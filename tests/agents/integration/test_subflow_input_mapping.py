@@ -100,8 +100,9 @@ class TestSubflowInputMapping:
             config={
                 "agent_id": "child_flow",
                 "input_mapping": {
-                "email": "@state:user.profile.email",
-                "name": "@state:user.name",
+                    "email": "@state:user.profile.email",
+                    "name": "@state:user.name",
+                },
             },
         )
 
@@ -131,9 +132,10 @@ class TestSubflowInputMapping:
             config={
                 "agent_id": "child_flow",
                 "input_mapping": {
-                "mode": "analysis",
-                "version": "v2",
-                "content": "@state:query",
+                    "mode": "analysis",
+                    "version": "v2",
+                    "content": "@state:query",
+                },
             },
         )
 
@@ -159,7 +161,8 @@ class TestSubflowInputMapping:
             config={
                 "agent_id": "child_flow",
                 "input_mapping": {
-                "content": "@state:missing_field",
+                    "content": "@state:missing_field",
+                },
             },
         )
 
@@ -182,7 +185,8 @@ class TestSubflowInputMapping:
             config={
                 "agent_id": "child_flow",
                 "input_mapping": {
-                "value": "@state:a.b.c",
+                    "value": "@state:a.b.c",
+                },
             },
         )
 
@@ -205,9 +209,10 @@ class TestSubflowInputMapping:
             config={
                 "agent_id": "child_flow",
                 "input_mapping": {
-                "count": 42,
-                "enabled": True,
-                "items": ["a", "b", "c"],
+                    "count": 42,
+                    "enabled": True,
+                    "items": ["a", "b", "c"],
+                },
             },
         )
 
@@ -231,7 +236,8 @@ class TestSubflowInputMapping:
             config={
                 "agent_id": "child_flow",
                 "input_mapping": {
-                "content": "@state:query",
+                    "content": "@state:query",
+                },
             },
         )
 
@@ -264,8 +270,9 @@ class TestSubflowInputMappingIntegration:
             config={
                 "agent_id": "child_flow",
                 "input_mapping": {
-                "content": "@state:user_query",
-                "context": "test context",
+                    "content": "@state:user_query",
+                    "context": "test context",
+                },
             },
         )
 

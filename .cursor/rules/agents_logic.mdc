@@ -1,0 +1,128 @@
+---
+description: "Агенты: архитектура, ноды, tools, skills"
+alwaysApply: true
+---
+# Агенты - Краткий Справочник
+
+## NodeType (7 типов)
+
+| Тип | Описание |
+|-----|----------|
+| react_node | LLM + tools |
+| code | Python код: execute(args, state) |
+| agent | Вызов skill агента (agent_id + skill_id) |
+| remote_agent | A2A вызов удалённого агента |
+| external_api | HTTP запрос |
+| mcp | MCP tool |
+| channel | Отправка сообщений (Telegram, Webhook, Email) |
+
+## Любая нода = Tool
+
+NodeAsToolWrapper оборачивает ЛЮБУЮ ноду для ReactNode:
+
+    tools: [
+      {"tool_id": "calc", "type": "code", "code": "..."},
+      {"tool_id": "skill", "type": "agent", "agent_id": "self", "skill_id": "math"},
+      {"tool_id": "api", "type": "external_api", "url": "..."},
+    ]
+
+## ReactNode - параллельное выполнение
+
+LLM возвращает несколько tool_calls → asyncio.gather → все выполняются параллельно.
+
+Merge:
+- messages → extend (все добавляются)
+- tool_results → merge (все результаты)
+- остальное → last wins
+
+## CodeNode
+
+    def execute(args, state):
+        state.result = args['value'] * 2
+        return {'result': state.result}
+
+Последняя функция в коде = entry point.
+
+## Маппинги
+
+input_mapping - откуда берём данные:
+
+    input_mapping: {
+        "query": "@state:user_query",   # из state.user_query
+        "limit": "@const:10",           # константа
+    }
+
+output_mapping - куда пишем результат:
+
+    output_mapping: {
+        "result": "calculation_result"  # result → state.calculation_result
+    }
+
+## Skills как Tools
+
+Агент может вызывать СВОИ skills как tools:
+
+    {
+        "tool_id": "my_skill",
+        "type": "agent",
+        "agent_id": "self_agent",  // тот же агент
+        "skill_id": "math_skill",
+        "args_schema": {"x": {"type": "integer"}}
+    }
+
+## Структура агента
+
+    {
+      "agent_id": "my_agent",
+      "entry": "main",
+      "nodes": {
+        "main": {"type": "react_node", "prompt": "...", "tools": [...]}
+      },
+      "edges": [{"from_node": "main", "to_node": null}],
+      "skills": {
+        "math_skill": {"name": "Math", "entry": "calc", "nodes": {...}}
+      }
+    }
+
+## Triggers (точки входа)
+
+Триггеры запускают агента из внешних источников:
+
+| Тип | Описание |
+|-----|----------|
+| telegram | Webhook от Telegram бота |
+| webhook | HTTP POST запрос |
+| cron | Расписание (TaskIQ) |
+
+    "triggers": {
+      "tg": {
+        "type": "telegram",
+        "config": {"bot_token": "@var:bot_token"},
+        "input_mapping": {"content": "@trigger:message.text"},
+        "output_actions": [...]
+      }
+    }
+
+## ChannelNode (отправка сообщений)
+
+    {
+      "type": "channel",
+      "channel": "telegram",  // telegram, webhook
+      "action": "send_message",
+      "channel_config": {"bot_token": "..."},
+      "input_mapping": {"recipient": "@state:chat_id", "text": "@state:response"}
+    }
+
+Как tool в ReactNode:
+
+    {"tool_id": "notify", "type": "channel", "channel": "webhook", ...}
+
+## Ключевые файлы
+
+- apps/agents/src/agent/nodes.py - все ноды
+- apps/agents/src/agent/runners/react_runner.py - ReactNode логика
+- apps/agents/src/tools/node_wrapper.py - NodeAsToolWrapper
+- apps/agents/src/tools/registry.py - ToolRegistry
+- apps/agents/src/triggers/ - триггеры (handlers, executor, registry)
+- apps/agents/src/channels/ - каналы (telegram.py, webhook.py)
+- core/state/__init__.py - ExecutionState

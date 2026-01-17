@@ -194,7 +194,7 @@ class AgentsLoader:
 
         # Создаем AgentConfig
         agent_config = AgentConfig(
-            agent_id=raw_config.get("id"),
+            agent_id=raw_config.get("agent_id") or raw_config.get("id"),
             name=raw_config.get("name", ""),
             description=raw_config.get("description", ""),
             tags=raw_config.get("tags", []),
@@ -570,6 +570,12 @@ class AgentsLoader:
                 return self._inline_react_node_tool(tool, context, depth)
             
             # Tool с tool_id без code - ищем в caches
+            # Полностью определённые inline tools (не требуют поиска в кэшах)
+            inline_node_types = {"channel", "agent", "mcp", "external_api", "remote_agent", "code"}
+            if tool_type in inline_node_types:
+                logger.debug(f"{context}: inline tool '{tool_id}' с type='{tool_type}'")
+                return tool
+            
             if tool_id and not tool.get("code"):
                 # Сначала в tools_cache
                 tool_ref = self._tools_cache.get(tool_id)
@@ -590,7 +596,7 @@ class AgentsLoader:
                 raise ValueError(f"{context}: tool '{tool_id}' не найден ни в tools_cache ни в nodes_cache")
             
             if not tool.get("code") and not tool.get("prompt"):
-                raise ValueError(f"{context}: inline tool требует 'code' или 'prompt': {tool}")
+                raise ValueError(f"{context}: inline tool требует 'type', 'code' или 'prompt': {tool}")
             
             return tool
         

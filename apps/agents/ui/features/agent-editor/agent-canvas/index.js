@@ -18,12 +18,34 @@ import { injectDrawflowStyles } from './drawflow-injector.js';
 
 const NODE_TYPE_ICON_NAMES = {
     'react_node': 'agent',
-    'function': 'code',
-    'tool': 'tool',
+    'code': 'code',
     'external_api': 'globe',
     'remote_agent': 'cloud',
     'agent': 'workflow',
     'mcp': 'mcp',
+    'channel': 'send',
+};
+
+const RESOURCE_TYPE_ICON_NAMES = {
+    'code': 'code',
+    'rag': 'search',
+    'files': 'folder',
+    'prompt': 'chat',
+    'llm': 'bot',
+    'secret': 'key',
+    'http': 'globe',
+    'cache': 'database',
+};
+
+const RESOURCE_TYPE_COLORS = {
+    'code': '#8b5cf6',
+    'rag': '#3b82f6',
+    'files': '#f59e0b',
+    'prompt': '#10b981',
+    'llm': '#ec4899',
+    'secret': '#ef4444',
+    'http': '#06b6d4',
+    'cache': '#14b8a6',
 };
 
 export class AgentCanvas extends PlatformElement {
@@ -46,19 +68,24 @@ export class AgentCanvas extends PlatformElement {
         this.agentConfig = null;
         this._editor = null;
         this.nodeConfigs = new Map();
+        this.resourceConfigs = new Map();
         this.entryNodeId = null;
         this.nodeIdCounter = 1;
+        this.resourceIdCounter = 1;
         this.contextMenu = null;
         this.connectionContextMenu = null;
+        this.resourceContextMenu = null;
         this._edgeLabelsManager = null;
         this.edgeConditions = new Map();
         this._pendingConnection = null;
         this._isImporting = false;
         this.endNodeEls = [];
         this._virtualConnectionsSvg = null;
+        this._resourceElements = new Map();
         
         this._handleClickOutside = this._handleClickOutside.bind(this);
         this._handleNodeClick = this._handleNodeClick.bind(this);
+        this._handleResourceClick = this._handleResourceClick.bind(this);
         this._zoomIn = this._zoomIn.bind(this);
         this._zoomOut = this._zoomOut.bind(this);
         this._zoomReset = this._zoomReset.bind(this);
@@ -66,6 +93,7 @@ export class AgentCanvas extends PlatformElement {
         this._deleteNode = this._deleteNode.bind(this);
         this._duplicateNode = this._duplicateNode.bind(this);
         this._toggleBreakpoint = this._toggleBreakpoint.bind(this);
+        this._deleteResource = this._deleteResource.bind(this);
         
         this.breakpointManager = null;
         
@@ -254,6 +282,259 @@ export class AgentCanvas extends PlatformElement {
             this.breakpointManager.toggleBreakpoint(nodeId);
             this.contextMenu = null;
         }
+    }
+
+    _handleResourceClick(e) {
+        const resourceEl = e.target.closest('.resource-block');
+        if (!resourceEl) return;
+        
+        const resourceId = resourceEl.dataset.resourceId;
+        const config = this.resourceConfigs.get(resourceId);
+        if (config) {
+            this.emit('resource-selected', {
+                resourceId,
+                resourceConfig: { ...config },
+            });
+        }
+    }
+
+    _deleteResource() {
+        if (this.resourceContextMenu) {
+            const resourceId = this.resourceContextMenu.resourceId;
+            this.removeResource(resourceId);
+            this.emit('resource-deleted', { resourceId });
+            this.resourceContextMenu = null;
+            this._saveSnapshot();
+        }
+    }
+
+    async addResource(resourceType, posX, posY) {
+        const resourceId = `${resourceType.type}_${this.resourceIdCounter++}`;
+        const color = RESOURCE_TYPE_COLORS[resourceType.type] || '#6b7280';
+        
+        const resourceEl = this._createResourceElement(resourceId, resourceType, posX, posY);
+        
+        const drawflowEl = this.querySelector('#drawflow-area .drawflow');
+        if (drawflowEl) {
+            drawflowEl.appendChild(resourceEl);
+        }
+        
+        this._resourceElements.set(resourceId, resourceEl);
+        this.resourceConfigs.set(resourceId, {
+            resourceId,
+            type: resourceType.type,
+            config: {},
+            color,
+            name: resourceType.name,
+            position: { x: posX, y: posY },
+        });
+        
+        this._setupResourceDrag(resourceEl, resourceId);
+        
+        this.emit('resource-added', { resourceId, resourceType });
+        this._saveSnapshot();
+        
+        return resourceId;
+    }
+
+    _createResourceElement(resourceId, resourceType, posX, posY, language = null) {
+        const color = RESOURCE_TYPE_COLORS[resourceType.type] || '#6b7280';
+        const bgColor = color + '20';
+        const iconName = RESOURCE_TYPE_ICON_NAMES[resourceType.type] || 'box';
+        
+        // Language badge для code ресурсов - SVG иконки (в правом нижнем углу блока)
+        let langBadge = '';
+        if (resourceType.type === 'code' && language) {
+            const langIcon = language === 'javascript' ? 'javascript' : 'python';
+            langBadge = `
+                <div class="resource-lang-badge" data-lang="${language}" style="
+                    position: absolute;
+                    bottom: -4px;
+                    right: -4px;
+                    width: 18px;
+                    height: 18px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10;
+                "><platform-icon name="${langIcon}" size="18" colored></platform-icon></div>
+            `;
+        }
+        
+        const el = document.createElement('div');
+        el.className = 'resource-block';
+        el.dataset.resourceId = resourceId;
+        el.style.cssText = `
+            position: absolute;
+            left: ${posX}px;
+            top: ${posY}px;
+            min-width: 120px;
+            padding: 10px 14px;
+            background: var(--glass-solid-medium);
+            border: 2px solid ${color}40;
+            border-radius: 12px;
+            cursor: move;
+            user-select: none;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: box-shadow 0.15s ease, border-color 0.15s ease;
+        `;
+        
+        el.innerHTML = `
+            <div class="resource-icon" style="
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                background: ${bgColor};
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: ${color};
+                flex-shrink: 0;
+            ">
+                <platform-icon name="${iconName}" size="16"></platform-icon>
+            </div>
+            <div class="resource-info">
+                <div class="resource-name" style="
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: var(--text-primary);
+                ">${resourceId}</div>
+                <div class="resource-type" style="
+                    font-size: 11px;
+                    color: var(--text-tertiary);
+                ">${resourceType.name}</div>
+            </div>
+            ${langBadge}
+        `;
+        
+        el.addEventListener('click', this._handleResourceClick);
+        
+        el.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.resourceContextMenu = {
+                x: e.clientX,
+                y: e.clientY,
+                resourceId,
+            };
+            this.requestUpdate();
+        });
+        
+        return el;
+    }
+
+    _setupResourceDrag(el, resourceId) {
+        let isDragging = false;
+        let startX, startY, origX, origY;
+        
+        el.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            origX = parseInt(el.style.left) || 0;
+            origY = parseInt(el.style.top) || 0;
+            el.style.zIndex = '100';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const zoom = this._editor?.zoom || 1;
+            const dx = (e.clientX - startX) / zoom;
+            const dy = (e.clientY - startY) / zoom;
+            
+            el.style.left = `${origX + dx}px`;
+            el.style.top = `${origY + dy}px`;
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            el.style.zIndex = '2';
+            
+            const config = this.resourceConfigs.get(resourceId);
+            if (config) {
+                config.position = {
+                    x: parseInt(el.style.left) || 0,
+                    y: parseInt(el.style.top) || 0,
+                };
+            }
+        });
+    }
+
+    removeResource(resourceId) {
+        const el = this._resourceElements.get(resourceId);
+        if (el) {
+            el.remove();
+            this._resourceElements.delete(resourceId);
+        }
+        this.resourceConfigs.delete(resourceId);
+    }
+
+    updateResourceConfig(resourceId, config) {
+        const existing = this.resourceConfigs.get(resourceId);
+        if (existing) {
+            const oldLanguage = existing.config?.language;
+            existing.config = config;
+            
+            // Обновляем language badge для code ресурсов
+            if (existing.type === 'code' && config.language !== oldLanguage) {
+                this._updateResourceLanguageBadge(resourceId, config.language);
+            }
+        }
+    }
+    
+    _updateResourceLanguageBadge(resourceId, language) {
+        const el = this._resourceElements.get(resourceId);
+        if (!el) return;
+        
+        let badge = el.querySelector('.resource-lang-badge');
+        
+        if (!language) {
+            if (badge) badge.remove();
+            return;
+        }
+        
+        const langIcon = language === 'javascript' ? 'javascript' : 'python';
+        
+        if (badge) {
+            badge.setAttribute('data-lang', language);
+            badge.innerHTML = `<platform-icon name="${langIcon}" size="18" colored></platform-icon>`;
+        } else {
+            badge = document.createElement('div');
+            badge.className = 'resource-lang-badge';
+            badge.setAttribute('data-lang', language);
+            badge.style.cssText = `
+                position: absolute;
+                bottom: -4px;
+                right: -4px;
+                width: 18px;
+                height: 18px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10;
+            `;
+            badge.innerHTML = `<platform-icon name="${langIcon}" size="18" colored></platform-icon>`;
+            el.appendChild(badge);
+        }
+    }
+
+    getResourcesData() {
+        const resources = {};
+        for (const [resourceId, config] of this.resourceConfigs.entries()) {
+            resources[resourceId] = {
+                type: config.type,
+                config: config.config || {},
+                position: config.position,
+            };
+        }
+        return resources;
     }
 
     /**
@@ -517,7 +798,7 @@ export class AgentCanvas extends PlatformElement {
         return this._createNodeHtmlSync(nodeId, nodeType, isEntry, isInherited);
     }
 
-    _createNodeHtmlSync(nodeId, nodeType, isEntry = false, isInherited = false) {
+    _createNodeHtmlSync(nodeId, nodeType, isEntry = false, isInherited = false, language = null) {
         const bgColor = nodeType.color + '20';
         const entryBadge = isEntry 
             ? '<div class="agent-node-entry-badge">▶</div>' 
@@ -525,6 +806,13 @@ export class AgentCanvas extends PlatformElement {
         const inheritedBadge = isInherited
             ? '<div class="agent-node-inherited-badge" title="Inherited from base"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M8 3l-3 3M8 3l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'
             : '';
+        
+        // Бейдж языка для code нод - используем SVG иконки
+        let languageBadge = '';
+        if (nodeType.type === 'code' && language) {
+            const langIcon = language === 'javascript' ? 'javascript' : 'python';
+            languageBadge = `<div class="agent-node-lang-badge" data-lang="${language}" title="${language}"><platform-icon name="${langIcon}" size="14" colored></platform-icon></div>`;
+        }
         
         const iconName = NODE_TYPE_ICON_NAMES[nodeType.type];
         let iconSvg = this.icon.getFromCache(iconName);
@@ -545,6 +833,7 @@ export class AgentCanvas extends PlatformElement {
                     <div class="agent-node-name">${nodeId}</div>
                     <div class="agent-node-type">${nodeType.name || nodeType.type}</div>
                 </div>
+                ${languageBadge}
             </div>
         `;
     }
@@ -737,12 +1026,12 @@ export class AgentCanvas extends PlatformElement {
     _getNodeColor(type) {
         const colors = {
             'react_node': '#f59e0b',
-            'function': '#8b5cf6',
-            'tool': '#10b981',
+            'code': '#8b5cf6',
             'external_api': '#06b6d4',
             'remote_agent': '#3b82f6',
             'agent': '#ec4899',
             'mcp': '#14b8a6',
+            'channel': '#10b981',
         };
         
         const color = colors[type];
@@ -841,7 +1130,9 @@ export class AgentCanvas extends PlatformElement {
         const entryConfig = this.nodeConfigs.get(this.entryNodeId);
         const entry = entryConfig ? entryConfig.nodeId : null;
 
-        return { nodes, edges, entry };
+        const resources = this.getResourcesData();
+
+        return { nodes, edges, entry, resources };
     }
 
     updateNodeConfig(nodeId, config) {
@@ -849,11 +1140,44 @@ export class AgentCanvas extends PlatformElement {
         for (const [drawflowId, nodeConfig] of this.nodeConfigs.entries()) {
             if (nodeConfig.nodeId === nodeId) {
                 console.log('[AgentCanvas] Found node, old config:', nodeConfig.config);
-                // Полностью заменяем config, а не делаем merge
+                const oldLanguage = nodeConfig.config?.language;
                 nodeConfig.config = config;
                 console.log('[AgentCanvas] Updated config:', nodeConfig.config);
+                
+                // Обновляем language badge если язык изменился
+                if (nodeConfig.type === 'code' && config.language !== oldLanguage) {
+                    this._updateLanguageBadge(drawflowId, config.language);
+                }
                 break;
             }
+        }
+    }
+    
+    _updateLanguageBadge(drawflowId, language) {
+        const nodeEl = this.querySelector(`#node-${drawflowId}`);
+        if (!nodeEl) return;
+        
+        let badge = nodeEl.querySelector('.agent-node-lang-badge');
+        const agentNode = nodeEl.querySelector('.agent-node');
+        
+        if (!language) {
+            if (badge) badge.remove();
+            return;
+        }
+        
+        const langIcon = language === 'javascript' ? 'javascript' : 'python';
+        
+        if (badge) {
+            badge.setAttribute('data-lang', language);
+            badge.setAttribute('title', language);
+            badge.innerHTML = `<platform-icon name="${langIcon}" size="14" colored></platform-icon>`;
+        } else if (agentNode) {
+            badge = document.createElement('div');
+            badge.className = 'agent-node-lang-badge';
+            badge.setAttribute('data-lang', language);
+            badge.setAttribute('title', language);
+            badge.innerHTML = `<platform-icon name="${langIcon}" size="14" colored></platform-icon>`;
+            agentNode.appendChild(badge);
         }
     }
 
@@ -1199,12 +1523,20 @@ export class AgentCanvas extends PlatformElement {
         }
         this.nodeIdCounter = 1;
         
+        // Очищаем ресурсы
+        for (const el of this._resourceElements.values()) {
+            el.remove();
+        }
+        this._resourceElements.clear();
+        this.resourceConfigs.clear();
+        this.resourceIdCounter = 1;
+        
         if (this._edgeLabelsManager) {
             this._edgeLabelsManager._setupContainer();
         }
         this._virtualConnectionsSvg = null;
 
-        const { nodes, edges = [], entry } = data;
+        const { nodes, edges = [], entry, resources = {} } = data;
         const nodePositions = new Map();
         const inheritedNodeIds = inherited ? (inherited.nodeIds || new Set()) : new Set();
 
@@ -1224,7 +1556,8 @@ export class AgentCanvas extends PlatformElement {
             const posX = nodeConfig.position ? nodeConfig.position.x : 250 + (index % 2) * 280;
             const posY = nodeConfig.position ? nodeConfig.position.y : 80 + Math.floor(index / 2) * 120;
             
-            const nodeHtml = this._createNodeHtmlSync(nodeId, nodeType, isEntry, isInherited);
+            const language = nodeConfig.type === 'code' ? (nodeConfig.language || 'python') : null;
+            const nodeHtml = this._createNodeHtmlSync(nodeId, nodeType, isEntry, isInherited, language);
             
             console.log('[AgentCanvas] Adding node:', {
                 nodeId,
@@ -1306,6 +1639,35 @@ export class AgentCanvas extends PlatformElement {
                     this._edgeLabelsManager?.add(fromId, toId, labelText);
                 }
             }
+        }
+        
+        // Загружаем ресурсы
+        for (const [resourceId, resourceConfig] of Object.entries(resources)) {
+            const resourceType = {
+                type: resourceConfig.type,
+                name: resourceConfig.type,
+            };
+            const posX = resourceConfig.position?.x ?? 50;
+            const posY = resourceConfig.position?.y ?? 50;
+            
+            const el = this._createResourceElement(resourceId, resourceType, posX, posY);
+            const drawflowEl = this.querySelector('#drawflow-area .drawflow');
+            if (drawflowEl) {
+                drawflowEl.appendChild(el);
+            }
+            
+            this._resourceElements.set(resourceId, el);
+            this.resourceConfigs.set(resourceId, {
+                resourceId,
+                type: resourceConfig.type,
+                config: resourceConfig.config || {},
+                color: RESOURCE_TYPE_COLORS[resourceConfig.type] || '#6b7280',
+                name: resourceConfig.type,
+                position: { x: posX, y: posY },
+            });
+            
+            this._setupResourceDrag(el, resourceId);
+            this.resourceIdCounter++;
         }
         
         this._updateVirtualNodes();

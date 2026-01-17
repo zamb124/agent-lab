@@ -90,7 +90,7 @@ export function setupDragDrop(component) {
         const data = e.dataTransfer.getData('application/json');
         if (!data) return;
         
-        const nodeType = JSON.parse(data);
+        const item = JSON.parse(data);
         
         const rect = container.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -103,7 +103,11 @@ export function setupDragDrop(component) {
         const posX = (x - translateX) / zoom;
         const posY = (y - translateY) / zoom;
 
-        await component._addNode(nodeType, posX, posY);
+        if (item.isResource) {
+            await component.addResource(item, posX, posY);
+        } else {
+            await component._addNode(item, posX, posY);
+        }
     });
 }
 

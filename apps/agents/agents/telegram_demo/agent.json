@@ -1,0 +1,103 @@
+{
+  "agent_id": "telegram_demo",
+  "name": "Telegram Demo",
+  "description": "2 скилла с разными Telegram ботами",
+  "entry": "react_main",
+  "variables": {
+    "bot_token_1": "8508247274:AAGtQBQzBDqq4wimkC-RTO0MNaBd1cV7Y68",
+    "bot_token_2": "8593483218:AAFVxYDoqIsdxrut0gxo2T-b4SWBsYPz26k"
+  },
+  "nodes": {
+    "react_main": {
+      "type": "react_node",
+      "prompt": "Отвечай на вопросы. Отправь ответ через send_telegram.",
+      "tools": [
+        {
+          "tool_id": "send_telegram",
+          "type": "channel",
+          "channel": "telegram",
+          "action": "send_message",
+          "description": "Отправить в Telegram",
+          "channel_config": {
+            "bot_token": "@var:bot_token_1"
+          },
+          "args_schema": {
+            "chat_id": {"type": "string"},
+            "text": {"type": "string"}
+          },
+          "input_mapping": {
+            "recipient": "@state:variables.chat_id",
+            "text": "@state:text"
+          }
+        }
+      ]
+    }
+  },
+  "edges": [
+    {"from": "react_main", "to": null}
+  ],
+  "skills": {
+    "react_skill": {
+      "name": "React Skill",
+      "description": "ReactNode с tool telegram",
+      "entry": "react_main"
+    },
+    "echo_skill": {
+      "name": "Echo Skill", 
+      "description": "CodeNode + ChannelNode эхо",
+      "entry": "echo_process",
+      "nodes": {
+        "echo_process": {
+          "type": "code",
+          "code": "def execute(args, state):\n    state.echo_text = f'Эхо: {state.content}'\n    return {'echo_text': state.echo_text}"
+        },
+        "echo_send": {
+          "type": "channel",
+          "channel": "telegram",
+          "action": "send_message",
+          "channel_config": {
+            "bot_token": "@var:bot_token_2"
+          },
+          "input_mapping": {
+            "recipient": "@state:variables.chat_id",
+            "text": "@state:echo_text"
+          }
+        }
+      },
+      "edges": [
+        {"from": "echo_process", "to": "echo_send"},
+        {"from": "echo_send", "to": null}
+      ]
+    }
+  },
+  "triggers": {
+    "tg_react": {
+      "trigger_id": "tg_react",
+      "name": "Telegram Bot 1",
+      "type": "telegram",
+      "enabled": true,
+      "config": {
+        "bot_token": "@var:bot_token_1"
+      },
+      "output_mapping": {
+        "content": "message.text",
+        "variables.chat_id": "message.chat.id"
+      },
+      "skill_id": "react_skill"
+    },
+    "tg_echo": {
+      "trigger_id": "tg_echo",
+      "name": "Telegram Bot 2",
+      "type": "telegram",
+      "enabled": true,
+      "config": {
+        "bot_token": "@var:bot_token_2"
+      },
+      "output_mapping": {
+        "content": "message.text",
+        "variables.chat_id": "message.chat.id"
+      },
+      "skill_id": "echo_skill"
+    }
+  }
+}

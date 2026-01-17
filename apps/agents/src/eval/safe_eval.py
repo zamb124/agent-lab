@@ -49,10 +49,20 @@ class SafeEval:
     Используйте PythonCodeRunner для нового кода.
     """
     
-    def __init__(self, context: Optional[Any] = None, variables: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        context: Optional[Any] = None,
+        variables: Optional[Dict[str, Any]] = None,
+        resources: Optional[Dict[str, Any]] = None,
+    ):
         self.context = context
         self.variables = variables or {}
-        self._runner = PythonCodeRunner(context=context, variables=self.variables)
+        self.resources = resources or {}
+        self._runner = PythonCodeRunner(
+            context=context,
+            variables=self.variables,
+            resources=self.resources,
+        )
     
     def _build_namespace(self) -> Dict[str, Any]:
         """Создаёт namespace для выполнения кода."""

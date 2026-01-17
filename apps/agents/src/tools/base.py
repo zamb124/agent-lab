@@ -267,6 +267,7 @@ class InlineTool(BaseTool):
         permission: Permission = None,
         tags: Optional[List[str]] = None,
         tool_type: ToolType = ToolType.TOOL,
+        resources: Optional[Dict[str, Any]] = None,
     ):
         self.name = tool_id
         self.description = description or f"Inline tool: {tool_id}"
@@ -274,6 +275,7 @@ class InlineTool(BaseTool):
         self.tags = tags or ["misc"]
         self.tool_type = tool_type
         self._code = code
+        self._resources_config = resources or {}
 
         # Параметры из args_schema
         if parameters:
@@ -306,8 +308,11 @@ class InlineTool(BaseTool):
         
         variables = state.variables
         
+        # Резолвим resources из конфига tool
+        resources = await self._resolve_resources(state)
+        
         SafeEval = get_container().safe_eval_class
-        evaluator = SafeEval(variables=variables)
+        evaluator = SafeEval(variables=variables, resources=resources)
         
         result = await evaluator.execute_tool(self._code, full_args, state)
         
@@ -326,6 +331,38 @@ class InlineTool(BaseTool):
                 result[prop_name] = prop_schema["default"]
         
         return result
+
+    async def _resolve_resources(self, state: "ExecutionState") -> Dict[str, Any]:
+        """
+        Резолвит resources для tool.
+        
+        Единообразно с нодами - использует иерархию agent > skill > tool.
+        """
+        container = get_container()
+        
+        # Ресурсы из agent_config (inline в state)
+        agent_resources = state.agent_config.get("resources", {}) if state.agent_config else {}
+        
+        # Ресурсы skill
+        skill_resources = None
+        skill_id = state.skill_id
+        if skill_id and skill_id != "default" and state.agent_config:
+            skills = state.agent_config.get("skills", {})
+            skill_config = skills.get(skill_id, {})
+            skill_resources = skill_config.get("resources")
+        
+        # Ресурсы tool
+        tool_resources = self._resources_config
+        
+        if not agent_resources and not skill_resources and not tool_resources:
+            return {}
+        
+        return await container.resource_resolver.resolve_for_node(
+            agent_resources=agent_resources,
+            skill_resources=skill_resources,
+            node_resources=tool_resources,
+            variables=state.variables,
+        )
 
 
 class ExternalAPITool(BaseTool):

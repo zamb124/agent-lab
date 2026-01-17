@@ -72,6 +72,9 @@ const ICON_MAP = {
     'mcp': 'mcp',
     'server': 'server',
     'key': 'key',
+    'python': 'python',
+    'javascript': 'javascript',
+    'js': 'javascript',
     
     // Алиасы
     'menu': 'hamburger',
@@ -107,6 +110,16 @@ const ICON_MAP = {
     'bell-ring': 'bell-ring',
     'more': 'adjustment',
     'dots': 'adjustment',
+    'variable': 'code',
+    'package': 'box',
+    'clock': 'calendar',
+    'timer': 'calendar',
+    'schedule': 'calendar',
+    'mail': 'send',
+    'email': 'send',
+    'envelope': 'send',
+    'message-circle': 'chat',
+    'phone': 'server',
 };
 
 export class IconService {

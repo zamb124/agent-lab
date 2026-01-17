@@ -5,7 +5,6 @@
 import { html, css } from 'lit';
 import { BaseNodeEditor } from './base-node-editor.js';
 import '../editors/json-field-editor.js';
-import '../editors/state-mapping-editor.js';
 import '../editors/test-panel.js';
 
 export class MCPNodeEditor extends BaseNodeEditor {
@@ -168,17 +167,14 @@ export class MCPNodeEditor extends BaseNodeEditor {
         }
     }
 
-    render() {
+    renderFields() {
         const config = this.nodeConfig;
         const selectedServerId = config.server_id || this.selectedServer;
         const selectedServer = this.mcpServers.find(s => s.server_id === selectedServerId);
+        const showCommonFields = !this.expanded;
         
         return html`
-            <div class="panel-body">
-                <p class="panel-description">
-                    Вызов MCP tool с внешнего сервера.
-                </p>
-                
+            ${showCommonFields ? html`
                 ${this.renderNodeIdField()}
                 
                 <div class="form-group">
@@ -192,117 +188,103 @@ export class MCPNodeEditor extends BaseNodeEditor {
                         @change=${(e) => this._onInputChange('name', e.target.value)}
                     />
                 </div>
-                
-                <div class="form-group">
-                    <div class="form-label">
-                        <span class="form-label-text">MCP Сервер</span>
-                    </div>
-                    <select 
-                        class="form-input form-select"
-                        .value=${selectedServerId || ''}
-                        @change=${this._onServerChange}
-                    >
-                        <option value="">Выберите сервер...</option>
-                        ${this.mcpServers.map(server => html`
-                            <option 
-                                value=${server.server_id}
-                                ?selected=${server.server_id === selectedServerId}
-                            >
-                                ${server.name} (${server.server_id})
-                            </option>
-                        `)}
-                    </select>
-                    ${selectedServer ? html`
-                        <span class="form-hint">${selectedServer.url}</span>
-                    ` : ''}
+            ` : ''}
+            
+            <div class="form-group">
+                <div class="form-label">
+                    <span class="form-label-text">MCP Сервер</span>
                 </div>
-                
-                <div class="form-group">
-                    <div class="form-label">
-                        <span class="form-label-text">Tool</span>
-                    </div>
-                    <select 
-                        class="form-input form-select"
-                        .value=${config.tool_name || ''}
-                        @change=${this._onToolChange}
-                        ?disabled=${!selectedServerId}
-                    >
-                        <option value="">Выберите tool...</option>
-                        ${this.serverTools.map(tool => html`
-                            <option 
-                                value=${tool.name}
-                                ?selected=${tool.name === config.tool_name}
-                            >
-                                ${tool.name}
-                            </option>
-                        `)}
-                    </select>
-                    ${this.serverTools.length === 0 && selectedServerId ? html`
-                        <span class="form-hint">Синхронизируйте тулы на странице MCP серверов</span>
-                    ` : ''}
-                </div>
-                
-                ${this.selectedToolSchema && Object.keys(this.selectedToolSchema).length > 0 ? html`
-                    <div class="form-group">
-                        <div class="form-label">
-                            <span class="form-label-text">Параметры tool</span>
-                        </div>
-                        <div class="tool-params">
-                            ${Object.entries(this.selectedToolSchema).map(([name, param]) => html`
-                                <div class="tool-param">
-                                    <span class="param-name">${name}</span>
-                                    <span class="param-type">${param.type || 'string'}</span>
-                                    ${param.required ? html`<span class="param-required">*</span>` : ''}
-                                    ${param.description ? html`
-                                        <span class="param-desc">${param.description}</span>
-                                    ` : ''}
-                                </div>
-                            `)}
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <state-mapping-editor
-                            mode="input"
-                            .mappings=${config.input_mapping || {}}
-                            .stateVariables=${Object.keys(this._buildDefaultState())}
-                            @change=${(e) => this._onInputChange('input_mapping', e.detail.value)}
-                        ></state-mapping-editor>
-                    </div>
+                <select 
+                    class="form-input form-select"
+                    .value=${selectedServerId || ''}
+                    @change=${this._onServerChange}
+                >
+                    <option value="">Выберите сервер...</option>
+                    ${this.mcpServers.map(server => html`
+                        <option 
+                            value=${server.server_id}
+                            ?selected=${server.server_id === selectedServerId}
+                        >
+                            ${server.name} (${server.server_id})
+                        </option>
+                    `)}
+                </select>
+                ${selectedServer ? html`
+                    <span class="form-hint">${selectedServer.url}</span>
                 ` : ''}
-                
+            </div>
+            
+            <div class="form-group">
+                <div class="form-label">
+                    <span class="form-label-text">Tool</span>
+                </div>
+                <select 
+                    class="form-input form-select"
+                    .value=${config.tool_name || ''}
+                    @change=${this._onToolChange}
+                    ?disabled=${!selectedServerId}
+                >
+                    <option value="">Выберите tool...</option>
+                    ${this.serverTools.map(tool => html`
+                        <option 
+                            value=${tool.name}
+                            ?selected=${tool.name === config.tool_name}
+                        >
+                            ${tool.name}
+                        </option>
+                    `)}
+                </select>
+                ${this.serverTools.length === 0 && selectedServerId ? html`
+                    <span class="form-hint">Синхронизируйте тулы на странице MCP серверов</span>
+                ` : ''}
+            </div>
+            
+            ${this.selectedToolSchema && Object.keys(this.selectedToolSchema).length > 0 ? html`
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Headers (JSON)</span>
+                        <span class="form-label-text">Параметры tool</span>
                     </div>
-                    <json-field-editor
-                        .value=${config.headers ? JSON.stringify(config.headers, null, 2) : '{}'}
-                        @change=${(e) => {
-                            const editor = e.target;
-                            if (editor.isValid()) {
-                                this._onInputChange('headers', editor.getParsedValue());
-                            }
-                        }}
-                        min-height="60"
-                        hint="Дополнительные headers (переопределяют серверные)"
-                    ></json-field-editor>
+                    <div class="tool-params">
+                        ${Object.entries(this.selectedToolSchema).map(([name, param]) => html`
+                            <div class="tool-param">
+                                <span class="param-name">${name}</span>
+                                <span class="param-type">${param.type || 'string'}</span>
+                                ${param.required ? html`<span class="param-required">*</span>` : ''}
+                                ${param.description ? html`
+                                    <span class="param-desc">${param.description}</span>
+                                ` : ''}
+                            </div>
+                        `)}
+                    </div>
                 </div>
-                
-                <div class="form-group">
-                    <state-mapping-editor
-                        mode="output"
-                        .mappings=${config.output_mapping || config.state_mapping || {}}
-                        @change=${(e) => this._onInputChange('output_mapping', e.detail.value)}
-                    ></state-mapping-editor>
+            ` : ''}
+            
+            <div class="form-group">
+                <div class="form-label">
+                    <span class="form-label-text">Headers (JSON)</span>
                 </div>
-                
-                <test-panel
-                    .inputState=${this._buildDefaultState()}
-                    ?expanded=${this.expanded}
-                    @validate=${this._onValidate}
-                    @execute=${this._onExecute}
-                ></test-panel>
+                <json-field-editor
+                    .value=${config.headers ? JSON.stringify(config.headers, null, 2) : '{}'}
+                    @change=${(e) => {
+                        const editor = e.target;
+                        if (editor.isValid()) {
+                            this._onInputChange('headers', editor.getParsedValue());
+                        }
+                    }}
+                    min-height="60"
+                    hint="Дополнительные headers (переопределяют серверные)"
+                ></json-field-editor>
             </div>
+            
+            ${this.renderMappingSection()}
+            
+            <test-panel
+                .inputState=${this._buildDefaultState()}
+                ?expanded=${this.expanded}
+                ?hide-input-state=${this.expanded}
+                @validate=${this._onValidate}
+                @execute=${this._onExecute}
+            ></test-panel>
         `;
     }
 }

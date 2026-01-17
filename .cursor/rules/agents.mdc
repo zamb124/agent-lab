@@ -1,870 +1,324 @@
 ---
-description: бэкенд backend python core streaming redis taskiq pubsub a2a channels emitter subscriber llm agents runner flow nodes state interrupt Emitter EventSubscriber ReactNodeRunner BaseChannel A2AChannel URN ResourceRegistry ExecutionState ToolRegistry
+description: "Архитектура agents сервиса"
 alwaysApply: false
 ---
-
-# Архитектура platform
-
-## ОСНОВНАЯ ЗАДАЧА
-- Все коментарии пишем исключительно на русском языке
-- Платформа для быстрого создания AI агентов и цепочек агентов
-- Разработчики внешних команд могут легко добавлять новых агентов и tools
-- Всё хранится в БД, выполнение только из БД (DB-First)
-- Все события через Redis Pub/Sub (Stream-First)
-- Поддержка INLINE_CODE - код может храниться прямо в БД
-
-
-# НКЗЫБЛЕМЫЕ ПРИНЦИПЫ!!
----
-1. Продуктовая концепция
-Платформа — это не просто библиотека для LLM-цепочек, это инфраструктурная среда (Runtime) для выполнения автономных агентов.
-
-Для кого: Для продуктовых команд, которым нужно быстро выводить AI-фичи в продакшн, сохраняя полный контроль над логикой, состоянием и стоимостью.
-
-Основная метафора: «Операционная система для агентов». Система не «угадывает», что делать, а строго исполняет инструкции (графы), хранящиеся в базе данных, общаясь с внешним миром через единую шину событий.
-
-2. Незыблемые принципы (The Core Pillars)
-Эти принципы не могут быть нарушены ради «удобства разработки» или «быстрого фикса».
-
-I. Принцип Явности (Explicit over Implicit)
-Никакой магии. Никаких догадок. Никаких фолбеков.
-
-Если в конфигурации не указан параметр — система выбрасывает исключение при загрузке, а не подставляет «значение по умолчанию».
-
-Любое поведение системы должно быть предсказуемо на основе входного JSON-конфига.
-
-Лозунг: «Better to crash than to guess» (Лучше упасть, чем угадать).
-
-II. DB-First & Single Source of Truth
-Код — это просто исполнитель инструкций, которые лежат в базе.
-
-Все графы, настройки агентов, навыки и промпты живут в БД.
-
-Обновление логики агента происходит через обновление записи в БД, а не через деплой нового кода.
-
-Код (Python) предоставляет только базовые блоки (Nodes) и инструменты (Tools), а «собирает» их в продукт бизнес-логика в БД.
-
-III. Stream-First (Reactive Communication)
-Система не ждет ответа, она живет в потоке событий.
-
-Всё взаимодействие (User <-> Agent, Agent <-> Agent, Node <-> Node) идет через Redis Pub/Sub (a2a-sdk).
-
-Запрос — это событие. Ответ — это поток событий (streaming).
-
-Состояние (State) обновляется инкрементально через события.
-
-IV. Принцип Атомарности и Изоляции
-Агент — это не монолитный кусок кода, а композиция независимых навыков (Skills).
-
-Каждая нода (Node) в графе — это чистая функция: получила State -> выполнила действие -> вернула обновленный State.
-
-Нода не знает о существовании других нод, она знает только контракт своего входа и выхода.
-
-V. Контрактная разработка (Schema-Driven)
-У каждого Агента, Навыка и Инструмента есть жесткая JSON-схема входа и выхода.
-
-Валидация происходит на границе: при получении события извне и при переходе между узлами графа.
-
-3. Определение «Анти-паттернов» (Что мы запрещаем навсегда)
-Hardcoded Logic: Запрещено прописывать логику переходов между агентами внутри Python-кода. Только через Graph Config в БД.
-
-Global State: Никаких глобальных переменных. Всё состояние передается через State объект в контексте выполнения задачи.
-
-Silent Failures: Запрещены try-except: pass или возвраты None там, где ожидается объект. Ошибка должна всплывать максимально громко.
-
-Local Fallbacks: Запрещено в коде писать: permission = config.get("permission", "admin"). Если поля нет — это ошибка конфигурации.
-
-## URN - Идентификация ресурсов
-
-**URN (Universal Resource Name)** - единый формат идентификации ресурсов платформы.
-Файл: `core/urn.py`
-
-**Формат:** `urn:iman:type:id`
-
-| Тип | Пример | Назначение |
-|-----|--------|------------|
-| `agent` | `urn:iman:agent:customer_service` | Агент |
-| `node` | `urn:iman:node:summarizer` | Нода |
-| `tool` | `urn:iman:tool:calculator` | Инструмент |
-| `skill` | `urn:iman:skill:refund` | Skill агента |
-| `variable` | `urn:iman:variable:api_key` | Переменная |
-
-**Специализированные классы:**
-
-```python
-from core.urn import AgentURN, NodeURN, ToolURN, SkillURN, VariableURN
-
-agent = AgentURN.create("customer_service")  # urn:iman:agent:customer_service
-node = NodeURN.create("summarizer")          # urn:iman:node:summarizer
-tool = ToolURN.create("calculator")          # urn:iman:tool:calculator
-```
-
-**Utility функции:**
-
-```python
-from core.urn import is_urn, extract_id, normalize_to_urn
-
-is_urn("urn:iman:node:test")           # True
-is_urn("just_an_id")                   # False
-extract_id("urn:iman:node:test")       # "test"
-normalize_to_urn("test", "node")       # URN(type="node", id="test")
-```
-
-**Решаемые проблемы:**
-- Явное разделение namespace (не нужно угадывать "это tool или node?")
-- Валидация на этапе парсинга
-- Защита от коллизий имён
-
-## ResourceRegistry - Реестр ресурсов
-
-**ResourceRegistry** - базовый абстрактный класс для реестров ресурсов платформы.
-Файл: `core/registry/base.py`
-
-Zero-Guess принципы:
-- Все ресурсы регистрируются явно при startup
-- Дубликат = `ResourceAlreadyExistsError`
-- Несуществующий ресурс = `ResourceNotFoundError`
-- Никаких fallback значений
-
-```python
-from core.registry import ResourceRegistry
-
-class NodeRegistry(ResourceRegistry[Type[BaseNode]]):
-    def register(self, key: str, resource: Type[BaseNode], metadata: dict = None):
-        super().register(key, resource, metadata)
-    
-    def get(self, key: str) -> Type[BaseNode]:
-        return super().get(key)
-
-# Использование
-registry = NodeRegistry()
-registry.register("react_node", ReactNode)
-node_class = registry.get("react_node")  # ResourceNotFoundError если не найден
-```
-
-**Методы:**
-
-| Метод | Описание |
-|-------|----------|
-| `register(key, resource)` | Регистрирует ресурс (ошибка при дубликате) |
-| `get(key)` | Получает ресурс (ошибка если не найден) |
-| `has(key)` | Проверяет наличие ресурса |
-| `list_keys()` | Список всех ключей |
-| `unregister(key)` | Удаляет ресурс |
-
-## ГЛАВНОЕ ПРАВИЛО: ВСЕ ЧЕРЕЗ a2a-sdk
-
-ВСЯ ПЛАТФОРМА ПОСТРОЕНА НА ТИПАХ И ОБЪЕКТАХ ИЗ `a2a-sdk`!
-НЕ ИЗОБРЕТАЕМ СВОИ ТИПЫ - ИСПОЛЬЗУЕМ СТАНДАРТНЫЕ ИЗ SDK.
-ИСПОЛЬЗУЙ context7 a2a-sdk для актуальной документации.
-
-НЕ ДЕЛАЙ КОСТЫЛЕЙ! Если что-то не подходит под архитектуру - МЕНЯЕМ!
-
-```python
-from a2a.types import (
-    # События streaming
-    TaskStatusUpdateEvent,    # Обновление статуса задачи
-    TaskArtifactUpdateEvent,  # Чанки артефактов (текст от LLM)
-    
-    # Основные типы
-    Message,                  # Сообщение (role, parts)
-    Task,                     # Задача
-    TaskStatus,               # Статус задачи
-    TaskState,                # working | input-required | completed | failed | canceled
-    
-    # Артефакты и части
-    Artifact,                 # Артефакт (name, parts)
-    Part,                     # Часть: TextPart, FilePart, DataPart
-    TextPart,                 # {"kind": "text", "text": "..."}
-    
-    # Запросы/ответы A2A протокола
-    MessageSendParams,
-    SendMessageRequest,
-    SendMessageResponse,
-)
-```
-
----
-
-## Ключевые сущности
-
-### Agent
-**Agent** - это кастомная реализация графа нод с условными переходами.
-**НЕ ИСПОЛЬЗУЕТСЯ LangGraph!** Это полностью кастомная реализация.
-
-## Иерархия: Router -> SubAgent -> Tool
-
-Архитектура позволяет строить сложные цепочки вызовов.
-
-1. **Router (Supervisor)**: Агент верхнего уровня, который определяет намерение пользователя.
-2. **SubAgent**: Специализированный агент, который решает конкретную задачу.
-3. **Tool**: Конечный инструмент (поиск в БД, API вызов, и т.д.).
-
-### Принцип работы
-
-1. **Router** получает сообщение пользователя.
-2. Определяет нужный сценарий (Субагент).
-3. Передает управление Субагенту (вызывает его как Tool).
-4. **Субагент** выполняется автономно, пока не решит задачу или не потребуется ввод пользователя.
-5. Если нужен ввод пользователя, Субагент "засыпает" (Interrupt), и управление возвращается пользователю.
-6. **ВАЖНО**: Когда пользователь отвечает, управление возвращается **напрямую в Субагент**, минуя Router!
-
-<good_example>
-# Сценарий "Жалоба на курьеров"
-
-RouterAgent -> CourierComplaintScenario (SubAgent)
-    -> WarehouseAgent (SubSubAgent) -> ask_user("Какой склад?")
-    
-# Пользователь отвечает: "Склад на Ленина"
-# Управление идет сразу в WarehouseAgent!
-</good_example>
-
-- Хранится в таблице `agents` (БД)
-- Конфигурация: `AgentConfig`
-- Файл конфигурации: `agent.json`
-- Содержит: nodes, edges, skills, variables
-- Выполнение: `Agent.run(state)` → итерация по нодам через edges
-
-**Класс Agent** (`apps/agents/src/agent/agent.py`):
-```python
-class Agent:
-    def __init__(self, agent_id, name, entry, nodes, edges, variables):
-        self.agent_id = agent_id
-        self.nodes = nodes  # Dict[str, BaseNode]
-        self.edges = edges  # List[Edge]
-        self.entry = entry  # ID стартовой ноды
-    
-    async def run(self, state: ExecutionState) -> ExecutionState:
-        # Итерация по графу: entry → nodes → edges → next node
-        current_node_id = self.entry
-        for iteration in range(MAX_ITERATIONS):
-            node = self.nodes[current_node_id]
-            state = await node.run(state)
-            next_node_id = self._find_next_node(current_node_id, state)
-            if next_node_id is None:
-                break
-            current_node_id = next_node_id
-        return state
-```
-
-### Node
-**Node** - это узел графа Agent. Базовый класс: `BaseNode`.
-
-**Типы нод:**
-- `react_node` - ReAct агент с LLM и tools (класс `ReactNode`)
-- `function` - Python функция (класс `FunctionNode`)
-- `agent` - вложенный Agent (класс `AgentNode`)
-- `remote_agent` - внешний агент по A2A (класс `RemoteAgentNode`)
-- `external_api` - вызов HTTP API (класс `ExternalAPINode`)
-- `tool` - обертка над tool (класс `ToolNode`)
-
-Ноды хранятся в таблице `nodes` (БД), конфигурация: `NodeConfig`.
-Файл конфигурации: `nodes.json`.
-
-**Базовый контракт:**
-```python
-class BaseNode(ABC):
-    @abstractmethod
-    async def run(self, state: ExecutionState) -> ExecutionState:
-        pass
-    
-    def as_tool(self) -> NodeAsTool:
-        # Любая нода может стать tool
-        return NodeAsTool(node=self)
-```
-
-**ВАЖНО:** Все ноды работают с нативным `ExecutionState` объектом, а не с `Dict[str, Any]`!
-
-### Tool
-**Tool** - инструмент, который может использовать нода.
-- Хранится в таблице `tools`
-- Типы: `BaseTool`, `InlineTool`, `ExternalAPITool`, `FunctionTool`
-- Любая нода может быть использована как tool через `NodeAsToolWrapper`
-
-**Базовый контракт:**
-```python
-class BaseTool(ABC):
-    name: str
-    description: str
-    permission: Optional[Union[str, List[str]]] = None
-    
-    @abstractmethod
-    async def execute(self, args: Dict[str, Any], state: ExecutionState) -> Any:
-        pass
-```
-
-**ВАЖНО:** Tools всегда принимают нативный `ExecutionState`, а не `Dict[str, Any]`!
-Inline код tools также работает с `ExecutionState` через SafeEval.
-
----
-
-## Stream-First Architecture
-
-LLM **ВСЕГДА** вызывается как stream. Redis Pub/Sub - единственный механизм доставки событий.
-
-### Полный поток данных
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────────────────────────┐
-│   Client    │────▶│   FastAPI   │────▶│  A2AChannel                     │
-│  (A2A/REST) │     │   (API)     │     │  on_message_send/stream()       │
-└─────────────┘     └──────┬──────┘     └────────────────┬────────────────┘
-                           │                             │
-                           │            ┌────────────────▼────────────────┐
-                           │            │  1. EventSubscriber.subscribe() │
-                           │            │  2. ready_event.wait()          │
-                           │            │  3. process_agent_task.kiq()    │
-                           │            └────────────────┬────────────────┘
-                           │                             │
-                           │                             ▼
-                           │                    ┌────────────────┐
-                           │                    │  TaskIQ Worker │
-                           │                    │  (subprocess)  │
-                           │                    └───────┬────────┘
-                           │                            │
-                           │               ┌────────────▼────────────┐
-                           │               │  BaseChannel.process_task│
-                           │               │    ReactNodeRunner     │
-                           │               │    LLMClient.stream()   │
-                           │               └────────────┬────────────┘
-                           │                            │
-                           │               ┌────────────▼────────────┐
-                           │               │     Emitter             │
-                           │               │  emit_text_chunk()      │
-                           │               │  emit_tool_call()       │
-                           │               │  emit_complete()        │
-                           │               └────────────┬────────────┘
-                           │                            │
-                           │                            ▼
-                           │               ┌─────────────────────────┐
-                           │               │    Redis Pub/Sub        │
-                           │               │  channel: stream:{id}   │
-                           │               └────────────┬────────────┘
-                           │                            │
-                  ┌────────▼────────┐                   │
-                  │ EventSubscriber │◀──────────────────┘
-                  │ subscribe(id)   │
-                  └────────┬────────┘
-                           │
-              ┌────────────┴────────────┐
-              │                         │
-    ┌─────────▼─────────┐     ┌─────────▼─────────┐
-    │  message/stream   │     │   message/send    │
-    │  yield events     │     │  collect() → Task │
-    │  (SSE Response)   │     │  (JSON Response)  │
-    └───────────────────┘     └───────────────────┘
-```
-
-### Ключевые компоненты streaming
-
-| Компонент | Файл | Роль |
-|-----------|------|------|
-| `A2AChannel` | `apps/agents/src/channels/a2a.py` | Координирует подписку и kiq |
-| `BaseChannel.process_task` | `apps/agents/src/channels/base.py` | Выполняет agent в worker |
-| `Emitter` | `apps/agents/src/streaming/emitter.py` | Публикует A2A события в Redis |
-| `EventSubscriber` | `apps/agents/src/streaming/subscriber.py` | Подписывается на события из Redis |
-| `RedisClient` | `core/clients/redis_client.py` | Pub/Sub через `publish()` и `subscribe()` |
-| `LLMClient.stream()` | `apps/agents/src/clients/llm/factory.py` | Stream-only вызов LLM |
-| `ReactNodeRunner` | `apps/agents/src/agent/runners/react_runner.py` | ReAct цикл, yield'ит события |
-| `_build_task_from_events` | `apps/agents/src/channels/a2a.py` | Формирует Task из событий (sync) |
-
-### Emitter методы
-
-```python
-class Emitter:
-    async def emit_text_chunk(text, append=True, last_chunk=False)  # Чанк от LLM
-    async def emit_tool_call(tool_name, tool_args, tool_call_id)    # Вызов tool
-    async def emit_tool_result(tool_name, result, tool_call_id)     # Результат tool
-    async def emit_artifact(data, name="response")                  # Артефакт с данными
-    async def emit_reasoning(reasoning_data)                        # Reasoning данные
-    async def emit_complete(response, message_id=None, has_artifact=False)  # Завершение
-    async def emit_interrupt(question, message_id=None)             # Запрос ввода
-    async def emit_error(error, message_id=None)                    # Ошибка
-```
-
----
-
-## A2A API (src/api/a2a.py)
-
-Полная реализация A2A протокола. ВСЕ 10 методов поддержаны:
-
-| # | JSON-RPC метод | Описание |
-|---|----------------|----------|
-| 1 | `message/send` | Отправка сообщения (синхронно) → `Task` |
-| 2 | `message/stream` | Отправка сообщения (SSE streaming) → yield событий |
-| 3 | `tasks/get` | Получение состояния задачи → `Task` с историей |
-| 4 | `tasks/cancel` | Отмена задачи → `Task(canceled)` |
-| 5 | `tasks/resubscribe` | Переподписка на события → yield событий |
-| 6 | `tasks/pushNotificationConfig/get` | Получить конфиг push notifications |
-| 7 | `tasks/pushNotificationConfig/set` | Сохранить конфиг push notifications |
-| 8 | `tasks/pushNotificationConfig/delete` | Удалить конфиг push notifications |
-| 9 | `tasks/pushNotificationConfig/list` | Список конфигов push notifications |
-| 10 | `agent/getAuthenticatedExtendedCard` | Расширенная карточка агента |
-
-### Endpoints
-
-| Endpoint | Описание |
-|----------|----------|
-| `GET /agents/{agent_id}` | Agent Card (well-known) |
-| `POST /agents/{agent_id}` | JSON-RPC handler (все методы) |
-| `GET /agents/{agent_id}/skills` | Список skills |
-| `GET /agents/{agent_id}/skills/{skill_id}` | Детали skill |
-| `GET /agents/{agent_id}/skills/{skill_id}/tools` | Tools для skill |
-| `POST /agents/{agent_id}/skills` | Создать skill |
-| `PUT /agents/{agent_id}/skills/{skill_id}` | Обновить skill |
-| `DELETE /agents/{agent_id}/skills/{skill_id}` | Удалить skill |
-| `GET /agents/{agent_id}/schema` | JSON Schema для skill |
-
----
-
-## TaskIQ
-
-Асинхронная очередь задач через Redis для многоинстансности.
-
-### Tasks
-
-| Task | Файл | Описание |
-|------|------|----------|
-| `process_agent_task` | `agent_tasks.py` | Выполнение agent, публикует события через Emitter |
-| `execute_tool` | `tool_tasks.py` | Выполнение tool из ReactNode |
-| `execute_inline_code` | `eval_task.py` | Выполнение inline кода через SafeEval |
-
-### process_agent_task
-
-Главная задача. Делегирует выполнение в `BaseChannel.process_task()`:
-
-```python
-@broker.task(task_name="process_agent_task")
-async def process_agent_task(agent_id, session_id, user_id, content, channel="a2a", ...):
-    # Получаем канал
-    channel_instance = get_channel(channel, agent_id)
-    
-    # Подготавливаем параметры
-    params = PreparedTaskParams(task_id, context_id, session_id, content, ...)
-    
-    # Делегируем выполнение - вся логика в BaseChannel
-    return await channel_instance.process_task(params)
-```
-
-`BaseChannel.process_task()` внутри:
-1. Создаёт `Emitter`
-2. Загружает `Agent` через `AgentFactory`
-3. Запускает `ReactNodeRunner.run()` - стримит события
-4. Публикует `emit_complete()` или `emit_interrupt()`
-5. Сохраняет state через `StateManager`
-
----
-
-## Структура проекта
-
-```
-core/                          # Базовые модули (независимые от сервисов)
-├── urn.py                     # URN - идентификация ресурсов
-├── errors.py                  # ResourceNotFoundError, ResourceAlreadyExistsError
-├── registry/                  # ResourceRegistry - базовый реестр
-├── auth/                      # Авторизация, permissions
-├── clients/                   # Redis, A2A клиенты
-├── config/                    # Базовый конфиг (CoreSettings)
-├── container.py               # CoreContainer (базовый DI)
-├── context/                   # Context, User, Tenant (multi-tenancy)
-├── db/                        # Storage, BaseRepository, BaseSQLRepository
-├── docs_generator/            # Генератор документации
-├── logging/                   # Логирование (OpenTelemetry format)
-├── middleware/                # AuthMiddleware
-├── tasks/                     # TaskIQ broker (базовый)
-└── tracing/                   # Трейсинг (OpenTelemetry)
-
-apps/
-├── agents/                    # Сервис agents
-│   ├── agents/                # Конфигурации agents (загружаются в БД)
-│   │   ├── registry.yaml      # Реестр активных agents
-│   │   └── <agent_name>/      # Папка agent
-│   │       ├── agent.json     # Конфигурация agent (nodes + edges)
-│   │       ├── nodes.json     # Ноды (сохраняются в БД)
-│   │       ├── nodes.py       # Python код для нод (CODE_REFERENCE)
-│   │       └── prompts/       # Промпты
-│   ├── src/                   # Исходники сервиса
-│   │   ├── agent/             # Agent, BaseNode, runners
-│   │   ├── api/               # API endpoints (a2a, registry, v1)
-│   │   ├── channels/          # Каналы (A2A, etc.)
-│   │   ├── clients/llm/       # LLMClient, MockLLM
-│   │   ├── config/            # AgentSettings (extends CoreSettings)
-│   │   ├── container.py       # PlatformContainer (extends CoreContainer)
-│   │   ├── db/                # Репозитории сервиса
-│   │   ├── eval/              # SafeEval
-│   │   ├── models/            # AgentConfig, NodeConfig, ToolReference
-│   │   ├── services/          # AgentFactory, AgentsLoader
-│   │   ├── state/             # ExecutionState, persistence, InterruptManager
-│   │   ├── streaming/         # Emitter, EventSubscriber
-│   │   ├── tasks/             # TaskIQ tasks (agent_tasks, tool_tasks)
-│   │   ├── tools/             # BaseTool, ToolRegistry, NodeAsToolWrapper
-│   │   └── variables/         # VariablesService
-│   ├── tools/                 # Реализации tools (CODE_REFERENCE)
-│   ├── main.py                # FastAPI точка входа
-│   └── static/                # Статика (PWA, чат)
-├── broker/                    # Worker сервис
-│   ├── broker.py              # startup/shutdown события
-│   └── worker.py              # Точка входа: taskiq worker apps.broker.worker:broker
-└── ...                        # Другие сервисы в будущем
-
-tests/                         # Тесты
-```
-
-### Ключевые файлы
-
-| Файл | Назначение |
-|------|------------|
-| `core/urn.py` | URN - идентификация ресурсов (agent, node, tool, skill) |
-| `core/registry/base.py` | ResourceRegistry - базовый реестр ресурсов |
-| `core/errors.py` | ResourceNotFoundError, ResourceAlreadyExistsError |
-| `core/state/execution_state.py` | ExecutionState - типизированное состояние |
-| `apps/agents/src/state/persistence.py` | Сериализация/десериализация state |
-| `apps/agents/src/mapping.py` | MappingResolver для `@state:` и `@var:` |
-| `apps/agents/src/tools/registry.py` | ToolRegistry - создание tools |
-| `apps/agents/src/agent/agent.py` | Agent - выполнение графа нод |
-| `apps/agents/src/agent/nodes.py` | BaseNode, ReactNode, ToolNode |
-| `apps/agents/src/agent/runners/react_runner.py` | ReactNodeRunner - ReAct цикл |
-
-## Архитектура Agent: Кастомная реализация графа
-
-**ВАЖНО:** Это НЕ LangGraph! Это кастомная реализация направленного графа.
-
-Agent = направленный граф с условными переходами:
-- **nodes** - ноды (react_node, function, agent, remote_agent, external_api, tool)
-- **edges** - связи между нодами с условиями
-- **entry** - точка входа
-
-```
-┌─────────┐      ┌───────────┐      condition: valid == true      ┌──────────┐
-│  entry  │ ───► │ validator │ ─────────────────────────────────► │ analyzer │
-└─────────┘      └───────────┘                                    └──────────┘
-                       │
-                       │ condition: valid == false
-                       ▼
-                 ┌──────────┐
-                 │  parser  │
-                 └──────────┘
-```
-
-### Механизм выполнения
-
-1. **Загрузка из БД:** `AgentFactory.get_agent(agent_id)` → `Agent` объект
-2. **Создание state:** `ExecutionState.create(task_id, context_id, user_id, content)`
-3. **Выполнение:** `await agent.run(state)` → итерация по графу
-4. **Переходы:** после каждой ноды проверяются conditions в edges
-5. **Завершение:** когда `to_node == None` или нет подходящего edge
-
-### Условные переходы (Edges)
-
-```python
-class Edge:
-    from_node: str              # ID исходной ноды
-    to_node: Optional[str]      # ID целевой ноды (None = конец)
-    condition: Optional[str]    # Условие перехода
-```
-
-**Примеры условий:**
-- `validation.valid == true` - проверка вложенного поля
-- `stage == "done"` - проверка значения
-- `count > 5` - числовое сравнение
-- `None` - безусловный переход
-
-## Поток данных (DB-First)
-
-```
-agents/*/agent.json  →  AgentsLoader.load_to_db()  →  БД (AgentConfig в таблице agents)
-agents/*/nodes.json  →  AgentsLoader.load_to_db()  →  БД (NodeConfig в таблице nodes)
-                                                            ↓
-                                                    AgentFactory.get_agent()
-                                                            ↓
-                                                    VariableResolver.resolve()
-                                                            ↓
-                                                    Agent (с резолвнутыми variables)
-                                                            ↓
-                                                    await agent.run(state)
-                                                            ↓
-                                                    ExecutionState (обновлённый)
-```
-
-### Детальный поток выполнения
-
-1. **Startup:** `AgentsLoader.load_to_db()` загружает все agents из `apps/agents/agents/` в БД
-2. **Request:** Клиент отправляет запрос через A2A API
-3. **Channel:** `A2AChannel.on_message_send()` создаёт task и подписывается на события
-4. **TaskIQ:** `process_agent_task.kiq()` отправляет задачу в worker
-5. **Worker:** `BaseChannel.process_task()` выполняет agent
-6. **Factory:** `AgentFactory.get_agent()` загружает agent из БД
-7. **Variables:** `VariableResolver.resolve()` резолвит `@var:` переменные
-8. **Execution:** `await agent.run(state)` выполняет граф нод
-9. **Streaming:** `Emitter` публикует события в Redis Pub/Sub
-10. **Response:** `EventSubscriber` собирает события и отправляет клиенту
-
-## Nodes (NodeConfig)
-
-Ноды - переиспользуемые компоненты с глобально уникальным ID.
-Хранятся в таблице `nodes`, загружаются из `nodes.json`.
-
-### nodes.json
-```json
-[
-  {
-    "id": "consultant",
-    "name": "Консультант",
-    "description": "Консультирует по вопросам",
-    "prompt_file": "prompts/consultant.md",
-    "tools": ["search", "ask_user"],
-    "llm": {"model": "gpt-4o", "temperature": 0.3}
-  }
-]
-```
-
-Если `type` не указан - по умолчанию `react_node`.
-
-### Использование в agent.json
-```json
-{
-  "nodes": {
-    "main": {
-      "type": "react_node",
-      "node_id": "consultant"
-    },
-    "nested": {
-      "type": "agent",
-      "agent_id": "other_agent"
+# Agents - Архитектура
+
+## Принципы
+
+1. **DB-First** - всё в БД, код только исполняет
+2. **Stream-First** - все события через Redis Pub/Sub
+3. **Zero-Guess** - нет fallback значений, ошибка = exception
+
+## NodeType
+
+| Тип | Класс | Описание |
+|-----|-------|----------|
+| react_node | ReactNode | LLM + tools, ReAct паттерн |
+| code | CodeNode | Inline Python код |
+| agent | AgentNode | Вызов skill (agent_id + skill_id) |
+| remote_agent | RemoteAgentNode | A2A протокол |
+| external_api | ExternalAPINode | HTTP запросы |
+| mcp | MCPNode | MCP tools |
+| channel | ChannelNode | Отправка сообщений (Telegram, Webhook) |
+
+## AgentConfig
+
+    {
+        "agent_id": "my_agent",
+        "name": "My Agent",
+        "entry": "main",
+        "nodes": {...},
+        "edges": [...],
+        "skills": {...},
+        "variables": {...},
+        "triggers": {...}
     }
-  }
-}
-```
-- `node_id` - ссылка на Node (NodeConfig) в таблице `nodes`
-- `agent_id` - ссылка на Agent (AgentConfig) в таблице `agents`
 
-### Нода как tool
-ToolRegistry создает `NodeAsToolWrapper` из inline react_node конфига.
+## Triggers (точки входа)
 
-## ExecutionState
+Триггеры - внешние источники запуска агента. Хранятся в AgentConfig.
 
-`ExecutionState` - типизированный Pydantic класс состояния выполнения агента.
-Файл: `core/state/execution_state.py`
+### TriggerType
 
-**ВАЖНЕЙШИЙ ПРИНЦИП:** `ExecutionState` - это **нативный объект**, который используется везде в системе!
+| Тип | Описание |
+|-----|----------|
+| telegram | Webhook от Telegram Bot API |
+| webhook | HTTP POST запрос |
+| cron | Расписание через TaskIQ |
 
-### Работа с ExecutionState
+### TriggerConfig
 
-**model_dump() и model_validate() вызываются ТОЛЬКО:**
-1. Pydantic автоматически при взаимодействии с БД/Redis (в Repository)
-2. Явно на границе с TaskIQ (при отправке/получении через очередь)
-3. Внутри tracing для JSON сериализации в OpenTelemetry spans
+    "triggers": {
+        "telegram_bot": {
+            "trigger_id": "telegram_bot",
+            "type": "telegram",
+            "config": {
+                "bot_token": "@var:telegram_token",
+                "secret_token": "webhook_secret"
+            },
+            "input_mapping": {
+                "content": "@trigger:message.text",
+                "variables.chat_id": "@trigger:message.chat.id"
+            },
+            "output_actions": [...]
+        }
+    }
 
-**Везде внутри системы** работа идет с нативным `ExecutionState` объектом:
-- Ноды: `async def run(self, state: ExecutionState) -> ExecutionState`
-- Tools: `async def execute(self, args: Dict[str, Any], state: ExecutionState) -> Any`
-- SafeEval: `async def execute_node(self, code: str, state: ExecutionState) -> ExecutionState`
-- Mapping: `MappingResolver.resolve_value(source: Any, state: ExecutionState) -> Any`
-- LLM Factory: `get_llm_for_state(state: ExecutionState) -> LLMClient`
+### input_mapping для триггеров
 
-**ЗАПРЕЩЕНО:**
-- ❌ Использовать `state.model_dump()` для передачи в другие компоненты
-- ❌ Конвертировать `ExecutionState` в `Dict[str, Any]` внутри системы
-- ❌ Писать `state_dict = state.model_dump()` где-то кроме границ (БД, TaskIQ, Tracing)
+- @trigger:path - данные из payload триггера (JSONPath)
+- @const:value - константа
 
-Ноды получают и возвращают `ExecutionState` - строго типизированный объект.
+### output_actions
 
-### Обязательные поля
+Действия после завершения агента:
 
-| Поле | Тип | Назначение |
-|------|-----|-----------|
-| `task_id` | `str` | ID задачи A2A |
-| `context_id` | `str` | ID контекста A2A |
-| `user_id` | `str` | ID пользователя |
+    "output_actions": [
+        {
+            "channel": "telegram",
+            "action": "send_message",
+            "mapping": {
+                "recipient": "@state:variables.chat_id",
+                "text": "@state:response"
+            },
+            "config": {"bot_token": "@var:token"},
+            "condition": "@state:success"
+        }
+    ]
 
-### Системные поля
+### Webhook URL
 
-| Поле | Тип | Назначение |
-|------|-----|-----------|
-| `session_id` | `Optional[str]` | ID сессии |
-| `current_node` | `Optional[str]` | ID текущей ноды |
-| `skill_id` | `str` | ID skill (default: "default") |
+Telegram: `/agents/api/v1/triggers/telegram/{agent_id}/{trigger_id}`
+Webhook: `/agents/api/v1/triggers/webhook/{agent_id}/{trigger_id}`
 
-### Данные
+## Nodes
 
-| Поле | Тип | Назначение |
-|------|-----|-----------|
-| `content` | `Optional[str]` | Входное сообщение |
-| `response` | `Optional[str]` | Ответ агента |
-| `messages` | `List[Message]` | История сообщений (A2A Message) |
-| `user_groups` | `List[str]` | Группы пользователя |
-| `variables` | `Dict[str, Any]` | Резолвнутые переменные |
-| `files` | `List[Dict]` | Прикреплённые файлы |
+### ReactNode
 
-### Interrupt
+    {
+        "type": "react_node",
+        "prompt": "You are helpful assistant.",
+        "tools": [
+            {"tool_id": "calc", "type": "code", "code": "..."},
+            {"tool_id": "skill", "type": "agent", "agent_id": "x", "skill_id": "y"}
+        ]
+    }
 
-| Поле | Тип | Назначение |
-|------|-----|-----------|
-| `interrupt` | `Optional[InterruptData]` | Данные прерывания |
-| `interrupt_path` | `List[InterruptPathItem]` | Путь к месту прерывания |
+Tools выполняются ПАРАЛЛЕЛЬНО через asyncio.gather.
 
-### История выполнения
+### CodeNode
 
-| Поле | Тип | Назначение |
-|------|-----|-----------|
-| `node_history` | `Dict[str, Dict]` | История вызовов нод |
-| `tool_results` | `Dict[str, Any]` | Результаты tools |
-| `nested_states` | `Dict[str, Dict]` | Состояния вложенных нод |
+    {
+        "type": "code",
+        "input_mapping": {"value": "@state:input_value"},
+        "output_mapping": {"result": "output_field"},
+        "code": "def execute(args, state):\n    return {'result': args['value'] * 2}"
+    }
 
-### Reasoning
+Последняя функция = entry point.
 
-| Поле | Тип | Назначение |
-|------|-----|-----------|
-| `reasoning_history` | `List[Dict]` | История рассуждений |
-| `pending_reasoning` | `Optional[Dict]` | Текущее pending рассуждение |
+### AgentNode
 
-### Пример
+    {
+        "type": "agent",
+        "agent_id": "helper_agent",
+        "skill_id": "translate"
+    }
 
-```python
-from core.state import ExecutionState
+Агент может вызывать СВОИ skills как tools.
 
-state = ExecutionState.create(
-    task_id="task-123",
-    context_id="ctx-456",
-    user_id="user-789",
-    content="Привет",
-)
+### ChannelNode
 
-# Типизированный доступ
-state.response = "Здравствуйте!"
-state.variables["company"] = "ACME"
-```
+Отправка сообщений во внешние каналы:
 
-### Dict-like интерфейс
+    {
+        "type": "channel",
+        "channel": "telegram",
+        "action": "send_message",
+        "channel_config": {
+            "bot_token": "@var:telegram_token",
+            "api_base": "https://api.telegram.org"
+        },
+        "input_mapping": {
+            "recipient": "@state:variables.chat_id",
+            "text": "@state:response"
+        }
+    }
 
-`ExecutionState` поддерживает dict-like доступ для **обратной совместимости** (устаревший способ):
+#### ChannelType
 
-```python
-state["response"] = "Ответ"      # setattr
-response = state["response"]     # getattr
-if "response" in state: ...      # hasattr
-value = state.get("key", None)   # get с default
-```
+| Тип | Действия |
+|-----|----------|
+| telegram | send_message, send_photo, send_document, reply |
+| webhook | send_message, send_payload, send_notification |
 
-**РЕКОМЕНДУЕТСЯ** использовать прямой доступ через атрибуты:
-```python
-state.response = "Ответ"         # Прямой доступ через атрибут
-response = state.response         # Типизированный доступ
-if hasattr(state, "response"): ...
-value = getattr(state, "key", None)
-```
+#### Как tool в ReactNode
 
-## Variables
+    "tools": [{
+        "tool_id": "notify_telegram",
+        "type": "channel",
+        "channel": "telegram",
+        "action": "send_message",
+        "channel_config": {"bot_token": "..."},
+        "args_schema": {
+            "chat_id": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "input_mapping": {
+            "recipient": "@state:chat_id",
+            "text": "@state:message"
+        }
+    }]
 
-Переменные agent резолвятся через VariablesService:
-- `@var:key` в конфиге → загружается из БД
-- Доступны в `state.variables` для всех нод
-- Используются в промптах через `{variable_name}`
+## Edges
 
-## Interrupt/Resume механизм
+    [
+        {"from_node": "start", "to_node": "process"},
+        {"from_node": "process", "to_node": "end", "condition": "state.success"},
+        {"from_node": "end", "to_node": null}
+    ]
 
-Механизм запроса информации у пользователя во время выполнения agent.
-**Работает с любой вложенностью:** Agent → Node → Agent → SubAgent → ask_user.
+to_node: null = конец графа.
 
-### Базовый сценарий
+## Skills
 
-1. Нода вызывает tool `ask_user`
-2. `AskUserTool.execute()` выбрасывает `AgentInterrupt` exception
-3. Exception пробрасывается через все уровни вложенности
-4. `BaseChannel.process_task()` ловит exception
-5. `Emitter.emit_interrupt(question)` публикует событие в Redis
-6. Клиент получает `TaskStatusUpdateEvent(state=input_required)`
-7. State сохраняется в БД через `StateRepository`
-8. При следующем запросе с `is_resume=True` выполнение продолжается
+    "skills": {
+        "math_skill": {
+            "name": "Math",
+            "entry": "calc",
+            "nodes": {
+                "calc": {"type": "code", "code": "..."}
+            },
+            "edges": [{"from_node": "calc", "to_node": null}]
+        }
+    }
 
-### Структура state при interrupt
+## Параллельное выполнение
 
-```python
-state.interrupt = InterruptData(
-    question="Ваш вопрос?",
-    context={"key": "value"}
-)
-state.interrupt_path = [
-    InterruptPathItem(type="tool", id="ask_user", tool_call={...}),
-    InterruptPathItem(type="react_node", id="subnode_id"),
-    InterruptPathItem(type="agent", id="parent_agent_id"),
-]
-state.nested_states = {
-    "subnode_id": NestedStateData(messages=[...], interrupt_path=[...]),
-    "parent_agent_id": NestedStateData(messages=[...], interrupt_path=[...])
-}
-state.current_node = "current_node_id"
-```
+1. Ноды одного уровня графа - параллельно
+2. Tools в ReactNode - параллельно (asyncio.gather)
 
-### InterruptManager
+State merge: messages extend, tool_results merge, остальное last wins.
 
-Управляет interrupt/resume для вложенных вызовов.
-Файл: `apps/agents/src/state/interrupt_manager.py`
+## Маппинги
 
-**Методы:**
-```python
-class InterruptManager:
-    @staticmethod
-    def save_nested_state(parent_state, nested_id, nested_state):
-        # Сохраняет state вложенного вызова
-        pass
-    
-    @staticmethod
-    def load_nested_state(parent_state, nested_id) -> ExecutionState:
-        # Загружает state вложенного вызова
-        pass
-    
-    @staticmethod
-    def prepare_nested_resume(state, user_response) -> ExecutionState:
-        # Подготавливает state для resume
-        # Восстанавливает вложенные состояния по interrupt_path
-        pass
-```
+input_mapping:
+- @state:field - из state
+- @const:value - константа
 
-### Пример вложенного interrupt
+output_mapping:
+- result: field - result → state.field
 
-```
-RouterAgent (entry)
-  └─> CourierComplaintAgent (tool)
-      └─> WarehouseAgent (tool)
-          └─> ask_user("Какой склад?")  ← INTERRUPT
+## Resources
 
-User: "Склад Большие Каменщики"
+Ресурсы = переиспользуемые компоненты (RAG, S3, LLM, Cache, HTTP, Code модули).
 
-Resume:
-  WarehouseAgent получает ответ  ← управление идёт СРАЗУ сюда
-  └─> продолжает выполнение
-      └─> возвращает результат в CourierComplaintAgent
-          └─> CourierComplaintAgent продолжает
-```
+### Типы ресурсов
 
-**ВАЖНО:** При resume управление возвращается **напрямую в прервавшуюся ноду**, минуя верхние уровни!
+| Тип | Класс | Назначение |
+|-----|-------|------------|
+| code | CodeModule | Python модуль с функциями/классами |
+| rag | RAGResource | Семантический поиск по документам |
+| files | FilesResource | S3/MinIO файловое хранилище |
+| cache | CacheResource | Redis кэш |
+| llm | LLMResource | Вызов LLM моделей |
+| prompt | PromptResource | Jinja2 шаблоны |
+| http | HTTPResource | HTTP клиент с базовым URL |
+| secret | str | Секрет из variables |
 
-## Защита от бесконечных циклов
+### Конфигурация ресурсов
 
-| Лимит | Значение | Исключение |
-|-------|----------|------------|
-| Итерации Agent | 100 | `AgentInfiniteLoopError` |
-| Вызовы function нод | 5 | `NodeCallLimitError` |
-| ReAct итерации | 10 | Автоматический выход из цикла |
+На уровне агента (доступны ВСЕМ нодам):
 
-## Permissions
+    "resources": {
+        "kb": {"type": "rag", "config": {"namespace": "faq"}},
+        "storage": {"type": "files", "config": {"bucket": "docs"}}
+    }
 
-Контроль доступа на основе групп пользователей.
+На уровне ноды (переопределяют агентские):
 
-### Уровни permissions
+    "nodes": {
+        "search": {
+            "type": "code",
+            "resources": {
+                "api": {"type": "http", "config": {"base_url": "https://api.example.com"}}
+            },
+            "code": "..."
+        }
+    }
 
-| Уровень | Поле | Проверка |
-|---------|------|----------|
-| Agent | `AgentConfig.permission` | `BaseChannel.check_permissions()` |
-| Skill | `SkillConfig.permission` | `BaseChannel.check_permissions()` |
-| Tool | `BaseTool.permission` / `ToolReference.permission` | `BaseTool._check_permission()` |
+### Использование в CodeNode
 
-### Формат permission
+Ресурсы доступны как переменные в inline коде:
 
-```python
-permission: Optional[Union[str, List[str]]] = None
-# None → fallback на ["admin"]
-# "managers" → одна группа
-# ["managers", "vip"] → любая из групп
-```
+    async def execute(args, state):
+        # RAG поиск
+        results = await kb.search("вопрос", top_k=5)
+        
+        # Файлы
+        await storage.write("file.txt", "content")
+        content = await storage.read("file.txt")
+        
+        # Cache
+        await cache.set("key", {"data": 123})
+        value = await cache.get("key")
+        
+        # HTTP
+        data = await api.get("/users")
+        
+        # LLM
+        response = await llm.complete("Translate: hello")
+        
+        # Code module
+        result = utils.calculate(10)
+
+### Использование в ReactNode tools
+
+Ресурсы ноды доступны inline tools:
+
+    {
+        "type": "react_node",
+        "resources": {"kb": {"type": "rag", "config": {...}}},
+        "tools": [{
+            "tool_id": "search",
+            "type": "code",
+            "code": "async def execute(args, state):\n    return await kb.search(args['query'])"
+        }]
+    }
+
+### Иерархия ресурсов
+
+Agent → Skill → Node (каждый уровень переопределяет предыдущий)
+
+### Shared ресурсы из БД
+
+Ссылка на ресурс из таблицы resources:
+
+    "resources": {
+        "kb": {"resource_id": "shared_faq_rag"}
+    }
+
+С переопределением конфига:
+
+    "resources": {
+        "kb": {"resource_id": "shared_rag", "override_config": {"namespace": "my_ns"}}
+    }
+
+## Файлы
+
+- apps/agents/src/agent/nodes.py - все ноды (включая ChannelNode)
+- apps/agents/src/agent/agent.py - Agent класс
+- apps/agents/src/agent/runners/react_runner.py - ReactNode
+- apps/agents/src/models/agent_config.py - AgentConfig
+- apps/agents/src/models/trigger_config.py - TriggerConfig
+- apps/agents/src/models/channel_config.py - ChannelConfig, OutputAction
+- apps/agents/src/triggers/handlers/ - обработчики триггеров (telegram.py, webhook.py)
+- apps/agents/src/triggers/executor.py - TriggerExecutor
+- apps/agents/src/triggers/registry.py - TriggerRegistry
+- apps/agents/src/channels/telegram.py - TelegramChannelHandler
+- apps/agents/src/channels/webhook.py - WebhookChannelHandler
+- apps/agents/src/channels/registry.py - ChannelRegistry
+- apps/agents/src/resources/resolver.py - ResourceResolver
+- apps/agents/src/resources/wrappers/*.py - resource wrappers
+- apps/agents/src/resources/providers/*.py - resource providers

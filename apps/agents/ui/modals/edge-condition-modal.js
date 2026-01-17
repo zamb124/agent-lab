@@ -4,7 +4,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
-import '../components/editors/python-code-editor.js';
+import '../components/editors/code-editor.js';
 
 const DEFAULT_PYTHON_CODE = `def check(state):
     """
@@ -570,12 +570,17 @@ export class EdgeConditionModal extends PlatformFormModal {
     _renderPythonMode() {
         return html`
             <div class="python-mode">
-                <python-code-editor
+                <code-editor
                     .value=${this.pythonCode}
-                    @change=${this._onPythonCodeChange}
+                    language="python"
+                    node-type="code"
                     min-height="180"
-                    show-header="false"
-                ></python-code-editor>
+                    ?show-header=${false}
+                    ?show-docs=${false}
+                    ?show-templates=${false}
+                    ?show-language-switch=${false}
+                    @change=${this._onPythonCodeChange}
+                ></code-editor>
                 <div class="python-hint">
                     Функция <code>check(state)</code> должна возвращать <code>True</code> или <code>False</code>.
                     <br>state - это dict со всеми переменными текущего состояния.

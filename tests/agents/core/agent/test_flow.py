@@ -24,11 +24,11 @@ class TestCodeNode:
     async def test_function_node_executes_sync_function(self, make_test_state):
         """CodeNode выполняет синхронную функцию."""
 
-        def my_func(state):
-            state["result"] = "done"
-            return state
-
-        node = CodeNode("test", config={"code": my_func})
+        node = CodeNode("test", config={
+            "code": """def execute(args, state):
+    state.result = "done"
+    return {"result": "done"}"""
+        })
         state = make_test_state()
         result = await node.run(state)
 
@@ -38,11 +38,11 @@ class TestCodeNode:
     async def test_function_node_executes_async_function(self, make_test_state):
         """CodeNode выполняет асинхронную функцию."""
 
-        async def my_async_func(state):
-            state["async_result"] = "async_done"
-            return state
-
-        node = CodeNode("test", config={"code": my_async_func})
+        node = CodeNode("test", config={
+            "code": """async def execute(args, state):
+    state.async_result = "async_done"
+    return {"async_result": "async_done"}"""
+        })
         state = make_test_state()
         result = await node.run(state)
 
@@ -52,11 +52,11 @@ class TestCodeNode:
     async def test_function_node_changes_stage(self, make_test_state):
         """CodeNode может менять stage."""
 
-        def set_stage(state):
-            state["stage"] = "next"
-            return state
-
-        node = CodeNode("test", config={"code": set_stage})
+        node = CodeNode("test", config={
+            "code": """def execute(args, state):
+    state.stage = "next"
+    return {"stage": "next"}"""
+        })
         state = make_test_state(stage="init")
         result = await node.run(state)
 
@@ -109,17 +109,17 @@ class TestFlowWithEdges:
     async def test_flow_executes_linear_chain(self):
         """Agent выполняет линейную цепочку нод."""
 
-        def step1(state):
-            state["step1"] = True
-            return state
-
-        def step2(state):
-            state["step2"] = True
-            return state
-
         nodes = {
-            "step1": CodeNode("step1", config={"code": step1}),
-            "step2": CodeNode("step2", config={"code": step2}),
+            "step1": CodeNode("step1", config={
+                "code": """def execute(args, state):
+    state.step1 = True
+    return {"step1": True}"""
+            }),
+            "step2": CodeNode("step2", config={
+                "code": """def execute(args, state):
+    state.step2 = True
+    return {"step2": True}"""
+            }),
         }
 
         flow = Agent(
@@ -149,22 +149,22 @@ class TestFlowWithEdges:
     async def test_flow_with_condition_true(self):
         """Agent переходит по edge с условием true."""
 
-        def set_valid(state):
-            state["valid"] = True
-            return state
-
-        def on_valid(state):
-            state["path"] = "valid"
-            return state
-
-        def on_invalid(state):
-            state["path"] = "invalid"
-            return state
-
         nodes = {
-            "check": CodeNode("check", config={"code": set_valid}),
-            "valid_path": CodeNode("valid_path", config={"code": on_valid}),
-            "invalid_path": CodeNode("invalid_path", config={"code": on_invalid}),
+            "check": CodeNode("check", config={
+                "code": """def execute(args, state):
+    state.valid = True
+    return {"valid": True}"""
+            }),
+            "valid_path": CodeNode("valid_path", config={
+                "code": """def execute(args, state):
+    state.path = "valid"
+    return {"path": "valid"}"""
+            }),
+            "invalid_path": CodeNode("invalid_path", config={
+                "code": """def execute(args, state):
+    state.path = "invalid"
+    return {"path": "invalid"}"""
+            }),
         }
 
         flow = Agent(
@@ -194,22 +194,22 @@ class TestFlowWithEdges:
     async def test_flow_with_condition_false(self):
         """Agent переходит по edge с условием false."""
 
-        def set_invalid(state):
-            state["valid"] = False
-            return state
-
-        def on_valid(state):
-            state["path"] = "valid"
-            return state
-
-        def on_invalid(state):
-            state["path"] = "invalid"
-            return state
-
         nodes = {
-            "check": CodeNode("check", config={"code": set_invalid}),
-            "valid_path": CodeNode("valid_path", config={"code": on_valid}),
-            "invalid_path": CodeNode("invalid_path", config={"code": on_invalid}),
+            "check": CodeNode("check", config={
+                "code": """def execute(args, state):
+    state.valid = False
+    return {"valid": False}"""
+            }),
+            "valid_path": CodeNode("valid_path", config={
+                "code": """def execute(args, state):
+    state.path = "valid"
+    return {"path": "valid"}"""
+            }),
+            "invalid_path": CodeNode("invalid_path", config={
+                "code": """def execute(args, state):
+    state.path = "invalid"
+    return {"path": "invalid"}"""
+            }),
         }
 
         flow = Agent(
@@ -239,17 +239,17 @@ class TestFlowWithEdges:
     async def test_flow_with_nested_condition(self):
         """Agent проверяет вложенное условие."""
 
-        def set_nested(state):
-            state["validation"] = {"valid": True}
-            return state
-
-        def success(state):
-            state["result"] = "success"
-            return state
-
         nodes = {
-            "init": CodeNode("init", config={"code": set_nested}),
-            "success": CodeNode("success", config={"code": success}),
+            "init": CodeNode("init", config={
+                "code": """def execute(args, state):
+    state.validation = {"valid": True}
+    return {"validation": {"valid": True}}"""
+            }),
+            "success": CodeNode("success", config={
+                "code": """def execute(args, state):
+    state.result = "success"
+    return {"result": "success"}"""
+            }),
         }
 
         flow = Agent(
@@ -277,17 +277,17 @@ class TestFlowWithEdges:
     async def test_flow_unconditional_edge(self):
         """Edge без condition - безусловный переход."""
 
-        def step1(state):
-            state["step1"] = True
-            return state
-
-        def step2(state):
-            state["step2"] = True
-            return state
-
         nodes = {
-            "step1": CodeNode("step1", config={"code": step1}),
-            "step2": CodeNode("step2", config={"code": step2}),
+            "step1": CodeNode("step1", config={
+                "code": """def execute(args, state):
+    state.step1 = True
+    return {"step1": True}"""
+            }),
+            "step2": CodeNode("step2", config={
+                "code": """def execute(args, state):
+    state.step2 = True
+    return {"step2": True}"""
+            }),
         }
 
         flow = Agent(
@@ -317,7 +317,10 @@ class TestFlowWithEdges:
         """Agent выбрасывает ошибку для несуществующей ноды."""
 
         nodes = {
-            "start": CodeNode("start", config={"code": lambda s: s}),
+            "start": CodeNode("start", config={
+                "code": """def execute(args, state):
+    return {}"""
+            }),
         }
 
         flow = Agent(
@@ -341,12 +344,15 @@ class TestFlowWithEdges:
     async def test_flow_raises_on_infinite_loop(self):
         """Agent выбрасывает ошибку при бесконечном цикле."""
 
-        def noop(state):
-            return state
-
         nodes = {
-            "a": CodeNode("a", config={"code": noop}),
-            "b": CodeNode("b", config={"code": noop}),
+            "a": CodeNode("a", config={
+                "code": """def execute(args, state):
+    return {}"""
+            }),
+            "b": CodeNode("b", config={
+                "code": """def execute(args, state):
+    return {}"""
+            }),
         }
 
         flow = Agent(
@@ -402,14 +408,13 @@ class TestFlowVariables:
     @pytest.mark.asyncio
     async def test_variables_available_in_state(self):
         """Переменные flow доступны в state["variables"]."""
-        captured_variables = {}
-
-        def capture_variables(state: Dict[str, Any]) -> Dict[str, Any]:
-            captured_variables.update(state.get("variables", {}))
-            return state
 
         nodes = {
-            "main": CodeNode("main", config={"code": capture_variables}),
+            "main": CodeNode("main", config={
+                "code": """def execute(args, state):
+    state.captured_variables = dict(state.variables)
+    return {"captured_variables": dict(state.variables)}""",
+            }),
         }
 
         flow = Agent(
@@ -422,26 +427,27 @@ class TestFlowVariables:
         )
 
         from core.state import ExecutionState
-        await flow.run(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
 
-        assert captured_variables == {"company": "TestCorp", "phone": "123-456"}
+        assert result["captured_variables"] == {"company": "TestCorp", "phone": "123-456"}
 
     @pytest.mark.asyncio
     async def test_function_can_use_variables(self):
         """Функция может использовать переменные из state."""
 
-        def use_variables(state: Dict[str, Any]) -> Dict[str, Any]:
-            variables = state.get("variables", {})
-            state["greeting"] = f"Welcome to {variables.get('company', 'Unknown')}"
-            return state
-
         nodes = {
-            "main": CodeNode("main", config={"code": use_variables}),
+            "main": CodeNode("main", config={
+                "code": """def execute(args, state):
+    variables = state.variables
+    company = variables.get('company', 'Unknown')
+    state.greeting = f"Welcome to {company}"
+    return {"greeting": f"Welcome to {company}"}""",
+            }),
         }
 
         flow = Agent(
@@ -563,17 +569,17 @@ class TestFlowConditionEvaluation:
     async def test_string_comparison(self):
         """Сравнение со строкой."""
 
-        def set_status(state):
-            state["status"] = "active"
-            return state
-
-        def on_active(state):
-            state["result"] = "is_active"
-            return state
-
         nodes = {
-            "init": CodeNode("init", config={"code": set_status}),
-            "active": CodeNode("active", config={"code": on_active}),
+            "init": CodeNode("init", config={
+                "code": """def execute(args, state):
+    state.status = "active"
+    return {"status": "active"}"""
+            }),
+            "active": CodeNode("active", config={
+                "code": """def execute(args, state):
+    state.result = "is_active"
+    return {"result": "is_active"}"""
+            }),
         }
 
         flow = Agent(
@@ -601,22 +607,22 @@ class TestFlowConditionEvaluation:
     async def test_numeric_comparison(self):
         """Числовое сравнение."""
 
-        def set_count(state):
-            state["count"] = 5
-            return state
-
-        def high(state):
-            state["level"] = "high"
-            return state
-
-        def low(state):
-            state["level"] = "low"
-            return state
-
         nodes = {
-            "init": CodeNode("init", config={"code": set_count}),
-            "high": CodeNode("high", config={"code": high}),
-            "low": CodeNode("low", config={"code": low}),
+            "init": CodeNode("init", config={
+                "code": """def execute(args, state):
+    state.count = 5
+    return {"count": 5}"""
+            }),
+            "high": CodeNode("high", config={
+                "code": """def execute(args, state):
+    state.level = "high"
+    return {"level": "high"}"""
+            }),
+            "low": CodeNode("low", config={
+                "code": """def execute(args, state):
+    state.level = "low"
+    return {"level": "low"}"""
+            }),
         }
 
         flow = Agent(

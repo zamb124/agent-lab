@@ -201,6 +201,44 @@ class BaseNode(ABC):
         """Проверяет является ли сообщение от пользователя."""
         return getattr(msg, "role", None) == Role.user
 
+    async def _resolve_resources(self, state: ExecutionState) -> Dict[str, Any]:
+        """
+        Резолвит ресурсы для ноды.
+        
+        Иерархия (node > skill > agent):
+        - agent_config.resources - ресурсы агента
+        - agent_config.skills[skill_id].resources - ресурсы skill
+        - node config resources - ресурсы ноды
+        
+        Returns:
+            Dict[resource_id, wrapper] для использования в namespace
+        """
+        container = get_container()
+        
+        # Ресурсы из agent_config (inline в state)
+        agent_resources = state.agent_config.get("resources", {})
+        
+        # Ресурсы skill (если есть)
+        skill_resources = None
+        skill_id = state.skill_id
+        if skill_id and skill_id != "default":
+            skills = state.agent_config.get("skills", {})
+            skill_config = skills.get(skill_id, {})
+            skill_resources = skill_config.get("resources")
+        
+        # Ресурсы ноды из конфига
+        node_resources = self.config.get("resources", {})
+        
+        if not agent_resources and not skill_resources and not node_resources:
+            return {}
+        
+        return await container.resource_resolver.resolve_for_node(
+            agent_resources=agent_resources,
+            skill_resources=skill_resources,
+            node_resources=node_resources,
+            variables=state.variables,
+        )
+
     # Descriptor для унифицированного вызова: node.run(state) или node.run.kiq(state)
     run = NodeRunDescriptor()
 
@@ -588,8 +626,30 @@ class ReactNode(BaseNode):
         )
 
     async def _load_tools(self) -> List[Any]:
-        """Создаёт tools из inline конфигов."""
+        """
+        Создаёт tools из inline конфигов.
+        
+        Node resources наследуются tools - если нода имеет resources,
+        они передаются в каждый tool.
+        """
         container = get_container()
+        
+        # Передаём node resources в tools
+        node_resources = self.config.get("resources", {})
+        if node_resources:
+            # Добавляем resources в каждый tool_ref
+            enriched_refs = []
+            for ref in self.tool_refs:
+                if isinstance(ref, dict):
+                    # Merge: tool resources переопределяют node resources
+                    tool_resources = ref.get("resources", {})
+                    merged_resources = {**node_resources, **tool_resources}
+                    enriched_ref = {**ref, "resources": merged_resources}
+                    enriched_refs.append(enriched_ref)
+                else:
+                    enriched_refs.append(ref)
+            return await container.tool_registry.create_tools(enriched_refs)
+        
         return await container.tool_registry.create_tools(self.tool_refs)
 
     async def before_prompt_render(
@@ -719,14 +779,10 @@ class CodeNode(BaseNode):
         except Exception as e:
             raise ValueError(f"Node '{self.node_id}': failed to load from {function_path}: {e}")
 
-    def _get_runner(self):
-        """Возвращает runner для текущего языка."""
-        if self._runner:
-            return self._runner
-        
+    def _get_runner(self, resources: Optional[Dict[str, Any]] = None):
+        """Возвращает runner для текущего языка с ресурсами."""
         container = get_container()
-        self._runner = container.get_code_runner(self.language)
-        return self._runner
+        return container.get_code_runner(self.language, resources=resources)
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """
@@ -745,7 +801,10 @@ class CodeNode(BaseNode):
         args = self._build_args(inputs)
         logger.info(f"[node:{self.node_id}] execute_tool с args: {list(args.keys())}")
         
-        runner = self._get_runner()
+        # Резолвим ресурсы для ноды
+        resources = await self._resolve_resources(state)
+        
+        runner = self._get_runner(resources=resources)
         return await runner.execute_tool(self.code, args, state)
 
     async def _run_registry_tool(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
@@ -986,6 +1045,85 @@ class MCPNode(BaseNode):
         setattr(state, "mcp_result", text_result)
         
         return text_result
+
+
+class ChannelNode(BaseNode):
+    """
+    Универсальная нода отправки сообщений в каналы.
+    
+    Поддерживаемые каналы: telegram, email, webhook, whatsapp, sms.
+    
+    Конфигурация:
+    {
+        "type": "channel",
+        "channel": "telegram",
+        "action": "send_message",
+        "channel_config": {
+            "bot_token": "@var:my_bot_token",
+            "parse_mode": "HTML"
+        },
+        "input_mapping": {
+            "recipient": "@state:variables.chat_id",
+            "text": "@state:response"
+        }
+    }
+    
+    Поддерживаемые actions:
+    - send_message: текстовое сообщение
+    - send_photo: фото с подписью
+    - send_document: документ/файл
+    - send_payload: произвольный JSON (для webhook)
+    - send_notification: A2A нотификация (для webhook)
+    """
+
+    def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
+        super().__init__(node_id, config)
+        cfg = self.config
+        
+        from apps.agents.src.models.enums import ChannelType
+        
+        channel_value = cfg.get("channel", "telegram")
+        self.channel = ChannelType(channel_value) if isinstance(channel_value, str) else channel_value
+        self.action = cfg.get("action", "send_message")
+        self.channel_config = cfg.get("channel_config", {})
+
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        """Отправляет сообщение через channel handler."""
+        from apps.agents.src.variables import VariableResolver
+        
+        container = get_container()
+        handler = container.channel_registry.get(self.channel)
+        
+        # Собираем все переменные (агента, компании, системные)
+        all_variables = VariableResolver.resolve_all(local_vars=state.variables)
+        
+        # Merge channel_config с inputs
+        config = {**self.channel_config}
+        
+        # Резолвим @var: в channel_config используя все переменные
+        for key, value in config.items():
+            if isinstance(value, str) and value.startswith("@var:"):
+                var_key = value[5:]
+                resolved = all_variables.get(var_key)
+                if resolved is None:
+                    raise ValueError(f"Variable not found: {var_key}")
+                config[key] = resolved
+        
+        result = await handler.execute_action(
+            action=self.action,
+            params=inputs,
+            config=config,
+            variables=all_variables,
+        )
+        
+        setattr(state, "channel_result", result)
+        
+        logger.info(
+            f"[node:{self.node_id}] Channel {self.channel.value} "
+            f"action {self.action} completed"
+        )
+        
+        return result
 
 
 async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:

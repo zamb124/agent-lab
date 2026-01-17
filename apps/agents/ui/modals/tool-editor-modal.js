@@ -3,9 +3,10 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import '../components/editors/python-code-editor.js';
+import '../components/editors/code-editor.js';
 import '../components/editors/json-field-editor.js';
 import '../components/editors/test-panel.js';
+import './code-docs-modal.js';
 
 export class ToolEditorModal extends PlatformModal {
     static styles = [
@@ -125,6 +126,7 @@ export class ToolEditorModal extends PlatformModal {
         description: { type: String },
         toolType: { type: String },
         code: { type: String },
+        language: { type: String },
         argsSchema: { type: String },
     };
 
@@ -137,6 +139,7 @@ export class ToolEditorModal extends PlatformModal {
         this.name = '';
         this.description = '';
         this.toolType = 'tool';
+        this.language = 'python';
         this.code = `async def execute(args):
     """
     Выполняет действие с переданными аргументами.
@@ -185,7 +188,7 @@ export class ToolEditorModal extends PlatformModal {
 
     _onValidate = async (e) => {
         const { state } = e.detail;
-        const codeEditor = this.shadowRoot.querySelector('python-code-editor');
+        const codeEditor = this.shadowRoot.querySelector('code-editor');
         const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
         
         if (!codeEditor || !jsonEditor) {
@@ -222,7 +225,7 @@ export class ToolEditorModal extends PlatformModal {
 
     _onExecute = async (e) => {
         const { state } = e.detail;
-        const codeEditor = this.shadowRoot.querySelector('python-code-editor');
+        const codeEditor = this.shadowRoot.querySelector('code-editor');
         const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
         
         if (!codeEditor || !jsonEditor) {
@@ -264,7 +267,7 @@ export class ToolEditorModal extends PlatformModal {
     }
 
     _onSave() {
-        const codeEditor = this.shadowRoot.querySelector('python-code-editor');
+        const codeEditor = this.shadowRoot.querySelector('code-editor');
         const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
         
         if (!this.name.trim()) {
@@ -318,6 +321,25 @@ export class ToolEditorModal extends PlatformModal {
 
     _onCodeChange(e) {
         this.code = e.detail.value;
+        if (e.detail.language) {
+            this.language = e.detail.language;
+        }
+    }
+
+    _onLanguageChange(e) {
+        this.language = e.detail.language;
+    }
+
+    _onOpenDocs(e) {
+        const modal = document.querySelector('code-docs-modal') || document.createElement('code-docs-modal');
+        if (!modal.parentElement) {
+            document.body.appendChild(modal);
+        }
+        modal.showModal({
+            language: e.detail.language || this.language || 'python',
+            nodeType: 'tool',
+            perspective: 'editor',
+        });
     }
 
     _onArgsSchemaChange(e) {
@@ -376,11 +398,15 @@ export class ToolEditorModal extends PlatformModal {
                 
                 <div class="form-group">
                     <label class="form-label required">Код</label>
-                    <python-code-editor
+                    <code-editor
                         .value=${this.code}
+                        .language=${this.language || 'python'}
+                        node-type="tool"
                         min-height="300"
                         @change=${this._onCodeChange}
-                    ></python-code-editor>
+                        @language-change=${this._onLanguageChange}
+                        @open-docs=${this._onOpenDocs}
+                    ></code-editor>
                 </div>
                 
                 <test-panel

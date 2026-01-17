@@ -73,6 +73,19 @@ class AgentContainer(BaseContainer):
         return MCPServerRepository(storage=self.storage)
 
     @lazy
+    def resource_repository(self):
+        from apps.agents.src.db import ResourceRepository
+        return ResourceRepository(storage=self.storage)
+
+    @lazy
+    def resource_resolver(self):
+        from apps.agents.src.resources import ResourceResolver
+        return ResourceResolver(
+            repository=self.resource_repository,
+            container=self,
+        )
+
+    @lazy
     def variables_service(self):
         from apps.agents.src.variables import VariablesService
         return VariablesService(self.variable_repository)
@@ -139,14 +152,14 @@ class AgentContainer(BaseContainer):
         from apps.agents.src.tools.base import BaseTool
         return BaseTool
 
-    def get_code_runner(self, language: str = "python"):
+    def get_code_runner(self, language: str = "python", resources: dict = None):
         """Возвращает runner для указанного языка."""
         from core.context import get_context
         context = get_context()
         
         if language == "python":
             from apps.agents.src.runners.python import PythonCodeRunner
-            return PythonCodeRunner(context=context)
+            return PythonCodeRunner(context=context, resources=resources)
         elif language == "javascript":
             from apps.agents.src.runners.javascript import JavaScriptCodeRunner
             return JavaScriptCodeRunner()
@@ -182,6 +195,28 @@ class AgentContainer(BaseContainer):
             variables_service=self.variables_service,
             graph_compiler=self.graph_compiler,
         )
+    
+    @lazy
+    def trigger_registry(self):
+        from apps.agents.config import get_settings
+        from apps.agents.src.triggers import TriggerRegistry
+        from apps.agents.src.triggers.handlers.telegram import TelegramTriggerHandler
+        from apps.agents.src.models import TriggerType
+        
+        settings = get_settings()
+        base_url = settings.server.get_service_url()
+        
+        registry = TriggerRegistry(base_url=base_url)
+        
+        # Регистрируем handlers
+        registry.register_handler(TriggerType.TELEGRAM, TelegramTriggerHandler)
+        
+        return registry
+    
+    @lazy
+    def channel_registry(self):
+        from apps.agents.src.channels import create_default_channel_registry
+        return create_default_channel_registry()
 
     @lazy
     def embed_mapping_repository(self):

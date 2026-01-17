@@ -230,5 +230,31 @@ class ScheduledTasks(Base):
         return f"<ScheduledTasks(id='{self.id}', agent_id='{self.agent_id}', status='{self.status}')>"
 
 
+class Resources(Base):
+    """
+    Таблица для хранения shared ресурсов.
+
+    Ключи имеют формат: resource:{resource_id}
+    """
+
+    __tablename__ = "resources"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_resources_key"),
+        Index("ix_resources_key_prefix", "key"),
+        Index("ix_resources_updated_at", "updated_at"),
+        Index("ix_resources_expired_at", "expired_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Resources(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
 # PushSubscription модель перенесена в core/push/models.py
 

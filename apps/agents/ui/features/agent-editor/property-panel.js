@@ -78,12 +78,13 @@ export class PropertyPanel extends PlatformElement {
             
             const defaults = {
                 'react_node': { name: 'Новый агент', prompt: '', code: null },
+                'code': { name: 'Новая функция', code: DEFAULT_CODE },
                 'function': { name: 'Новая функция', code: DEFAULT_CODE },
-                'tool': { name: 'Новый инструмент', code: DEFAULT_CODE },
                 'agent': { name: 'Новый суб-агент', agent_id: '' },
                 'external_api': { name: 'Новый API', url: '', method: 'GET' },
                 'remote_agent': { name: 'Новый удалённый агент', agent_url: '' },
                 'mcp': { name: 'MCP Tool', server_id: '', tool_name: '' },
+                'channel': { name: 'Send to Channel', channel: 'telegram', action: 'send_message', channel_config: {} },
             };
             
             const typeDefaults = defaults[config.type] || {};
@@ -160,6 +161,18 @@ export class PropertyPanel extends PlatformElement {
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
                 ></react-node-editor>`;
+            case 'code':
+                return html`<code-node-editor
+                    .nodeConfig=${this.config}
+                    .nodeId=${this.node.id || this.node.nodeId}
+                    .agentId=${this.agentId}
+                    .skillId=${this.skillId}
+                    .agentVariables=${this.agentVariables}
+                    ?expanded=${this.expanded}
+                    @config-change=${this._onConfigChanged}
+                    @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
+                ></code-node-editor>`;
             case 'function':
                 return html`<function-node-editor
                     .nodeConfig=${this.config}
@@ -232,6 +245,18 @@ export class PropertyPanel extends PlatformElement {
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
                 ></mcp-node-editor>`;
+            case 'channel':
+                return html`<channel-node-editor
+                    .nodeConfig=${this.config}
+                    .nodeId=${this.node.id || this.node.nodeId}
+                    .agentId=${this.agentId}
+                    .skillId=${this.skillId}
+                    .agentVariables=${this.agentVariables}
+                    ?expanded=${this.expanded}
+                    @config-change=${this._onConfigChanged}
+                    @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
+                ></channel-node-editor>`;
             default:
                 return this._renderDefaultPanel();
         }

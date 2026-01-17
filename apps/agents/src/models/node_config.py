@@ -17,6 +17,7 @@ from core.models import StrictBaseModel
 from core.urn import extract_id
 from .enums import NodeType
 from .tool_reference import ToolReference
+from .resource import ResourceReference
 
 
 class ReactLoopMode(str, Enum):
@@ -136,6 +137,12 @@ class NodeConfig(StrictBaseModel):
     
     # Для function ноды
     code: Optional[str] = Field(default=None, description="Inline Python код")
+    
+    # Ресурсы ноды
+    resources: Dict[str, ResourceReference] = Field(
+        default_factory=dict,
+        description="Ресурсы ноды (переопределяют agent-level)"
+    )
     
     # Общее
     local_variables: Dict[str, Any] = Field(

@@ -113,11 +113,24 @@ async def on_startup(app: FastAPI, container, settings: AgentSettings):
         except Exception as e:
             logger.error(f"Ошибка при синхронизации LLM моделей: {e}")
     else:
-        logger.info("⏭️  Пропускаем синхронизацию LLM моделей (TESTING=true)")
+        logger.info("Пропускаем синхронизацию LLM моделей (TESTING=true)")
+    
+    # Telegram Dev Polling (только в development)
+    if settings.server.env == "development" and os.getenv("TESTING") != "true":
+        from apps.agents.src.triggers.dev_polling import start_dev_polling
+        await start_dev_polling()
+        logger.info("Telegram dev polling запущен")
 
 
 async def on_shutdown(app: FastAPI, container):
     """Кастомная логика при остановке сервиса agents"""
+    
+    # Остановка Telegram dev polling
+    try:
+        from apps.agents.src.triggers.dev_polling import stop_dev_polling
+        await stop_dev_polling()
+    except Exception as e:
+        logger.warning(f"Error stopping dev polling: {e}")
     
     # Остановка фоновой синхронизации моделей
     await container.llm_models_service.stop_background_sync()

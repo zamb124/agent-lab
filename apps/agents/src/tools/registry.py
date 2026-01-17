@@ -139,7 +139,9 @@ class ToolRegistry:
             NodeType.REMOTE_AGENT.value,
             NodeType.EXTERNAL_API.value,
             NodeType.MCP.value,
+            NodeType.CHANNEL.value,
             "agent",
+            "channel",
         ) or tool_ref.get("prompt"):
             return self._create_node_as_tool(tool_ref)
         
@@ -241,6 +243,9 @@ class ToolRegistry:
         tool_type_str = config.get("tool_type", "tool")
         tool_type = ToolType(tool_type_str) if isinstance(tool_type_str, str) else tool_type_str
 
+        # Resources из конфига (могут быть унаследованы от node)
+        resources = config.get("resources")
+
         tool = InlineTool(
             tool_id=tool_id,
             code=code,
@@ -248,6 +253,7 @@ class ToolRegistry:
             description=config.get("description"),
             parameters=parameters,
             tool_type=tool_type,
+            resources=resources,
         )
         
         self.register(tool)

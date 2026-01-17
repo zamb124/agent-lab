@@ -23,6 +23,7 @@ from .tool_repository import ToolRepository
 from core.db.repositories import VariableRepository
 from .scheduled_task_repository import ScheduledTaskRepository
 from .mcp_repository import MCPServerRepository
+from .resource_repository import ResourceRepository
 
 __all__ = [
     "Storage",
@@ -39,4 +40,5 @@ __all__ = [
     "VariableRepository",
     "ScheduledTaskRepository",
     "MCPServerRepository",
+    "ResourceRepository",
 ]

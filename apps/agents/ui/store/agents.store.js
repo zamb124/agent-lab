@@ -27,7 +27,8 @@ const baseStore = new BaseStore('agents', {
         agentConfig: null,
         currentSkillId: null,
         selectedNodeId: null,
-        skillsData: { nodes: {}, edges: [], entry: null, variables: {} },
+        selectedResourceId: null,
+        skillsData: { nodes: {}, edges: [], entry: null, variables: {}, resources: {} },
         inheritedData: null,
         panelOpen: false,
         panelExpanded: false,
@@ -318,7 +319,8 @@ export const AgentsStore = {
                 nodes: agent.nodes ?? {},
                 edges: agent.edges ?? [],
                 entry: agent.entry ?? null,
-                variables: agent.variables ?? {}
+                variables: agent.variables ?? {},
+                resources: agent.resources ?? {}
             };
             
             baseStore.setState((s) => ({
@@ -390,14 +392,91 @@ export const AgentsStore = {
     
     selectNode(nodeId) {
         baseStore.setState((s) => ({
-            editor: { ...s.editor, selectedNodeId: nodeId, panelOpen: !!nodeId }
+            editor: { 
+                ...s.editor, 
+                selectedNodeId: nodeId, 
+                selectedResourceId: null,
+                panelOpen: !!nodeId 
+            }
+        }));
+    },
+    
+    selectResource(resourceId) {
+        baseStore.setState((s) => ({
+            editor: { 
+                ...s.editor, 
+                selectedResourceId: resourceId, 
+                selectedNodeId: null,
+                panelOpen: !!resourceId 
+            }
         }));
     },
     
     closePanel() {
         baseStore.setState((s) => ({
-            editor: { ...s.editor, panelOpen: false, selectedNodeId: null }
+            editor: { 
+                ...s.editor, 
+                panelOpen: false, 
+                selectedNodeId: null,
+                selectedResourceId: null 
+            }
         }));
+    },
+    
+    updateResources(resources) {
+        baseStore.setState((s) => ({
+            editor: {
+                ...s.editor,
+                skillsData: { ...s.editor.skillsData, resources }
+            }
+        }));
+    },
+    
+    addResource(resourceId, resourceConfig) {
+        baseStore.setState((s) => ({
+            editor: {
+                ...s.editor,
+                skillsData: {
+                    ...s.editor.skillsData,
+                    resources: {
+                        ...s.editor.skillsData.resources,
+                        [resourceId]: resourceConfig
+                    }
+                }
+            }
+        }));
+    },
+    
+    updateResource(resourceId, resourceConfig) {
+        baseStore.setState((s) => ({
+            editor: {
+                ...s.editor,
+                skillsData: {
+                    ...s.editor.skillsData,
+                    resources: {
+                        ...s.editor.skillsData.resources,
+                        [resourceId]: resourceConfig
+                    }
+                }
+            }
+        }));
+    },
+    
+    deleteResource(resourceId) {
+        baseStore.setState((s) => {
+            const { [resourceId]: removed, ...remainingResources } = s.editor.skillsData.resources || {};
+            return {
+                editor: {
+                    ...s.editor,
+                    skillsData: {
+                        ...s.editor.skillsData,
+                        resources: remainingResources
+                    },
+                    selectedResourceId: s.editor.selectedResourceId === resourceId ? null : s.editor.selectedResourceId,
+                    panelOpen: s.editor.selectedResourceId === resourceId ? false : s.editor.panelOpen
+                }
+            };
+        });
     },
     
     togglePanelExpanded() {

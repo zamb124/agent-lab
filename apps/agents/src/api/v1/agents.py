@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from apps.agents.src.container import AgentContainer, get_container
 from core.logging import get_logger
-from apps.agents.src.models import Edge, AgentConfig, SkillConfig, NodeConfig, AgentType, ExternalAgentStatus
+from apps.agents.src.models import Edge, AgentConfig, SkillConfig, NodeConfig, AgentType, ExternalAgentStatus, TriggerConfig
 from apps.agents.src.services.agent_validator import AgentValidator
 
 logger = get_logger(__name__)
@@ -271,6 +271,8 @@ class AgentCreateRequest(BaseModel):
     tags: List[str] = []
     skills: Dict[str, SkillRequest] = {}
     evaluation: Optional[Dict[str, Any]] = None
+    triggers: Dict[str, Any] = {}
+    resources: Dict[str, Any] = {}
 
 
 class AgentResponse(BaseModel):
@@ -304,6 +306,12 @@ class AgentResponse(BaseModel):
         "streaming": True,
         "pushNotifications": True,
     }
+    
+    # Триггеры агента
+    triggers: Dict[str, Any] = {}
+    
+    # Ресурсы агента
+    resources: Dict[str, Any] = {}
 
 
 class AgentValidateRequest(BaseModel):
@@ -594,6 +602,11 @@ async def get_flow(
                     "condition": e.condition
                 })
         
+        triggers_response = {}
+        if agent.triggers:
+            for trigger_id, trigger in agent.triggers.items():
+                triggers_response[trigger_id] = trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
+        
         return AgentResponse(
             agent_id=agent.agent_id,
             version=agent.version or "",
@@ -609,6 +622,8 @@ async def get_flow(
             evaluation=evaluation_dict,
             hidden=getattr(agent, 'hidden', False),
             url=_generate_agent_url(agent.agent_id, agent.type, getattr(agent, 'url', None)),
+            triggers=triggers_response,
+            resources=agent.resources or {},
         )
     except HTTPException:
         raise
@@ -645,6 +660,13 @@ async def update_flow(
         for skill_id, skill in request.skills.items()
     }
 
+    triggers = {
+        trigger_id: TriggerConfig(**trigger_data) if isinstance(trigger_data, dict) else trigger_data
+        for trigger_id, trigger_data in request.triggers.items()
+    }
+
+    resources = request.resources or {}
+
     agent_config = AgentConfig(
         agent_id=agent_id,
         name=request.name,
@@ -657,6 +679,8 @@ async def update_flow(
         skills=skills,
         evaluation=request.evaluation,
         source=existing.source,
+        triggers=triggers,
+        resources=resources,
     )
 
     await container.agent_repository.set(agent_config)
@@ -664,6 +688,11 @@ async def update_flow(
     skills_response = {
         skill_id: _skill_config_to_response(skill)
         for skill_id, skill in agent_config.skills.items()
+    }
+
+    triggers_response = {
+        trigger_id: trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
+        for trigger_id, trigger in agent_config.triggers.items()
     }
 
     return AgentResponse(
@@ -684,6 +713,8 @@ async def update_flow(
         evaluation=request.evaluation,
         hidden=getattr(agent_config, 'hidden', False),
         url=_generate_agent_url(agent_config.agent_id, agent_config.type, getattr(agent_config, 'url', None)),
+        triggers=triggers_response,
+        resources=agent_config.resources or {},
     )
 
 

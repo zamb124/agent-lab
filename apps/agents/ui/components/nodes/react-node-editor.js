@@ -7,7 +7,6 @@ import { BaseNodeEditor } from './base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
 import '../editors/llm-config-editor.js';
 import '../editors/tag-input.js';
-import '../editors/state-mapping-editor.js';
 import '../editors/test-panel.js';
 import '../../modals/inline-tool-modal.js';
 import '../../modals/tool-picker-modal.js';
@@ -689,26 +688,16 @@ export class ReactNodeEditor extends BaseNodeEditor {
         this._deleteNode();
     }
 
-    render() {
-        // Не рендерим пока не загружен nodeConfig
+    renderFields() {
         if (!this.nodeConfig) {
-            console.warn('[ReactNodeEditor] nodeConfig is not set:', {
-                nodeConfig: this.nodeConfig,
-                nodeId: this.nodeId
-            });
-            return html`<div class="panel-body">Загрузка...</div>`;
+            return html`<div>Загрузка...</div>`;
         }
         
-        console.log('[ReactNodeEditor] Rendering with config:', this.nodeConfig);
-        
         const config = this.nodeConfig;
+        const showCommonFields = !this.expanded;
         
         return html`
-            <div class="panel-body">
-                <p class="panel-description">
-                    LLM агент с инструментами. Выполняет задачи через ReAct loop.
-                </p>
-                
+            ${showCommonFields ? html`
                 ${this.renderNodeIdField()}
                 
                 <div class="form-group">
@@ -746,6 +735,7 @@ export class ReactNodeEditor extends BaseNodeEditor {
                         @change=${(e) => this._onInputChange('tags', e.detail.tags)}
                     ></tag-input>
                 </div>
+            ` : ''}
                 
                 <div class="form-group">
                     <prompt-editor
@@ -967,30 +957,15 @@ export class ReactNodeEditor extends BaseNodeEditor {
                 </div>
                 ` : ''}
                 
-                <div class="form-group">
-                    <state-mapping-editor
-                        mode="input"
-                        .mappings=${config.input_mapping || {}}
-                        .stateVariables=${Object.keys(this._buildDefaultState())}
-                        @change=${(e) => this._onInputChange('input_mapping', e.detail.value)}
-                    ></state-mapping-editor>
-                </div>
-                
-                <div class="form-group">
-                    <state-mapping-editor
-                        mode="output"
-                        .mappings=${config.output_mapping || {}}
-                        @change=${(e) => this._onInputChange('output_mapping', e.detail.value)}
-                    ></state-mapping-editor>
-                </div>
+                ${this.renderMappingSection()}
                 
                 <test-panel
                     .inputState=${this._buildDefaultState()}
                     ?expanded=${this.expanded}
+                    ?hide-input-state=${this.expanded}
                     @validate=${this._onValidate}
                     @execute=${this._onExecute}
                 ></test-panel>
-            </div>
         `;
     }
 }

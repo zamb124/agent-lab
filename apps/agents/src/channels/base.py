@@ -461,6 +461,14 @@ class BaseChannel(ABC):
             
             state.variables = {**state.variables, **agent.variables}
             
+            # Добавляем triggers из metadata
+            request_triggers = params.metadata.get("triggers") if params.metadata else None
+            if request_triggers:
+                state.triggers = {**state.triggers, **request_triggers}
+            
+            # Передаём полный inline agent_config в state
+            state.agent_config = agent.config
+            
             # Обновляем breakpoints из metadata (для отладки)
             if breakpoints:
                 state.breakpoints = breakpoints
@@ -1292,3 +1300,136 @@ class BaseChannel(ABC):
             card_dict["variables"] = public_vars
 
         return card_dict
+
+
+# =============================================================================
+# BaseChannelHandler - для отправки сообщений в каналы (Telegram, Email, Webhook)
+# =============================================================================
+
+class BaseChannelHandler(ABC):
+    """
+    Базовый класс для отправки сообщений в каналы.
+    
+    Отличие от BaseChannel:
+    - BaseChannel - получение и обработка сообщений ОТ агента
+    - BaseChannelHandler - отправка сообщений В канал (Telegram, Email, Webhook)
+    
+    Каждый handler реализует методы send_message, send_photo, send_document.
+    Метод execute_action - универсальный диспетчер действий.
+    """
+    
+    from apps.agents.src.models.enums import ChannelType
+    channel_type: ChannelType
+    
+    @abstractmethod
+    async def send_message(
+        self,
+        recipient: str,
+        text: str,
+        config: Dict[str, Any],
+        variables: Dict[str, Any],
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        Отправляет текстовое сообщение.
+        
+        Args:
+            recipient: Получатель (chat_id для Telegram, email для Email)
+            text: Текст сообщения
+            config: Конфигурация канала (bot_token, parse_mode, etc)
+            variables: Переменные для резолвинга @var:
+            **kwargs: Дополнительные параметры (reply_to_message_id, etc)
+            
+        Returns:
+            Ответ от API канала
+        """
+        pass
+    
+    @abstractmethod
+    async def send_photo(
+        self,
+        recipient: str,
+        photo: Union[str, bytes],
+        config: Dict[str, Any],
+        variables: Dict[str, Any],
+        caption: Optional[str] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        Отправляет фото.
+        
+        Args:
+            recipient: Получатель
+            photo: URL или bytes фото
+            config: Конфигурация канала
+            variables: Переменные
+            caption: Подпись к фото
+        """
+        pass
+    
+    @abstractmethod
+    async def send_document(
+        self,
+        recipient: str,
+        document: Union[str, bytes],
+        config: Dict[str, Any],
+        variables: Dict[str, Any],
+        caption: Optional[str] = None,
+        filename: Optional[str] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        Отправляет документ/файл.
+        
+        Args:
+            recipient: Получатель
+            document: URL или bytes документа
+            config: Конфигурация канала
+            variables: Переменные
+            caption: Подпись
+            filename: Имя файла
+        """
+        pass
+    
+    async def execute_action(
+        self,
+        action: str,
+        params: Dict[str, Any],
+        config: Dict[str, Any],
+        variables: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Универсальный диспетчер действий.
+        
+        Вызывает соответствующий метод (send_message, send_photo, etc).
+        
+        Args:
+            action: Название действия (send_message, send_photo, send_document)
+            params: Параметры действия (recipient, text, photo, etc)
+            config: Конфигурация канала
+            variables: Переменные для резолвинга
+            
+        Returns:
+            Результат выполнения действия
+        """
+        method = getattr(self, action, None)
+        
+        if method is None:
+            raise ValueError(
+                f"Unknown action '{action}' for channel {self.channel_type.value}. "
+                f"Available: send_message, send_photo, send_document"
+            )
+        
+        logger.info(
+            f"Channel {self.channel_type.value}: executing {action} "
+            f"to {params.get('recipient', 'unknown')}"
+        )
+        
+        return await method(config=config, variables=variables, **params)
+    
+    def _resolve_value(self, value: Any, variables: Dict[str, Any]) -> Any:
+        """Резолвит @var: значения."""
+        if not isinstance(value, str):
+            return value
+        from apps.agents.src.mapping import MappingResolver
+        return MappingResolver.resolve_vars_in_string(value, variables)

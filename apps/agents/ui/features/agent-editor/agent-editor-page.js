@@ -10,6 +10,8 @@ import { AgentsStore } from '../../store/agents.store.js';
 import { injectEditorStyles } from './agent-editor-styles.js';
 import '../../modals/confirm-modal.js';
 import '../../modals/code-modal.js';
+import '../../modals/trigger-editor-modal.js';
+import './resource-property-panel.js';
 
 export class AgentEditorPage extends PlatformElement {
     // Light DOM для совместимости с глобальными стилями Drawflow
@@ -32,6 +34,7 @@ export class AgentEditorPage extends PlatformElement {
         this.state = this.use(s => ({
             agentConfig: s.editor.agentConfig,
             selectedNodeId: s.editor.selectedNodeId,
+            selectedResourceId: s.editor.selectedResourceId,
             currentSkillId: s.editor.currentSkillId,
             skillsData: s.editor.skillsData,
             inheritedData: s.editor.inheritedData,
@@ -618,6 +621,59 @@ export class AgentEditorPage extends PlatformElement {
         this._checkForChanges();
     }
 
+    _onResourceSelected(e) {
+        const { resourceId, resourceConfig } = e.detail;
+        
+        console.log('[AgentEditorPage] Resource selected:', { resourceId, resourceConfig });
+        
+        if (!resourceId) {
+            console.error('[AgentEditorPage] Resource selected but resourceId is missing!');
+            return;
+        }
+        
+        AgentsStore.selectResource(resourceId);
+        this._panelEntering = true;
+        
+        setTimeout(() => {
+            this._panelEntering = false;
+        }, 300);
+    }
+
+    _onResourceAdded(e) {
+        console.log('[AgentEditorPage] Resource added, syncing with store');
+        this._syncCanvasToAgentsStore();
+        this._checkForChanges();
+    }
+
+    _onResourceDeleted(e) {
+        const { resourceId } = e.detail;
+        console.log('[AgentEditorPage] Resource deleted:', resourceId);
+        
+        const canvas = this.querySelector('agent-canvas');
+        if (canvas) {
+            canvas.removeResource(resourceId);
+        }
+        
+        AgentsStore.deleteResource(resourceId);
+        this._checkForChanges();
+    }
+
+    _onResourceUpdated(e) {
+        const { resourceId, resourceConfig } = e.detail;
+        console.log('[AgentEditorPage] Resource updated:', { resourceId, resourceConfig });
+        
+        const canvas = this.querySelector('agent-canvas');
+        if (canvas) {
+            canvas.updateResourceConfig(resourceId, resourceConfig);
+        }
+        
+        AgentsStore.updateResource(resourceId, {
+            ...this.state.value.skillsData?.resources?.[resourceId],
+            config: resourceConfig,
+        });
+        this._checkForChanges();
+    }
+
     _syncCanvasToAgentsStore() {
         // Синхронизируем данные с canvas в store
         const canvas = this.querySelector('agent-canvas');
@@ -846,16 +902,26 @@ export class AgentEditorPage extends PlatformElement {
     }
 
     _renderFloatingPanel() {
-        const { panelOpen, panelExpanded, selectedNodeId, agentConfig, currentSkillId, skillsData } = this.state.value;
+        const { panelOpen, panelExpanded, selectedNodeId, selectedResourceId, agentConfig, currentSkillId, skillsData } = this.state.value;
         
         console.log('[AgentEditorPage] _renderFloatingPanel:', {
             panelOpen,
             selectedNodeId,
+            selectedResourceId,
             hasSkillsData: !!skillsData,
             nodeCount: Object.keys(skillsData?.nodes || {}).length
         });
         
-        if (!panelOpen || !selectedNodeId) {
+        if (!panelOpen) {
+            return null;
+        }
+        
+        // Если выбран ресурс, показываем панель ресурса
+        if (selectedResourceId) {
+            return this._renderResourcePanel();
+        }
+        
+        if (!selectedNodeId) {
             return null;
         }
         
@@ -887,7 +953,7 @@ export class AgentEditorPage extends PlatformElement {
                 <div class="floating-panel-header">
                     <div class="floating-panel-title">
                         <div class="floating-panel-icon" style="background: ${bgColor}; color: ${color};">
-                            <platform-icon name="agent" size="${panelExpanded ? 18 : 14}"></platform-icon>
+                            <platform-icon name="${this._getNodeIcon(selectedNode.type)}" size="${panelExpanded ? 18 : 14}"></platform-icon>
                         </div>
                         <span class="floating-panel-name">${selectedNode.name || selectedNode.nodeId || selectedNodeId}</span>
                     </div>
@@ -919,6 +985,89 @@ export class AgentEditorPage extends PlatformElement {
                 </div>
             </div>
         `;
+    }
+
+    _renderResourcePanel() {
+        const { panelExpanded, selectedResourceId, skillsData } = this.state.value;
+        
+        const canvas = this.querySelector('agent-canvas');
+        const resourceConfig = canvas?.resourceConfigs?.get(selectedResourceId);
+        
+        if (!resourceConfig) {
+            console.error('[AgentEditorPage] Selected resource not found:', selectedResourceId);
+            return null;
+        }
+        
+        const color = resourceConfig.color || '#6b7280';
+        const bgColor = color + '20';
+        
+        const panelClasses = ['floating-panel'];
+        if (panelExpanded) panelClasses.push('expanded');
+        if (this._panelEntering) panelClasses.push('entering');
+
+        return html`
+            <div 
+                class="panel-backdrop ${panelExpanded ? 'visible' : ''}"
+                @click=${this._onBackdropClick}
+            ></div>
+            <div class="${panelClasses.join(' ')}">
+                <div class="floating-panel-header">
+                    <div class="floating-panel-title">
+                        <div class="floating-panel-icon" style="background: ${bgColor}; color: ${color}; border-radius: 50%;">
+                            <platform-icon name="${this._getResourceIcon(resourceConfig.type)}" size="${panelExpanded ? 18 : 14}"></platform-icon>
+                        </div>
+                        <span class="floating-panel-name">${selectedResourceId}</span>
+                    </div>
+                    <div class="floating-panel-actions">
+                        <button 
+                            class="floating-panel-btn expand-btn" 
+                            @click=${this._toggleExpanded} 
+                            title="${panelExpanded ? 'Свернуть' : 'Развернуть'}"
+                        >
+                            <platform-icon name="${panelExpanded ? 'minimize' : 'maximize'}" size="16"></platform-icon>
+                        </button>
+                        <button class="floating-panel-btn" @click=${this._closePanel} title="Закрыть">
+                            <platform-icon name="x" size="16"></platform-icon>
+                        </button>
+                    </div>
+                </div>
+                <div class="floating-panel-body">
+                    <resource-property-panel
+                        .resource=${resourceConfig}
+                        ?expanded=${panelExpanded}
+                        @resource-updated=${this._onResourceUpdated}
+                        @resource-deleted=${this._onResourceDeleted}
+                    ></resource-property-panel>
+                </div>
+            </div>
+        `;
+    }
+
+    _getNodeIcon(type) {
+        const icons = {
+            'react_node': 'agent',
+            'code': 'code',
+            'agent': 'workflow',
+            'remote_agent': 'cloud',
+            'external_api': 'globe',
+            'mcp': 'mcp',
+            'channel': 'send',
+        };
+        return icons[type] || 'box';
+    }
+
+    _getResourceIcon(type) {
+        const icons = {
+            'code': 'code',
+            'rag': 'search',
+            'files': 'folder',
+            'prompt': 'chat',
+            'llm': 'bot',
+            'secret': 'key',
+            'http': 'globe',
+            'cache': 'database',
+        };
+        return icons[type] || 'box';
     }
 
     render() {
@@ -954,6 +1103,9 @@ export class AgentEditorPage extends PlatformElement {
                 <div class="editor-body">
                     <node-types-sidebar
                         class="node-types-sidebar"
+                        .triggers=${agentConfig?.triggers || {}}
+                        @trigger-add-requested=${this._onTriggerAdd}
+                        @trigger-edit-requested=${this._onTriggerEdit}
                     ></node-types-sidebar>
                     
                     <div class="canvas-area">
@@ -961,6 +1113,9 @@ export class AgentEditorPage extends PlatformElement {
                             @node-selected=${this._onNodeSelected}
                             @node-unselected=${this._onNodeUnselected}
                             @node-added=${this._onNodeAdded}
+                            @resource-selected=${this._onResourceSelected}
+                            @resource-added=${this._onResourceAdded}
+                            @resource-deleted=${this._onResourceDeleted}
                             @connection-created=${() => this._checkForChanges()}
                             @connection-removed=${() => this._checkForChanges()}
                         ></agent-canvas>
@@ -1033,6 +1188,93 @@ export class AgentEditorPage extends PlatformElement {
         `;
     }
 
+    _onTriggerAdd() {
+        const modal = this.querySelector('trigger-editor-modal');
+        if (modal) {
+            modal.agentId = this.agentId;
+            modal.agentVariables = this._getAgentVariablesList();
+            modal.showModal();
+        }
+    }
+
+    _onTriggerEdit(e) {
+        const { triggerId } = e.detail;
+        const { agentConfig } = this.state.value;
+        const triggerConfig = agentConfig?.triggers?.[triggerId];
+        
+        if (triggerConfig) {
+            const modal = this.querySelector('trigger-editor-modal');
+            if (modal) {
+                modal.agentId = this.agentId;
+                modal.agentVariables = this._getAgentVariablesList();
+                modal.showModal(triggerId, triggerConfig);
+            }
+        }
+    }
+
+    _getAgentVariablesList() {
+        const { agentConfig } = this.state.value;
+        const variables = agentConfig?.variables || {};
+        return Object.entries(variables).map(([name, config]) => ({
+            name,
+            type: config.type || 'string',
+            description: config.description || '',
+        }));
+    }
+
+    async _onTriggerToggle(e) {
+        const { triggerId, enabled } = e.detail;
+        const { agentConfig } = this.state.value;
+        
+        if (agentConfig?.triggers?.[triggerId]) {
+            const updatedTriggers = {
+                ...agentConfig.triggers,
+                [triggerId]: {
+                    ...agentConfig.triggers[triggerId],
+                    enabled,
+                }
+            };
+            
+            const updatedConfig = { ...agentConfig, triggers: updatedTriggers };
+            await this.a2a.saveAgentConfig(this.agentId, updatedConfig);
+            await AgentsStore.loadAgent(this.agentId, this.a2a, this.state.value.currentSkillId);
+            
+            this.success(`Триггер ${enabled ? 'включен' : 'отключен'}`);
+        }
+    }
+
+    async _onTriggerDelete(e) {
+        const { triggerId } = e.detail;
+        const { agentConfig } = this.state.value;
+        
+        if (agentConfig?.triggers?.[triggerId]) {
+            const updatedTriggers = { ...agentConfig.triggers };
+            delete updatedTriggers[triggerId];
+            
+            const updatedConfig = { ...agentConfig, triggers: updatedTriggers };
+            await this.a2a.saveAgentConfig(this.agentId, updatedConfig);
+            await AgentsStore.loadAgent(this.agentId, this.a2a, this.state.value.currentSkillId);
+            
+            this.success(`Триггер "${triggerId}" удален`);
+        }
+    }
+
+    async _onTriggerSave(e) {
+        const { triggerId, config } = e.detail;
+        const { agentConfig } = this.state.value;
+        
+        const updatedTriggers = {
+            ...(agentConfig?.triggers || {}),
+            [triggerId]: config,
+        };
+        
+        const updatedConfig = { ...agentConfig, triggers: updatedTriggers };
+        await this.a2a.saveAgentConfig(this.agentId, updatedConfig);
+        await AgentsStore.loadAgent(this.agentId, this.a2a, this.state.value.currentSkillId);
+        
+        this.success(`Триггер "${triggerId}" сохранен`);
+    }
+
     _renderHiddenComponents() {
         return html`
             <execution-runner
@@ -1058,6 +1300,10 @@ export class AgentEditorPage extends PlatformElement {
             <variable-editor-modal
                 @variable-saved=${this._onVariableSaved}
             ></variable-editor-modal>
+
+            <trigger-editor-modal
+                @trigger-save=${this._onTriggerSave}
+            ></trigger-editor-modal>
         `;
     }
 }

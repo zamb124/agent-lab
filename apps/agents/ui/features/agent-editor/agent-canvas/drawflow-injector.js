@@ -313,6 +313,24 @@ agent-canvas .context-menu-separator {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
+/* Language badge для code нод */
+.drawflow .agent-node-lang-badge {
+    position: absolute !important;
+    bottom: -4px !important;
+    right: -4px !important;
+    width: 18px !important;
+    height: 18px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 10 !important;
+}
+
+.drawflow .agent-node-lang-badge platform-icon {
+    width: 18px !important;
+    height: 18px !important;
+}
+
 .drawflow .drawflow-node.node-inherited {
     border-color: rgba(107, 114, 128, 0.4) !important;
     opacity: 0.85 !important;

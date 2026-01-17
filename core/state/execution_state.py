@@ -132,6 +132,15 @@ class ExecutionState(FlexibleBaseModel):
     session_id: str = Field(..., description="ID сессии в формате agent_id:context_id")
     
     # ========================================================================
+    # Agent Config - полный inline конфиг агента
+    # ========================================================================
+    
+    agent_config: Dict[str, Any] = Field(
+        default_factory=dict, 
+        description="Полный inline конфиг агента (nodes, edges, resources, skills и т.д.)"
+    )
+    
+    # ========================================================================
     # Системные поля - опциональные
     # ========================================================================
     
@@ -189,6 +198,7 @@ class ExecutionState(FlexibleBaseModel):
     # ========================================================================
     
     variables: Dict[str, Any] = Field(default_factory=dict, description="Резолвнутые переменные")
+    triggers: Dict[str, Any] = Field(default_factory=dict, description="Данные триггеров {trigger_id: payload}")
     files: List[Dict[str, Any]] = Field(default_factory=list, description="Прикреплённые файлы")
     
     # ========================================================================
@@ -338,6 +348,25 @@ class ExecutionState(FlexibleBaseModel):
         if not self.prompt_history:
             return None
         return self.prompt_history[-1].prompt
+    
+    @property
+    def resources(self) -> Dict[str, Any]:
+        """
+        Resources из agent_config.
+        
+        Возвращает Dict[str, ResourceDefinition] (inline resources).
+        """
+        return self.agent_config.get("resources", {})
+    
+    def get_node_config(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """Получает конфиг ноды из agent_config."""
+        nodes = self.agent_config.get("nodes", {})
+        return nodes.get(node_id)
+    
+    def get_skill_config(self, skill_id: str) -> Optional[Dict[str, Any]]:
+        """Получает конфиг skill из agent_config."""
+        skills = self.agent_config.get("skills", {})
+        return skills.get(skill_id)
     
     @classmethod
     def create(

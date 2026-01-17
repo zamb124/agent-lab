@@ -73,6 +73,30 @@ export class A2AService extends BaseService {
         return this.get('/api/v1/tools');
     }
 
+    // Resources API
+    async getResources(type = null) {
+        const url = type 
+            ? `/api/v1/resources/?type=${type}`
+            : '/api/v1/resources/';
+        return this.get(url);
+    }
+
+    async getResource(resourceId) {
+        return this.get(`/api/v1/resources/${resourceId}`);
+    }
+
+    async createResource(config) {
+        return this.post('/api/v1/resources/', config);
+    }
+
+    async updateResource(resourceId, config) {
+        return this.put(`/api/v1/resources/${resourceId}`, config);
+    }
+
+    async deleteResource(resourceId) {
+        return this.delete(`/api/v1/resources/${resourceId}`);
+    }
+
     async getAvailableModels(provider = null) {
         const url = provider 
             ? `/api/v1/registry/models/values?provider=${provider}`

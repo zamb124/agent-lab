@@ -82,6 +82,10 @@ export class TestPanel extends PlatformElement {
                 grid-template-columns: 1fr;
             }
             
+            :host([hide-input-state]) .test-panels {
+                grid-template-columns: 1fr;
+            }
+            
             @media (max-width: 768px) {
                 .test-panels {
                     grid-template-columns: 1fr;
@@ -230,6 +234,7 @@ export class TestPanel extends PlatformElement {
         result: { type: Object },
         showFullState: { type: Boolean, attribute: 'show-full-state' },
         expanded: { type: Boolean, reflect: true },
+        hideInputState: { type: Boolean, attribute: 'hide-input-state', reflect: true },
     };
 
     constructor() {
@@ -239,6 +244,7 @@ export class TestPanel extends PlatformElement {
         this.result = null;
         this.showFullState = false;
         this.expanded = false;
+        this.hideInputState = false;
     }
 
     getInputState() {
@@ -362,6 +368,26 @@ export class TestPanel extends PlatformElement {
         `;
     }
 
+    renderInputStatePanel() {
+        return html`
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Input State (JSON)</span>
+                    <button 
+                        type="button" 
+                        class="panel-action"
+                        @click=${this._onResetState}
+                    >↺ Сбросить</button>
+                </div>
+                <json-field-editor
+                    .value=${JSON.stringify(this.inputState, null, 2)}
+                    min-height="150"
+                    placeholder='{"content": "", "messages": []}'
+                ></json-field-editor>
+            </div>
+        `;
+    }
+
     render() {
         return html`
             <div class="test-section">
@@ -388,21 +414,7 @@ export class TestPanel extends PlatformElement {
                 </div>
                 
                 <div class="test-panels">
-                    <div class="panel">
-                        <div class="panel-header">
-                            <span class="panel-title">Input State (JSON)</span>
-                            <button 
-                                type="button" 
-                                class="panel-action"
-                                @click=${this._onResetState}
-                            >↺ Сбросить</button>
-                        </div>
-                        <json-field-editor
-                            .value=${JSON.stringify(this.inputState, null, 2)}
-                            min-height="150"
-                            placeholder='{"content": "", "messages": []}'
-                        ></json-field-editor>
-                    </div>
+                    ${!this.hideInputState ? this.renderInputStatePanel() : ''}
                     
                     <div class="panel">
                         <div class="panel-header">

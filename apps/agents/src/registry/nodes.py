@@ -17,6 +17,7 @@ from apps.agents.src.agent.nodes import (
     RemoteAgentNode,
     ExternalAPINode,
     MCPNode,
+    ChannelNode,
 )
 
 
@@ -97,6 +98,7 @@ def create_default_node_registry() -> NodeRegistry:
     registry.register(NodeType.REMOTE_AGENT, RemoteAgentNode, {"description": "Внешний A2A агент"})
     registry.register(NodeType.EXTERNAL_API, ExternalAPINode, {"description": "HTTP API вызов"})
     registry.register(NodeType.MCP, MCPNode, {"description": "MCP tool"})
+    registry.register(NodeType.CHANNEL, ChannelNode, {"description": "Отправка в канал (Telegram, Email, Webhook)"})
     
     return registry
 

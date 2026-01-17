@@ -1,6 +1,9 @@
 /**
  * StateMappingEditor - унифицированный редактор маппинга данных
- * Работает в двух режимах: input (state -> param) и output (result -> state)
+ * Работает в трёх режимах: 
+ * - input (state -> param)
+ * - output (result -> state)
+ * - both (табы input/output в одном компоненте)
  * 
  * Формат хранения:
  * - input: {"param_name": "@state:field"} или {"param": "@var:name"} или {"param": "const"}
@@ -41,6 +44,50 @@ export class StateMappingEditor extends PlatformElement {
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
                 color: var(--text-secondary);
+            }
+            
+            /* Табы для режима both */
+            .tabs-container {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+            }
+            
+            .tab-btn {
+                padding: var(--space-1) var(--space-3);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                color: var(--text-tertiary);
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                transition: all var(--duration-fast) var(--easing-default);
+            }
+            
+            .tab-btn:hover {
+                color: var(--text-secondary);
+                background: var(--glass-tint-subtle);
+            }
+            
+            .tab-btn.active {
+                color: var(--accent);
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+            }
+            
+            .tab-btn .count {
+                margin-left: var(--space-1);
+                padding: 0 var(--space-1);
+                font-size: 10px;
+                color: var(--text-tertiary);
+                background: var(--glass-tint-medium);
+                border-radius: var(--radius-xs);
+            }
+            
+            .tab-btn.active .count {
+                color: var(--accent);
+                background: var(--accent-bg);
             }
             
             .add-btn {
@@ -170,32 +217,62 @@ export class StateMappingEditor extends PlatformElement {
     static properties = {
         mode: { type: String },
         mappings: { type: Object },
+        inputMappings: { type: Object },
+        outputMappings: { type: Object },
         stateVariables: { type: Array, attribute: 'state-variables' },
         readonly: { type: Boolean },
         mappingsList: { type: Array, state: true },
+        activeTab: { type: String, state: true },
+        inputMappingsList: { type: Array, state: true },
+        outputMappingsList: { type: Array, state: true },
     };
 
     constructor() {
         super();
         this.mode = 'input';
         this.mappings = {};
+        this.inputMappings = {};
+        this.outputMappings = {};
         this.stateVariables = [];
         this.readonly = false;
         this.mappingsList = [];
+        this.activeTab = 'input';
+        this.inputMappingsList = [];
+        this.outputMappingsList = [];
     }
 
     updated(changedProperties) {
-        if (changedProperties.has('mappings')) {
-            this._parseMappings();
+        if (this.mode === 'both') {
+            if (changedProperties.has('inputMappings')) {
+                this._parseInputMappingsForBoth();
+            }
+            if (changedProperties.has('outputMappings')) {
+                this._parseOutputMappingsForBoth();
+            }
+        } else {
+            if (changedProperties.has('mappings')) {
+                this._parseMappings();
+            }
         }
     }
 
+    get _currentMode() {
+        return this.mode === 'both' ? this.activeTab : this.mode;
+    }
+
+    get _currentList() {
+        if (this.mode === 'both') {
+            return this.activeTab === 'input' ? this.inputMappingsList : this.outputMappingsList;
+        }
+        return this.mappingsList;
+    }
+
     get _title() {
-        return this.mode === 'input' ? 'Input Mapping' : 'Output Mapping';
+        return this._currentMode === 'input' ? 'Input Mapping' : 'Output Mapping';
     }
 
     get _labels() {
-        if (this.mode === 'input') {
+        if (this._currentMode === 'input') {
             return {
                 source: 'Source',
                 type: 'Type',
@@ -210,7 +287,7 @@ export class StateMappingEditor extends PlatformElement {
     }
 
     get _placeholders() {
-        if (this.mode === 'input') {
+        if (this._currentMode === 'input') {
             return {
                 source: 'field.path',
                 target: 'param_name'
@@ -223,21 +300,21 @@ export class StateMappingEditor extends PlatformElement {
     }
 
     get _emptyText() {
-        if (this.mode === 'input') {
-            return 'Нет маппингов. Добавьте для передачи данных из state в параметры.';
+        if (this._currentMode === 'input') {
+            return 'Нет маппингов';
         }
-        return 'Нет маппингов. Добавьте для записи результата в state.';
+        return 'Нет маппингов';
     }
 
     get _hintText() {
-        if (this.mode === 'input') {
-            return 'Маппинг: state/var/const → параметр ноды';
+        if (this._currentMode === 'input') {
+            return 'state/var/const → параметр';
         }
-        return 'Маппинг: поле результата → поле state';
+        return 'результат → state';
     }
 
     get _typeOptions() {
-        if (this.mode === 'input') {
+        if (this._currentMode === 'input') {
             return [
                 { value: '@state', label: '@state' },
                 { value: '@var', label: '@var' },
@@ -249,17 +326,68 @@ export class StateMappingEditor extends PlatformElement {
         ];
     }
 
-    _parseMappings() {
-        if (!this.mappings || Object.keys(this.mappings).length === 0) {
-            this.mappingsList = [];
+    _parseInputMappingsForBoth() {
+        const currentValue = this._getValueForMode('input', this.inputMappingsList);
+        const currentStr = JSON.stringify(currentValue);
+        const newStr = JSON.stringify(this.inputMappings || {});
+        
+        if (currentStr === newStr) return;
+        if ((!this.inputMappings || Object.keys(this.inputMappings).length === 0) && this.inputMappingsList.length > 0) return;
+        
+        if (!this.inputMappings || Object.keys(this.inputMappings).length === 0) {
+            this.inputMappingsList = [];
             return;
         }
         
+        this.inputMappingsList = Object.entries(this.inputMappings).map(([target, sourceValue]) => {
+            let type = 'const';
+            let source = sourceValue;
+            
+            if (typeof sourceValue === 'string') {
+                if (sourceValue.startsWith('@state:')) {
+                    type = '@state';
+                    source = sourceValue.slice(7);
+                } else if (sourceValue.startsWith('@var:')) {
+                    type = '@var';
+                    source = sourceValue.slice(5);
+                }
+            }
+            
+            return { source, type, target, id: generateId() };
+        });
+    }
+
+    _parseOutputMappingsForBoth() {
+        const currentValue = this._getValueForMode('output', this.outputMappingsList);
+        const currentStr = JSON.stringify(currentValue);
+        const newStr = JSON.stringify(this.outputMappings || {});
+        
+        if (currentStr === newStr) return;
+        if ((!this.outputMappings || Object.keys(this.outputMappings).length === 0) && this.outputMappingsList.length > 0) return;
+        
+        if (!this.outputMappings || Object.keys(this.outputMappings).length === 0) {
+            this.outputMappingsList = [];
+            return;
+        }
+        
+        this.outputMappingsList = Object.entries(this.outputMappings).map(([source, target]) => ({
+            source,
+            type: 'result',
+            target: typeof target === 'string' ? target : JSON.stringify(target),
+            id: generateId()
+        }));
+    }
+
+    _parseMappings() {
         const currentValue = this.getValue();
         const currentStr = JSON.stringify(currentValue);
-        const newStr = JSON.stringify(this.mappings);
+        const newStr = JSON.stringify(this.mappings || {});
         
-        if (currentStr === newStr) {
+        if (currentStr === newStr) return;
+        if ((!this.mappings || Object.keys(this.mappings).length === 0) && this.mappingsList.length > 0) return;
+        
+        if (!this.mappings || Object.keys(this.mappings).length === 0) {
+            this.mappingsList = [];
             return;
         }
         
@@ -285,12 +413,7 @@ export class StateMappingEditor extends PlatformElement {
                 }
             }
             
-            return {
-                source,
-                type,
-                target,
-                id: generateId()
-            };
+            return { source, type, target, id: generateId() };
         });
     }
 
@@ -303,11 +426,10 @@ export class StateMappingEditor extends PlatformElement {
         }));
     }
 
-    getValue() {
+    _getValueForMode(mode, list) {
         const result = {};
-        const list = this.mappingsList || [];
         
-        if (this.mode === 'input') {
+        if (mode === 'input') {
             for (const m of list) {
                 if (m.target && m.source) {
                     let value;
@@ -332,38 +454,98 @@ export class StateMappingEditor extends PlatformElement {
         return result;
     }
 
+    getValue() {
+        if (this.mode === 'both') {
+            return {
+                input: this._getValueForMode('input', this.inputMappingsList),
+                output: this._getValueForMode('output', this.outputMappingsList)
+            };
+        }
+        return this._getValueForMode(this.mode, this.mappingsList);
+    }
+
+    getInputValue() {
+        return this._getValueForMode('input', this.inputMappingsList);
+    }
+
+    getOutputValue() {
+        return this._getValueForMode('output', this.outputMappingsList);
+    }
+
     setValue(mapping) {
         this.mappings = mapping;
         this._parseMappings();
     }
 
     _addMapping() {
-        const currentList = this.mappingsList || [];
-        const defaultType = this.mode === 'input' ? '@state' : 'result';
-        
-        this.mappingsList = [
-            ...currentList,
-            { source: '', type: defaultType, target: '', id: generateId() }
-        ];
-        this._emitChange();
+        if (this.mode === 'both') {
+            const defaultType = this.activeTab === 'input' ? '@state' : 'result';
+            if (this.activeTab === 'input') {
+                this.inputMappingsList = [
+                    ...this.inputMappingsList,
+                    { source: '', type: defaultType, target: '', id: generateId() }
+                ];
+            } else {
+                this.outputMappingsList = [
+                    ...this.outputMappingsList,
+                    { source: '', type: defaultType, target: '', id: generateId() }
+                ];
+            }
+        } else {
+            const defaultType = this.mode === 'input' ? '@state' : 'result';
+            this.mappingsList = [
+                ...this.mappingsList,
+                { source: '', type: defaultType, target: '', id: generateId() }
+            ];
+        }
     }
 
     _removeMapping(id) {
-        const currentList = this.mappingsList || [];
-        this.mappingsList = currentList.filter(m => m.id !== id);
-        this._emitChange();
+        if (this.mode === 'both') {
+            if (this.activeTab === 'input') {
+                this.inputMappingsList = this.inputMappingsList.filter(m => m.id !== id);
+                this._emitInputChange();
+            } else {
+                this.outputMappingsList = this.outputMappingsList.filter(m => m.id !== id);
+                this._emitOutputChange();
+            }
+        } else {
+            this.mappingsList = this.mappingsList.filter(m => m.id !== id);
+            this._emitChange();
+        }
     }
 
     _updateMapping(id, field, value) {
-        const currentList = this.mappingsList || [];
-        this.mappingsList = currentList.map(m => 
-            m.id === id ? { ...m, [field]: value } : m
-        );
-        this._emitChange();
+        if (this.mode === 'both') {
+            if (this.activeTab === 'input') {
+                this.inputMappingsList = this.inputMappingsList.map(m => 
+                    m.id === id ? { ...m, [field]: value } : m
+                );
+                this._emitInputChange();
+            } else {
+                this.outputMappingsList = this.outputMappingsList.map(m => 
+                    m.id === id ? { ...m, [field]: value } : m
+                );
+                this._emitOutputChange();
+            }
+        } else {
+            this.mappingsList = this.mappingsList.map(m => 
+                m.id === id ? { ...m, [field]: value } : m
+            );
+            this._emitChange();
+        }
     }
 
     _emitChange() {
         this.emit('change', { value: this.getValue() });
+    }
+
+    _emitInputChange() {
+        this.emit('input-change', { value: this.getInputValue() });
+    }
+
+    _emitOutputChange() {
+        this.emit('output-change', { value: this.getOutputValue() });
     }
 
     _getAutocompleteOptions() {
@@ -373,13 +555,137 @@ export class StateMappingEditor extends PlatformElement {
         return this.stateVariables;
     }
 
-    render() {
-        const mappingsList = this.mappingsList || [];
+    _switchTab(tab) {
+        this.activeTab = tab;
+    }
+
+    _renderTabs() {
+        const inputCount = this.inputMappingsList.length;
+        const outputCount = this.outputMappingsList.length;
+        
+        return html`
+            <div class="tabs-container">
+                <button 
+                    type="button" 
+                    class="tab-btn ${this.activeTab === 'input' ? 'active' : ''}"
+                    @click=${() => this._switchTab('input')}
+                >
+                    Input${inputCount > 0 ? html`<span class="count">${inputCount}</span>` : ''}
+                </button>
+                <button 
+                    type="button" 
+                    class="tab-btn ${this.activeTab === 'output' ? 'active' : ''}"
+                    @click=${() => this._switchTab('output')}
+                >
+                    Output${outputCount > 0 ? html`<span class="count">${outputCount}</span>` : ''}
+                </button>
+            </div>
+        `;
+    }
+
+    _renderMappingContent() {
+        const mappingsList = this._currentList;
         const labels = this._labels;
         const placeholders = this._placeholders;
         const typeOptions = this._typeOptions;
         const autocompleteOptions = this._getAutocompleteOptions();
-        const showTypeSelect = this.mode === 'input';
+        const showTypeSelect = this._currentMode === 'input';
+        
+        return html`
+            ${mappingsList.length === 0 ? html`
+                <div class="empty-state">
+                    ${this._emptyText}
+                </div>
+            ` : html`
+                <div class="labels-row">
+                    <span class="label">${labels.source}</span>
+                    ${showTypeSelect ? html`
+                        <span class="arrow-spacer"></span>
+                        <span class="label type-label">${labels.type}</span>
+                    ` : ''}
+                    <span class="arrow-spacer"></span>
+                    <span class="label">${labels.target}</span>
+                    ${!this.readonly ? html`<span class="label-spacer"></span>` : ''}
+                </div>
+                ${mappingsList.map(m => html`
+                    <div class="mapping-row">
+                        <div class="mapping-field">
+                            <input
+                                type="text"
+                                class="mapping-input"
+                                placeholder="${placeholders.source}"
+                                .value=${m.source}
+                                ?readonly=${this.readonly}
+                                list="autocomplete-${m.id}"
+                                @input=${(e) => this._updateMapping(m.id, 'source', e.target.value)}
+                            />
+                            ${this._currentMode === 'input' && autocompleteOptions.length > 0 ? html`
+                                <datalist id="autocomplete-${m.id}">
+                                    ${autocompleteOptions.map(opt => html`<option value="${opt}">`)}
+                                </datalist>
+                            ` : ''}
+                        </div>
+                        ${showTypeSelect ? html`
+                            <span class="mapping-arrow">|</span>
+                            <div class="mapping-field type-field">
+                                <select
+                                    class="mapping-select"
+                                    .value=${m.type}
+                                    ?disabled=${this.readonly}
+                                    @change=${(e) => this._updateMapping(m.id, 'type', e.target.value)}
+                                >
+                                    ${typeOptions.map(opt => html`
+                                        <option value="${opt.value}" ?selected=${m.type === opt.value}>
+                                            ${opt.label}
+                                        </option>
+                                    `)}
+                                </select>
+                            </div>
+                        ` : ''}
+                        <span class="mapping-arrow">→</span>
+                        <div class="mapping-field">
+                            <input
+                                type="text"
+                                class="mapping-input"
+                                placeholder="${placeholders.target}"
+                                .value=${m.target}
+                                ?readonly=${this.readonly}
+                                @input=${(e) => this._updateMapping(m.id, 'target', e.target.value)}
+                            />
+                        </div>
+                        ${!this.readonly ? html`
+                            <button 
+                                type="button" 
+                                class="mapping-remove"
+                                @click=${() => this._removeMapping(m.id)}
+                            >×</button>
+                        ` : ''}
+                    </div>
+                `)}
+            `}
+            
+            <div class="hint">
+                ${this._hintText}
+            </div>
+        `;
+    }
+
+    render() {
+        if (this.mode === 'both') {
+            return html`
+                <div class="mapping-container">
+                    <div class="mapping-header">
+                        ${this._renderTabs()}
+                        ${!this.readonly ? html`
+                            <button type="button" class="add-btn" @click=${this._addMapping}>
+                                + Добавить
+                            </button>
+                        ` : ''}
+                    </div>
+                    ${this._renderMappingContent()}
+                </div>
+            `;
+        }
         
         return html`
             <div class="mapping-container">
@@ -391,82 +697,7 @@ export class StateMappingEditor extends PlatformElement {
                         </button>
                     ` : ''}
                 </div>
-                
-                ${mappingsList.length === 0 ? html`
-                    <div class="empty-state">
-                        ${this._emptyText}
-                    </div>
-                ` : html`
-                    <div class="labels-row">
-                        <span class="label">${labels.source}</span>
-                        ${showTypeSelect ? html`
-                            <span class="arrow-spacer"></span>
-                            <span class="label type-label">${labels.type}</span>
-                        ` : ''}
-                        <span class="arrow-spacer"></span>
-                        <span class="label">${labels.target}</span>
-                        ${!this.readonly ? html`<span class="label-spacer"></span>` : ''}
-                    </div>
-                    ${mappingsList.map(m => html`
-                        <div class="mapping-row">
-                            <div class="mapping-field">
-                                <input
-                                    type="text"
-                                    class="mapping-input"
-                                    placeholder="${placeholders.source}"
-                                    .value=${m.source}
-                                    ?readonly=${this.readonly}
-                                    list="autocomplete-${m.id}"
-                                    @input=${(e) => this._updateMapping(m.id, 'source', e.target.value)}
-                                />
-                                ${this.mode === 'input' && autocompleteOptions.length > 0 ? html`
-                                    <datalist id="autocomplete-${m.id}">
-                                        ${autocompleteOptions.map(opt => html`<option value="${opt}">`)}
-                                    </datalist>
-                                ` : ''}
-                            </div>
-                            ${showTypeSelect ? html`
-                                <span class="mapping-arrow">|</span>
-                                <div class="mapping-field type-field">
-                                    <select
-                                        class="mapping-select"
-                                        .value=${m.type}
-                                        ?disabled=${this.readonly}
-                                        @change=${(e) => this._updateMapping(m.id, 'type', e.target.value)}
-                                    >
-                                        ${typeOptions.map(opt => html`
-                                            <option value="${opt.value}" ?selected=${m.type === opt.value}>
-                                                ${opt.label}
-                                            </option>
-                                        `)}
-                                    </select>
-                                </div>
-                            ` : ''}
-                            <span class="mapping-arrow">→</span>
-                            <div class="mapping-field">
-                                <input
-                                    type="text"
-                                    class="mapping-input"
-                                    placeholder="${placeholders.target}"
-                                    .value=${m.target}
-                                    ?readonly=${this.readonly}
-                                    @input=${(e) => this._updateMapping(m.id, 'target', e.target.value)}
-                                />
-                            </div>
-                            ${!this.readonly ? html`
-                                <button 
-                                    type="button" 
-                                    class="mapping-remove"
-                                    @click=${() => this._removeMapping(m.id)}
-                                >×</button>
-                            ` : ''}
-                        </div>
-                    `)}
-                `}
-                
-                <div class="hint">
-                    ${this._hintText}
-                </div>
+                ${this._renderMappingContent()}
             </div>
         `;
     }

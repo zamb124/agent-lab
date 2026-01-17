@@ -197,12 +197,12 @@ export class AgentCreateModal extends PlatformModal {
                     entry: 'start',
                     nodes: {
                         start: {
-                            type: 'function',
-                            code: 'def run(state):\n    state["step"] = "start"\n    return state'
+                            type: 'code',
+                            code: 'def execute(args, state):\n    state.result = "start"\n    return {"step": "start"}'
                         },
                         finish: {
-                            type: 'function',
-                            code: 'def run(state):\n    state["step"] = "finish"\n    return state'
+                            type: 'code',
+                            code: 'def execute(args, state):\n    state.result = "finish"\n    return {"step": "finish"}'
                         }
                     },
                     edges: [
@@ -241,12 +241,12 @@ export class AgentCreateModal extends PlatformModal {
                     agent_id: agentId,
                     name: `Новый ${template.name}`,
                     description: 'Агент на основе функций',
-                    tags: ['новый', 'function'],
+                    tags: ['новый', 'code'],
                     entry: 'process',
                     nodes: {
                         process: {
-                            type: 'function',
-                            code: 'def run(state):\n    """Обработка данных"""\n    result = state.get("input", "")\n    state["output"] = f"Обработано: {result}"\n    return state'
+                            type: 'code',
+                            code: 'def execute(args, state):\n    """Обработка данных"""\n    result = args.get("input", "")\n    return {"output": f"Обработано: {result}"}'
                         }
                     },
                     edges: [
@@ -260,18 +260,12 @@ export class AgentCreateModal extends PlatformModal {
                     agent_id: agentId,
                     name: `Новый ${template.name}`,
                     description: 'Агент-инструмент',
-                    tags: ['новый', 'tool'],
+                    tags: ['новый', 'code'],
                     entry: 'tool_node',
                     nodes: {
                         tool_node: {
-                            type: 'tool',
-                            code: 'async def execute(args: dict, state: dict) -> str:\n    """Выполнение инструмента"""\n    return f"Результат: {args}"',
-                            args_schema: {
-                                'input': {
-                                    'type': 'string',
-                                    'description': 'Входные данные'
-                                }
-                            }
+                            type: 'code',
+                            code: 'def execute(args, state):\n    """Выполнение инструмента"""\n    return {"result": f"Результат: {args}"}',
                         }
                     },
                     edges: [

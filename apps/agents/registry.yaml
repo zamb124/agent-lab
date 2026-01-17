@@ -30,6 +30,11 @@ agents:
   - id: crm
     public: true
     description: "AI анализатор текста CRM заметок для извлечения entities/relationships"
+  
+  # Telegram Demo
+  - id: telegram_demo
+    public: true
+    description: "Демо агент с Telegram триггерами и ChannelNode"
 
 
 # Тулы

@@ -39,6 +39,7 @@ class NodeType(str, Enum):
     REMOTE_AGENT = "remote_agent"   # Внешний агент по A2A протоколу
     EXTERNAL_API = "external_api"   # Вызов внешнего HTTP API
     MCP = "mcp"                     # MCP Tool как нода
+    CHANNEL = "channel"             # Отправка сообщений в каналы (Telegram, Email)
 
 
 class ToolType(str, Enum):
@@ -100,3 +101,40 @@ class MergeMode(str, Enum):
     
     MERGE = "merge"         # Слияние с базовой конфигурацией
     REPLACE = "replace"     # Полная замена базовой конфигурации
+
+
+class TriggerType(str, Enum):
+    """
+    Типы триггеров для запуска агента.
+    
+    Push-based: telegram, webhook - внешний источник делает POST
+    Pull-based: cron, email - polling по расписанию
+    """
+    
+    TELEGRAM = "telegram"   # Telegram Bot webhook
+    CRON = "cron"           # Cron расписание (TaskIQ scheduler)
+    WEBHOOK = "webhook"     # Внешний HTTP webhook
+    EMAIL = "email"         # Email polling или webhook
+    REDIS = "redis"         # Redis Pub/Sub событие
+
+
+class TriggerStatus(str, Enum):
+    """Статус триггера."""
+    
+    INACTIVE = "inactive"   # Не зарегистрирован
+    ACTIVE = "active"       # Работает
+    ERROR = "error"         # Ошибка регистрации
+
+
+class ChannelType(str, Enum):
+    """
+    Типы каналов для отправки сообщений.
+    
+    Используется в ChannelNode и output_actions триггеров.
+    """
+    
+    TELEGRAM = "telegram"   # Telegram Bot API
+    EMAIL = "email"         # Email (SMTP, Mailgun, SendGrid)
+    WHATSAPP = "whatsapp"   # WhatsApp Business API
+    SMS = "sms"             # SMS (Twilio, etc)
+    WEBHOOK = "webhook"     # HTTP webhook

@@ -94,7 +94,7 @@ class BaseReactNodeRunner(ABC):
 
     def get_variables(self, state: "ExecutionState") -> Dict[str, Any]:
         """Получает переменные из state."""
-        return state.variables or {}
+        return dict(state.variables or {})
 
     def get_messages(self, state: "ExecutionState") -> List[Message]:
         """Получает историю сообщений."""

@@ -12,6 +12,7 @@ export function renderCanvas(component) {
             ${renderZoomControls(component)}
             ${component.contextMenu ? renderContextMenu(component) : ''}
             ${component.connectionContextMenu ? renderConnectionContextMenu(component) : ''}
+            ${component.resourceContextMenu ? renderResourceContextMenu(component) : ''}
         </div>
     `;
 }
@@ -92,6 +93,26 @@ function renderConnectionContextMenu(component) {
             >
                 <platform-icon name="trash" size="14"></platform-icon>
                 Delete Connection
+            </div>
+        </div>
+    `;
+}
+
+function renderResourceContextMenu(component) {
+    const menu = component.resourceContextMenu;
+    
+    return html`
+        <div 
+            class="context-menu"
+            style="left: ${menu.x}px; top: ${menu.y}px;"
+            @click=${(e) => e.stopPropagation()}
+        >
+            <div 
+                class="context-menu-item danger" 
+                @click=${component._deleteResource}
+            >
+                <platform-icon name="trash" size="14"></platform-icon>
+                Delete Resource
             </div>
         </div>
     `;

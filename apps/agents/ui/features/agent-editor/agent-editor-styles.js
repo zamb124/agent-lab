@@ -30,7 +30,7 @@ agent-editor-page .editor-body {
 }
 
 agent-editor-page .node-types-sidebar {
-    width: 180px;
+    width: 220px;
     flex-shrink: 0;
     border-right: 1px solid var(--border-subtle);
     background: var(--glass-solid-subtle);
@@ -103,13 +103,13 @@ agent-editor-page .floating-panel.entering {
 
 agent-editor-page .floating-panel.expanded {
     position: fixed;
-    top: 5vh !important;
+    top: 3vh !important;
     left: 50% !important;
     right: auto !important;
     transform: translateX(-50%);
-    width: min(900px, 90vw);
-    height: 90vh;
-    max-height: 90vh;
+    width: min(1200px, 94vw);
+    height: 94vh;
+    max-height: 94vh;
     z-index: 100;
     box-shadow: 0 32px 100px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.1);
 }

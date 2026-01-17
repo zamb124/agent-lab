@@ -76,18 +76,14 @@ class AgentFactory:
             for e in effective["edges"]
         ]
 
-        return await Agent.from_config(
-            config={
-                "id": config.agent_id,
-                "name": config.name,
-                "description": config.description or "",
-                "tags": config.tags,
-                "entry": effective["entry"],
-                "nodes": effective["nodes"],
-                "edges": edges,
-            },
-            variables=resolved_variables,
-        )
+        # Полный inline конфиг
+        config_dict = config.model_dump()
+        config_dict["resolved_variables"] = resolved_variables
+        config_dict["entry"] = effective["entry"]
+        config_dict["nodes"] = effective["nodes"]
+        config_dict["edges"] = edges
+
+        return await Agent.from_config(config_dict)
 
     def _apply_skill(self, config: AgentConfig, skill_id: str) -> Dict[str, Any]:
         """

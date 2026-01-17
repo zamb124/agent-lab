@@ -23,10 +23,20 @@ class PythonCodeRunner(BaseCodeRunner):
     
     language = "python"
     
-    def __init__(self, context: Optional[Any] = None, variables: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        context: Optional[Any] = None,
+        variables: Optional[Dict[str, Any]] = None,
+        resources: Optional[Dict[str, Any]] = None,
+    ):
         self.context = context
         self.variables = variables or {}
-        self.namespace_builder = PythonNamespaceBuilder(context=context, variables=self.variables)
+        self.resources = resources or {}
+        self.namespace_builder = PythonNamespaceBuilder(
+            context=context,
+            variables=self.variables,
+            resources=self.resources,
+        )
         self.compiler = PythonCompiler(namespace_builder=self.namespace_builder)
     
     async def execute(

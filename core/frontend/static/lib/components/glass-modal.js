@@ -364,7 +364,11 @@ export class GlassModal extends PlatformElement {
         this.open = false;
         this._isFullscreen = false;
         this._position = { x: null, y: null };
-        this.emit('close');
+        // Используем событие без всплытия чтобы не конфликтовать с другими обработчиками
+        this.dispatchEvent(new CustomEvent('modal-closed', {
+            bubbles: false,
+            composed: true,
+        }));
     }
 
     toggleFullscreen() {

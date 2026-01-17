@@ -22,6 +22,9 @@ export class PlatformIcon extends PlatformElement {
             svg {
                 width: 100%;
                 height: 100%;
+            }
+            
+            :host(:not([colored])) svg {
                 fill: none;
                 stroke: currentColor;
                 stroke-width: 2;
@@ -29,7 +32,7 @@ export class PlatformIcon extends PlatformElement {
                 stroke-linejoin: round;
             }
             
-            :host([filled]) svg {
+            :host([filled]:not([colored])) svg {
                 fill: currentColor;
                 stroke: none;
             }
@@ -40,6 +43,7 @@ export class PlatformIcon extends PlatformElement {
         name: { type: String },
         size: { type: Number },
         filled: { type: Boolean, reflect: true },
+        colored: { type: Boolean, reflect: true },
     };
 
     constructor() {
@@ -47,6 +51,7 @@ export class PlatformIcon extends PlatformElement {
         this.name = '';
         this.size = 20;
         this.filled = false;
+        this.colored = false;
         this._svg = '';
     }
 

@@ -23,6 +23,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator, field_valida
 from core.models import StrictBaseModel
 from core.urn import extract_id
 from .enums import MergeMode
+from .resource import ResourceReference
+from .trigger_config import TriggerConfig
 
 # Тип для permission: строка или список строк
 Permission = Optional[Union[str, List[str]]]
@@ -242,6 +244,16 @@ class SkillConfig(StrictBaseModel):
         default=None,
         description="Mock конфигурация для skill. Переопределяет mock агента."
     )
+    
+    # Ресурсы skill
+    resources: Dict[str, ResourceReference] = Field(
+        default_factory=dict,
+        description="Ресурсы skill (мержатся с agent-level)"
+    )
+    resources_mode: MergeMode = Field(
+        default=MergeMode.MERGE,
+        description="Режим применения resources: 'merge' или 'replace'"
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -417,11 +429,23 @@ class AgentConfig(StrictBaseModel):
         default=None,
         description="Mock конфигурация для агента (tools, agents, nodes, llm)"
     )
+    
+    # Ресурсы агента
+    resources: Dict[str, ResourceReference] = Field(
+        default_factory=dict,
+        description="Ресурсы агента, доступные всем нодам"
+    )
 
     # Evaluation - словарь тест-кейсов {test_id: TestCaseConfig}
     evaluation: Optional[Dict[str, TestCaseConfig]] = Field(
         default=None,
         description="Тест-кейсы для оценки агента {test_id: config}"
+    )
+    
+    # Триггеры агента - точки входа (telegram, cron, webhook, email)
+    triggers: Dict[str, TriggerConfig] = Field(
+        default_factory=dict,
+        description="Триггеры агента {trigger_id: TriggerConfig}"
     )
     
     # Контроль доступа для UI

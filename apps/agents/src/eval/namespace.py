@@ -89,9 +89,15 @@ class PythonNamespaceBuilder:
     Единственное место, где определяется что доступно в inline коде.
     """
     
-    def __init__(self, context: Optional[Any] = None, variables: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        context: Optional[Any] = None,
+        variables: Optional[Dict[str, Any]] = None,
+        resources: Optional[Dict[str, Any]] = None,
+    ):
         self.context = context
         self.variables = variables or {}
+        self.resources = resources or {}
     
     def build(self) -> Dict[str, Any]:
         """Возвращает полный namespace с builtins, типами, утилитами, wrappers."""
@@ -182,5 +188,9 @@ class PythonNamespaceBuilder:
         # BaseTool для создания инструментов в inline коде
         container = get_container()
         namespace["BaseTool"] = container.base_tool_class
+        
+        # Ресурсы агента (code modules, llm, rag, http и др.)
+        for resource_id, resource in self.resources.items():
+            namespace[resource_id] = resource
         
         return namespace

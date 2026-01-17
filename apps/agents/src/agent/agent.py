@@ -52,6 +52,7 @@ class Agent:
         nodes: Словарь нод {node_id: BaseNode}
         edges: Список edges с conditions
         variables: Резолвнутые переменные (доступны в state.variables)
+        config: Полный inline AgentConfig (для передачи в state)
     """
 
     def __init__(
@@ -64,6 +65,7 @@ class Agent:
         description: str = "",
         tags: Optional[List[str]] = None,
         variables: Optional[Dict[str, Any]] = None,
+        config: Optional[Dict[str, Any]] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -72,6 +74,7 @@ class Agent:
         self.description = description
         self.tags = tags or []
         self.variables = variables or {}
+        self.config = config or {}  # Полный inline AgentConfig
 
         # Нормализуем edges в единый формат (список словарей)
         self.edges = self._normalize_edges(edges)
@@ -483,31 +486,43 @@ class Agent:
 
     @classmethod
     async def from_config(
-        cls, config: Dict[str, Any], variables: Optional[Dict[str, Any]] = None
+        cls, 
+        config: Dict[str, Any], 
+        variables: Optional[Dict[str, Any]] = None,
     ) -> "Agent":
         """
-        Создает агента из конфига.
-
-        Zero-Guess: все обязательные поля должны присутствовать.
+        Создает агента из AgentConfig.
 
         Args:
-            config: Конфиг агента
-            variables: Резолвнутые переменные
+            config: AgentConfig (model_dump() или dict)
+            variables: Опционально - переопределение variables (для обратной совместимости)
 
         Returns:
             Agent instance
         """
+        # agent_id может быть в "agent_id" или "id"
+        agent_id = config.get("agent_id") or config.get("id")
+        
         nodes = {}
-        for node_id, node_config in config["nodes"].items():
+        nodes_config = config.get("nodes", {})
+        for node_id, node_config in nodes_config.items():
             nodes[node_id] = await create_node(node_id, node_config)
 
+        # variables: параметр > config["resolved_variables"] > config["variables"]
+        resolved_variables = (
+            variables 
+            or config.get("resolved_variables") 
+            or config.get("variables", {})
+        )
+
         return cls(
-            agent_id=config["id"],
-            name=config["name"],
-            entry=config["entry"],
+            agent_id=agent_id,
+            name=config.get("name", ""),
+            entry=config.get("entry", "main"),
             nodes=nodes,
-            edges=config["edges"],
+            edges=config.get("edges", []),
             description=config.get("description", ""),
             tags=config.get("tags", []),
-            variables=variables or {},
+            variables=resolved_variables,
+            config=config,
         )

@@ -1,13 +1,37 @@
 """
-Каналы коммуникации с агентами.
+Channels - каналы коммуникации и отправки сообщений.
 
-BaseChannel - абстрактный интерфейс канала.
-A2AChannel - реализация A2A протокола.
+Содержит:
+1. BaseChannel - базовый класс каналов коммуникации (A2A, WebSocket, Telegram)
+2. BaseChannelHandler - базовый класс для отправки сообщений в каналы
+3. Конкретные реализации: TelegramChannelHandler, WebhookChannelHandler
+4. ChannelRegistry - реестр handlers для отправки
+
+Используется:
+- ChannelNode (нода графа)
+- TriggerExecutor (output_actions)
+- A2A API, WebSocket API
 """
 
-from apps.agents.src.channels.base import BaseChannel, PermissionDenied
-from apps.agents.src.channels.types import PreparedTaskParams
-from apps.agents.src.channels.factory import get_channel
+# Существующие классы каналов коммуникации
+from .base import BaseChannel, PermissionDenied, BaseChannelHandler
 
-__all__ = ["BaseChannel", "PermissionDenied", "PreparedTaskParams", "get_channel"]
+# Handlers для отправки сообщений
+from .telegram import TelegramChannelHandler
+from .webhook import WebhookChannelHandler
 
+# Реестр handlers
+from .registry import ChannelRegistry, create_default_channel_registry
+
+__all__ = [
+    # Каналы коммуникации
+    "BaseChannel",
+    "PermissionDenied",
+    # Handlers для отправки
+    "BaseChannelHandler",
+    "TelegramChannelHandler",
+    "WebhookChannelHandler",
+    # Реестр
+    "ChannelRegistry",
+    "create_default_channel_registry",
+]
