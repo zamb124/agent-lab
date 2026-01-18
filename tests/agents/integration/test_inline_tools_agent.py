@@ -103,7 +103,7 @@ class TestToolRegistryInlineConfig:
             "description": "Без кода",
         }
 
-        with pytest.raises(ValueError, match="requires 'code' field"):
+        with pytest.raises(ValueError, match="requires 'type' or 'code' field"):
             await container.tool_registry.create_tool(config)
 
 

@@ -320,7 +320,7 @@ class TestExternalAPITool:
 
     @pytest.mark.asyncio
     async def test_external_api_tool_execute(self, monkeypatch):
-        """Выполнение ExternalAPITool."""
+        """Выполнение ExternalAPITool через _run_impl (обходит test mock)."""
         import httpx
 
         async def mock_request(self, *args, **kwargs):
@@ -349,7 +349,8 @@ class TestExternalAPITool:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await tool.run({"input": "test data"}, state)
+        # Вызываем _run_impl напрямую чтобы обойти test mode mock
+        result = await tool._run_impl({"input": "test data"}, state)
         assert result["result"] == "processed"
 
     @pytest.mark.asyncio
@@ -404,7 +405,8 @@ class TestExternalAPITool:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await tool.run({}, state)
+        # Вызываем _run_impl напрямую чтобы обойти test mode mock
+        result = await tool._run_impl({}, state)
         assert result == {"answer": 42}
 
 
