@@ -1,10 +1,11 @@
 """
 NodeAsToolWrapper - обёртка ноды для использования как tool.
 
-Простая логика:
+Логика:
 1. Создает args_schema для LLM из конфига ноды
-2. Записывает args в state
+2. Для react_node создает изолированный nested_state
 3. Вызывает node.run(state)
+4. При AgentInterrupt сохраняет nested_state для resume
 
 Нода сама берет нужные данные через input_mapping.
 """
@@ -15,12 +16,15 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from pydantic import Field, create_model
 
+from apps.agents.src.agent.exceptions import AgentInterrupt
 from apps.agents.src.agent.nodes import create_node
 from core.logging import get_logger
 from apps.agents.src.mock import get_mock_for_agent
 from apps.agents.src.models import NodeConfig
+from apps.agents.src.models.enums import NodeType
+from apps.agents.src.state.interrupt_manager import InterruptManager
 from apps.agents.src.tools.base import BaseTool, sanitize_tool_name
-from core.state import ExecutionState
+from core.state import ExecutionState, InterruptPathItem
 
 if TYPE_CHECKING:
     from apps.agents.src.agent.nodes import BaseNode
@@ -138,27 +142,123 @@ class NodeAsToolWrapper(BaseTool):
 
     async def _run_impl(self, args: Dict[str, Any], state: ExecutionState) -> Any:
         """
-        Записывает args в state и вызывает node.run(state).
-        Нода сама возьмет данные через input_mapping.
+        Вызывает ноду. Для react_node создает изолированный state и обрабатывает interrupt.
         """
         node_id = self.node_config.node_id
+        node_type = self.node_config.type
         
         mock_result = get_mock_for_agent(state, node_id)
         if mock_result is not None:
             logger.info(f"[wrapper:{node_id}] mock response")
             return mock_result
         
-        # Записываем args в state
+        node = await self._get_node()
+        logger.info(f"[wrapper:{node_id}] run with args: {list(args.keys())}")
+        
+        # Для react_node создаем изолированный state
+        if node_type == NodeType.REACT_NODE.value:
+            return await self._run_react_node(node, node_id, args, state)
+        
+        # Для остальных нод - простой вызов
         for key, value in args.items():
             setattr(state, key, value)
         
-        node = await self._get_node()
-        logger.info(f"[wrapper:{node_id}] run with args in state: {list(args.keys())}")
-        
-        # Вызываем ноду - она сама разберется через input_mapping
         result = await node.run(state)
+        return self._extract_response(result)
+    
+    async def _run_react_node(
+        self, 
+        node: "BaseNode", 
+        node_id: str, 
+        args: Dict[str, Any], 
+        parent_state: ExecutionState
+    ) -> Any:
+        """
+        Выполняет react_node с изолированным state.
+        При interrupt сохраняет nested_state для resume.
+        """
+        # Проверяем resume: если есть interrupt_path для этой ноды
+        is_resume = InterruptManager.is_resume_for_nested(parent_state, node_id)
         
-        # Возвращаем response
+        if is_resume:
+            # Resume: загружаем сохраненный state субагента
+            nested_state = InterruptManager.load_nested_state(parent_state, node_id)
+            # Передаем ответ пользователя
+            nested_state.content = parent_state.content
+            # Передаем оставшийся путь interrupt (без первого элемента)
+            nested_state.interrupt_path = list(parent_state.interrupt_path[1:])
+            logger.info(f"[wrapper:{node_id}] resume with answer='{parent_state.content[:50]}...'")
+        else:
+            # Первый вызов: создаем новый state для субагента
+            nested_state = self._create_nested_state(parent_state, args)
+        
+        try:
+            result = await node.run(nested_state)
+            
+            # Успешное завершение - копируем результат в родительский state
+            self._copy_result_to_parent(nested_state, parent_state)
+            
+            # Сохраняем историю субагента
+            InterruptManager.save_nested_state(parent_state, node_id, nested_state)
+            
+            return self._extract_response(result)
+            
+        except AgentInterrupt as e:
+            # Сохраняем state субагента для resume
+            logger.info(
+                f"[wrapper:{node_id}] interrupt, saving nested_state: "
+                f"messages={len(nested_state.messages)}"
+            )
+            InterruptManager.save_nested_state(parent_state, node_id, nested_state)
+            
+            # Копируем interrupt_path из субагента в родительский state
+            parent_state.interrupt_path = list(nested_state.interrupt_path)
+            
+            # Добавляем себя в начало пути
+            InterruptManager.push_interrupt_path(
+                parent_state,
+                InterruptPathItem(
+                    type=NodeType.REACT_NODE.value,
+                    id=node_id,
+                    tool_call=None
+                )
+            )
+            
+            logger.info(f"[wrapper:{node_id}] interrupt: {e.question[:50]}...")
+            raise
+    
+    def _create_nested_state(
+        self, parent_state: ExecutionState, args: Dict[str, Any]
+    ) -> ExecutionState:
+        """Создает изолированный state для субагента."""
+        nested_state = ExecutionState(
+            task_id=parent_state.task_id,
+            context_id=parent_state.context_id,
+            session_id=parent_state.session_id,
+            user_id=parent_state.user_id,
+            variables=parent_state.variables.copy(),
+            content=args.get("query", args.get("content", "")),
+            messages=[],  # Чистая история для субагента
+        )
+        
+        # Записываем args в nested_state
+        for key, value in args.items():
+            setattr(nested_state, key, value)
+        
+        return nested_state
+    
+    def _copy_result_to_parent(
+        self, nested_state: ExecutionState, parent_state: ExecutionState
+    ) -> None:
+        """Копирует результат субагента в родительский state."""
+        if nested_state.response:
+            parent_state.response = nested_state.response
+        
+        # Копируем tool_results
+        parent_state.tool_results.update(nested_state.tool_results)
+    
+    def _extract_response(self, result: Any) -> Any:
+        """Извлекает response из результата."""
         if isinstance(result, ExecutionState):
             return result.response or str(result.model_dump(exclude_none=False))
         if isinstance(result, dict):

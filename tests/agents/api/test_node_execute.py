@@ -1719,7 +1719,7 @@ def run(state):
         
         function_resp = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "code", "code": function_code, "state": state}
+            json={"node_type": "code", "node_config": {"code": function_code}, "state": state}
         )
         assert function_resp.json()["success"] is True
         processed_state = function_resp.json()["output_state"]
@@ -1751,7 +1751,7 @@ def run(state):
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
+                "node_config": {"agent_id": "example_graph"},
                 "state": state
             }
         )

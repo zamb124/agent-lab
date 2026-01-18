@@ -434,3 +434,370 @@ class TestCreateNodeTool:
 
         assert result.formatted_order == "ORD-12345"
 
+
+class TestCodeNodeNamedArguments:
+    """Тесты CodeNode с именованными аргументами и дефолтами."""
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_with_defaults(self):
+        """CodeNode с функцией, имеющей именованные аргументы и дефолты."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20, state=None):
+    return {"result": x + y}""",
+                "input_mapping": {},
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+        )
+        result = await node.run(state)
+
+        # Должны использоваться дефолтные значения
+        assert result.result == 30  # 10 + 20
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_from_input_mapping(self):
+        """CodeNode: именованные аргументы подставляются из input_mapping."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20, state=None):
+    return {"result": x + y}""",
+                "input_mapping": {
+                    "x": 5,
+                    "y": 15,
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+        )
+        result = await node.run(state)
+
+        # Должны использоваться значения из input_mapping
+        assert result.result == 20  # 5 + 15
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_partial_defaults(self):
+        """CodeNode: часть аргументов из input_mapping, часть из дефолтов."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20, z=30, state=None):
+    return {"result": x + y + z}""",
+                "input_mapping": {
+                    "x": 5,
+                    # y и z должны взять дефолты
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+        )
+        result = await node.run(state)
+
+        # x из input_mapping, y и z из дефолтов
+        assert result.result == 55  # 5 + 20 + 30
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_from_state(self):
+        """CodeNode: именованные аргументы подставляются из state через @state:."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20, state=None):
+    return {"result": x + y}""",
+                "input_mapping": {
+                    "x": "@state:value_x",
+                    "y": "@state:value_y",
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            value_x=7,
+            value_y=13,
+        )
+        result = await node.run(state)
+
+        # Должны использоваться значения из state
+        assert result.result == 20  # 7 + 13
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_mixed_sources(self):
+        """CodeNode: смешанные источники - state, переменные, константы, дефолты."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20, z=30, multiplier=1, state=None):
+    return {"result": (x + y + z) * multiplier}""",
+                "input_mapping": {
+                    "x": "@state:value_x",
+                    "y": "@var:value_y",
+                    "z": 100,  # константа
+                    # multiplier должен взять дефолт
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            value_x=5,
+            variables={"value_y": 15},
+        )
+        result = await node.run(state)
+
+        # x из state (5), y из variables (15), z константа (100), multiplier дефолт (1)
+        assert result.result == 120  # (5 + 15 + 100) * 1
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_with_state_parameter(self):
+        """CodeNode: функция с именованными аргументами и параметром state."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20, state=None):
+    # Используем state для доступа к дополнительным данным
+    bonus = getattr(state, 'bonus', 0) if state else 0
+    return {"result": x + y + bonus}""",
+                "input_mapping": {
+                    "x": "@state:value_x",
+                    "y": "@state:value_y",
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            value_x=5,
+            value_y=15,
+            bonus=10,
+        )
+        result = await node.run(state)
+
+        # x и y из state, bonus из state напрямую
+        assert result.result == 30  # 5 + 15 + 10
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_string_defaults(self):
+        """CodeNode: именованные аргументы со строковыми дефолтами."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(greeting="Hello", name="World", state=None):
+    return {"message": f"{greeting}, {name}!"}""",
+                "input_mapping": {
+                    "name": "@state:user_name",
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            user_name="Иван",
+        )
+        result = await node.run(state)
+
+        # greeting из дефолта, name из state
+        assert result.message == "Hello, Иван!"
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_none_default(self):
+        """CodeNode: именованные аргументы с None в дефолте."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(value=None, multiplier=1, state=None):
+    if value is None:
+        value = 0
+    return {"result": value * multiplier}""",
+                "input_mapping": {
+                    "value": "@state:input_value",
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            input_value=42,
+        )
+        result = await node.run(state)
+
+        # value из state, multiplier из дефолта
+        assert result.result == 42  # 42 * 1
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_list_default(self):
+        """CodeNode: именованные аргументы со списком в дефолте."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(items=None, prefix="Item", state=None):
+    if items is None:
+        items = []
+    return {"formatted": [f"{prefix}: {item}" for item in items]}""",
+                "input_mapping": {
+                    "items": "@state:item_list",
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            item_list=["apple", "banana"],
+        )
+        result = await node.run(state)
+
+        # items из state, prefix из дефолта
+        assert result.formatted == ["Item: apple", "Item: banana"]
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_dict_default(self):
+        """CodeNode: именованные аргументы со словарем в дефолте."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(config=None, key="default", state=None):
+    if config is None:
+        config = {}
+    return {"value": config.get(key, "not_found")}""",
+                "input_mapping": {
+                    "config": "@state:user_config",
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            user_config={"default": "found", "other": "value"},
+        )
+        result = await node.run(state)
+
+        # config из state, key из дефолта
+        assert result.value == "found"
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_without_state_parameter(self):
+        """CodeNode: функция с именованными аргументами без параметра state."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20):
+    return {"result": x + y}""",
+                "input_mapping": {
+                    "x": "@state:value_x",
+                    "y": "@state:value_y",
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            value_x=7,
+            value_y=13,
+        )
+        result = await node.run(state)
+
+        # Должны использоваться значения из state через input_mapping
+        assert result.result == 20  # 7 + 13
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_without_state_parameter_defaults_only(self):
+        """CodeNode: функция без state, только дефолты используются."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20):
+    return {"result": x + y}""",
+                "input_mapping": {},
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+        )
+        result = await node.run(state)
+
+        # Должны использоваться только дефолтные значения
+        assert result.result == 30  # 10 + 20
+
+    @pytest.mark.asyncio
+    async def test_named_arguments_without_state_parameter_partial_mapping(self):
+        """CodeNode: функция без state, часть аргументов из mapping, часть из дефолтов."""
+        node = CodeNode(
+            node_id="test_node",
+            config={
+                "code": """def execute(x=10, y=20, z=30):
+    return {"result": x + y + z}""",
+                "input_mapping": {
+                    "x": 5,
+                    # y и z должны взять дефолты
+                },
+            },
+        )
+
+        from core.state import ExecutionState
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+        )
+        result = await node.run(state)
+
+        # x из input_mapping, y и z из дефолтов
+        assert result.result == 55  # 5 + 20 + 30

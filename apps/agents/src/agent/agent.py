@@ -239,11 +239,15 @@ class Agent:
             new_messages = result.messages[original_msg_count:]
             merged.messages.extend(new_messages)
 
+            # nested_states - мержим напрямую (без сериализации)
+            if result.nested_states:
+                merged.nested_states.update(result.nested_states)
+
             # Все поля (включая динамические) - перезаписываем
             result_dict = result.model_dump(exclude_none=False)
             for field, value in result_dict.items():
-                if field == "messages":
-                    continue
+                if field in ("messages", "nested_states"):
+                    continue  # Уже обработали
                 if value is not None:
                     setattr(merged, field, value)
 

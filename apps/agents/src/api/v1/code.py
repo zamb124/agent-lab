@@ -655,6 +655,15 @@ async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
     config = request.node_config.copy()
     config["type"] = request.node_type
     
+    # Обратная совместимость: если node_config пустой, но есть поля напрямую в request
+    # (старый формат API)
+    if not config and hasattr(request, '__dict__'):
+        request_dict = request.__dict__
+        # Переносим поля из request в config (кроме node_type и state)
+        for key, value in request_dict.items():
+            if key not in ("node_type", "state", "node_config") and value is not None:
+                config[key] = value
+    
     _validate_node_config(config)
     
     return config
@@ -669,6 +678,13 @@ async def _execute_node(node_config: Dict[str, Any], input_state: Dict[str, Any]
     if "session_id" not in state_data:
         context_id = state_data.get("context_id", str(uuid.uuid4()))
         state_data["session_id"] = f"{agent_id}:{context_id}"
+    
+    # Инлайним tools для react_node если они переданы как строки
+    if node_config.get("type") == "react_node" and "tools" in node_config:
+        tools = node_config["tools"]
+        if tools:
+            container = get_container()
+            node_config = {**node_config, "tools": await _inline_tools_list(tools, container)}
     
     node = await create_node("test_node", node_config)
     state = ExecutionState.model_validate(state_data)

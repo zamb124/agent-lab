@@ -286,11 +286,10 @@ class ReactNodeRunner(BaseReactNodeRunner):
         )
 
         if call_type == NodeType.REACT_NODE.value:
-            nested_state = InterruptManager.load_nested_state(state, call_id)
-            nested_state.interrupt_path = list(interrupt_path[1:])
-            InterruptManager.save_nested_state(state, call_id, nested_state)
-            InterruptManager.clear_interrupt_path(state)
-
+            # NodeAsToolWrapper сам обрабатывает resume через interrupt_path
+            # Передаем ответ пользователя в state.content
+            state.content = user_answer
+            
             try:
                 tool_results = await self._execute_tools_parallel(
                     [{"name": call_id, "id": tool_call_id, "arguments": {"query": user_answer}}],
@@ -302,6 +301,8 @@ class ReactNodeRunner(BaseReactNodeRunner):
                             tr["tool_call_id"], tr["content"], context_id, task_id
                         )
                     )
+                # Очищаем interrupt_path после успешного выполнения
+                InterruptManager.clear_interrupt_path(state)
             except AgentInterrupt as e:
                 self._save_messages_to_state(messages, state)
                 InterruptManager.set_interrupt(state, e.question, tool_call)
