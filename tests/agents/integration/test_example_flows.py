@@ -285,17 +285,17 @@ class TestExampleGraphAgent:
 
     @pytest.mark.asyncio
     async def test_classifier_is_inline_code(self, agent_config):
-        """Classifier - function нода с inline code."""
+        """Classifier - code нода с inline code."""
         classifier = agent_config.nodes["classifier"]
-        assert classifier["type"] == "function"
+        assert classifier["type"] == "code"
         assert "code" in classifier
         assert "def run(state):" in classifier["code"]
 
     @pytest.mark.asyncio
     async def test_formatter_has_inlined_code(self, agent_config):
-        """Formatter - function нода с инлайненным кодом."""
+        """Formatter - code нода с инлайненным кодом."""
         formatter = agent_config.nodes["formatter"]
-        assert formatter["type"] == "function"
+        assert formatter["type"] == "code"
         assert "code" in formatter
         assert "def format_response" in formatter["code"]
 

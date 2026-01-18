@@ -193,7 +193,7 @@ class TestSkillValidationAndPersistence:
         assert skill.entry == "skill_main"
         assert "skill_main" in skill.nodes
         assert "skill_helper" in skill.nodes
-        assert skill.nodes["skill_main"]["type"] == "function"
+        assert skill.nodes["skill_main"]["type"] == "code"
         assert "state['path'] = 'skill'" in skill.nodes["skill_main"]["code"]
         
         # Проверяем что при применении skill ноды заменяются (nodes_mode = REPLACE по умолчанию)

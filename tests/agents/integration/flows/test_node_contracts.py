@@ -76,16 +76,13 @@ def run(state):
     @pytest.mark.asyncio
     async def test_tool_node_returns_dict(self):
         """CodeNode возвращает dict - поля пишутся в state."""
-        tool = InlineTool(
-            tool_id="calculator",
-            code="def execute(args, state):\n    return {'doubled': args['x'] * 2}",
-        )
-        
         node = CodeNode(
             node_id="double_tool",
-            config={"input_mapping": {"x": 10}},
+            config={
+                "code": "def execute(args, state):\n    return {'doubled': args['x'] * 2}",
+                "input_mapping": {"x": 10},
+            },
         )
-        node.tool = tool
         
         state = make_state()
         result = await node.run(state)
@@ -95,16 +92,14 @@ def run(state):
     @pytest.mark.asyncio
     async def test_tool_node_with_output_mapping(self):
         """CodeNode с output_mapping маппит поля."""
-        tool = InlineTool(
-            tool_id="calculator",
-            code="def execute(args, state):\n    return {'value': args['x'] * 3}",
-        )
-        
         node = CodeNode(
             node_id="triple_tool",
-            config={"input_mapping": {"x": 10}, "output_mapping": {"value": "tripled_value"}},
+            config={
+                "code": "def execute(args, state):\n    return {'value': args['x'] * 3}",
+                "input_mapping": {"x": 10},
+                "output_mapping": {"value": "tripled_value"},
+            },
         )
-        node.tool = tool
         
         state = make_state()
         result = await node.run(state)
@@ -160,16 +155,14 @@ def run(state):
     @pytest.mark.asyncio
     async def test_tool_node_save_to_messages_disabled(self):
         """CodeNode без save_to_messages не добавляет в messages."""
-        tool = InlineTool(
-            tool_id="calc",
-            code="def execute(args, state):\n    return 42",
-        )
-        
         node = CodeNode(
             node_id="no_msg_tool",
-            config={"input_mapping": {}, "save_to_messages": False}
+            config={
+                "code": "def execute(args, state):\n    return 42",
+                "input_mapping": {},
+                "save_to_messages": False,
+            },
         )
-        node.tool = tool
         
         state = make_state(messages=[])
         result = await node.run(state)
@@ -179,16 +172,14 @@ def run(state):
     @pytest.mark.asyncio
     async def test_tool_node_save_to_messages_with_result(self):
         """CodeNode с save_to_messages добавляет результат."""
-        tool = InlineTool(
-            tool_id="calc",
-            code="def execute(args, state):\n    return {'answer': 42, 'status': 'ok'}",
-        )
-        
         node = CodeNode(
             node_id="msg_tool",
-            config={"input_mapping": {}, "save_to_messages": True}
+            config={
+                "code": "def execute(args, state):\n    return {'answer': 42, 'status': 'ok'}",
+                "input_mapping": {},
+                "save_to_messages": True,
+            },
         )
-        node.tool = tool
         
         state = make_state(messages=[])
         result = await node.run(state)
@@ -202,20 +193,15 @@ class TestMessageField:
     @pytest.mark.asyncio
     async def test_tool_node_message_field(self):
         """CodeNode с message_field пишет конкретное поле."""
-        tool = InlineTool(
-            tool_id="calc",
-            code="def execute(args, state):\n    return {'answer': 42, 'debug': 'internal_info'}",
-        )
-        
         node = CodeNode(
             node_id="field_tool",
             config={
+                "code": "def execute(args, state):\n    return {'answer': 42, 'debug': 'internal_info'}",
                 "input_mapping": {},
                 "save_to_messages": True,
-                "message_field": "answer"
-            }
+                "message_field": "answer",
+            },
         )
-        node.tool = tool
         
         state = make_state(messages=[])
         result = await node.run(state)
@@ -329,20 +315,16 @@ def run(state):
 """
         func_node = CodeNode(node_id="prepare", config={"code": func_code})
         
-        tool = InlineTool(
-            tool_id="multiply",
-            code="def execute(args, state):\n    return {'result': args['value'] * args['multiplier']}",
-        )
         tool_node = CodeNode(
             node_id="multiply",
             config={
+                "code": "def execute(args, state):\n    return {'result': args['value'] * args['multiplier']}",
                 "input_mapping": {
                     "value": "@state:calculated_value",
                     "multiplier": "@state:factor"
                 }
             },
         )
-        tool_node.tool = tool
         
         flow = Agent(
             agent_id="func_to_tool",
@@ -366,15 +348,13 @@ def run(state):
     @pytest.mark.asyncio
     async def test_tool_to_function_data_flow(self):
         """CodeNode -> CodeNode: передача данных."""
-        tool = InlineTool(
-            tool_id="generate",
-            code="def execute(args, state):\n    return {'generated_item': {'id': 12345, 'name': 'Test Item'}}",
-        )
         tool_node = CodeNode(
             node_id="generate",
-            config={"input_mapping": {}},
+            config={
+                "code": "def execute(args, state):\n    return {'generated_item': {'id': 12345, 'name': 'Test Item'}}",
+                "input_mapping": {},
+            },
         )
-        tool_node.tool = tool
         
         func_code = """
 def run(state):
@@ -405,34 +385,27 @@ def run(state):
     @pytest.mark.asyncio
     async def test_tool_chain_data_flow(self):
         """Цепочка CodeNode: каждый читает результат предыдущего."""
-        tool1 = InlineTool(
-            tool_id="step1",
-            code="def execute(args, state):\n    return {'after_add': args['x'] + 10}",
-        )
-        tool2 = InlineTool(
-            tool_id="step2",
-            code="def execute(args, state):\n    return {'after_double': args['x'] * 2}",
-        )
-        tool3 = InlineTool(
-            tool_id="step3",
-            code="def execute(args, state):\n    return {'final': args['x'] - 5}",
-        )
-        
         node1 = CodeNode(
             node_id="add_ten",
-            config={"input_mapping": {"x": "@state:initial"}},
+            config={
+                "code": "def execute(args, state):\n    return {'after_add': args['x'] + 10}",
+                "input_mapping": {"x": "@state:initial"},
+            },
         )
-        node1.tool = tool1
         node2 = CodeNode(
             node_id="double",
-            config={"input_mapping": {"x": "@state:after_add"}},
+            config={
+                "code": "def execute(args, state):\n    return {'after_double': args['x'] * 2}",
+                "input_mapping": {"x": "@state:after_add"},
+            },
         )
-        node2.tool = tool2
         node3 = CodeNode(
             node_id="subtract",
-            config={"input_mapping": {"x": "@state:after_double"}},
+            config={
+                "code": "def execute(args, state):\n    return {'final': args['x'] - 5}",
+                "input_mapping": {"x": "@state:after_double"},
+            },
         )
-        node3.tool = tool3
         
         flow = Agent(
             agent_id="tool_chain",
@@ -520,13 +493,10 @@ def run(state):
             config={"code": func_code, "save_to_messages": True}
         )
         
-        tool = InlineTool(
-            tool_id="bonus",
-            code="def execute(args, state):\n    return {'final_score': args['score'] + args['bonus']}",
-        )
         tool_node = CodeNode(
             node_id="add_bonus",
             config={
+                "code": "def execute(args, state):\n    return {'final_score': args['score'] + args['bonus']}",
                 "input_mapping": {
                     "score": "@state:user_data.score",
                     "bonus": "@var:bonus_amount"
@@ -534,7 +504,6 @@ def run(state):
                 "save_to_messages": True
             }
         )
-        tool_node.tool = tool
         
         flow = Agent(
             agent_id="mixed_messages",
@@ -709,9 +678,22 @@ def run(state):
         
         extract_node = CodeNode(
             node_id="extract",
-            config={"input_mapping": {}},
+            config={
+                "code": """
+def execute(args, state):
+    return {
+        'extracted': {
+            'items': [
+                {'id': 1, 'name': 'item1', 'price': 100},
+                {'id': 2, 'name': 'item2', 'price': 200},
+            ],
+            'total': 2
+        }
+    }
+""",
+                "input_mapping": {},
+            },
         )
-        extract_node.tool = extract_tool
         
         transform_node = CodeNode(
             node_id="transform",
@@ -721,6 +703,15 @@ def run(state):
         load_node = CodeNode(
             node_id="load",
             config={
+                "code": """
+def execute(args, state):
+    return {
+        'load_result': {
+            'saved': len(args['items']),
+            'total_value': args['total_price']
+        }
+    }
+""",
                 "input_mapping": {
                     "items": "@state:transformed_items",
                     "total_price": "@state:total_price"
@@ -728,7 +719,6 @@ def run(state):
                 "save_to_messages": True
             }
         )
-        load_node.tool = load_tool
         
         flow = Agent(
             agent_id="etl_pipeline",
@@ -827,22 +817,40 @@ def run(state):
         urgent_node = CodeNode(
             node_id="urgent_process",
             config={
+                "code": """
+def execute(args, state):
+    return {
+        'process_result': {
+            'priority': 'HIGH',
+            'handler': 'urgent_team',
+            'message': f'Urgent: {args["content"]}'
+        }
+    }
+""",
                 "input_mapping": {"content": "@state:content"},
                 "save_to_messages": True,
                 "message_field": "priority"
             }
         )
-        urgent_node.tool = urgent_tool
         
         normal_node = CodeNode(
             node_id="normal_process",
             config={
+                "code": """
+def execute(args, state):
+    return {
+        'process_result': {
+            'priority': 'NORMAL',
+            'handler': 'standard_queue',
+            'message': f'Request: {args["content"]}'
+        }
+    }
+""",
                 "input_mapping": {"content": "@state:content"},
                 "save_to_messages": True,
                 "message_field": "priority"
             }
         )
-        normal_node.tool = normal_tool
         
         finalize_node = CodeNode(
             node_id="finalize",

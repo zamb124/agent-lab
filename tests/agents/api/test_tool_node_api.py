@@ -24,7 +24,7 @@ class TestCodeNodeFlowAPI:
                 "nodes": {
                     "calculator": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['a'] + args['b']",
+                        "code": "def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
                         "args_schema": {
                             "a": {"type": "integer", "description": "First number"},
                             "b": {"type": "integer", "description": "Second number"},
@@ -33,7 +33,6 @@ class TestCodeNodeFlowAPI:
                             "a": "@state:num1",
                             "b": "@state:num2",
                         },
-                        "output_key": "sum",
                     }
                 },
                 "edges": [{"from": "calculator", "to": None}],
@@ -43,7 +42,7 @@ class TestCodeNodeFlowAPI:
         data = response.json()
         assert data["agent_id"] == agent_id
         assert "calculator" in data["nodes"]
-        assert data["nodes"]["calculator"]["type"] == "tool"
+        assert data["nodes"]["calculator"]["type"] == "code"
 
         # Cleanup
         await client.delete(f"/agents/api/v1/{agent_id}")
@@ -305,9 +304,8 @@ class TestUpdateFlowWithCodeNode:
                     },
                     "process": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['x'] * 2",
+                        "code": "def execute(args, state):\n    return {'processed': args['x'] * 2}",
                         "input_mapping": {"x": "@state:value"},
-                        "output_key": "processed",
                     },
                 },
                 "edges": [
@@ -319,7 +317,7 @@ class TestUpdateFlowWithCodeNode:
         assert response.status_code == 200
         data = response.json()
         assert "process" in data["nodes"]
-        assert data["nodes"]["process"]["type"] == "tool"
+        assert data["nodes"]["process"]["type"] == "code"
 
         # Cleanup
         await client.delete(f"/agents/api/v1/{agent_id}", headers=auth_headers_system)

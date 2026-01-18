@@ -78,12 +78,11 @@ class TestCodeNodeE2E:
                     },
                     "calculate": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['a'] + args['b']",
+                        "code": "def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
                         "input_mapping": {
                             "a": "@state:num1",
                             "b": "@state:num2",
                         },
-                        "output_key": "sum",
                     },
                     "finish": {
                         "type": "code",
@@ -138,12 +137,11 @@ class TestCodeNodeE2E:
                     },
                     "format": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return f\"{args['prefix']}{args['id']}\"",
+                        "code": "def execute(args, state):\n    return {'formatted_order': f\"{args['prefix']}{args['id']}\"}",
                         "input_mapping": {
                             "prefix": "@var:order_prefix",
                             "id": "@state:order_id",
                         },
-                        "output_key": "formatted_order",
                     },
                     "finish": {
                         "type": "code",
@@ -197,15 +195,13 @@ class TestCodeNodeE2E:
                     },
                     "double": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['x'] * 2",
+                        "code": "def execute(args, state):\n    return {'doubled': args['x'] * 2}",
                         "input_mapping": {"x": "@state:input"},
-                        "output_key": "doubled",
                     },
                     "square": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['x'] ** 2",
+                        "code": "def execute(args, state):\n    return {'squared': args['x'] ** 2}",
                         "input_mapping": {"x": "@state:doubled"},
-                        "output_key": "squared",
                     },
                     "finish": {
                         "type": "code",
@@ -260,12 +256,11 @@ class TestCodeNodeE2E:
                     },
                     "greet": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['template'].format(name=args['name'])",
+                        "code": "def execute(args, state):\n    return {'greeting': args['template'].format(name=args['name'])}",
                         "input_mapping": {
                             "name": "@state:user.name",
                             "template": "@state:config.template",
                         },
-                        "output_key": "greeting",
                     },
                     "finish": {
                         "type": "code",
@@ -318,9 +313,8 @@ class TestCodeNodeE2E:
                     },
                     "calculate": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['x'] + args['y']",
+                        "code": "def execute(args, state):\n    return {'result': args['x'] + args['y']}",
                         "input_mapping": {"x": "@state:a", "y": "@state:b"},
-                        "output_key": "result",
                     },
                     "skip": {
                         "type": "code",

@@ -94,18 +94,16 @@ Return JSON with next_action and reason.""",
         )
         
         # Tool1 - CodeNode (InlineTool)
-        tool1 = InlineTool(
-            tool_id="data_fetcher",
-            code="""
+        tool1_node = CodeNode(
+            node_id="tool1",
+            config={
+                "code": """
 def execute(args, state):
     return {"tool1_result": "Data fetched successfully", "data": [1, 2, 3]}
 """,
+                "input_mapping": {},
+            },
         )
-        tool1_node = CodeNode(
-            node_id="tool1",
-            config={"input_mapping": {}},
-        )
-        tool1_node.tool = tool1
         
         # Tool2 - CodeNode: доступ строго через state.field
         tool2_code = """
@@ -205,12 +203,13 @@ def run(state):
         )
         
         # Tool1
-        tool1 = InlineTool(
-            tool_id="fetcher",
-            code="def execute(args, state):\n    return {'tool1_done': True, 'payload': 'data123'}",
+        tool1_node = CodeNode(
+            node_id="tool1",
+            config={
+                "code": "def execute(args, state):\n    return {'tool1_done': True, 'payload': 'data123'}",
+                "input_mapping": {},
+            },
         )
-        tool1_node = CodeNode(node_id="tool1", config={"input_mapping": {}})
-        tool1_node.tool = tool1
         
         # RemoteAgent - реальный сервер из docker-compose
         remote_node = RemoteAgentNode(
@@ -484,15 +483,16 @@ def run(state):
         )
         
         # 2. CodeNode - InlineTool
-        tool1 = InlineTool(
-            tool_id="inline_tool",
-            code="""
+        tool1_node = CodeNode(
+            node_id="tool1",
+            config={
+                "code": """
 def execute(args, state):
     return {"tool1_executed": True, "tool1_data": "from_inline_tool"}
 """,
+                "input_mapping": {},
+            },
         )
-        tool1_node = CodeNode(node_id="tool1", config={"input_mapping": {}})
-        tool1_node.tool = tool1
         
         # 3. CodeNode: строгий доступ к state.tool1_data
         tool2_node = CodeNode(

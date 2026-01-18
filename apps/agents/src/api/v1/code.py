@@ -476,7 +476,14 @@ class ExecuteResponse(BaseModel):
 def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> List[DiffItem]:
     """Вычисляет diff между двумя state."""
     diff_items = []
-    SKIP_KEYS = set()
+    SKIP_KEYS = {
+        "task_id", "context_id", "user_id", "session_id",
+        "messages", "prompt_history", "node_history", "nested_states",
+        "current_nodes", "skill_id", "agent_config", "user_groups",
+        "interrupt_path", "tool_results", "triggers", "files",
+        "breakpoints", "scheduled_tasks", "reasoning_history",
+        "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt"
+    }
     all_keys = set(old.keys()) | set(new.keys())
 
     for key in all_keys:

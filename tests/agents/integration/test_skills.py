@@ -61,7 +61,7 @@ class TestAgentConfigWithSkills:
             agent_id="test_flow",
             name="Test Agent",
             entry="main",
-            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
         )
 
@@ -73,7 +73,7 @@ class TestAgentConfigWithSkills:
             agent_id="multi_skill_flow",
             name="Multi Skill Agent",
             entry="main",
-            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             skills={
                 "default": SkillConfig(name="Default", description="Default skill"),
@@ -102,8 +102,8 @@ class TestApplySkill:
             name="Test",
             entry="default_entry",
             nodes={
-                "default_entry": {"type": "code", "code": "def run(s): return s"},
-                "skill_entry": {"type": "code", "code": "def run(s): return s"},
+                "default_entry": {"type": "code", "code": "def run(state): return state"},
+                "skill_entry": {"type": "code", "code": "def run(state): return state"},
             },
             edges=[
                 Edge(from_node="default_entry", to_node=None),
@@ -124,7 +124,7 @@ class TestApplySkill:
             agent_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={"base_var": "base_value", "shared": "from_flow"},
             skills={
@@ -147,7 +147,7 @@ class TestApplySkill:
             agent_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={"base_var": "base_value"},
             skills={
@@ -228,7 +228,7 @@ class TestApplySkill:
             agent_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(state): return state"}},
             edges=[
                 Edge(from_node="main", to_node="step2"),
                 Edge(from_node="step2", to_node=None),
@@ -253,7 +253,7 @@ class TestApplySkill:
             agent_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(state): return state"}},
             edges=[
                 Edge(from_node="main", to_node="step2"),
                 Edge(from_node="step2", to_node=None),
@@ -285,7 +285,7 @@ class TestApplySkill:
             agent_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             skills={
                 "known": SkillConfig(name="Known", entry="other"),
@@ -302,7 +302,7 @@ class TestApplySkill:
             agent_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
         )
 
@@ -324,11 +324,11 @@ class TestFlowWithSkills:
             nodes={
                 "default_start": {
                     "type": "code",
-                    "code": "def run(s): s['path'] = 'default'; return s",
+                    "code": "def run(state): state.path = 'default'; return state",
                 },
                 "skill_start": {
                     "type": "code",
-                    "code": "def run(s): s['path'] = 'skill'; return s",
+                    "code": "def run(state): state.path = 'skill'; return state",
                 },
             },
             edges=[

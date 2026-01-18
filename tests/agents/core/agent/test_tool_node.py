@@ -3,6 +3,7 @@
 
 CodeNode позволяет использовать BaseTool как ноду графа.
 Поддерживает input_mapping для @state:, @var: и констант.
+Поддерживает функции с именованными аргументами и дефолтами.
 """
 
 import pytest
@@ -52,9 +53,8 @@ class TestCodeNode:
                 "code": """def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
-    return x + y""",
+    return {"result": x + y}""",
                 "input_mapping": {"x": 10, "y": 20},
-                "output_key": "result",
             },
         )
 
@@ -67,7 +67,7 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        assert result["result"] == 30
+        assert result.result == 30
 
     @pytest.mark.asyncio
     async def test_tool_node_input_mapping_state(self):
@@ -78,12 +78,11 @@ class TestCodeNode:
                 "code": """def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
-    return x + y""",
+    return {"sum": x + y}""",
                 "input_mapping": {
                     "x": "@state:value_x",
                     "y": "@state:value_y",
                 },
-                "output_key": "sum",
             },
         )
 
@@ -98,7 +97,7 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        assert result["sum"] == 20
+        assert result.sum == 20
 
     @pytest.mark.asyncio
     async def test_tool_node_input_mapping_nested_state(self):
@@ -109,12 +108,11 @@ class TestCodeNode:
                 "code": """def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
-    return x + y""",
+    return {"total": x + y}""",
                 "input_mapping": {
                     "x": "@state:data.first",
                     "y": "@state:data.second",
                 },
-                "output_key": "total",
             },
         )
 
@@ -128,7 +126,7 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        assert result["total"] == 300
+        assert result.total == 300
 
     @pytest.mark.asyncio
     async def test_tool_node_input_mapping_var(self):
@@ -139,12 +137,11 @@ class TestCodeNode:
                 "code": """def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
-    return x + y""",
+    return {"result": x + y}""",
                 "input_mapping": {
                     "x": "@var:multiplier",
                     "y": "@state:value",
                 },
-                "output_key": "result",
             },
         )
 
@@ -159,7 +156,7 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        assert result["result"] == 15
+        assert result.result == 15
 
     @pytest.mark.asyncio
     async def test_tool_node_input_mapping_constants(self):
@@ -170,12 +167,11 @@ class TestCodeNode:
                 "code": """def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
-    return x + y""",
+    return {"answer": x + y}""",
                 "input_mapping": {
                     "x": 42,
                     "y": 8,
                 },
-                "output_key": "answer",
             },
         )
 
@@ -188,7 +184,7 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        assert result["answer"] == 50
+        assert result.answer == 50
 
     @pytest.mark.asyncio
     async def test_tool_node_mixed_mapping(self):
@@ -199,12 +195,11 @@ class TestCodeNode:
                 "code": """def execute(args, state):
     template = args.get("template", "")
     name = args.get("name", "")
-    return template.format(name=name)""",
+    return {"greeting": template.format(name=name)}""",
                 "input_mapping": {
                     "template": "Привет, {name}!",
                     "name": "@state:user.name",
                 },
-                "output_key": "greeting",
             },
         )
 
@@ -218,11 +213,11 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        assert result["greeting"] == "Привет, Иван!"
+        assert result.greeting == "Привет, Иван!"
 
     @pytest.mark.asyncio
     async def test_tool_node_without_output_key(self):
-        """CodeNode без output_key записывает результат в state.result."""
+        """CodeNode без output_mapping записывает скалярный результат в state.result."""
         node = CodeNode(
             node_id="my_calculator",
             config={
@@ -243,7 +238,6 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        # Без output_key скалярный результат записывается в state.result
         assert result.result == 3
 
     @pytest.mark.asyncio
@@ -255,9 +249,8 @@ class TestCodeNode:
                 "code": """def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
-    return x + y""",
+    return {"result": x + y}""",
                 "input_mapping": {"x": 1, "y": 2},
-                "output_key": "result",
             },
         )
 
@@ -272,9 +265,9 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        assert result["existing_field"] == "value"
-        assert result["another"] == 123
-        assert result["result"] == 3
+        assert result.existing_field == "value"
+        assert result.another == 123
+        assert result.result == 3
 
     @pytest.mark.asyncio
     async def test_tool_node_mock(self):
@@ -305,31 +298,23 @@ class TestCodeNode:
         )
         result = await node.run(state)
 
-        assert result["my_tool_node"] == 999
-        assert result["mocked"] is True
+        assert result.my_tool_node == 999
+        assert result.mocked is True
 
 
 class TestInlineCodeNode:
-    """Тесты CodeNode с InlineTool."""
+    """Тесты CodeNode с inline кодом."""
 
     @pytest.mark.asyncio
     async def test_inline_tool_basic(self):
-        """InlineTool выполняется через CodeNode."""
-        inline_tool = InlineTool(
-            tool_id="inline_add",
-            code="def execute(args, state):\n    return args['a'] + args['b']",
-            description="Сложение",
-            parameters={
-                "a": CallParameter(type="integer", description="Первое число"),
-                "b": CallParameter(type="integer", description="Второе число"),
-            },
-        )
-
+        """CodeNode выполняет inline код."""
         node = CodeNode(
             node_id="inline_node",
-            config={"input_mapping": {"a": 100, "b": 200}, "output_key": "sum"},
+            config={
+                "code": "def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
+                "input_mapping": {"a": 100, "b": 200},
+            },
         )
-        node.tool = inline_tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -340,22 +325,18 @@ class TestInlineCodeNode:
         )
         result = await node.run(state)
 
-        assert result["sum"] == 300
+        assert result.sum == 300
 
     @pytest.mark.asyncio
     async def test_inline_tool_with_state_access(self):
-        """InlineTool имеет доступ к state."""
-        inline_tool = InlineTool(
-            tool_id="state_reader",
-            code="def execute(args, state):\n    return state.get('secret', 'not found')",
-            description="Читает из state",
-        )
-
+        """CodeNode имеет доступ к state."""
         node = CodeNode(
             node_id="reader_node",
-            config={"input_mapping": {}, "output_key": "secret_value"},
+            config={
+                "code": "def execute(args, state):\n    return {'secret_value': state.get('secret', 'not found')}",
+                "input_mapping": {},
+            },
         )
-        node.tool = inline_tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -367,28 +348,21 @@ class TestInlineCodeNode:
         )
         result = await node.run(state)
 
-        assert result["secret_value"] == "my_secret_value"
+        assert result.secret_value == "my_secret_value"
 
     @pytest.mark.asyncio
     async def test_inline_tool_with_var_mapping(self):
-        """InlineTool с маппингом из переменных."""
-        inline_tool = InlineTool(
-            tool_id="greeting",
-            code="def execute(args, state):\n    return f\"Добро пожаловать в {args['company']}, {args['user']}!\"",
-            description="Приветствие",
-        )
-
+        """CodeNode с маппингом из переменных."""
         node = CodeNode(
             node_id="greeting_node",
             config={
+                "code": "def execute(args, state):\n    return {'message': f\"Добро пожаловать в {args['company']}, {args['user']}!\"}",
                 "input_mapping": {
                     "company": "@var:company_name",
                     "user": "@state:user.name",
                 },
-                "output_key": "message",
             },
         )
-        node.tool = inline_tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -401,7 +375,7 @@ class TestInlineCodeNode:
         )
         result = await node.run(state)
 
-        assert result["message"] == "Добро пожаловать в Acme Corp, Мария!"
+        assert result.message == "Добро пожаловать в Acme Corp, Мария!"
 
 
 class TestCreateNodeTool:
@@ -412,19 +386,17 @@ class TestCreateNodeTool:
         """create_node создает CodeNode из inline кода."""
         node_config = {
             "type": "code",
-            "code": "def execute(args, state):\n    return args['x'] * 2",
+            "code": "def execute(args, state):\n    return {'doubled': args['x'] * 2}",
             "args_schema": {
                 "x": {"type": "integer", "description": "Число для удвоения"},
             },
             "input_mapping": {"x": 5},
-            "output_key": "doubled",
         }
 
         node = await create_node("double_node", node_config)
 
         assert isinstance(node, CodeNode)
         assert node.node_id == "double_node"
-        assert node.output_key == "doubled"
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -434,19 +406,18 @@ class TestCreateNodeTool:
             session_id="test-agent:test-context",
         )
         result = await node.run(state)
-        assert result["doubled"] == 10
+        assert result.doubled == 10
 
     @pytest.mark.asyncio
     async def test_create_node_inline_tool_with_mapping(self):
         """create_node c inline tool и input_mapping."""
         node_config = {
             "type": "code",
-            "code": "def execute(args, state):\n    return f\"{args['prefix']}{args['value']}\"",
+            "code": "def execute(args, state):\n    return {'formatted_order': f\"{args['prefix']}{args['value']}\"}",
             "input_mapping": {
                 "prefix": "@var:order_prefix",
                 "value": "@state:order_id",
             },
-            "output_key": "formatted_order",
         }
 
         node = await create_node("format_node", node_config)
@@ -461,5 +432,5 @@ class TestCreateNodeTool:
         )
         result = await node.run(state)
 
-        assert result["formatted_order"] == "ORD-12345"
+        assert result.formatted_order == "ORD-12345"
 

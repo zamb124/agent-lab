@@ -169,19 +169,16 @@ class TestCodeNodeOutputMapping:
     @pytest.mark.asyncio
     async def test_dict_result_without_mapping(self):
         """CodeNode: dict без output_mapping -> поля пишутся напрямую."""
-        tool = InlineTool(
-            tool_id="data_tool",
-            code="""
+        node = CodeNode(
+            node_id="test_tool",
+            config={
+                "code": """
 def execute(args, state):
     return {"status": "ok", "data": {"items": [1, 2, 3]}, "count": 3}
 """,
+                "input_mapping": {},
+            },
         )
-        
-        node = CodeNode(
-            node_id="test_tool",
-            config={"input_mapping": {}},
-        )
-        node.tool = tool
         
         state = make_state()
         result = await node.run(state)
@@ -193,22 +190,17 @@ def execute(args, state):
     @pytest.mark.asyncio
     async def test_dict_result_with_mapping(self):
         """CodeNode: dict с output_mapping -> маппинг полей."""
-        tool = InlineTool(
-            tool_id="data_tool",
-            code="""
-def execute(args, state):
-    return {"result": "success", "value": 100}
-""",
-        )
-        
         node = CodeNode(
             node_id="test_tool",
             config={
+                "code": """
+def execute(args, state):
+    return {"result": "success", "value": 100}
+""",
                 "input_mapping": {},
                 "output_mapping": {"result": "tool_status", "value": "tool_value"}
             },
         )
-        node.tool = tool
         
         state = make_state()
         result = await node.run(state)
@@ -219,19 +211,16 @@ def execute(args, state):
     @pytest.mark.asyncio
     async def test_string_result_without_mapping(self):
         """CodeNode: строка без output_mapping -> state.result."""
-        tool = InlineTool(
-            tool_id="text_tool",
-            code="""
+        node = CodeNode(
+            node_id="test_tool",
+            config={
+                "code": """
 def execute(args, state):
     return "Tool executed successfully"
 """,
+                "input_mapping": {},
+            },
         )
-        
-        node = CodeNode(
-            node_id="test_tool",
-            config={"input_mapping": {}},
-        )
-        node.tool = tool
         
         state = make_state()
         result = await node.run(state)
@@ -241,19 +230,16 @@ def execute(args, state):
     @pytest.mark.asyncio
     async def test_number_result_without_mapping(self):
         """CodeNode: число без output_mapping -> state.result."""
-        tool = InlineTool(
-            tool_id="calc_tool",
-            code="""
+        node = CodeNode(
+            node_id="test_tool",
+            config={
+                "code": """
 def execute(args, state):
     return args['x'] * args['y']
 """,
+                "input_mapping": {"x": 7, "y": 6},
+            },
         )
-        
-        node = CodeNode(
-            node_id="test_tool",
-            config={"input_mapping": {"x": 7, "y": 6}},
-        )
-        node.tool = tool
         
         state = make_state()
         result = await node.run(state)
@@ -263,19 +249,16 @@ def execute(args, state):
     @pytest.mark.asyncio
     async def test_list_result_without_mapping(self):
         """CodeNode: список без output_mapping -> state.result."""
-        tool = InlineTool(
-            tool_id="list_tool",
-            code="""
+        node = CodeNode(
+            node_id="test_tool",
+            config={
+                "code": """
 def execute(args, state):
     return [1, 2, 3, 4, 5]
 """,
+                "input_mapping": {},
+            },
         )
-        
-        node = CodeNode(
-            node_id="test_tool",
-            config={"input_mapping": {}},
-        )
-        node.tool = tool
         
         state = make_state()
         result = await node.run(state)
@@ -511,15 +494,13 @@ def run(state):
         )
         
         # CodeNode использует mapped поля
-        tool = InlineTool(
-            tool_id="multiply",
-            code="def execute(args, state):\n    return args['x'] * args['y']",
-        )
         tool_node = CodeNode(
             node_id="multiply",
-            config={"input_mapping": {"x": "@state:input_value", "y": "@state:factor"}},
+            config={
+                "code": "def execute(args, state):\n    return args['x'] * args['y']",
+                "input_mapping": {"x": "@state:input_value", "y": "@state:factor"},
+            },
         )
-        tool_node.tool = tool
         
         # Выполняем цепочку
         state = make_state()
@@ -538,31 +519,23 @@ def run(state):
     @pytest.mark.asyncio
     async def test_tool_chain_with_mapping(self):
         """Цепочка CodeNode с output_mapping."""
-        tool1 = InlineTool(
-            tool_id="step1",
-            code="def execute(args, state):\n    return {'value': args['input'] * 2}",
-        )
         node1 = CodeNode(
             node_id="step1",
             config={
+                "code": "def execute(args, state):\n    return {'value': args['input'] * 2}",
                 "input_mapping": {"input": 10},
                 "output_mapping": {"value": "step1_result"}
             },
         )
-        node1.tool = tool1
         
-        tool2 = InlineTool(
-            tool_id="step2",
-            code="def execute(args, state):\n    return {'final': args['x'] + 5}",
-        )
         node2 = CodeNode(
             node_id="step2",
             config={
+                "code": "def execute(args, state):\n    return {'final': args['x'] + 5}",
                 "input_mapping": {"x": "@state:step1_result"},
                 "output_mapping": {"final": "final_result"}
             },
         )
-        node2.tool = tool2
         
         state = make_state()
         state = await node1.run(state)

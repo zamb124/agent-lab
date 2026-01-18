@@ -24,7 +24,7 @@ class TestCodeNodeOverrides:
                 "nodes": {
                     "classifier": {
                         "type": "code",
-                        "code": "def run(state):\n    state['route'] = 'default'\n    return state"
+                        "code": "def run(state):\n    state.route = 'default'\n    return state"
                     }
                 },
                 "edges": [{"from": "classifier", "to": None}]
@@ -39,7 +39,7 @@ class TestCodeNodeOverrides:
             session_id="test-agent:test-context",
             content="test"
         ))
-        assert state["route"] == "default"
+        assert state.route == "default"
 
         # Skill override
         flow_skill = await Agent.from_config(
@@ -50,7 +50,7 @@ class TestCodeNodeOverrides:
                 "nodes": {
                     "classifier": {
                         "type": "code",
-                        "code": "def run(state):\n    state['route'] = 'custom'\n    return state"
+                        "code": "def run(state):\n    state.route = 'custom'\n    return state"
                     }
                 },
                 "edges": [{"from": "classifier", "to": None}]
@@ -65,7 +65,7 @@ class TestCodeNodeOverrides:
             session_id="test-agent:test-context",
             content="test"
         ))
-        assert state["route"] == "custom"
+        assert state.route == "custom"
 
     @pytest.mark.asyncio
     async def test_conditional_routing_override(self):
@@ -80,19 +80,19 @@ class TestCodeNodeOverrides:
                     "type": "code",
                     "code": """
 def run(state):
-    content = state.get('content', '').lower()
+    content = (getattr(state, 'content', None) or '').lower()
     if 'заказ' in content:
-        state['route'] = 'order'
+        state.route = 'order'
     elif 'жалоб' in content:
-        state['route'] = 'complaint'
+        state.route = 'complaint'
     else:
-        state['route'] = 'general'
+        state.route = 'general'
     return state
 """
                 },
-                "order": {"type": "code", "code": "def run(s): s['result'] = 'order'; return s"},
-                "complaint": {"type": "code", "code": "def run(s): s['result'] = 'complaint'; return s"},
-                "general": {"type": "code", "code": "def run(s): s['result'] = 'general'; return s"}
+                "order": {"type": "code", "code": "def run(state): state.result = 'order'; return state"},
+                "complaint": {"type": "code", "code": "def run(state): state.result = 'complaint'; return state"},
+                "general": {"type": "code", "code": "def run(state): state.result = 'general'; return state"}
             },
             "edges": [
                 {"from": "classifier", "to": "order", "condition": "route == 'order'"},
@@ -114,8 +114,8 @@ def run(state):
             session_id="test-agent:test-context",
             content="у меня жалоба"
         ))
-        assert state["route"] == "complaint"
-        assert state["result"] == "complaint"
+        assert state.route == "complaint"
+        assert state.result == "complaint"
 
         # Skill: orders_only - все non-order идет в general
         config_orders_only = {
@@ -127,16 +127,16 @@ def run(state):
                     "type": "code",
                     "code": """
 def run(state):
-    content = state.get('content', '').lower()
+    content = (getattr(state, 'content', None) or '').lower()
     if 'заказ' in content:
-        state['route'] = 'order'
+        state.route = 'order'
     else:
-        state['route'] = 'general'
+        state.route = 'general'
     return state
 """
                 },
-                "order": {"type": "code", "code": "def run(s): s['result'] = 'order'; return s"},
-                "general": {"type": "code", "code": "def run(s): s['result'] = 'general'; return s"}
+                "order": {"type": "code", "code": "def run(state): state.result = 'order'; return state"},
+                "general": {"type": "code", "code": "def run(state): state.result = 'general'; return state"}
             },
             "edges": [
                 {"from": "classifier", "to": "order", "condition": "route == 'order'"},
@@ -156,8 +156,8 @@ def run(state):
             session_id="test-agent:test-context",
             content="у меня жалоба"
         ))
-        assert state["route"] == "general"  # Changed!
-        assert state["result"] == "general"
+        assert state.route == "general"  # Changed!
+        assert state.result == "general"
 
 
 class TestVariablesOverrideE2E:
@@ -176,9 +176,9 @@ class TestVariablesOverrideE2E:
                         "type": "code",
                         "code": """
 def run(state):
-    vars = state.get('variables', {})
-    state['company'] = vars.get('company_name', 'unknown')
-    state['max_len'] = vars.get('max_length', 0)
+    vars = getattr(state, 'variables', {})
+    state.company = vars.get('company_name', 'unknown')
+    state.max_len = vars.get('max_length', 0)
     return state
 """
                     }
@@ -195,8 +195,8 @@ def run(state):
             session_id="test-agent:test-context",
         ))
 
-        assert state["company"] == "TestCorp"
-        assert state["max_len"] == 500
+        assert state.company == "TestCorp"
+        assert state.max_len == 500
 
     @pytest.mark.asyncio
     async def test_skill_variables_override_base(self):
@@ -212,8 +212,8 @@ def run(state):
                         "type": "code",
                         "code": """
 def run(state):
-    vars = state.get('variables', {})
-    state['max_len'] = vars.get('max_length', 0)
+    vars = getattr(state, 'variables', {})
+    state.max_len = vars.get('max_length', 0)
     return state
 """
                     }
@@ -242,8 +242,8 @@ def run(state):
                         "type": "code",
                         "code": """
 def run(state):
-    vars = state.get('variables', {})
-    state['max_len'] = vars.get('max_length', 0)
+    vars = getattr(state, 'variables', {})
+    state.max_len = vars.get('max_length', 0)
     return state
 """
                     }
@@ -271,11 +271,11 @@ class TestEntryOverrideE2E:
         config_nodes = {
             "default_start": {
                 "type": "code",
-                "code": "def run(s): s['path'] = 'default'; return s"
+                "code": "def run(state): state.path = 'default'; return state"
             },
             "skill_start": {
                 "type": "code",
-                "code": "def run(s): s['path'] = 'skill'; return s"
+                "code": "def run(state): state.path = 'skill'; return state"
             }
         }
 
@@ -300,7 +300,7 @@ class TestEntryOverrideE2E:
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
-        assert state["path"] == "default"
+        assert state.path == "default"
 
         # Skill entry
         flow_skill = await Agent.from_config(
@@ -323,7 +323,7 @@ class TestEntryOverrideE2E:
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
-        assert state["path"] == "skill"
+        assert state.path == "skill"
 
 
 class TestExternalApiNodeOverridesE2E:
@@ -346,8 +346,8 @@ def run(state):
     # Симулируем API response
     api_response = {'fact': 'Cats sleep 16 hours', 'length': 20}
     # Применяем state_mapping
-    state['cat_fact'] = api_response['fact']
-    state['cat_fact_length'] = api_response['length']
+    state.cat_fact = api_response['fact']
+    state.cat_fact_length = api_response['length']
     return state
 """
                     }
@@ -364,8 +364,8 @@ def run(state):
             session_id="test-agent:test-context",
         ))
 
-        assert state["cat_fact"] == "Cats sleep 16 hours"
-        assert state["cat_fact_length"] == 20
+        assert state.cat_fact == "Cats sleep 16 hours"
+        assert state.cat_fact_length == 20
 
 
 class TestNestedOverridesE2E:
@@ -386,7 +386,7 @@ class TestNestedOverridesE2E:
 def run(state):
     # В реальности LLM config используется в ReactNode
     # Здесь проверяем что конфиг правильно передан
-    state['config_passed'] = True
+    state.config_passed = True
     return state
 """
                     }
@@ -402,7 +402,7 @@ def run(state):
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
-        assert state["config_passed"] is True
+        assert state.config_passed is True
 
 
 class TestGraphOverridesE2E:
@@ -419,15 +419,15 @@ class TestGraphOverridesE2E:
             "nodes": {
                 "classifier": {
                     "type": "code",
-                    "code": "def run(s): s['route'] = 'order'; s['step'] = ['classifier']; return s"
+                    "code": "def run(state): state.route = 'order'; state.step = ['classifier']; return state"
                 },
                 "processor": {
                     "type": "code",
-                    "code": "def run(s): s['step'].append('processor'); return s"
+                    "code": "def run(state): state.step.append('processor'); return state"
                 },
                 "formatter": {
                     "type": "code",
-                    "code": "def run(s): s['step'].append('formatter'); return s"
+                    "code": "def run(state): state.step.append('formatter'); return state"
                 }
             },
             "edges": [
@@ -445,7 +445,7 @@ class TestGraphOverridesE2E:
             session_id="test-agent:test-context",
         ))
 
-        assert state["step"] == ["classifier", "processor", "formatter"]
+        assert state.step == ["classifier", "processor", "formatter"]
 
         # Fast track: classifier -> processor -> end (skip formatter)
         config_fast = {
@@ -455,11 +455,11 @@ class TestGraphOverridesE2E:
             "nodes": {
                 "classifier": {
                     "type": "code",
-                    "code": "def run(s): s['route'] = 'order'; s['step'] = ['classifier']; return s"
+                    "code": "def run(state): state.route = 'order'; state.step = ['classifier']; return state"
                 },
                 "processor": {
                     "type": "code",
-                    "code": "def run(s): s['step'].append('processor'); return s"
+                        "code": "def run(state): state.step.append('processor'); return state"
                 }
             },
             "edges": [
@@ -476,8 +476,8 @@ class TestGraphOverridesE2E:
             session_id="test-agent:test-context",
         ))
 
-        assert state["step"] == ["classifier", "processor"]
-        assert "formatter" not in state["step"]
+        assert state.step == ["classifier", "processor"]
+        assert "formatter" not in state.step
 
     @pytest.mark.asyncio
     async def test_conditional_edge_override(self):
@@ -491,11 +491,11 @@ class TestGraphOverridesE2E:
                 "nodes": {
                     "start": {
                         "type": "code",
-                        "code": "def run(s): s['route'] = s.get('input_route', 'a'); return s"
+                        "code": "def run(state): state.route = getattr(state, 'input_route', 'a'); return state"
                     },
-                    "path_a": {"type": "code", "code": "def run(s): s['result'] = 'A'; return s"},
-                    "path_b": {"type": "code", "code": "def run(s): s['result'] = 'B'; return s"},
-                    "path_c": {"type": "code", "code": "def run(s): s['result'] = 'C'; return s"}
+                    "path_a": {"type": "code", "code": "def run(state): state.result = 'A'; return state"},
+                    "path_b": {"type": "code", "code": "def run(state): state.result = 'B'; return state"},
+                    "path_c": {"type": "code", "code": "def run(state): state.result = 'C'; return state"}
                 },
                 "edges": [
                     {"from": "start", "to": "path_a", "condition": "route == 'a'"},
@@ -516,7 +516,7 @@ class TestGraphOverridesE2E:
             session_id="test-agent:test-context",
             input_route="b"
         ))
-        assert state["result"] == "B"
+        assert state.result == "B"
 
         # Skill: redirect b to c
         flow_redirect = await Agent.from_config(
@@ -527,10 +527,10 @@ class TestGraphOverridesE2E:
                 "nodes": {
                     "start": {
                         "type": "code",
-                        "code": "def run(s): s['route'] = 'c' if s.get('input_route') == 'b' else s.get('input_route', 'a'); return s"
+                        "code": "def run(state): state.route = 'c' if getattr(state, 'input_route', None) == 'b' else getattr(state, 'input_route', 'a'); return state"
                     },
-                    "path_a": {"type": "code", "code": "def run(s): s['result'] = 'A'; return s"},
-                    "path_c": {"type": "code", "code": "def run(s): s['result'] = 'C'; return s"}
+                    "path_a": {"type": "code", "code": "def run(state): state.result = 'A'; return state"},
+                    "path_c": {"type": "code", "code": "def run(state): state.result = 'C'; return state"}
                 },
                 "edges": [
                     {"from": "start", "to": "path_a", "condition": "route == 'a'"},
@@ -549,7 +549,7 @@ class TestGraphOverridesE2E:
             session_id="test-agent:test-context",
             input_route="b"
         ))
-        assert state["result"] == "C"  # Redirected!
+        assert state.result == "C"  # Redirected!
 
 
 class TestMultipleNodesOverrideE2E:
@@ -565,9 +565,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "step1",
                 "nodes": {
-                    "step1": {"type": "code", "code": "def run(s): s['v1'] = 'base1'; return s"},
-                    "step2": {"type": "code", "code": "def run(s): s['v2'] = 'base2'; return s"},
-                    "step3": {"type": "code", "code": "def run(s): s['v3'] = 'base3'; return s"}
+                    "step1": {"type": "code", "code": "def run(state): state.v1 = 'base1'; return state"},
+                    "step2": {"type": "code", "code": "def run(state): state.v2 = 'base2'; return state"},
+                    "step3": {"type": "code", "code": "def run(state): state.v3 = 'base3'; return state"}
                 },
                 "edges": [
                     {"from": "step1", "to": "step2"},
@@ -584,9 +584,9 @@ class TestMultipleNodesOverrideE2E:
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
-        assert state["v1"] == "base1"
-        assert state["v2"] == "base2"
-        assert state["v3"] == "base3"
+        assert state.v1 == "base1"
+        assert state.v2 == "base2"
+        assert state.v3 == "base3"
 
         # Override step1 and step3
         flow_override = await Agent.from_config(
@@ -595,9 +595,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "step1",
                 "nodes": {
-                    "step1": {"type": "code", "code": "def run(s): s['v1'] = 'override1'; return s"},
-                    "step2": {"type": "code", "code": "def run(s): s['v2'] = 'base2'; return s"},
-                    "step3": {"type": "code", "code": "def run(s): s['v3'] = 'override3'; return s"}
+                    "step1": {"type": "code", "code": "def run(state): state.v1 = 'override1'; return state"},
+                    "step2": {"type": "code", "code": "def run(state): state.v2 = 'base2'; return state"},
+                    "step3": {"type": "code", "code": "def run(state): state.v3 = 'override3'; return state"}
                 },
                 "edges": [
                     {"from": "step1", "to": "step2"},
@@ -614,9 +614,9 @@ class TestMultipleNodesOverrideE2E:
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
-        assert state["v1"] == "override1"  # Overridden
-        assert state["v2"] == "base2"      # Kept
-        assert state["v3"] == "override3"  # Overridden
+        assert state.v1 == "override1"  # Overridden
+        assert state.v2 == "base2"      # Kept
+        assert state.v3 == "override3"  # Overridden
 
     @pytest.mark.asyncio
     async def test_add_new_node_in_skill(self):
@@ -628,8 +628,8 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "first",
                 "nodes": {
-                    "first": {"type": "code", "code": "def run(s): s['steps'] = ['first']; return s"},
-                    "last": {"type": "code", "code": "def run(s): s['steps'].append('last'); return s"}
+                    "first": {"type": "code", "code": "def run(state): state.steps = ['first']; return state"},
+                    "last": {"type": "code", "code": "def run(state): state.steps.append('last'); return state"}
                 },
                 "edges": [
                     {"from": "first", "to": "last"},
@@ -645,7 +645,7 @@ class TestMultipleNodesOverrideE2E:
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
-        assert state["steps"] == ["first", "last"]
+        assert state.steps == ["first", "last"]
 
         # Skill: add middle node
         flow_with_middle = await Agent.from_config(
@@ -654,9 +654,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "first",
                 "nodes": {
-                    "first": {"type": "code", "code": "def run(s): s['steps'] = ['first']; return s"},
-                    "middle": {"type": "code", "code": "def run(s): s['steps'].append('middle'); return s"},
-                    "last": {"type": "code", "code": "def run(s): s['steps'].append('last'); return s"}
+                    "first": {"type": "code", "code": "def run(state): state.steps = ['first']; return state"},
+                    "middle": {"type": "code", "code": "def run(state): state.steps.append('middle'); return state"},
+                    "last": {"type": "code", "code": "def run(state): state.steps.append('last'); return state"}
                 },
                 "edges": [
                     {"from": "first", "to": "middle"},
@@ -673,4 +673,4 @@ class TestMultipleNodesOverrideE2E:
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
-        assert state["steps"] == ["first", "middle", "last"]
+        assert state.steps == ["first", "middle", "last"]
