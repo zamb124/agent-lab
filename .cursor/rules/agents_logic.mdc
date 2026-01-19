@@ -119,53 +119,73 @@ output_mapping - куда пишем результат:
 
 ## AgentInterrupt - Механизм Прерывания
 
-Когда агенту нужен ввод от пользователя, он бросает `AgentInterrupt`.
+Бросает `AgentInterrupt(question="...")` → выполнение останавливается → вопрос уходит пользователю.
 
-### Структура состояния при interrupt
+### State при interrupt
 
-    state.interrupt: InterruptData          # Вопрос для пользователя
+    state.interrupt: InterruptData          # Вопрос
     state.interrupt_path: List[PathItem]    # Путь к месту прерывания
-    state.nested_states: Dict[str, Data]    # Состояния вложенных агентов
+    state.nested_states: Dict[str, Data]    # Состояния субагентов
+    state.current_nodes: List[str]          # Где остановились на графе
 
-### Сценарий 1: ask_user в простом tool
+### Сценарий 1: ask_user tool в ReactNode
 
-    ReactNode → ask_user tool → AgentInterrupt
+    ReactNode → ask_user → AgentInterrupt
     
-1. `ask_user` бросает `AgentInterrupt(question="В каком городе?")`
-2. `ReactNodeRunner` ловит, добавляет `{type: "tool", id: "ask_user"}` в `interrupt_path`
-3. Возвращает state с `interrupt` наверх
-4. При resume: ответ добавляется как tool result в messages
+- `interrupt_path = [{type: "tool", id: "ask_user"}]`
+- Resume: ответ → tool result в messages → LLM продолжает
 
 ### Сценарий 2: ask_user в субагенте (react_node как tool)
 
-    ReactNode → subagent (react_node) → ask_user → AgentInterrupt
+    ReactNode → child_agent (react_node tool) → ask_user → AgentInterrupt
     
-1. Субагент вызывает `ask_user` → `AgentInterrupt`
-2. `ReactNodeRunner` субагента ловит, устанавливает `interrupt_path = [{type: "tool", id: "ask_user"}]`
-3. `NodeAsToolWrapper` ловит, **сохраняет** `nested_state` в `parent.nested_states["subagent"]`
-4. Копирует `interrupt_path` субагента, добавляет себя: `[{type: "react_node", id: "subagent"}, {...ask_user}]`
-5. При resume:
-   - `NodeAsToolWrapper` видит `interrupt_path[0].id == "subagent"` → загружает `nested_state`
-   - Передает `content = user_answer`, `interrupt_path = path[1:]`
-   - Субагент продолжает с того места где остановился
+- `interrupt_path = [{type: "react_node", id: "child_agent"}, {type: "tool", id: "ask_user"}]`
+- `nested_states["child_agent"]` = сохранённое состояние child
+- Resume: по `interrupt_path[0]` → загрузить nested_state → передать ответ → child продолжает
 
-### Сценарий 3: interrupt в CodeNode
+### Сценарий 3: AgentNode (subflow на графе) с CodeNode
 
-    CodeNode не поддерживает interrupt напрямую.
-    Для интерактивности используй ReactNode с ask_user tool.
+    Parent Agent → AgentNode("call_child") → Child Agent → CodeNode → AgentInterrupt
+    
+- AgentNode - это нода на графе (type: "agent"), не tool!
+- `current_nodes = ["call_child"]` - где остановились
+- CodeNode может бросить `raise AgentInterrupt(question="...")` 
+- Resume: Agent.run() видит `interrupt + content` → продолжает с `current_nodes`
+- AgentNode вызывается повторно, передаёт `state.content` (ответ) в child
+
+### Сценарий 4: AgentNode с ReactNode + ask_user
+
+    Parent (ReactNode tool) → child_agent → ReactNode → ask_user
+    
+- Комбинация сценариев 2 и 3
+- `interrupt_path` содержит путь: `[child_agent, ask_user]`
+- `nested_states["child_agent"]` хранит историю messages
+- Resume: ответ попадает как tool result в messages child → LLM child продолжает
+
+### Как бросить interrupt
+
+В CodeNode/tool:
+
+    from apps.agents.src.agent.exceptions import AgentInterrupt
+    raise AgentInterrupt(question="Как вас зовут?")
+
+Или использовать готовую функцию:
+
+    from apps.agents.src.eval.state_utils import ask_user
+    ask_user("Как вас зовут?")
 
 ### Ключевые компоненты
 
-- `InterruptManager.save_nested_state()` - сохраняет state субагента
+- `InterruptManager.save_nested_state()` - сохраняет state
 - `InterruptManager.load_nested_state()` - загружает при resume
-- `InterruptManager.push_interrupt_path()` - добавляет элемент в НАЧАЛО пути
-- `InterruptManager.is_resume_for_nested()` - проверяет нужен ли resume
+- `InterruptManager.push_interrupt_path()` - добавляет в НАЧАЛО пути
+- `Agent.run()` - определяет resume по `state.interrupt + state.content`
 
-### Agent._merge_results и nested_states
+### Merge при interrupt
 
-При merge результатов нод:
-- `messages` - extend (добавляются)
-- `nested_states` - update напрямую (без сериализации!)
+- `messages` - extend
+- `nested_states` - update напрямую
+- `interrupt_path` - копируется целиком
 - остальное - last wins
 
 ## Ключевые файлы
