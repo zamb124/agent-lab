@@ -2,7 +2,7 @@
 Сервис проверки доступа через AccessGrants.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from datetime import datetime, timezone
 
 from apps.crm.db.models import CRMEntity
@@ -100,13 +100,13 @@ class AccessControlService:
         entity: CRMEntity,
         user_id: Optional[str],
         company_id: Optional[str]
-    ) -> Dict[str, Any]:
-        """Фильтрация полей для публичного доступа"""
+    ) -> Union[CRMEntity, Dict[str, Any]]:
+        """Возвращает полную entity при полном доступе или dict с публичными полями."""
         
         # Проверяем ПОЛНЫЙ доступ (owner, same company+namespace, grants с ролью)
         has_full_access = await self._has_full_access(entity, user_id, company_id)
         if has_full_access:
-            return entity.model_dump()
+            return entity
         
         # Проверяем публичные гранты
         entity_grants = await self._grant_repo.find_by_resource("entity", entity.entity_id, entity.company_id)

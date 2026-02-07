@@ -57,6 +57,8 @@ def merge_state(base: 'ExecutionState | dict', updates: dict) -> 'ExecutionState
         if not isinstance(updates, dict):
             raise SafeEvalError("updates must be a dict")
         for key, value in updates.items():
+            if key == "prompt_history" and value is not None:
+                value = ExecutionState._normalize_prompt_history(value)
             setattr(base, key, value)
         return base
     elif isinstance(base, dict):

@@ -8,7 +8,7 @@ Zero-Guess: все системные поля явно типизированы
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_serializer, field_validator, model_validator
 
 from a2a.types import Message
 from core.models import FlexibleBaseModel
@@ -229,11 +229,12 @@ class ExecutionState(FlexibleBaseModel):
     def __setattr__(self, name: str, value: Any) -> None:
         """
         Перехватывает прямое присваивание атрибутов.
-        Конвертирует dict -> InterruptData при присваивании.
+        Нормализует dict -> типизированные модели при присваивании.
         """
         if name == "interrupt" and value is not None and isinstance(value, dict):
             value = InterruptData.model_validate(value)
-        
+        if name == "prompt_history" and value is not None:
+            value = ExecutionState._normalize_prompt_history(value)
         super().__setattr__(name, value)
     
     @field_validator("interrupt_path", mode="before")
@@ -323,15 +324,14 @@ class ExecutionState(FlexibleBaseModel):
         default_factory=list,
         description="История изменений системного промпта"
     )
-    
-    @field_validator("prompt_history", mode="before")
-    @classmethod
-    def validate_prompt_history(cls, v: Any) -> List[PromptHistoryItem]:
-        """Конвертирует словари в объекты PromptHistoryItem."""
+
+    @staticmethod
+    def _normalize_prompt_history(v: Any) -> List[PromptHistoryItem]:
+        """Единая нормализация: dict/list dict -> List[PromptHistoryItem]."""
         if not v:
             return []
         result = []
-        for i, item in enumerate(v):
+        for item in v:
             if isinstance(item, PromptHistoryItem):
                 result.append(item)
             elif isinstance(item, dict):
@@ -341,6 +341,18 @@ class ExecutionState(FlexibleBaseModel):
                     f"Ожидается PromptHistoryItem или dict, получен {type(item)}"
                 )
         return result
+
+    @field_validator("prompt_history", mode="before")
+    @classmethod
+    def validate_prompt_history(cls, v: Any) -> List[PromptHistoryItem]:
+        return cls._normalize_prompt_history(v)
+
+    @field_serializer("prompt_history", when_used="always")
+    def serialize_prompt_history(self, v: List[PromptHistoryItem]) -> List[Any]:
+        return [
+            x.model_dump() if isinstance(x, PromptHistoryItem) else PromptHistoryItem.model_validate(x).model_dump()
+            for x in v
+        ]
     
     @property
     def current_system_prompt(self) -> Optional[str]:

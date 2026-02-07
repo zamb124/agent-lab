@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.crm.models.api import EntityCreate, EntityUpdate, EntityResponse, AIAnalyzeRequest, AIAnalyzeResponse, SearchMentionsRequest
+from apps.crm.db.models import CRMEntity
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.access_control_service import AccessControlService
 from apps.crm.dependencies import get_entity_service, get_access_control_service
@@ -77,9 +78,11 @@ async def get_entity(
     if not await access_control.can_read_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Фильтрация полей (для публичного доступа)
+    # Фильтрация полей (полный доступ → entity, публичный → dict с ограниченными полями)
     try:
         filtered = await access_control.filter_fields(entity, user_id, company_id)
+        if isinstance(filtered, CRMEntity):
+            return EntityResponse.model_validate(filtered)
         return filtered
     except PermissionError:
         raise HTTPException(status_code=403, detail="Access denied")

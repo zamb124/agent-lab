@@ -243,13 +243,16 @@ class Agent:
             if result.nested_states:
                 merged.nested_states.update(result.nested_states)
 
-            # Все поля (включая динамические) - перезаписываем
-            result_dict = result.model_dump(exclude_none=False)
-            for field, value in result_dict.items():
+            # Остальные поля — из атрибутов result, чтобы сохранять типы (например List[PromptHistoryItem])
+            for field in ExecutionState.model_fields:
                 if field in ("messages", "nested_states"):
-                    continue  # Уже обработали
+                    continue
+                value = getattr(result, field)
                 if value is not None:
-                    setattr(merged, field, value)
+                    if isinstance(value, list):
+                        setattr(merged, field, list(value))
+                    else:
+                        setattr(merged, field, value)
 
         return merged
 
