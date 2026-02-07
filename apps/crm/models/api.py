@@ -62,7 +62,7 @@ class EntityResponse(BaseModel):
     user_id: Optional[str]
     source_entity_id: Optional[str]
     source_company_id: Optional[str]
-    external_relationships: List[Dict[str, Any]]
+    external_relationships: List[Dict[str, Any]] = []
     relevance: float
     
     created_at: datetime

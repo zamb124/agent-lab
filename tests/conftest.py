@@ -102,25 +102,39 @@ print(f"   process_agent_task.broker id: {id(process_agent_task.broker)}")
 print(f"   Are they same? {id(test_broker) == id(process_agent_task.broker)}")
 
 
+_DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"
+
+
+async def _alembic_version_ready(db_url: str) -> bool:
+    """Проверяет: таблица alembic_version существует и в ней ровно одна строка."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            row = await conn.execute(text("SELECT COUNT(*) FROM alembic_version"))
+            count = row.scalar()
+            return count == 1
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_database_before_tests():
     """
     Глобальная фикстура для подготовки БД перед запуском тестов.
-    Запускается один раз в начале сессии:
-    1. Убивает процессы на тестовых портах
-    2. Удаляет все таблицы
-    3. Запускает Alembic миграции
-    
-    Это гарантирует чистое состояние БД с правильной схемой.
+    Если alembic_version уже есть и в ней ровно одна строка — дроп и миграции не выполняем
+    (другой процесс уже подготовил БД). Иначе под блокировкой: дроп таблиц и миграции.
     """
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
-    from core.db.models import Base
-    
-    # Убиваем процессы на тестовых портах
+    from filelock import FileLock
+
     test_ports = [9001, 9002, 9003, 9004]
     print(f"\n Освобождаем тестовые порты: {test_ports}...")
-    
     for port in test_ports:
         try:
             result = subprocess.run(
@@ -133,46 +147,43 @@ async def setup_database_before_tests():
                 print(f"   Порт {port} освобожден")
         except Exception:
             pass
-    
     time.sleep(2)
     print("Все тестовые порты свободны!\n")
-    
+
     db_url = os.environ.get("DATABASE__URL", "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test")
-    
-    print("Подготовка БД для тестов...")
-    
-    engine = create_async_engine(db_url, echo=False)
-    
-    # Удаляем все таблицы включая alembic_version
-    async with engine.begin() as conn:
-        # Получаем все таблицы из public schema
-        result = await conn.execute(text("""
-            SELECT tablename FROM pg_tables 
-            WHERE schemaname = 'public'
-        """))
-        tables = [row[0] for row in result.fetchall()]
-        
-        if tables:
-            # Отключаем foreign key checks и удаляем все таблицы
-            await conn.execute(text("SET session_replication_role = 'replica'"))
-            for table in tables:
-                await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
-            await conn.execute(text("SET session_replication_role = 'origin'"))
-            print(f"   Удалено {len(tables)} таблиц")
-        else:
-            print("   БД уже пустая")
-    
-    await engine.dispose()
-    
-    # Запускаем Alembic миграции
-    print("Применение миграций...")
-    from core.db.migrations import run_migrations_async
-    await run_migrations_async()
-    print("Миграции применены!\n")
-    
-    yield
-    
-    # Cleanup после всех тестов
+
+    if await _alembic_version_ready(db_url):
+        print("БД уже подготовлена (alembic_version есть, одна ревизия), пропуск дропа и миграций.\n")
+        yield
+    else:
+        lock = FileLock(_DB_SETUP_LOCK, timeout=120)
+        with lock:
+            if await _alembic_version_ready(db_url):
+                print("БД подготовлена другим процессом, пропуск.\n")
+                yield
+            else:
+                print("Подготовка БД для тестов...")
+                engine = create_async_engine(db_url, echo=False)
+                async with engine.begin() as conn:
+                    result = await conn.execute(text("""
+                        SELECT tablename FROM pg_tables
+                        WHERE schemaname = 'public'
+                    """))
+                    tables = [row[0] for row in result.fetchall()]
+                    if tables:
+                        await conn.execute(text("SET session_replication_role = 'replica'"))
+                        for table in tables:
+                            await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
+                        await conn.execute(text("SET session_replication_role = 'origin'"))
+                        print(f"   Удалено {len(tables)} таблиц")
+                await engine.dispose()
+
+                print("Применение миграций...")
+                from core.db.migrations import run_migrations_async
+                await run_migrations_async()
+                print("Миграции применены!\n")
+                yield
+
     print(f"\nФинальная очистка портов...")
     for port in test_ports:
         try:

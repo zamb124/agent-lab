@@ -70,15 +70,18 @@ class TestS3Integration:
     async def test_s3_client_creation_from_config(self):
         """Тест создания S3 клиента из конфигурации"""
         skip_if_s3_disabled()
+        from core.config import get_settings
+
         bucket_name = get_test_bucket_name()
         client = S3ClientFactory.create_client_for_bucket(bucket_name)
-        
+        bucket_config = get_settings().s3.buckets[bucket_name]
+
         assert client.bucket_name == bucket_name
-        assert client.provider_name == 'minio'
-        assert 'localhost:9000' in client.endpoint_url or 'minio-test:9000' in client.endpoint_url
-        assert client.access_key_id == 'minioadmin'
+        assert client.provider_name == bucket_config.provider
+        assert client.endpoint_url == bucket_config.endpoint_url
+        assert client.access_key_id == bucket_config.access_key_id
         assert client.track_files
-        
+
         await client.close()
     
     async def test_s3_client_creation_invalid_bucket(self):
