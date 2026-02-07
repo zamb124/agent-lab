@@ -19,9 +19,9 @@ class CRMSettings(BaseSettings):
     URL agents сервиса берется из server.agents_service_url (SERVER__AGENTS_SERVICE_URL).
     """
     
-    chromadb_namespace_prefix: str = Field(
+    rag_namespace_prefix: str = Field(
         default="crm_",
-        description="Префикс namespace в ChromaDB для CRM сущностей"
+        description="Префикс namespace для CRM сущностей в RAG"
     )
     max_entities_per_company: int = Field(
         default=10000,

@@ -12,7 +12,7 @@ from datetime import date
 
 import pytest
 
-from apps.agents.src.evaluation.runners.dialog_runner import DialogTestRunner
+from apps.agents.src.evaluation.runners.test_runner import TestRunner
 from apps.agents.src.models import AgentConfig, NodeConfig
 from apps.agents.src.models.agent_config import (
     CheckConfig,
@@ -26,14 +26,29 @@ from apps.agents.src.models.tool_reference import ToolReference
 from core.state import ExecutionState
 
 
+async def _noop_callable(state):
+    return state
+
+
 @pytest.fixture
 def runner():
-    """Создаёт DialogTestRunner для тестов."""
-    return DialogTestRunner(
-        agent_id="test_flow",
-        skill_id="default",
+    """Создает TestRunner для тестов."""
+    return TestRunner(
+        target_id="test_flow:default",
+        target_callable=_noop_callable,
         run_date=date.today(),
         iteration=1,
+    )
+
+
+@pytest.fixture
+def execution_state():
+    """Создает ExecutionState для тестов."""
+    return ExecutionState(
+        task_id="test-task",
+        context_id="test-context",
+        user_id="test-user",
+        session_id="test-agent:test-context",
     )
 
 
@@ -41,18 +56,18 @@ class TestInputText:
     """Тесты для InputType.TEXT."""
 
     @pytest.mark.asyncio
-    async def test_text_input(self, runner):
+    async def test_text_input(self, runner, execution_state):
         """Простой текстовый input."""
         input_config = InputConfig(type=InputType.TEXT, value="Привет!")
-        text, files = await runner._get_input(input_config)
+        text, files = await runner._get_input(input_config, execution_state)
         assert text == "Привет!"
         assert files is None
 
     @pytest.mark.asyncio
-    async def test_text_input_empty(self, runner):
+    async def test_text_input_empty(self, runner, execution_state):
         """Пустой текстовый input."""
         input_config = InputConfig(type=InputType.TEXT, value="")
-        text, files = await runner._get_input(input_config)
+        text, files = await runner._get_input(input_config, execution_state)
         assert text == ""
 
 
@@ -60,17 +75,17 @@ class TestInputFunction:
     """Тесты для InputType.FUNCTION (inline код)."""
 
     @pytest.mark.asyncio
-    async def test_function_simple(self, runner):
+    async def test_function_simple(self, runner, execution_state):
         """Простая inline функция."""
         input_config = InputConfig(
             type=InputType.FUNCTION,
             value='def generate():\n    return "Generated"',
         )
-        text, files = await runner._get_input(input_config)
+        text, files = await runner._get_input(input_config, execution_state)
         assert text == "Generated"
 
     @pytest.mark.asyncio
-    async def test_function_with_logic(self, runner):
+    async def test_function_with_logic(self, runner, execution_state):
         """Inline функция с логикой."""
         input_config = InputConfig(
             type=InputType.FUNCTION,
@@ -79,11 +94,11 @@ class TestInputFunction:
     return f"Sum: {sum(items)}"
 """,
         )
-        text, files = await runner._get_input(input_config)
+        text, files = await runner._get_input(input_config, execution_state)
         assert text == "Sum: 6"
 
     @pytest.mark.asyncio
-    async def test_function_multiline(self, runner):
+    async def test_function_multiline(self, runner, execution_state):
         """Многострочная inline функция."""
         input_config = InputConfig(
             type=InputType.FUNCTION,
@@ -93,7 +108,7 @@ class TestInputFunction:
     return f"{greeting}, {name}!"
 """,
         )
-        text, files = await runner._get_input(input_config)
+        text, files = await runner._get_input(input_config, execution_state)
         assert text == "Hello, World!"
 
 
@@ -177,28 +192,38 @@ class TestCheckFunction:
     """Тесты для CheckType.FUNCTION (inline код)."""
 
     @pytest.mark.asyncio
-    async def test_function_returns_bool(self, runner):
-        """Inline checker возвращает bool."""
+    async def test_function_returns_bool(self, runner, execution_state):
+        """Inline checker возвращает bool -> нормализуется в Dict[str, float]."""
         check = CheckConfig(
             type=CheckType.FUNCTION,
             value='def check(state, response):\n    return "ok" in response',
         )
-        assert await runner._execute_check(check, {}, "Everything is ok", []) is True
-        assert await runner._execute_check(check, {}, "Not good", []) is False
+        result = await runner._execute_check(check, execution_state, "Everything is ok", [])
+        assert result == {"result": 10.0}
+        
+        result = await runner._execute_check(check, execution_state, "Not good", [])
+        assert result == {"result": 0.0}
 
     @pytest.mark.asyncio
     async def test_function_uses_state(self, runner):
         """Inline checker использует state."""
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            expected="success",
+        )
         check = CheckConfig(
             type=CheckType.FUNCTION,
             value='def check(state, response):\n    return state.get("expected") in response',
         )
-        result = await runner._execute_check(check, {"expected": "success"}, "Operation success", [])
-        assert result is True
+        result = await runner._execute_check(check, state, "Operation success", [])
+        assert result == {"result": 10.0}
 
     @pytest.mark.asyncio
-    async def test_function_returns_dict(self, runner):
-        """Inline checker возвращает dict scores."""
+    async def test_function_returns_dict(self, runner, execution_state):
+        """Inline checker возвращает dict scores -> нормализуется."""
         check = CheckConfig(
             type=CheckType.FUNCTION,
             value="""def check(state, response):
@@ -208,11 +233,11 @@ class TestCheckFunction:
         "score": 8.5
     }""",
         )
-        result = await runner._execute_check(check, {}, "Hello, this is a long response", [])
-        assert result == {"has_greeting": True, "long_enough": True, "score": 8.5}
+        result = await runner._execute_check(check, execution_state, "Hello, this is a long response", [])
+        assert result == {"has_greeting": 10.0, "long_enough": 10.0, "score": 8.5}
 
     @pytest.mark.asyncio
-    async def test_function_complex_logic(self, runner):
+    async def test_function_complex_logic(self, runner, execution_state):
         """Inline checker со сложной логикой."""
         check = CheckConfig(
             type=CheckType.FUNCTION,
@@ -222,8 +247,11 @@ class TestCheckFunction:
     return all(w in words for w in required)
 """,
         )
-        assert await runner._execute_check(check, {}, "Order has been confirmed", []) is True
-        assert await runner._execute_check(check, {}, "Request received", []) is False
+        result = await runner._execute_check(check, execution_state, "Order has been confirmed", [])
+        assert result == {"result": 10.0}
+        
+        result = await runner._execute_check(check, execution_state, "Request received", [])
+        assert result == {"result": 0.0}
 
 
 class TestTestCaseConfigAllCombinations:

@@ -1,5 +1,5 @@
 """
-Unit тесты для проверок (checkers) в DialogTestRunner.
+Unit тесты для проверок (checkers) в TestRunner.
 
 Тестирует все типы checker:
 - contains: проверка наличия слов
@@ -14,15 +14,19 @@ from datetime import date
 
 import pytest
 
-from apps.agents.src.evaluation.runners.dialog_runner import DialogTestRunner
+from apps.agents.src.evaluation.runners.test_runner import TestRunner
+
+
+async def _noop_callable(state):
+    return state
 
 
 @pytest.fixture
 def runner():
-    """Создаёт DialogTestRunner для тестов."""
-    return DialogTestRunner(
-        agent_id="test_flow",
-        skill_id="default",
+    """Создает TestRunner для тестов."""
+    return TestRunner(
+        target_id="test_flow:default",
+        target_callable=_noop_callable,
         run_date=date.today(),
         iteration=1,
     )

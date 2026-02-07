@@ -48,13 +48,11 @@ os.environ.setdefault("SERVER__CRM_SERVICE_URL", "http://localhost:9003")
 os.environ.setdefault("SERVER__FRONTEND_SERVICE_URL", "http://localhost:9004")
 # S3 конфигурация для тестов - используем test-bucket вместо vkbucket
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
-# RAG config для тестов (ChromaDB test container на порту 8101)
+# RAG config для тестов (pgvector в PostgreSQL)
 os.environ.setdefault("RAG__ENABLED", "true")
-os.environ.setdefault("RAG__DEFAULT_PROVIDER", "chromadb")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__ENABLED", "true")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__HOST", "localhost")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__PORT", "8101")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__EMBEDDING_API_KEY", "sk-test-key")
+os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
+os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__ENABLED", "true")
+os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY", "sk-test-key")
 
 # Сбрасываем settings singleton чтобы он пересоздался с тестовыми env переменными
 import core.config.base
@@ -198,9 +196,9 @@ _APP_INIT_DONE = "/tmp/platform_test_app_init.done"
 _TASKIQ_WORKER_LOCK = "/tmp/platform_test_taskiq_worker.lock"
 _TASKIQ_WORKER_PID = "/tmp/platform_test_taskiq_worker.pid"
 
-# ChromaDB worker - только один worker на все pytest workers
-_CHROMA_WORKER_LOCK = "/tmp/platform_test_chroma_worker.lock"
-_CHROMA_WORKER_PID = "/tmp/platform_test_chroma_worker.pid"
+# RAG worker - только один worker на все pytest workers
+_RAG_WORKER_LOCK = "/tmp/platform_test_rag_worker.lock"
+_RAG_WORKER_PID = "/tmp/platform_test_rag_worker.pid"
 
 
 def pytest_configure(config):
@@ -211,7 +209,7 @@ def pytest_configure(config):
     # Удаляем маркеры если они старше 1 часа (зависли от предыдущего запуска)
     max_age_seconds = 3600
     
-    for marker in [_APP_INIT_LOCK, _APP_INIT_DONE, _TASKIQ_WORKER_LOCK, _TASKIQ_WORKER_PID, _CHROMA_WORKER_LOCK, _CHROMA_WORKER_PID]:
+    for marker in [_APP_INIT_LOCK, _APP_INIT_DONE, _TASKIQ_WORKER_LOCK, _TASKIQ_WORKER_PID, _RAG_WORKER_LOCK, _RAG_WORKER_PID]:
         path = pathlib.Path(marker)
         if path.exists():
             age = time.time() - path.stat().st_mtime
@@ -551,7 +549,7 @@ def sync_tools(request, monkeypatch):
 
 # Worker фикстуры вынесены в tests/fixtures/workers.py для переиспользования
 from tests.fixtures.workers import (  # noqa: F401
-    chroma_worker,
+    rag_worker,
     taskiq_broker,
     taskiq_scheduler,
     taskiq_worker,
@@ -932,39 +930,37 @@ async def auth_headers(auth_token):
 
 
 @pytest_asyncio.fixture
-async def rag_provider_chromadb():
+async def rag_provider_pgvector():
     """
-    Реальный ChromaDB провайдер для тестов (порт 8101).
+    Реальный pgvector провайдер для тестов.
     
-    Cleanup автоматически удаляет тестовые коллекции после тестов.
+    Использует PostgreSQL с расширением pgvector для хранения embeddings.
     """
-    from core.rag.providers.chromadb_provider import ChromaDBRAGProvider
+    from core.rag.providers.pgvector_provider import PgVectorProvider
     
     config = {
-        "host": "localhost",
-        "port": 8101,
+        "db_url": os.environ.get("DATABASE__URL", "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test"),
         "embedding_api_key": "sk-test-key",
-        "timeout": 30,
         "chunk_size": 1000,
         "chunk_overlap": 100
     }
     
     embedding_config = {
         "model": "text-embedding-3-small",
-        "dimension": 1536
+        "dimension": 1024
     }
     
-    provider = ChromaDBRAGProvider(config, embedding_config)
+    provider = PgVectorProvider(config, embedding_config)
     yield provider
     
-    # Cleanup: удаляем тестовые коллекции
+    # Cleanup: удаляем тестовые namespaces
     try:
-        collections = provider._client.list_collections()
-        for collection in collections:
-            if collection.name.startswith("test_"):
-                provider._client.delete_collection(collection.name)
+        namespaces = await provider.list_namespaces()
+        for namespace in namespaces:
+            if namespace.name.startswith("test_"):
+                await provider.delete_namespace(namespace.name)
     except Exception as e:
-        # ChromaDB может быть недоступен при teardown
+        # pgvector может быть недоступен при teardown
         pass
 
 

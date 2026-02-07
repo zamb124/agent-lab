@@ -7,7 +7,7 @@ import { BaseStore } from '@platform/lib/store/BaseStore.js';
 const baseStore = new BaseStore('rag', {
     providers: {
         list: [],
-        current: 'chromadb',
+        current: 'pgvector',
         loading: false,
     },
     namespaces: {
@@ -114,7 +114,7 @@ export const RagStore = {
         
         const response = await ragApi.getProviders();
         const providers = response.providers || [];
-        const currentProvider = response.current_provider || 'chromadb';
+        const currentProvider = response.current_provider || 'pgvector';
         
         baseStore.setState((s) => ({
             providers: {

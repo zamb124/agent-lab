@@ -138,3 +138,15 @@ class ChannelType(str, Enum):
     WHATSAPP = "whatsapp"   # WhatsApp Business API
     SMS = "sms"             # SMS (Twilio, etc)
     WEBHOOK = "webhook"     # HTTP webhook
+
+
+class TestTargetType(str, Enum):
+    """
+    Тип цели тестирования в evaluation.
+    
+    AGENT - тестируем полный агент (Agent.run)
+    NODE - тестируем отдельную ноду (BaseNode.run)
+    """
+    
+    AGENT = "agent"
+    NODE = "node"

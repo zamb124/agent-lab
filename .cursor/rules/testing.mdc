@@ -400,7 +400,7 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
 | State с текстом | `state_with_content` | state | `state_with_content.content == "test"` |
 | Кастомный state | `make_test_state` | factory | `state = make_test_state(task_id=...)` |
 | TaskIQ worker | `taskiq_worker` | worker | Автоматически через `app` |
-| RAG worker | `chroma_worker` | worker | Автоматически через `rag_client` |
+| RAG worker | `rag_worker` | worker | Автоматически через `rag_client` |
 | Scheduler | `taskiq_scheduler` | scheduler | `def test_schedule(taskiq_scheduler):` |
 
 **ГЛАВНОЕ:** 
@@ -771,7 +771,7 @@ def test_e2e(rag_service):
 | Фикстура | Scope | Зависимости | Назначение |
 |----------|-------|-------------|------------|
 | `agents_client` | function | `app` | Unit тесты Agents API |
-| `rag_client` | function | `rag_app`, `chroma_worker` | Unit тесты RAG API |
+| `rag_client` | function | `rag_app`, `rag_worker` | Unit тесты RAG API |
 | `crm_client` | function | `app`, `rag_app`, `rag_service` | Unit тесты CRM API |
 | `frontend_client` | function | `app` | Unit тесты Frontend API |
 
@@ -784,7 +784,7 @@ async def test_list_providers(rag_client, auth_headers_system):
         headers=auth_headers_system
     )
     assert response.status_code == 200
-    assert "chromadb" in response.json()
+    assert "pgvector" in response.json()
 ```
 
 #### HTTP Clients (для E2E тестов)
@@ -854,8 +854,8 @@ async def test_full_platform(all_clients_http, auth_headers_system, unique_id):
 | Фикстура | Scope | Назначение | Автозапуск |
 |----------|-------|------------|------------|
 | `taskiq_worker` | session | TaskIQ worker subprocess | Автоматически при использовании app |
-| `chroma_worker` | session | ChromaDB worker subprocess | Автоматически через rag_client |
-| `taskiq_broker` | function | TaskIQ broker | Зависит от chroma_worker |
+| `rag_worker` | session | RAG worker subprocess | Автоматически через rag_client |
+| `taskiq_broker` | function | TaskIQ broker | Зависит от rag_worker |
 | `taskiq_scheduler` | session | TaskIQ scheduler subprocess | Для тестов с расписанием |
 
 **Правила использования worker фикстур:**

@@ -70,7 +70,7 @@ tests/crm/
 - **Примерное количество тестов:** ~90+
 - **Покрытие функционала:** 100%
 - **Использование моков:** Только MockLLM (как требовалось)
-- **Реальные сервисы:** PostgreSQL, Redis, ChromaDB, MinIO, RAG, Agents
+- **Реальные сервисы:** PostgreSQL, Redis, pgvector, MinIO, RAG, Agents
 
 ## Как запустить
 
@@ -96,7 +96,7 @@ uv run pytest tests/crm/ --cov=apps/crm --cov-report=html -v
 - `mock_llm_redis` - mock LLM
 - `client` - HTTP клиент
 - `taskiq_worker` - TaskIQ worker
-- `chroma_worker` - RAG worker
+- `rag_worker` - RAG worker
 
 **Из `tests/crm/conftest.py`:**
 - `crm_client` - HTTP клиент для CRM API

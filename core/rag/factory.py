@@ -6,14 +6,14 @@ import logging
 from typing import Optional
 from .base_provider import BaseRAGProvider
 from .providers.agentset_provider import AgentsetRAGProvider
-from .providers.chromadb_provider import ChromaDBRAGProvider
+from .providers.pgvector_provider import PgVectorProvider
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 RAG_PROVIDERS = {
     "agentset": AgentsetRAGProvider,
-    "chromadb": ChromaDBRAGProvider,
+    "pgvector": PgVectorProvider,
 }
 
 
@@ -73,13 +73,12 @@ def get_rag_provider(provider_name: Optional[str] = None) -> BaseRAGProvider:
         embedding_config = settings.rag.embedding.model_dump() if hasattr(settings.rag.embedding, 'model_dump') else dict(settings.rag.embedding)
     
     provider_class = RAG_PROVIDERS[provider]
-    
-    # ChromaDB принимает embedding_config отдельным параметром
-    if provider == "chromadb":
+
+    if provider == "pgvector":
         instance = provider_class(config_dict, embedding_config=embedding_config)
     else:
         instance = provider_class(config_dict)
-    
+
     logger.info(f"Создан RAG провайдер: {provider}")
     return instance
 

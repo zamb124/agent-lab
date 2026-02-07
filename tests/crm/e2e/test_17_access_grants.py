@@ -11,8 +11,7 @@ E2E тесты для системы AccessGrants.
 import pytest
 from httpx import AsyncClient
 
-from apps.crm.models.entity import ChromaDBEntity
-from apps.crm.db.models import EntityType, AccessGrant
+from apps.crm.db.models import CRMEntity, EntityType, AccessGrant
 
 
 @pytest.mark.asyncio

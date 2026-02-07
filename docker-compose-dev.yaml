@@ -1,7 +1,7 @@
 services:
   postgres:
     platform: "linux/amd64"
-    image: postgres:15
+    image: pgvector/pgvector:pg15
     container_name: platform-postgres-dev
     environment:
       POSTGRES_DB: platform_db
@@ -32,26 +32,6 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - dev-net
-
-  # Chroma - RAG vector database
-  chroma:
-    platform: "linux/amd64"
-    image: chromadb/chroma:latest
-    container_name: platform-chroma-dev
-    ports:
-      - "8100:8000"
-    volumes:
-      - chroma_dev_data:/chroma/chroma
-    environment:
-      - ANONYMIZED_TELEMETRY=False
-      - IS_PERSISTENT=TRUE
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 10s
       timeout: 5s
       retries: 5
     networks:
@@ -144,14 +124,14 @@ services:
   #   networks:
   #     - dev-net
 
-  # ChromaWorker опционален - можно запустить локально для дебага:
-  # DATABASE__URL=postgresql://platform_user:admin@localhost:5435/platform_db TASKS__BROKER_URL=redis://localhost:6381/1 CHROMA_HOST=localhost uv run python scripts/run_chroma_worker.py
-  # chroma-worker:
+  # RAGWorker опционален - можно запустить локально для дебага:
+  # DATABASE__URL=postgresql://platform_user:admin@localhost:5435/platform_db TASKS__BROKER_URL=redis://localhost:6381/1 uv run python scripts/run_rag_worker.py
+  # rag-worker:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile
-  #     target: chroma-worker
-  #   container_name: platform-chroma-worker-dev
+  #     target: rag-worker
+  #   container_name: platform-rag-worker-dev
   #   depends_on:
   #     redis:
   #       condition: service_healthy
@@ -161,8 +141,7 @@ services:
   #     - DATABASE__URL=postgresql://platform_user:admin@postgres:5432/platform_db
   #     - DATABASE__REDIS_URL=redis://redis:6379/0
   #     - TASKS__BROKER_URL=redis://redis:6379/1
-  #     - CHROMA_HOST=chroma
-  #   command: ["taskiq", "worker", "apps.chroma_worker.worker:broker", "--workers", "2"]
+  #   command: ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]
   #   restart: unless-stopped
   #   networks:
   #     - dev-net
@@ -171,8 +150,6 @@ volumes:
   postgres_dev_data:
     driver: local
   redis_dev_data:
-    driver: local
-  chroma_dev_data:
     driver: local
   minio_dev_data:
     driver: local

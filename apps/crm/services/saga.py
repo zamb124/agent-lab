@@ -1,7 +1,7 @@
 """
-Saga Pattern для каскадных операций через ChromaDB и PostgreSQL.
+Saga Pattern для каскадных операций через PostgreSQL (crm_entities + vector_documents).
 
-Обеспечивает транзакционность при работе с двумя хранилищами.
+Обеспечивает транзакционность при работе с несколькими таблицами.
 """
 
 from typing import List, Callable, Any, Optional, Awaitable
@@ -37,8 +37,8 @@ class EntityDeletionSaga:
     
     Шаги:
     1. Удалить relationships (PostgreSQL)
-    2. Удалить attachments (RAG + ChromaDB)
-    3. Удалить entity (ChromaDB)
+    2. Удалить attachments (S3 + vector_documents)
+    3. Удалить entity (crm_entities + vector_documents)
     
     При ошибке - откат в обратном порядке.
     """

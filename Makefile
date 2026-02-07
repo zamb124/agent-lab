@@ -69,10 +69,10 @@ test-frontend:
 	@echo "🧪 Запуск всех frontend тестов..."
 	uv run pytest tests/frontend/api/ -v
 
-# RAG тесты (с реальным ChromaDB и MinIO)
+# RAG тесты (с pgvector и MinIO)
 test-rag:
-	@echo "🧪 Запуск RAG тестов (ChromaDB + MinIO)..."
-	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test chroma-test minio-test
+	@echo "🧪 Запуск RAG тестов (pgvector + MinIO)..."
+	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test
 	@echo "🚀 Запуск тестов..."
 	uv run pytest tests/rag/ -v --tb=short
 	@echo "✅ RAG тесты завершены"

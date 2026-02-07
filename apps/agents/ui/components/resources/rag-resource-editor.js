@@ -19,7 +19,7 @@ export class RAGResourceEditor extends BaseResourceEditor {
 
     renderFields() {
         const namespace = this.resourceConfig?.namespace || '';
-        const provider = this.resourceConfig?.provider || 'chromadb';
+        const provider = this.resourceConfig?.provider || 'pgvector';
         const defaultTopK = this.resourceConfig?.default_top_k || 5;
 
         return html`
@@ -42,7 +42,7 @@ export class RAGResourceEditor extends BaseResourceEditor {
                     .value=${provider}
                     @change=${(e) => this._onInputChange('provider', e.target.value)}
                 >
-                    <option value="chromadb">ChromaDB</option>
+                    <option value="pgvector">pgvector</option>
                     <option value="qdrant">Qdrant</option>
                     <option value="pinecone">Pinecone</option>
                 </select>

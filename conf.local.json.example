@@ -62,7 +62,7 @@
   },
   "rag": {
     "providers": {
-      "chromadb": {
+      "pgvector": {
         "embedding_api_key": "YOUR_EMBEDDING_API_KEY"
       },
       "agentset": {

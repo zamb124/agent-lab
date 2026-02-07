@@ -267,7 +267,7 @@ async def test_search_nonexistent_namespace(rag_client, auth_headers_system):
             json={"query": "test", "limit": 5},
         headers=auth_headers_system
     )
-    # ChromaDB создает collection если его нет, поэтому возвращает 200 с пустыми результатами
+    # pgvector может возвращать 200 с пустыми результатами или ошибку
     # Другие провайдеры могут возвращать 404 или 500
     assert response.status_code in [200, 404, 500]
     if response.status_code == 200:

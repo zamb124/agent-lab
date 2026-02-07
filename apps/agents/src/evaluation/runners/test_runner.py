@@ -1,25 +1,21 @@
 """
-Runner для всех тест-кейсов.
+Универсальный TestRunner для evaluation.
 
-Любой тест = список ходов (turns): [{input, check}, ...]
+Тестирует любой callable: (ExecutionState) -> ExecutionState
+- Agent.run
+- BaseNode.run
 
-Поддерживаемые типы input:
-- text: строка для отправки
-- function: inline Python функция генерирующая input
-- agent: агент генерирующий сообщения
-
-Поддерживаемые типы check:
-- string: contains:, regex:, state:, length:, not_contains:
-- function: inline Python функция проверки
-- agent: агент-судья оценивающий результат
+Поддерживает все комбинации input x check.
 """
 
 import importlib
+import inspect
 import json
-import os
 import re
+import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Union
+from datetime import date
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
 
 from apps.agents.src.container import get_container
 from apps.agents.src.eval import compile_function
@@ -27,39 +23,69 @@ from apps.agents.src.models import NodeConfig, TestCaseConfig
 from apps.agents.src.models.agent_config import CheckConfig, CheckType, InputConfig, InputType, TestTurn
 from apps.agents.src.tasks.llm_tasks import invoke_llm
 from core.logging import get_logger
-
-from .base import BaseTestRunner
+from core.state import ExecutionState
 
 logger = get_logger(__name__)
 
-ScoresType = Dict[str, Union[float, bool]]
+ScoresType = Dict[str, float]
 
 TEST_COMPLETE_MARKER = "[TEST_COMPLETE]"
 LOOP_DETECTION_WINDOW = 3
 
 
-class DialogTestRunner(BaseTestRunner):
-    """Унифицированный runner для всех тест-кейсов."""
+class TestRunner:
+    """
+    Универсальный runner для тестирования.
+    
+    Тестирует callable: (ExecutionState) -> ExecutionState.
+    Поддерживает агентов и отдельные ноды.
+    """
+
+    def __init__(
+        self,
+        target_id: str,
+        target_callable: Callable,
+        run_date: date,
+        iteration: int,
+    ):
+        self.target_id = target_id
+        self.target_callable = target_callable
+        self.run_date = run_date
+        self.iteration = iteration
 
     async def run(
-        self, test_case: TestCaseConfig, test_case_id: str, task_id: Optional[str] = None
-    ):
+        self,
+        test_case: TestCaseConfig,
+        test_case_id: str,
+        task_id: Optional[str] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
         """
         Запускает тест со стримингом.
-
-        Обрабатывает все типы через turns:
-        - text/string: простой диалог
-        - function/function: тест через Python функции
-        - agent/agent: агентский диалог с судьёй
+        
+        Для каждого turn:
+        1. Генерирует input (text/function/node)
+        2. Вызывает target_callable(state)
+        3. Проверяет результат (string/function/node)
         """
-        elapsed = self.measure_time()
+        elapsed = self._measure_time()
         if task_id is None:
             task_id = str(uuid.uuid4())
 
-        session_id = None
         turns_count = 0
         step_scores: ScoresType = {}
-        state: Dict[str, Any] = {}
+        initial_state_dict = test_case.initial_state or {}
+        
+        context_id = str(uuid.uuid4())
+        session_id = f"{self.target_id}:{context_id}"
+        
+        execution_state = ExecutionState(
+            task_id=task_id,
+            context_id=context_id,
+            session_id=session_id,
+            user_id="evaluation_runner",
+            content="",
+            **initial_state_dict,
+        )
         response = ""
         dialog: List[Dict[str, Any]] = []
 
@@ -71,6 +97,7 @@ class DialogTestRunner(BaseTestRunner):
                     "duration_ms": elapsed(),
                     "error": "No turns provided",
                     "task_id": task_id,
+                    "context_id": context_id,
                 }
                 return
 
@@ -83,9 +110,8 @@ class DialogTestRunner(BaseTestRunner):
             )
 
             if is_agent_test:
-                # Agent-to-agent тест
                 async for event in self._run_agent_test(
-                    test_case, first_turn, task_id, elapsed
+                    test_case, first_turn, task_id, elapsed, execution_state
                 ):
                     yield event
                 return
@@ -94,8 +120,7 @@ class DialogTestRunner(BaseTestRunner):
             for i, turn in enumerate(test_case.turns):
                 turns_count += 1
 
-                # Получаем input
-                input_text, files = await self._get_input(turn.input)
+                input_text, files = await self._get_input(turn.input, execution_state)
 
                 if not input_text and not files:
                     yield {
@@ -104,21 +129,16 @@ class DialogTestRunner(BaseTestRunner):
                         "duration_ms": elapsed(),
                         "error": f"Turn {i + 1}: no input",
                         "task_id": task_id,
+                        "context_id": context_id,
                     }
                     return
 
                 yield {"type": "user", "content": input_text or "[file]"}
 
-                result = await self.send_message(
-                    content=input_text or "",
-                    files=files,
-                    session_id=session_id,
-                    task_id=task_id,
-                )
+                execution_state.content = input_text or ""
+                execution_state = await self.target_callable(execution_state)
 
-                session_id = result.get("session_id", session_id)
-                response = result.get("response", "")
-                state = result.get("state", {})
+                response = execution_state.response or ""
 
                 dialog.append({"role": "user", "content": input_text})
                 dialog.append({"role": "assistant", "content": response})
@@ -127,38 +147,34 @@ class DialogTestRunner(BaseTestRunner):
 
                 # Проверка
                 if turn.check:
-                    check_result = await self._execute_check(turn.check, state, response, dialog)
+                    check_result = await self._execute_check(
+                        turn.check, execution_state, response, dialog
+                    )
 
-                    if isinstance(check_result, dict):
-                        step_scores[f"step_{i + 1}"] = check_result.get("result", True)
-                        if not self._scores_passed(check_result):
-                            yield {
-                                "type": "result",
-                                "status": "failed",
-                                "duration_ms": elapsed(),
-                                "turns_count": turns_count,
-                                "scores": {**step_scores, **check_result},
-                                "error": f"Step {i + 1} check failed",
-                                "task_id": task_id,
-                            }
-                            return
-                    else:
-                        step_scores[f"step_{i + 1}"] = check_result
-                        if not check_result:
-                            yield {
-                                "type": "result",
-                                "status": "failed",
-                                "duration_ms": elapsed(),
-                                "turns_count": turns_count,
-                                "scores": step_scores,
-                                "error": f"Step {i + 1} check failed",
-                                "task_id": task_id,
-                            }
-                            return
+                    step_key = f"step_{i + 1}"
+                    step_scores[step_key] = check_result.get("result", 10.0)
+                    
+                    for k, v in check_result.items():
+                        if k != "result" and k not in step_scores:
+                            step_scores[k] = v
+
+                    if not self._scores_passed(check_result):
+                        yield {
+                            "type": "result",
+                            "status": "failed",
+                            "duration_ms": elapsed(),
+                            "turns_count": turns_count,
+                            "scores": step_scores,
+                            "dialog": dialog,
+                            "error": f"Step {i + 1} check failed",
+                            "task_id": task_id,
+                            "context_id": context_id,
+                        }
+                        return
 
             # Все шаги пройдены
             if not step_scores:
-                step_scores = {"result": True}
+                step_scores = {"result": 10.0}
 
             yield {
                 "type": "result",
@@ -166,7 +182,9 @@ class DialogTestRunner(BaseTestRunner):
                 "duration_ms": elapsed(),
                 "turns_count": turns_count,
                 "scores": step_scores,
+                "dialog": dialog,
                 "task_id": task_id,
+                "context_id": context_id,
             }
 
         except Exception as e:
@@ -178,6 +196,7 @@ class DialogTestRunner(BaseTestRunner):
                 "turns_count": turns_count,
                 "error": str(e),
                 "task_id": task_id,
+                "context_id": context_id,
             }
 
     async def _run_agent_test(
@@ -186,23 +205,13 @@ class DialogTestRunner(BaseTestRunner):
         turn: TestTurn,
         task_id: str,
         elapsed: Callable[[], int],
+        execution_state: ExecutionState,
     ):
         """Запускает agent-to-agent тест."""
-        session_id = f"eval:{self.agent_id}:{uuid.uuid4()}"
         dialog: List[Dict[str, Any]] = []
         turns = 0
 
-        # Загружаем тестера
-        tester_config = await self._get_node_config(turn.input)
-        if not tester_config:
-            yield {
-                "type": "result",
-                "status": "error",
-                "duration_ms": elapsed(),
-                "error": "No tester agent config",
-                "task_id": task_id,
-            }
-            return
+        tester_config = self._get_node_config(turn.input)
 
         # Первое сообщение тестера
         tester_messages: List[Dict[str, str]] = []
@@ -221,13 +230,10 @@ class DialogTestRunner(BaseTestRunner):
             dialog.append({"role": "tester", "content": tester_response})
             yield {"type": "user", "content": f"[TESTER] {tester_response}"}
 
-            agent_result = await self.send_message(
-                content=tester_response,
-                session_id=session_id,
-                is_resume=turns > 1,
-                task_id=task_id,
-            )
-            agent_response = agent_result.get("response", "")
+            execution_state.content = tester_response
+            execution_state = await self.target_callable(execution_state)
+            
+            agent_response = execution_state.response or ""
 
             dialog.append({"role": "agent", "content": agent_response})
             yield {"type": "assistant", "content": agent_response}
@@ -240,6 +246,7 @@ class DialogTestRunner(BaseTestRunner):
                     "turns_count": turns,
                     "error": "Loop detected",
                     "task_id": task_id,
+                    "context_id": execution_state.context_id,
                 }
                 return
 
@@ -250,7 +257,7 @@ class DialogTestRunner(BaseTestRunner):
                 tester_config, tester_messages, agent_response
             )
 
-        # Оценка судьёй
+        # Оценка судьей
         scores, feedback, passed = await self._judge_dialog(turn.check, dialog)
 
         yield {
@@ -262,10 +269,11 @@ class DialogTestRunner(BaseTestRunner):
             "judge_feedback": feedback,
             "dialog": dialog,
             "task_id": task_id,
+            "context_id": execution_state.context_id,
         }
 
     async def _get_input(
-        self, input_config: InputConfig
+        self, input_config: InputConfig, execution_state: ExecutionState
     ) -> tuple[Optional[str], Optional[List[Dict[str, Any]]]]:
         """Получает input на основе конфигурации."""
         if input_config.type == InputType.TEXT:
@@ -273,32 +281,68 @@ class DialogTestRunner(BaseTestRunner):
 
         if input_config.type == InputType.FUNCTION:
             fn = compile_function(input_config.value, "generate")
-            return fn(), None
+            sig = inspect.signature(fn)
+            if len(sig.parameters) == 0:
+                result = fn()
+            else:
+                result = fn(execution_state.model_dump())
+            return str(result), None
 
-        # InputType.NODE - не должен попадать сюда для обычных тестов
         return input_config.value, None
 
     async def _execute_check(
         self,
         check_config: CheckConfig,
-        state: Dict[str, Any],
+        execution_state: ExecutionState,
         response: str,
         dialog: List[Dict[str, Any]],
-    ) -> Union[bool, Dict[str, Any]]:
-        """Выполняет проверку результата."""
+    ) -> Dict[str, float]:
+        """Выполняет проверку. Всегда возвращает Dict[str, float] (0-10)."""
+        state_dict = execution_state.model_dump()
+        
         if check_config.type == CheckType.STRING:
-            return self._execute_string_checker(check_config.value, state, response)
+            result = self._execute_string_checker(check_config.value, state_dict, response)
+            return {"result": 10.0 if result else 0.0}
 
         if check_config.type == CheckType.FUNCTION:
             fn = compile_function(check_config.value, "check")
-            result = fn(state, response)
-            return result
+            result = fn(state_dict, response)
+            return self._normalize_check_result(result)
 
         if check_config.type == CheckType.NODE:
             scores, _, passed = await self._judge_dialog(check_config, dialog)
-            return {"result": passed, **scores}
+            scores["result"] = 10.0 if passed else 0.0
+            return scores
 
-        return True
+        raise ValueError(f"Unknown check type: {check_config.type}")
+
+    def _normalize_check_result(self, result: Any) -> Dict[str, float]:
+        """
+        Нормализует результат проверки к единой структуре: Dict[str, float] (0-10).
+        
+        True -> {"result": 10.0}
+        False -> {"result": 0.0}
+        число -> {"result": число}
+        dict -> преобразует все значения: True->10, False->0, числа остаются
+        """
+        if isinstance(result, bool):
+            return {"result": 10.0 if result else 0.0}
+        
+        if isinstance(result, (int, float)):
+            return {"result": float(result)}
+        
+        if isinstance(result, dict):
+            normalized = {}
+            for k, v in result.items():
+                if isinstance(v, bool):
+                    normalized[k] = 10.0 if v else 0.0
+                elif isinstance(v, (int, float)):
+                    normalized[k] = float(v)
+                elif v is None:
+                    normalized[k] = 0.0
+            return normalized if normalized else {"result": 10.0}
+        
+        return {"result": 10.0}
 
     def _execute_string_checker(
         self, checker: str, state: Dict[str, Any], response: str
@@ -324,7 +368,7 @@ class DialogTestRunner(BaseTestRunner):
         if checker.startswith("state:"):
             return self._check_state_expression(checker[6:], state)
 
-        # Python функция по пути
+        # Python функция по пути модуля
         fn = self._import_function(checker)
         return fn(state, response)
 
@@ -397,7 +441,7 @@ class DialogTestRunner(BaseTestRunner):
         return False
 
     def _get_nested_value(self, data: Dict[str, Any], path: str) -> Any:
-        """Получает значение по пути."""
+        """Получает значение по вложенному пути (a.b.c)."""
         keys = path.split(".")
         value = data
         for key in keys:
@@ -408,22 +452,16 @@ class DialogTestRunner(BaseTestRunner):
         return value
 
     def _import_function(self, function_path: str) -> Callable:
-        """Импортирует функцию по пути."""
+        """Импортирует функцию по полному пути модуля."""
         module_path, func_name = function_path.rsplit(".", 1)
         module = importlib.import_module(module_path)
         return getattr(module, func_name)
 
-    async def _get_node_config(self, input_config: InputConfig) -> Optional[NodeConfig]:
-        """Получает конфигурацию ноды."""
+    def _get_node_config(self, input_config: InputConfig) -> NodeConfig:
+        """Получает конфигурацию ноды. Только inline."""
         if input_config.node:
-            # Преобразуем dict в NodeConfig
             return NodeConfig(**input_config.node)
-
-        if input_config.value:
-            container = get_container()
-            return await container.node_repository.get(input_config.value)
-
-        return None
+        raise ValueError("node config is required for NODE input type (inline only)")
 
     async def _invoke_node(
         self,
@@ -431,7 +469,7 @@ class DialogTestRunner(BaseTestRunner):
         messages: List[Dict[str, str]],
         last_message: str,
     ) -> str:
-        """Вызывает ноду для генерации ответа."""
+        """Вызывает ноду (tester/judge) через LLM."""
         system_prompt = node_config.prompt or "Ты тестер. Веди диалог с агентом."
 
         llm_messages = [{"role": "system", "content": system_prompt}]
@@ -466,18 +504,9 @@ class DialogTestRunner(BaseTestRunner):
     ) -> tuple[ScoresType, Optional[str], bool]:
         """Вызывает агента-судью для оценки диалога."""
         if not check_config:
-            return {"result": True}, None, True
+            return {"result": 10.0}, None, True
 
-        judge_config = None
-        if check_config.node:
-            # Преобразуем dict в NodeConfig
-            judge_config = NodeConfig(**check_config.node)
-        elif check_config.value:
-            container = get_container()
-            judge_config = await container.node_repository.get(check_config.value)
-
-        if not judge_config:
-            return {"result": True}, None, True
+        judge_config = self._get_judge_config(check_config)
 
         dialog_text = "\n".join(f"{msg['role'].upper()}: {msg['content']}" for msg in dialog)
 
@@ -501,32 +530,34 @@ class DialogTestRunner(BaseTestRunner):
         result = await task.wait_result()
 
         if result.is_err:
-            logger.warning(f"Judge LLM task failed: {result.error}")
-            return {"result": True}, None, True
+            raise RuntimeError(f"Judge LLM task failed: {result.error}")
 
         response_text = result.return_value.get("content", "")
 
-        try:
-            start = response_text.find("{")
-            end = response_text.rfind("}") + 1
-            if start >= 0 and end > start:
-                judge_result = json.loads(response_text[start:end])
-                scores = judge_result.get("scores", {})
-                if not scores:
-                    scores = {"result": judge_result.get("passed", True)}
-                feedback = judge_result.get("feedback")
-                passed = judge_result.get("passed", self._scores_passed(scores))
-                return scores, feedback, passed
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse judge response: {response_text}")
+        start = response_text.find("{")
+        end = response_text.rfind("}") + 1
+        if start >= 0 and end > start:
+            judge_result = json.loads(response_text[start:end])
+            scores = judge_result.get("scores", {})
+            if not scores:
+                scores = {"result": 10.0 if judge_result.get("passed", True) else 0.0}
+            else:
+                scores = self._normalize_check_result(scores)
+            feedback = judge_result.get("feedback")
+            passed = judge_result.get("passed", self._scores_passed(scores))
+            return scores, feedback, passed
 
-        return {"result": True}, response_text, True
+        raise ValueError(f"Judge response is not valid JSON: {response_text}")
+
+    def _get_judge_config(self, check_config: CheckConfig) -> NodeConfig:
+        """Получает конфигурацию судьи. Только inline."""
+        if check_config.node:
+            return NodeConfig(**check_config.node)
+        raise ValueError("node config is required for NODE check type (inline only)")
 
     def _scores_passed(self, scores: ScoresType) -> bool:
-        """Определяет пройден ли тест."""
+        """Все scores должны быть >= 5.0."""
         for v in scores.values():
-            if isinstance(v, bool) and not v:
-                return False
             if isinstance(v, (int, float)) and v < 5.0:
                 return False
         return True
@@ -542,3 +573,8 @@ class DialogTestRunner(BaseTestRunner):
         ]
 
         return recent == previous
+
+    def _measure_time(self) -> Callable[[], int]:
+        """Создает функцию измерения времени в мс."""
+        start = time.perf_counter()
+        return lambda: int((time.perf_counter() - start) * 1000)

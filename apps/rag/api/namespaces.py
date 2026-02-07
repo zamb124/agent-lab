@@ -35,7 +35,7 @@ class NamespaceListResponse(BaseModel):
 
 @router.get("/namespaces", response_model=NamespaceListResponse)
 async def list_namespaces(
-    provider: Optional[str] = Query(None, description="RAG provider (chromadb, agentset)"),
+    provider: Optional[str] = Query(None, description="RAG provider (pgvector, agentset)"),
     container: RAGContainer = Depends(get_container_dep)
 ) -> NamespaceListResponse:
     """
@@ -92,7 +92,7 @@ async def create_namespace(
         rag_provider = get_rag_provider(provider) if provider else container.rag_provider
         
         # Провайдер сам добавит company_id через контекст
-        chroma_namespace = await rag_provider.create_namespace(
+        rag_namespace = await rag_provider.create_namespace(
             name=request.name,
             description=request.description
         )
@@ -136,14 +136,17 @@ async def delete_namespace(
         company_id = context.active_company.company_id
         
         rag_provider = get_rag_provider(provider) if provider else container.rag_provider
+        namespace_repo = container.namespace_repository
         
-        # Провайдер сам добавит company_id через контекст
-        success = await rag_provider.delete_namespace(namespace_id)
+        # Удаляем документы из провайдера (может не быть, если namespace пустой)
+        provider_deleted = await rag_provider.delete_namespace(namespace_id)
         
-        if not success:
+        # Проверяем, существует ли namespace в репозитории
+        ns_from_repo = await namespace_repo.get(namespace_id)
+        
+        if not provider_deleted and not ns_from_repo:
             raise HTTPException(status_code=404, detail="Namespace not found")
         
-        namespace_repo = container.namespace_repository
         await namespace_repo.delete(namespace_id)
         
         logger.info(f"Удален namespace: {namespace_id} для компании {company_id}")

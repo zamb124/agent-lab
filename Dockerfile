@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group core \
         --group agents \
         --group worker-base \
-        --group chroma-worker \
+        --group rag-worker \
         --group crm \
         --group rag
 
@@ -88,9 +88,9 @@ CMD ["taskiq", "worker", "apps.broker.worker:broker", "--workers", "4"]
 FROM base-final AS scheduler
 CMD ["taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"]
 
-# ChromaWorker
-FROM base-final AS chroma-worker
-CMD ["taskiq", "worker", "apps.chroma_worker.worker:broker", "--workers", "2"]
+# RAG Worker
+FROM base-final AS rag-worker
+CMD ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]
 
 # Migrations (init container)
 FROM base-final AS migrations

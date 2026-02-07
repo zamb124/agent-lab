@@ -271,7 +271,7 @@
   },
   "rag": {
     "enabled": true,
-    "default_provider": "chromadb",
+    "default_provider": "pgvector",
     
     "embedding": {
       "model": "baai/bge-m3",
@@ -279,10 +279,8 @@
     },
     
     "providers": {
-      "chromadb": {
+      "pgvector": {
         "enabled": true,
-        "host": "localhost",
-        "port": 8100,
         "embedding_api_key": "YOUR_EMBEDDING_API_KEY",
         "embedding_cost_per_1m_tokens": 5.0,
         "embedding_platform_markup": 1.1,

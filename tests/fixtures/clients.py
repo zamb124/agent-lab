@@ -24,7 +24,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-# chroma_worker импортируется из tests.conftest через pytest
+# rag_worker импортируется из tests.conftest через pytest
 # Он объявлен там как session-scoped фикстура
 
 
@@ -61,7 +61,7 @@ async def rag_app():
 
 
 @pytest_asyncio.fixture
-async def rag_client(rag_app, chroma_worker):
+async def rag_client(rag_app, rag_worker):
     """
     HTTP клиент для RAG API (ASGI transport).
     
@@ -69,7 +69,7 @@ async def rag_client(rag_app, chroma_worker):
     
     Зависимости:
     - rag_app: FastAPI приложение
-    - chroma_worker: для обработки документов
+    - rag_worker: для обработки документов
     """
     transport = ASGITransport(app=rag_app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -77,7 +77,7 @@ async def rag_client(rag_app, chroma_worker):
 
 
 @pytest_asyncio.fixture
-async def crm_client(app, rag_app, rag_service, agents_service, chroma_worker):
+async def crm_client(app, rag_app, rag_service, agents_service, rag_worker):
     """
     HTTP клиент для CRM API (ASGI transport).
     
@@ -88,7 +88,7 @@ async def crm_client(app, rag_app, rag_service, agents_service, chroma_worker):
     - app: Agents service (из tests/conftest.py)
     - rag_app: для инициализации RAG таблиц
     - rag_service: реальный HTTP сервер для inter-service communication (attachments)
-    - chroma_worker: для обработки загруженных документов
+    - rag_worker: для обработки загруженных документов
     """
     from apps.crm.main import create_app
     from apps.crm.container import get_crm_container

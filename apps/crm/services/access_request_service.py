@@ -6,10 +6,9 @@ import uuid
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
 
-from apps.crm.models.entity import ChromaDBEntity
-from apps.crm.db.models import AccessRequest, Relationship
+from apps.crm.db.models import CRMEntity, AccessRequest, Relationship
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
-from apps.crm.db.repositories.entity_repository import EntityChromaRepository
+from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from core.websocket.publisher import notify_user, Notification, NotificationType
 from core.logging import get_logger
@@ -23,7 +22,7 @@ class AccessRequestService:
     def __init__(
         self,
         access_request_repo: AccessRequestRepository,
-        entity_repo: EntityChromaRepository,
+        entity_repo: EntityRepository,
         relationship_repo: RelationshipRepository
     ):
         self._request_repo = access_request_repo
@@ -92,7 +91,7 @@ class AccessRequestService:
         self,
         request_id: str,
         owner_user_id: str
-    ) -> ChromaDBEntity:
+    ) -> CRMEntity:
         """Одобрить = скопировать entity в компанию запросившего"""
         
         request = await self._request_repo.get(request_id)
@@ -159,10 +158,10 @@ class AccessRequestService:
     
     async def _copy_shallow(
         self,
-        original: ChromaDBEntity,
+        original: CRMEntity,
         target_company_id: str,
         target_user_id: str
-    ) -> ChromaDBEntity:
+    ) -> CRMEntity:
         """Shallow copy - entity + metadata relationships"""
         
         # Получаем relationships оригинала
@@ -181,32 +180,26 @@ class AccessRequestService:
                     # НЕТ target_entity_id - это другая компания!
                 })
         
-        # Создаем копию
-        copy_data = original.model_dump(
-            exclude={
-                "entity_id", 
-                "company_id", 
-                "namespace",
-                "user_id",
-                "source_entity_id",  # Устанавливаем явно
-                "source_company_id",  # Устанавливаем явно
-                "external_relationships",  # Устанавливаем явно
-                "created_at",
-                "updated_at"
-            }
-        )
-        
-        copy = ChromaDBEntity(
+        copy = CRMEntity(
             entity_id=str(uuid.uuid4()),
             company_id=target_company_id,
-            namespace="default",  # В default namespace целевой компании
+            namespace="default",
+            entity_type=original.entity_type,
+            entity_subtype=original.entity_subtype,
+            name=original.name,
+            description=original.description,
+            status=original.status,
+            tags=list(original.tags) if original.tags else [],
+            attributes=dict(original.attributes) if original.attributes else {},
+            priority=original.priority,
+            due_date=original.due_date,
+            note_date=original.note_date,
+            assignees=list(original.assignees) if original.assignees else [],
+            attachment_ids=[],
             source_entity_id=original.entity_id,
             source_company_id=original.company_id,
-            external_relationships=external_rels,  # Metadata
-            user_id=target_user_id,  # Новый владелец
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-            **copy_data
+            user_id=target_user_id,
+            relevance=original.relevance,
         )
         
         await self._entity_repo.create(copy)
@@ -216,13 +209,13 @@ class AccessRequestService:
     
     async def _copy_with_dependencies(
         self,
-        original: ChromaDBEntity,
+        original: CRMEntity,
         target_company_id: str,
         target_user_id: str,
         max_depth: int,
         _current_depth: int = 0,
         _copied_map: Optional[Dict[str, str]] = None
-    ) -> ChromaDBEntity:
+    ) -> CRMEntity:
         """Deep copy - рекурсивное копирование с relationships"""
         
         if _copied_map is None:
@@ -232,25 +225,26 @@ class AccessRequestService:
         if _current_depth >= max_depth:
             return await self._copy_shallow(original, target_company_id, target_user_id)
         
-        # Копируем основную entity
-        copy_data = original.model_dump(
-            exclude={
-                "entity_id", "company_id", "namespace", "user_id",
-                "source_entity_id", "source_company_id", "external_relationships",
-                "created_at", "updated_at"
-            }
-        )
-        
-        copy = ChromaDBEntity(
+        copy = CRMEntity(
             entity_id=str(uuid.uuid4()),
             company_id=target_company_id,
             namespace="default",
+            entity_type=original.entity_type,
+            entity_subtype=original.entity_subtype,
+            name=original.name,
+            description=original.description,
+            status=original.status,
+            tags=list(original.tags) if original.tags else [],
+            attributes=dict(original.attributes) if original.attributes else {},
+            priority=original.priority,
+            due_date=original.due_date,
+            note_date=original.note_date,
+            assignees=list(original.assignees) if original.assignees else [],
+            attachment_ids=[],
             source_entity_id=original.entity_id,
             source_company_id=original.company_id,
             user_id=target_user_id,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-            **copy_data
+            relevance=original.relevance,
         )
         
         await self._entity_repo.create(copy)

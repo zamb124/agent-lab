@@ -4,9 +4,12 @@
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Integer, Boolean, Index, UniqueConstraint, text
-from sqlalchemy.orm import declarative_base
+from typing import Optional, Dict, Any
+
+from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean, Float, Index, UniqueConstraint, text
+from sqlalchemy.orm import declarative_base, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
+from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
 
@@ -350,4 +353,49 @@ class DocumentProcessingStatus(Base):
 
     def __repr__(self):
         return f"<DocumentProcessingStatus(document_id='{self.document_id}', status='{self.status}')>"
+
+
+class VectorDocument(Base):
+    """
+    Единое хранилище векторных документов для всех сервисов (RAG, CRM, Agents).
+
+    Используется для семантического поиска через pgvector.
+    Изоляция данных через namespace_id и company_id.
+    """
+
+    __tablename__ = "vector_documents"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    namespace_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    company_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    document_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    document_name: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding = mapped_column(Vector(1024), nullable=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_chunks: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    metadata_: Mapped[Dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_vd_namespace_company", "namespace_id", "company_id"),
+        Index("ix_vd_document_id", "document_id"),
+        Index(
+            "ix_vd_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    def __repr__(self):
+        return f"<VectorDocument(id='{self.id}', namespace='{self.namespace_id}', doc='{self.document_id}')>"
 

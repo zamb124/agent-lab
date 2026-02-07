@@ -33,7 +33,7 @@ class AttachmentService:
         return context.active_company.company_id
     
     def _get_entity_repo(self):
-        """Получает EntityChromaRepository из контейнера"""
+        """Получает EntityRepository из контейнера"""
         from apps.crm.container import get_crm_container
         
         container = get_crm_container()

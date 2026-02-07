@@ -49,11 +49,9 @@ _COMMON_TEST_ENV = {
     "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
     "S3__DEFAULT_BUCKET": "test-bucket",
     "RAG__ENABLED": "true",
-    "RAG__DEFAULT_PROVIDER": "chromadb",
-    "RAG__PROVIDERS__CHROMADB__ENABLED": "true",
-    "RAG__PROVIDERS__CHROMADB__HOST": "localhost",
-    "RAG__PROVIDERS__CHROMADB__PORT": "8101",
-    "RAG__PROVIDERS__CHROMADB__EMBEDDING_API_KEY": "sk-test-key",
+    "RAG__DEFAULT_PROVIDER": "pgvector",
+    "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
+    "RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY": "sk-test-key",
 }
 
 
@@ -92,15 +90,14 @@ def rag_service():
     RAG сервис как реальный HTTP сервер на порту 9002.
     
     Используется для:
-    - Semantic search через ChromaDB
+    - Semantic search через pgvector
     - Document processing
     - Namespace management
     
     Зависимости:
-    - PostgreSQL (порт 5434) - для document_processing_status, namespaces
-    - ChromaDB (порт 8101)
+    - PostgreSQL (порт 5434) - для document_processing_status, namespaces, pgvector embeddings
     - MinIO (порт 9000) - для хранения файлов
-    - ChromaWorker (должен быть запущен отдельно)
+    - RAGWorker (должен быть запущен отдельно)
     """
     manager = SessionServerManager(
         name="RAG",
@@ -128,8 +125,7 @@ def crm_service():
     - Attachments (через RAG service)
     
     Зависимости:
-    - PostgreSQL (порт 5434) - для entity_types, relationships, relationship_types
-    - ChromaDB (порт 8101) - для entities через ChromaDBRAGProvider
+    - PostgreSQL (порт 5434) - для entity_types, relationships, relationship_types, entities через pgvector
     - RAG service (порт 9002) - для attachments
     - Agents service (порт 9001) - для AI анализа через A2A
     """
@@ -185,7 +181,7 @@ def all_services(agents_service, rag_service, crm_service, frontend_service):
     
     Сервисы запускаются в следующем порядке:
     1. Agents (9001) - базовый сервис
-    2. RAG (9002) - зависит от ChromaDB
+    2. RAG (9002) - зависит от PostgreSQL с pgvector
     3. CRM (9003) - зависит от RAG и Agents
     4. Frontend (9004) - зависит от Agents
     """

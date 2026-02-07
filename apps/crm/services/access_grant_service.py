@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from apps.crm.db.models import AccessGrant
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
-from apps.crm.db.repositories.entity_repository import EntityChromaRepository
+from apps.crm.db.repositories.entity_repository import EntityRepository
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -19,7 +19,7 @@ class AccessGrantService:
     def __init__(
         self,
         grant_repo: AccessGrantRepository,
-        entity_repo: EntityChromaRepository
+        entity_repo: EntityRepository
     ):
         self._grant_repo = grant_repo
         self._entity_repo = entity_repo

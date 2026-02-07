@@ -38,7 +38,7 @@ tests/crm/
 - **`mock_llm_redis`** - мок LLM через Redis для AI тестов
 - **`client`** - HTTP клиент для agents API
 - **`taskiq_worker`** - реальный TaskIQ worker
-- **`chroma_worker`** - RAG worker
+- **`rag_worker`** - RAG worker
 
 **CRM-специфичные фикстуры** из `tests/crm/conftest.py`:
 
@@ -109,7 +109,7 @@ uv run pytest tests/crm/ -n auto -v
 ✅ **Задачи** - управление с приоритетами и дедлайнами  
 ✅ **Дневной саммари** - обобщенный отчет за день  
 ✅ **Фильтрация** - по дате, тегам, типам, владельцу  
-✅ **Семантический поиск** - через ChromaDB  
+✅ **Семантический поиск** - через PostgreSQL + pgvector  
 ✅ **Access Requests** - запросы доступа к entities  
 ✅ **User Profiles** - профили с настройками  
 ✅ **Исторические заметки** - заметки задним числом  
@@ -202,7 +202,7 @@ async def test_example(crm_client, unique_id):
 
 - Python 3.12+
 - uv (package manager)
-- Docker (для тестовых сервисов: PostgreSQL, Redis, ChromaDB, MinIO)
+- Docker (для тестовых сервисов: PostgreSQL, Redis, MinIO)
 
 ## Тестовое окружение
 

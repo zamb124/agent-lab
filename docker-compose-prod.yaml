@@ -16,8 +16,6 @@ x-common-env: &common-env
   SERVER__CRM_SERVICE_URL: http://crm:8003
   SERVER__RAG_SERVICE_URL: http://rag:8004
   AUTH__JWT_SECRET: ${AUTH__JWT_SECRET:-change-me-in-production}
-  CHROMA_HOST: chroma
-  CHROMA_PORT: "8000"
 
 x-healthcheck: &healthcheck
   interval: 30s
@@ -34,7 +32,7 @@ services:
   # Infrastructure
   # ============================================
   postgres:
-    image: postgres:15
+    image: pgvector/pgvector:pg15
     container_name: platform-postgres
     environment:
       POSTGRES_DB: platform_db
@@ -65,20 +63,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    restart: unless-stopped
-    networks:
-      - platform-net
-
-  chroma:
-    image: chromadb/chroma:latest
-    container_name: platform-chroma
-    ports:
-      - "127.0.0.1:8100:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-    environment:
-      ANONYMIZED_TELEMETRY: "False"
-      IS_PERSISTENT: "TRUE"
     restart: unless-stopped
     networks:
       - platform-net
@@ -127,8 +111,6 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-      chroma:
-        condition: service_started
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
@@ -185,8 +167,6 @@ services:
         condition: service_completed_successfully
       agents:
         condition: service_healthy
-      chroma:
-        condition: service_started
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
@@ -215,8 +195,6 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-      chroma:
-        condition: service_started
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
@@ -267,16 +245,16 @@ services:
     networks:
       - platform-net
 
-  chroma-worker:
+  rag-worker:
     build:
       <<: *default-build
-      target: chroma-worker
-    container_name: platform-chroma-worker
+      target: rag-worker
+    container_name: platform-rag-worker
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./conf.local.json:/app/conf.local.json:ro
-      - ./apps/chroma_worker/conf.json:/app/apps/chroma_worker/conf.json:ro
-      - chroma_worker_logs:/app/logs
+      - ./apps/rag_worker/conf.json:/app/apps/rag_worker/conf.json:ro
+      - rag_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -284,8 +262,6 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-      chroma:
-        condition: service_started
     restart: unless-stopped
     networks:
       - platform-net
@@ -293,13 +269,12 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  chroma_data:
   agents_logs:
   frontend_logs:
   crm_logs:
   rag_logs:
   worker_logs:
-  chroma_worker_logs:
+  rag_worker_logs:
 
 networks:
   platform-net:

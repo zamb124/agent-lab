@@ -5,7 +5,7 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
-from apps.crm.models.entity import ChromaDBEntity
+from apps.crm.db.models import CRMEntity
 from apps.crm.db.models import AccessGrant
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
@@ -27,7 +27,7 @@ class AccessControlService:
     
     async def can_read_entity(
         self,
-        entity: ChromaDBEntity,
+        entity: CRMEntity,
         user_id: Optional[str],
         company_id: Optional[str]
     ) -> bool:
@@ -68,7 +68,7 @@ class AccessControlService:
     
     async def can_write_entity(
         self,
-        entity: ChromaDBEntity,
+        entity: CRMEntity,
         user_id: str,
         company_id: str
     ) -> bool:
@@ -97,7 +97,7 @@ class AccessControlService:
     
     async def filter_fields(
         self,
-        entity: ChromaDBEntity,
+        entity: CRMEntity,
         user_id: Optional[str],
         company_id: Optional[str]
     ) -> Dict[str, Any]:
@@ -124,7 +124,7 @@ class AccessControlService:
     
     async def _filter_public_fields(
         self,
-        entity: ChromaDBEntity
+        entity: CRMEntity
     ) -> Dict[str, Any]:
         """Фильтрация по EntityType.public_fields"""
         
@@ -147,7 +147,7 @@ class AccessControlService:
     
     async def _has_full_access(
         self,
-        entity: ChromaDBEntity,
+        entity: CRMEntity,
         user_id: Optional[str],
         company_id: Optional[str]
     ) -> bool:

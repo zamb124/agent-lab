@@ -9,9 +9,9 @@
 ```python
 # Переменные окружения для RAG
 os.environ.setdefault("RAG__ENABLED", "true")
-os.environ.setdefault("RAG__DEFAULT_PROVIDER", "chromadb")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__HOST", "localhost")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__PORT", "8101")
+os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
+os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__HOST", "localhost")
+os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__PORT", "5433")
 
 # Фикстуры
 @pytest_asyncio.fixture
@@ -21,7 +21,7 @@ async def rag_app()  # FastAPI приложение RAG
 async def rag_client(rag_app)  # HTTP клиент
 
 @pytest_asyncio.fixture
-async def rag_provider_chromadb()  # Реальный ChromaDB провайдер
+async def rag_provider_pgvector()  # Реальный pgvector провайдер
 
 @pytest.fixture
 def unique_namespace_name(unique_id)  # Уникальное имя для изоляции
@@ -70,8 +70,8 @@ tests/rag/
 
 ```makefile
 test-rag:
-	@echo "🧪 Запуск RAG тестов (ChromaDB + MinIO)..."
-	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test chroma-test minio-test
+	@echo "🧪 Запуск RAG тестов (PostgreSQL + pgvector + MinIO)..."
+	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test
 	@echo "⏳ Ожидание готовности сервисов..."
 	sleep 5
 	uv run pytest tests/rag/ -v --tb=short
@@ -84,9 +84,8 @@ test-rag:
 
 ### ✅ Без моков
 Все тесты используют реальные сервисы:
-- ChromaDB (порт 8101)
+- PostgreSQL + pgvector (порт 5433)
 - MinIO (порт 9002)
-- PostgreSQL (порт 5434)
 - Redis (порт 6380)
 
 Мокается только LLM (через TESTING=true).
@@ -101,7 +100,7 @@ namespace_name = f"test_namespace_{uuid}"
 ```
 
 ### ✅ Автоматический cleanup
-Фикстура `rag_provider_chromadb` автоматически удаляет тестовые коллекции после teardown.
+Фикстура `rag_provider_pgvector` автоматически удаляет тестовые данные после teardown.
 
 ## Запуск
 
@@ -149,7 +148,7 @@ async def test_list_providers(rag_client):
 ```python
 @pytest.mark.asyncio
 async def test_create_namespace(rag_client, unique_namespace_name):
-    """POST /namespaces создает namespace в ChromaDB"""
+    """POST /namespaces создает namespace в PostgreSQL + pgvector"""
     response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name}
@@ -309,7 +308,7 @@ uv run pytest tests/rag/ --cov=apps.rag --cov-report=term-missing
 - ✅ Команда make test-rag добавлена
 - ✅ Документация создана
 - ✅ Все тесты без моков (кроме LLM)
-- ✅ ChromaDB уже настроен в docker-compose-test.yaml
+- ✅ PostgreSQL + pgvector уже настроен в docker-compose-test.yaml
 - ✅ Cleanup автоматический
 
 **Тесты готовы к использованию!** 🚀

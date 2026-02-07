@@ -3,7 +3,7 @@
 
 Этот модуль содержит:
 - SessionWorkerManager: универсальный класс для управления worker процессами
-- Фикстуры для TaskIQ worker и ChromaWorker
+- Фикстуры для TaskIQ worker и RAGWorker
 """
 
 import os
@@ -22,8 +22,8 @@ from filelock import FileLock
 # Константы для файлов блокировки и PID
 _TASKIQ_WORKER_LOCK = "/tmp/platform_test_taskiq_worker.lock"
 _TASKIQ_WORKER_PID = "/tmp/platform_test_taskiq_worker.pid"
-_CHROMA_WORKER_LOCK = "/tmp/platform_test_chroma_worker.lock"
-_CHROMA_WORKER_PID = "/tmp/platform_test_chroma_worker.pid"
+_RAG_WORKER_LOCK = "/tmp/platform_test_rag_worker.lock"
+_RAG_WORKER_PID = "/tmp/platform_test_rag_worker.pid"
 
 
 class SessionWorkerManager:
@@ -351,16 +351,16 @@ def taskiq_worker():
 
 
 @pytest.fixture(scope="session")
-def chroma_worker():
+def rag_worker():
     """
-    Запускает ChromaWorker для обработки RAG задач в тестах.
+    Запускает RAGWorker для обработки RAG задач в тестах.
     
-    ChromaWorker обрабатывает задачи индексации документов в ChromaDB через SessionWorkerManager.
+    RAGWorker обрабатывает задачи индексации документов в pgvector через SessionWorkerManager.
     
     scope="session" - worker запускается один раз на все тесты.
     
     При pytest-xdist используется filelock для синхронизации - 
-    первый worker запускает ChromaWorker, остальные ждут и переиспользуют его.
+    первый worker запускает RAGWorker, остальные ждут и переиспользуют его.
     """
     # В Docker worker уже запущен
     if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
@@ -369,10 +369,10 @@ def chroma_worker():
     
     # Используем SessionWorkerManager для управления worker
     manager = SessionWorkerManager(
-        name="ChromaWorker",
-        lock_file=_CHROMA_WORKER_LOCK,
-        pid_file=_CHROMA_WORKER_PID,
-        command=[sys.executable, "-m", "taskiq", "worker", "apps.chroma_worker.worker:broker", "-w", "2"],
+        name="RAGWorker",
+        lock_file=_RAG_WORKER_LOCK,
+        pid_file=_RAG_WORKER_PID,
+        command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:broker", "-w", "2"],
         env={
             "TESTING": "true",
             "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
@@ -380,22 +380,20 @@ def chroma_worker():
             "DATABASE__REDIS_URL": "redis://localhost:6380/0",
             "TASKS__BROKER_URL": "redis://localhost:6380/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
-            "RAG__PROVIDERS__CHROMADB__HOST": "localhost",
-            "RAG__PROVIDERS__CHROMADB__PORT": "8101",
             "S3__ENDPOINT_URL": "http://localhost:9010",
             "S3__ACCESS_KEY": "minioadmin",
             "S3__SECRET_KEY": "minioadmin",
             "S3__BUCKET_NAME": "platform-test",
-            "RAG__PROVIDERS__CHROMADB__MOCK_EMBEDDINGS": "true",
+            "RAG__PROVIDERS__PGVECTOR__MOCK_EMBEDDINGS": "true",
         },
         cleanup_patterns=[
-            "apps.chroma_worker.worker",
+            "apps.rag_worker.worker",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
         startup_wait=3.0,
-        log_file="/tmp/chroma_worker_test.log",
-        err_file="/tmp/chroma_worker_test_err.log",
+        log_file="/tmp/rag_worker_test.log",
+        err_file="/tmp/rag_worker_test_err.log",
     )
     
     with manager.start() as worker_process:
@@ -403,11 +401,11 @@ def chroma_worker():
 
 
 @pytest.fixture
-def taskiq_broker(chroma_worker):
+def taskiq_broker(rag_worker):
     """
     Возвращает TaskIQ broker для RAG тестов.
     
-    Зависит от chroma_worker - гарантирует что worker запущен.
+    Зависит от rag_worker - гарантирует что worker запущен.
     """
     from apps.broker.broker import broker
     return broker

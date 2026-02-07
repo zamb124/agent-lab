@@ -3,7 +3,7 @@
 
 Конкретные brokers создаются в:
 - apps/broker/broker.py - для платформенных задач (agents, crm)
-- apps/chroma_worker/chroma_broker.py - для RAG задач
+- apps/rag_worker/broker.py - для RAG задач
 """
 
 import asyncio

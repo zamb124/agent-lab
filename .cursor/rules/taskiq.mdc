@@ -349,7 +349,7 @@ async def reliable_task(data: str) -> str:
 ### Запуск тестов (с Redis)
 
 ```bash
-make test  # Автоматически поднимает postgres, chroma, redis
+make test  # Автоматически поднимает postgres (pgvector), redis
 ```
 
 ### Инициализация брокера в тестах

@@ -33,15 +33,15 @@ ENV TESTING=true
 
 CMD ["python", "-m", "pytest", "tests/", "-v"]
 
-# ChromaWorker stage для тестов
-FROM base-test AS chroma-worker
+# RAG Worker stage для тестов
+FROM base-test AS rag-worker
 
-# chroma-worker зависимости (системные пакеты уже в базовом образе)
+# rag-worker зависимости (системные пакеты уже в базовом образе)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system --group chroma-worker
+    uv pip install --system --group rag-worker
 
 COPY core/ ./core/
-COPY apps/chroma_worker/ ./apps/chroma_worker/
+COPY apps/rag_worker/ ./apps/rag_worker/
 COPY apps/__init__.py ./apps/
 
 ENV PYTHONPATH=/app
@@ -49,4 +49,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV TESTING=true
 
-CMD ["taskiq", "worker", "apps.chroma_worker.worker:broker", "--workers", "1"]
+CMD ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "1"]

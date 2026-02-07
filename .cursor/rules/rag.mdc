@@ -1,5 +1,5 @@
 ---
-description: "RAG система - провайдеры, namespaces, документы"
+description: "RAG система - провайдеры, namespaces, документы, pgvector"
 alwaysApply: false
 globs:
   - "core/rag/**/*"
@@ -10,10 +10,10 @@ globs:
 
 ## Обзор
 
-RAG Service - микросервис для управления документами и семантического поиска с поддержкой множественных провайдеров (ChromaDB, Agentset).
+RAG Service - микросервис для управления документами и семантического поиска с поддержкой множественных провайдеров (pgvector, Agentset).
 
 **Ключевые особенности:**
-- Поддержка нескольких провайдеров (ChromaDB, Agentset)
+- Поддержка нескольких провайдеров (pgvector, Agentset)
 - Изоляция данных через namespaces
 - Асинхронная обработка документов через TaskIQ
 - Хранение оригиналов файлов в S3/MinIO
@@ -37,7 +37,7 @@ apps/rag/
 │   ├── documents.py         # Управление документами
 │   └── search.py            # Семантический поиск
 ├── services/
-│   └── chroma_worker_client.py  # Клиент для TaskIQ workers
+│   └── rag_worker_client.py # Клиент для TaskIQ workers
 └── ui/                      # Micro-frontend (Lit 3 + Zustand)
     ├── index.html
     ├── index.js
@@ -69,14 +69,15 @@ core/rag/
 ├── namespace_manager.py     # Менеджер namespaces
 ├── repository.py            # Репозиторий для DocumentProcessingStatus
 ├── providers/
-│   ├── chromadb_provider.py  # ChromaDB провайдер
-│   └── agentset_provider.py  # Agentset провайдер
+│   ├── pgvector_provider.py # pgvector провайдер (PostgreSQL)
+│   └── agentset_provider.py # Agentset провайдер
 └── services/
     ├── document_parser.py    # Парсинг через Unstructured
     └── embedding_service.py  # Embeddings через OpenRouter
 
 core/db/models.py
-└── DocumentProcessingStatus  # SQLAlchemy модель статуса обработки
+├── VectorDocument             # SQLAlchemy модель для vector_documents
+└── DocumentProcessingStatus   # SQLAlchemy модель статуса обработки
 ```
 
 ## API Endpoints
@@ -146,9 +147,27 @@ class RAGNamespace(BaseModel):
     metadata: Dict[str, Any] = {}
 ```
 
+### VectorDocument (SQLAlchemy)
+```python
+class VectorDocument(Base):
+    __tablename__ = "vector_documents"
+    id: Mapped[str]
+    namespace_id: Mapped[str]
+    company_id: Mapped[Optional[str]]
+    document_id: Mapped[str]
+    document_name: Mapped[Optional[str]]
+    content: Mapped[str]
+    embedding = mapped_column(Vector(1024))
+    chunk_index: Mapped[int]
+    total_chunks: Mapped[int]
+    metadata_: Mapped[Dict[str, Any]]
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
+```
+
 ### DocumentProcessingStatus (SQLAlchemy)
 ```python
-class DocumentProcessingStatus(BaseModel):
+class DocumentProcessingStatus(Base):
     document_id: str
     task_id: str
     namespace_id: str
@@ -219,27 +238,26 @@ class BaseRAGProvider(ABC):
     ) -> List[RAGSearchResult]
 ```
 
-### ChromaDB Provider
+### pgvector Provider
 
 **Особенности:**
-- Работает через HTTP (docker-контейнер `chromadb/chroma`)
+- Работает через PostgreSQL с расширением pgvector
 - Embeddings через OpenRouter
 - Парсинг документов через Unstructured
 - Асинхронная обработка через TaskIQ workers
 - Автоматическое удаление старых чанков при перезаписи документа
 - Хранение оригиналов в S3/MinIO
+- HNSW индекс для быстрого поиска по cosine distance
 
 **Конфигурация (conf.json):**
 ```json
 {
   "rag": {
     "enabled": true,
-    "default_provider": "chromadb",
+    "default_provider": "pgvector",
     "providers": {
-      "chromadb": {
+      "pgvector": {
         "enabled": true,
-        "host": "localhost",
-        "port": 8100,
         "embedding_model": "openai/text-embedding-3-small",
         "embedding_api_key": "sk-or-...",
         "chunk_size": 1000,
@@ -260,7 +278,7 @@ class BaseRAGProvider(ABC):
    - Парсит через Unstructured
    - Разбивает на чанки
    - Генерирует embeddings через OpenRouter
-   - Индексирует в ChromaDB
+   - Индексирует в vector_documents (PostgreSQL + pgvector)
    - Обновляет статус на `completed`
 
 ### Agentset Provider
@@ -289,7 +307,7 @@ class BaseRAGProvider(ABC):
 
 ### TaskIQ Workers
 
-**Файл:** `apps/rag/services/chroma_worker_client.py`
+**Файл:** `apps/rag_worker/tasks/indexing_tasks.py`
 
 **Задачи:**
 - `process_document_task` - обработка загруженного документа
@@ -309,7 +327,7 @@ async def process_document_task(
     # 2. Парсить через Unstructured
     # 3. Разбить на чанки
     # 4. Генерировать embeddings
-    # 5. Индексировать в ChromaDB
+    # 5. Индексировать в vector_documents (pgvector)
     # 6. Обновить статус в БД
 ```
 
@@ -352,9 +370,9 @@ class NamespaceManager:
         Преобразует scope в конкретный namespace_id.
         
         Examples:
-        - scope="company", context_id="acme_corp" → "company:acme_corp"
-        - scope="flow", context_id="support_agent" → "flow:support_agent"
-        - scope="session", session_id="user123:chat456" → "session:user123:chat456"
+        - scope="company", context_id="acme_corp" -> "company:acme_corp"
+        - scope="flow", context_id="support_agent" -> "flow:support_agent"
+        - scope="session", session_id="user123:chat456" -> "session:user123:chat456"
         """
 ```
 
@@ -408,7 +426,6 @@ response = await rag_client.request(
 ```
 tests/rag/
 ├── README.md
-├── TESTS_COMPLETE.md
 ├── test_documents_api.py
 ├── test_namespaces_api.py
 ├── test_providers_api.py
@@ -424,11 +441,6 @@ tests/rag/
 async def rag_client(httpx_client_factory) -> AsyncClient:
     """HTTP клиент для RAG service"""
     return await httpx_client_factory("http://localhost:9002")
-
-@pytest_asyncio.fixture
-async def chroma_client() -> chromadb.ClientAPI:
-    """ChromaDB клиент для прямого доступа"""
-    return chromadb.HttpClient(host="localhost", port=8100)
 ```
 
 ### Docker Compose для тестов
@@ -436,15 +448,15 @@ async def chroma_client() -> chromadb.ClientAPI:
 ```yaml
 # docker-compose-test.yaml
 services:
-chroma:
-  image: chromadb/chroma:latest
-  ports:
-      - "8100:8000"
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5433:5432"
   
   minio:
     image: minio/minio:latest
     ports:
-      - "9010:9000"  # НЕ 9002 - конфликт с RAG service!
+      - "9010:9000"
     command: server /data
 ```
 
@@ -536,17 +548,17 @@ class DocumentParser:
 ### 1. ВСЕГДА используй префикс `/rag/api/v1/`
 
 ```python
-# ✅ ПРАВИЛЬНО
+# ПРАВИЛЬНО
 response = await client.post("/rag/api/v1/namespaces/...")
 
-# ❌ НЕПРАВИЛЬНО
+# НЕПРАВИЛЬНО
 response = await client.post("/namespaces/...")
 ```
 
 ### 2. НЕ добавляй Content-Type при отправке файлов
 
 ```python
-# ✅ ПРАВИЛЬНО
+# ПРАВИЛЬНО
 response = await service_client.request(
     method="POST",
     endpoint="/rag/api/v1/namespaces/{id}/documents",
@@ -554,7 +566,7 @@ response = await service_client.request(
     data={"metadata": json.dumps(metadata)},
 )
 
-# ❌ НЕПРАВИЛЬНО
+# НЕПРАВИЛЬНО
 response = await service_client.request(
     method="POST",
     endpoint="/rag/api/v1/namespaces/{id}/documents",
@@ -566,13 +578,13 @@ response = await service_client.request(
 ### 3. Используй NamespaceManager для scope resolution
 
 ```python
-# ✅ ПРАВИЛЬНО
+# ПРАВИЛЬНО
 namespace_id = await namespace_manager.resolve_namespace(
     scope="flow",
     context_id=context.company_id,
 )
 
-# ❌ НЕПРАВИЛЬНО
+# НЕПРАВИЛЬНО
 namespace_id = f"flow:{context.company_id}"  # Хардкод формата
 ```
 
@@ -591,7 +603,7 @@ assert status.status == "completed"
 ### 5. Используй асинхронную обработку
 
 ```python
-# ✅ ПРАВИЛЬНО - TaskIQ worker обрабатывает документ асинхронно
+# ПРАВИЛЬНО - TaskIQ worker обрабатывает документ асинхронно
 await process_document_task.kiq(
     namespace_id=namespace_id,
     document_id=document_id,
@@ -601,7 +613,7 @@ await process_document_task.kiq(
     metadata=metadata,
 )
 
-# ❌ НЕПРАВИЛЬНО - синхронная обработка блокирует API
+# НЕПРАВИЛЬНО - синхронная обработка блокирует API
 content = parse_document(file_path)
 await provider.add_document(namespace_id, document_id, content)
 ```

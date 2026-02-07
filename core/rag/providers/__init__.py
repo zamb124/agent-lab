@@ -3,10 +3,10 @@
 """
 
 from .agentset_provider import AgentsetRAGProvider
-from .chromadb_provider import ChromaDBRAGProvider
+from .pgvector_provider import PgVectorProvider
 
 __all__ = [
     "AgentsetRAGProvider",
-    "ChromaDBRAGProvider",
+    "PgVectorProvider",
 ]
 

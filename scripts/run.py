@@ -9,7 +9,7 @@
     python scripts/run.py rag         # Запуск rag сервиса
     python scripts/run.py worker      # Запуск TaskIQ worker
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
-    python scripts/run.py chroma-worker  # Запуск ChromaDB worker
+    python scripts/run.py rag-worker     # Запуск RAG worker
 
 Конфигурация загружается из conf.json и conf.local.json.
 Переменные окружения имеют приоритет над конфигами.
@@ -53,9 +53,9 @@ SERVICES = {
         "broker": "apps.broker.worker:broker",
         "workers": "1",
     },
-    "chroma-worker": {
+    "rag-worker": {
         "type": "taskiq-worker",
-        "broker": "apps.chroma_worker.worker:broker",
+        "broker": "apps.rag_worker.worker:broker",
         "workers": "1",
     },
     

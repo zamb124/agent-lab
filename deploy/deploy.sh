@@ -240,14 +240,14 @@ run_healthchecks() {
     healthcheck_service "frontend (8002)" "http://localhost:8002/health" || failed=1
     healthcheck_service "crm (8003)" "http://localhost:8003/health" || failed=1
     healthcheck_service "rag (8004)" "http://localhost:8004/health" || failed=1
-    healthcheck_service "chroma (8100)" "http://localhost:8100/api/v2/heartbeat" || failed=1
+    # pgvector использует PostgreSQL, отдельный healthcheck не нужен
     
     # Контейнеры без HTTP
     healthcheck_container "redis" "redis" || failed=1
     healthcheck_container "postgres" "postgres" || failed=1
     healthcheck_container "worker" "worker" || failed=1
     healthcheck_container "scheduler" "scheduler" || failed=1
-    healthcheck_container "chroma-worker" "chroma-worker" || failed=1
+    healthcheck_container "rag-worker" "rag-worker" || failed=1
     
     if [ $failed -eq 1 ]; then
         log_error "Некоторые сервисы не прошли проверку!"

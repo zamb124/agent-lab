@@ -22,8 +22,8 @@ class CRMContainer(BaseContainer):
     - auth_service, variables_service
     
     Добавляет CRM-специфичные:
-    - CRMDatabase для реляционных данных (relationships, notes, tasks)
-    - ChromaDB для сущностей с embeddings
+    - CRMDatabase для реляционных данных (relationships, entity types, relationships)
+    - pgvector для семантического поиска (через RAGRepository)
     
     Пример:
         container = get_crm_container()
@@ -60,8 +60,8 @@ class CRMContainer(BaseContainer):
     
     @lazy
     def entity_repository(self):
-        from apps.crm.db.repositories.entity_repository import EntityChromaRepository
-        return EntityChromaRepository(rag_repository=self.rag_repository)
+        from apps.crm.db.repositories.entity_repository import EntityRepository
+        return EntityRepository(db=self.crm_db, rag_repository=self.rag_repository)
     
     @lazy
     def company_mapping_repository(self):
@@ -82,7 +82,7 @@ class CRMContainer(BaseContainer):
     
     @lazy
     def rag_repository(self):
-        """RAGRepository для работы с ChromaDB (сущности с embeddings)"""
+        """RAGRepository для работы с pgvector (сущности с embeddings)"""
         from core.rag import RAGRepository
         return RAGRepository()
     

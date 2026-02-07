@@ -1,8 +1,7 @@
 """
-Test runners для оценки агентов/skills.
+Test runners для оценки агентов/нод.
 """
 
-from .base import BaseTestRunner
-from .dialog_runner import DialogTestRunner
+from .test_runner import TestRunner
 
-__all__ = ["BaseTestRunner", "DialogTestRunner"]
+__all__ = ["TestRunner"]

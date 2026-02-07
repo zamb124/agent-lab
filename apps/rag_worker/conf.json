@@ -1,6 +1,6 @@
 {
   "service": {
-    "name": "chroma-worker",
+    "name": "rag-worker",
     "version": "1.0.0"
   },
   "database": {
@@ -12,13 +12,17 @@
   },
   "rag": {
     "enabled": true,
-    "default_provider": "chromadb",
+    "default_provider": "pgvector",
     "providers": {
-      "chromadb": {
+      "pgvector": {
         "enabled": true,
-        "host": "${CHROMA_HOST:-chroma}",
-        "port": 8000
+        "db_url": "${DATABASE__URL}",
+        "embedding_api_key": "${RAG__EMBEDDING_API_KEY}"
       }
+    },
+    "embedding": {
+      "model": "baai/bge-m3",
+      "dimension": 1024
     }
   },
   "logging": {
@@ -26,5 +30,3 @@
     "format": "json"
   }
 }
-
-

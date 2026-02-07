@@ -1,8 +1,8 @@
 """
-CRM Pydantic Models.
+CRM Models.
 """
 
-from apps.crm.models.entity import ChromaDBEntity
+from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import (
     EntityCreate,
     EntityUpdate,
@@ -18,7 +18,7 @@ from apps.crm.models.api import (
 )
 
 __all__ = [
-    "ChromaDBEntity",
+    "CRMEntity",
     "EntityCreate",
     "EntityUpdate",
     "EntityResponse",

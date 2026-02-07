@@ -38,7 +38,7 @@ from core.http import get_httpx_client
 from core.logging import setup_logging, get_logger
 from core.container import BaseContainer
 from core.variables import VariablesService, VariableResolver, get_state, set_state_in_context
-# RAG imports moved to core.rag (requires chromadb)
+# RAG imports moved to core.rag
 from core.billing import BillingService
 from core.payments import PaymentService, PaymentSyncService
 from core.files import S3Client, FileProcessor, AudioProcessor, FileMetadata

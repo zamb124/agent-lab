@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any, Tuple, Set
 from collections import deque
 import heapq
 
-from apps.crm.models.entity import ChromaDBEntity
+from apps.crm.db.models import CRMEntity
 from apps.crm.models.graph import (
     GraphNode,
     GraphEdge,
@@ -19,7 +19,7 @@ from apps.crm.models.graph import (
 )
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
-from apps.crm.db.repositories.entity_repository import EntityChromaRepository
+from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.models import Relationship, RelationshipType
 from apps.crm.services.access_control_service import AccessControlService
 from core.context import get_context
@@ -44,7 +44,7 @@ class GraphService:
         self,
         relationship_repo: RelationshipRepository,
         relationship_type_repo: RelationshipTypeRepository,
-        entity_repo: EntityChromaRepository,
+        entity_repo: EntityRepository,
         access_control: AccessControlService
     ):
         self._relationship_repo = relationship_repo
@@ -104,7 +104,7 @@ class GraphService:
         
         visited: Set[str] = set()
         entity_levels: Dict[str, int] = {entity_id: 0}
-        entities_dict: Dict[str, ChromaDBEntity] = {entity_id: root_entity}
+        entities_dict: Dict[str, CRMEntity] = {entity_id: root_entity}
         edges_dict: Dict[str, Relationship] = {}  # Используем dict для дедупликации по relationship_id
         
         queue = deque([(entity_id, 0)])
@@ -393,7 +393,7 @@ class GraphService:
     
     async def _apply_access_control(
         self,
-        entities_dict: Dict[str, ChromaDBEntity],
+        entities_dict: Dict[str, CRMEntity],
         entity_levels: Dict[str, int],
         user_id: Optional[str],
         company_id: Optional[str]

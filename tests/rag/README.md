@@ -5,7 +5,7 @@
 ## Принципы
 
 - **Без моков** (кроме LLM)
-- **Реальный ChromaDB** на порту 8101
+- **Реальный PostgreSQL + pgvector** на порту 5433
 - **Реальный MinIO** на порту 9002
 - **Централизованные фикстуры** в `tests/conftest.py`
 - **Изоляция данных** через `unique_namespace_name`
@@ -38,13 +38,13 @@ async def test_providers(rag_client):
     assert response.status_code == 200
 ```
 
-### rag_provider_chromadb
-Реальный ChromaDB провайдер с автоматическим cleanup.
+### rag_provider_pgvector
+Реальный pgvector провайдер с автоматическим cleanup.
 
 ```python
-async def test_provider(rag_provider_chromadb):
-    collections = rag_provider_chromadb._client.list_collections()
-    assert collections is not None
+async def test_provider(rag_provider_pgvector):
+    # Проверка подключения к PostgreSQL + pgvector
+    assert rag_provider_pgvector is not None
 ```
 
 ### unique_namespace_name
@@ -65,7 +65,7 @@ make test-rag
 ```
 
 Эта команда:
-1. Поднимает docker-compose сервисы (postgres, redis, chroma, minio)
+1. Поднимает docker-compose сервисы (postgres, redis, minio)
 2. Ждет 5 секунд готовности сервисов
 3. Запускает pytest для `tests/rag/`
 
@@ -124,24 +124,26 @@ uv run pytest tests/rag/test_providers_api.py::test_list_providers -v
 
 ```python
 os.environ.setdefault("RAG__ENABLED", "true")
-os.environ.setdefault("RAG__DEFAULT_PROVIDER", "chromadb")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__ENABLED", "true")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__HOST", "localhost")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__PORT", "8101")
-os.environ.setdefault("RAG__PROVIDERS__CHROMADB__EMBEDDING_API_KEY", "sk-test-key")
+os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
+os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__ENABLED", "true")
+os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__HOST", "localhost")
+os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__PORT", "5433")
+os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY", "sk-test-key")
 ```
 
 ### Docker Compose (docker-compose-test.yaml)
 
-ChromaDB уже настроен:
+PostgreSQL + pgvector уже настроен:
 
 ```yaml
-chroma-test:
-  image: chromadb/chroma:latest
+postgres-test:
+  image: pgvector/pgvector:pg16
   ports:
-    - "8101:8000"
+    - "5433:5432"
   environment:
-    - ANONYMIZED_TELEMETRY=False
+    - POSTGRES_USER=platform_user
+    - POSTGRES_PASSWORD=admin
+    - POSTGRES_DB=platform_test
 ```
 
 ## Примеры тестов
@@ -225,17 +227,17 @@ async def test_search_documents(rag_client, unique_namespace_name):
 
 ## Troubleshooting
 
-### ChromaDB не запускается
+### PostgreSQL + pgvector не запускается
 
 ```bash
 # Проверяем статус
-docker-compose -f docker-compose-test.yaml ps chroma-test
+docker-compose -f docker-compose-test.yaml ps postgres-test
 
 # Логи
-docker-compose -f docker-compose-test.yaml logs chroma-test
+docker-compose -f docker-compose-test.yaml logs postgres-test
 
 # Перезапуск
-docker-compose -f docker-compose-test.yaml restart chroma-test
+docker-compose -f docker-compose-test.yaml restart postgres-test
 ```
 
 ### Тесты падают с connection error
@@ -243,18 +245,18 @@ docker-compose -f docker-compose-test.yaml restart chroma-test
 Убедитесь что сервисы запущены:
 
 ```bash
-docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test chroma-test minio-test
+docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test
 ```
 
 Подождите несколько секунд для healthcheck.
 
 ### Cleanup не работает
 
-Фикстура `rag_provider_chromadb` автоматически удаляет тестовые коллекции (начинающиеся с `test_`). Если нужно очистить вручную:
+Фикстура `rag_provider_pgvector` автоматически удаляет тестовые данные. Если нужно очистить вручную:
 
 ```bash
-# Перезапуск ChromaDB удалит все данные
-docker-compose -f docker-compose-test.yaml restart chroma-test
+# Перезапуск PostgreSQL удалит все данные
+docker-compose -f docker-compose-test.yaml restart postgres-test
 ```
 
 ## CI/CD
@@ -299,7 +301,7 @@ def my_rag_fixture():
 ## Поддержка
 
 При проблемах проверьте:
-1. ChromaDB запущен: `docker ps | grep chroma-test`
-2. Порт 8101 свободен: `lsof -i :8101`
-3. Логи сервиса: `docker-compose -f docker-compose-test.yaml logs chroma-test`
+1. PostgreSQL запущен: `docker ps | grep postgres-test`
+2. Порт 5433 свободен: `lsof -i :5433`
+3. Логи сервиса: `docker-compose -f docker-compose-test.yaml logs postgres-test`
 

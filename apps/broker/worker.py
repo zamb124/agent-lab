@@ -26,7 +26,7 @@ import apps.agents.src.tasks.push_notification_tasks  # noqa: F401
 import apps.agents.src.tasks.scheduled_tasks  # noqa: F401
 import apps.agents.src.tasks.company_init_tasks  # noqa: F401
 
-# CRM attachment tasks теперь в chroma broker (apps/chroma_worker/worker.py)
+# CRM attachment tasks теперь в rag broker (apps/rag_worker/worker.py)
 # import apps.crm.tasks.attachment_tasks  # noqa: F401
 
 # Экспортируем объекты для taskiq CLI

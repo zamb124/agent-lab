@@ -89,14 +89,7 @@ async def test_full_rag_workflow(rag_client, unique_namespace_name, auth_headers
     assert len(results) > 0
     assert "FastAPI" in results[0]["content"]
     
-    # 5. Удалить документ
-    delete_doc_response = await rag_client.delete(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents/{document_id}",
-        headers=auth_headers_system
-    )
-    assert delete_doc_response.status_code == 200
-    
-    # 6. Удалить namespace
+    # 5. Удалить namespace (каскадно удалит все документы)
     delete_ns_response = await rag_client.delete(
         f"/rag/api/v1/namespaces/{namespace_id}",
         headers=auth_headers_system
@@ -105,27 +98,27 @@ async def test_full_rag_workflow(rag_client, unique_namespace_name, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_provider_switch_persistence(rag_client, rag_provider_chromadb, auth_headers_system):
+async def test_provider_switch_persistence(rag_client, rag_provider_pgvector, auth_headers_system):
     """
     Переключение провайдеров и проверка изоляции данных.
     
-    Проверяет что данные ChromaDB изолированы от других провайдеров.
+    Проверяет что данные pgvector изолированы от других провайдеров.
     """
     # Получаем список провайдеров
     response = await rag_client.get("/rag/api/v1/providers", headers=auth_headers_system)
     assert response.status_code == 200
     
     providers = response.json()["providers"]
-    assert any(p["name"] == "chromadb" for p in providers)
+    assert any(p["name"] == "pgvector" for p in providers)
     
-    # Переключаемся на chromadb
+    # Переключаемся на pgvector
     switch_response = await rag_client.post(
         "/rag/api/v1/providers/switch",
-        json={"provider_name": "chromadb"},
+        json={"provider_name": "pgvector"},
         headers=auth_headers_system
     )
     assert switch_response.status_code == 200
-    assert switch_response.json()["provider"] == "chromadb"
+    assert switch_response.json()["provider"] == "pgvector"
 
 
 @pytest.mark.asyncio

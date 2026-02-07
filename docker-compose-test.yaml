@@ -1,7 +1,7 @@
 services:
   postgres-test:
     platform: "linux/amd64"
-    image: postgres:15
+    image: pgvector/pgvector:pg15
     container_name: platform-postgres-test
     environment:
       POSTGRES_DB: platform_test
@@ -29,20 +29,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - test-net
-
-  chroma-test:
-    platform: "linux/amd64"
-    image: chromadb/chroma:latest
-    container_name: platform-chroma-test
-    ports:
-      - "8101:8000"
-    volumes:
-      - chroma_test_data:/chroma/chroma
-    environment:
-      - ANONYMIZED_TELEMETRY=False
-      - IS_PERSISTENT=TRUE
     networks:
       - test-net
 
@@ -130,29 +116,25 @@ services:
     networks:
       - test-net
 
-  chroma-worker-test:
+  rag-worker-test:
     platform: "linux/amd64"
     build:
       context: .
       dockerfile: Dockerfile.test
-      target: chroma-worker
-    container_name: platform-chroma-worker-test
+      target: rag-worker
+    container_name: platform-rag-worker-test
     depends_on:
       redis-test:
         condition: service_healthy
       postgres-test:
         condition: service_healthy
-      chroma-test:
-        condition: service_started
     environment:
       - DATABASE__URL=postgresql://platform_user:admin@postgres-test:5432/platform_test
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
-      - CHROMA_HOST=chroma-test
-      - CHROMA_PORT=8000
       - TESTING=true
       - AUTH__PERMISSIONS_ENABLED=false
-    command: ["taskiq", "worker", "apps.chroma_worker.worker:broker", "--workers", "1"]
+    command: ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "1"]
     restart: "no"
     networks:
       - test-net
@@ -168,8 +150,6 @@ services:
         condition: service_healthy
       postgres-test:
         condition: service_healthy
-      chroma-test:
-        condition: service_healthy
       minio-test:
         condition: service_healthy
       test-a2a-agent:
@@ -178,7 +158,7 @@ services:
         condition: service_started
       scheduler-test:
         condition: service_started
-      chroma-worker-test:
+      rag-worker-test:
         condition: service_started
     environment:
       - DATABASE__URL=postgresql://platform_user:admin@postgres-test:5432/platform_test
@@ -204,8 +184,4 @@ services:
 networks:
   test-net:
     driver: bridge
-
-volumes:
-  chroma_test_data:
-    driver: local
 

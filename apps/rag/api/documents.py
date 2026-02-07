@@ -6,7 +6,7 @@ import json
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
-from apps.chroma_worker.tasks.indexing_tasks import upload_document_task
+from apps.rag_worker.tasks.indexing_tasks import upload_document_task
 import uuid
 from core.logging import get_logger
 from core.rag.models import RAGDocument
@@ -47,7 +47,7 @@ async def list_documents(
     Получает список документов в namespace.
     
     Объединяет данные из:
-    - ChromaDB (completed документы)
+    - vector_documents (completed документы)
     - document_processing_status (pending/processing/failed)
     
     Args:
@@ -167,7 +167,7 @@ async def upload_document(
             file_size=len(file_data)
         )
         
-        # Добавляем document_id в metadata для ChromaDB
+        # Добавляем document_id в metadata для индексации
         metadata_dict["document_id"] = document_id
         
         # Отправляем задачу на индексацию с s3_key (не с file_data!)

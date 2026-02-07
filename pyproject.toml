@@ -5,6 +5,7 @@ description = "Agent Platform - платформа агентских систе
 requires-python = ">=3.13"
 dependencies = [
     "cairosvg>=2.8.2",
+    "greenlet",
     "pywebpush>=2.1.2",
     "reportlab>=4.4.7",
     "svglib>=1.6.0",
@@ -77,6 +78,7 @@ core = [
     "pywebpush>=2.1.2",
     "opentelemetry-instrumentation-asyncpg>=0.59b0",
     "gunicorn>=21.2.0",
+    "pgvector>=0.3.6",
 ]
 
 agents = [
@@ -97,22 +99,17 @@ worker-base = [
     "openai>=2.2.0",
 ]
 
-chroma-worker = [
-    # Легковесная версия unstructured без всех экстра зависимостей (PDF, docx, изображения)
-    # Для базовой обработки текста достаточно core версии
+rag-worker = [
     "unstructured>=0.16.0",
-    "chromadb>=0.6.0",
     "tiktoken>=0.9.0",
     "beautifulsoup4>=4.12.0",
 ]
 
 crm = [
-    "chromadb>=0.6.0",
     "tiktoken>=0.9.0",
 ]
 
 rag = [
-    "chromadb>=0.6.0",
     "tiktoken>=0.9.0",
 ]
 

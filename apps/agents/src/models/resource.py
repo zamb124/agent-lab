@@ -44,7 +44,7 @@ class CodeResourceConfig(StrictBaseModel):
 class RAGResourceConfig(StrictBaseModel):
     """RAG namespace как ресурс."""
     namespace: str = Field(..., description="ID или scope namespace")
-    provider: str = Field(default="chromadb", description="RAG провайдер")
+    provider: str = Field(default="pgvector", description="RAG провайдер")
     default_top_k: int = Field(default=5, description="Дефолтное количество результатов")
 
 

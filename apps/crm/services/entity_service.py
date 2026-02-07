@@ -10,14 +10,14 @@ from datetime import datetime, timezone
 import uuid
 import re
 
-from apps.crm.models.entity import ChromaDBEntity
+from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import (
     AIAnalyzeRequest, 
     AIAnalyzeResponse, 
     AIExtractedEntity,
     DeduplicateResult
 )
-from apps.crm.db.repositories.entity_repository import EntityChromaRepository
+from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
@@ -45,7 +45,7 @@ class EntityService:
     
     def __init__(
         self,
-        entity_repo: EntityChromaRepository,
+        entity_repo: EntityRepository,
         entity_type_repo: EntityTypeRepository,
         relationship_type_repo: RelationshipTypeRepository,
         relationship_repo: RelationshipRepository,
@@ -75,7 +75,7 @@ class EntityService:
         tags: Optional[List[str]] = None,
         
         **kwargs
-    ) -> ChromaDBEntity:
+    ) -> CRMEntity:
         """Создает новую entity"""
         
         # user_id ОБЯЗАТЕЛЕН - берем из kwargs или из контекста
@@ -86,7 +86,7 @@ class EntityService:
                 raise ValueError("user_id is required (no user in context)")
             user_id = context.user.user_id
         
-        entity = ChromaDBEntity(
+        entity = CRMEntity(
             user_id=user_id,
             entity_id=str(uuid.uuid4()),
             entity_type=entity_type,
@@ -96,8 +96,6 @@ class EntityService:
             attributes=attributes or {},
             tags=tags or [],
             company_id=self._get_company_id(),
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
             **kwargs
         )
         
@@ -110,7 +108,7 @@ class EntityService:
         self, 
         entity_id: str,
         
-    ) -> Optional[ChromaDBEntity]:
+    ) -> Optional[CRMEntity]:
         """Получает entity по ID"""
         
         return await self._entity_repo.get(entity_id)
@@ -120,7 +118,7 @@ class EntityService:
         entity_id: str,
         updates: Dict[str, Any],
         
-    ) -> ChromaDBEntity:
+    ) -> CRMEntity:
         """Обновляет entity"""
         
         
@@ -145,7 +143,7 @@ class EntityService:
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
-    ) -> List[ChromaDBEntity]:
+    ) -> List[CRMEntity]:
         """Получает список entities БЕЗ семантического поиска"""
         return await self._entity_repo.list_all(
             entity_type=entity_type,
@@ -166,7 +164,7 @@ class EntityService:
         Шаги:
         1. Удалить все relationships
         2. Удалить все attachments
-        3. Удалить entity из ChromaDB
+        3. Удалить entity из БД + vector_documents
         """
         
         
@@ -200,10 +198,10 @@ class EntityService:
         async def restore_attachments():
             pass
         
-        async def delete_entity_from_chroma():
+        async def delete_entity_from_db():
             await self._entity_repo.delete(entity_id)
         
-        async def restore_entity_to_chroma():
+        async def restore_entity_to_db():
             await self._entity_repo.create(entity)
         
         saga.add_step(SagaStep(
@@ -220,8 +218,8 @@ class EntityService:
         
         saga.add_step(SagaStep(
             name="Delete entity",
-            execute_fn=delete_entity_from_chroma,
-            compensate_fn=restore_entity_to_chroma
+            execute_fn=delete_entity_from_db,
+            compensate_fn=restore_entity_to_db
         ))
         
         await saga.execute()
@@ -237,7 +235,7 @@ class EntityService:
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
         
-    ) -> List[ChromaDBEntity]:
+    ) -> List[CRMEntity]:
         """Семантический поиск entities с поддержкой всех фильтров"""
         
         return await self._entity_repo.search(
@@ -253,7 +251,7 @@ class EntityService:
         self,
         text: str,
         limit: int = 20
-    ) -> List[ChromaDBEntity]:
+    ) -> List[CRMEntity]:
         """
         Real-time поиск упоминаний entities в тексте для подсветки.
         
@@ -518,7 +516,7 @@ class EntityService:
             }
         
         payload = {
-            "notes": [n.model_dump(mode='json') for n in notes],
+            "notes": [self._entity_to_dict(n) for n in notes],
             "date": date_str
         }
         
@@ -582,7 +580,7 @@ class EntityService:
         attachments = await self._attachment_service.get_attachments(entity_id)
         
         return {
-            "entity": entity.model_dump(),
+            "entity": self._entity_to_dict(entity),
             "relationships": [
                 {
                     "relationship_id": rel.relationship_id,
@@ -594,10 +592,37 @@ class EntityService:
                 }
                 for rel in relationships
             ],
-            "related_entities": [e.model_dump() for e in related_entities],
+            "related_entities": [self._entity_to_dict(e) for e in related_entities],
             "attachments": attachments
         }
     
+    @staticmethod
+    def _entity_to_dict(entity: CRMEntity) -> Dict[str, Any]:
+        """Конвертирует SQLAlchemy CRMEntity в dict."""
+        return {
+            "entity_id": entity.entity_id,
+            "company_id": entity.company_id,
+            "namespace": entity.namespace,
+            "entity_type": entity.entity_type,
+            "entity_subtype": entity.entity_subtype,
+            "name": entity.name,
+            "description": entity.description,
+            "status": entity.status,
+            "tags": entity.tags or [],
+            "attributes": entity.attributes or {},
+            "priority": entity.priority,
+            "due_date": entity.due_date.isoformat() if entity.due_date else None,
+            "note_date": entity.note_date.isoformat() if entity.note_date else None,
+            "assignees": entity.assignees or [],
+            "attachment_ids": entity.attachment_ids or [],
+            "user_id": entity.user_id,
+            "source_entity_id": entity.source_entity_id,
+            "source_company_id": entity.source_company_id,
+            "relevance": entity.relevance,
+            "created_at": entity.created_at.isoformat() if entity.created_at else None,
+            "updated_at": entity.updated_at.isoformat() if entity.updated_at else None,
+        }
+
     def _parse_explicit_links(self, text: str) -> List[str]:
         """
         Парсит явные ссылки @entity:id из текста.
@@ -683,7 +708,7 @@ class EntityService:
     async def _call_deduplicate_agent(
         self,
         extracted: AIExtractedEntity,
-        candidate: ChromaDBEntity
+        candidate: CRMEntity
     ) -> DeduplicateResult:
         """Вызывает агента со skill deduplicate для сравнения сущностей"""
         settings = get_settings()

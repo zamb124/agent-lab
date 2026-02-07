@@ -823,7 +823,7 @@ class TestRAGResource:
     """
     RAG resource: семантический поиск по документам.
     
-    Использует ChromaDB напрямую через core/rag.
+    Использует pgvector напрямую через core/rag.
     """
 
     @pytest.fixture
@@ -832,7 +832,7 @@ class TestRAGResource:
         return f"test_resources_{uuid.uuid4().hex[:8]}"
 
     @pytest.mark.asyncio
-    async def test_rag_resource_add_and_search(self, unique_namespace, rag_provider_chromadb):
+    async def test_rag_resource_add_and_search(self, unique_namespace, rag_provider_pgvector):
         """
         RAG resource: добавление документа и поиск.
         """
@@ -840,7 +840,7 @@ class TestRAGResource:
             "type": "rag",
             "config": {
                 "namespace": unique_namespace,
-                "provider": "chromadb",
+                "provider": "pgvector",
                 "default_top_k": 3
             }
         }
@@ -895,7 +895,7 @@ async def execute(args, state):
         assert len(result.search_results) > 0
 
     @pytest.mark.asyncio
-    async def test_rag_resource_in_react_tool(self, mock_llm_with_queue, unique_namespace, rag_provider_chromadb):
+    async def test_rag_resource_in_react_tool(self, mock_llm_with_queue, unique_namespace, rag_provider_pgvector):
         """
         RAG resource доступен в inline tool ReactNode.
         """
@@ -903,14 +903,14 @@ async def execute(args, state):
             "type": "rag",
             "config": {
                 "namespace": unique_namespace,
-                "provider": "chromadb",
+                "provider": "pgvector",
                 "default_top_k": 3
             }
         }
         
         # Сначала добавим документ
         from apps.agents.src.resources.wrappers import RAGResource
-        rag = RAGResource(namespace=unique_namespace, provider="chromadb")
+        rag = RAGResource(namespace=unique_namespace, provider="pgvector")
         await rag.add_document(
             document_id="faq_1",
             content="Return policy: You can return any item within 30 days of purchase.",

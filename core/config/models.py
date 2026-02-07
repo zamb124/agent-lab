@@ -239,9 +239,12 @@ class RAGProviderConfig(BaseModel):
     base_url: Optional[str] = None
     timeout: int = 60
 
-    # ChromaDB specific
+    # Legacy (не используются для pgvector)
     host: Optional[str] = None
     port: Optional[int] = None
+
+    # PgVector specific
+    db_url: Optional[str] = None
 
     # Embeddings - ключ для OpenRouter или другого embedding API
     embedding_api_key: Optional[str] = None

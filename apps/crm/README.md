@@ -10,9 +10,9 @@ CRM Service - сервис для управления сущностями (ent
 
 ## Ключевые принципы
 
-### 1. Единая модель ChromaDBEntity
+### 1. Единая модель CRMEntity
 
-**ВСЕ сущности** - это `ChromaDBEntity`:
+**ВСЕ сущности** - это `CRMEntity`:
 - `entity_type`: базовый тип (note, task, contact, organization)
 - `entity_subtype`: подтип для note (meeting, call, webinar_notes)
 - **БЕЗ** `linked_entity_ids` - все связи через PostgreSQL!
@@ -59,11 +59,11 @@ RelationshipType (ВСЕ с company_id!)
 
 ## Архитектура данных
 
-### ChromaDB (Semantic Search)
+### PostgreSQL + pgvector (Semantic Search)
 
 **Namespace:** `company_id` (без префикса - общая для всех сервисов!)
 
-**Модель:** `ChromaDBEntity` (единая для всех)
+**Модель:** `CRMEntity` (единая для всех)
 
 **Содержит:**
 - Полные metadata для фильтрации
@@ -92,15 +92,15 @@ RelationshipType (ВСЕ с company_id!)
 3. **`relationships`** - граф связей
    - ВСЕ связи между entities
    - `source_entity_id`, `target_entity_id`, `relationship_type`
-   - Нет `linked_entity_ids` в ChromaDB!
+   - Нет `linked_entity_ids` в vector_documents!
 
 4. **`company_mapping`** - связь company → entity
 5. **`access_requests`** - workflow для доступа
 6. **`user_profiles`** - профили пользователей
 
 **УДАЛЕНО:**
-- `notes` - теперь ChromaDBEntity
-- `tasks` - теперь ChromaDBEntity
+- `notes` - теперь CRMEntity
+- `tasks` - теперь CRMEntity
 
 ---
 
@@ -155,7 +155,7 @@ result = await entity_service.analyze_text_with_ai(
 
 1. Удалить все relationships (PostgreSQL)
 2. Удалить все attachments (RAG)
-3. Удалить entity (ChromaDB)
+3. Удалить entity (PostgreSQL + pgvector)
 
 При ошибке - откат в обратном порядке.
 
@@ -224,13 +224,13 @@ response = await service_client.post(
 - ❌ `Note`, `Task` модели в PostgreSQL
 - ❌ `NoteService`, `TaskService`
 - ❌ `AgentsClient` (старый HTTP)
-- ❌ `linked_entity_ids` в ChromaDB
+- ❌ `linked_entity_ids` в vector_documents
 - ❌ Прямая работа с S3/FileProcessor
 - ❌ API v1
 
 ### Добавлено
 
-- ✅ Единая модель `ChromaDBEntity`
+- ✅ Единая модель `CRMEntity`
 - ✅ Иерархия `EntityType` с промптами
 - ✅ `RelationshipType` с промптами
 - ✅ Все типы с `company_id`
@@ -262,13 +262,12 @@ make test-crm
 ```
 apps/crm/
 ├── models/
-│   ├── entity.py          # ChromaDBEntity
+│   ├── entity.py          # CRMEntity
 │   └── api.py             # API модели
 ├── db/
 │   ├── models.py          # SQLAlchemy (EntityType, RelationshipType, Relationship)
-│   ├── chroma_repository.py  # Базовый репозиторий для ChromaDB
 │   └── repositories/
-│       ├── entity_repository.py         # ChromaDB
+│       ├── entity_repository.py         # PostgreSQL + pgvector
 │       ├── entity_type_repository.py    # PostgreSQL
 │       ├── relationship_type_repository.py
 │       └── relationship_repository.py

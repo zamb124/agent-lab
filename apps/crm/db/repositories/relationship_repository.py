@@ -2,7 +2,7 @@
 Репозиторий для relationships (граф связей).
 
 Для сложных связей с метаданными.
-Все связи ТОЛЬКО здесь (нет linked_entity_ids в ChromaDB)!
+Все связи ТОЛЬКО здесь (нет linked_entity_ids в CRMEntity)!
 """
 
 from typing import List, Optional, Dict

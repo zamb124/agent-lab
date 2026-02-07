@@ -2,5 +2,5 @@
 CRM Service - модуль для управления сущностями, связями, заметками и задачами.
 
 Порт: 8003
-БД: crm_db (PostgreSQL) + ChromaDB (сущности с embeddings)
+БД: crm_db (PostgreSQL) + pgvector (семантический поиск)
 """

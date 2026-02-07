@@ -29,32 +29,32 @@ async def test_list_providers(rag_client, auth_headers_system):
 
 
 @pytest.mark.asyncio
-async def test_list_providers_chromadb_present(rag_client, auth_headers_system):
-    """Список провайдеров содержит chromadb"""
+async def test_list_providers_pgvector_present(rag_client, auth_headers_system):
+    """Список провайдеров содержит pgvector"""
     response = await rag_client.get("/rag/api/v1/providers", headers=auth_headers_system)
     assert response.status_code == 200
     data = response.json()
     
     providers = data["providers"]
-    chromadb = next((p for p in providers if p["name"] == "chromadb"), None)
+    pgvector = next((p for p in providers if p["name"] == "pgvector"), None)
     
-    assert chromadb is not None
-    assert chromadb["enabled"] is True
+    assert pgvector is not None
+    assert pgvector["enabled"] is True
 
 
 @pytest.mark.asyncio
-async def test_switch_provider_chromadb(rag_client, auth_headers_system):
-    """POST /providers/switch переключает на chromadb"""
+async def test_switch_provider_pgvector(rag_client, auth_headers_system):
+    """POST /providers/switch переключает на pgvector"""
     response = await rag_client.post(
         "/rag/api/v1/providers/switch",
-        json={"provider_name": "chromadb"},
+        json={"provider_name": "pgvector"},
         headers=auth_headers_system
     )
     assert response.status_code == 200
     data = response.json()
     
     assert data["success"] is True
-    assert data["provider"] == "chromadb"
+    assert data["provider"] == "pgvector"
     assert "message" in data
 
 

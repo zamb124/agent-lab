@@ -58,11 +58,11 @@ class RAGRepository:
         limit: int = 100
     ) -> List[RAGDocument]:
         """
-        Получает документы с фильтрацией по metadata через ChromaDB where clause.
+        Получает документы с фильтрацией по metadata.
         
         Args:
             namespace_id: ID namespace
-            filters: Фильтры для metadata (ChromaDB where clause)
+            filters: Фильтры для metadata (where clause)
             limit: Максимальное количество
             
         Returns:

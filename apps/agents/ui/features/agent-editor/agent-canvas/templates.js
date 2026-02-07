@@ -117,4 +117,3 @@ function renderResourceContextMenu(component) {
         </div>
     `;
 }
-

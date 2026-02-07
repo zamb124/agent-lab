@@ -1,0 +1,163 @@
+---
+description: "Главные правила платформы Humanitec - стиль, паттерны, запреты"
+alwaysApply: true
+---
+# Платформа Humanitec - Кодекс
+
+## Язык
+
+Всегда отвечай на русском. Не используй эмодзи в коде и комментариях.
+
+## Стек
+
+Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
+
+## Сервисы
+
+| Сервис | Порт | Описание |
+|--------|------|----------|
+| agents | 8001 | AI агенты, flows, skills, A2A |
+| frontend | 8002 | Управление платформой, UI |
+| crm | 8003 | CRM: entities, graph, access control |
+| rag | 8004 | RAG: документы, семантический поиск |
+| broker | — | TaskIQ брокер фоновых задач |
+| rag_worker | — | TaskIQ worker обработки документов |
+| scheduler | — | TaskIQ планировщик |
+
+## ОБЯЗАТЕЛЬНО: Новое = правка рулов
+
+**При появлении нового паттерна, сервиса, конвенции или изменении архитектуры — сразу добавляй/прави правило в `.cursor/rules/`.** Без обновления рулов новое не считается завершённым. Один источник правды — рулы.
+
+## АБСОЛЮТНЫЕ ЗАПРЕТЫ
+
+### 1. НИКАКИХ фолбеков
+
+Если операция не может быть выполнена — `raise`. Фолбеки (return None, пустой список, тихий pass) скрывают баги и делают систему непредсказуемой.
+
+```python
+# ЗАПРЕЩЕНО
+try:
+    result = await service.process()
+except Exception:
+    logger.warning("Не удалось, продолжаем")
+    result = []
+
+# ПРАВИЛЬНО
+result = await service.process()
+```
+
+### 2. НИКАКИХ лишних try-except
+
+`try-except` допустим ТОЛЬКО для IO и внешних сервисов (HTTP, БД, Redis). Бизнес-логика НЕ оборачивается в try-except. Если ловишь — пробрасывай через `raise ... from e`.
+
+```python
+# ЗАПРЕЩЕНО
+try:
+    user = users[user_id]
+except KeyError:
+    return None
+
+# ПРАВИЛЬНО
+if user_id not in users:
+    raise ValueError(f"Пользователь {user_id} не найден")
+```
+
+### 3. НИКАКИХ проглоченных исключений
+
+Каждый `except` должен либо пробрасывать, либо логировать с `raise`. Голый `except: pass` — запрещён.
+
+### 4. НИКАКИХ локальных импортов
+
+Все импорты в начале файла. Группировка: stdlib -> third-party -> local. Исключение: неразрешимые циклические зависимости.
+
+### 5. НИКАКИХ мета-комментариев
+
+Не пиши: "отрефакторил", "удалил старый код", "обновил логику". Комментарии объясняют ПОЧЕМУ, а не ЧТО сделано.
+
+### 6. НИКАКИХ бессмысленных имён
+
+Запрещены: `new_`, `old_`, `temp_`, `data`, `result` без контекста.
+
+## Паттерны
+
+### Структура сервиса
+
+```
+apps/{service}/
+├── __init__.py          # Описание модуля
+├── config.py            # {Service}Settings(BaseSettings)
+├── container.py         # {Service}Container(BaseContainer) + @lazy
+├── dependencies.py      # FastAPI Depends()
+├── main.py              # FastAPI app
+├── api/                 # Роутеры
+├── services/            # Бизнес-логика
+└── db/                  # Репозитории
+```
+
+### DI: Container + @lazy
+
+Зависимости через контейнер. Сервисы получают зависимости через конструктор.
+
+```python
+container = get_{service}_container()
+service = container.entity_service
+```
+
+### Repository Pattern
+
+Все данные ТОЛЬКО через репозитории. Storage — приватный класс. Никогда напрямую.
+
+### Конфигурация
+
+Каскад: ENV (высший) -> conf.json/conf.local.json -> defaults. ENV формат: `DATABASE__URL`.
+
+### Асинхронность
+
+ВСЁ асинхронное: `async/await` для БД, HTTP, LLM, тулов, фабрик.
+
+### Межсервисное взаимодействие
+
+ТОЛЬКО `ServiceClient`. Запрещён прямой `httpx.AsyncClient` между сервисами.
+
+```python
+from core.clients import get_service_client
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+```
+
+### LLM
+
+ТОЛЬКО через `core/clients/llm/factory.py`: `get_llm()`. Запрещены прямые импорты LangChain моделей.
+
+### Context
+
+`get_context()` для доступа к user, company_id, trace_id. Репозитории берут company_id из контекста автоматически.
+
+## INLINE-FIRST
+
+Платформа = JSON-конфиги агентов в БД. Код в `apps/agents/src/` — это runtime-библиотека, не бизнес-логика.
+
+## Навигация по правилам
+
+| Тема | Файл правила |
+|------|-------------|
+| Агенты: ноды, skills, interrupt | `agents_logic.mdc` |
+| Архитектура agents сервиса | `agents.mdc` |
+| Архитектурные принципы | `architecture.mdc` |
+| Конфигурация | `configuration.mdc` |
+| БД, репозитории, модели | `database.mdc` |
+| ExecutionState | `execution_state.mdc` |
+| CRM: entities, graph, grants | `crm.mdc` |
+| RAG: документы, поиск, pgvector | `rag.mdc` |
+| Frontend: Lit 3, Zustand | `frontend.mdc` |
+| Тестирование, фикстуры | `testing.mdc` |
+| TaskIQ: воркеры, задачи | `taskiq.mdc` |
+| Streaming, events, Redis Pub/Sub | `streaming.mdc` |
+| Интеграции: A2A, HTTP | `integrations.mdc` |
+| S3 и MinIO | `s3_minio.mdc` |
+| Сессии | `session.mdc` |
+| Tools для агентов | `tools.mdc` |
+| MCP серверы | `mcp.mdc` |
+| Уведомления | `notifications.mdc` |
+| Миграции БД | `migrations.mdc` |
+| Проект: UV, порты, стиль | `project.mdc` |

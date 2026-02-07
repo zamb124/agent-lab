@@ -1,28 +1,29 @@
 """
-Сервис оценки агентов/skills.
+Сервис оценки агентов/нод.
 
 Оркестрирует запуск тест-кейсов и сохранение результатов.
+Поддерживает тестирование агентов и отдельных нод через TestTarget.
 """
 
 from datetime import date, datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 from apps.agents.src.container import get_container
 from apps.agents.src.db import EvaluationRepository
+from apps.agents.src.models import TestCaseConfig
+from apps.agents.src.models.agent_config import TestTarget
+from apps.agents.src.models.enums import TestTargetType
+from apps.agents.src.models.evaluation_result import EvaluationResult, EvaluationRunSummary
 from core.logging import get_logger
-from apps.agents.src.models import (
-    EvaluationResult,
-    EvaluationRunSummary,
-    TestCaseConfig,
-)
+from core.state import ExecutionState
 
-from .runners import DialogTestRunner
+from .runners import TestRunner
 
 logger = get_logger(__name__)
 
 
 class EvaluationService:
-    """Сервис для запуска и управления оценкой агентов/skills."""
+    """Сервис для запуска и управления оценкой агентов/нод."""
 
     def __init__(self, evaluation_repository: EvaluationRepository):
         self._repository = evaluation_repository
@@ -54,10 +55,8 @@ class EvaluationService:
         for test_id, test_case in agent_config.evaluation.items():
             skill_ids = test_case.skill_ids
 
-            # "*" - для всех skills
             if skill_ids == "*":
                 result[test_id] = test_case
-            # Список - проверяем вхождение
             elif isinstance(skill_ids, list) and skill_id in skill_ids:
                 result[test_id] = test_case
 
@@ -90,8 +89,38 @@ class EvaluationService:
         run_date = date.today()
         iteration = await self._repository.get_next_iteration(agent_id, skill_id, run_date)
 
-        runner = self._create_runner(agent_id, skill_id, run_date, iteration, test_case)
-        result = await runner.run(test_case, test_case_id)
+        runner = await self._create_runner(agent_id, skill_id, run_date, iteration, test_case)
+
+        # Собираем результат из стриминга
+        result_event = None
+        dialog = []
+        async for event in runner.run(test_case, test_case_id):
+            if event["type"] == "user":
+                dialog.append({"role": "user", "content": event["content"]})
+            elif event["type"] == "assistant":
+                dialog.append({"role": "assistant", "content": event["content"]})
+            elif event["type"] == "result":
+                result_event = event
+
+        if not result_event:
+            raise RuntimeError(f"Test {test_case_id} did not produce a result event")
+
+        saved_dialog = result_event.get("dialog", dialog)
+        result = EvaluationResult(
+            agent_id=agent_id,
+            skill_id=skill_id,
+            run_date=run_date,
+            iteration=iteration,
+            test_case_id=test_case_id,
+            task_id=result_event.get("task_id"),
+            status=result_event.get("status", "error"),
+            duration_ms=result_event.get("duration_ms", 0),
+            turns_count=result_event.get("turns_count", len(saved_dialog) // 2),
+            dialog=saved_dialog,
+            scores=result_event.get("scores"),
+            judge_feedback=result_event.get("judge_feedback"),
+            error=result_event.get("error"),
+        )
 
         await self._repository.save(result)
 
@@ -116,7 +145,6 @@ class EvaluationService:
         Returns:
             Сводка по запуску
         """
-
         test_cases = await self.get_test_cases(agent_id, skill_id)
 
         if not test_cases:
@@ -137,9 +165,39 @@ class EvaluationService:
         total_scores: List[float] = []
 
         for test_case_id, test_case in test_cases.items():
-            runner = self._create_runner(agent_id, skill_id, run_date, iteration, test_case)
+            runner = await self._create_runner(agent_id, skill_id, run_date, iteration, test_case)
 
-            result = await runner.run(test_case, test_case_id)
+            # Собираем результат из стриминга
+            result_event = None
+            dialog = []
+            async for event in runner.run(test_case, test_case_id):
+                if event["type"] == "user":
+                    dialog.append({"role": "user", "content": event["content"]})
+                elif event["type"] == "assistant":
+                    dialog.append({"role": "assistant", "content": event["content"]})
+                elif event["type"] == "result":
+                    result_event = event
+
+            if not result_event:
+                summary.error_tests += 1
+                continue
+
+            saved_dialog = result_event.get("dialog", dialog)
+            result = EvaluationResult(
+                agent_id=agent_id,
+                skill_id=skill_id,
+                run_date=run_date,
+                iteration=iteration,
+                test_case_id=test_case_id,
+                task_id=result_event.get("task_id"),
+                status=result_event.get("status", "error"),
+                duration_ms=result_event.get("duration_ms", 0),
+                turns_count=result_event.get("turns_count", len(saved_dialog) // 2),
+                dialog=saved_dialog,
+                scores=result_event.get("scores"),
+                judge_feedback=result_event.get("judge_feedback"),
+                error=result_event.get("error"),
+            )
             await self._repository.save(result)
 
             if result.status == "passed":
@@ -184,14 +242,11 @@ class EvaluationService:
         """
         Запускает один тест со streaming результатов.
 
-        Args:
-            task_id: ID задачи для трейсинга (если не указан, генерируется автоматически)
-
         Yields:
             События в реальном времени:
             - {"type": "start", "test_case_id": ...}
-            - {"type": "user", "content": ...} - сразу при отправке
-            - {"type": "assistant", "content": ...} - когда получен ответ
+            - {"type": "user", "content": ...}
+            - {"type": "assistant", "content": ...}
             - {"type": "result", "status": ..., "duration_ms": ..., ...}
             - {"type": "error", "message": ...}
         """
@@ -212,9 +267,8 @@ class EvaluationService:
             "name": test_case.name,
         }
 
-        runner = self._create_runner(agent_id, skill_id, run_date, iteration, test_case)
+        runner = await self._create_runner(agent_id, skill_id, run_date, iteration, test_case)
 
-        # Собираем диалог для сохранения
         dialog = []
         result_event = None
 
@@ -231,7 +285,6 @@ class EvaluationService:
 
         # Сохраняем результат в БД
         if result_event:
-            # Для agent тестов диалог передается в событии result
             saved_dialog = result_event.get("dialog", dialog)
             result = EvaluationResult(
                 agent_id=agent_id,
@@ -291,9 +344,44 @@ class EvaluationService:
                 "name": test_case.name,
             }
 
-            runner = self._create_runner(agent_id, skill_id, run_date, iteration, test_case)
+            runner = await self._create_runner(agent_id, skill_id, run_date, iteration, test_case)
 
-            result = await runner.run(test_case, test_case_id)
+            result_event = None
+            dialog = []
+            async for event in runner.run(test_case, test_case_id):
+                if event["type"] == "user":
+                    dialog.append({"role": "user", "content": event["content"]})
+                elif event["type"] == "assistant":
+                    dialog.append({"role": "assistant", "content": event["content"]})
+                elif event["type"] == "result":
+                    result_event = event
+
+            if not result_event:
+                errors += 1
+                yield {
+                    "type": "test_result",
+                    "test_case_id": test_case_id,
+                    "status": "error",
+                    "error": "No result event produced",
+                }
+                continue
+
+            saved_dialog = result_event.get("dialog", dialog)
+            result = EvaluationResult(
+                agent_id=agent_id,
+                skill_id=skill_id,
+                run_date=run_date,
+                iteration=iteration,
+                test_case_id=test_case_id,
+                task_id=result_event.get("task_id"),
+                status=result_event.get("status", "error"),
+                duration_ms=result_event.get("duration_ms", 0),
+                turns_count=result_event.get("turns_count", len(saved_dialog) // 2),
+                dialog=saved_dialog,
+                scores=result_event.get("scores"),
+                judge_feedback=result_event.get("judge_feedback"),
+                error=result_event.get("error"),
+            )
             await self._repository.save(result)
 
             if result.status == "passed":
@@ -358,13 +446,86 @@ class EvaluationService:
 
         return await self._repository.get_latest_results(agent_id, skill_id, limit)
 
-    def _create_runner(
+    # ========================================================================
+    # Создание runner и target callable
+    # ========================================================================
+
+    async def _create_runner(
         self,
         agent_id: str,
         skill_id: str,
         run_date: date,
         iteration: int,
         test_case: TestCaseConfig,
-    ):
-        """Создаёт runner для теста."""
-        return DialogTestRunner(agent_id, skill_id, run_date, iteration)
+    ) -> TestRunner:
+        """Создает TestRunner с нужным target callable."""
+        target_callable, target_id = await self._create_target_callable(
+            test_case, agent_id, skill_id
+        )
+        return TestRunner(target_id, target_callable, run_date, iteration)
+
+    async def _create_target_callable(
+        self,
+        test_case: TestCaseConfig,
+        agent_id: str,
+        skill_id: str,
+    ) -> tuple[Callable, str]:
+        """
+        Создает callable и target_id на основе target конфигурации.
+        
+        Returns:
+            (callable, target_id)
+        """
+        target = test_case.target
+        
+        # Backward compatible: target не указан -- тестируем текущего агента
+        if not target:
+            callable_ = await self._create_agent_callable(agent_id, skill_id)
+            return callable_, f"{agent_id}:{skill_id}"
+        
+        if target.type == TestTargetType.AGENT:
+            target_agent_id = target.agent_id or agent_id
+            target_skill_id = target.skill_id or skill_id
+            callable_ = await self._create_agent_callable(target_agent_id, target_skill_id)
+            return callable_, f"{target_agent_id}:{target_skill_id}"
+        
+        if target.type == TestTargetType.NODE:
+            callable_ = self._create_node_callable(target)
+            node_id = target.node_config.get("node_id", "inline_node") if target.node_config else "inline_node"
+            return callable_, f"node:{node_id}"
+        
+        raise ValueError(f"Unknown target type: {target.type}")
+
+    async def _create_agent_callable(
+        self, agent_id: str, skill_id: str
+    ) -> Callable[[ExecutionState], ExecutionState]:
+        """Создает callable для агента через AgentFactory."""
+        container = get_container()
+        agent = await container.agent_factory.get_flow(agent_id, skill_id)
+        
+        if not agent:
+            raise ValueError(f"Agent not found: {agent_id}")
+        
+        return agent.run
+
+    def _create_node_callable(
+        self, target: TestTarget
+    ) -> Callable[[ExecutionState], ExecutionState]:
+        """Создает callable для ноды из inline конфига."""
+        if not target.node_config:
+            raise ValueError("node_config is required for NODE target type")
+        
+        container = get_container()
+        
+        node_type = target.node_config.get("type")
+        if not node_type:
+            raise ValueError("node_config must contain 'type' field")
+        
+        from apps.agents.src.models.enums import NodeType
+        node_type_enum = NodeType(node_type)
+        
+        node_class = container.node_registry.get(node_type_enum)
+        node_id = target.node_config.get("node_id", "test_node")
+        node = node_class.from_config(node_id, target.node_config)
+        
+        return node.run

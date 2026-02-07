@@ -12,7 +12,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_create_namespace(rag_client, unique_namespace_name, auth_headers_system):
-    """POST /namespaces создает namespace в ChromaDB"""
+    """POST /namespaces создает namespace в pgvector"""
     response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={
@@ -68,16 +68,16 @@ async def test_list_namespaces(rag_client, unique_namespace_name, auth_headers_s
 
 @pytest.mark.asyncio
 async def test_list_namespaces_with_provider_param(rag_client, unique_namespace_name, auth_headers_system):
-    """GET /namespaces?provider=chromadb возвращает namespaces для конкретного провайдера"""
+    """GET /namespaces?provider=pgvector возвращает namespaces для конкретного провайдера"""
     # Создаем namespace
     await rag_client.post(
-        "/rag/api/v1/namespaces?provider=chromadb",
+        "/rag/api/v1/namespaces?provider=pgvector",
         json={"name": unique_namespace_name},
         headers=auth_headers_system
     )
     
     # Получаем список с параметром провайдера
-    response = await rag_client.get("/rag/api/v1/namespaces?provider=chromadb", headers=auth_headers_system)
+    response = await rag_client.get("/rag/api/v1/namespaces?provider=pgvector", headers=auth_headers_system)
     assert response.status_code == 200
     data = response.json()
     
@@ -87,15 +87,25 @@ async def test_list_namespaces_with_provider_param(rag_client, unique_namespace_
 
 @pytest.mark.asyncio
 async def test_delete_namespace(rag_client, unique_namespace_name, auth_headers_system):
-    """DELETE /namespaces/{id} удаляет namespace"""
-    # Создаем
+    """DELETE /namespaces/{id} удаляет namespace вместе с документами"""
+    from io import BytesIO
+
+    # Создаем namespace
     create_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
         headers=auth_headers_system
     )
     namespace_id = create_response.json()["name"]
-    
+
+    # Загружаем документ, чтобы namespace реально существовал в pgvector
+    files = {"file": ("test.txt", BytesIO(b"test content for delete"), "text/plain")}
+    await rag_client.post(
+        f"/rag/api/v1/namespaces/{namespace_id}/documents",
+        files=files,
+        headers=auth_headers_system,
+    )
+
     # Удаляем
     delete_response = await rag_client.delete(
         f"/rag/api/v1/namespaces/{namespace_id}",
@@ -103,7 +113,7 @@ async def test_delete_namespace(rag_client, unique_namespace_name, auth_headers_
     )
     assert delete_response.status_code == 200
     data = delete_response.json()
-    
+
     assert data["success"] is True
     assert data["name"] == namespace_id
 
@@ -136,7 +146,7 @@ async def test_create_namespace_duplicate_name(rag_client, unique_namespace_name
         json={"name": unique_namespace_name},
         headers=auth_headers_system
     )
-    # ChromaDB может разрешить дубликаты или вернуть ошибку
+    # pgvector может разрешить дубликаты или вернуть ошибку
     # Проверяем что ответ валидный (201 или 400)
     assert response2.status_code in [201, 400]
 

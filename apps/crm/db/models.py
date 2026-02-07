@@ -2,24 +2,21 @@
 SQLAlchemy модели для CRM Service.
 
 Таблицы в crm_db:
-- entity_types: Типы сущностей с иерархией и промптами (ВСЕ с company_id!)
-- relationship_types: Типы связей с промптами (ВСЕ с company_id!)
+- crm_entities: Сущности CRM с типизированными атрибутами
+- entity_types: Типы сущностей с иерархией и промптами
+- relationship_types: Типы связей с промптами
 - relationships: Граф связей между entities
-- company_mapping: Связь tenant (company) с entity в ChromaDB
+- company_mapping: Связь tenant (company) с entity
+- access_grants: Гранты доступа
 - access_requests: Запросы на доступ
-- user_profiles: Профили пользователей
-
-УДАЛЕНО в V2:
-- notes: теперь ChromaDBEntity с entity_type="note"
-- tasks: теперь ChromaDBEntity с entity_type="task"
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from typing import Optional, Dict, Any, List
 
-from sqlalchemy import String, Text, Boolean, Float, DateTime, Index, UniqueConstraint, ForeignKey, Integer
+from sqlalchemy import String, Text, Boolean, Float, Date, DateTime, Index, UniqueConstraint, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship as sa_relationship
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 
 from core.db.models import Base
 from core.db.service_registry import register_service
@@ -34,6 +31,79 @@ def _get_crm_db_url() -> str:
 
 # Регистрируем сервис для миграций
 register_service("crm", _get_crm_db_url, "apps.crm.db.models")
+
+
+class CRMEntity(Base):
+    """
+    Сущности CRM с типизированными атрибутами.
+
+    Структурные данные для SQL-запросов (фильтрация по типу, тегам, датам).
+    Семантический поиск через JOIN с vector_documents (shared_db).
+    """
+
+    __tablename__ = "crm_entities"
+
+    entity_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    namespace: Mapped[str] = mapped_column(String(100), default="default", nullable=False)
+
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    entity_subtype: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    name: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="active", nullable=False)
+
+    tags: Mapped[List[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+    attributes: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+    priority: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    assignees: Mapped[List[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+
+    attachment_ids: Mapped[List[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+
+    user_id: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    source_entity_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_company_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    relevance: Mapped[float] = mapped_column(Float, default=1.0)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_crm_entities_company_type", "company_id", "entity_type"),
+        Index("ix_crm_entities_tags", "tags", postgresql_using="gin"),
+        Index("ix_crm_entities_due_date", "due_date"),
+        Index("ix_crm_entities_note_date", "note_date"),
+        Index("ix_crm_entities_namespace", "company_id", "namespace"),
+    )
+
+    @property
+    def is_note(self) -> bool:
+        return self.entity_type == "note"
+
+    @property
+    def is_task(self) -> bool:
+        return self.entity_type == "task"
+
+    @property
+    def full_type(self) -> str:
+        if self.entity_subtype:
+            return f"{self.entity_type}:{self.entity_subtype}"
+        return self.entity_type
+
+    def __repr__(self) -> str:
+        return f"<CRMEntity(entity_id='{self.entity_id}', type='{self.full_type}', company='{self.company_id}')>"
 
 
 class EntityType(Base):
@@ -191,9 +261,9 @@ class Relationship(Base):
     """
     Граф связей между entities.
     
-    ВСЕ связи ТОЛЬКО здесь (нет linked_entity_ids в ChromaDB)!
+    ВСЕ связи ТОЛЬКО здесь (нет linked_entity_ids в CRMEntity)!
     
-    source_entity_id и target_entity_id - ID сущностей в ChromaDB.
+    source_entity_id и target_entity_id - ID сущностей в crm_entities.
     relationship_type - ID типа связи из RelationshipType.
     namespace - изоляция связей по пространствам.
     """
@@ -236,7 +306,7 @@ class Relationship(Base):
 
 class CompanyMapping(Base):
     """
-    Связь между tenant (company из shared_db) и entity в ChromaDB.
+    Связь между tenant (company из shared_db) и entity в crm_entities.
     
     При первом входе в CRM автоматически создается entity типа 'organization'
     для компании пользователя с is_owner=True.

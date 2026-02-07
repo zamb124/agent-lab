@@ -1,5 +1,5 @@
 from .node_config import NodeConfig, NodeLLMOverride, ReactConfig, ReactLoopMode
-from .enums import CodeMode, SessionStatus, TriggerType, TriggerStatus, ChannelType
+from .enums import CodeMode, SessionStatus, TriggerType, TriggerStatus, ChannelType, TestTargetType
 from .trigger_config import (
     TriggerConfig,
     TelegramTriggerConfig,
@@ -33,6 +33,7 @@ from .agent_config import (
     Permission,
     SkillConfig,
     TestCaseConfig,
+    TestTarget,
     TestTurn,
 )
 
@@ -98,6 +99,8 @@ __all__ = [
     "SkillConfig",
     "TelegramTriggerConfig",
     "TestCaseConfig",
+    "TestTarget",
+    "TestTargetType",
     "TestTurn",
     "ToolReference",
     "TriggerConfig",

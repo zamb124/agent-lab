@@ -4,7 +4,7 @@ RAG система с поддержкой различных провайдер
 
 Провайдеры:
 - agentset: Внешний SaaS (Agentset.ai)
-- chromadb: Локальный ChromaDB Server
+- pgvector: PostgreSQL + pgvector
 """
 
 from .base_provider import BaseRAGProvider
@@ -15,7 +15,7 @@ from .factory import (
     close_default_rag_provider
 )
 from .repository import RAGRepository
-from .providers import AgentsetRAGProvider, ChromaDBRAGProvider
+from .providers import AgentsetRAGProvider, PgVectorProvider
 from .services import DocumentParser, EmbeddingService
 
 __all__ = [
@@ -34,7 +34,7 @@ __all__ = [
     "RAGRepository",
     # Providers
     "AgentsetRAGProvider",
-    "ChromaDBRAGProvider",
+    "PgVectorProvider",
     # Services
     "DocumentParser",
     "EmbeddingService",

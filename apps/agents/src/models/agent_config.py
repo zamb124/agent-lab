@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator, field_valida
 
 from core.models import StrictBaseModel
 from core.urn import extract_id
-from .enums import MergeMode
+from .enums import MergeMode, TestTargetType
 from .resource import ResourceReference
 from .trigger_config import TriggerConfig
 
@@ -170,6 +170,26 @@ class TestTurn(StrictBaseModel):
     check: Optional[CheckConfig] = Field(default=None, description="Конфигурация проверки (опционально)")
 
 
+class TestTarget(StrictBaseModel):
+    """
+    Цель тестирования -- что именно тестируем.
+    
+    Примеры:
+    - {"type": "agent", "agent_id": "my_agent", "skill_id": "default"}
+    - {"type": "node", "node_config": {"type": "react_node", "prompt": "..."}}
+    """
+    type: TestTargetType = Field(..., description="Тип цели: agent, node")
+    
+    # AGENT -- тестируем другого агента (если None, используется agent_id из контекста)
+    agent_id: Optional[str] = Field(default=None, description="ID агента")
+    skill_id: Optional[str] = Field(default="default", description="ID skill")
+    
+    # NODE -- только inline конфиг ноды
+    node_config: Optional[Dict[str, Any]] = Field(
+        default=None, description="Inline конфиг ноды для тестирования"
+    )
+
+
 class TestCaseConfig(StrictBaseModel):
     """
     Унифицированный тест-кейс = список ходов (turns).
@@ -178,9 +198,23 @@ class TestCaseConfig(StrictBaseModel):
     - Один ход: простой тест
     - Много ходов: многошаговый диалог
     - Agent-agent: автоматический диалог с max_turns
+    
+    target определяет что тестируем:
+    - None / {"type": "agent"} -- полный агент (backward compatible)
+    - {"type": "node", "node_config": {...}} -- отдельная нода
     """
     name: str = Field(..., description="Название теста")
     description: str = Field(default="", description="Описание теста")
+    
+    target: Optional[TestTarget] = Field(
+        default=None,
+        description="Цель тестирования. None = agent из контекста"
+    )
+    initial_state: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Начальное состояние для теста (переменные, данные)"
+    )
+    
     skill_ids: Union[Literal["*"], List[str]] = Field(
         default="*", description="Skill IDs для теста. '*' = все"
     )

@@ -25,7 +25,7 @@ class RAGResource:
     def __init__(
         self,
         namespace: str,
-        provider: str = "chromadb",
+        provider: str = "pgvector",
         default_top_k: int = 5,
         container: Any = None,
     ):

@@ -76,7 +76,7 @@ def test_with_real_server(rag_service):
 Быстрые, не требуют запуска реального сервера:
 
 - `agents_client` - клиент для Agents API
-- `rag_client` - клиент для RAG API (зависит от `chroma_worker`)
+- `rag_client` - клиент для RAG API (зависит от `rag_worker`)
 - `crm_client` - клиент для CRM API (зависит от `rag_service`)
 - `frontend_client` - клиент для Frontend API
 
@@ -122,14 +122,14 @@ async def test_e2e(all_clients_http):
 Session-scoped фикстуры для worker процессов:
 
 - `taskiq_worker` - TaskIQ worker для async задач
-- `chroma_worker` - ChromaWorker для обработки документов
+- `rag_worker` - RAG Worker для обработки документов
 
 **Использование:**
 ```python
 @pytest.mark.real_taskiq  # Маркер для тестов с реальным TaskIQ
-async def test_with_worker(chroma_worker):
+async def test_with_worker(rag_worker):
     # Worker уже запущен и готов обрабатывать задачи
-    from apps.chroma_worker.tasks.indexing_tasks import upload_document_task
+    from apps.rag_worker.tasks.indexing_tasks import upload_document_task
     
     task = await upload_document_task.kiq(
         namespace_id="test",
@@ -158,11 +158,11 @@ _COMMON_TEST_ENV = {
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
     "S3__DEFAULT_BUCKET": "test-bucket",
     "RAG__ENABLED": "true",
-    "RAG__DEFAULT_PROVIDER": "chromadb",
-    "RAG__PROVIDERS__CHROMADB__ENABLED": "true",
-    "RAG__PROVIDERS__CHROMADB__HOST": "localhost",
-    "RAG__PROVIDERS__CHROMADB__PORT": "8101",
-    "RAG__PROVIDERS__CHROMADB__EMBEDDING_API_KEY": "sk-test-key",
+    "RAG__DEFAULT_PROVIDER": "pgvector",
+    "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
+    "RAG__PROVIDERS__PGVECTOR__HOST": "localhost",
+    "RAG__PROVIDERS__PGVECTOR__PORT": "5433",
+    "RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY": "sk-test-key",
 }
 ```
 
@@ -236,7 +236,7 @@ crm_client (ASGI)
 
 rag_client (ASGI)
 ├── rag_app (RAG ASGI app)
-└── chroma_worker (для обработки документов)
+└── rag_worker (для обработки документов)
 
 crm_client_http
 ├── crm_service
@@ -348,7 +348,7 @@ rm /tmp/platform_test_rag_server.*
 Проверь что используется маркер `@pytest.mark.real_taskiq`:
 ```python
 @pytest.mark.real_taskiq
-async def test_with_worker(chroma_worker):
+async def test_with_worker(rag_worker):
     # Этот тест будет использовать реальный worker
     pass
 ```

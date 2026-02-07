@@ -1,30 +1,35 @@
 ---
 alwaysApply: false
-description: "CRM NetWorkle система управления сущностями: entities, relationships, graph, ChromaDB, PostgreSQL, access control, grants, entity types, relationship types, namespace, semantic search, влияние, граф связей, бизнес сущности, записная книжка, встречи, контакты, заметки, задачи, сделки, звонки"
+description: "CRM NetWorkle система управления сущностями: entities, relationships, graph, pgvector, PostgreSQL, access control, grants, entity types, relationship types, namespace, semantic search, влияние, граф связей, бизнес сущности, записная книжка, встречи, контакты, заметки, задачи, сделки, звонки"
 ---
 
 # CRM Service - Правила
 
 ## Архитектура
 
-CRM = **ChromaDB (entities) + PostgreSQL (types, relationships, grants)**
+CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relationships, grants)**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  ChromaDB (векторный поиск)    │   PostgreSQL (relations)   │
+│  crm_entities (атрибуты)       │   PostgreSQL (relations)   │
 ├────────────────────────────────┼────────────────────────────┤
-│  Entity (content + metadata)   │   EntityType, Relationship │
-│  Semantic search               │   RelationshipType, Grants │
-│  company_id изоляция           │   company_id изоляция      │
+│  CRMEntity (structured attrs) │   EntityType, Relationship │
+│  + vector_documents (pgvector) │   RelationshipType, Grants │
+│  Hybrid search (SQL + vector)  │   company_id изоляция      │
+│  company_id изоляция           │                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Модели
 
-**ChromaDB:**
-- `Entity` - сущности с content, metadata, векторами
-  - Всегда: `entity_id`, `company_id`, `namespace`, `entity_type`
-  - Опционально: `tags`, `user_id`, `source`, `summary`
+**crm_entities (PostgreSQL):**
+- `CRMEntity` - структурированные атрибуты сущностей
+  - Всегда: `entity_id`, `company_id`, `namespace`, `entity_type`, `name`
+  - Опционально: `tags`, `user_id`, `status`, `priority`, `due_date`, `attributes`
+
+**vector_documents (PostgreSQL + pgvector):**
+- `VectorDocument` - чанки контента с embeddings для семантического поиска
+  - Связь: `document_id` -> `entity_id`
 
 **PostgreSQL:**
 - `EntityType` - типы сущностей (note, meeting, call, task, deal, contact)
@@ -65,16 +70,16 @@ class MyRepository(BaseCRMRepository[MyModel]):
 
 **ВАЖНО:** Контекст (`company_id`) берется из `core.context.get_context()` ВНУТРИ репозитория.
 
-### ChromaDB Entity
+### Entity Repository
 
-`EntityService` - работа с ChromaDB:
-- `create_entity()` - создать entity + вектор
-- `search()` - семантический поиск
+`EntityService` - работа с CRM-сущностями:
+- `create_entity()` - создать entity в crm_entities + индексировать в vector_documents
+- `search()` - гибридный поиск (SQL атрибуты + pgvector семантика)
 - `get_by_id()` - получить по ID
-- `update()` - обновить content/metadata
-- `delete()` - удалить (+ cascade для relationships)
+- `update()` - обновить атрибуты + переиндексировать в vector_documents
+- `delete()` - удалить из crm_entities + vector_documents (+ cascade для relationships)
 
-**Namespace изоляция:** `{company_id}_{namespace}` - каждый namespace изолирован.
+**Namespace изоляция:** фильтрация по `company_id` + `namespace` в SQL запросах.
 
 ## Типы и их роль
 
@@ -246,7 +251,7 @@ company_id="acme", namespace="support"   # Поддержка
 company_id="acme", namespace="default"   # По умолчанию
 ```
 
-**В ChromaDB:** collection = `{company_id}_{namespace}`
+**В vector_documents:** фильтрация по `namespace_id` = `{company_id}_{namespace}`
 
 **Access:** можно дать доступ к целому namespace через `AccessGrant`.
 
@@ -298,7 +303,7 @@ company_id="acme", namespace="default"   # По умолчанию
 ## Cascade удаление
 
 При удалении entity:
-1. Удаляется из ChromaDB
+1. Удаляется из crm_entities + vector_documents
 2. Удаляются все Relationship где entity участвует (source/target)
 3. Удаляются все AccessGrant для этой entity
 
@@ -307,8 +312,7 @@ company_id="acme", namespace="default"   # По умолчанию
 ## Тестирование
 
 **БЕЗ МОКОВ** - только реальные:
-- PostgreSQL
-- ChromaDB
+- PostgreSQL (+ pgvector)
 - Redis (для pub/sub)
 - HTTP запросы через `crm_client`
 
@@ -327,7 +331,7 @@ company_id="acme", namespace="default"   # По умолчанию
 3. **Graph cross-company** - только через grants, с access control на nodes
 4. **Types определяют behavior** - AI использует prompts из EntityType
 5. **Cascade всё** - удаление entity → удаление связей и грантов
-6. **Namespace изоляция** - в ChromaDB = отдельные collections
+6. **Namespace изоляция** - SQL фильтрация по company_id + namespace
 7. **БЕЗ легаси** - чистая архитектура, никаких фолбеков
 
 ## Частые ошибки
