@@ -1,5 +1,6 @@
 {
   "server": {
+    "env": "development",
     "services": {
       "agents": {
         "url": "http://localhost:8001",
