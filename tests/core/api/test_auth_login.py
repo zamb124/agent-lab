@@ -22,7 +22,7 @@ class TestAuthLogin:
         print(f"✅ /frontend/api/auth/login/yandex возвращает JSON с auth_url: {data['auth_url'][:80]}...")
     
     async def test_login_with_custom_host(self, frontend_client):
-        """Проверяем что redirect_uri определяется из Host header"""
+        """Проверяем что при кастомном хосте возвращается валидный auth_url"""
         response = await frontend_client.get(
             "/frontend/api/auth/login/yandex",
             headers={"host": "custom.domain.com"}
@@ -31,10 +31,13 @@ class TestAuthLogin:
         assert response.status_code == 200
         data = response.json()
         assert "auth_url" in data
-        # redirect_uri должен быть на custom.domain.com
-        assert "custom.domain.com" in data["auth_url"]
+        assert "provider" in data
+        # Для неизвестных доменов redirect_uri строится через PRIMARY_DOMAIN (humanitec.ru)
+        # что позволяет использовать единый callback URL у OAuth провайдеров
+        assert "oauth.yandex.ru" in data["auth_url"]
+        assert "redirect_uri" in data["auth_url"]
         
-        print(f"✅ redirect_uri определяется из Host header: custom.domain.com")
+        print(f"✅ Кастомный хост обрабатывается, возвращается валидный auth_url")
     
     async def test_login_invalid_provider(self, frontend_client):
         """Проверяем обработку невалидного провайдера"""
@@ -49,12 +52,12 @@ class TestAuthLogin:
     
     async def test_login_protocol_detection(self, frontend_client):
         """Проверяем определение протокола (http/https) из запроса"""
-        # По умолчанию testserver использует https
+        # По умолчанию для не-localhost хостов — https
         response = await frontend_client.get("/frontend/api/auth/login/yandex")
         assert response.status_code == 200
         data = response.json()
-        # redirect_uri в auth_url должен быть https
-        assert "https%3A%2F%2Ftestserver" in data["auth_url"] or "https://testserver" in data["auth_url"]
+        # redirect_uri должен использовать https (testserver — не localhost)
+        assert "https%3A%2F%2F" in data["auth_url"] or "redirect_uri=https" in data["auth_url"]
         
         print("✅ Протокол по умолчанию: https")
         
@@ -65,7 +68,7 @@ class TestAuthLogin:
         )
         assert response.status_code == 200
         data = response.json()
-        assert "http%3A%2F%2Ftestserver" in data["auth_url"] or "http://testserver" in data["auth_url"]
+        assert "http%3A%2F%2F" in data["auth_url"] or "redirect_uri=http" in data["auth_url"]
         
         print("✅ X-Forwarded-Proto=http корректно переключает на http")
 

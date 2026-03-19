@@ -10,7 +10,7 @@
 import json
 import pytest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from core.clients.llm import setup_mock_responses
 from apps.agents.src.agent.agent import Agent
@@ -25,6 +25,11 @@ AGENTS_DIR = Path(__file__).parent.parent.parent.parent / "apps" / "agents" / "a
 SKIP_FLOWS = {"example_external"}
 
 
+def _get_agent_id(config: Dict[str, Any]) -> Optional[str]:
+    """Возвращает ID агента из конфига (поддерживает 'id' и 'agent_id')."""
+    return config.get("id") or config.get("agent_id")
+
+
 def get_all_flow_ids() -> List[str]:
     """Получает список ID всех flows из файлов agent.json."""
     flow_ids = []
@@ -34,8 +39,9 @@ def get_all_flow_ids() -> List[str]:
             if flow_json.exists():
                 with open(flow_json) as f:
                     config = json.load(f)
-                    if config.get("id") not in SKIP_FLOWS:
-                        flow_ids.append(config["id"])
+                    agent_id = _get_agent_id(config)
+                    if agent_id and agent_id not in SKIP_FLOWS:
+                        flow_ids.append(agent_id)
     return flow_ids
 
 
@@ -48,7 +54,8 @@ def get_all_agent_configs_from_files() -> List[Dict[str, Any]]:
             if flow_json.exists():
                 with open(flow_json) as f:
                     config = json.load(f)
-                    if config.get("id") not in SKIP_FLOWS:
+                    agent_id = _get_agent_id(config)
+                    if agent_id and agent_id not in SKIP_FLOWS:
                         config["_path"] = str(flow_json)
                         configs.append(config)
     return configs
@@ -96,7 +103,8 @@ class TestAllAgentConfigs:
         if config is None:
             pytest.skip(f"Agent {flow_id} не загружен в БД")
         
-        valid_types = {"react_node", "router", "function", "subflow", "remote_agent", "external_api", "tool"}
+        from apps.agents.src.models.enums import NodeType
+        valid_types = {t.value for t in NodeType}
         for node_id, node_config in config.nodes.items():
             node_type = node_config.get("type", "react_node")
             assert node_type in valid_types, f"Invalid type '{node_type}' in node '{node_id}'"

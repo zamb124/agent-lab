@@ -20,8 +20,10 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 | frontend | 8002 | Управление платформой, UI |
 | crm | 8003 | CRM: entities, graph, access control |
 | rag | 8004 | RAG: документы, семантический поиск |
+| sync | 8005 | Инженерный чат с Git-интеграцией |
 | broker | — | TaskIQ брокер фоновых задач |
 | rag_worker | — | TaskIQ worker обработки документов |
+| sync_worker | — | TaskIQ worker realtime команд sync |
 | scheduler | — | TaskIQ планировщик |
 
 ## ОБЯЗАТЕЛЬНО: Новое = правка рулов
@@ -77,6 +79,55 @@ if user_id not in users:
 ### 6. НИКАКИХ бессмысленных имён
 
 Запрещены: `new_`, `old_`, `temp_`, `data`, `result` без контекста.
+
+### 7. НИКАКИХ неявных фолбеков в значениях
+
+```python
+# ЗАПРЕЩЕНО
+x = value or "default"
+x = value or []
+x = getattr(obj, "field", fallback)
+
+# ПРАВИЛЬНО — падаем если значения нет
+if not value:
+    raise ValueError("value is required")
+obj.field  # прямое обращение
+```
+
+### 8. НИКАКИХ голых типов
+
+Все публичные функции/методы — полные аннотации (аргументы + возврат). Явные типы: `dict[str, Any]`, `list[str]` (не голые `dict`/`list`). Доменные модели — Pydantic `BaseModel` или `dataclass`, не сырые словари.
+
+## Zero-Guess
+
+**"Better to crash than to guess."** Нет значения — `raise`. Не подставлять, не угадывать, не маскировать. Дефолты допустимы ТОЛЬКО в Pydantic-моделях. Инфраструктура (БД, Redis) недоступна — сервис падает. Сбои на старте — фатальные: лучше не подняться, чем работать сломанным.
+
+## Границы core ↔ apps
+
+### `core/` НИКОГДА не импортирует `apps/`
+
+Зависимость строго однонаправленная: `apps/ → core/`. Нарушение ломает всю архитектуру.
+
+```python
+# ЗАПРЕЩЕНО в core/
+from apps.agents.config import get_settings
+from apps.crm.db.repositories import EntityRepository
+
+# ПРАВИЛЬНО в apps/
+from core.config import BaseSettings
+from core.container import BaseContainer
+```
+
+### Куда класть новый код
+
+- Переиспользуемый между сервисами → `core/`
+- Клиенты интеграций (HTTP, GitLab, S3) → `core/clients/`
+- Специфичный для одного сервиса → `apps/<service>/`
+- Сомневаешься → `core/`. Лучше обобщить сразу, чем потом выносить.
+
+## CleanFirst
+
+Мёртвый код удаляется немедленно. Не добавлять фичи без запроса. Не проектировать «на будущее». Минимум обёрток, альясов, патчей.
 
 ## Паттерны
 
@@ -149,6 +200,7 @@ response = await client.get("agents", "/agents/api/v1/flows/")
 | ExecutionState | `execution_state.mdc` |
 | CRM: entities, graph, grants | `crm.mdc` |
 | RAG: документы, поиск, pgvector | `rag.mdc` |
+| Sync: чат, каналы, Git-интеграция | `sync.mdc` |
 | Frontend: Lit 3, Zustand | `frontend.mdc` |
 | Тестирование, фикстуры | `testing.mdc` |
 | TaskIQ: воркеры, задачи | `taskiq.mdc` |

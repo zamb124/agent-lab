@@ -211,7 +211,7 @@ class TestRunner:
         dialog: List[Dict[str, Any]] = []
         turns = 0
 
-        tester_config = self._get_node_config(turn.input)
+        tester_config = await self._get_node_config(turn.input, execution_state)
 
         # Первое сообщение тестера
         tester_messages: List[Dict[str, str]] = []
@@ -258,7 +258,7 @@ class TestRunner:
             )
 
         # Оценка судьей
-        scores, feedback, passed = await self._judge_dialog(turn.check, dialog)
+        scores, feedback, passed = await self._judge_dialog(turn.check, dialog, execution_state)
 
         yield {
             "type": "result",
@@ -310,7 +310,7 @@ class TestRunner:
             return self._normalize_check_result(result)
 
         if check_config.type == CheckType.NODE:
-            scores, _, passed = await self._judge_dialog(check_config, dialog)
+            scores, _, passed = await self._judge_dialog(check_config, dialog, execution_state)
             scores["result"] = 10.0 if passed else 0.0
             return scores
 
@@ -457,11 +457,32 @@ class TestRunner:
         module = importlib.import_module(module_path)
         return getattr(module, func_name)
 
-    def _get_node_config(self, input_config: InputConfig) -> NodeConfig:
-        """Получает конфигурацию ноды. Только inline."""
+    async def _get_node_config(
+        self, input_config: InputConfig, execution_state: Optional[ExecutionState] = None
+    ) -> NodeConfig:
+        """Получает конфигурацию ноды: inline dict, из agent_config или из node_repository."""
         if input_config.node:
             return NodeConfig(**input_config.node)
-        raise ValueError("node config is required for NODE input type (inline only)")
+        
+        node_id = input_config.value
+        if node_id and execution_state:
+            agent_nodes = (execution_state.agent_config or {}).get("nodes", {})
+            node_dict = agent_nodes.get(node_id)
+            if node_dict is not None:
+                config = dict(node_dict)
+                config.setdefault("node_id", node_id)
+                return NodeConfig(**config)
+        
+        if node_id:
+            container = get_container()
+            node_config = await container.node_repository.get(node_id)
+            if node_config is not None:
+                return node_config
+        
+        raise ValueError(
+            f"node config is required for NODE input type: "
+            f"neither 'node' inline config nor agent node '{node_id}' found"
+        )
 
     async def _invoke_node(
         self,
@@ -501,12 +522,13 @@ class TestRunner:
         self,
         check_config: Optional[CheckConfig],
         dialog: List[Dict[str, Any]],
+        execution_state: Optional[ExecutionState] = None,
     ) -> tuple[ScoresType, Optional[str], bool]:
         """Вызывает агента-судью для оценки диалога."""
         if not check_config:
             return {"result": 10.0}, None, True
 
-        judge_config = self._get_judge_config(check_config)
+        judge_config = await self._get_judge_config(check_config, execution_state)
 
         dialog_text = "\n".join(f"{msg['role'].upper()}: {msg['content']}" for msg in dialog)
 
@@ -549,11 +571,32 @@ class TestRunner:
 
         raise ValueError(f"Judge response is not valid JSON: {response_text}")
 
-    def _get_judge_config(self, check_config: CheckConfig) -> NodeConfig:
-        """Получает конфигурацию судьи. Только inline."""
+    async def _get_judge_config(
+        self, check_config: CheckConfig, execution_state: Optional[ExecutionState] = None
+    ) -> NodeConfig:
+        """Получает конфигурацию судьи: inline dict, из agent_config или из node_repository."""
         if check_config.node:
             return NodeConfig(**check_config.node)
-        raise ValueError("node config is required for NODE check type (inline only)")
+        
+        node_id = check_config.value
+        if node_id and execution_state:
+            agent_nodes = (execution_state.agent_config or {}).get("nodes", {})
+            node_dict = agent_nodes.get(node_id)
+            if node_dict is not None:
+                config = dict(node_dict)
+                config.setdefault("node_id", node_id)
+                return NodeConfig(**config)
+        
+        if node_id:
+            container = get_container()
+            node_config = await container.node_repository.get(node_id)
+            if node_config is not None:
+                return node_config
+        
+        raise ValueError(
+            f"node config is required for NODE check type: "
+            f"neither 'node' inline config nor agent node '{node_id}' found"
+        )
 
     def _scores_passed(self, scores: ScoresType) -> bool:
         """Все scores должны быть >= 5.0."""

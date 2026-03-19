@@ -5,9 +5,8 @@ TelegramChannelHandler - отправка сообщений через Telegram
 import os
 from typing import Any, Dict, Optional, Union
 
-import httpx
-
 from apps.agents.src.models.enums import ChannelType
+from core.http import get_httpx_client
 from core.logging import get_logger
 
 from .base import BaseChannelHandler
@@ -78,7 +77,7 @@ class TelegramChannelHandler(BaseChannelHandler):
         if config.get("protect_content"):
             payload["protect_content"] = True
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with get_httpx_client(timeout=30.0, proxy=True) as client:
             response = await client.post(url, json=payload)
             result = response.json()
             
@@ -107,7 +106,7 @@ class TelegramChannelHandler(BaseChannelHandler):
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendPhoto"
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with get_httpx_client(timeout=60.0, proxy=True) as client:
             if isinstance(photo, bytes):
                 files = {"photo": ("photo.jpg", photo, "image/jpeg")}
                 data = {"chat_id": recipient}
@@ -161,7 +160,7 @@ class TelegramChannelHandler(BaseChannelHandler):
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendDocument"
         
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with get_httpx_client(timeout=120.0, proxy=True) as client:
             if isinstance(document, bytes):
                 fname = filename or "document"
                 files = {"document": (fname, document, "application/octet-stream")}

@@ -10,7 +10,7 @@ alwaysApply: false
 
 | Окружение | Провайдер | Endpoint | Bucket | Порты |
 |-----------|-----------|----------|--------|-------|
-| **Dev** | MinIO | `http://localhost:9000` | `test-bucket` | 9000 (API), 9001 (Console) |
+| **Dev** | MinIO | `http://localhost:19001` | `test-bucket` | 19001 (API), 19011 (Console) |
 | **Test** | MinIO | `http://minio-test:9000` | `test-bucket` | 9002 (API), 9003 (Console) |
 | **Prod** | VK Cloud | `https://hb.ru-msk.vkcloud-storage.ru` | `vkbucket` | - |
 
@@ -62,7 +62,7 @@ minio-test:
         "access_key_id": "minioadmin",
         "secret_access_key": "minioadmin",
         "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:9000",
+        "endpoint_url": "http://localhost:19001",
         "enabled": true
       },
       "vkbucket": {
@@ -293,7 +293,7 @@ docker inspect platform-minio-dev | grep Health
 **Через CLI:**
 ```bash
 # Настроить alias
-docker exec platform-minio-dev mc alias set local http://localhost:9000 minioadmin minioadmin
+docker exec agentlab_minio_dev mc alias set local http://localhost:9000 minioadmin minioadmin
 
 # Создать bucket
 docker exec platform-minio-dev mc mb local/test-bucket
@@ -339,7 +339,7 @@ import aioboto3
 session = aioboto3.Session()
 async with session.client(
     "s3",
-    endpoint_url="http://localhost:9000",
+    endpoint_url="http://localhost:19001",
     aws_access_key_id="minioadmin",
     aws_secret_access_key="minioadmin",
 ) as s3:
@@ -364,7 +364,7 @@ async with session.client(
 endpoint_url = "http://minio-test:9000"  # ✅
 
 # Снаружи используй localhost
-endpoint_url = "http://localhost:9000"   # ✅
+endpoint_url = "http://localhost:19001"   # dev MinIO
 
 # НЕ используй 127.0.0.1 внутри контейнера
 endpoint_url = "http://127.0.0.1:9000"   # ❌

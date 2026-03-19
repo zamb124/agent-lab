@@ -1,14 +1,16 @@
+name: agentlab-dev
+
 services:
   postgres:
     platform: "linux/amd64"
     image: pgvector/pgvector:pg15
-    container_name: platform-postgres-dev
+    container_name: agentlab_postgres_dev
     environment:
       POSTGRES_DB: platform_db
       POSTGRES_USER: platform_user
       POSTGRES_PASSWORD: admin
     ports:
-      - "5435:5432"
+      - "54321:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     command: postgres -c max_connections=300
@@ -23,10 +25,10 @@ services:
   redis:
     platform: "linux/amd64"
     image: redis:7-alpine
-    container_name: platform-redis-dev
+    container_name: agentlab_redis_dev
     command: redis-server --save 60 1 --loglevel notice
     ports:
-      - "6381:6379"
+      - "63791:6379"
     volumes:
       - redis_dev_data:/data
     healthcheck:
@@ -40,10 +42,10 @@ services:
   minio:
     platform: "linux/amd64"
     image: minio/minio:latest
-    container_name: platform-minio-dev
+    container_name: agentlab_minio_dev
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "19001:9000"
+      - "19011:9001"
     volumes:
       - minio_dev_data:/data
     environment:
@@ -81,7 +83,7 @@ services:
   #     - dev-net
 
   # Worker опционален - можно запустить локально для дебага:
-  # DATABASE__URL=postgresql://platform_user:admin@localhost:5435/platform_db TASKS__BROKER_URL=redis://localhost:6381/1 uv run python -m taskiq worker apps.broker.worker:broker
+  # DATABASE__URL=postgresql://platform_user:admin@localhost:54321/platform_db TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq worker apps.broker.worker:broker
   # worker:
   #   build:
   #     context: .
@@ -103,7 +105,7 @@ services:
   #     - dev-net
 
   # Scheduler опционален - можно запустить локально для дебага:
-  # DATABASE__URL=postgresql://platform_user:admin@localhost:5435/platform_db TASKS__BROKER_URL=redis://localhost:6381/1 uv run python -m taskiq scheduler apps.scheduler.scheduler:scheduler
+  # DATABASE__URL=postgresql://platform_user:admin@localhost:54321/platform_db TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq scheduler apps.scheduler.scheduler:scheduler
   # scheduler:
   #   build:
   #     context: .
@@ -125,7 +127,7 @@ services:
   #     - dev-net
 
   # RAGWorker опционален - можно запустить локально для дебага:
-  # DATABASE__URL=postgresql://platform_user:admin@localhost:5435/platform_db TASKS__BROKER_URL=redis://localhost:6381/1 uv run python scripts/run_rag_worker.py
+  # DATABASE__URL=postgresql://platform_user:admin@localhost:54321/platform_db TASKS__BROKER_URL=redis://localhost:63791/1 uv run python scripts/run_rag_worker.py
   # rag-worker:
   #   build:
   #     context: .

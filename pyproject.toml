@@ -113,6 +113,10 @@ rag = [
     "tiktoken>=0.9.0",
 ]
 
+sync = [
+    "websockets>=16.0",
+]
+
 dev = [
     "pillow>=12.0.0",
     "pytest>=9.0.0",

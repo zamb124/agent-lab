@@ -31,3 +31,5 @@ docs/video/*.mov
 /logs/
 /tmp/
 /scripts/logs/agents.log
+/.hypothesis/
+/sync1/

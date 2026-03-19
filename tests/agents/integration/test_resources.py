@@ -971,7 +971,7 @@ class TestFILESResource:
 
     MINIO_CONFIG = {
         "bucket": "test-bucket",
-        "endpoint_url": "http://localhost:9010",
+        "endpoint_url": "http://localhost:19002",
         "access_key_id": "minioadmin",
         "secret_access_key": "minioadmin",
     }

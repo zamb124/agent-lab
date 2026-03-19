@@ -8,13 +8,51 @@ from typing import Optional
 from apps.agents.src.tools import tool
 
 
-def _vision_mock(args: dict) -> dict:
-    """Mock для тестов."""
+def _vision_mock(args: dict, state=None) -> dict:
+    """Mock для тестов с валидацией файлов."""
+    from pathlib import Path
+
     prompt = args.get("prompt", "")
+    
+    SUPPORTED_MIME_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"}
+    
+    if state is not None:
+        files = getattr(state, "files", None)
+        if files is None and isinstance(state, dict):
+            files = state.get("files", [])
+        files = files or []
+        
+        if not files:
+            return {"success": False, "error": "Нет файлов для анализа"}
+        
+        file_name = args.get("file_name")
+        if file_name:
+            file_info = next((f for f in files if f.get("name") == file_name), None)
+            if file_info is None:
+                available = [f.get("name") for f in files]
+                return {
+                    "success": False,
+                    "error": f"Файл '{file_name}' не найден. Доступные: {available}",
+                }
+        else:
+            file_info = files[0]
+        
+        mime_type = file_info.get("mime_type")
+        if mime_type and mime_type not in SUPPORTED_MIME_TYPES:
+            return {"success": False, "error": f"Неподдерживаемый тип файла: {mime_type}"}
+        
+        file_path = file_info.get("path")
+        if file_path and not Path(file_path).exists():
+            return {"success": False, "error": f"Файл не найден: {file_path}"}
+        
+        resolved_name = file_info.get("name", "first_file")
+    else:
+        resolved_name = args.get("file_name") or "first_file"
+    
     return {
         "success": True,
         "result": f"Mock vision result for: {prompt[:50]}",
-        "file_name": args.get("file_name") or "first_file",
+        "file_name": resolved_name,
         "model": args.get("model", "mock"),
     }
 

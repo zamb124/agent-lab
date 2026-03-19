@@ -32,11 +32,12 @@ from httpx import ASGITransport, AsyncClient
 
 # Устанавливаем переменные окружения ДО импорта приложения
 os.environ["TESTING"] = "true"
-os.environ.setdefault("DATABASE__URL", "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test")
-os.environ.setdefault("DATABASE__SHARED_URL", "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test")
-os.environ.setdefault("DATABASE__CRM_URL", "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test")
-os.environ.setdefault("DATABASE__REDIS_URL", "redis://localhost:6380/0")
-os.environ.setdefault("TASKS__BROKER_URL", "redis://localhost:6380/1")
+os.environ.setdefault("DATABASE__URL", "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test")
+os.environ.setdefault("DATABASE__SHARED_URL", "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test")
+os.environ.setdefault("DATABASE__CRM_URL", "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test")
+os.environ.setdefault("DATABASE__SYNC_URL", "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test")
+os.environ.setdefault("DATABASE__REDIS_URL", "redis://localhost:63792/0")
+os.environ.setdefault("TASKS__BROKER_URL", "redis://localhost:63792/1")
 # Отключаем проверку permissions по умолчанию для тестов (кроме test_permissions.py)
 os.environ.setdefault("AUTH__PERMISSIONS_ENABLED", "false")
 # Default tenant для тестов
@@ -46,6 +47,7 @@ os.environ.setdefault("SERVER__AGENTS_SERVICE_URL", "http://localhost:9001")
 os.environ.setdefault("SERVER__RAG_SERVICE_URL", "http://localhost:9002")
 os.environ.setdefault("SERVER__CRM_SERVICE_URL", "http://localhost:9003")
 os.environ.setdefault("SERVER__FRONTEND_SERVICE_URL", "http://localhost:9004")
+os.environ.setdefault("SERVER__SYNC_SERVICE_URL", "http://localhost:9005")
 # S3 конфигурация для тестов - используем test-bucket вместо vkbucket
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
 # RAG config для тестов (pgvector в PostgreSQL)
@@ -150,7 +152,7 @@ async def setup_database_before_tests():
     time.sleep(2)
     print("Все тестовые порты свободны!\n")
 
-    db_url = os.environ.get("DATABASE__URL", "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test")
+    db_url = os.environ.get("DATABASE__URL", "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test")
 
     if await _alembic_version_ready(db_url):
         print("БД уже подготовлена (alembic_version есть, одна ревизия), пропуск дропа и миграций.\n")
@@ -950,7 +952,7 @@ async def rag_provider_pgvector():
     from core.rag.providers.pgvector_provider import PgVectorProvider
     
     config = {
-        "db_url": os.environ.get("DATABASE__URL", "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test"),
+        "db_url": os.environ.get("DATABASE__URL", "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test"),
         "embedding_api_key": "sk-test-key",
         "chunk_size": 1000,
         "chunk_overlap": 100
@@ -1034,7 +1036,7 @@ async def ensure_minio_bucket():
         session = aioboto3.Session()
         async with session.client(
             's3',
-            endpoint_url='http://localhost:9010',
+            endpoint_url='http://localhost:19002',
             aws_access_key_id='minioadmin',
             aws_secret_access_key='minioadmin',
         ) as client:

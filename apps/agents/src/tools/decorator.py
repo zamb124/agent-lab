@@ -137,7 +137,11 @@ class FunctionTool(BaseTool):
         if is_test_mode() and self._mock_response is not None:
             logger.debug(f"Tool {self.name}: using mock from decorator")
             if callable(self._mock_response):
-                result = self._mock_response(args)
+                sig = inspect.signature(self._mock_response)
+                if "state" in sig.parameters:
+                    result = self._mock_response(args, state=state)
+                else:
+                    result = self._mock_response(args)
                 if inspect.iscoroutine(result):
                     return await result
                 return result

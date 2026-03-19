@@ -38,6 +38,7 @@ class DatabaseConfig(BaseModel):
     shared_url: Optional[str] = None  # URL для shared БД (users, companies, files)
     agents_db_url: Optional[str] = None  # URL для agents БД (agents, flows, tools)
     crm_url: Optional[str] = None  # URL для CRM БД (entity_types, notes, tasks, relationships)
+    sync_url: Optional[str] = None  # URL для Sync БД (spaces, channels, messages)
     redis_url: str = "redis://localhost:8099"  # URL для Redis (TaskIQ очереди)
 
 
@@ -73,9 +74,10 @@ class ServerConfig(BaseModel):
     crm_service_url: Optional[str] = None
     frontend_service_url: Optional[str] = None
     rag_service_url: Optional[str] = None
+    sync_service_url: Optional[str] = None
 
     # Порты по умолчанию для каждого сервиса
-    _default_ports: Dict[str, int] = {"agents": 8001, "frontend": 8002, "crm": 8003, "rag": 8004}
+    _default_ports: Dict[str, int] = {"agents": 8001, "frontend": 8002, "crm": 8003, "rag": 8004, "sync": 8005}
 
     def get_service_url(self, service: Optional[str] = None) -> str:
         """

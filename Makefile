@@ -19,11 +19,11 @@ REMOTE_DIR ?= /opt/agents-lab
 # Алиас для удобства
 dev: dev-up
 
-# Development Environment (порты: 5435, 6381, 9000-9001)
+# Development Environment (порты: 54321, 63791, 19001-19011)
 dev-up:
 	@echo "🚀 Запуск Development окружения..."
 	docker-compose -f docker-compose-dev.yaml up -d
-	@echo "✅ Dev окружение запущено (PostgreSQL: 5435, Redis: 6381, MinIO: 9000/9001)"
+	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, MinIO: 19001/19011)"
 
 dev-down:
 	@echo "🛑 Остановка Development окружения..."
@@ -38,7 +38,7 @@ dev-clean:
 	docker-compose -f docker-compose-dev.yaml down -v
 	@echo "✅ Dev окружение очищено"
 
-# Test Environment (порты: 5434, 6380, 9002-9003, 8005 для test-a2a-agent) - ТОЛЬКО для автотестов
+# Test Environment (порты: 54322, 63792, 19002-19012, 18052) - ТОЛЬКО для автотестов
 test:
 	@echo "🧪 Запуск тестов в изолированном окружении (включая MinIO и test-a2a-agent)..."
 	docker-compose -f docker-compose-test.yaml up --build --abort-on-container-exit tests-runner
@@ -217,14 +217,14 @@ help:
 	@echo "============================================================================"
 	@echo "Изолированные окружения (dev/test/prod):"
 	@echo "============================================================================"
-	@echo "Development (порты: 5435, 6381, 9000-9001):"
+	@echo "Development (порты: 54321, 63791, 19001-19011):"
 	@echo "  make dev-up          - Запустить dev окружение (включая MinIO)"
 	@echo "  make dev-down        - Остановить dev окружение"
 	@echo "  make dev-logs        - Логи dev окружения"
 	@echo "  make dev-clean       - Полная очистка (включая volumes)"
 	@echo "  MinIO Console: http://localhost:9001 (minioadmin/minioadmin)"
 	@echo ""
-	@echo "Testing (порты: 5434, 6380, 9002-9003) - ТОЛЬКО для автотестов:"
+	@echo "Testing (порты: 54322, 63792, 19002-19012) - ТОЛЬКО для автотестов:"
 	@echo "  make test            - Запустить все тесты (включая MinIO)"
 	@echo "  make test-unit       - Запустить unit тесты"
 	@echo "  make test-integration - Запустить integration тесты"

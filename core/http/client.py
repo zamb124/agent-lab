@@ -60,11 +60,27 @@ class SmartProxyClient:
             **self.kwargs,
         )
 
+    def _is_local_url(self, url: str) -> bool:
+        """Проверяет что URL ведёт на localhost или приватную сеть."""
+        try:
+            from urllib.parse import urlparse
+            hostname = urlparse(url).hostname or ""
+            return (
+                hostname in ("localhost", "127.0.0.1", "::1")
+                or hostname.endswith(".localhost")
+                or hostname.startswith("192.168.")
+                or hostname.startswith("10.")
+                or hostname.startswith("172.16.")
+            )
+        except Exception:
+            return False
+
     async def _request_with_retry(self, method: str, url: str, **kwargs) -> httpx.Response:
         """
         Выполняет запрос с автоматическим retry при таймауте прокси.
+        Локальные адреса (localhost, 192.168.x.x и т.д.) всегда идут напрямую.
         """
-        if not self.use_proxy:
+        if not self.use_proxy or self._is_local_url(url):
             async with self._create_client() as client:
                 return await getattr(client, method)(url, **kwargs)
 
@@ -134,7 +150,7 @@ class _StreamContextManager:
         self._stream_cm = None
 
     async def __aenter__(self):
-        if not self._smart_client.use_proxy:
+        if not self._smart_client.use_proxy or self._smart_client._is_local_url(self._url):
             self._client = self._smart_client._create_client()
             self._stream_cm = self._client.stream(self._method, self._url, **self._kwargs)
             return await self._stream_cm.__aenter__()

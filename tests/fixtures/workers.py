@@ -331,9 +331,9 @@ def taskiq_worker():
         command=[sys.executable, "-m", "taskiq", "worker", "apps.broker.worker:broker", "-w", "2"],
         env={
             "TESTING": "true",
-            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-            "DATABASE__REDIS_URL": "redis://localhost:6380/0",
-            "TASKS__BROKER_URL": "redis://localhost:6380/1",
+            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
+            "DATABASE__REDIS_URL": "redis://localhost:63792/0",
+            "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
         },
         cleanup_patterns=[
@@ -375,12 +375,12 @@ def rag_worker():
         command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:broker", "-w", "2"],
         env={
             "TESTING": "true",
-            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-            "DATABASE__SHARED_URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_shared_test",
-            "DATABASE__REDIS_URL": "redis://localhost:6380/0",
-            "TASKS__BROKER_URL": "redis://localhost:6380/1",
+            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
+            "DATABASE__SHARED_URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_shared_test",
+            "DATABASE__REDIS_URL": "redis://localhost:63792/0",
+            "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
-            "S3__ENDPOINT_URL": "http://localhost:9010",
+            "S3__ENDPOINT_URL": "http://localhost:19002",
             "S3__ACCESS_KEY": "minioadmin",
             "S3__SECRET_KEY": "minioadmin",
             "S3__BUCKET_NAME": "platform-test",
@@ -437,9 +437,9 @@ def taskiq_scheduler():
         env={
             **os.environ,
             "TESTING": "true",
-            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-            "DATABASE__REDIS_URL": "redis://localhost:6380/0",
-            "TASKS__BROKER_URL": "redis://localhost:6380/1",
+            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
+            "DATABASE__REDIS_URL": "redis://localhost:63792/0",
+            "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
         },
     )

@@ -166,7 +166,7 @@ cp conf.local.json.example conf.local.json
         "access_key_id": "minioadmin",
         "secret_access_key": "minioadmin",
         "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:9000",
+        "endpoint_url": "http://localhost:19001",
         "enabled": true
       }
     }
@@ -192,7 +192,7 @@ cp conf.local.json.example conf.local.json
         "access_key_id": "minioadmin",
         "secret_access_key": "minioadmin",
         "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:9000",
+        "endpoint_url": "http://localhost:19001",
         "enabled": true
       }
     }
@@ -201,7 +201,7 @@ cp conf.local.json.example conf.local.json
 </good_example>
 
 **MinIO доступен:**
-- Dev: `http://localhost:9000` (API), `http://localhost:9001` (Console)
+- Dev: `http://localhost:19001` (API), `http://localhost:19011` (Console)
 - Test: `http://localhost:9002` (API), `http://localhost:9003` (Console)
 - Credentials: `minioadmin` / `minioadmin`
 

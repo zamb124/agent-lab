@@ -254,8 +254,13 @@ class NodeAsToolWrapper(BaseTool):
         if nested_state.response:
             parent_state.response = nested_state.response
         
-        # Копируем tool_results
         parent_state.tool_results.update(nested_state.tool_results)
+        
+        # Копируем все extra поля которые субагент записал в state
+        extra = nested_state.model_extra
+        if extra:
+            for key, value in extra.items():
+                setattr(parent_state, key, value)
     
     def _extract_response(self, result: Any) -> Any:
         """Извлекает response из результата."""

@@ -1,14 +1,16 @@
+name: agentlab-test
+
 services:
   postgres-test:
     platform: "linux/amd64"
     image: pgvector/pgvector:pg15
-    container_name: platform-postgres-test
+    container_name: agentlab_postgres_test
     environment:
       POSTGRES_DB: platform_test
       POSTGRES_USER: platform_user
       POSTGRES_PASSWORD: admin
     ports:
-      - "5434:5432"
+      - "54322:5432"
     command: postgres -c max_connections=300
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_test"]
@@ -21,9 +23,9 @@ services:
   redis-test:
     platform: "linux/amd64"
     image: redis:7-alpine
-    container_name: platform-redis-test
+    container_name: agentlab_redis_test
     ports:
-      - "6380:6379"
+      - "63792:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -35,10 +37,10 @@ services:
   minio-test:
     platform: "linux/amd64"
     image: minio/minio:latest
-    container_name: platform-minio-test
+    container_name: agentlab_minio_test
     ports:
-      - "9010:9000"
-      - "9011:9001"
+      - "19002:9000"
+      - "19012:9001"
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
@@ -56,9 +58,9 @@ services:
     build:
       context: .
       dockerfile: apps/test_a2a_agent/Dockerfile
-    container_name: test-a2a-agent
+    container_name: agentlab_a2a_test
     ports:
-      - "8005:8005"
+      - "18052:8005"
     environment:
       - API_KEY=test-api-key-12345
       - AGENT_URL=http://test-a2a-agent:8005
@@ -77,7 +79,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
-    container_name: platform-worker-test
+    container_name: agentlab_worker_test
     depends_on:
       redis-test:
         condition: service_healthy
@@ -99,7 +101,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
-    container_name: platform-scheduler-test
+    container_name: agentlab_scheduler_test
     depends_on:
       redis-test:
         condition: service_healthy
@@ -122,7 +124,7 @@ services:
       context: .
       dockerfile: Dockerfile.test
       target: rag-worker
-    container_name: platform-rag-worker-test
+    container_name: agentlab_rag_worker_test
     depends_on:
       redis-test:
         condition: service_healthy
@@ -144,7 +146,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
-    container_name: platform-tests-runner
+    container_name: agentlab_tests_runner
     depends_on:
       redis-test:
         condition: service_healthy
@@ -184,4 +186,3 @@ services:
 networks:
   test-net:
     driver: bridge
-

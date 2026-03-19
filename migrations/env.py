@@ -37,6 +37,12 @@ from apps.crm.db.models import (
     EntityType, RelationshipType, Relationship,
     CompanyMapping, AccessGrant, AccessRequest
 )
+# Sync models
+from apps.sync.db.models import (
+    SyncSpace, SyncChannel, SyncChannelMember,
+    SyncThread, SyncMessage, SyncMessageContent,
+    SyncMessageFile, SyncFile, SyncGitResourceRef,
+)
 
 # Теперь импортируем реестр после регистрации всех сервисов
 from core.db.service_registry import get_unique_db_urls

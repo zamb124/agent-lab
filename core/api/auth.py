@@ -111,6 +111,9 @@ async def start_auth(request: Request, provider_name: str, auth_service: AuthSer
     try:
         auth_url = await auth_service.start_auth(provider, redirect_uri, original_host=original_host)
         return {"auth_url": auth_url, "provider": provider_name}
+    except ValueError as e:
+        logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

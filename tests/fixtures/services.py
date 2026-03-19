@@ -9,10 +9,11 @@
 - Автоматически останавливается после завершения тестов
 
 Доступные сервисы:
-- agents_service: Agents сервис (порт 8000)
-- rag_service: RAG сервис (порт 8004)
-- crm_service: CRM сервис (порт 8003)
-- frontend_service: Frontend сервис (порт 8001)
+- agents_service: Agents сервис (порт 9001)
+- rag_service: RAG сервис (порт 9002)
+- crm_service: CRM сервис (порт 9003)
+- frontend_service: Frontend сервис (порт 9004)
+- sync_service: Sync сервис (порт 9005)
 """
 
 import pytest
@@ -32,21 +33,26 @@ _CRM_SERVER_PID = "/tmp/platform_test_crm_server.pid"
 _FRONTEND_SERVER_LOCK = "/tmp/platform_test_frontend_server.lock"
 _FRONTEND_SERVER_PID = "/tmp/platform_test_frontend_server.pid"
 
+_SYNC_SERVER_LOCK = "/tmp/platform_test_sync_server.lock"
+_SYNC_SERVER_PID = "/tmp/platform_test_sync_server.pid"
+
 
 # Общие env переменные для всех сервисов
 _COMMON_TEST_ENV = {
     "TESTING": "true",
-    "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-    "DATABASE__SHARED_URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-    "DATABASE__CRM_URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-    "DATABASE__REDIS_URL": "redis://localhost:6380/0",
-    "TASKS__BROKER_URL": "redis://localhost:6380/1",
+    "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
+    "DATABASE__SHARED_URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
+    "DATABASE__CRM_URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
+    "DATABASE__SYNC_URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
+    "DATABASE__REDIS_URL": "redis://localhost:63792/0",
+    "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "AUTH__PERMISSIONS_ENABLED": "false",
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
     "SERVER__AGENTS_SERVICE_URL": "http://localhost:9001",
     "SERVER__RAG_SERVICE_URL": "http://localhost:9002",
     "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
     "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
+    "SERVER__SYNC_SERVICE_URL": "http://localhost:9005",
     "S3__DEFAULT_BUCKET": "test-bucket",
     "RAG__ENABLED": "true",
     "RAG__DEFAULT_PROVIDER": "pgvector",
@@ -66,8 +72,8 @@ def agents_service():
     - WebSocket connections
     
     Зависимости:
-    - PostgreSQL (порт 5434)
-    - Redis (порт 6380)
+    - PostgreSQL (порт 54322)
+    - Redis (порт 63792)
     - TaskIQ worker (должен быть запущен отдельно)
     """
     manager = SessionServerManager(
@@ -95,8 +101,8 @@ def rag_service():
     - Namespace management
     
     Зависимости:
-    - PostgreSQL (порт 5434) - для document_processing_status, namespaces, pgvector embeddings
-    - MinIO (порт 9000) - для хранения файлов
+    - PostgreSQL (порт 54322) - для document_processing_status, namespaces, pgvector embeddings
+    - MinIO (порт 19002) - для хранения файлов
     - RAGWorker (должен быть запущен отдельно)
     """
     manager = SessionServerManager(
@@ -125,7 +131,7 @@ def crm_service():
     - Attachments (через RAG service)
     
     Зависимости:
-    - PostgreSQL (порт 5434) - для entity_types, relationships, relationship_types, entities через pgvector
+    - PostgreSQL (порт 54322) - для entity_types, relationships, relationship_types, entities через pgvector
     - RAG service (порт 9002) - для attachments
     - Agents service (порт 9001) - для AI анализа через A2A
     """
@@ -173,7 +179,36 @@ def frontend_service():
 
 
 @pytest.fixture(scope="session")
-def all_services(agents_service, rag_service, crm_service, frontend_service):
+def sync_service():
+    """
+    Sync сервис как реальный HTTP сервер на порту 9005.
+
+    Используется для:
+    - Инженерный чат (spaces, channels, threads, messages)
+    - WebSocket realtime
+    - Git-интеграция
+
+    Зависимости:
+    - PostgreSQL (порт 54322)
+    - Redis (порт 63792)
+    - Sync Worker (должен быть запущен отдельно)
+    """
+    manager = SessionServerManager(
+        name="Sync",
+        lock_file=_SYNC_SERVER_LOCK,
+        pid_file=_SYNC_SERVER_PID,
+        app_path="apps.sync.main:app",
+        port=9005,
+        startup_wait=3.0,
+        env=_COMMON_TEST_ENV,
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def all_services(agents_service, rag_service, crm_service, frontend_service, sync_service):
     """
     Запускает все сервисы платформы.
     
@@ -184,12 +219,14 @@ def all_services(agents_service, rag_service, crm_service, frontend_service):
     2. RAG (9002) - зависит от PostgreSQL с pgvector
     3. CRM (9003) - зависит от RAG и Agents
     4. Frontend (9004) - зависит от Agents
+    5. Sync (9005) - зависит от PostgreSQL и Redis
     """
     return {
         "agents": "http://localhost:9001",
         "rag": "http://localhost:9002",
-        "s3_endpoint": "http://localhost:9010",
         "crm": "http://localhost:9003",
         "frontend": "http://localhost:9004",
+        "sync": "http://localhost:9005",
+        "s3_endpoint": "http://localhost:19002",
     }
 

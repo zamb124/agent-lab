@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Set
 import httpx
 
 from core.config import get_settings
+from core.http import get_httpx_client
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -45,13 +46,13 @@ class TelegramPollingBot:
         """Удаляет webhook перед polling."""
         url = f"{TELEGRAM_API_BASE}/bot{self.bot_token}/deleteWebhook"
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with get_httpx_client(timeout=10.0, proxy=True) as client:
                 await client.post(url)
                 logger.info(f"[{self.bot_key}] Webhook deleted")
         except Exception as e:
             logger.warning(f"[{self.bot_key}] Failed to delete webhook: {e}")
     
-    async def get_updates(self, client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    async def get_updates(self, client) -> List[Dict[str, Any]]:
         """Long polling getUpdates."""
         try:
             response = await client.get(
@@ -90,7 +91,7 @@ class TelegramPollingBot:
         
         logger.info(f"[{self.bot_key}] Polling started (token: ...{self.bot_token[-8:]})")
         
-        async with httpx.AsyncClient() as client:
+        async with get_httpx_client(proxy=True) as client:
             while self.running:
                 updates = await self.get_updates(client)
                 

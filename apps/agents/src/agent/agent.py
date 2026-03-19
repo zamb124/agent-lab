@@ -180,8 +180,13 @@ class Agent:
                     await emitter.emit_node_start(node_id, node_type)
 
                 # Выполнение всех нод текущего уровня
+                async def _run(node_id: str) -> ExecutionState:
+                    node_type = self.nodes[node_id].config.get("type", "function")
+                    async with tracer.node_span(node_id, node_type, trace_ctx):
+                        return await self.nodes[node_id].run.kiq(state)
+
                 try:
-                    tasks = [self.nodes[node_id].run.kiq(state) for node_id in current_nodes]
+                    tasks = [_run(node_id) for node_id in current_nodes]
                     results = await asyncio.gather(*tasks)
                     state = self._merge_results(state, results)
                 except AgentInterrupt as e:

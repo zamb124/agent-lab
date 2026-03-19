@@ -10,9 +10,8 @@ TelegramTriggerHandler - обработчик Telegram Bot webhook тригге�
 import secrets
 from typing import Any, Dict
 
-import httpx
-
 from apps.agents.src.models import TriggerConfig, TriggerStatus, TriggerType
+from core.http import get_httpx_client
 from apps.agents.src.triggers.executor import TriggerExecutor
 from apps.agents.src.triggers.handlers.base import (
     BaseTriggerHandler,
@@ -103,7 +102,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             "drop_pending_updates": config.get("drop_pending_updates", False),
         }
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with get_httpx_client(timeout=30.0, proxy=True) as client:
             response = await client.post(api_url, json=payload)
             
             if response.status_code != 200:
@@ -167,7 +166,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         api_url = f"{TELEGRAM_API_BASE}/bot{bot_token}/deleteWebhook"
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with get_httpx_client(timeout=30.0, proxy=True) as client:
                 response = await client.post(api_url, json={"drop_pending_updates": True})
                 
                 if response.status_code == 200:

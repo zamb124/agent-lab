@@ -92,6 +92,15 @@ CMD ["taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"]
 FROM base-final AS rag-worker
 CMD ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]
 
+# Sync
+FROM base-final AS sync
+EXPOSE 8005
+CMD ["python", "-m", "apps.sync.main"]
+
+# Sync Worker
+FROM base-final AS sync-worker
+CMD ["taskiq", "worker", "apps.sync_worker.worker:broker", "--workers", "2"]
+
 # Migrations (init container)
 FROM base-final AS migrations
 CMD ["python", "-m", "core.db.migrations"]
@@ -99,5 +108,5 @@ CMD ["python", "-m", "core.db.migrations"]
 # Full (для локальной разработки и тестов)
 FROM base-final AS full
 COPY --from=docs-builder /app/site ./site
-EXPOSE 8001 8002 8003 8004
+EXPOSE 8001 8002 8003 8004 8005
 CMD ["python", "run_prod.py"]
