@@ -26,7 +26,7 @@
   "database": {
     "url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
     "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
-    "sync_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/sync_db",
+    "sync_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
     "redis_url": "redis://localhost:63791/0"
   },
   "tasks": {

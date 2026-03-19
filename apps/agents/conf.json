@@ -1,9 +1,9 @@
 {
   "service_name": "agents",
   "database": {
-    "url": "postgresql+asyncpg://platform_user:admin@localhost:5435/platform_db",
-    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:5435/platform_db",
-    "redis_url": "redis://localhost:6381/0"
+    "url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
+    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
+    "redis_url": "redis://localhost:63791/0"
   },
   "server": {
     "name": "agents",
@@ -21,7 +21,7 @@
     "permissions_enabled": false
   },
   "tasks": {
-    "broker_url": "redis://localhost:6381/0"
+    "broker_url": "redis://localhost:63791/0"
   },
   "logging": {
     "level": "INFO",

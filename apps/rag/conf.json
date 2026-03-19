@@ -1,8 +1,8 @@
 {
   "service_name": "rag",
   "database": {
-    "url": "postgresql+asyncpg://platform_user:admin@localhost:5435/platform_db",
-    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:5435/platform_db"
+    "url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
+    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db"
   },
   "server": {
     "name": "rag",

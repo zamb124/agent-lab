@@ -127,6 +127,9 @@ ROUTE_RULES: List[RouteRule] = [
     
     # Универсальный эндпоинт информации о пользователе (доступен на всех сервисах)
     RouteRule("/api/auth/me", context_type="api", auth_required=True),
+    RouteRule("/api/auth/me/*", context_type="api", auth_required=True),
+    RouteRule("/auth/me", context_type="api", auth_required=True),
+    RouteRule("/auth/me/*", context_type="api", auth_required=True),
     RouteRule("/*/api/auth/me", context_type="api", auth_required=True),
     RouteRule("/*/api/auth/me/*", context_type="api", auth_required=True),
     
@@ -147,11 +150,15 @@ ROUTE_RULES: List[RouteRule] = [
     
     # UI агентов - статика без авторизации (должна быть перед /agents/ui/*)
     RouteRule("/agents/ui/static/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/ui/static/*", auth_required=False, context_type="anonymous"),
     
     # UI агентов - страницы (требуют авторизацию)
     RouteRule("/agents/ui/*", context_type="frontend", auth_required=True),
     RouteRule("/agents/ui", context_type="frontend", auth_required=True),
     RouteRule("/agents", context_type="frontend", auth_required=True),
+    # Прямой доступ на порт сервиса (без nginx-префикса /agents)
+    RouteRule("/ui/*", context_type="frontend", auth_required=True),
+    RouteRule("/ui", context_type="frontend", auth_required=True),
     
     # API агентов (новый путь)
     RouteRule("/agents/v1/auth/me", context_type="api", auth_required=True),
@@ -187,6 +194,9 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/api/companies/me",
     "/api/companies",
     "/api/auth/me",
+    "/api/auth/me/*",
+    "/auth/me",
+    "/auth/me/*",
     "/*/api/auth/me",
     "/*/api/auth/me/*",
     "/frontend/api/companies/check-slug",
