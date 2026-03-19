@@ -16,16 +16,21 @@
       "rag": {
         "url": "http://localhost:8004",
         "name": "rag"
+      },
+      "sync": {
+        "url": "http://localhost:8005",
+        "name": "sync"
       }
     }
   },
   "database": {
-    "url": "postgresql+asyncpg://platform_user:admin@localhost:5435/platform_db",
-    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:5435/platform_db",
-    "redis_url": "redis://localhost:6381/0"
+    "url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
+    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
+    "sync_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/sync_db",
+    "redis_url": "redis://localhost:63791/0"
   },
   "tasks": {
-    "broker_url": "redis://localhost:6381/0"
+    "broker_url": "redis://localhost:63791/0"
   },
   "auth": {
     "enabled": true,
@@ -37,6 +42,8 @@
         "token_url": "https://oauth.yandex.ru/token",
         "userinfo_url": "https://login.yandex.ru/info",
         "scope": "login:email login:avatar",
+        "client_id": "test-yandex-client-id",
+        "client_secret": "test-yandex-client-secret",
         "enabled": true
       },
       "google": {
@@ -44,6 +51,8 @@
         "token_url": "https://oauth2.googleapis.com/token",
         "userinfo_url": "https://openidconnect.googleapis.com/v1/userinfo",
         "scope": "openid email profile",
+        "client_id": "test-google-client-id",
+        "client_secret": "test-google-client-secret",
         "enabled": true
       },
       "github": {
@@ -51,6 +60,8 @@
         "token_url": "https://github.com/login/oauth/access_token",
         "userinfo_url": "https://api.github.com/user",
         "scope": "read:user user:email",
+        "client_id": "test-github-client-id",
+        "client_secret": "test-github-client-secret",
         "enabled": true
       }
     }
@@ -181,31 +192,16 @@
   },
   "s3": {
     "enabled": true,
-    "default_bucket": "vkbucket",
+    "default_bucket": "selectel",
     "buckets": {
-      "secretbucket": {
-        "provider": "yandex",
-        "access_key_id": "YOUR_YANDEX_S3_ACCESS_KEY_ID",
-        "secret_access_key": "YOUR_YANDEX_S3_SECRET_ACCESS_KEY",
-        "region_name": "ru-central1",
-        "endpoint_url": "https://storage.yandexcloud.net",
-        "enabled": true
-      },
-      "aws-bucket": {
+      "selectel": {
         "provider": "aws",
-        "access_key_id": null,
-        "secret_access_key": null,
-        "region_name": "us-west-2",
-        "endpoint_url": null,
-        "enabled": false
-      },
-      "minio-local": {
-        "provider": "minio",
-        "access_key_id": "minioadmin",
-        "secret_access_key": "minioadmin",
-        "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:9000",
-        "enabled": false
+        "access_key_id": "SELECTEL_ACCESS_KEY",
+        "secret_access_key": "SELECTEL_SECRET_KEY",
+        "region_name": "ru-3",
+        "endpoint_url": "https://s3.ru-3.storage.selcloud.ru",
+        "bucket_name": "shvedzilla",
+        "enabled": true
       },
       "test-bucket": {
         "provider": "minio",
@@ -213,24 +209,14 @@
         "access_key_id": "minioadmin",
         "secret_access_key": "minioadmin",
         "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:9010",
-        "enabled": true
-      },
-      "vkbucket": {
-        "provider": "vkcloud",
-        "access_key_id": "YOUR_VKCLOUD_S3_ACCESS_KEY_ID",
-        "secret_access_key": "YOUR_VKCLOUD_S3_SECRET_ACCESS_KEY",
-        "region_name": "ru-msk",
-        "endpoint_url": "https://hb.ru-msk.vkcloud-storage.ru",
+        "endpoint_url": "http://localhost:19002",
         "enabled": true
       }
     }
   },
   "proxy": {
-    "enabled": true,
-    "proxies": [
-      "http://YOUR_PROXY_USER:YOUR_PROXY_PASSWORD@YOUR_PROXY_HOST:YOUR_PROXY_PORT"
-    ],
+    "enabled": false,
+    "proxies": [],
     "connect_timeout": 10.0
   },
   "cloud_voice": {

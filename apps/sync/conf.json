@@ -1,0 +1,6 @@
+{
+  "server": {
+    "name": "sync",
+    "port": 8005
+  }
+}

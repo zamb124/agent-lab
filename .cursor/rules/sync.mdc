@@ -1,0 +1,110 @@
+---
+description: "Sync сервис: инженерный чат, каналы, треды, сообщения, Git-интеграция sync chat channels threads messages git"
+globs:
+  - "apps/sync/**"
+  - "apps/sync_worker/**"
+---
+# Sync Service
+
+Инженерный чат с Git-интеграцией. Порт 8005.
+
+## Архитектура
+
+- **БД**: SQLAlchemy реляционный (паттерн CRM: `SyncDatabase` + `BaseSyncRepository`)
+- **Изоляция**: `company_id` во всех таблицах, из `get_context()` автоматически
+- **Auth**: платформенный `AuthMiddleware` + `get_context()`
+- **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket
+- **UI**: SolidJS в `apps/sync/ui/`
+
+## Структура
+
+```
+apps/sync/
+  config.py         # SyncSettings(BaseSettings)
+  container.py      # SyncContainer(BaseContainer)
+  main.py           # create_service_app() + WS + UI
+  ws.py             # ConnectionManager + PubSubFanout
+  db/
+    models.py       # SQLAlchemy модели (Base) + register_service("sync")
+    base.py         # SyncDatabase + BaseSyncRepository
+    repositories/   # Space, Channel, Thread, Message, File, GitResourceRef
+  models/           # Pydantic API-модели (Read/Create/Update)
+  api/              # REST роутеры
+  realtime/         # Command-Event (broker, commands, events, handlers, tasks)
+
+apps/sync_worker/   # TaskIQ worker (queue: sync)
+```
+
+## Таблицы (префикс sync_)
+
+| Таблица | company_id | Описание |
+|---------|-----------|----------|
+| sync_spaces | да | Пространства |
+| sync_channels | да | Каналы (direct/group/topic) |
+| sync_channel_members | да | Участники каналов |
+| sync_threads | да | Треды |
+| sync_messages | да | Сообщения |
+| sync_message_contents | нет (через message FK) | Полиморфный контент |
+| sync_message_files | нет (через FK) | Связь файлов с сообщениями |
+| sync_files | да | Файлы |
+| sync_git_resource_refs | да | Git-ресурсы |
+
+## Command-First архитектура
+
+REST API и WebSocket используют единый pipeline обработки команд:
+
+```
+REST POST /sync/api/v1/... ──┐
+                              ├──> TaskIQ (queue: sync) ──> handlers.py ──> БД + Redis Pub/Sub ──> WS
+WebSocket /sync/ws        ────┘
+```
+
+### Правила
+
+- **Мутации** — только через команды: `CommandEnvelope` -> `handle_command.kiq()` -> `execute_command()` в `handlers.py`
+- **Чтение** — напрямую из репозитория (GET-эндпоинты)
+- **Бизнес-логика** — только в `handlers.py` (`execute_command()`)
+- **События** — только из `handlers.py` (`CommandExecutionResult.events`). TaskIQ task публикует в Redis канал `sync.realtime.events`
+- **company_id** — передаётся в `CommandEnvelope` из `get_context()`
+
+### Запрещено
+
+- Прямые изменения БД в REST эндпоинтах (в обход команд)
+- Разная бизнес-логика для REST и WebSocket
+- Ручная публикация событий в Redis (минуя handlers)
+
+### Добавление новой команды
+
+1. Payload-модель -> `commands.py`
+2. Обработчик -> `handlers.py` (`execute_command`, ветка `if cmd.type == "..."`)
+3. Событие -> `events.py`
+4. REST эндпоинт (если нужен) -> `api/*.py` через `handle_command.kiq()`
+5. WebSocket — работает автоматически
+
+Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.upsert`).
+
+### WebSocket протокол
+
+**Клиент -> сервер:** `{ id, type, payload }` (WsCommandFrame)
+
+**Сервер -> клиент:**
+- Результат команды: `{ id, ok, result, error_code, error_detail }` (WsResultFrame)
+- Realtime-событие: `{ type, payload }` (RealtimeEvent, broadcast всем)
+
+## Frontend (SolidJS)
+
+Frontend живёт в `apps/sync/ui/` (собранный) и `apps/sync/ui-src/` (исходники, SolidJS + Vite + Tailwind + Kobalte).
+
+- `shared/*` не импортирует `pages/*`
+- Компоненты `pages/chat/*` не ходят в сеть — только props
+- Единственная точка запросов: `shared/api.ts` (`apiFetch`)
+- Zero-Guess на фронте: `x || "default"` для обязательных значений — запрещено, бросать `throw`
+- WebSocket: Backend-first — UI отправляет команду -> pending -> подтверждение по событию
+
+## Ключевые файлы
+
+- `apps/sync/db/models.py` - SQLAlchemy модели
+- `apps/sync/db/base.py` - SyncDatabase, BaseSyncRepository
+- `apps/sync/realtime/handlers.py` - бизнес-логика команд
+- `apps/sync/realtime/tasks.py` - TaskIQ задачи
+- `apps/sync/ws.py` - WebSocket, PubSubFanout

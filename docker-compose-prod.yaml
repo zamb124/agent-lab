@@ -1,3 +1,5 @@
+name: agentlab-prod
+
 # Production Docker Compose с YAML anchors для DRY
 # Использование: docker-compose -f docker-compose-prod.yaml up -d
 
@@ -15,7 +17,12 @@ x-common-env: &common-env
   SERVER__FRONTEND_SERVICE_URL: http://frontend:8002
   SERVER__CRM_SERVICE_URL: http://crm:8003
   SERVER__RAG_SERVICE_URL: http://rag:8004
+  SERVER__SYNC_SERVICE_URL: http://sync:8005
+  DATABASE__SYNC_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/sync_db
   AUTH__JWT_SECRET: ${AUTH__JWT_SECRET:-change-me-in-production}
+  S3__DEFAULT_BUCKET: selectel
+  S3__BUCKETS__SELECTEL__ACCESS_KEY_ID: ${SELECTEL_ACCESS_KEY}
+  S3__BUCKETS__SELECTEL__SECRET_ACCESS_KEY: ${SELECTEL_SECRET_KEY}
 
 x-healthcheck: &healthcheck
   interval: 30s
@@ -33,7 +40,7 @@ services:
   # ============================================
   postgres:
     image: pgvector/pgvector:pg15
-    container_name: platform-postgres
+    container_name: agentlab_postgres
     environment:
       POSTGRES_DB: platform_db
       POSTGRES_USER: platform_user
@@ -49,11 +56,11 @@ services:
       start_period: 10s
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
 
   redis:
     image: redis:7-alpine
-    container_name: platform-redis
+    container_name: agentlab_redis
     command: redis-server --save 60 1 --loglevel notice --appendonly yes
     volumes:
       - redis_data:/data
@@ -65,7 +72,7 @@ services:
       start_period: 10s
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
 
   # ============================================
   # Init container: Migrations
@@ -74,7 +81,7 @@ services:
     build:
       <<: *default-build
       target: migrations
-    container_name: platform-migrations
+    container_name: agentlab_migrations
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./migrations:/app/migrations:ro
@@ -85,7 +92,7 @@ services:
         condition: service_healthy
     restart: "no"
     networks:
-      - platform-net
+      - agentlab-net
 
   # ============================================
   # Application Services
@@ -94,7 +101,7 @@ services:
     build:
       <<: *default-build
       target: agents
-    container_name: platform-agents
+    container_name: agentlab_agents
     ports:
       - "127.0.0.1:8001:8001"
     volumes:
@@ -116,13 +123,13 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
 
   frontend:
     build:
       <<: *default-build
       target: frontend
-    container_name: platform-frontend
+    container_name: agentlab_frontend
     ports:
       - "127.0.0.1:8002:8002"
     volumes:
@@ -144,13 +151,13 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
 
   crm:
     build:
       <<: *default-build
       target: crm
-    container_name: platform-crm
+    container_name: agentlab_crm
     ports:
       - "127.0.0.1:8003:8003"
     volumes:
@@ -172,13 +179,13 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
 
   rag:
     build:
       <<: *default-build
       target: rag
-    container_name: platform-rag
+    container_name: agentlab_rag
     ports:
       - "127.0.0.1:8004:8004"
     volumes:
@@ -200,7 +207,35 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
+
+  sync:
+    build:
+      <<: *default-build
+      target: sync
+    container_name: agentlab_sync
+    ports:
+      - "127.0.0.1:8005:8005"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+      - ./apps/sync/conf.json:/app/apps/sync/conf.json:ro
+      - sync_logs:/app/logs
+    environment:
+      <<: *common-env
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: "8005"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+    restart: unless-stopped
+    networks:
+      - agentlab-net
 
   # ============================================
   # Workers
@@ -222,7 +257,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
     deploy:
       replicas: 2
 
@@ -230,7 +265,7 @@ services:
     build:
       <<: *default-build
       target: scheduler
-    container_name: platform-scheduler
+    container_name: agentlab_scheduler
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./conf.local.json:/app/conf.local.json:ro
@@ -243,13 +278,13 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
 
   rag-worker:
     build:
       <<: *default-build
       target: rag-worker
-    container_name: platform-rag-worker
+    container_name: agentlab_rag_worker
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./conf.local.json:/app/conf.local.json:ro
@@ -264,7 +299,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - platform-net
+      - agentlab-net
+
+  sync-worker:
+    build:
+      <<: *default-build
+      target: sync-worker
+    container_name: agentlab_sync_worker
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+      - sync_worker_logs:/app/logs
+    environment:
+      <<: *common-env
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentlab-net
 
 volumes:
   postgres_data:
@@ -273,9 +328,11 @@ volumes:
   frontend_logs:
   crm_logs:
   rag_logs:
+  sync_logs:
   worker_logs:
   rag_worker_logs:
+  sync_worker_logs:
 
 networks:
-  platform-net:
+  agentlab-net:
     driver: bridge

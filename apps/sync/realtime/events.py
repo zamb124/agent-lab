@@ -1,0 +1,62 @@
+"""События realtime слоя Sync (server -> client)."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from apps.sync.models.channels import ChannelRead
+from apps.sync.models.git import GitResourceRefRead
+from apps.sync.models.messages import MessageRead, MessageStatus
+from apps.sync.models.spaces import SpaceRead
+from apps.sync.models.threads import ThreadRead
+
+
+EventType = Literal[
+    "space.created",
+    "channel.created",
+    "thread.created",
+    "message.created",
+    "message.status_changed",
+    "git_resource.upserted",
+]
+
+
+class RealtimeEvent(BaseModel):
+    type: EventType
+    channel_id: str | None = Field(default=None, description="Канал события, если применимо.")
+    payload: dict = Field(description="Сериализованный payload события.")
+
+
+class MessageStatusChangedPayload(BaseModel):
+    message_id: str
+    status: MessageStatus
+
+
+def event_space_created(space: SpaceRead) -> RealtimeEvent:
+    return RealtimeEvent(type="space.created", channel_id=None, payload=space.model_dump(mode="json"))
+
+
+def event_channel_created(channel: ChannelRead) -> RealtimeEvent:
+    return RealtimeEvent(type="channel.created", channel_id=channel.id, payload=channel.model_dump(mode="json"))
+
+
+def event_thread_created(thread: ThreadRead) -> RealtimeEvent:
+    return RealtimeEvent(type="thread.created", channel_id=thread.channel_id, payload=thread.model_dump(mode="json"))
+
+
+def event_message_created(message: MessageRead) -> RealtimeEvent:
+    return RealtimeEvent(type="message.created", channel_id=message.channel_id, payload=message.model_dump(mode="json"))
+
+
+def event_message_status_changed(channel_id: str, payload: MessageStatusChangedPayload) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="message.status_changed",
+        channel_id=channel_id,
+        payload=payload.model_dump(mode="json"),
+    )
+
+
+def event_git_resource_upserted(ref: GitResourceRefRead) -> RealtimeEvent:
+    return RealtimeEvent(type="git_resource.upserted", channel_id=None, payload=ref.model_dump(mode="json"))
