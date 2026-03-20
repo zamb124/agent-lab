@@ -298,6 +298,30 @@ export class PlatformChat extends PlatformIsland {
                     border-right: none;
                 }
             }
+
+            /* Полноэкранный режим элемента (DOM fullscreen API) */
+            :host:fullscreen,
+            :host:-webkit-full-screen {
+                margin: 0;
+                border-radius: 25px;
+            }
+
+            :host:fullscreen .island,
+            :host:-webkit-full-screen .island {
+                border-radius: 25px;
+            }
+
+            :host:fullscreen .chat-body,
+            :host:-webkit-full-screen .chat-body {
+                border-radius: 25px;
+                border-left: 1px solid var(--glass-border-subtle);
+                border-right: 1px solid var(--glass-border-subtle);
+            }
+
+            :host:fullscreen .island-header-glow,
+            :host:-webkit-full-screen .island-header-glow {
+                border-radius: 25px 25px 0 0;
+            }
         `
     ];
 
