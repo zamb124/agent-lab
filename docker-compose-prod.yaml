@@ -100,7 +100,7 @@ services:
     container_name: agentlab_agents
     command: ["python", "-m", "apps.agents.main"]
     ports:
-      - "127.0.0.1:8001:8001"
+      - "8001:8001"
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./apps/agents/conf.json:/app/apps/agents/conf.json:ro
@@ -126,7 +126,7 @@ services:
     container_name: agentlab_frontend
     command: ["python", "-m", "apps.frontend.main"]
     ports:
-      - "127.0.0.1:8002:8002"
+      - "8002:8002"
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./apps/frontend/conf.json:/app/apps/frontend/conf.json:ro
@@ -152,7 +152,7 @@ services:
     container_name: agentlab_crm
     command: ["python", "-m", "apps.crm.main"]
     ports:
-      - "127.0.0.1:8003:8003"
+      - "8003:8003"
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./apps/crm/conf.json:/app/apps/crm/conf.json:ro
@@ -178,7 +178,7 @@ services:
     container_name: agentlab_rag
     command: ["python", "-m", "apps.rag.main"]
     ports:
-      - "127.0.0.1:8004:8004"
+      - "8004:8004"
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./apps/rag/conf.json:/app/apps/rag/conf.json:ro
@@ -204,7 +204,7 @@ services:
     container_name: agentlab_sync
     command: ["python", "-m", "apps.sync.main"]
     ports:
-      - "127.0.0.1:8005:8005"
+      - "8005:8005"
     volumes:
       - ./conf.json:/app/conf.json:ro
       - ./apps/sync/conf.json:/app/apps/sync/conf.json:ro
