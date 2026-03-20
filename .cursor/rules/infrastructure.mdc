@@ -1,0 +1,89 @@
+---
+description: "Инфраструктура: сервер, MicroK8s Ingress, деплой, DNS"
+alwaysApply: false
+---
+
+# Инфраструктура
+
+## Сервер
+
+| Параметр | Значение |
+|---|---|
+| IP | `84.38.184.105` |
+| SSH | `root@84.38.184.105` |
+| Рабочая директория | `/opt/agent-lab/` |
+| Домен | `humanitec.ru` |
+
+## Стек
+
+- **Docker Compose** — запускает все сервисы (`/opt/agent-lab/docker-compose-prod.yaml`)
+- **MicroK8s** — Kubernetes ingress-nginx + cert-manager (Let's Encrypt)
+- **Selectel S3** — объектное хранилище (`s3.ru-3.storage.selcloud.ru`, бакет `shvedzilla`)
+
+## Маршрутизация (Ingress)
+
+Один ingress `humanitec-ingress` с path-based роутингом — работает одинаково для корневого домена и поддоменов компаний:
+
+```
+humanitec.ru/           → frontend-svc  :8002
+humanitec.ru/agents     → agents-svc    :8001
+humanitec.ru/crm        → crm-svc       :8003
+humanitec.ru/rag        → rag-svc       :8004
+humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
+
+*.humanitec.ru/         → frontend-svc  :8002  (поддомен = slug компании)
+*.humanitec.ru/agents   → agents-svc    :8001
+*.humanitec.ru/crm      → crm-svc       :8003
+...
+```
+
+Поддомен компании (`qqq.humanitec.ru`) обрабатывается `AuthMiddleware` в каждом сервисе — он читает `Host` хедер и резолвит `company_id` через Redis.
+
+## Сервисы на хосте
+
+Все сервисы слушают на `0.0.0.0` (нужно для доступа из K8s Endpoints):
+
+| Сервис | Порт | Команда |
+|---|---|---|
+| agents | 8001 | `python -m apps.agents.main` |
+| frontend | 8002 | `python -m apps.frontend.main` |
+| crm | 8003 | `python -m apps.crm.main` |
+| rag | 8004 | `python -m apps.rag.main` |
+| sync | 8005 | `python -m apps.sync.main` |
+
+Один Docker-образ `ghcr.io/zamb124/agent-lab:latest` — разные `command:` в compose.
+
+## DNS
+
+Две A-записи у регистратора (reg.ru):
+- `@` → `84.38.184.105`
+- `*` → `84.38.184.105`
+
+## Деплой
+
+Триггер: push в `main` → GitHub Actions:
+1. Собирает образ (`Dockerfile` target `full`) → пушит в GHCR
+2. SCP копирует на сервер: `docker-compose-prod.yaml`, `conf.json`, `apps/*/conf.json`
+3. SSH: `docker compose pull` → миграции → `docker compose up -d`
+
+Секреты — только в GitHub Secrets (environment: `production`), на диск сервера не пишутся.
+
+## Управление Ingress
+
+Для переконфигурации ingress запускать локально:
+```bash
+bash deploy/ingress.sh
+```
+
+Читает `conf.local.json` → `ingress.services` и `selectel.ip/login`.
+
+Прямые команды на сервере:
+```bash
+microk8s kubectl get ingress
+microk8s kubectl get certificate
+microk8s kubectl describe certificate humanitec-ru-tls
+```
+
+## Параллельный сервис
+
+На сервере также крутится отдельный проект `ytai.tech` (порт 8000, ingress `sync-ingress`) — не трогать.

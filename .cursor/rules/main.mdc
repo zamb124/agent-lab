@@ -207,6 +207,7 @@ response = await client.get("agents", "/agents/api/v1/flows/")
 | Streaming, events, Redis Pub/Sub | `streaming.mdc` |
 | Интеграции: A2A, HTTP | `integrations.mdc` |
 | S3 и MinIO | `s3_minio.mdc` |
+| Инфраструктура: сервер, ingress, деплой | `infrastructure.mdc` |
 | Сессии | `session.mdc` |
 | Tools для агентов | `tools.mdc` |
 | MCP серверы | `mcp.mdc` |

@@ -1,85 +1,70 @@
 #!/usr/bin/env bash
 # Настройка MicroK8s Ingress + cert-manager (Let's Encrypt) на сервере.
-# Читает домен и поддомены из conf.local.json -> ingress.
-# Запускается локально, все команды выполняются на сервере по SSH.
 #
-# Структура conf.local.json:
+# Архитектура:
+#   domain.com/         → frontend  (8002)
+#   domain.com/agents   → agents    (8001)
+#   domain.com/crm      → crm       (8003)
+#   domain.com/rag      → rag       (8004)
+#   domain.com/sync     → sync      (8005, websocket)
+#   *.domain.com/*      → те же правила (поддомены компаний)
+#
+# Конфиг в conf.local.json:
+#   "selectel": { "ip": "...", "login": "...", "ssh_port": "22" }
 #   "ingress": {
-#     "domain": "example.com",
-#     "email": "admin@example.com",
-#     "subdomains": [
-#       {"name": "sync", "port": 8005, "websocket": true},
-#       {"name": "agents", "port": 8001, "websocket": false},
-#       {"name": "crm", "port": 8003, "websocket": false},
-#       {"name": "rag", "port": 8004, "websocket": false}
+#     "domain": "humanitec.ru",
+#     "email": "admin@humanitec.ru",
+#     "services": [
+#       {"name": "frontend", "port": 8002, "path": "/",      "websocket": false},
+#       {"name": "agents",   "port": 8001, "path": "/agents","websocket": false},
+#       {"name": "crm",      "port": 8003, "path": "/crm",   "websocket": false},
+#       {"name": "rag",      "port": 8004, "path": "/rag",   "websocket": false},
+#       {"name": "sync",     "port": 8005, "path": "/sync",  "websocket": true}
 #     ]
 #   }
+#
+# Запуск: bash deploy/ingress.sh
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONF_LOCAL_JSON="${CONF_LOCAL_JSON:-${PROJECT_ROOT}/conf.local.json}"
 
-log() {
-  printf "\n[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
-}
+log() { printf "\n[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 
 require_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "Локально не найдена команда '$1'. Установите её и повторите." >&2
-    exit 1
-  fi
+  command -v "$1" >/dev/null 2>&1 || { echo "Не найдена команда: $1" >&2; exit 1; }
 }
 
 require_cmd jq
 require_cmd ssh
+require_cmd scp
 
-if [[ ! -f "${CONF_LOCAL_JSON}" ]]; then
-  echo "Не найден файл конфигурации: ${CONF_LOCAL_JSON}" >&2
-  exit 1
-fi
+[[ -f "${CONF_LOCAL_JSON}" ]] || { echo "Не найден: ${CONF_LOCAL_JSON}" >&2; exit 1; }
 
-ip="$(jq -er '.selectel.ip' "${CONF_LOCAL_JSON}")"
-login="$(jq -er '.selectel.login' "${CONF_LOCAL_JSON}")"
-ssh_port="$(jq -r '.selectel.ssh_port // "22"' "${CONF_LOCAL_JSON}")"
-domain="$(jq -er '.ingress.domain' "${CONF_LOCAL_JSON}")"
-email="$(jq -er '.ingress.email' "${CONF_LOCAL_JSON}")"
+IP="$(jq -er '.selectel.ip' "${CONF_LOCAL_JSON}")"
+LOGIN="$(jq -er '.selectel.login' "${CONF_LOCAL_JSON}")"
+SSH_PORT="$(jq -r '.selectel.ssh_port // "22"' "${CONF_LOCAL_JSON}")"
+DOMAIN="$(jq -er '.ingress.domain' "${CONF_LOCAL_JSON}")"
+EMAIL="$(jq -er '.ingress.email' "${CONF_LOCAL_JSON}")"
 
-# "sync:8005:true agents:8001:false crm:8003:false"
-subdomains_str="$(jq -r '.ingress.subdomains[] | "\(.name):\(.port):\(.websocket // false)"' "${CONF_LOCAL_JSON}" | tr '\n' ' ')"
+log "Домен: ${DOMAIN}"
+log "Сервер: ${LOGIN}@${IP}:${SSH_PORT}"
 
-log "Домен: ${domain}"
-log "Поддомены: ${subdomains_str}"
-log "Подключаюсь к серверу: ${login}@${ip}:${ssh_port}"
+SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 -p ${SSH_PORT} ${LOGIN}@${IP}"
 
-ssh \
-  -o StrictHostKeyChecking=accept-new \
-  -o BatchMode=yes \
-  -o ConnectTimeout=10 \
-  -p "${ssh_port}" \
-  "${login}@${ip}" \
-  DOMAIN="${domain}" EMAIL="${email}" SUBDOMAINS="${subdomains_str}" \
-  "bash -s" <<'REMOTE_SCRIPT'
-
-set -euo pipefail
-
-log() {
-  printf "\n[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
-}
+# Получаем IP хоста на сервере
+HOST_IP="$(${SSH} "ip -4 addr show scope global | awk '/inet / {print \$2}' | awk -F/ '{print \$1}' | head -1")"
+log "IP хоста: ${HOST_IP}"
 
 # cert-manager
-if microk8s kubectl get namespace cert-manager >/dev/null 2>&1; then
-  log "cert-manager уже установлен, пропускаем"
-else
-  log "Включаем cert-manager"
-  microk8s enable cert-manager
-  microk8s kubectl wait --for=condition=ready pod \
-    -l app=cert-manager -n cert-manager --timeout=120s
-fi
+log "Проверяем cert-manager"
+${SSH} "microk8s kubectl get namespace cert-manager >/dev/null 2>&1 || (microk8s enable cert-manager && microk8s kubectl wait --for=condition=ready pod -l app=cert-manager -n cert-manager --timeout=120s)"
 
-# ClusterIssuer (Let's Encrypt)
-log "Применяем ClusterIssuer (Let's Encrypt)"
-microk8s kubectl apply -f - <<EOF
+# ClusterIssuer
+log "ClusterIssuer (Let's Encrypt)"
+${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -96,20 +81,19 @@ spec:
           class: public
 EOF
 
-# Service + Endpoints для каждого поддомена
-HOST_IP="$(ip -4 addr show scope global | awk '/inet / {print $2}' | awk -F/ '{print $1}' | head -1)"
-log "IP хоста для Endpoints: ${HOST_IP}"
+# Services + Endpoints для каждого сервиса
+log "Создаём Services и Endpoints"
+while IFS= read -r entry; do
+  name="$(echo "${entry}" | jq -r '.name')"
+  port="$(echo "${entry}" | jq -r '.port')"
+  svc="${name}-svc"
 
-for entry in ${SUBDOMAINS}; do
-  IFS=':' read -r sub port ws <<< "${entry}"
-  svc_name="${sub}-svc"
-  log "Настраиваем Service/Endpoints: ${svc_name} -> ${HOST_IP}:${port}"
-
-  microk8s kubectl apply -f - <<EOF
+  log "  ${svc} -> ${HOST_IP}:${port}"
+  ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: v1
 kind: Service
 metadata:
-  name: ${svc_name}
+  name: ${svc}
   namespace: default
 spec:
   ports:
@@ -120,7 +104,7 @@ spec:
 apiVersion: v1
 kind: Endpoints
 metadata:
-  name: ${svc_name}
+  name: ${svc}
   namespace: default
 subsets:
 - addresses:
@@ -128,76 +112,66 @@ subsets:
   ports:
   - port: ${port}
 EOF
-done
+done < <(jq -c '.ingress.services[]' "${CONF_LOCAL_JSON}")
 
-# Ingress для каждого поддомена
-for entry in ${SUBDOMAINS}; do
-  IFS=':' read -r sub port ws <<< "${entry}"
-  fqdn="${sub}.${DOMAIN}"
-  svc_name="${sub}-svc"
-  secret_name="${sub}-$(echo "${DOMAIN}" | tr '.' '-')-tls"
-  ingress_name="${sub}-ingress"
+# Генерируем paths для ingress
+build_paths() {
+  jq -r '
+    .ingress.services
+    | sort_by(.path | length)
+    | reverse
+    | .[]
+    | "      - path: \(.path)\n        pathType: Prefix\n        backend:\n          service:\n            name: \(.name)-svc\n            port:\n              number: \(.port)"
+  ' "${CONF_LOCAL_JSON}"
+}
 
-  log "Настраиваем Ingress: ${fqdn} -> ${svc_name}:${port}"
+PATHS="$(build_paths)"
 
-  ws_annotations=""
-  if [[ "${ws}" == "true" ]]; then
-    ws_annotations='
-    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";'
-  fi
-
-  microk8s kubectl apply -f - <<EOF
+# Одиночный Ingress с path-based роутингом для domain и *.domain
+log "Создаём Ingress для ${DOMAIN} и *.${DOMAIN}"
+${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ${ingress_name}
+  name: humanitec-ingress
   namespace: default
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"${ws_annotations}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection "upgrade";
 spec:
   ingressClassName: public
   tls:
   - hosts:
-    - ${fqdn}
-    secretName: ${secret_name}
+    - ${DOMAIN}
+    - "*.${DOMAIN}"
+    secretName: $(echo "${DOMAIN}" | tr '.' '-')-tls
   rules:
-  - host: ${fqdn}
+  - host: ${DOMAIN}
     http:
       paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: ${svc_name}
-            port:
-              number: ${port}
+${PATHS}
+  - host: "*.${DOMAIN}"
+    http:
+      paths:
+${PATHS}
 EOF
-done
 
-# Итог
-log "Ожидаем выдачи сертификатов (~30 сек)"
+log "Ожидаем сертификаты (~30 сек)"
 sleep 30
 
 echo
 echo "======================================"
 echo " Ingress настроен"
 echo "======================================"
+${SSH} "microk8s kubectl get ingress && echo && microk8s kubectl get certificate"
 echo
-microk8s kubectl get ingress
-echo
-microk8s kubectl get certificate
-echo
-for entry in ${SUBDOMAINS}; do
-  IFS=':' read -r sub port ws <<< "${entry}"
-  echo "  https://${sub}.${DOMAIN}"
-done
+echo "  https://${DOMAIN}/"
+jq -r '.ingress.services[] | select(.path != "/") | "  https://${DOMAIN}\(.path)"' "${CONF_LOCAL_JSON}" | DOMAIN="${DOMAIN}" envsubst
+echo "  https://<company>.${DOMAIN}/ (поддомены компаний)"
 echo "======================================"
-
-REMOTE_SCRIPT
 
 log "Готово."
