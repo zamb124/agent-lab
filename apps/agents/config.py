@@ -51,9 +51,9 @@ class PushConfig(BaseModel):
         default="n6oh3YpjV9APhmtdZ-p18P4YGLtBRLATLbprkXWAldA",
         description="VAPID приватный ключ (URL-safe Base64)"
     )
-    vapid_claims_email: str = Field(
-        default="mailto:admin@platform.local",
-        description="Email для VAPID claims"
+    vapid_email: str = Field(
+        default="admin@platform.local",
+        description="Контакт для VAPID sub claim (без префикса mailto:)",
     )
 
 

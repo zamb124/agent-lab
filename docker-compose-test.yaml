@@ -81,6 +81,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
+      target: default
     container_name: agentlab_worker_test
     depends_on:
       redis-test:
@@ -107,6 +108,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
+      target: default
     container_name: agentlab_scheduler_test
     depends_on:
       redis-test:
@@ -157,6 +159,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
+      target: default
     container_name: agentlab_tests_runner
     depends_on:
       redis-test:

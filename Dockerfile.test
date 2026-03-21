@@ -18,22 +18,7 @@ COPY pyproject.toml README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --group dev
 
-# Default stage: для запуска тестов
-FROM base-test AS default
-
-COPY . .
-
-RUN mkdir -p /app/test-results /app/htmlcov && \
-    chmod 777 /app/test-results /app/htmlcov
-
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV TESTING=true
-
-CMD ["python", "-m", "pytest", "tests/", "-v"]
-
-# RAG Worker stage для тестов
+# RAG Worker stage для тестов (минимальный образ; сборка: --target rag-worker)
 FROM base-test AS rag-worker
 
 # rag-worker зависимости (системные пакеты уже в базовом образе)
@@ -50,3 +35,18 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV TESTING=true
 
 CMD ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "1"]
+
+# Полный образ для pytest и worker/scheduler (последний stage = default при сборке без --target)
+FROM base-test AS default
+
+COPY . .
+
+RUN mkdir -p /app/test-results /app/htmlcov && \
+    chmod 777 /app/test-results /app/htmlcov
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV TESTING=true
+
+CMD ["python", "-m", "pytest", "tests/", "-v"]

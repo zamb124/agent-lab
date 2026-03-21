@@ -1315,6 +1315,8 @@ tests/
 
 ## Команды запуска
 
+`Dockerfile.test`: последний stage — полный образ `default` (весь репозиторий); образ `rag-worker` — только для `rag-worker-test` (`build.target: rag-worker`).
+
 ```bash
 # Поднять тестовые контейнеры
 docker compose -f docker-compose-test.yaml up -d

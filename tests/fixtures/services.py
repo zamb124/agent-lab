@@ -84,7 +84,7 @@ def agents_service():
         pid_file=_AGENTS_SERVER_PID,
         app_path="apps.agents.main:app",
         port=9001,
-        startup_wait=3.0,
+        startup_wait=20.0,
         env=_COMMON_TEST_ENV
     )
     
