@@ -2,8 +2,14 @@
 
 from fastapi import APIRouter, Depends
 
+from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.container import get_sync_container
-from apps.sync.models.channels import ChannelRead, ChannelCreate, ChannelMemberAdd, ChannelMemberRead
+from apps.sync.models.channels import (
+    ChannelCreate,
+    ChannelMemberAdd,
+    ChannelMemberRead,
+    ChannelRead,
+)
 from apps.sync.models.common import PaginationRequest
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
@@ -17,34 +23,29 @@ async def list_channels(
     space_id: str | None = None,
     pagination: PaginationRequest = Depends(),
 ) -> list[ChannelRead]:
-    """Список каналов (опционально фильтр по space_id)."""
+    """Список каналов текущего пользователя (членство). Опционально фильтр по space_id."""
     context = get_context()
     container = get_sync_container()
-    if space_id:
-        channels = await container.channel_repository.list_by_space(
-            space_id, limit=pagination.limit,
-            company_id=context.active_company.company_id,
+    company_id = context.active_company.company_id
+    viewer_id = context.user.user_id
+    channels = await container.channel_repository.list_for_user(
+        viewer_id,
+        space_id=space_id,
+        limit=pagination.limit,
+        company_id=company_id,
+    )
+    out: list[ChannelRead] = []
+    for c in channels:
+        out.append(
+            await channel_read_from_entity(
+                c,
+                viewer_user_id=viewer_id,
+                channel_repository=container.channel_repository,
+                user_repository=container.user_repository,
+                company_id=company_id,
+            )
         )
-    else:
-        channels = await container.channel_repository.list_all(
-            limit=pagination.limit,
-            company_id=context.active_company.company_id,
-        )
-    return [
-        ChannelRead(
-            id=c.channel_id,
-            space_id=c.space_id,
-            type=c.type,
-            name=c.name,
-            is_private=c.is_private,
-            created_at=c.created_at,
-            created_by_user_id=c.created_by_user_id,
-            pinned_message_ids=list(c.pinned_message_ids)
-            if isinstance(c.pinned_message_ids, list)
-            else [],
-        )
-        for c in channels
-    ]
+    return out
 
 
 @router.post("/", status_code=201)

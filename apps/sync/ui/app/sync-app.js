@@ -114,6 +114,7 @@ export class SyncApp extends PlatformApp {
         await Promise.all([
             SyncStore.loadSpaces(syncApi),
             SyncStore.loadChannels(syncApi),
+            SyncStore.loadCompanyMembers(syncApi),
         ]);
 
         await this._restoreLastSelection();

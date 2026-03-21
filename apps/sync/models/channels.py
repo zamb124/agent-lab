@@ -7,6 +7,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from apps.sync.models.common import UserBrief
+
 
 class ChannelType(str, Enum):
     """Тип канала."""
@@ -37,6 +39,10 @@ class ChannelRead(BaseModel):
     pinned_message_ids: list[str] = Field(
         default_factory=list,
         description="Упорядоченный список закреплённых сообщений (message_id).",
+    )
+    peer: UserBrief | None = Field(
+        default=None,
+        description="Собеседник в direct (участник, отличный от текущего пользователя).",
     )
 
 

@@ -137,6 +137,96 @@ export class SyncSidebar extends PlatformElement {
                 padding-top: var(--space-3);
                 margin-top: var(--space-2);
             }
+
+            .lists-toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 0 var(--space-3) var(--space-2);
+            }
+
+            .toolbar-btn {
+                font-size: 10px;
+                font-weight: var(--font-medium);
+                padding: 4px 8px;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-tertiary);
+                cursor: pointer;
+            }
+
+            .toolbar-btn:hover {
+                color: var(--text-secondary);
+                border-color: var(--glass-border-medium);
+            }
+
+            .section-header--toggle {
+                cursor: pointer;
+                user-select: none;
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .chevron-rot {
+                display: inline-flex;
+                align-items: center;
+                transition: transform var(--duration-fast);
+                flex-shrink: 0;
+            }
+
+            .chevron-rot.is-closed {
+                transform: rotate(-90deg);
+            }
+
+            .peer-avatar {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                object-fit: cover;
+            }
+
+            .peer-avatar-initials {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 11px;
+                font-weight: var(--font-semibold);
+                color: #fff;
+            }
+
+            .section-empty {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                padding: 0 var(--space-3) var(--space-2);
+            }
+
+            .direct-search {
+                width: calc(100% - 2 * var(--space-3));
+                box-sizing: border-box;
+                margin: 0 var(--space-3) var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                font-family: inherit;
+                outline: none;
+            }
+
+            .direct-search:focus {
+                border-color: var(--accent);
+            }
+
+            .direct-search::placeholder {
+                color: var(--text-tertiary);
+            }
         `
     ];
 
@@ -144,7 +234,10 @@ export class SyncSidebar extends PlatformElement {
         collapsed: { type: Boolean, reflect: true },
         _spaces: { state: true },
         _channels: { state: true },
+        _companyMembers: { state: true },
         _chat: { state: true },
+        _sectionOpen: { state: true },
+        _directSearch: { state: true },
     };
 
     constructor() {
@@ -153,7 +246,10 @@ export class SyncSidebar extends PlatformElement {
         const s = SyncStore.state;
         this._spaces = s.spaces;
         this._channels = s.channels;
+        this._companyMembers = s.companyMembers;
         this._chat = s.chat;
+        this._sectionOpen = s.ui.sidebarSectionOpen;
+        this._directSearch = '';
     }
 
     connectedCallback() {
@@ -161,7 +257,9 @@ export class SyncSidebar extends PlatformElement {
         this._unsubscribe = SyncStore.subscribe(state => {
             this._spaces = state.spaces;
             this._channels = state.channels;
+            this._companyMembers = state.companyMembers;
             this._chat = state.chat;
+            this._sectionOpen = state.ui.sidebarSectionOpen;
         });
     }
 
@@ -182,9 +280,71 @@ export class SyncSidebar extends PlatformElement {
         }
     }
 
+    async _openDirectWithMember(member) {
+        try {
+            const syncApi = ServiceRegistry.get('syncApi');
+            const existing = SyncStore.findDirectChannelForPeer(member.user_id);
+            if (existing) {
+                await this._selectChannel(existing);
+                return;
+            }
+            const created = await syncApi.createDirectChannel(member.user_id);
+            await SyncStore.loadChannels(syncApi);
+            await SyncStore.selectChannelAndLoadMessages(syncApi, null, created.id);
+            if (window.innerWidth < 768) {
+                SyncStore.setMobileSidebarOpen(false);
+            }
+        } catch (err) {
+            const text = err instanceof Error ? err.message : String(err);
+            this.error(text);
+        }
+    }
+
+    _hueFromUserId(userId) {
+        let h = 0;
+        for (let i = 0; i < userId.length; i++) {
+            h = (h * 31 + userId.charCodeAt(i)) >>> 0;
+        }
+        return h % 360;
+    }
+
+    _memberAvatar(member) {
+        if (member.avatar_url) {
+            return html`<img class="peer-avatar" src=${member.avatar_url} alt="" />`;
+        }
+        const label = typeof member.name === 'string' ? member.name : member.user_id;
+        const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
+        const hue = this._hueFromUserId(member.user_id);
+        return html`
+            <span class="peer-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+        `;
+    }
+
+    _filteredCompanyMembers() {
+        const list = this._companyMembers.list;
+        const q = this._directSearch.trim().toLowerCase();
+        if (!q) {
+            return list;
+        }
+        return list.filter((m) => {
+            const name = typeof m.name === 'string' ? m.name.toLowerCase() : '';
+            const id = typeof m.user_id === 'string' ? m.user_id.toLowerCase() : '';
+            return name.includes(q) || id.includes(q);
+        });
+    }
+
+    _isDirectRowActive(member, selectedChannelId) {
+        const ch = SyncStore.findDirectChannelForPeer(member.user_id);
+        return ch !== null && ch.id === selectedChannelId;
+    }
+
     render() {
         const { selectedSpaceId, selectedChannelId } = this._chat;
-        const channelsForSpace = SyncStore.getChannelsForSpace(selectedSpaceId);
+        const sec = this._sectionOpen || { direct: true, spaces: true, channels: true };
+        const channelsForSpace = selectedSpaceId
+            ? SyncStore.getChannelsForSpace(selectedSpaceId)
+            : [];
+        const memberRows = this._filteredCompanyMembers();
 
         return html`
             <platform-sidebar
@@ -194,32 +354,108 @@ export class SyncSidebar extends PlatformElement {
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
             >
                 <div>
-                    <div class="section-header">
-                        <platform-icon name="folder" size="16"></platform-icon>
-                        <span class="section-title">Пространства</span>
+                    <div class="lists-toolbar">
                         <button
                             type="button"
-                            class="add-btn"
-                            title="Создать пространство"
-                            aria-label="Создать пространство"
-                            @click=${() => SyncStore.setShowCreateSpace(true)}
-                        >+</button>
-                    </div>
-                    <div class="section-scroll">
-                        ${this._spaces.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
-                        ${this._spaces.list.map(space => html`
-                            <button
-                                class="nav-item ${space.id === selectedSpaceId ? 'active' : ''}"
-                                @click=${() => this._selectSpace(space.id)}
-                            >
-                                <platform-icon name="folder" size="16"></platform-icon>
-                                <span class="nav-item-label">${space.name}</span>
-                            </button>
-                        `)}
+                            class="toolbar-btn"
+                            title="Свернуть списки пространств, каналов и личных чатов"
+                            @click=${() => SyncStore.collapseAllSidebarSections()}
+                        >Свернуть всё</button>
+                        <button
+                            type="button"
+                            class="toolbar-btn"
+                            title="Развернуть все секции"
+                            @click=${() => SyncStore.expandAllSidebarSections()}
+                        >Развернуть всё</button>
                     </div>
 
                     <div class="channels-section">
-                        <div class="section-header">
+                        <div
+                            class="section-header section-header--toggle"
+                            @click=${() => SyncStore.setSidebarSectionOpen('direct', !sec.direct)}
+                        >
+                            <span class="chevron-rot ${sec.direct ? '' : 'is-closed'}">
+                                <platform-icon name="chevron-down" size="14"></platform-icon>
+                            </span>
+                            <platform-icon name="user" size="16"></platform-icon>
+                            <span class="section-title">Личные</span>
+                        </div>
+                        ${sec.direct ? html`
+                            <input
+                                type="search"
+                                class="direct-search"
+                                placeholder="Поиск по имени или id..."
+                                aria-label="Поиск участников компании"
+                                .value=${this._directSearch}
+                                @input=${(e) => { this._directSearch = e.target.value; }}
+                                @click=${(e) => e.stopPropagation()}
+                            />
+                            <div class="section-scroll">
+                                ${this._companyMembers.loading
+                                    ? html`<div class="loading-text">Загрузка...</div>`
+                                    : ''}
+                                ${!this._companyMembers.loading && memberRows.length === 0
+                                    ? html`<div class="section-empty">Нет совпадений или других участников</div>`
+                                    : ''}
+                                ${memberRows.map((member) => html`
+                                    <button
+                                        type="button"
+                                        class="nav-item ${this._isDirectRowActive(member, selectedChannelId) ? 'active' : ''}"
+                                        @click=${() => this._openDirectWithMember(member)}
+                                    >
+                                        ${this._memberAvatar(member)}
+                                        <span class="nav-item-label">${member.name}</span>
+                                    </button>
+                                `)}
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="channels-section">
+                        <div
+                            class="section-header section-header--toggle"
+                            @click=${() => SyncStore.setSidebarSectionOpen('spaces', !sec.spaces)}
+                        >
+                            <span class="chevron-rot ${sec.spaces ? '' : 'is-closed'}">
+                                <platform-icon name="chevron-down" size="14"></platform-icon>
+                            </span>
+                            <platform-icon name="folder" size="16"></platform-icon>
+                            <span class="section-title">Пространства</span>
+                            <button
+                                type="button"
+                                class="add-btn"
+                                title="Создать пространство"
+                                aria-label="Создать пространство"
+                                @click=${(e) => {
+                                    e.stopPropagation();
+                                    SyncStore.setShowCreateSpace(true);
+                                }}
+                            >+</button>
+                        </div>
+                        ${sec.spaces ? html`
+                            <div class="section-scroll">
+                                ${this._spaces.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
+                                ${this._spaces.list.map(space => html`
+                                    <button
+                                        class="nav-item ${space.id === selectedSpaceId ? 'active' : ''}"
+                                        @click=${() => this._selectSpace(space.id)}
+                                    >
+                                        <platform-icon name="folder" size="16"></platform-icon>
+                                        <span class="nav-item-label">${space.name}</span>
+                                    </button>
+                                `)}
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="channels-section">
+                        <div
+                            class="section-header section-header--toggle"
+                            @click=${() => SyncStore.setSidebarSectionOpen('channels', !sec.channels)}
+                        >
+                            <span class="chevron-rot ${sec.channels ? '' : 'is-closed'}">
+                                <platform-icon name="chevron-down" size="14"></platform-icon>
+                            </span>
                             <platform-icon name="chat" size="16"></platform-icon>
                             <span class="section-title">Каналы</span>
                             <button
@@ -227,22 +463,30 @@ export class SyncSidebar extends PlatformElement {
                                 class="add-btn"
                                 title="Создать канал"
                                 aria-label="Создать канал"
-                                @click=${() => SyncStore.setShowCreateChannel(true)}
+                                @click=${(e) => {
+                                    e.stopPropagation();
+                                    SyncStore.setShowCreateChannel(true);
+                                }}
                             >+</button>
                         </div>
-                        <div class="section-scroll">
-                            ${this._channels.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
-                            ${channelsForSpace.map(channel => html`
-                                <button
-                                    class="nav-item ${channel.id === selectedChannelId ? 'active' : ''}"
-                                    @click=${() => this._selectChannel(channel)}
-                                >
-                                    <platform-icon name="chat" size="16"></platform-icon>
-                                    <span class="nav-item-label">${channel.name ?? channel.id}</span>
-                                    <span class="nav-item-type">${channel.type}</span>
-                                </button>
-                            `)}
-                        </div>
+                        ${sec.channels ? html`
+                            <div class="section-scroll">
+                                ${this._channels.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
+                                ${!selectedSpaceId && !this._channels.loading
+                                    ? html`<div class="section-empty">Выбери пространство</div>`
+                                    : ''}
+                                ${channelsForSpace.map(channel => html`
+                                    <button
+                                        class="nav-item ${channel.id === selectedChannelId ? 'active' : ''}"
+                                        @click=${() => this._selectChannel(channel)}
+                                    >
+                                        <platform-icon name="chat" size="16"></platform-icon>
+                                        <span class="nav-item-label">${channel.name ?? channel.id}</span>
+                                        <span class="nav-item-type">${channel.type}</span>
+                                    </button>
+                                `)}
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
 

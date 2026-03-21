@@ -113,12 +113,17 @@ export class ChannelPicker extends PlatformElement {
             ${loading ? html`<div class="hint">Загрузка...</div>` : ''}
             <div class="grid">
                 ${channels.length === 0 && !loading ? html`<div class="empty">Каналов пока нет.</div>` : ''}
-                ${channels.map(ch => html`
-                    <button class="channel-card" @click=${() => this._pick(ch)}>
-                        <span class="channel-name">${ch.name ?? ch.id}</span>
-                        <span class="channel-type">${ch.type}</span>
-                    </button>
-                `)}
+                ${channels.map((ch) => {
+                    const title = ch.type === 'direct' && ch.peer?.display_name
+                        ? ch.peer.display_name
+                        : (ch.name ?? ch.id);
+                    return html`
+                        <button class="channel-card" @click=${() => this._pick(ch)}>
+                            <span class="channel-name">${title}</span>
+                            <span class="channel-type">${ch.type}</span>
+                        </button>
+                    `;
+                })}
             </div>
         `;
     }

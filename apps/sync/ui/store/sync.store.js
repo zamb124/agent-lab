@@ -27,6 +27,10 @@ const baseStore = new BaseStore('sync', {
         list: [],
         loading: false,
     },
+    companyMembers: {
+        list: [],
+        loading: false,
+    },
     messages: {
         list: [],
         pending: {},
@@ -48,6 +52,11 @@ const baseStore = new BaseStore('sync', {
         threadDrawerOpen: false,
         showCreateSpace: false,
         showCreateChannel: false,
+        sidebarSectionOpen: {
+            direct: true,
+            spaces: true,
+            channels: true,
+        },
         selectionMode: false,
         selectedMessageIds: [],
         forwardModalOpen: false,
@@ -62,6 +71,9 @@ const baseStore = new BaseStore('sync', {
         chat: {
             selectedSpaceId: state.chat.selectedSpaceId,
             selectedChannelId: state.chat.selectedChannelId,
+        },
+        ui: {
+            sidebarSectionOpen: state.ui.sidebarSectionOpen,
         },
     }),
 });
@@ -396,6 +408,49 @@ export const SyncStore = {
         baseStore.setState(s => ({ ui: { ...s.ui, showCreateChannel: show } }));
     },
 
+    /**
+     * @param {'direct'|'spaces'|'channels'} key
+     * @param {boolean} open
+     */
+    setSidebarSectionOpen(key, open) {
+        const allowed = ['direct', 'spaces', 'channels'];
+        if (!allowed.includes(key)) {
+            throw new Error(`Неизвестная секция сайдбара: ${key}`);
+        }
+        baseStore.setState(s => ({
+            ui: {
+                ...s.ui,
+                sidebarSectionOpen: {
+                    ...s.ui.sidebarSectionOpen,
+                    [key]: !!open,
+                },
+            },
+        }));
+    },
+
+    collapseAllSidebarSections() {
+        baseStore.setState(s => ({
+            ui: {
+                ...s.ui,
+                sidebarSectionOpen: { direct: false, spaces: false, channels: false },
+            },
+        }));
+    },
+
+    expandAllSidebarSections() {
+        baseStore.setState(s => ({
+            ui: {
+                ...s.ui,
+                sidebarSectionOpen: { direct: true, spaces: true, channels: true },
+            },
+        }));
+    },
+
+    getDirectChannels() {
+        const all = baseStore.state.channels.list;
+        return all.filter(c => c.type === 'direct');
+    },
+
     getDisplayMessages() {
         const s = baseStore.state;
         const pending = Object.values(s.messages.pending);
@@ -404,10 +459,16 @@ export const SyncStore = {
         return merged;
     },
 
+    /**
+     * Каналы пространства без личных. Без spaceId — все каналы пользователя (picker).
+     * @param {string|null} spaceId
+     */
     getChannelsForSpace(spaceId) {
         const all = baseStore.state.channels.list;
-        if (!spaceId) return all;
-        return all.filter(c => c.space_id === spaceId);
+        if (!spaceId) {
+            return all;
+        }
+        return all.filter(c => c.space_id === spaceId && c.type !== 'direct');
     },
 
     getThreadIds() {
@@ -431,6 +492,27 @@ export const SyncStore = {
         const items = await syncApi.getChannels();
         this.setChannels(items);
         return items;
+    },
+
+    async loadCompanyMembers(syncApi) {
+        baseStore.setState(s => ({ companyMembers: { ...s.companyMembers, loading: true } }));
+        const items = await syncApi.getCompanyMembers();
+        baseStore.setState(s => ({
+            companyMembers: { list: items, loading: false },
+        }));
+        return items;
+    },
+
+    /**
+     * @param {string} peerUserId
+     */
+    findDirectChannelForPeer(peerUserId) {
+        if (typeof peerUserId !== 'string' || peerUserId === '') {
+            throw new Error('peerUserId обязателен.');
+        }
+        return (
+            this.getDirectChannels().find(c => c.peer && c.peer.id === peerUserId) ?? null
+        );
     },
 
     async loadMessages(syncApi, channelId) {

@@ -6,16 +6,17 @@ from datetime import UTC, datetime
 from typing import Optional
 from uuid import uuid4
 
-from apps.sync.db.models import SyncSpace, SyncChannel, SyncThread, SyncGitResourceRef, SyncMessage
+from apps.sync.channel_read_helpers import channel_read_entity_minimal
+from apps.sync.db.models import SyncChannel, SyncGitResourceRef, SyncMessage, SyncSpace, SyncThread
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
+from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.channels import ChannelRead, ChannelType
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
-from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.messages import MessageContentModel, MessageCreate, MessageRead, MessageStatus
 from apps.sync.models.spaces import SpaceRead
 from apps.sync.models.threads import ThreadRead
@@ -181,17 +182,7 @@ async def _message_read_from_db(
 
 
 def _channel_read_entity(entity: SyncChannel) -> ChannelRead:
-    pids = entity.pinned_message_ids if isinstance(entity.pinned_message_ids, list) else []
-    return ChannelRead(
-        id=entity.channel_id,
-        space_id=entity.space_id,
-        type=ChannelType(entity.type),
-        name=entity.name,
-        is_private=entity.is_private,
-        created_at=entity.created_at,
-        created_by_user_id=entity.created_by_user_id,
-        pinned_message_ids=pids,
-    )
+    return channel_read_entity_minimal(entity)
 
 
 def _apply_reaction_json(
@@ -243,6 +234,15 @@ async def _create_channel(body, *, actor_user_id: str, company_id: str, channels
             raise ValueError("Для topic обязателен space_id.")
         if body.name is None:
             raise ValueError("Для topic обязателен name.")
+
+    if body.type == ChannelType.DIRECT:
+        if body.space_id is not None:
+            raise ValueError("Для direct не задают space_id.")
+        mids = body.member_ids
+        if mids is None or len(mids) != 1:
+            raise ValueError("Для direct в member_ids должен быть ровно один собеседник.")
+        if mids[0] == actor_user_id:
+            raise ValueError("Нельзя создать личный канал с самим собой.")
 
     channel_id = uuid4().hex
     entity = SyncChannel(

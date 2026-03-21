@@ -3,7 +3,7 @@
 import logging
 from typing import List, Optional, Type
 
-from sqlalchemy import select, exists, update
+from sqlalchemy import exists, nullslast, select, update
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannel, SyncChannelMember
@@ -41,6 +41,57 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
                 .order_by(SyncChannel.name.asc())
                 .limit(limit)
                 .offset(offset)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def list_for_user(
+        self,
+        user_id: str,
+        *,
+        space_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        company_id: Optional[str] = None,
+    ) -> List[SyncChannel]:
+        """Каналы, в которых состоит пользователь."""
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = (
+                select(SyncChannel)
+                .join(
+                    SyncChannelMember,
+                    SyncChannelMember.channel_id == SyncChannel.channel_id,
+                )
+                .where(
+                    SyncChannel.company_id == cid,
+                    SyncChannelMember.company_id == cid,
+                    SyncChannelMember.user_id == user_id,
+                )
+            )
+            if space_id is not None:
+                stmt = stmt.where(SyncChannel.space_id == space_id)
+            stmt = (
+                stmt.order_by(
+                    SyncChannel.type.asc(),
+                    nullslast(SyncChannel.name.asc()),
+                )
+                .limit(limit)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def list_member_user_ids(
+        self,
+        channel_id: str,
+        company_id: Optional[str] = None,
+    ) -> List[str]:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(SyncChannelMember.user_id).where(
+                SyncChannelMember.channel_id == channel_id,
+                SyncChannelMember.company_id == cid,
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())

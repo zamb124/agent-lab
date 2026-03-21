@@ -92,6 +92,10 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 **Лента канала (GET /messages, `list_by_channel`):** `thread_id IS NULL`, `deleted_at IS NULL`; ответы на сообщения в основной полосе **включены** (`parent_message_id` может быть задан при `thread_id IS NULL`).
 
+**Каналы (GET /channels):** только каналы, где текущий пользователь есть в `sync_channel_members` (`ChannelRepository.list_for_user`). Опционально `?space_id=` — те же правила плюс `SyncChannel.space_id`. В `ChannelRead` для `type: direct` поле `peer` (`UserBrief`) — собеседник. Создание direct: `channels.create`, `space_id: null`, `member_ids: [один user_id]` (см. `handlers._create_channel`).
+
+**Участники компании (GET /company/members):** список `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий пользователь исключён). Sync UI: секция «Личные» — поиск + открытие/создание DM по клику (`SyncStore.loadCompanyMembers`, `findDirectChannelForPeer`).
+
 ### WebSocket протокол
 
 **Клиент -> сервер:** `{ id, type, payload }` (WsCommandFrame)
@@ -111,12 +115,12 @@ apps/sync/ui/
   index.html              # import map Lit, @platform/lib/, tokens.css
   index.js                # импорт компонентов
   app/sync-app.js         # extends PlatformApp, checkAuth() через AuthService
-  store/sync.store.js     # BaseStore: spaces, channels, messages, ws, ui
+  store/sync.store.js     # BaseStore: spaces, channels, companyMembers, messages, ws, ui
   services/
     sync-api.service.js   # extends BaseService, /sync/api/v1/*
     sync-ws.service.js    # WebSocket к /sync/ws, cookie auth, reconnect/backoff
   features/
-    sync-sidebar.js       # platform-sidebar + spaces + channels
+    sync-sidebar.js       # platform-sidebar: Личные — участники компании (GET /company/members), поиск, DM по клику; Пространства + Каналы; аккордеоны, «Свернуть всё» / «Развернуть всё»
     chat-view.js          # header + channel-picker | message-list + composer
     channel-picker.js     # сетка каналов
     message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
@@ -143,7 +147,7 @@ apps/sync/ui/
 
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
 - Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
-- Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`, иначе список сообщений не подгрузится
+- Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`; для direct `spaceId` — `null`, иначе список сообщений не подгрузится
 - API — только через `SyncAPIService`, без прямых `fetch` в компонентах
 - WebSocket — backend-first: команда → pending → `{ id, ok, result }` ack или `message.created` event
 - Zero-Guess: нет `x || 'default'` для обязательных значений, бросаем исключение
@@ -153,6 +157,8 @@ apps/sync/ui/
 - `apps/sync/db/models.py` - SQLAlchemy модели
 - `apps/sync/db/base.py` - SyncDatabase, BaseSyncRepository
 - `apps/sync/realtime/handlers.py` - бизнес-логика команд
+- `apps/sync/channel_read_helpers.py` - сборка `ChannelRead` с `peer` для direct
+- `apps/sync/api/company.py` - GET `/company/members`
 - `apps/sync/realtime/tasks.py` - TaskIQ задачи
 - `apps/sync/ws.py` - WebSocket, PubSubFanout
 - `apps/sync/ui/app/sync-app.js` - главный компонент

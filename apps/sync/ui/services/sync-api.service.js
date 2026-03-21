@@ -20,6 +20,10 @@ export class SyncAPIService extends BaseService {
         return this.get(`/channels/?limit=${limit}`);
     }
 
+    async getCompanyMembers() {
+        return this.get('/company/members');
+    }
+
     async createChannel(spaceId, name) {
         return this.post('/channels/', {
             space_id: spaceId,
@@ -27,6 +31,22 @@ export class SyncAPIService extends BaseService {
             name,
             is_private: false,
             member_ids: null,
+        });
+    }
+
+    /**
+     * @param {string} peerUserId
+     */
+    async createDirectChannel(peerUserId) {
+        if (typeof peerUserId !== 'string' || peerUserId.trim() === '') {
+            throw new Error('peerUserId обязателен.');
+        }
+        return this.post('/channels/', {
+            space_id: null,
+            type: 'direct',
+            name: null,
+            is_private: false,
+            member_ids: [peerUserId.trim()],
         });
     }
 

@@ -256,14 +256,21 @@ export class ChatView extends PlatformElement {
         if (focusedThreadId) return 'Тред';
         if (!selectedChannelId) return 'Выбери канал';
         const ch = this._selectedChannel();
-        return ch?.name ?? selectedChannelId;
+        if (!ch) return selectedChannelId;
+        if (ch.type === 'direct' && ch.peer && typeof ch.peer.display_name === 'string') {
+            return ch.peer.display_name;
+        }
+        return ch.name ?? selectedChannelId;
     }
 
     _getSubtitle() {
         const { focusedThreadId } = this._chat;
         const ch = this._selectedChannel();
         if (!ch) return '';
-        if (focusedThreadId) return `Канал: ${ch.name ?? ch.id} • thread_id: ${focusedThreadId}`;
+        const chLabel = ch.type === 'direct' && ch.peer?.display_name
+            ? ch.peer.display_name
+            : (ch.name ?? ch.id);
+        if (focusedThreadId) return `Канал: ${chLabel} • thread_id: ${focusedThreadId}`;
         return ch.type ?? '';
     }
 
