@@ -4,6 +4,20 @@
  */
 import { BaseStore } from '@platform/lib/store/BaseStore.js';
 
+let _flashMessageTimer = null;
+
+/** Таймеры удаления сообщения после анимации разрушения (message.deleted). */
+const _messageDeleteTimers = new Map();
+
+function _clearAllMessageDeleteTimers() {
+    for (const tid of _messageDeleteTimers.values()) {
+        clearTimeout(tid);
+    }
+    _messageDeleteTimers.clear();
+}
+
+const MESSAGE_DELETE_ANIM_MS = 580;
+
 const baseStore = new BaseStore('sync', {
     spaces: {
         list: [],
@@ -22,6 +36,9 @@ const baseStore = new BaseStore('sync', {
         selectedSpaceId: null,
         selectedChannelId: null,
         focusedThreadId: null,
+        replyToMessage: null,
+        editMessage: null,
+        pinnedNavigateIndex: 0,
     },
     ws: {
         state: 'closed',
@@ -31,6 +48,12 @@ const baseStore = new BaseStore('sync', {
         threadDrawerOpen: false,
         showCreateSpace: false,
         showCreateChannel: false,
+        selectionMode: false,
+        selectedMessageIds: [],
+        forwardModalOpen: false,
+        forwardMessage: null,
+        flashMessageId: null,
+        deletingMessageIds: [],
     },
 }, {
     persist: true,
@@ -81,8 +104,10 @@ export const SyncStore = {
     },
 
     setMessages(list) {
+        _clearAllMessageDeleteTimers();
         baseStore.setState(s => ({
             messages: { ...s.messages, list, loading: false, pending: {} },
+            ui: { ...s.ui, deletingMessageIds: [] },
         }));
     },
 
@@ -101,6 +126,172 @@ export const SyncStore = {
                 : list.map((m, i) => i === idx ? message : m);
             return { messages: { ...s.messages, list: next } };
         });
+    },
+
+    mergeMessageFields(messageId, fields) {
+        if (typeof messageId !== 'string' || messageId === '') {
+            throw new Error('messageId обязателен.');
+        }
+        if (!fields || typeof fields !== 'object') {
+            throw new Error('fields обязателен.');
+        }
+        baseStore.setState(s => ({
+            messages: {
+                ...s.messages,
+                list: s.messages.list.map(m => (m.id === messageId ? { ...m, ...fields } : m)),
+            },
+        }));
+    },
+
+    removeMessage(messageId) {
+        if (typeof messageId !== 'string' || messageId === '') {
+            throw new Error('messageId обязателен.');
+        }
+        const pending = _messageDeleteTimers.get(messageId);
+        if (pending !== undefined) {
+            clearTimeout(pending);
+            _messageDeleteTimers.delete(messageId);
+        }
+        baseStore.setState(s => ({
+            messages: {
+                ...s.messages,
+                list: s.messages.list.filter(m => m.id !== messageId),
+            },
+            ui: {
+                ...s.ui,
+                deletingMessageIds: s.ui.deletingMessageIds.filter(id => id !== messageId),
+            },
+        }));
+    },
+
+    /**
+     * После message.deleted: анимация разрушения, затем удаление из списка.
+     * @param {string} messageId
+     */
+    scheduleMessageRemovalAfterDeleteAnimation(messageId) {
+        if (typeof messageId !== 'string' || messageId === '') {
+            throw new Error('messageId обязателен.');
+        }
+        if (_messageDeleteTimers.has(messageId)) {
+            return;
+        }
+        baseStore.setState(s => {
+            if (s.ui.deletingMessageIds.includes(messageId)) {
+                return s;
+            }
+            return {
+                ui: {
+                    ...s.ui,
+                    deletingMessageIds: [...s.ui.deletingMessageIds, messageId],
+                },
+            };
+        });
+        const tid = setTimeout(() => {
+            _messageDeleteTimers.delete(messageId);
+            SyncStore.removeMessage(messageId);
+        }, MESSAGE_DELETE_ANIM_MS);
+        _messageDeleteTimers.set(messageId, tid);
+    },
+
+    mergeChannel(channel) {
+        baseStore.setState(s => {
+            const list = s.channels.list;
+            const idx = list.findIndex(c => c.id === channel.id);
+            const next = idx === -1
+                ? [...list, channel]
+                : list.map((c, i) => i === idx ? channel : c);
+            return { channels: { ...s.channels, list: next } };
+        });
+    },
+
+    setReplyToMessage(msg) {
+        baseStore.setState(s => ({
+            chat: { ...s.chat, replyToMessage: msg, editMessage: null },
+        }));
+    },
+
+    clearReplyToMessage() {
+        baseStore.setState(s => ({
+            chat: { ...s.chat, replyToMessage: null },
+        }));
+    },
+
+    setEditMessage(msg) {
+        baseStore.setState(s => ({
+            chat: { ...s.chat, editMessage: msg, replyToMessage: null },
+        }));
+    },
+
+    clearEditMessage() {
+        baseStore.setState(s => ({
+            chat: { ...s.chat, editMessage: null },
+        }));
+    },
+
+    setPinnedNavigateIndex(index) {
+        baseStore.setState(s => ({
+            chat: { ...s.chat, pinnedNavigateIndex: index },
+        }));
+    },
+
+    setSelectionMode(on) {
+        baseStore.setState(s => ({
+            ui: {
+                ...s.ui,
+                selectionMode: !!on,
+                selectedMessageIds: on ? s.ui.selectedMessageIds : [],
+            },
+        }));
+    },
+
+    toggleMessageSelection(messageId) {
+        baseStore.setState(s => {
+            const cur = s.ui.selectedMessageIds;
+            const has = cur.includes(messageId);
+            const selectedMessageIds = has
+                ? cur.filter(id => id !== messageId)
+                : [...cur, messageId];
+            return { ui: { ...s.ui, selectedMessageIds } };
+        });
+    },
+
+    clearMessageSelection() {
+        baseStore.setState(s => ({
+            ui: { ...s.ui, selectedMessageIds: [] },
+        }));
+    },
+
+    setForwardModal(open, message) {
+        baseStore.setState(s => ({
+            ui: {
+                ...s.ui,
+                forwardModalOpen: !!open,
+                forwardMessage: open ? message : null,
+            },
+        }));
+    },
+
+    /**
+     * Краткая подсветка пузыря по id (навигация к ответу, закрепам).
+     * @param {string} messageId
+     */
+    flashMessageHighlight(messageId) {
+        if (typeof messageId !== 'string' || messageId === '') {
+            throw new Error('messageId обязателен.');
+        }
+        if (_flashMessageTimer !== null) {
+            clearTimeout(_flashMessageTimer);
+            _flashMessageTimer = null;
+        }
+        baseStore.setState(s => ({
+            ui: { ...s.ui, flashMessageId: messageId },
+        }));
+        _flashMessageTimer = setTimeout(() => {
+            _flashMessageTimer = null;
+            baseStore.setState(s => ({
+                ui: { ...s.ui, flashMessageId: null },
+            }));
+        }, 2800);
     },
 
     addPending(commandId, message) {
@@ -153,13 +344,29 @@ export const SyncStore = {
 
     selectSpace(spaceId) {
         baseStore.setState(s => ({
-            chat: { ...s.chat, selectedSpaceId: spaceId, selectedChannelId: null, focusedThreadId: null },
+            chat: {
+                ...s.chat,
+                selectedSpaceId: spaceId,
+                selectedChannelId: null,
+                focusedThreadId: null,
+                replyToMessage: null,
+                editMessage: null,
+                pinnedNavigateIndex: 0,
+            },
         }));
     },
 
     selectChannel(spaceId, channelId) {
         baseStore.setState(s => ({
-            chat: { ...s.chat, selectedSpaceId: spaceId, selectedChannelId: channelId, focusedThreadId: null },
+            chat: {
+                ...s.chat,
+                selectedSpaceId: spaceId,
+                selectedChannelId: channelId,
+                focusedThreadId: null,
+                replyToMessage: null,
+                editMessage: null,
+                pinnedNavigateIndex: 0,
+            },
         }));
     },
 

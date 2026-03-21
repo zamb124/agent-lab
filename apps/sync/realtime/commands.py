@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from apps.sync.models.channels import ChannelCreate, ChannelRead
 from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
-from apps.sync.models.messages import MessageCreate, MessageRead
+from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
 from apps.sync.models.spaces import SpaceCreate, SpaceRead
 from apps.sync.models.threads import ThreadCreate, ThreadRead
 
@@ -19,6 +19,11 @@ CommandType = Literal[
     "threads.create",
     "messages.send",
     "messages.mark_read",
+    "messages.edit",
+    "messages.delete",
+    "messages.forward",
+    "messages.react",
+    "messages.pin",
     "git.resources.upsert",
 ]
 
@@ -79,3 +84,33 @@ class MessagesMarkReadPayload(BaseModel):
 
 class GitResourcesUpsertPayload(BaseModel):
     body: GitResourceRefCreate
+
+
+class MessagesEditPayload(BaseModel):
+    channel_id: str
+    message_id: str
+    body: MessageEdit
+
+
+class MessagesDeletePayload(BaseModel):
+    channel_id: str
+    message_id: str
+
+
+class MessagesForwardPayload(BaseModel):
+    from_channel_id: str
+    message_id: str
+    to_channel_id: str
+    thread_id: str | None = None
+
+
+class MessagesReactPayload(BaseModel):
+    channel_id: str
+    message_id: str
+    emoji: str | None = None
+
+
+class MessagesPinPayload(BaseModel):
+    channel_id: str
+    message_id: str
+    action: Literal["add", "remove"]

@@ -49,6 +49,10 @@ export class BaseService {
         return this._fetch('PUT', path, data, options);
     }
 
+    async patch(path, data, options = {}) {
+        return this._fetch('PATCH', path, data, options);
+    }
+
     async delete(path, options = {}) {
         return this._fetch('DELETE', path, null, options);
     }

@@ -54,6 +54,11 @@ export class MessageList extends PlatformElement {
         _loading: { state: true },
         _focusedThreadId: { state: true },
         _currentUserId: { state: true },
+        _selectionMode: { state: true },
+        _selectedMessageIds: { state: true },
+        _pinnedMessageIds: { state: true },
+        _flashMessageId: { state: true },
+        _deletingMessageIds: { state: true },
     };
 
     static styles = [
@@ -118,6 +123,22 @@ export class MessageList extends PlatformElement {
         this._currentUserId = null;
         this._stickToBottom = true;
         this._listRef = null;
+        this._selectionMode = false;
+        this._selectedMessageIds = [];
+        this._pinnedMessageIds = [];
+        this._flashMessageId = null;
+        this._deletingMessageIds = [];
+    }
+
+    _syncChannelMeta(state) {
+        const cid = this.channelId;
+        if (!cid) {
+            this._pinnedMessageIds = [];
+            return;
+        }
+        const ch = state.channels.list.find(c => c.id === cid);
+        const pins = ch?.pinned_message_ids;
+        this._pinnedMessageIds = Array.isArray(pins) ? pins : [];
     }
 
     connectedCallback() {
@@ -126,6 +147,13 @@ export class MessageList extends PlatformElement {
             this._loading = state.messages.loading;
             this._focusedThreadId = state.chat.focusedThreadId;
             this._messages = SyncStore.getDisplayMessages();
+            this._selectionMode = state.ui.selectionMode;
+            this._selectedMessageIds = state.ui.selectedMessageIds;
+            this._syncChannelMeta(state);
+            this._flashMessageId = state.ui.flashMessageId ?? null;
+            this._deletingMessageIds = Array.isArray(state.ui.deletingMessageIds)
+                ? state.ui.deletingMessageIds
+                : [];
             this._syncCurrentUserId();
             this._scrollIfSticky();
         });
@@ -168,6 +196,43 @@ export class MessageList extends PlatformElement {
         }
     }
 
+    /**
+     * Прокрутка к сообщению по id (якорь для закрепов).
+     * @param {string} messageId
+     */
+    scrollToMessageId(messageId) {
+        if (typeof messageId !== 'string' || messageId === '') {
+            throw new Error('messageId обязателен.');
+        }
+        const list = this.shadowRoot?.querySelector('.list');
+        if (!list) {
+            throw new Error('Список сообщений не готов.');
+        }
+        const bubble = list.querySelector(`message-bubble[data-msg-id="${CSS.escape(messageId)}"]`);
+        if (!bubble) {
+            throw new Error(
+                `Сообщение ${messageId} не найдено в ленте (возможно не загружено или в другом треде).`
+            );
+        }
+        bubble.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        this._stickToBottom = false;
+    }
+
+    _onScrollToMessage(e) {
+        const id = e.detail?.messageId;
+        if (typeof id !== 'string' || id === '') {
+            this.error('messageId обязателен.');
+            return;
+        }
+        try {
+            this.scrollToMessageId(id);
+            SyncStore.flashMessageHighlight(id);
+        } catch (err) {
+            const text = err instanceof Error ? err.message : String(err);
+            this.error(text);
+        }
+    }
+
     render() {
         const filtered = this._messages.filter(m => {
             if (this._focusedThreadId === null) return true;
@@ -177,7 +242,7 @@ export class MessageList extends PlatformElement {
         const items = buildListItems(filtered);
 
         return html`
-            <div class="list" @scroll=${this._onScroll}>
+            <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
                 ${this._loading ? html`<div class="loading-text">Загрузка сообщений...</div>` : ''}
                 ${!this._loading && filtered.length === 0 ? html`<div class="empty-text">Сообщений пока нет.</div>` : ''}
                 ${items.map((item) => {
@@ -189,9 +254,19 @@ export class MessageList extends PlatformElement {
                         `;
                     }
                     const msg = item.msg;
+                    const selected = this._selectedMessageIds.includes(msg.id);
+                    const flashActive = this._flashMessageId === msg.id;
+                    const deleting = this._deletingMessageIds.includes(msg.id);
                     return html`
                         <message-bubble
+                            data-msg-id=${msg.id}
                             .msg=${msg}
+                            .channelId=${this.channelId}
+                            .pinnedMessageIds=${this._pinnedMessageIds}
+                            .selectionMode=${this._selectionMode}
+                            .selected=${selected}
+                            .deleting=${deleting}
+                            .flashActive=${flashActive}
                             .isOwn=${this._currentUserId !== null && msg.sender?.id === this._currentUserId}
                             .canFocusThread=${this._focusedThreadId === null && msg.thread_id !== null}
                             @focus-thread=${(e) => SyncStore.setFocusedThread(e.detail.threadId)}

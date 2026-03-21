@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
 import './channel-picker.js';
 import './message-list.js';
@@ -130,6 +131,83 @@ export class ChatView extends PlatformElement {
                 border-color: rgba(239, 68, 68, 0.4);
                 color: rgb(239, 68, 68);
             }
+
+            .pin-strip {
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-4);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                background: rgba(245, 158, 11, 0.08);
+                cursor: pointer;
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+            }
+
+            .pin-strip:hover {
+                background: rgba(245, 158, 11, 0.14);
+            }
+
+            .selection-bar {
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                padding: var(--space-2) var(--space-4);
+                border-bottom: 1px solid rgba(244, 114, 182, 0.35);
+                background: rgba(244, 114, 182, 0.14);
+                font-size: var(--text-xs);
+            }
+
+            .selection-actions {
+                display: flex;
+                gap: var(--space-2);
+            }
+
+            .modal-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 300;
+                background: rgba(0, 0, 0, 0.45);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--space-4);
+            }
+
+            .modal-box {
+                width: min(420px, 100%);
+                border-radius: var(--radius-xl);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-strong);
+                padding: var(--space-4);
+                max-height: 70vh;
+                overflow: auto;
+            }
+
+            .modal-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                margin-bottom: var(--space-3);
+            }
+
+            .channel-pick {
+                width: 100%;
+                text-align: left;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                cursor: pointer;
+                margin-bottom: var(--space-2);
+                font-size: var(--text-sm);
+            }
+
+            .channel-pick:hover {
+                background: var(--glass-solid-medium);
+            }
         `
     ];
 
@@ -138,6 +216,7 @@ export class ChatView extends PlatformElement {
         _channels: { state: true },
         _wsState: { state: true },
         _threadIds: { state: true },
+        _ui: { state: true },
     };
 
     constructor() {
@@ -147,6 +226,7 @@ export class ChatView extends PlatformElement {
         this._channels = s.channels;
         this._wsState = s.ws.state;
         this._threadIds = [];
+        this._ui = SyncStore.state.ui;
     }
 
     connectedCallback() {
@@ -156,6 +236,7 @@ export class ChatView extends PlatformElement {
             this._channels = state.channels;
             this._wsState = state.ws.state;
             this._threadIds = SyncStore.getThreadIds();
+            this._ui = state.ui;
         });
     }
 
@@ -186,9 +267,76 @@ export class ChatView extends PlatformElement {
         return ch.type ?? '';
     }
 
+    _messageListEl() {
+        return this.shadowRoot?.querySelector('message-list');
+    }
+
+    _onPinStripClick() {
+        const ch = this._selectedChannel();
+        const ids = ch?.pinned_message_ids;
+        if (!Array.isArray(ids) || ids.length === 0) return;
+        const i = this._chat.pinnedNavigateIndex % ids.length;
+        const targetId = ids[i];
+        SyncStore.setPinnedNavigateIndex((i + 1) % ids.length);
+        this.updateComplete.then(() => {
+            const ml = this._messageListEl();
+            if (!ml) {
+                throw new Error('message-list не найден.');
+            }
+            ml.scrollToMessageId(targetId);
+            SyncStore.flashMessageHighlight(targetId);
+        }).catch((err) => {
+            const text = err instanceof Error ? err.message : String(err);
+            this.error(text);
+        });
+    }
+
+    async _deleteSelected() {
+        const syncApi = ServiceRegistry.get('syncApi');
+        const channelId = this._chat.selectedChannelId;
+        if (!channelId) throw new Error('Канал не выбран.');
+        const ids = this._ui.selectedMessageIds;
+        for (const mid of ids) {
+            await syncApi.deleteMessage(channelId, mid);
+        }
+        SyncStore.clearMessageSelection();
+        SyncStore.setSelectionMode(false);
+        await SyncStore.loadMessages(syncApi, channelId);
+    }
+
+    async _forwardSelectedToChannel(toChannelId) {
+        const syncApi = ServiceRegistry.get('syncApi');
+        const fromId = this._chat.selectedChannelId;
+        if (!fromId) throw new Error('Канал не выбран.');
+        const ids = this._ui.selectedMessageIds;
+        for (const mid of ids) {
+            await syncApi.forwardMessage(fromId, mid, toChannelId, null);
+        }
+        SyncStore.clearMessageSelection();
+        SyncStore.setSelectionMode(false);
+        SyncStore.setForwardModal(false, null);
+        await SyncStore.loadMessages(syncApi, fromId);
+    }
+
+    async _forwardModalPick(toChannelId) {
+        const syncApi = ServiceRegistry.get('syncApi');
+        const fwd = this._ui.forwardMessage;
+        const fromId = this._chat.selectedChannelId;
+        if (!fwd?.id || !fromId) throw new Error('Нет сообщения для пересылки.');
+        await syncApi.forwardMessage(fromId, fwd.id, toChannelId, null);
+        SyncStore.setForwardModal(false, null);
+        await SyncStore.loadMessages(syncApi, fromId);
+    }
+
     render() {
         const { selectedChannelId, focusedThreadId } = this._chat;
         const selectedChannel = this._selectedChannel();
+        const pins = selectedChannel?.pinned_message_ids;
+        const pinCount = Array.isArray(pins) ? pins.length : 0;
+        const selMode = this._ui.selectionMode;
+        const selIds = this._ui.selectedMessageIds;
+        const fwdOpen = this._ui.forwardModalOpen;
+        const otherChannels = this._channels.list.filter(c => c.id !== selectedChannelId);
 
         return html`
             <div class="chat-header">
@@ -228,10 +376,66 @@ export class ChatView extends PlatformElement {
                 ${!selectedChannelId ? html`
                     <channel-picker></channel-picker>
                 ` : html`
+                    ${pinCount > 0 && !focusedThreadId ? html`
+                        <div class="pin-strip" @click=${this._onPinStripClick} title="Перейти к закреплённому">
+                            <platform-icon name="target" size="14"></platform-icon>
+                            <span>Закреплённые сообщения (${pinCount}) — нажмите для перехода по кругу</span>
+                        </div>
+                    ` : ''}
+                    ${selMode ? html`
+                        <div class="selection-bar">
+                            <span>Выбрано: ${selIds.length}</span>
+                            <div class="selection-actions">
+                                <button type="button" class="back-btn" @click=${() => {
+        SyncStore.setSelectionMode(false);
+    }}>Отмена</button>
+                                <button
+                                    type="button"
+                                    class="back-btn"
+                                    ?disabled=${selIds.length === 0}
+                                    @click=${() => SyncStore.setForwardModal(true, null)}
+                                >Переслать</button>
+                                <button
+                                    type="button"
+                                    class="back-btn"
+                                    ?disabled=${selIds.length === 0}
+                                    @click=${this._deleteSelected}
+                                >Удалить</button>
+                            </div>
+                        </div>
+                    ` : ''}
                     <message-list .channelId=${selectedChannelId}></message-list>
                     <message-composer .channelId=${selectedChannelId}></message-composer>
                 `}
             </div>
+
+            ${fwdOpen ? html`
+                <div class="modal-overlay" @click=${(e) => {
+        if (e.target === e.currentTarget) SyncStore.setForwardModal(false, null);
+    }}>
+                    <div class="modal-box" @click=${(e) => e.stopPropagation()}>
+                        <div class="modal-title">Куда переслать</div>
+                        ${otherChannels.length === 0 ? html`<p class="header-subtitle">Нет других каналов.</p>` : ''}
+                        ${otherChannels.map(c => html`
+                            <button
+                                type="button"
+                                class="channel-pick"
+                                @click=${() => {
+        const one = this._ui.forwardMessage;
+        if (one?.id) {
+            this._forwardModalPick(c.id);
+        } else if (this._ui.selectedMessageIds.length > 0) {
+            this._forwardSelectedToChannel(c.id);
+        } else {
+            SyncStore.setForwardModal(false, null);
+        }
+    }}
+                            >${c.name ?? c.id}</button>
+                        `)}
+                        <button type="button" class="back-btn" style="margin-top:var(--space-3)" @click=${() => SyncStore.setForwardModal(false, null)}>Закрыть</button>
+                    </div>
+                </div>
+            ` : ''}
 
             <thread-drawer></thread-drawer>
         `;

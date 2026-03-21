@@ -22,7 +22,8 @@ from apps.sync.api import get_api_router
 logger = logging.getLogger(__name__)
 
 async def on_startup(app: FastAPI, container, settings):
-    """Запуск PubSubFanout для рассылки realtime событий."""
+    """Инициализация БД (таблицы + колонки для существующих инсталляций) и PubSubFanout."""
+    await container.init_db()
     await fanout.start()
     logger.info("Sync Service: PubSubFanout запущен")
 

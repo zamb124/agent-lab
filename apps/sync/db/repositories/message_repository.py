@@ -1,10 +1,10 @@
 """Репозиторий для работы с сообщениями (SQLAlchemy)."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Type
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, delete as sql_delete, update
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncMessage, SyncMessageContent
@@ -34,7 +34,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         offset: int = 0,
         company_id: Optional[str] = None,
     ) -> List[SyncMessage]:
-        """Корневые сообщения канала (без parent_message_id)."""
+        """Сообщения основной ленты канала: thread_id IS NULL, не удалённые, включая ответы (parent_message_id)."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = (
@@ -42,7 +42,8 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 .where(
                     SyncMessage.company_id == cid,
                     SyncMessage.channel_id == channel_id,
-                    SyncMessage.parent_message_id.is_(None),
+                    SyncMessage.thread_id.is_(None),
+                    SyncMessage.deleted_at.is_(None),
                 )
                 .order_by(SyncMessage.sent_at.desc())
                 .limit(limit)
@@ -63,7 +64,11 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         async with self._db.session() as session:
             stmt = (
                 select(SyncMessage)
-                .where(SyncMessage.company_id == cid, SyncMessage.thread_id == thread_id)
+                .where(
+                    SyncMessage.company_id == cid,
+                    SyncMessage.thread_id == thread_id,
+                    SyncMessage.deleted_at.is_(None),
+                )
                 .order_by(SyncMessage.sent_at.asc())
                 .limit(limit)
                 .offset(offset)
@@ -118,6 +123,8 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         status: str,
         sent_at: datetime,
         contents: List[MessageContentModel],
+        forwarded_from_channel_id: Optional[str] = None,
+        forwarded_from_channel_name: Optional[str] = None,
     ) -> SyncMessage:
         """Создаёт сообщение с контент-блоками в одной транзакции."""
         async with self._db.session() as session:
@@ -130,6 +137,10 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 sender_user_id=sender_user_id,
                 status=status,
                 sent_at=sent_at,
+                reactions=[],
+                deleted_at=None,
+                forwarded_from_channel_id=forwarded_from_channel_id,
+                forwarded_from_channel_name=forwarded_from_channel_name,
             )
             session.add(message)
 
@@ -145,3 +156,58 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
             await session.commit()
             await session.refresh(message)
             return message
+
+    async def get_by_id_for_company(
+        self,
+        message_id: str,
+        company_id: str,
+    ) -> Optional[SyncMessage]:
+        async with self._db.session() as session:
+            stmt = select(SyncMessage).where(
+                SyncMessage.message_id == message_id,
+                SyncMessage.company_id == company_id,
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def replace_message_contents(
+        self,
+        message_id: str,
+        contents: List[MessageContentModel],
+        edited_at: datetime,
+    ) -> None:
+        async with self._db.session() as session:
+            await session.execute(sql_delete(SyncMessageContent).where(SyncMessageContent.message_id == message_id))
+            for content in contents:
+                session.add(
+                    SyncMessageContent(
+                        message_id=message_id,
+                        type=content.type.value,
+                        order=content.order,
+                        data=content.data.model_dump(),
+                    )
+                )
+            await session.execute(
+                update(SyncMessage)
+                .where(SyncMessage.message_id == message_id)
+                .values(edited_at=edited_at)
+            )
+            await session.commit()
+
+    async def soft_delete_message(self, message_id: str, deleted_at: datetime) -> None:
+        async with self._db.session() as session:
+            await session.execute(
+                update(SyncMessage)
+                .where(SyncMessage.message_id == message_id)
+                .values(deleted_at=deleted_at)
+            )
+            await session.commit()
+
+    async def set_message_reactions(self, message_id: str, reactions: list) -> None:
+        async with self._db.session() as session:
+            await session.execute(
+                update(SyncMessage)
+                .where(SyncMessage.message_id == message_id)
+                .values(reactions=reactions)
+            )
+            await session.commit()

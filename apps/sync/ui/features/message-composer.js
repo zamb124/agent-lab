@@ -11,6 +11,17 @@ import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 
 const EMOJIS = ['😀', '😅', '😉', '😍', '🤝', '🔥', '✅', '💡', '🧠', '🚀', '📌', '🧩', '⚠️', '❌', '👍', '👀'];
 
+function extractPlainTextFromMsg(msg) {
+    const contents = msg?.contents ?? [];
+    const parts = [];
+    for (const c of contents) {
+        if (c.type === 'text/plain' && typeof c.data?.body === 'string') {
+            parts.push(c.data.body);
+        }
+    }
+    return parts.join('\n').trim();
+}
+
 function randomUuidV4() {
     const c = globalThis.crypto;
     if (c && typeof c.randomUUID === 'function') {
@@ -33,6 +44,9 @@ export class MessageComposer extends PlatformElement {
         _text: { state: true },
         _emojiOpen: { state: true },
         _focusedThreadId: { state: true },
+        _replyToMessage: { state: true },
+        _editMessage: { state: true },
+        _editSourceId: { state: true },
     };
 
     static styles = [
@@ -149,6 +163,37 @@ export class MessageComposer extends PlatformElement {
                 margin-top: var(--space-2);
             }
 
+            .draft-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                margin-bottom: var(--space-2);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+            }
+
+            .draft-bar .snippet {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .draft-bar button {
+                flex-shrink: 0;
+                border: none;
+                background: transparent;
+                color: var(--accent);
+                cursor: pointer;
+                font-size: var(--text-xs);
+            }
+
             input[type="file"] {
                 display: none;
             }
@@ -161,12 +206,27 @@ export class MessageComposer extends PlatformElement {
         this._text = '';
         this._emojiOpen = false;
         this._focusedThreadId = null;
+        this._replyToMessage = null;
+        this._editMessage = null;
+        this._editSourceId = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
         this._unsubscribe = SyncStore.subscribe(state => {
             this._focusedThreadId = state.chat.focusedThreadId;
+            const reply = state.chat.replyToMessage;
+            const edit = state.chat.editMessage;
+            this._replyToMessage = reply;
+            this._editMessage = edit;
+            const eid = edit?.id ?? null;
+            if (eid !== this._editSourceId) {
+                this._editSourceId = eid;
+                if (edit && eid) {
+                    const t = extractPlainTextFromMsg(edit);
+                    this._text = t;
+                }
+            }
         });
     }
 
@@ -178,6 +238,17 @@ export class MessageComposer extends PlatformElement {
     async _sendText() {
         const text = this._text.trim();
         if (!text || !this.channelId) return;
+
+        const syncApi = ServiceRegistry.get('syncApi');
+        const edit = this._editMessage;
+        if (edit?.id) {
+            const contents = [{ type: 'text/plain', data: { body: text }, order: 0 }];
+            await syncApi.editMessage(this.channelId, edit.id, { contents });
+            SyncStore.clearEditMessage();
+            this._text = '';
+            await SyncStore.loadMessages(syncApi, this.channelId);
+            return;
+        }
 
         const ws = ServiceRegistry.get('syncWs');
         if (!ws) throw new Error('WebSocket не подключен.');
@@ -191,9 +262,10 @@ export class MessageComposer extends PlatformElement {
                 ? auth.user.name.trim()
                 : 'Вы';
 
+        const parentId = this._replyToMessage?.id ?? null;
         const messageCreate = {
             thread_id: this._focusedThreadId,
-            parent_message_id: null,
+            parent_message_id: parentId,
             contents: [{ type: 'text/plain', data: { body: text }, order: 0 }],
         };
 
@@ -201,7 +273,7 @@ export class MessageComposer extends PlatformElement {
             id: `pending:${commandId}`,
             channel_id: this.channelId,
             thread_id: this._focusedThreadId,
-            parent_message_id: null,
+            parent_message_id: parentId,
             sender: { id: userId, display_name: displayName, avatar_url: null },
             status: 'pending',
             sent_at: new Date().toISOString(),
@@ -210,6 +282,7 @@ export class MessageComposer extends PlatformElement {
         };
 
         this._text = '';
+        SyncStore.clearReplyToMessage();
         SyncStore.addPending(commandId, pending);
 
         try {
@@ -237,13 +310,15 @@ export class MessageComposer extends PlatformElement {
         const res = await syncApi.uploadFile(file);
         if (!res?.file?.id) throw new Error('Некорректный ответ загрузки файла.');
 
+        const parentId = this._replyToMessage?.id ?? null;
         const messageCreate = {
             thread_id: this._focusedThreadId,
-            parent_message_id: null,
+            parent_message_id: parentId,
             contents: [{ type: 'mock/image', data: { file_id: res.file.id, alt_text: null }, order: 0 }],
         };
 
         await syncApi.sendMessage(this.channelId, messageCreate);
+        SyncStore.clearReplyToMessage();
         await SyncStore.loadMessages(syncApi, this.channelId);
     }
 
@@ -264,9 +339,28 @@ export class MessageComposer extends PlatformElement {
         this.shadowRoot?.querySelector('input[type="file"]')?.click();
     }
 
+    _replySnippet() {
+        const m = this._replyToMessage;
+        if (!m) return '';
+        const t = extractPlainTextFromMsg(m).slice(0, 160);
+        return t || 'Сообщение';
+    }
+
     render() {
         return html`
             <div class="composer">
+                ${this._editMessage ? html`
+                    <div class="draft-bar">
+                        <span>Редактирование сообщения</span>
+                        <button type="button" @click=${() => SyncStore.clearEditMessage()}>Отмена</button>
+                    </div>
+                ` : ''}
+                ${this._replyToMessage && !this._editMessage ? html`
+                    <div class="draft-bar">
+                        <span class="snippet">Ответ: ${this._replySnippet()}</span>
+                        <button type="button" @click=${() => SyncStore.clearReplyToMessage()}>Отмена</button>
+                    </div>
+                ` : ''}
                 <div class="row">
                     <button class="icon-btn" title="Прикрепить изображение" @click=${this._openFilePicker}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">

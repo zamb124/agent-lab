@@ -89,6 +89,24 @@ class MessageContentModel(BaseModel):
     order: int = Field(description="Позиция блока в сообщении.")
 
 
+class ReactionEntry(BaseModel):
+    """Одна реакция на сообщение (хранится в JSON на строке сообщения)."""
+
+    user_id: str = Field(description="Кто поставил.")
+    emoji: str = Field(description="Символ эмодзи.")
+    created_at: datetime = Field(description="Время установки.")
+
+
+class ForwardedFromChannel(BaseModel):
+    """Источник пересланного сообщения (другой канал)."""
+
+    channel_id: str = Field(description="Идентификатор канала-источника.")
+    channel_name: str | None = Field(
+        default=None,
+        description="Имя канала на момент пересылки (если было в БД).",
+    )
+
+
 class MessageRead(BaseModel):
     """Сообщение, возвращаемое из API."""
 
@@ -112,6 +130,14 @@ class MessageRead(BaseModel):
     contents: list[MessageContentModel] = Field(
         description="Список блоков контента сообщения.",
     )
+    reactions: list[ReactionEntry] = Field(
+        default_factory=list,
+        description="Реакции пользователей.",
+    )
+    forwarded_from: ForwardedFromChannel | None = Field(
+        default=None,
+        description="Если сообщение переслано из другого канала.",
+    )
 
 
 class MessageCreate(BaseModel):
@@ -127,6 +153,14 @@ class MessageCreate(BaseModel):
     )
     contents: list[MessageContentModel] = Field(
         description="Блоки контента нового сообщения.",
+    )
+
+
+class MessageEdit(BaseModel):
+    """Тело редактирования сообщения."""
+
+    contents: list[MessageContentModel] = Field(
+        description="Новый набор блоков контента.",
     )
 
 

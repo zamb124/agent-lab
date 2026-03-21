@@ -39,6 +39,9 @@ async def list_channels(
             is_private=c.is_private,
             created_at=c.created_at,
             created_by_user_id=c.created_by_user_id,
+            pinned_message_ids=list(c.pinned_message_ids)
+            if isinstance(c.pinned_message_ids, list)
+            else [],
         )
         for c in channels
     ]

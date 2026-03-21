@@ -19,6 +19,10 @@ EventType = Literal[
     "thread.created",
     "message.created",
     "message.status_changed",
+    "message.updated",
+    "message.deleted",
+    "message.reaction_changed",
+    "channel.pins_changed",
     "git_resource.upserted",
 ]
 
@@ -60,3 +64,39 @@ def event_message_status_changed(channel_id: str, payload: MessageStatusChangedP
 
 def event_git_resource_upserted(ref: GitResourceRefRead) -> RealtimeEvent:
     return RealtimeEvent(type="git_resource.upserted", channel_id=None, payload=ref.model_dump(mode="json"))
+
+
+def event_message_updated(message: MessageRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="message.updated",
+        channel_id=message.channel_id,
+        payload=message.model_dump(mode="json"),
+    )
+
+
+def event_message_deleted(channel_id: str, message_id: str) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="message.deleted",
+        channel_id=channel_id,
+        payload={"message_id": message_id, "channel_id": channel_id},
+    )
+
+
+def event_message_reaction_changed(
+    channel_id: str,
+    message_id: str,
+    reactions: list,
+) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="message.reaction_changed",
+        channel_id=channel_id,
+        payload={"message_id": message_id, "channel_id": channel_id, "reactions": reactions},
+    )
+
+
+def event_channel_pins_changed(channel: ChannelRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="channel.pins_changed",
+        channel_id=channel.id,
+        payload=channel.model_dump(mode="json"),
+    )

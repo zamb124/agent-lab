@@ -34,6 +34,10 @@ class ChannelRead(BaseModel):
     )
     created_at: datetime = Field(description="Время создания канала.")
     created_by_user_id: str = Field(description="Создатель канала.")
+    pinned_message_ids: list[str] = Field(
+        default_factory=list,
+        description="Упорядоченный список закреплённых сообщений (message_id).",
+    )
 
 
 class ChannelCreate(BaseModel):

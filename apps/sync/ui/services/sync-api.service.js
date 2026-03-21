@@ -46,4 +46,38 @@ export class SyncAPIService extends BaseService {
         fd.append('file', file);
         return this.post('/files/', fd);
     }
+
+    async editMessage(channelId, messageId, body) {
+        return this.patch(
+            `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
+            body
+        );
+    }
+
+    async deleteMessage(channelId, messageId) {
+        return this.delete(
+            `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`
+        );
+    }
+
+    async forwardMessage(channelId, messageId, toChannelId, threadId = null) {
+        return this.post(
+            `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/forward`,
+            { to_channel_id: toChannelId, thread_id: threadId }
+        );
+    }
+
+    async reactMessage(channelId, messageId, emoji) {
+        return this.post(
+            `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/react`,
+            { emoji }
+        );
+    }
+
+    async pinMessage(channelId, messageId, action) {
+        return this.post(
+            `/channels/${encodeURIComponent(channelId)}/pins`,
+            { message_id: messageId, action }
+        );
+    }
 }

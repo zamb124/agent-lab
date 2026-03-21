@@ -65,7 +65,12 @@ async def handle_command(cmd: dict) -> dict:
         await r.aclose()
 
     if exec_res.ok:
-        result_payload = exec_res.result.model_dump(mode="json") if exec_res.result is not None else None
+        if exec_res.result is None:
+            result_payload = None
+        elif hasattr(exec_res.result, "model_dump"):
+            result_payload = exec_res.result.model_dump(mode="json")
+        else:
+            result_payload = exec_res.result
         logger.info("task handle_command ok: id=%s type=%s", command.id, command.type)
         return {"id": command.id, "ok": True, "result": result_payload, "error_code": None, "error_detail": None}
 

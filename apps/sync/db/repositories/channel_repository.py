@@ -3,7 +3,7 @@
 import logging
 from typing import List, Optional, Type
 
-from sqlalchemy import select, exists
+from sqlalchemy import select, exists, update
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannel, SyncChannelMember
@@ -80,3 +80,28 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         is_already = await self.is_member(channel_id, user_id)
         if not is_already:
             await self.upsert_member(channel_id, user_id, role, cid)
+
+    async def get_member_role(self, channel_id: str, user_id: str) -> Optional[str]:
+        async with self._db.session() as session:
+            row = await session.get(SyncChannelMember, (channel_id, user_id))
+            if row is None:
+                return None
+            return row.role
+
+    async def set_pinned_message_ids(
+        self,
+        channel_id: str,
+        message_ids: list[str],
+        company_id: Optional[str] = None,
+    ) -> None:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            await session.execute(
+                update(SyncChannel)
+                .where(
+                    SyncChannel.channel_id == channel_id,
+                    SyncChannel.company_id == cid,
+                )
+                .values(pinned_message_ids=message_ids)
+            )
+            await session.commit()

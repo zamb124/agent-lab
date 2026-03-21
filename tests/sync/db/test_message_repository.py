@@ -124,3 +124,54 @@ async def test_message_list_by_thread(
 
     thread_msgs = await message_repo.list_by_thread("thr_1", company_id=company_id)
     assert [m.message_id for m in thread_msgs] == ["msg_root", "msg_reply"]
+
+
+@pytest.mark.asyncio
+async def test_main_channel_feed_includes_reply_with_parent(
+    channel_repo: ChannelRepository,
+    message_repo: MessageRepository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    """Основная лента канала (thread_id IS NULL) включает ответы с parent_message_id."""
+    ch = SyncChannel(
+        channel_id="ch_main",
+        company_id=company_id,
+        type="topic",
+        name="main",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id="user_1",
+    )
+    await channel_repo.create(ch)
+
+    await message_repo.create_message(
+        message_id="root_a",
+        company_id=company_id,
+        channel_id="ch_main",
+        thread_id=None,
+        parent_message_id=None,
+        sender_user_id="user_1",
+        status="sent",
+        sent_at=datetime(2026, 1, 2, 10, 0, tzinfo=UTC),
+        contents=[
+            MessageContentModel(type=MessageContentType.TEXT_PLAIN, data=TextPlainContent(body="root"), order=0),
+        ],
+    )
+    await message_repo.create_message(
+        message_id="reply_b",
+        company_id=company_id,
+        channel_id="ch_main",
+        thread_id=None,
+        parent_message_id="root_a",
+        sender_user_id="user_2",
+        status="sent",
+        sent_at=datetime(2026, 1, 2, 10, 1, tzinfo=UTC),
+        contents=[
+            MessageContentModel(type=MessageContentType.TEXT_PLAIN, data=TextPlainContent(body="reply"), order=0),
+        ],
+    )
+
+    listed = await message_repo.list_by_channel("ch_main", company_id=company_id, limit=50)
+    ids = {m.message_id for m in listed}
+    assert ids == {"root_a", "reply_b"}

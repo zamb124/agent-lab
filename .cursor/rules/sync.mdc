@@ -10,7 +10,7 @@ globs:
 
 ## Архитектура
 
-- **БД**: SQLAlchemy реляционный (паттерн CRM: `SyncDatabase` + `BaseSyncRepository`)
+- **БД**: SQLAlchemy реляционный (паттерн CRM: `SyncDatabase` + `BaseSyncRepository`). При старте сервиса вызывается `SyncContainer.init_db()` → `create_tables()` и **`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`** для колонок, добавленных в модели после создания таблиц (иначе `create_all` не обновляет существующие таблицы).
 - **Изоляция**: `company_id` во всех таблицах, из `get_context()` автоматически
 - **Auth**: платформенный `AuthMiddleware` + `get_context()`
 - **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket
@@ -45,10 +45,10 @@ apps/sync_worker/   # TaskIQ worker (queue: sync)
 | Таблица | company_id | Описание |
 |---------|-----------|----------|
 | sync_spaces | да | Пространства |
-| sync_channels | да | Каналы (direct/group/topic) |
+| sync_channels | да | Каналы (direct/group/topic), `pinned_message_ids` JSONB — упорядоченный список id |
 | sync_channel_members | да | Участники каналов |
 | sync_threads | да | Треды |
-| sync_messages | да | Сообщения |
+| sync_messages | да | Сообщения (`reactions` JSONB, `deleted_at`, при пересылке `forwarded_from_channel_id` / `forwarded_from_channel_name`) |
 | sync_message_contents | нет (через message FK) | Полиморфный контент |
 | sync_message_files | нет (через FK) | Связь файлов с сообщениями |
 | sync_files | да | Файлы |
@@ -88,6 +88,10 @@ WebSocket /sync/ws        ────┘
 
 Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.upsert`).
 
+Дополнительные команды сообщений и канала: `messages.edit`, `messages.delete`, `messages.forward`, `messages.react`, `messages.pin`. События: `message.updated`, `message.deleted`, `message.reaction_changed`, `channel.pins_changed`.
+
+**Лента канала (GET /messages, `list_by_channel`):** `thread_id IS NULL`, `deleted_at IS NULL`; ответы на сообщения в основной полосе **включены** (`parent_message_id` может быть задан при `thread_id IS NULL`).
+
 ### WebSocket протокол
 
 **Клиент -> сервер:** `{ id, type, payload }` (WsCommandFrame)
@@ -115,9 +119,10 @@ apps/sync/ui/
     sync-sidebar.js       # platform-sidebar + spaces + channels
     chat-view.js          # header + channel-picker | message-list + composer
     channel-picker.js     # сетка каналов
-    message-list.js       # список сообщений, автоскролл, фильтр по треду
-    message-bubble.js     # рендер всех типов контента + user-info-modal
-    message-composer.js   # текст + Enter, emoji, image upload
+    message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
+    message-bubble.js     # контент, ПКМ-меню, реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation
+    message-context-menu.js
+    message-composer.js   # текст + Enter, emoji, image, reply и редактирование через store
     thread-drawer.js      # drawer со списком тредов
   modals/
     create-space-modal.js

@@ -20,7 +20,8 @@ export class PlatformUser extends PlatformElement {
         serviceAttrs: { type: Object },
         companies: { type: Array },
         _menuOpen: { type: Boolean },
-        _companySelectorOpen: { type: Boolean }
+        _companySelectorOpen: { type: Boolean },
+        _avatarBroken: { type: Boolean, state: true },
     };
 
     constructor() {
@@ -30,6 +31,7 @@ export class PlatformUser extends PlatformElement {
         this.companies = [];
         this._menuOpen = false;
         this._companySelectorOpen = false;
+        this._avatarBroken = false;
     }
 
     connectedCallback() {
@@ -53,6 +55,7 @@ export class PlatformUser extends PlatformElement {
         try {
             const userData = await this.auth.get('/api/auth/me');
             this.user = userData;
+            this._avatarBroken = false;
             
             if (userData.companies && Object.keys(userData.companies).length > 1) {
                 this.companies = Object.entries(userData.companies).map(([company_id, roles]) => ({
@@ -119,6 +122,38 @@ export class PlatformUser extends PlatformElement {
         if (!this.user) return '?';
         const name = this.user.name || this.user.emails?.[0] || '';
         return name.charAt(0).toUpperCase();
+    }
+
+    _avatarDisplayUrl() {
+        const raw = this.user?.avatar_url;
+        if (typeof raw !== 'string') {
+            return null;
+        }
+        const trimmed = raw.trim();
+        return trimmed !== '' ? trimmed : null;
+    }
+
+    _onAvatarError() {
+        this._avatarBroken = true;
+    }
+
+    _renderAvatar() {
+        const url = this._avatarDisplayUrl();
+        if (url && !this._avatarBroken) {
+            return html`
+                <div class="user-avatar has-image" aria-hidden="true">
+                    <img
+                        class="avatar-img"
+                        src=${url}
+                        alt=""
+                        @error=${this._onAvatarError}
+                    />
+                </div>
+            `;
+        }
+        return html`
+            <div class="user-avatar" aria-hidden="true">${this._getUserInitials()}</div>
+        `;
     }
 
     async _openProfileModal() {
@@ -215,7 +250,7 @@ export class PlatformUser extends PlatformElement {
         return html`
             <div class="user-container">
                 <button class="user-button" @click=${this._toggleMenu} title="Меню пользователя">
-                    <div class="user-avatar">${this._getUserInitials()}</div>
+                    ${this._renderAvatar()}
                     <div class="user-info">
                         <div class="user-name">${this.user.name || 'Пользователь'}</div>
                         <div class="user-email">${this.user.emails?.[0] || ''}</div>
@@ -333,6 +368,19 @@ export class PlatformUser extends PlatformElement {
                 font-size: var(--text-sm);
                 box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
                 flex-shrink: 0;
+                overflow: hidden;
+            }
+
+            .user-avatar.has-image {
+                padding: 0;
+                background: var(--glass-solid-subtle);
+            }
+
+            .user-avatar .avatar-img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
             }
 
             .user-info {

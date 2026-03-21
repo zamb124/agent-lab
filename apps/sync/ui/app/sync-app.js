@@ -176,11 +176,30 @@ export class SyncApp extends PlatformApp {
                 return;
             }
 
-            if (msg.type === 'message.created' && msg.payload) {
-                const { selectedChannelId } = SyncStore.state.chat;
-                if (selectedChannelId && msg.payload.channel_id === selectedChannelId) {
-                    SyncStore.upsertMessage(msg.payload);
-                }
+            const selectedChannelId = SyncStore.state.chat.selectedChannelId;
+            const p = msg.payload;
+            if (!p || typeof p !== 'object') return;
+
+            if (msg.type === 'message.created' && selectedChannelId && p.channel_id === selectedChannelId) {
+                SyncStore.upsertMessage(p);
+                return;
+            }
+            if (msg.type === 'message.updated' && selectedChannelId && p.channel_id === selectedChannelId) {
+                SyncStore.upsertMessage(p);
+                return;
+            }
+            if (msg.type === 'message.reaction_changed' && selectedChannelId && p.channel_id === selectedChannelId) {
+                const mid = p.message_id;
+                if (typeof mid !== 'string') throw new Error('message.reaction_changed: нет message_id.');
+                SyncStore.mergeMessageFields(mid, { reactions: p.reactions });
+                return;
+            }
+            if (msg.type === 'message.deleted' && selectedChannelId && p.channel_id === selectedChannelId) {
+                SyncStore.scheduleMessageRemovalAfterDeleteAnimation(p.message_id);
+                return;
+            }
+            if (msg.type === 'channel.pins_changed' && p.id) {
+                SyncStore.mergeChannel(p);
             }
         });
 
