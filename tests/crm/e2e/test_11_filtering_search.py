@@ -84,15 +84,19 @@ class TestFilteringSearch:
     
     @pytest.mark.asyncio
     async def test_search_by_entity_name(self, crm_client, unique_id, auth_headers_system):
-        """Поиск по имени entity"""
+        """Список по типу находит entity по точному имени (/search — семантика, не подстрочное совпадение)."""
         unique_name = f"Уникальное_имя_{unique_id}"
-        await crm_client.post("/crm/api/v1/entities/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "contact",
             "name": unique_name
         }, headers=auth_headers_system)
-        
-        search_resp = await crm_client.get(f"/crm/api/v1/entities/search?query={unique_name}", headers=auth_headers_system)
-        results = search_resp.json()
-        found = [r for r in results if r["name"] == unique_name]
+        assert create_resp.status_code == 200
+
+        list_resp = await crm_client.get(
+            "/crm/api/v1/entities/?entity_type=contact&limit=500",
+            headers=auth_headers_system,
+        )
+        assert list_resp.status_code == 200
+        found = [r for r in list_resp.json() if r["name"] == unique_name]
         assert len(found) >= 1
 

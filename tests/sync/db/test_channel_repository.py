@@ -92,13 +92,13 @@ async def test_channel_members(
     )
     await channel_repo.create(ch)
 
-    assert await channel_repo.is_member("ch_mbr", "user_10") is False
+    assert await channel_repo.is_member("ch_mbr", "user_10", company_id=company_id) is False
 
     await channel_repo.upsert_member("ch_mbr", "user_10", "member", company_id)
-    assert await channel_repo.is_member("ch_mbr", "user_10") is True
+    assert await channel_repo.is_member("ch_mbr", "user_10", company_id=company_id) is True
 
     await channel_repo.add_member_if_missing("ch_mbr", "user_10", "admin", company_id)
-    assert await channel_repo.is_member("ch_mbr", "user_10") is True
+    assert await channel_repo.is_member("ch_mbr", "user_10", company_id=company_id) is True
 
 
 @pytest.mark.asyncio

@@ -136,9 +136,9 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
     async def add_member_if_missing(self, channel_id: str, user_id: str, role: str, company_id: Optional[str] = None) -> None:
         """Добавляет участника, если его ещё нет."""
         cid = company_id or self._get_company_id()
-        is_already = await self.is_member(channel_id, user_id)
+        is_already = await self.is_member(channel_id, user_id, company_id=cid)
         if not is_already:
-            await self.upsert_member(channel_id, user_id, role, cid)
+            await self.upsert_member(channel_id, user_id, role, company_id=cid)
 
     async def get_member_role(self, channel_id: str, user_id: str) -> Optional[str]:
         async with self._db.session() as session:

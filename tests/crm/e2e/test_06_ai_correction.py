@@ -113,26 +113,18 @@ class TestAICorrection:
         }, headers=auth_headers_system)
         entities = analyze_resp.json()["entities"]
         
-        # Создаём обе извлечённые entities
+        incorrect_entity_id = None
         for entity_data in entities:
-            await crm_client.post("/crm/api/v1/entities/", json={
+            create_resp = await crm_client.post("/crm/api/v1/entities/", json={
                 "entity_type": entity_data["entity_type"],
                 "name": entity_data["name"]
             }, headers=auth_headers_system)
-        
-        # Ищем ошибочный контакт по имени
-        search_resp = await crm_client.get(
-            "/crm/api/v1/entities/search?query=Ошибочный+контакт&entity_type=contact&limit=10",
-            headers=auth_headers_system
-        )
-        created_entities = search_resp.json()
-        
-        # Удаляем ошибочный (находим по имени)
-        incorrect_entity = next((e for e in created_entities if "Ошибочный" in e["name"]), None)
-        if not incorrect_entity:
+            assert create_resp.status_code == 200
+            if "Ошибочный" in entity_data["name"]:
+                incorrect_entity_id = create_resp.json()["entity_id"]
+
+        if incorrect_entity_id is None:
             raise ValueError("Ошибочный контакт не найден")
-        
-        incorrect_entity_id = incorrect_entity["entity_id"]
         delete_resp = await crm_client.delete(f"/crm/api/v1/entities/{incorrect_entity_id}", headers=auth_headers_system)
         assert delete_resp.status_code == 200
         

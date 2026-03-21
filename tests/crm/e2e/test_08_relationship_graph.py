@@ -77,16 +77,20 @@ async def create_entity(
     entity_type: str,
     name: str,
     headers: dict,
-    attributes: dict = None
+    attributes: dict = None,
+    namespace: str | None = None,
 ) -> str:
     """Создать entity и вернуть entity_id"""
+    payload = {
+        "entity_type": entity_type,
+        "name": name,
+        "attributes": attributes or {},
+    }
+    if namespace is not None:
+        payload["namespace"] = namespace
     response = await client.post(
         "/crm/api/v1/entities/",
-        json={
-            "entity_type": entity_type,
-            "name": name,
-            "attributes": attributes or {}
-        },
+        json=payload,
         headers=headers
     )
     assert response.status_code == 200, f"Failed to create entity: {response.text}"
@@ -746,10 +750,11 @@ class TestAccessControl:
     @pytest.mark.asyncio
     async def test_placeholder_nodes(self, crm_client, unique_id, auth_headers_system, auth_headers_company2):
         """Test 7.1: Placeholder для недоступных узлов"""
+        ns = f"g_{unique_id}"
         # Company2 user создает entities в СВОЕЙ компании
-        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2)
-        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2)
-        c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2)
+        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2, namespace=ns)
+        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
+        c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2, namespace=ns)
         
         await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
         await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_company2)
@@ -784,10 +789,11 @@ class TestAccessControl:
     @pytest.mark.asyncio
     async def test_partial_access_through_grants(self, crm_client, unique_id, auth_headers_system, auth_headers_company2):
         """Test 7.2: Частичный доступ через grants"""
+        ns = f"g_{unique_id}"
         # Company2 user создает entities в СВОЕЙ компании
-        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2)
-        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2)
-        c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2)
+        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2, namespace=ns)
+        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
+        c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2, namespace=ns)
         
         await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
         await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_company2)
@@ -821,9 +827,10 @@ class TestCrossCompanyAccess:
     @pytest.mark.asyncio
     async def test_public_grant_shows_relationships(self, crm_client, unique_id, auth_headers_system, auth_headers_company2):
         """Test 7.3: Public grant позволяет видеть relationships"""
+        ns = f"g_{unique_id}"
         # Company2 создает граф
-        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2)
-        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2)
+        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2, namespace=ns)
+        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
         
         await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
         await create_public_grant(crm_client, a_id, auth_headers_company2)
@@ -849,10 +856,11 @@ class TestCrossCompanyAccess:
     @pytest.mark.asyncio
     async def test_user_grant_cross_company(self, crm_client, unique_id, auth_headers_system, auth_headers_company2, system_user_id):
         """Test 7.4: User grant позволяет видеть relationships"""
+        ns = f"g_{unique_id}"
         # Company2 создает entities
-        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2)
-        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2)
-        c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2)
+        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2, namespace=ns)
+        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
+        c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2, namespace=ns)
         
         await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
         await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_company2)
@@ -935,10 +943,11 @@ class TestCrossCompanyAccess:
     @pytest.mark.asyncio
     async def test_shortest_path_cross_company(self, crm_client, unique_id, auth_headers_system, auth_headers_company2):
         """Test 7.6: Shortest path работает через company границы"""
+        ns = f"g_{unique_id}"
         # Company2 создает путь A→B→C
-        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2)
-        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2)
-        c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2)
+        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2, namespace=ns)
+        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
+        c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2, namespace=ns)
         
         await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2, weight=1.0)
         await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_company2, weight=1.0)
@@ -962,12 +971,13 @@ class TestCrossCompanyAccess:
     @pytest.mark.asyncio
     async def test_related_entities_cross_company(self, crm_client, unique_id, auth_headers_system, auth_headers_company2):
         """Test 7.7: Related entities видны через company границы"""
+        ns = f"g_{unique_id}"
         # Company2 создает hub entity
-        hub_id = await create_entity(crm_client, "contact", f"Hub {unique_id}", auth_headers_company2)
+        hub_id = await create_entity(crm_client, "contact", f"Hub {unique_id}", auth_headers_company2, namespace=ns)
         
         related_ids = []
         for i in range(3):
-            r_id = await create_entity(crm_client, "contact", f"Related{i} {unique_id}", auth_headers_company2)
+            r_id = await create_entity(crm_client, "contact", f"Related{i} {unique_id}", auth_headers_company2, namespace=ns)
             await create_relationship(crm_client, hub_id, r_id, "knows", auth_headers_company2)
             related_ids.append(r_id)
         
@@ -1227,9 +1237,10 @@ class TestSameCompanyRegression:
     @pytest.mark.asyncio
     async def test_api_list_relationships_filtered(self, crm_client, unique_id, auth_headers_system, auth_headers_company2):
         """Test 8.2: API /relationships/ фильтрует по компании"""
+        ns = f"g_{unique_id}"
         # Company2 создает relationship
-        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2)
-        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2)
+        a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2, namespace=ns)
+        b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
         await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
         
         # System user НЕ видит через API

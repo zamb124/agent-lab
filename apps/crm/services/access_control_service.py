@@ -32,40 +32,41 @@ class AccessControlService:
         company_id: Optional[str]
     ) -> bool:
         """Проверка доступа к entity"""
-        
+
         # 1. Владелец всегда может
         if user_id and entity.user_id == user_id:
             return True
-        
+
         # 2. Same company + same namespace
         if user_id and company_id == entity.company_id:
             user_ns = await self._get_user_namespace(user_id)
             if user_ns == entity.namespace:
                 return True
-        
-        # 3. AccessGrants для ENTITY
+
+        # 3. AccessGrants для ENTITY (company_id ресурса — владелец гранта)
         entity_grants = await self._grant_repo.find_by_resource(
             resource_type="entity",
-            resource_id=entity.entity_id
+            resource_id=entity.entity_id,
+            resource_company_id=entity.company_id,
         )
         
         for grant in entity_grants:
             if await self._check_grant(grant, user_id, company_id):
                 return True
-        
+
         # 4. AccessGrants для NAMESPACE
         namespace_grants = await self._grant_repo.find_by_resource(
             "namespace",
             entity.namespace,
             entity.company_id
         )
-        
+
         for grant in namespace_grants:
             if grant.grant_type == "public":
                 continue
             if await self._check_grant(grant, user_id, company_id):
                 return True
-        
+
         return False
     
     async def can_write_entity(

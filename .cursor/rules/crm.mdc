@@ -324,6 +324,8 @@ company_id="acme", namespace="default"   # По умолчанию
 
 **E2E тесты в:** `tests/crm/e2e/`
 
+**Graph + cross-company (company2):** сущности для сценариев с «чужими» узлами и placeholder создавай в **отдельном** `namespace` на тест (например `g_{unique_id}`). Иначе в общей БД остаётся грант `namespaces/default/grants/company` на `target_company_id=system` — `can_read_entity` начинает отдавать полный доступ ко всем entity в `default` компании company2, и тесты графа дают ложный `access: true`.
+
 ## Ключевые принципы
 
 1. **Company изоляция** - ВСЕГДА фильтруем по `company_id` из контекста
