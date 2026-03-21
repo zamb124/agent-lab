@@ -3,19 +3,20 @@ name: agentlab-dev
 services:
   postgres:
     platform: "linux/amd64"
-    image: pgvector/pgvector:pg15
+    image: pgvector/pgvector:pg17
     container_name: agentlab_postgres_dev
     environment:
-      POSTGRES_DB: platform_db
+      POSTGRES_DB: platform_shared
       POSTGRES_USER: platform_user
       POSTGRES_PASSWORD: admin
     ports:
       - "54321:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
+      - ./migrations/postgres/init.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
     command: postgres -c max_connections=300
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_db"]
+      test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_shared"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -83,7 +84,7 @@ services:
   #     - dev-net
 
   # Worker опционален - можно запустить локально для дебага:
-  # DATABASE__URL=postgresql://platform_user:admin@localhost:54321/platform_db TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq worker apps.broker.worker:broker
+  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq worker apps.broker.worker:broker
   # worker:
   #   build:
   #     context: .
@@ -96,7 +97,7 @@ services:
   #     postgres:
   #       condition: service_healthy
   #   environment:
-  #     - DATABASE__URL=postgresql://platform_user:admin@postgres:5432/platform_db
+  #     - DATABASE__SHARED_URL=postgresql://platform_user:admin@postgres:5432/platform_shared
   #     - DATABASE__REDIS_URL=redis://redis:6379/0
   #     - TASKS__BROKER_URL=redis://redis:6379/1
   #   command: ["uv", "run", "python", "-m", "taskiq", "worker", "apps.broker.worker:broker", "--workers", "4"]
@@ -105,7 +106,7 @@ services:
   #     - dev-net
 
   # Scheduler опционален - можно запустить локально для дебага:
-  # DATABASE__URL=postgresql://platform_user:admin@localhost:54321/platform_db TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq scheduler apps.scheduler.scheduler:scheduler
+  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq scheduler apps.scheduler.scheduler:scheduler
   # scheduler:
   #   build:
   #     context: .
@@ -118,7 +119,7 @@ services:
   #     postgres:
   #       condition: service_healthy
   #   environment:
-  #     - DATABASE__URL=postgresql://platform_user:admin@postgres:5432/platform_db
+  #     - DATABASE__SHARED_URL=postgresql://platform_user:admin@postgres:5432/platform_shared
   #     - DATABASE__REDIS_URL=redis://redis:6379/0
   #     - TASKS__BROKER_URL=redis://redis:6379/1
   #   command: ["python", "-m", "apps.scheduler.run_scheduler"]
@@ -127,7 +128,7 @@ services:
   #     - dev-net
 
   # RAGWorker опционален - можно запустить локально для дебага:
-  # DATABASE__URL=postgresql://platform_user:admin@localhost:54321/platform_db TASKS__BROKER_URL=redis://localhost:63791/1 uv run python scripts/run_rag_worker.py
+  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared DATABASE__RAG_URL=postgresql://platform_user:admin@localhost:54321/platform_rag TASKS__BROKER_URL=redis://localhost:63791/1 uv run python scripts/run_rag_worker.py
   # rag-worker:
   #   build:
   #     context: .
@@ -140,7 +141,7 @@ services:
   #     postgres:
   #       condition: service_healthy
   #   environment:
-  #     - DATABASE__URL=postgresql://platform_user:admin@postgres:5432/platform_db
+  #     - DATABASE__SHARED_URL=postgresql://platform_user:admin@postgres:5432/platform_shared
   #     - DATABASE__REDIS_URL=redis://redis:6379/0
   #     - TASKS__BROKER_URL=redis://redis:6379/1
   #   command: ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]

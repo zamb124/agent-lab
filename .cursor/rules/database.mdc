@@ -14,37 +14,40 @@ alwaysApply: false
 2. **НИКАКИХ лишних if-else** - логика должна быть прозрачной, используй early return
 3. **try-except ТОЛЬКО для IO/внешних сервисов** - не для бизнес-логики
 
-## Структура
+## Структура БД (каждый сервис — своя PostgreSQL-база)
+
+| Переменная окружения    | База данных      | Владелец моделей              |
+|-------------------------|------------------|-------------------------------|
+| DATABASE__SHARED_URL    | platform_shared  | core/db/models/platform.py    |
+| DATABASE__AGENTS_URL    | platform_agents  | migrations/services.json → agents_url |
+| DATABASE__CRM_URL       | platform_crm     | apps/crm/db/models.py         |
+| DATABASE__SYNC_URL      | platform_sync    | apps/sync/db/models.py        |
+| DATABASE__RAG_URL       | platform_rag     | core/db/models/rag.py         |
+
+Таблицы из `core/db/models/platform.py` (в т.ч. `variables`, `users`, `usage`) живут только в **platform_shared**. В `AgentContainer` репозитории к ним — через `shared_storage`, не через `storage` (agents).
 
 ```
 core/db/
+├── models/
+│   ├── __init__.py         # реэкспорт Base + всех моделей
+│   ├── base.py             # class Base(DeclarativeBase): pass
+│   ├── platform.py         # Storage, Users, Variables, Usage, Namespaces, Spans, PushSubscription
+│   └── rag.py              # DocumentProcessingStatus, VectorDocument
 ├── storage.py              # Storage (приватный, только для репозиториев)
 ├── base_repository.py      # BaseRepository (композиция с Storage)
-├── models.py               # SQLAlchemy таблицы
-└── repositories/           # Core репозитории (shared БД)
-    ├── user_repository.py
-    ├── company_repository.py
-    ├── auth_session_repository.py
-    ├── subdomain_repository.py
-    ├── variable_repository.py
-    ├── usage_repository.py
-    ├── document_status_repository.py
-    ├── embed_config_repository.py
-    ├── embed_mapping_repository.py
-    ├── namespace_repository.py
-    └── __init__.py
+├── service_registry.py     # реестр: name, get_db_url, alembic_script_location
+├── migrations.py           # run_migrations_async(), Alembic helpers
+├── cli.py                  # argparse: подкоманды (вызывается из scripts.db_migrate)
+└── repositories/           # core репозитории (shared БД)
 
 apps/agents/src/db/
-├── models.py               # SQLAlchemy таблицы для agents
-├── agent_repository.py
-├── node_repository.py
-├── tool_repository.py
-├── state_repository.py
-├── evaluation_repository.py
-├── llm_model_repository.py
-├── push_repository.py
-├── scheduled_task_repository.py
-└── __init__.py
+├── models.py               # Agents, AgentsVersions, Nodes, Tools, States,
+│                           # EvaluationResults, ScheduledTasks, Resources,
+│                           # Stores, AgentStates
+└── ...
+
+apps/crm/db/models.py       # CRMEntity, EntityType, RelationshipType, ...
+apps/sync/db/models.py      # SyncSpace, SyncChannel, SyncMessage, ...
 ```
 
 ## BaseRepository - незыблемая логика

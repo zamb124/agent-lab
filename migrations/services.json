@@ -1,0 +1,39 @@
+{
+  "services": [
+    {
+      "name": "shared",
+      "models_module": "core.db.models.platform",
+      "database_url_key": "shared_url"
+    },
+    {
+      "name": "agents",
+      "models_module": "apps.agents.src.db.models",
+      "database_url_key": "agents_url"
+    },
+    {
+      "name": "crm",
+      "models_module": "apps.crm.db.models",
+      "database_url_key": "crm_url"
+    },
+    {
+      "name": "sync",
+      "models_module": "apps.sync.db.models",
+      "database_url_key": "sync_url"
+    },
+    {
+      "name": "rag",
+      "models_module": "core.db.models.rag",
+      "database_url_key": "rag_url"
+    }
+  ],
+  "postgres": {
+    "databases": [
+      "platform_shared",
+      "platform_agents",
+      "platform_crm",
+      "platform_sync",
+      "platform_rag"
+    ],
+    "vector_extensions": ["platform_shared", "platform_rag"]
+  }
+}

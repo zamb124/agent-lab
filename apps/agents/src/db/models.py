@@ -9,18 +9,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 
 from core.db.models import Base
-from core.db.service_registry import register_service
-
-
-def _get_agents_db_url() -> str:
-    """Получает URL БД для agents из конфига сервиса."""
-    from apps.agents.config import get_settings
-    settings = get_settings()
-    return settings.database.agents_db_url or settings.database.url
-
-
-# Регистрируем сервис для миграций
-register_service("agents", _get_agents_db_url, "apps.agents.src.db.models")
 
 
 def utc_now() -> datetime:
@@ -256,5 +244,47 @@ class Resources(Base):
         return f"<Resources(key='{self.key}', updated_at='{self.updated_at}')>"
 
 
-# PushSubscription модель перенесена в core/push/models.py
+class Stores(Base):
+    """
+    Таблица хранения store (единого для всего flow).
+    Все агенты в flow используют один и тот же store через store_id.
+    """
+
+    __tablename__ = "stores"
+
+    store_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    store_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+
+    __table_args__ = (
+        Index("ix_stores_updated_at", "updated_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Stores(store_id='{self.store_id}', updated_at='{self.updated_at}')>"
+
+
+class AgentStates(Base):
+    """
+    Таблица хранения состояний агентов.
+    Хранит состояние сессий в формате JSONB.
+    Store хранится отдельно в таблице Stores и ссылается через store_id.
+    """
+
+    __tablename__ = "agent_states"
+
+    session_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    store_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    state_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+
+    __table_args__ = (
+        Index("ix_agent_states_store_id", "store_id"),
+        Index("ix_agent_states_updated_at", "updated_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AgentStates(session_id='{self.session_id}', store_id='{self.store_id}')>"
 

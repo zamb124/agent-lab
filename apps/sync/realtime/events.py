@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -16,6 +17,8 @@ from apps.sync.models.threads import ThreadRead
 EventType = Literal[
     "space.created",
     "channel.created",
+    "channel.member_added",
+    "channel.read_updated",
     "thread.created",
     "message.created",
     "message.status_changed",
@@ -44,6 +47,30 @@ def event_space_created(space: SpaceRead) -> RealtimeEvent:
 
 def event_channel_created(channel: ChannelRead) -> RealtimeEvent:
     return RealtimeEvent(type="channel.created", channel_id=channel.id, payload=channel.model_dump(mode="json"))
+
+
+def event_channel_member_added(channel_id: str, added_user_id: str) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="channel.member_added",
+        channel_id=channel_id,
+        payload={"channel_id": channel_id, "added_user_id": added_user_id},
+    )
+
+
+def event_channel_read_updated(
+    channel_id: str,
+    reader_user_id: str,
+    read_at: datetime,
+) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="channel.read_updated",
+        channel_id=channel_id,
+        payload={
+            "channel_id": channel_id,
+            "reader_user_id": reader_user_id,
+            "read_at": read_at.isoformat(),
+        },
+    )
 
 
 def event_thread_created(thread: ThreadRead) -> RealtimeEvent:

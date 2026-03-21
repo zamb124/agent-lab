@@ -1,0 +1,273 @@
+"""
+Модели shared-базы данных.
+
+Таблицы platform БД: storage, users, variables, usage, namespaces, spans, push_subscriptions.
+"""
+
+from datetime import datetime, timezone
+from typing import Optional, Any
+
+from sqlalchemy import String, Text, DateTime, Integer, Boolean, Index, UniqueConstraint, text
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB
+
+from core.db.models.base import Base
+
+
+class Storage(Base):
+    """
+    Таблица для key-value хранения сущностей.
+
+    Ключи имеют префиксы:
+    - agent:agent_id
+    - flow:flow_id
+    - session:session_id
+    """
+
+    __tablename__ = "storage"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_storage_key"),
+        Index("ix_storage_key_prefix", "key"),
+        Index("ix_storage_updated_at", "updated_at"),
+        Index("ix_storage_expired_at", "expired_at"),
+        Index("ix_storage_key_created_at", "key", "created_at"),
+        Index("ix_storage_key_updated_at", "key", "updated_at"),
+        Index("ix_storage_key_expired_at", "key", "expired_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Storage(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class Users(Base):
+    """
+    Таблица для хранения пользователей и аутентификации.
+
+    Ключи имеют префиксы:
+    - user:user_id (основная запись пользователя - source of truth)
+    - user_providers:user_id (провайдеры)
+    - auth_session:session_id (сессии)
+    - auth_state:state (временные OAuth-состояния)
+    """
+
+    __tablename__ = "users"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_users_key"),
+        Index("ix_users_key_prefix", "key"),
+        Index("ix_users_updated_at", "updated_at"),
+        Index("ix_users_expired_at", "expired_at"),
+        Index("ix_users_key_created_at", "key", "created_at"),
+        Index("ix_users_key_updated_at", "key", "updated_at"),
+        Index("ix_users_key_expired_at", "key", "expired_at"),
+        Index(
+            "ix_users_providers_jsonb",
+            text("value jsonb_path_ops"),
+            postgresql_using="gin",
+            postgresql_where=text("key LIKE 'user_providers:%'"),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Users(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class Variables(Base):
+    """
+    Таблица для переменных всех компаний.
+
+    Ключи имеют формат: company:{company_id}:var:{key}
+    """
+
+    __tablename__ = "variables"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_variables_key"),
+        Index("ix_variables_key_prefix", "key"),
+        Index("ix_variables_updated_at", "updated_at"),
+        Index("ix_variables_expired_at", "expired_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Variables(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class Usage(Base):
+    """
+    Таблица для записей использования ресурсов (биллинг).
+
+    Ключи имеют формат: company:{company_id}:usage:{resource_name}:{usage_id}
+    """
+
+    __tablename__ = "usage"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_usage_key"),
+        Index("ix_usage_key_prefix", "key"),
+        Index("ix_usage_updated_at", "updated_at"),
+        Index("ix_usage_expired_at", "expired_at"),
+        Index("ix_usage_company_id", text("(value->>'company_id')")),
+        Index("ix_usage_user_id", text("(value->>'user_id')")),
+        Index("ix_usage_timestamp", text("(value->>'timestamp')")),
+        Index("ix_usage_resource_name", text("(value->>'resource_name')")),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Usage(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class Namespaces(Base):
+    """
+    Таблица для namespace (изолированные области данных).
+
+    Ключи имеют формат: namespace:{company_id}:{namespace_name}
+    """
+
+    __tablename__ = "namespaces"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_namespaces_key"),
+        Index("ix_namespaces_key_prefix", "key"),
+        Index("ix_namespaces_company_id", text("(value->>'company_id')")),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Namespaces(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class Spans(Base):
+    """
+    Таблица для хранения OpenTelemetry spans.
+
+    Нормализованная структура для быстрого поиска по user_id, agent_id, session.
+    """
+
+    __tablename__ = "spans"
+
+    span_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    trace_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    parent_span_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+
+    operation_name: Mapped[str] = mapped_column(String, nullable=False)
+    kind: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    status_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    user_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    user_groups: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+    session_auth: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    session_agent: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+
+    agent_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    task_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    context_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    skill_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    channel: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    node_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    agent_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    is_resume: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+
+    attributes: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    events: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+    __table_args__ = ()
+
+    def __repr__(self) -> str:
+        return f"<Spans(span_id='{self.span_id}', trace_id='{self.trace_id}', operation_name='{self.operation_name}')>"
+
+
+class PushSubscription(Base):
+    """Подписка пользователя на push-уведомления."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(String(2048), nullable=False, unique=True)
+    keys: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    platform: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    last_used_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_push_subscriptions_user_endpoint", "user_id", "endpoint"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PushSubscription(user_id={self.user_id}, platform={self.platform})>"

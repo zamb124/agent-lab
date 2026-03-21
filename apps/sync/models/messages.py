@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 
 from apps.sync.models.common import UserBrief
 
+# Один текстовый блок text/plain — как лимит одного сообщения в Telegram (4096).
+SYNC_MESSAGE_TEXT_MAX_CHARS = 4096
+
 
 class MessageStatus(str, Enum):
     """Статус доставки сообщения."""
@@ -33,7 +36,11 @@ class MessageContentType(str, Enum):
 class TextPlainContent(BaseModel):
     """Текстовый блок с поддержкой Markdown."""
 
-    body: str = Field(description="Текст сообщения в формате совместимом с Markdown.")
+    body: str = Field(
+        ...,
+        max_length=SYNC_MESSAGE_TEXT_MAX_CHARS,
+        description="Текст сообщения в формате совместимом с Markdown.",
+    )
 
 
 class CodeBlockContent(BaseModel):

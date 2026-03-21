@@ -36,7 +36,10 @@ class PgVectorProvider(BaseRAGProvider):
         db_url = config.get("db_url")
         if not db_url:
             from core.config import get_settings
-            db_url = get_settings().database.url
+            settings = get_settings()
+            if not settings.database.rag_url:
+                raise ValueError("DATABASE__RAG_URL не настроен")
+            db_url = settings.database.rag_url
 
         self._engine = create_async_engine(
             db_url,

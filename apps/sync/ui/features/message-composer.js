@@ -6,8 +6,10 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+import { SYNC_MESSAGE_TEXT_MAX_CHARS } from '../constants/sync-limits.js';
 
 const EMOJIS = ['😀', '😅', '😉', '😍', '🤝', '🔥', '✅', '💡', '🧠', '🚀', '📌', '🧩', '⚠️', '❌', '👍', '👀'];
 
@@ -20,6 +22,17 @@ function extractPlainTextFromMsg(msg) {
         }
     }
     return parts.join('\n').trim();
+}
+
+function toShortUsernameForReply(displayName) {
+    const raw = (displayName || '').trim();
+    if (raw === '') return 'Пользователь';
+    const parts = raw.split(/\s+/).filter(p => p.trim() !== '');
+    const nonEmail = parts.filter(p => !p.includes('@'));
+    if (nonEmail.length > 0) return nonEmail.join(' ');
+    const first = parts[0] ?? raw;
+    if (first.includes('@')) return first.split('@')[0] || first;
+    return raw;
 }
 
 function randomUuidV4() {
@@ -104,6 +117,7 @@ export class MessageComposer extends PlatformElement {
 
             .textarea {
                 flex: 1;
+                min-width: 0;
                 min-height: 44px;
                 max-height: 200px;
                 resize: none;
@@ -115,6 +129,7 @@ export class MessageComposer extends PlatformElement {
                 font-size: var(--text-sm);
                 font-family: inherit;
                 outline: none;
+                overflow-wrap: anywhere;
                 transition: border-color var(--duration-fast);
             }
 
@@ -194,6 +209,52 @@ export class MessageComposer extends PlatformElement {
                 font-size: var(--text-xs);
             }
 
+            .draft-bar.reply-draft--parent-own {
+                align-items: flex-start;
+                border-left: 4px solid rgb(5, 150, 105);
+                background: rgba(16, 185, 129, 0.26);
+                border-color: rgba(16, 185, 129, 0.35);
+            }
+
+            .draft-bar.reply-draft--parent-other {
+                align-items: flex-start;
+                border-left: 4px solid rgb(2, 132, 199);
+                background: rgba(147, 197, 253, 0.52);
+                border-color: rgba(56, 189, 248, 0.4);
+            }
+
+            .reply-draft-body {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .reply-draft-author {
+                display: block;
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                margin-bottom: 2px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .reply-draft--parent-own .reply-draft-author {
+                color: rgb(4, 120, 87);
+            }
+
+            .reply-draft--parent-other .reply-draft-author {
+                color: rgb(3, 105, 161);
+            }
+
+            .reply-draft-text {
+                display: block;
+                font-size: var(--text-xs);
+                color: var(--text-primary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
             input[type="file"] {
                 display: none;
             }
@@ -235,9 +296,63 @@ export class MessageComposer extends PlatformElement {
         this._unsubscribe?.();
     }
 
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (!changedProperties.has('_replyToMessage')) return;
+        const prev = changedProperties.get('_replyToMessage');
+        const cur = this._replyToMessage;
+        if (!cur || this._editMessage) return;
+        if (prev?.id === cur.id) return;
+        queueMicrotask(() => this._focusTextarea());
+    }
+
+    _focusTextarea() {
+        const ta = this.shadowRoot?.querySelector('textarea.textarea');
+        if (!ta) return;
+        ta.focus();
+        const len = ta.value.length;
+        try {
+            ta.setSelectionRange(len, len);
+        } catch {
+            /* ignore */
+        }
+    }
+
+    _onTextInput(e) {
+        const raw = e.target.value;
+        if (raw.length > SYNC_MESSAGE_TEXT_MAX_CHARS) {
+            const clipped = raw.slice(0, SYNC_MESSAGE_TEXT_MAX_CHARS);
+            e.target.value = clipped;
+            this._text = clipped;
+            window.dispatchEvent(
+                new CustomEvent(AppEvents.TOAST_SHOW, {
+                    detail: {
+                        type: 'warning',
+                        message: `Не больше ${SYNC_MESSAGE_TEXT_MAX_CHARS} символов в сообщении (как в Telegram).`,
+                        duration: 4000,
+                    },
+                })
+            );
+            return;
+        }
+        this._text = raw;
+    }
+
     async _sendText() {
         const text = this._text.trim();
         if (!text || !this.channelId) return;
+        if (text.length > SYNC_MESSAGE_TEXT_MAX_CHARS) {
+            window.dispatchEvent(
+                new CustomEvent(AppEvents.TOAST_SHOW, {
+                    detail: {
+                        type: 'error',
+                        message: `Сообщение не длиннее ${SYNC_MESSAGE_TEXT_MAX_CHARS} символов.`,
+                        duration: 5000,
+                    },
+                })
+            );
+            return;
+        }
 
         const syncApi = ServiceRegistry.get('syncApi');
         const edit = this._editMessage;
@@ -324,7 +439,20 @@ export class MessageComposer extends PlatformElement {
 
     _insertEmoji(em) {
         if (!em.trim()) throw new Error('emoji обязателен.');
-        this._text = this._text + em;
+        let next = this._text + em;
+        if (next.length > SYNC_MESSAGE_TEXT_MAX_CHARS) {
+            window.dispatchEvent(
+                new CustomEvent(AppEvents.TOAST_SHOW, {
+                    detail: {
+                        type: 'warning',
+                        message: `Не больше ${SYNC_MESSAGE_TEXT_MAX_CHARS} символов в сообщении (как в Telegram).`,
+                        duration: 4000,
+                    },
+                })
+            );
+            next = next.slice(0, SYNC_MESSAGE_TEXT_MAX_CHARS);
+        }
+        this._text = next;
         this._emojiOpen = false;
     }
 
@@ -346,6 +474,18 @@ export class MessageComposer extends PlatformElement {
         return t || 'Сообщение';
     }
 
+    _replyQuotedParentIsOwn() {
+        const m = this._replyToMessage;
+        const myId = ServiceRegistry.auth?.user?.id;
+        const sid = m?.sender?.id;
+        return typeof myId === 'string' && typeof sid === 'string' && myId === sid;
+    }
+
+    _replyAuthorLabel() {
+        const m = this._replyToMessage;
+        return toShortUsernameForReply(m?.sender?.display_name ?? '');
+    }
+
     render() {
         return html`
             <div class="composer">
@@ -356,8 +496,11 @@ export class MessageComposer extends PlatformElement {
                     </div>
                 ` : ''}
                 ${this._replyToMessage && !this._editMessage ? html`
-                    <div class="draft-bar">
-                        <span class="snippet">Ответ: ${this._replySnippet()}</span>
+                    <div class="draft-bar reply-draft ${this._replyQuotedParentIsOwn() ? 'reply-draft--parent-own' : 'reply-draft--parent-other'}">
+                        <div class="reply-draft-body">
+                            <span class="reply-draft-author">${this._replyAuthorLabel()}</span>
+                            <span class="reply-draft-text">${this._replySnippet()}</span>
+                        </div>
                         <button type="button" @click=${() => SyncStore.clearReplyToMessage()}>Отмена</button>
                     </div>
                 ` : ''}
@@ -374,7 +517,7 @@ export class MessageComposer extends PlatformElement {
                         rows="1"
                         placeholder="Сообщение..."
                         .value=${this._text}
-                        @input=${(e) => { this._text = e.target.value; }}
+                        @input=${this._onTextInput}
                         @keydown=${this._onKeyDown}
                     ></textarea>
 

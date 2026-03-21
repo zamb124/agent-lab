@@ -1,10 +1,15 @@
 ---
-description: "Миграции БД: Alembic, multi-db, autogenerate"
+description: "Миграции БД: раздельные Alembic-деревья по сервисам"
 globs:
   - "migrations/**"
   - "**/db/models.py"
+  - "**/db/models/**"
   - "core/db/migrations.py"
+  - "core/db/cli.py"
+  - "scripts/db_migrate.py"
   - "core/db/service_registry.py"
+  - "core/db/migration_manifest.py"
+  - "migrations/services.json"
 alwaysApply: false
 ---
 
@@ -12,49 +17,94 @@ alwaysApply: false
 
 ## Архитектура
 
-- Единая папка `migrations/` в корне проекта
-- Все модели наследуются от `core.db.models.Base`
-- Сервисы регистрируются в `core.db.service_registry`
-- Одна команда `alembic upgrade head` применяет миграции ко всем БД
+Каждый сервис имеет **собственную PostgreSQL-базу** и **собственное Alembic-дерево**:
 
-## Регистрация сервиса
+| Сервис  | БД                | Дерево миграций       | Переменная окружения        |
+|---------|-------------------|-----------------------|-----------------------------|
+| shared  | platform_shared   | migrations/shared/    | DATABASE__SHARED_URL        |
+| agents  | platform_agents   | migrations/agents/    | DATABASE__AGENTS_URL        |
+| crm     | platform_crm      | migrations/crm/       | DATABASE__CRM_URL           |
+| sync    | platform_sync     | migrations/sync/      | DATABASE__SYNC_URL          |
+| rag     | platform_rag      | migrations/rag/       | DATABASE__RAG_URL           |
 
-Каждый сервис с моделями регистрирует себя в `apps/{service}/db/models.py`:
+У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `agents` Alembic не найдёт эту ревизию в `migrations/agents/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт.
 
-```python
-from core.db.service_registry import register_service
+## PostgreSQL и pgvector
 
-def _get_db_url() -> str:
-    from apps.{service}.config import get_settings
-    return get_settings().database.{service}_url or get_settings().database.url
+Расширение в SQL называется **`vector`** (пакет pgvector в каталоге PostgreSQL), не `pgvector`. В миграциях: `CREATE EXTENSION IF NOT EXISTS vector`.
 
-register_service("{service}", _get_db_url, "apps.{service}.db.models")
+Нужен сервер с установленным pgvector: образ **`pgvector/pgvector:pg17`** (`docker-compose-dev.yaml`, `docker-compose-prod.yaml`, `docker-compose-test.yaml`) или сборка Postgres с пакетом pgvector на хосте. Обычный `postgres:17` без pgvector миграции shared/rag не пройдут.
+
+## Структура папки migrations/
+
+```
+migrations/
+├── services.json       # манифест: сервисы, модули моделей, ключи database.*, список БД Postgres
+├── postgres/
+│   └── init.sql        # CREATE DATABASE + vector (дублирует services.json.postgres)
+├── shared/
+│   ├── alembic.ini
+│   ├── env.py
+│   └── versions/
+├── agents/
+├── crm/
+├── sync/
+├── rag/
+└── _legacy_removed/
 ```
 
-## Команды
+## Манифест `migrations/services.json`
+
+- `services[]`: `name`, `models_module`, `database_url_key` (поле `DatabaseConfig`: `shared_url`, `agents_url`, …).
+- Регистрация в `core.db.migration_manifest.register_migration_services()`; bootstrap: `bootstrap_migration_registry()`.
+- При добавлении сервиса: правка `services.json`, дерево `migrations/<name>/`, при необходимости строк в `postgres/init.sql` и переменных в корневом `conf.json` (`database.*`).
+
+## env.py каждого дерева
+
+- Импортирует **только** модели своей БД
+- Использует `include_object` для фильтрации таблиц по имени (`MANAGED_TABLES`)
+- URL берёт из `sqlalchemy.url` в alembic.ini (передаётся runner'ом) или из settings
+
+## Единая точка входа
+
+Все команды — через **`python -m scripts.db_migrate`** (после `uv run` локально):
+
+1. `bootstrap_migration_registry()` — реестр и импорт моделей по `services.json`.
+2. Делегирование в `core.db.cli`: подкоманды `upgrade`, `revision`, `downgrade`, `current`, `history`, `heads`.
+
+Примеры:
 
 ```bash
-# Создать миграцию
-alembic -c migrations/alembic.ini revision --autogenerate -m "описание"
-
-# Применить миграции
-alembic -c migrations/alembic.ini upgrade head
-
-# Откатить
-alembic -c migrations/alembic.ini downgrade -1
-
-# Текущая версия
-alembic -c migrations/alembic.ini current
+uv run python -m scripts.db_migrate upgrade
+uv run python -m scripts.db_migrate upgrade --service shared
+uv run python -m scripts.db_migrate revision -m "описание" --service agents --autogenerate
+uv run python -m scripts.db_migrate revision -m "описание" --service crm --empty
+uv run python -m scripts.db_migrate downgrade --service sync
+uv run python -m scripts.db_migrate current --service rag
 ```
+
+`make migrate` и остальные цели из `mk/migrate.mk` — тонкие обёртки над этим же модулем (для `migrate-new` / `migrate-empty` и т.д. нужны переменные `m=` и при необходимости `s=` — сервис).
+
+Прямой вызов `alembic -c migrations/<svc>/alembic.ini …` допустим, но для единообразия предпочтителен `scripts.db_migrate`.
 
 ## Автоматический запуск
 
-- `settings.database.auto_migrate = True` — миграции при старте сервиса
-- Тесты запускают миграции через `run_migrations_async()` в `conftest.py`
+`core.db.migrations.run_migrations_async()` итерируется по реестру и применяет `upgrade head` к каждой БД. Перед вызовом: **`core.db.migration_manifest.bootstrap_migration_registry()`**.
 
-## Файлы
+Init-контейнер в `docker-compose-prod.yaml`:
 
-- `migrations/env.py` — конфигурация Alembic, итерация по БД
-- `migrations/versions/` — файлы миграций
-- `core/db/migrations.py` — `run_migrations()`, `run_migrations_async()`
-- `core/db/service_registry.py` — реестр сервисов и их БД
+```yaml
+command: ["python", "-m", "scripts.db_migrate", "upgrade"]
+```
+
+## Ключевые файлы
+
+- `migrations/services.json` — манифест миграций и списка БД Postgres
+- `migrations/postgres/init.sql` — первичное создание БД в Docker (см. `docker-compose`)
+- `core/db/migration_manifest.py` — загрузка манифеста, регистрация, bootstrap
+- `scripts/db_migrate.py` — точка входа → `core.db.cli`
+- `core/db/cli.py` — argparse-подкоманды Alembic
+- `migrations/<svc>/env.py`, `versions/`
+- `core/db/migrations.py` — `run_migrations_async()`, и т.д.
+- `core/db/service_registry.py`
+- `core/db/models/platform.py`, `core/db/models/rag.py`

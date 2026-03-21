@@ -1,28 +1,20 @@
 """
 Утилиты для загрузки конфигурации с каскадным объединением.
 
-Поддерживает: base config.json + service config.json + env переменные
+Корень проекта: conf.json + conf.local.json. Переопределения сервисов — в conf.json
+в ключе services.<имя_сервиса> (без отдельных conf.json в apps/).
 """
 
 import json
-import os
 import logging
-from typing import Dict, Any, Union
+import os
 from pathlib import Path
+from typing import Any, Dict, Union
 
 logger = logging.getLogger(__name__)
 
 
 def load_json_config(config_path: Union[str, Path]) -> Dict[str, Any]:
-    """
-    Загружает JSON конфигурацию из файла.
-
-    Args:
-        config_path: Путь к файлу конфигурации
-
-    Returns:
-        Словарь с конфигурацией или пустой словарь если файл не найден
-    """
     config_path = Path(config_path)
 
     if not config_path.exists():
@@ -40,17 +32,6 @@ def load_json_config(config_path: Union[str, Path]) -> Dict[str, Any]:
 def merge_configs(
     base_config: Dict[str, Any], override_config: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """
-    Рекурсивно объединяет два словаря конфигурации.
-    override_config имеет приоритет над base_config.
-
-    Args:
-        base_config: Базовая конфигурация
-        override_config: Конфигурация для переопределения
-
-    Returns:
-        Объединенная конфигурация
-    """
     result = base_config.copy()
 
     for key, value in override_config.items():
@@ -63,13 +44,6 @@ def merge_configs(
 
 
 def get_config_paths() -> list[Path]:
-    """
-    Возвращает список путей для поиска файлов конфигурации.
-    Порядок важен - последние файлы переопределяют предыдущие.
-
-    Returns:
-        Список путей к файлам конфигурации
-    """
     current_dir = Path(__file__).parent
     core_dir = current_dir.parent
     project_root = core_dir.parent
@@ -87,90 +61,53 @@ def get_config_paths() -> list[Path]:
 
 
 def remove_env_overridden_values(config: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
-    """
-    Удаляет из конфигурации значения, которые переопределены через env переменные.
-    Это нужно чтобы env переменные имели приоритет над JSON конфигурацией.
-    
-    Args:
-        config: Словарь конфигурации
-        prefix: Префикс для построения имени env переменной
-    
-    Returns:
-        Конфигурация без значений переопределенных через env
-    """
     result = {}
-    
+
     for key, value in config.items():
         env_key = f"{prefix}__{key}".upper() if prefix else key.upper()
-        
+
         if os.getenv(env_key) is not None:
             logger.debug(f"Пропускаем {key} из JSON, используется env переменная {env_key}")
             continue
-        
+
         if isinstance(value, dict):
             nested_result = remove_env_overridden_values(value, env_key)
             if nested_result:
                 result[key] = nested_result
         else:
             result[key] = value
-    
+
     return result
 
 
-def load_merged_config(
-    base_config_path: Path = None,
-    service_config_path: Path = None
-) -> Dict[str, Any]:
+def load_merged_config(service_name: str | None = None) -> Dict[str, Any]:
     """
-    Загружает и объединяет конфигурации:
-    1. Базовый config.json
-    2. Service config.json (если есть)
-    3. Удаляет значения переопределенные через env
+    Загружает конфигурацию: conf.json + conf.local.json (+ AGENT_CONFIG_PATH),
+    затем при service_name — сливает services.<service_name> поверх общего слоя.
 
-    Args:
-        base_config_path: Путь к базовой конфигурации
-        service_config_path: Путь к конфигурации сервиса
-
-    Returns:
-        Итоговая объединенная конфигурация
+    Ключ services не передаётся в Pydantic (удаляется из результата).
     """
-    merged_config = {}
+    merged: Dict[str, Any] = {}
 
-    if base_config_path is None:
-        config_paths = get_config_paths()
-        for config_path in config_paths:
-            config = load_json_config(config_path)
-            if config:
-                merged_config = merge_configs(merged_config, config)
-                logger.debug(f"Применена конфигурация из {config_path}")
-    else:
-        base_config = load_json_config(base_config_path)
-        if base_config:
-            merged_config = base_config
+    for config_path in get_config_paths():
+        config = load_json_config(config_path)
+        if config:
+            merged = merge_configs(merged, config)
+            logger.debug(f"Применена конфигурация из {config_path}")
 
-    if service_config_path:
-        service_config = load_json_config(service_config_path)
-        if service_config:
-            merged_config = merge_configs(merged_config, service_config)
-            logger.info(f"Применена service конфигурация из {service_config_path}")
+    if service_name:
+        overrides = merged.get("services", {}).get(service_name, {})
+        if overrides:
+            merged = merge_configs(merged, overrides)
+            logger.info(f"Применён слой services.{service_name}")
 
-    merged_config = remove_env_overridden_values(merged_config)
-    
-    return merged_config
+    merged.pop("services", None)
+    merged = remove_env_overridden_values(merged)
+
+    return merged
 
 
 def get_nested_value(config: Dict[str, Any], key_path: str, default: Any = None) -> Any:
-    """
-    Получает значение по вложенному ключу (например, "auth.providers.yandex.client_id").
-
-    Args:
-        config: Словарь конфигурации
-        key_path: Путь к ключу через точку
-        default: Значение по умолчанию
-
-    Returns:
-        Значение или default
-    """
     keys = key_path.split(".")
     current = config
 
@@ -184,14 +121,6 @@ def get_nested_value(config: Dict[str, Any], key_path: str, default: Any = None)
 
 
 def set_nested_value(config: Dict[str, Any], key_path: str, value: Any) -> None:
-    """
-    Устанавливает значение по вложенному ключу.
-
-    Args:
-        config: Словарь конфигурации
-        key_path: Путь к ключу через точку
-        value: Значение для установки
-    """
     keys = key_path.split(".")
     current = config
 
@@ -206,19 +135,6 @@ def set_nested_value(config: Dict[str, Any], key_path: str, value: Any) -> None:
 def get_env_or_config(
     env_key: str, config_key: str, config: Dict[str, Any], default: Any = None
 ) -> Any:
-    """
-    Получает значение из переменной окружения или конфигурации.
-    Переменная окружения имеет приоритет.
-
-    Args:
-        env_key: Ключ переменной окружения
-        config_key: Ключ в конфигурации (может быть вложенным)
-        config: Словарь конфигурации
-        default: Значение по умолчанию
-
-    Returns:
-        Значение из env, config или default
-    """
     env_value = os.getenv(env_key)
     if env_value is not None:
         return env_value
@@ -228,4 +144,3 @@ def get_env_or_config(
         return config_value
 
     return default
-

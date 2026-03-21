@@ -26,10 +26,9 @@ from sqlalchemy import text
 
 def _get_sync_test_db_url() -> str:
     """URL тестовой БД sync. Берётся из ENV или дефолт."""
-    return os.environ.get(
-        "DATABASE__SYNC_URL",
-        "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
-    )
+    from tests.fixtures.test_database_env import TEST_DATABASE_ENV
+
+    return os.environ.get("DATABASE__SYNC_URL", TEST_DATABASE_ENV["DATABASE__SYNC_URL"])
 
 
 @pytest.fixture(scope="session")

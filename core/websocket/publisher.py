@@ -77,7 +77,9 @@ async def _send_web_push(user_id: str, notification: Notification):
     
     # Создаем репозиторий с db_url из settings
     settings = get_settings()
-    db_url = settings.database.shared_url or settings.database.url
+    if not settings.database.shared_url:
+        raise ValueError("database.shared_url не задан")
+    db_url = settings.database.shared_url
     
     repo = PushSubscriptionRepository(db_url=db_url)
     subscriptions = await repo.get_user_subscriptions(user_id)

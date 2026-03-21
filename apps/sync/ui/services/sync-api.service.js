@@ -20,6 +20,44 @@ export class SyncAPIService extends BaseService {
         return this.get(`/channels/?limit=${limit}`);
     }
 
+    /**
+     * @param {string} channelId
+     */
+    async markChannelRead(channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        return this.post(`/channels/${encodeURIComponent(channelId)}/read`, {});
+    }
+
+    /**
+     * @param {string} channelId
+     * @param {string} userId
+     * @param {'owner'|'admin'|'member'|'viewer'} [role]
+     */
+    async addChannelMember(channelId, userId, role = 'member') {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (typeof userId !== 'string' || userId === '') {
+            throw new Error('userId обязателен.');
+        }
+        return this.post(`/channels/${encodeURIComponent(channelId)}/members`, {
+            user_id: userId,
+            role,
+        });
+    }
+
+    /**
+     * @param {string} channelId
+     */
+    async getChannelMembers(channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        return this.get(`/channels/${encodeURIComponent(channelId)}/members`);
+    }
+
     async getCompanyMembers() {
         return this.get('/company/members');
     }

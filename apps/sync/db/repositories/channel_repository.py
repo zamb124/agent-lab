@@ -1,6 +1,7 @@
 """Репозиторий для работы с каналами (SQLAlchemy)."""
 
 import logging
+from datetime import datetime
 from typing import List, Optional, Type
 
 from sqlalchemy import exists, nullslast, select, update
@@ -96,13 +97,20 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def is_member(self, channel_id: str, user_id: str) -> bool:
-        """Проверяет членство пользователя в канале."""
+    async def is_member(
+        self,
+        channel_id: str,
+        user_id: str,
+        company_id: Optional[str] = None,
+    ) -> bool:
+        """Проверяет членство пользователя в канале (в рамках компании)."""
+        cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(
                 exists().where(
                     SyncChannelMember.channel_id == channel_id,
                     SyncChannelMember.user_id == user_id,
+                    SyncChannelMember.company_id == cid,
                 )
             )
             result = await session.execute(stmt)
@@ -138,6 +146,48 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             if row is None:
                 return None
             return row.role
+
+    async def list_member_rows(
+        self,
+        channel_id: str,
+        *,
+        company_id: Optional[str] = None,
+    ) -> List[tuple[str, str]]:
+        """Список (user_id, role) участников канала в компании."""
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = (
+                select(SyncChannelMember.user_id, SyncChannelMember.role)
+                .where(
+                    SyncChannelMember.channel_id == channel_id,
+                    SyncChannelMember.company_id == cid,
+                )
+                .order_by(SyncChannelMember.user_id.asc())
+            )
+            result = await session.execute(stmt)
+            return [(r[0], r[1]) for r in result.all()]
+
+    async def set_member_last_read_at(
+        self,
+        channel_id: str,
+        user_id: str,
+        at: datetime,
+        company_id: Optional[str] = None,
+    ) -> None:
+        """Курсор прочитанного в основной ленте для участника канала."""
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            row = await session.get(SyncChannelMember, (channel_id, user_id))
+            if row is None:
+                raise ValueError(
+                    f"Участник канала не найден: channel_id={channel_id}, user_id={user_id}."
+                )
+            if row.company_id != cid:
+                raise ValueError(
+                    f"Запись участника принадлежит другой компании: channel_id={channel_id}."
+                )
+            row.last_read_at = at
+            await session.commit()
 
     async def set_pinned_message_ids(
         self,

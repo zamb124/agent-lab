@@ -1,8 +1,7 @@
 """
 Реестр сервисов для миграций.
 
-Каждый сервис регистрирует свои модели и функцию получения URL БД.
-Это позволяет env.py собирать все уникальные БД и применять миграции к каждой.
+Каждый сервис регистрирует свои модели, функцию получения URL и путь к Alembic-дереву.
 """
 
 import logging
@@ -15,59 +14,71 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ServiceDBConfig:
     """Конфигурация БД сервиса"""
-    
-    name: str                          # "agents", "crm", "rag"
-    get_db_url: Callable[[], str]      # Функция получения URL из конфига сервиса
-    models_module: str                 # "apps.agents.src.db.models"
+
+    name: str
+    get_db_url: Callable[[], str]
+    models_module: str
+    alembic_script_location: str   # путь к папке с env.py и versions/
 
 
 _registry: List[ServiceDBConfig] = []
 
 
-def register_service(name: str, get_db_url: Callable[[], str], models_module: str) -> None:
+def register_service(
+    name: str,
+    get_db_url: Callable[[], str],
+    models_module: str,
+    alembic_script_location: str = "",
+) -> None:
     """
     Регистрирует сервис в реестре.
-    
+
     Args:
-        name: Имя сервиса (agents, crm, etc.)
-        get_db_url: Функция которая возвращает URL БД из конфига сервиса
+        name: Имя сервиса (shared, agents, crm, sync, rag)
+        get_db_url: Функция, возвращающая URL БД из конфига сервиса
         models_module: Путь к модулю с моделями
+        alembic_script_location: Путь к папке Alembic-дерева (migrations/<name>)
     """
-    # Проверяем что сервис еще не зарегистрирован
     for svc in _registry:
         if svc.name == name:
             return
-    
-    _registry.append(ServiceDBConfig(name, get_db_url, models_module))
-    logger.debug(f"Service '{name}' registered for migrations")
+
+    location = alembic_script_location or f"migrations/{name}"
+    _registry.append(ServiceDBConfig(name, get_db_url, models_module, location))
+    logger.debug(f"Service '{name}' registered for migrations (tree: {location})")
 
 
 def get_all_services() -> List[ServiceDBConfig]:
-    """Возвращает все зарегистрированные сервисы"""
+    """Возвращает все зарегистрированные сервисы."""
     return _registry.copy()
+
+
+def get_service_by_name(name: str) -> ServiceDBConfig:
+    """Возвращает конфиг сервиса по имени или бросает KeyError."""
+    for svc in _registry:
+        if svc.name == name:
+            return svc
+    raise KeyError(f"Сервис БД не зарегистрирован: {name!r}")
 
 
 def get_unique_db_urls() -> dict[str, List[str]]:
     """
     Возвращает уникальные URL БД с именами сервисов.
-    
+
     Returns:
         dict: {db_url: [service_names]}
     """
     urls: dict[str, List[str]] = {}
-    
+
     for svc in _registry:
-        try:
-            url = svc.get_db_url()
-            if url not in urls:
-                urls[url] = []
-            urls[url].append(svc.name)
-        except Exception as e:
-            logger.warning(f"Failed to get DB URL for service '{svc.name}': {e}")
-    
+        url = svc.get_db_url()
+        if url not in urls:
+            urls[url] = []
+        urls[url].append(svc.name)
+
     return urls
 
 
 def clear_registry() -> None:
-    """Очищает реестр (для тестов)"""
+    """Очищает реестр (для тестов)."""
     _registry.clear()

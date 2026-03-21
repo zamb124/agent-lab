@@ -2,12 +2,13 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional, Type
+from typing import Dict, List, Optional, Type
 
-from sqlalchemy import select, text, delete as sql_delete, update
+from sqlalchemy import and_, delete as sql_delete, func, or_, select, text, update
 
+from apps.sync.channel_lane_preview import ChannelLaneSummary, lane_preview_from_content_row
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
-from apps.sync.db.models import SyncMessage, SyncMessageContent
+from apps.sync.db.models import SyncChannelMember, SyncMessage, SyncMessageContent
 from apps.sync.models.messages import MessageContentModel
 
 logger = logging.getLogger(__name__)
@@ -211,3 +212,159 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 .values(reactions=reactions)
             )
             await session.commit()
+
+    async def max_root_lane_sent_at(
+        self,
+        channel_id: str,
+        *,
+        company_id: str,
+    ) -> Optional[datetime]:
+        """Максимальное sent_at среди корневых сообщений канала (основная лента)."""
+        async with self._db.session() as session:
+            stmt = select(func.max(SyncMessage.sent_at)).where(
+                SyncMessage.company_id == company_id,
+                SyncMessage.channel_id == channel_id,
+                SyncMessage.thread_id.is_(None),
+                SyncMessage.deleted_at.is_(None),
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def channel_lane_summaries_batch(
+        self,
+        *,
+        company_id: str,
+        channel_ids: list[str],
+        viewer_user_id: str,
+    ) -> Dict[str, ChannelLaneSummary]:
+        """Сводка по основной ленте для списка каналов: непрочитанные и превью последнего сообщения."""
+        if not channel_ids:
+            return {}
+        base: Dict[str, ChannelLaneSummary] = {
+            cid: ChannelLaneSummary(unread_count=0, last_message_preview=None, last_message_at=None)
+            for cid in channel_ids
+        }
+
+        async with self._db.session() as session:
+            unread_stmt = (
+                select(SyncMessage.channel_id, func.count().label("cnt"))
+                .select_from(SyncMessage)
+                .join(
+                    SyncChannelMember,
+                    and_(
+                        SyncChannelMember.channel_id == SyncMessage.channel_id,
+                        SyncChannelMember.user_id == viewer_user_id,
+                        SyncChannelMember.company_id == company_id,
+                    ),
+                )
+                .where(
+                    SyncMessage.company_id == company_id,
+                    SyncMessage.channel_id.in_(channel_ids),
+                    SyncMessage.thread_id.is_(None),
+                    SyncMessage.deleted_at.is_(None),
+                    SyncMessage.sender_user_id != viewer_user_id,
+                    or_(
+                        SyncChannelMember.last_read_at.is_(None),
+                        SyncMessage.sent_at > SyncChannelMember.last_read_at,
+                    ),
+                )
+                .group_by(SyncMessage.channel_id)
+            )
+            unread_res = await session.execute(unread_stmt)
+            for row in unread_res.all():
+                cid = row.channel_id
+                cnt = int(row.cnt)
+                prev = base[cid]
+                base[cid] = ChannelLaneSummary(
+                    unread_count=cnt,
+                    last_message_preview=prev.last_message_preview,
+                    last_message_at=prev.last_message_at,
+                )
+
+            msg_rn = func.row_number().over(
+                partition_by=SyncMessage.channel_id,
+                order_by=SyncMessage.sent_at.desc(),
+            ).label("msg_rn")
+
+            msg_ranked = (
+                select(
+                    SyncMessage.channel_id,
+                    SyncMessage.message_id,
+                    SyncMessage.sent_at,
+                    msg_rn,
+                )
+                .where(
+                    SyncMessage.company_id == company_id,
+                    SyncMessage.channel_id.in_(channel_ids),
+                    SyncMessage.thread_id.is_(None),
+                    SyncMessage.deleted_at.is_(None),
+                )
+                .subquery("msg_ranked")
+            )
+
+            last_msgs = (
+                select(
+                    msg_ranked.c.channel_id,
+                    msg_ranked.c.message_id,
+                    msg_ranked.c.sent_at,
+                )
+                .where(msg_ranked.c.msg_rn == 1)
+            ).subquery("last_msgs")
+
+            content_rn = func.row_number().over(
+                partition_by=SyncMessageContent.message_id,
+                order_by=(SyncMessageContent.order.asc(), SyncMessageContent.id.asc()),
+            ).label("content_rn")
+
+            content_ranked = (
+                select(
+                    SyncMessageContent.message_id,
+                    SyncMessageContent.type,
+                    SyncMessageContent.data,
+                    content_rn,
+                )
+                .select_from(SyncMessageContent)
+                .join(last_msgs, last_msgs.c.message_id == SyncMessageContent.message_id)
+            ).subquery("content_ranked")
+
+            first_blocks = (
+                select(
+                    content_ranked.c.message_id,
+                    content_ranked.c.type,
+                    content_ranked.c.data,
+                )
+                .where(content_ranked.c.content_rn == 1)
+            ).subquery("first_blocks")
+
+            last_stmt = (
+                select(
+                    last_msgs.c.channel_id,
+                    last_msgs.c.sent_at,
+                    first_blocks.c.type,
+                    first_blocks.c.data,
+                )
+                .select_from(
+                    last_msgs.outerjoin(first_blocks, first_blocks.c.message_id == last_msgs.c.message_id)
+                )
+            )
+            last_res = await session.execute(last_stmt)
+            for row in last_res.all():
+                cid = row.channel_id
+                prev = base[cid]
+                preview: str | None = None
+                if row.type is not None:
+                    if row.data is None:
+                        logger.error(
+                            "Сводка ленты: тип %s без data (channel_id=%s), превью пропущено.",
+                            row.type,
+                            cid,
+                        )
+                    else:
+                        preview = lane_preview_from_content_row(row.type, row.data)
+                base[cid] = ChannelLaneSummary(
+                    unread_count=prev.unread_count,
+                    last_message_preview=preview,
+                    last_message_at=row.sent_at,
+                )
+
+        return base

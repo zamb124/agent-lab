@@ -11,6 +11,7 @@ import './channel-picker.js';
 import './message-list.js';
 import './message-composer.js';
 import './thread-drawer.js';
+import '../modals/channel-settings-modal.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -31,13 +32,66 @@ export class ChatView extends PlatformElement {
 
             .chat-header {
                 display: flex;
-                align-items: center;
+                align-items: stretch;
                 justify-content: space-between;
-                padding: var(--space-3) var(--space-4);
+                gap: var(--space-3);
+                padding: var(--space-2) var(--space-4);
                 border-bottom: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 backdrop-filter: blur(var(--glass-blur-medium));
                 flex-shrink: 0;
+            }
+
+            .header-channel-hit {
+                flex: 1 1 auto;
+                min-width: 0;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                padding: var(--space-2) var(--space-3);
+                margin: 0;
+                border: none;
+                border-radius: var(--radius-lg);
+                background: transparent;
+                cursor: pointer;
+                font: inherit;
+                color: inherit;
+                text-align: left;
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            .header-channel-hit:hover {
+                background: var(--glass-solid-medium);
+            }
+
+            .header-channel-hit:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
+            }
+
+            .header-channel-text {
+                min-width: 0;
+                flex: 1 1 auto;
+            }
+
+            .header-settings-ic {
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+                opacity: 0.9;
+            }
+
+            .header-channel-hit:hover .header-settings-ic {
+                color: var(--accent);
+            }
+
+            .header-channel-static {
+                flex: 1 1 auto;
+                min-width: 0;
+                padding: var(--space-2) var(--space-3);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
             }
 
             .header-title {
@@ -56,6 +110,7 @@ export class ChatView extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                flex-shrink: 0;
             }
 
             .icon-btn {
@@ -217,6 +272,7 @@ export class ChatView extends PlatformElement {
         _wsState: { state: true },
         _threadIds: { state: true },
         _ui: { state: true },
+        _channelSettingsOpen: { state: true },
     };
 
     constructor() {
@@ -227,6 +283,7 @@ export class ChatView extends PlatformElement {
         this._wsState = s.ws.state;
         this._threadIds = [];
         this._ui = SyncStore.state.ui;
+        this._channelSettingsOpen = false;
     }
 
     connectedCallback() {
@@ -237,6 +294,9 @@ export class ChatView extends PlatformElement {
             this._wsState = state.ws.state;
             this._threadIds = SyncStore.getThreadIds();
             this._ui = state.ui;
+            if (!state.chat.selectedChannelId) {
+                this._channelSettingsOpen = false;
+            }
         });
     }
 
@@ -325,6 +385,18 @@ export class ChatView extends PlatformElement {
         await SyncStore.loadMessages(syncApi, fromId);
     }
 
+    _openChannelSettings() {
+        const ch = this._selectedChannel();
+        if (!ch || ch.type === 'direct' || this._chat.focusedThreadId) {
+            return;
+        }
+        this._channelSettingsOpen = true;
+    }
+
+    _closeChannelSettings() {
+        this._channelSettingsOpen = false;
+    }
+
     async _forwardModalPick(toChannelId) {
         const syncApi = ServiceRegistry.get('syncApi');
         const fwd = this._ui.forwardMessage;
@@ -345,12 +417,31 @@ export class ChatView extends PlatformElement {
         const fwdOpen = this._ui.forwardModalOpen;
         const otherChannels = this._channels.list.filter(c => c.id !== selectedChannelId);
 
+        const showChannelSettings = Boolean(
+            selectedChannel && selectedChannel.type !== 'direct' && !focusedThreadId
+        );
+
         return html`
             <div class="chat-header">
-                <div>
-                    <div class="header-title">${this._getTitle()}</div>
-                    ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
-                </div>
+                ${showChannelSettings ? html`
+                    <button
+                        type="button"
+                        class="header-channel-hit"
+                        title="Настройки канала"
+                        @click=${this._openChannelSettings}
+                    >
+                        <div class="header-channel-text">
+                            <div class="header-title">${this._getTitle()}</div>
+                            ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
+                        </div>
+                        <platform-icon class="header-settings-ic" name="settings" size="20"></platform-icon>
+                    </button>
+                ` : html`
+                    <div class="header-channel-static">
+                        <div class="header-title">${this._getTitle()}</div>
+                        ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
+                    </div>
+                `}
                 <div class="header-actions">
                     <span class="ws-badge ${this._wsState}">${this._wsState}</span>
 
@@ -445,6 +536,12 @@ export class ChatView extends PlatformElement {
             ` : ''}
 
             <thread-drawer></thread-drawer>
+
+            <channel-settings-modal
+                .open=${this._channelSettingsOpen}
+                .channel=${selectedChannel}
+                @close=${this._closeChannelSettings}
+            ></channel-settings-modal>
         `;
     }
 }

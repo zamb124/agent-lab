@@ -5,7 +5,6 @@
 """
 
 from typing import Optional, Dict, List
-from pathlib import Path
 from pydantic import BaseModel, Field
 
 from core.config import BaseSettings
@@ -113,8 +112,7 @@ def get_settings() -> AgentSettings:
     if _settings is None:
         from core.config import set_settings as core_set_settings
         
-        service_config_path = Path(__file__).parent / "conf.json"
-        merged_config = load_merged_config(service_config_path=service_config_path)
+        merged_config = load_merged_config(service_name="agents")
         _settings = AgentSettings(**merged_config)
         core_set_settings(_settings)
     

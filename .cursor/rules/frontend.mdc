@@ -267,6 +267,8 @@ export class MyApiService extends BaseService {
 }
 ```
 
+`_fetch` после `response.ok`: статусы `204`/`205` и пустое тело ответа дают `{}` без `JSON.parse`, иначе `Content-Type: application/json` с пустым телом ломает клиент (`Unexpected end of JSON input`).
+
 ---
 
 ## Стили: Shared Стили (DRY)

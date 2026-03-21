@@ -53,7 +53,7 @@ class AgentContainer(BaseContainer):
     @lazy
     def variable_repository(self):
         from core.db.repositories import VariableRepository
-        return VariableRepository(storage=self.storage)
+        return VariableRepository(storage=self.shared_storage)
 
     @lazy
     def evaluation_repository(self):
@@ -246,7 +246,7 @@ def get_container() -> AgentContainer:
         from apps.agents.config import get_settings
         settings = get_settings()
         _container = AgentContainer(
-            db_url=settings.database.url,
+            db_url=settings.database.agents_url,
             shared_db_url=settings.database.shared_url
         )
         # В тестах по умолчанию без воркера

@@ -1,6 +1,8 @@
 """API роутер для каналов (Channels)."""
 
-from fastapi import APIRouter, Depends
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.container import get_sync_container
@@ -11,7 +13,10 @@ from apps.sync.models.channels import (
     ChannelRead,
 )
 from apps.sync.models.common import PaginationRequest
+from apps.sync.realtime.command_dispatch import dispatch_sync_command
 from apps.sync.realtime.commands import CommandEnvelope
+from apps.sync.realtime.events import event_channel_member_added
+from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.tasks import handle_command
 from core.context import get_context
 
@@ -34,8 +39,15 @@ async def list_channels(
         limit=pagination.limit,
         company_id=company_id,
     )
+    channel_ids = [c.channel_id for c in channels]
+    summaries = await container.message_repository.channel_lane_summaries_batch(
+        company_id=company_id,
+        channel_ids=channel_ids,
+        viewer_user_id=viewer_id,
+    )
     out: list[ChannelRead] = []
     for c in channels:
+        summ = summaries[c.channel_id]
         out.append(
             await channel_read_from_entity(
                 c,
@@ -43,9 +55,26 @@ async def list_channels(
                 channel_repository=container.channel_repository,
                 user_repository=container.user_repository,
                 company_id=company_id,
+                lane_summary=summ,
             )
         )
     return out
+
+
+@router.post("/{channel_id}/read", status_code=204)
+async def mark_channel_read(channel_id: str) -> None:
+    """Отмечает основную ленту канала прочитанной для текущего пользователя."""
+    context = get_context()
+    cmd = CommandEnvelope(
+        id=uuid.uuid4().hex,
+        actor_user_id=context.user.user_id,
+        company_id=context.active_company.company_id,
+        type="channels.mark_read",
+        payload={"channel_id": channel_id},
+    )
+    body = await dispatch_sync_command(cmd)
+    if not body.get("ok"):
+        raise RuntimeError(f"Command failed: {body.get('error_detail')}")
 
 
 @router.post("/", status_code=201)
@@ -66,13 +95,37 @@ async def create_channel(body: ChannelCreate) -> ChannelRead:
     return ChannelRead.model_validate(res.return_value["result"])
 
 
+@router.get("/{channel_id}/members", response_model=list[ChannelMemberRead])
+async def list_channel_members(channel_id: str) -> list[ChannelMemberRead]:
+    """Участники канала (только для состоящих в канале)."""
+    context = get_context()
+    company_id = context.active_company.company_id
+    viewer_id = context.user.user_id
+    container = get_sync_container()
+    ch = await container.channel_repository.get(channel_id)
+    if ch is None or ch.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Канал не найден.")
+    if not await container.channel_repository.is_member(channel_id, viewer_id, company_id=company_id):
+        raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
+    rows = await container.channel_repository.list_member_rows(channel_id, company_id=company_id)
+    return [ChannelMemberRead(user_id=uid, role=role) for uid, role in rows]
+
+
 @router.post("/{channel_id}/members", status_code=201)
 async def add_member(channel_id: str, body: ChannelMemberAdd) -> ChannelMemberRead:
-    """Добавление участника в канал."""
+    """Добавление участника в канал (только участники канала)."""
     context = get_context()
+    company_id = context.active_company.company_id
+    viewer_id = context.user.user_id
     container = get_sync_container()
+    ch = await container.channel_repository.get(channel_id)
+    if ch is None or ch.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Канал не найден.")
+    if not await container.channel_repository.is_member(channel_id, viewer_id, company_id=company_id):
+        raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
     await container.channel_repository.upsert_member(
         channel_id, body.user_id, body.role,
-        company_id=context.active_company.company_id,
+        company_id=company_id,
     )
+    await publish_realtime_events([event_channel_member_added(channel_id, body.user_id)])
     return ChannelMemberRead(user_id=body.user_id, role=body.role)

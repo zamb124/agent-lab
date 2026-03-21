@@ -45,7 +45,7 @@ def get_rag_container() -> RAGContainer:
         from .config import get_rag_settings
         settings = get_rag_settings()
         _container = RAGContainer(
-            db_url=settings.database.url,
+            db_url=settings.database.rag_url,
             shared_db_url=settings.database.shared_url
         )
         logger.info("RAGContainer создан")

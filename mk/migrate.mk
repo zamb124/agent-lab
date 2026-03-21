@@ -1,41 +1,28 @@
-# Команды для работы с миграциями Alembic
-.PHONY: migrate migrate-new migrate-empty migrate-downgrade migrate-downgrade-to migrate-history migrate-current migrate-heads migrate-sql
+# Миграции: единая точка — python -m scripts.db_migrate <команда>
+# Сервисы: shared | agents | crm | sync | rag
+.PHONY: migrate migrate-new migrate-empty migrate-downgrade migrate-downgrade-to migrate-history migrate-current migrate-heads
 
-# Применить все pending миграции
 migrate:
-	uv run alembic -c migrations/alembic.ini upgrade head
+	uv run python -m scripts.db_migrate upgrade
 
-# Создать новую миграцию с autogenerate
-# Использование: make migrate-new m="add_users_table"
+# make migrate-new m="описание" s=shared  (или agents, crm, sync, rag)
 migrate-new:
-	uv run alembic -c migrations/alembic.ini revision --autogenerate -m "$(m)"
+	uv run python -m scripts.db_migrate revision -m "$(m)" --service $(s) --autogenerate
 
-# Создать пустую миграцию (без autogenerate)
-# Использование: make migrate-empty m="custom_migration"
 migrate-empty:
-	uv run alembic -c migrations/alembic.ini revision -m "$(m)"
+	uv run python -m scripts.db_migrate revision -m "$(m)" --service $(s) --empty
 
-# Откатить последнюю миграцию
 migrate-downgrade:
-	uv run alembic -c migrations/alembic.ini downgrade -1
+	uv run python -m scripts.db_migrate downgrade --service $(s)
 
-# Откатить до конкретной ревизии
-# Использование: make migrate-downgrade-to rev="abc123"
 migrate-downgrade-to:
-	uv run alembic -c migrations/alembic.ini downgrade $(rev)
+	uv run python -m scripts.db_migrate downgrade --service $(s) $(rev)
 
-# Показать историю миграций
 migrate-history:
-	uv run alembic -c migrations/alembic.ini history
+	uv run python -m scripts.db_migrate history --service $(s)
 
-# Показать текущую версию БД
 migrate-current:
-	uv run alembic -c migrations/alembic.ini current
+	uv run python -m scripts.db_migrate current --service $(s)
 
-# Показать pending миграции (heads)
 migrate-heads:
-	uv run alembic -c migrations/alembic.ini heads
-
-# Сгенерировать SQL для миграции (offline mode)
-migrate-sql:
-	uv run alembic -c migrations/alembic.ini upgrade head --sql
+	uv run python -m scripts.db_migrate heads --service $(s)

@@ -69,7 +69,7 @@ export class SyncSidebar extends PlatformElement {
 
             .nav-item {
                 display: flex;
-                align-items: center;
+                align-items: flex-start;
                 gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-lg);
@@ -102,12 +102,51 @@ export class SyncSidebar extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+                min-width: 0;
             }
 
             .nav-item-type {
                 font-size: 10px;
                 color: var(--text-tertiary);
                 flex-shrink: 0;
+            }
+
+            .nav-item-inner {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .nav-item-title-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+
+            .nav-item-preview {
+                font-size: 11px;
+                color: var(--text-tertiary);
+                line-height: 1.3;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .nav-item-unread {
+                font-size: 11px;
+                font-weight: var(--font-semibold);
+                color: #fff;
+                background: var(--accent);
+                border-radius: var(--radius-full);
+                min-width: 18px;
+                padding: 1px 6px;
+                text-align: center;
+                flex-shrink: 0;
+                margin-left: auto;
+                align-self: flex-start;
             }
 
             .nav-item-count {
@@ -290,6 +329,7 @@ export class SyncSidebar extends PlatformElement {
             }
             const created = await syncApi.createDirectChannel(member.user_id);
             await SyncStore.loadChannels(syncApi);
+            SyncStore.sanitizeChatSelectionAfterLoad();
             await SyncStore.selectChannelAndLoadMessages(syncApi, null, created.id);
             if (window.innerWidth < 768) {
                 SyncStore.setMobileSidebarOpen(false);
@@ -336,6 +376,15 @@ export class SyncSidebar extends PlatformElement {
     _isDirectRowActive(member, selectedChannelId) {
         const ch = SyncStore.findDirectChannelForPeer(member.user_id);
         return ch !== null && ch.id === selectedChannelId;
+    }
+
+    _channelRowMeta(channel) {
+        if (!channel) {
+            return { preview: '', unread: 0 };
+        }
+        const preview = typeof channel.last_message_preview === 'string' ? channel.last_message_preview : '';
+        const unread = typeof channel.unread_count === 'number' ? channel.unread_count : 0;
+        return { preview, unread };
     }
 
     render() {
@@ -397,16 +446,30 @@ export class SyncSidebar extends PlatformElement {
                                 ${!this._companyMembers.loading && memberRows.length === 0
                                     ? html`<div class="section-empty">Нет совпадений или других участников</div>`
                                     : ''}
-                                ${memberRows.map((member) => html`
+                                ${memberRows.map((member) => {
+                                    const dmCh = SyncStore.findDirectChannelForPeer(member.user_id);
+                                    const rowMeta = this._channelRowMeta(dmCh);
+                                    return html`
                                     <button
                                         type="button"
                                         class="nav-item ${this._isDirectRowActive(member, selectedChannelId) ? 'active' : ''}"
                                         @click=${() => this._openDirectWithMember(member)}
                                     >
                                         ${this._memberAvatar(member)}
-                                        <span class="nav-item-label">${member.name}</span>
+                                        <div class="nav-item-inner">
+                                            <div class="nav-item-title-row">
+                                                <span class="nav-item-label">${member.name}</span>
+                                            </div>
+                                            ${rowMeta.preview
+                                                ? html`<span class="nav-item-preview">${rowMeta.preview}</span>`
+                                                : ''}
+                                        </div>
+                                        ${rowMeta.unread > 0
+                                            ? html`<span class="nav-item-unread">${rowMeta.unread}</span>`
+                                            : ''}
                                     </button>
-                                `)}
+                                `;
+                                })}
                             </div>
                         ` : ''}
                     </div>
@@ -475,16 +538,29 @@ export class SyncSidebar extends PlatformElement {
                                 ${!selectedSpaceId && !this._channels.loading
                                     ? html`<div class="section-empty">Выбери пространство</div>`
                                     : ''}
-                                ${channelsForSpace.map(channel => html`
+                                ${channelsForSpace.map((channel) => {
+                                    const rowMeta = this._channelRowMeta(channel);
+                                    return html`
                                     <button
                                         class="nav-item ${channel.id === selectedChannelId ? 'active' : ''}"
                                         @click=${() => this._selectChannel(channel)}
                                     >
                                         <platform-icon name="chat" size="16"></platform-icon>
-                                        <span class="nav-item-label">${channel.name ?? channel.id}</span>
-                                        <span class="nav-item-type">${channel.type}</span>
+                                        <div class="nav-item-inner">
+                                            <div class="nav-item-title-row">
+                                                <span class="nav-item-label">${channel.name ?? channel.id}</span>
+                                                <span class="nav-item-type">${channel.type}</span>
+                                            </div>
+                                            ${rowMeta.preview
+                                                ? html`<span class="nav-item-preview">${rowMeta.preview}</span>`
+                                                : ''}
+                                        </div>
+                                        ${rowMeta.unread > 0
+                                            ? html`<span class="nav-item-unread">${rowMeta.unread}</span>`
+                                            : ''}
                                     </button>
-                                `)}
+                                `;
+                                })}
                             </div>
                         ` : ''}
                     </div>

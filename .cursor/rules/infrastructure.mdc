@@ -61,12 +61,16 @@ humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
 
 ## Деплой
 
-Триггер: push в `main` → GitHub Actions:
-1. Собирает образ (`Dockerfile` target `full`) → пушит в GHCR
-2. SCP копирует на сервер: `docker-compose-prod.yaml`, `conf.json`, `apps/*/conf.json`
-3. SSH: `docker compose pull` → миграции → `docker compose up -d`
+Триггер: `workflow_dispatch` → `.github/workflows/deploy.yml`:
+1. Сборка образа (target `full`) → push в GHCR (`IMAGE` + тег из metadata-action)
+2. SCP на `/opt/agent-lab/`: `docker-compose-prod.yaml`, `conf.json`, **`migrations/postgres/init.sql`** (нужен bind-mount у сервиса `postgres`)
+3. SSH: `docker compose pull` → `postgres`+`redis` → одноразовый контейнер **`migrations`** (`python -m scripts.db_migrate upgrade`) → остальные сервисы
 
-Секреты — только в GitHub Secrets (environment: `production`), на диск сервера не пишутся.
+`x-common-env` в `docker-compose-prod.yaml` задаёт `DATABASE__SHARED_URL`, `DATABASE__AGENTS_URL`, … на хост `postgres` и отдельные имена БД — они **перекрывают** URL из `conf.json` внутри контейнеров. Репозиторный `conf.json` с `localhost` на сервере не мешает, пока заданы переменные окружения compose.
+
+Секреты — в GitHub Secrets (environment `production`).
+
+**Существующий volume Postgres** со старой схемой (одна БД вместо `platform_*`) требует ручной миграции данных или нового volume — не автоматизировано в workflow.
 
 ## Управление Ingress
 

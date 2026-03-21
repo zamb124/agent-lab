@@ -59,16 +59,8 @@ def load_service_settings(
         (settings, project_root)
     """
     project_root = Path(__file__).parent.parent.parent
-    service_config_path = project_root / "apps" / service_name / "conf.json"
-    
-    # Загружаем конфигурацию:
-    # 1. conf.json
-    # 2. conf.local.json
-    # 3. apps/{service}/conf.json
-    merged_config = load_merged_config(
-        base_config_path=None,  # None = загрузит conf.json + conf.local.json автоматически
-        service_config_path=service_config_path
-    )
+
+    merged_config = load_merged_config(service_name=service_name)
     
     settings = settings_class(**merged_config)
     set_settings(settings)

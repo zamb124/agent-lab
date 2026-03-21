@@ -51,6 +51,7 @@ FROM builder-all AS base-final
 WORKDIR /app
 COPY core/ ./core/
 COPY apps/ ./apps/
+COPY scripts/ ./scripts/
 COPY migrations/ ./migrations/
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -103,7 +104,7 @@ CMD ["taskiq", "worker", "apps.sync_worker.worker:broker", "--workers", "2"]
 
 # Migrations (init container)
 FROM base-final AS migrations
-CMD ["python", "-m", "core.db.migrations"]
+CMD ["python", "-m", "scripts.db_migrate", "upgrade"]
 
 # Full (для локальной разработки и тестов)
 FROM base-final AS full

@@ -18,7 +18,7 @@
 │  │  Dockerfile target  │    │  SCP → /opt/agent-lab/:      │    │
 │  │  full → собирает    │    │    docker-compose-prod.yaml  │    │
 │  │  один образ со      │───▶│    conf.json                 │    │
-│  │  всем кодом         │    │    apps/*/conf.json          │    │
+│  │  всем кодом         │    │                              │    │
 │  │                     │    │                              │    │
 │  │  Push →             │    │  SSH → запуск на сервере     │    │
 │  │  ghcr.io/zamb124/   │    │  (секреты в env сессии)      │    │
@@ -36,8 +36,7 @@
 │                                                                 │
 │  /opt/agent-lab/                                                │
 │  ├── docker-compose-prod.yaml   ← из репо                       │
-│  ├── conf.json                  ← из репо (не секреты)          │
-│  └── apps/*/conf.json           ← из репо (имя, порт сервиса)   │
+│  └── conf.json                  ← из репо (в т.ч. services.*)   │
 │                                                                 │
 │  docker compose pull            ← тянет образ из ghcr.io        │
 │  docker compose run migrations  ← применяет миграции БД         │
@@ -71,8 +70,7 @@
 
 | Источник | Что содержит | Где хранится |
 |---|---|---|
-| `conf.json` | Структура, дефолты, не-секреты | Git репо |
-| `apps/*/conf.json` | Имя и порт сервиса | Git репо |
+| `conf.json` | Общие настройки и `services.<имя>` для сервисов | Git репо |
 | GitHub Secrets | Пароли, ключи, токены | GitHub → Settings → Secrets |
 
 Секреты **никогда не попадают на диск сервера** — только в память SSH-сессии.

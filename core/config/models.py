@@ -4,7 +4,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import AliasChoices, BaseModel, Field, PrivateAttr
 
 
 class AuthProviderConfig(BaseModel):
@@ -31,15 +31,21 @@ class AuthConfig(BaseModel):
 
 
 class DatabaseConfig(BaseModel):
-    """Конфигурация базы данных"""
+    """Конфигурация базы данных: ровно пять URL PostgreSQL + redis (без дублирующего url)."""
 
-    url: str = "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agent_platform"
     checkpointer_url: str = "postgresql://agent_user:agent_password@localhost:5432/agent_platform"
-    shared_url: Optional[str] = None  # URL для shared БД (users, companies, files)
-    agents_db_url: Optional[str] = None  # URL для agents БД (agents, flows, tools)
-    crm_url: Optional[str] = None  # URL для CRM БД (entity_types, notes, tasks, relationships)
-    sync_url: Optional[str] = None  # URL для Sync БД (spaces, channels, messages)
-    redis_url: str = "redis://localhost:8099"  # URL для Redis (TaskIQ очереди)
+    shared_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("shared_url", "url"),
+    )
+    agents_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("agents_url", "agents_db_url"),
+    )
+    crm_url: Optional[str] = None
+    sync_url: Optional[str] = None
+    rag_url: Optional[str] = None
+    redis_url: str = "redis://localhost:8099"
 
 
 class LoggingConfig(BaseModel):

@@ -160,7 +160,7 @@ service = container.entity_service
 
 ### Конфигурация
 
-Каскад: ENV (высший) -> conf.json/conf.local.json -> defaults. ENV формат: `DATABASE__URL`.
+Каскад: ENV (высший) -> conf.json/conf.local.json -> defaults. БД: `DATABASE__SHARED_URL`, `DATABASE__AGENTS_URL`, `DATABASE__CRM_URL`, `DATABASE__SYNC_URL`, `DATABASE__RAG_URL`, `DATABASE__REDIS_URL` (см. `configuration.mdc`, `database.mdc`). Устаревшее `DATABASE__URL` читается как алиас к `shared_url`.
 
 ### Асинхронность
 

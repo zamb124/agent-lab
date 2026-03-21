@@ -19,18 +19,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship as sa_relationshi
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 
 from core.db.models import Base
-from core.db.service_registry import register_service
-
-
-def _get_crm_db_url() -> str:
-    """Получает URL БД для CRM из конфига сервиса."""
-    from apps.crm.config import get_crm_settings
-    settings = get_crm_settings()
-    return settings.database.crm_url or settings.database.url
-
-
-# Регистрируем сервис для миграций
-register_service("crm", _get_crm_db_url, "apps.crm.db.models")
 
 
 class CRMEntity(Base):

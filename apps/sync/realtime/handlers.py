@@ -22,6 +22,7 @@ from apps.sync.models.spaces import SpaceRead
 from apps.sync.models.threads import ThreadRead
 from apps.sync.realtime.commands import (
     ChannelsCreatePayload,
+    ChannelsMarkReadPayload,
     CommandEnvelope,
     GitResourcesUpsertPayload,
     MessagesDeletePayload,
@@ -39,6 +40,7 @@ from apps.sync.realtime.events import (
     RealtimeEvent,
     event_channel_created,
     event_channel_pins_changed,
+    event_channel_read_updated,
     event_git_resource_upserted,
     event_message_created,
     event_message_deleted,
@@ -77,6 +79,35 @@ async def execute_command(
         payload = ChannelsCreatePayload.model_validate(cmd.payload)
         channel = await _create_channel(payload.body, actor_user_id=cmd.actor_user_id, company_id=cmd.company_id, channels=channels)
         return CommandExecutionResult(ok=True, result=channel, events=[event_channel_created(channel)])
+
+    if cmd.type == "channels.mark_read":
+        payload = ChannelsMarkReadPayload.model_validate(cmd.payload)
+        if await channels.get_member_role(payload.channel_id, cmd.actor_user_id) is None:
+            raise PermissionError(
+                f"Пользователь не состоит в канале {payload.channel_id}."
+            )
+        max_at = await messages.max_root_lane_sent_at(
+            payload.channel_id,
+            company_id=cmd.company_id,
+        )
+        read_at = max_at if max_at is not None else datetime.now(UTC)
+        await channels.set_member_last_read_at(
+            payload.channel_id,
+            cmd.actor_user_id,
+            read_at,
+            company_id=cmd.company_id,
+        )
+        return CommandExecutionResult(
+            ok=True,
+            result=None,
+            events=[
+                event_channel_read_updated(
+                    payload.channel_id,
+                    cmd.actor_user_id,
+                    read_at,
+                ),
+            ],
+        )
 
     if cmd.type == "threads.create":
         payload = ThreadsCreatePayload.model_validate(cmd.payload)

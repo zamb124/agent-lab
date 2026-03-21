@@ -49,11 +49,9 @@ def get_crm_settings() -> CRMSettings:
     """
     global _crm_settings
     if _crm_settings is None:
-        from pathlib import Path
         from core.config.loader import load_merged_config
-        
-        service_config_path = Path(__file__).parent / "conf.json"
-        merged_config = load_merged_config(service_config_path=service_config_path)
+
+        merged_config = load_merged_config(service_name="crm")
         _crm_settings = CRMSettings(**merged_config)
     
     return _crm_settings

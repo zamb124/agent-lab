@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from apps.sync.channel_lane_preview import ChannelLaneSummary
 from apps.sync.db.models import SyncChannel
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.models.channels import ChannelRead, ChannelType
@@ -27,8 +28,14 @@ async def channel_read_from_entity(
     channel_repository: ChannelRepository,
     user_repository: UserRepository | None,
     company_id: str,
+    lane_summary: ChannelLaneSummary | None = None,
 ) -> ChannelRead:
     """Строит ChannelRead; для direct подставляет peer (любой участник кроме viewer)."""
+    summ = lane_summary or ChannelLaneSummary(
+        unread_count=0,
+        last_message_preview=None,
+        last_message_at=None,
+    )
     pids = entity.pinned_message_ids if isinstance(entity.pinned_message_ids, list) else []
     peer: UserBrief | None = None
     if entity.type == ChannelType.DIRECT.value:
@@ -49,6 +56,9 @@ async def channel_read_from_entity(
         created_by_user_id=entity.created_by_user_id,
         pinned_message_ids=pids,
         peer=peer,
+        unread_count=summ.unread_count,
+        last_message_preview=summ.last_message_preview,
+        last_message_at=summ.last_message_at,
     )
 
 
@@ -65,4 +75,7 @@ def channel_read_entity_minimal(entity: SyncChannel) -> ChannelRead:
         created_by_user_id=entity.created_by_user_id,
         pinned_message_ids=pids,
         peer=None,
+        unread_count=0,
+        last_message_preview=None,
+        last_message_at=None,
     )

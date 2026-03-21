@@ -20,6 +20,14 @@ from core.db.models import (
 
 logger = logging.getLogger(__name__)
 
+
+def _require_shared_db_url() -> str:
+    settings = get_settings()
+    u = settings.database.shared_url
+    if not u:
+        raise ValueError("database.shared_url не задан")
+    return u
+
 _engines: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 _session_factories: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 
@@ -35,13 +43,12 @@ async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
     Лениво создает engine для текущего event loop и URL БД.
     
     Args:
-        db_url: URL БД (если не указан, берется из settings.database.url)
+        db_url: URL БД (если не указан — shared_url)
     """
     loop_id = _get_loop_id()
-    
-    settings = get_settings()
+
     if db_url is None:
-        db_url = settings.database.url
+        db_url = _require_shared_db_url()
     
     # Ключ кэша включает и loop_id и db_url
     cache_key = (loop_id, db_url)
@@ -85,13 +92,12 @@ async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmake
     Лениво создает session factory для текущего event loop и URL БД.
     
     Args:
-        db_url: URL БД (если не указан, берется из settings.database.url)
+        db_url: URL БД (если не указан — shared_url)
     """
     loop_id = _get_loop_id()
-    
-    settings = get_settings()
+
     if db_url is None:
-        db_url = settings.database.url
+        db_url = _require_shared_db_url()
     
     # Ключ кэша включает и loop_id и db_url
     cache_key = (loop_id, db_url)
@@ -114,7 +120,7 @@ async def session(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, 
     Алиас для get_session_factory() - создает контекстный менеджер сессии.
     
     Args:
-        db_url: URL БД (если не указан, берется из settings.database.url)
+        db_url: URL БД (если не указан — shared_url)
     
     Usage:
         async for s in session():
@@ -131,7 +137,7 @@ async def get_db(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, N
     Dependency для получения сессии БД в FastAPI.
     
     Args:
-        db_url: URL БД (если не указан, берется из settings.database.url)
+        db_url: URL БД (если не указан — shared_url)
     """
     session_factory = await get_session_factory(db_url)
     async with session_factory() as session:
@@ -148,7 +154,7 @@ async def wait_for_db(max_retries: int = 30, retry_interval: int = 2, db_url: Op
     Args:
         max_retries: Максимальное количество попыток
         retry_interval: Интервал между попытками
-        db_url: URL БД (если не указан, берется из settings.database.url)
+        db_url: URL БД (если не указан — shared_url)
     """
     for attempt in range(1, max_retries + 1):
         session_factory = await get_session_factory(db_url)
@@ -172,7 +178,7 @@ async def create_tables(db_url: Optional[str] = None, table_names: Optional[List
     Создает таблицы в БД если их нет.
     
     Args:
-        db_url: URL БД (если не указан, берется из settings.database.url)
+        db_url: URL БД (если не указан — shared_url)
         table_names: Список имен таблиц для создания (если None, создаются все)
     """
     # Явный импорт всех моделей для регистрации в Base.metadata
@@ -233,7 +239,7 @@ async def drop_tables(db_url: Optional[str] = None):
     Удаляет все таблицы.
     
     Args:
-        db_url: URL БД (если не указан, берется из settings.database.url)
+        db_url: URL БД (если не указан — shared_url)
     """
     session_factory = await get_session_factory(db_url)
     async with session_factory() as session:

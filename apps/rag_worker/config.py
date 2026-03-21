@@ -3,10 +3,12 @@
 """
 
 from core.config import BaseSettings
+from core.config.loader import load_merged_config
 
 
 class RAGWorkerSettings(BaseSettings):
     """Настройки для RAG Worker"""
+
     pass
 
 
@@ -14,8 +16,8 @@ _settings: RAGWorkerSettings | None = None
 
 
 def get_settings() -> RAGWorkerSettings:
-    """Получить singleton settings"""
     global _settings
     if _settings is None:
-        _settings = RAGWorkerSettings()
+        merged = load_merged_config(service_name="rag_worker")
+        _settings = RAGWorkerSettings(**merged)
     return _settings

@@ -930,7 +930,7 @@ def my_custom_worker():
         command=[sys.executable, "-m", "my_app.worker"],  # Команда запуска
         env={  # Переменные окружения
             "TESTING": "true",
-            "DATABASE__URL": "postgresql+asyncpg://...",
+            "DATABASE__SHARED_URL": "postgresql+asyncpg://...",
         },
         cleanup_patterns=[  # Паттерны для pkill (очистка старых процессов)
             "my_app.worker",

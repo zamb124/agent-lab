@@ -17,6 +17,7 @@
 """
 
 import pytest
+from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 from tests.fixtures.workers import SessionServerManager
 
 
@@ -37,13 +38,10 @@ _SYNC_SERVER_LOCK = "/tmp/platform_test_sync_server.lock"
 _SYNC_SERVER_PID = "/tmp/platform_test_sync_server.pid"
 
 
-# Общие env переменные для всех сервисов
+# Общие env переменные для всех сервисов (те же БД, что в conftest и миграциях)
 _COMMON_TEST_ENV = {
+    **TEST_DATABASE_ENV,
     "TESTING": "true",
-    "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
-    "DATABASE__SHARED_URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
-    "DATABASE__CRM_URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
-    "DATABASE__SYNC_URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "AUTH__PERMISSIONS_ENABLED": "false",

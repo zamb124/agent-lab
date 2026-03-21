@@ -5,7 +5,6 @@
 """
 
 from typing import Optional
-from pathlib import Path
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
@@ -33,8 +32,7 @@ def get_sync_settings() -> SyncSettings:
     """
     global _sync_settings
     if _sync_settings is None:
-        service_config_path = Path(__file__).parent / "conf.json"
-        merged_config = load_merged_config(service_config_path=service_config_path)
+        merged_config = load_merged_config(service_name="sync")
         _sync_settings = SyncSettings(**merged_config)
 
     return _sync_settings

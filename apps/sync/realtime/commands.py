@@ -16,6 +16,7 @@ from apps.sync.models.threads import ThreadCreate, ThreadRead
 CommandType = Literal[
     "spaces.create",
     "channels.create",
+    "channels.mark_read",
     "threads.create",
     "messages.send",
     "messages.mark_read",
@@ -66,6 +67,10 @@ class SpacesCreatePayload(BaseModel):
 
 class ChannelsCreatePayload(BaseModel):
     body: ChannelCreate
+
+
+class ChannelsMarkReadPayload(BaseModel):
+    channel_id: str
 
 
 class ThreadsCreatePayload(BaseModel):

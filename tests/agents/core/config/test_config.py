@@ -47,13 +47,13 @@ class TestEnvOverride:
         assert result["server"]["port"] == 8001
 
     def test_env_overrides_nested(self):
-        config = {"database": {"url": "old_url", "redis_url": "redis://localhost"}}
+        config = {"database": {"shared_url": "old_url", "redis_url": "redis://localhost"}}
         # Очищаем существующие env vars которые могут влиять на тест
         clean_env = {k: v for k, v in os.environ.items() if not k.startswith("DATABASE__")}
-        clean_env["DATABASE__URL"] = "new_url"
+        clean_env["DATABASE__SHARED_URL"] = "new_url"
         with patch.dict(os.environ, clean_env, clear=True):
             result = remove_env_overridden_values(config)
-        assert "url" not in result.get("database", {})
+        assert "shared_url" not in result.get("database", {})
         assert result["database"]["redis_url"] == "redis://localhost"
 
     def test_env_overrides_deep_nested(self):
@@ -69,9 +69,9 @@ class TestBaseSettings:
 
     def test_env_override_database_url(self):
         env_url = "postgresql://test:test@testhost:5555/testdb"
-        with patch.dict(os.environ, {"DATABASE__URL": env_url}, clear=False):
+        with patch.dict(os.environ, {"DATABASE__SHARED_URL": env_url}, clear=False):
             settings = BaseSettings()
-        assert settings.database.url == env_url
+        assert settings.database.shared_url == env_url
 
     def test_env_override_server_port(self):
         with patch.dict(os.environ, {"SERVER__PORT": "9999"}, clear=False):
@@ -93,14 +93,14 @@ class TestBaseSettings:
 
     def test_env_override_multiple_values(self):
         env_vars = {
-            "DATABASE__URL": "postgresql://env:env@envhost:1234/envdb",
+            "DATABASE__SHARED_URL": "postgresql://env:env@envhost:1234/envdb",
             "SERVER__PORT": "7777",
             "SERVER__DEBUG": "true",
             "LLM__TEMPERATURE": "0.5",
         }
         with patch.dict(os.environ, env_vars, clear=False):
             settings = BaseSettings()
-        assert settings.database.url == "postgresql://env:env@envhost:1234/envdb"
+        assert settings.database.shared_url == "postgresql://env:env@envhost:1234/envdb"
         assert settings.server.port == 7777
         assert settings.server.debug is True
         assert settings.llm.temperature == 0.5

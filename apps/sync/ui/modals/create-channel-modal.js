@@ -172,6 +172,7 @@ export class CreateChannelModal extends PlatformElement {
             const syncApi = ServiceRegistry.get('syncApi');
             const created = await syncApi.createChannel(spaceId, name);
             await SyncStore.loadChannels(syncApi);
+            SyncStore.sanitizeChatSelectionAfterLoad();
             SyncStore.selectChannel(spaceId, created.id);
             this._close();
         } catch (e) {

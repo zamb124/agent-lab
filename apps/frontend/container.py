@@ -66,8 +66,11 @@ def get_frontend_container() -> FrontendContainer:
         from core.config import get_settings
         settings = get_settings()
         
+        if not settings.database.shared_url:
+            raise ValueError("database.shared_url не задан")
+
         _frontend_container = FrontendContainer(
-            db_url=settings.database.url,
+            db_url=settings.database.shared_url,
             shared_db_url=settings.database.shared_url
         )
         logger.info("FrontendContainer инициализирован")

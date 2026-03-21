@@ -30,12 +30,12 @@ apps/sync/
   main.py           # create_service_app() + WS + UI
   ws.py             # ConnectionManager + PubSubFanout
   db/
-    models.py       # SQLAlchemy модели (Base) + register_service("sync")
+    models.py       # SQLAlchemy модели (Base); миграции — migrations/services.json
     base.py         # SyncDatabase + BaseSyncRepository
     repositories/   # Space, Channel, Thread, Message, File, GitResourceRef
   models/           # Pydantic API-модели (Read/Create/Update)
   api/              # REST роутеры
-  realtime/         # Command-Event (broker, commands, events, handlers, tasks)
+  realtime/         # Command-Event (broker, commands, events, handlers, command_dispatch, tasks)
 
 apps/sync_worker/   # TaskIQ worker (queue: sync)
 ```
@@ -46,7 +46,7 @@ apps/sync_worker/   # TaskIQ worker (queue: sync)
 |---------|-----------|----------|
 | sync_spaces | да | Пространства |
 | sync_channels | да | Каналы (direct/group/topic), `pinned_message_ids` JSONB — упорядоченный список id |
-| sync_channel_members | да | Участники каналов |
+| sync_channel_members | да | Участники каналов; `last_read_at` — курсор прочитанного **основной ленты** (`thread_id IS NULL`) для бейджа непрочитанного в UI |
 | sync_threads | да | Треды |
 | sync_messages | да | Сообщения (`reactions` JSONB, `deleted_at`, при пересылке `forwarded_from_channel_id` / `forwarded_from_channel_name`) |
 | sync_message_contents | нет (через message FK) | Полиморфный контент |
@@ -64,9 +64,11 @@ REST POST /sync/api/v1/... ──┐
 WebSocket /sync/ws        ────┘
 ```
 
+Исключение: **`POST /channels/{id}/read`** вызывает `dispatch_sync_command()` в процессе API (тот же путь, что и внутри `handle_command`: `execute_command` + публикация в `sync.realtime.events`), без постановки в очередь TaskIQ — отметка прочитанного не должна зависеть от отдельного `sync-worker` и от десериализации результата задачи.
+
 ### Правила
 
-- **Мутации** — только через команды: `CommandEnvelope` -> `handle_command.kiq()` -> `execute_command()` в `handlers.py`
+- **Мутации** — через команды: `CommandEnvelope` -> `execute_command()` в `handlers.py`; доставка — обычно `handle_command.kiq()` -> worker, для `channels.mark_read` из REST — `dispatch_sync_command()` (`apps/sync/realtime/command_dispatch.py`)
 - **Чтение** — напрямую из репозитория (GET-эндпоинты)
 - **Бизнес-логика** — только в `handlers.py` (`execute_command()`)
 - **События** — только из `handlers.py` (`CommandExecutionResult.events`). TaskIQ task публикует в Redis канал `sync.realtime.events`
@@ -83,16 +85,20 @@ WebSocket /sync/ws        ────┘
 1. Payload-модель -> `commands.py`
 2. Обработчик -> `handlers.py` (`execute_command`, ветка `if cmd.type == "..."`)
 3. Событие -> `events.py`
-4. REST эндпоинт (если нужен) -> `api/*.py` через `handle_command.kiq()`
+4. REST эндпоинт (если нужен) -> `api/*.py` через `handle_command.kiq()` (кроме `POST /channels/{id}/read` — `dispatch_sync_command`)
 5. WebSocket — работает автоматически
 
 Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.upsert`).
 
-Дополнительные команды сообщений и канала: `messages.edit`, `messages.delete`, `messages.forward`, `messages.react`, `messages.pin`. События: `message.updated`, `message.deleted`, `message.reaction_changed`, `channel.pins_changed`.
+Дополнительные команды сообщений и канала: `messages.edit`, `messages.delete`, `messages.forward`, `messages.react`, `messages.pin`, **`channels.mark_read`** (обновляет `sync_channel_members.last_read_at` до `max(sent_at)` корневой ленты или «сейчас», если сообщений нет). События: `message.updated`, `message.deleted`, `message.reaction_changed`, `channel.pins_changed`, **`channel.read_updated`** (`channel_id`, `reader_user_id`, `read_at` ISO) — другие вкладки клиента могут сбросить локальный бейдж.
+
+**Сводка канала в списке (GET /channels):** в `ChannelRead` поля `unread_count` (только корневая лента, чужие сообщения после `last_read_at`; `last_read_at IS NULL` — все такие сообщения считаются непрочитанными), `last_message_preview`, `last_message_at`. Счётчик и превью считаются в `MessageRepository.channel_lane_summaries_batch`. После открытия ленты клиент вызывает **`POST /channels/{channel_id}/read`** (`dispatch_sync_command`, та же бизнес-логика, что у команды `channels.mark_read`) — см. `SyncStore.loadMessages` + `markChannelRead`. Realtime: для чужих каналов `message.created` без `thread_id` обновляет превью в `sync-app.js`; непрочитанные — только если отправитель не текущий пользователь.
 
 **Лента канала (GET /messages, `list_by_channel`):** `thread_id IS NULL`, `deleted_at IS NULL`; ответы на сообщения в основной полосе **включены** (`parent_message_id` может быть задан при `thread_id IS NULL`).
 
-**Каналы (GET /channels):** только каналы, где текущий пользователь есть в `sync_channel_members` (`ChannelRepository.list_for_user`). Опционально `?space_id=` — те же правила плюс `SyncChannel.space_id`. В `ChannelRead` для `type: direct` поле `peer` (`UserBrief`) — собеседник. Создание direct: `channels.create`, `space_id: null`, `member_ids: [один user_id]` (см. `handlers._create_channel`).
+**Каналы (GET /channels):** только каналы, где текущий пользователь есть в `sync_channel_members` (`ChannelRepository.list_for_user`). Опционально `?space_id=` — те же правила плюс `SyncChannel.space_id`. В `ChannelRead` для `type: direct` поле `peer` (`UserBrief`) — собеседник. Создание direct: `channels.create`, `space_id: null`, `member_ids: [один user_id]` (см. `handlers._create_channel`). Topic при создании добавляет в участники только создателя; чтобы коллега видел канал в списке, его нужно добавить: **`POST /channels/{channel_id}/members`** тело `{"user_id":"...","role":"member"}` (`ChannelMemberAdd`) — `ChannelRepository.upsert_member`; на клиенте `SyncAPIService.addChannelMember`. Список участников канала: **`GET /channels/{channel_id}/members`** (только для участников канала). После успешного POST публикуется realtime **`channel.member_added`** (`payload`: `channel_id`, `added_user_id`) — у добавленного пользователя клиент делает `loadChannels`.
+
+**Realtime `channel.member_added`:** Redis `sync.realtime.events`, WS broadcast; UI `sync-app.js` — если `added_user_id` совпадает с текущим пользователем, перезагрузка списка каналов.
 
 **Участники компании (GET /company/members):** список `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий пользователь исключён). Sync UI: секция «Личные» — поиск + открытие/создание DM по клику (`SyncStore.loadCompanyMembers`, `findDirectChannelForPeer`).
 
@@ -103,6 +109,11 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 **Сервер -> клиент:**
 - Результат команды: `{ id, ok, result, error_code, error_detail }` (WsResultFrame)
 - Realtime-событие: `{ type, payload }` (RealtimeEvent, broadcast всем)
+
+## Сообщения: длина и отображение
+
+- Текстовый блок `text/plain`: не длиннее **4096** символов (как одно сообщение в Telegram). Константа `SYNC_MESSAGE_TEXT_MAX_CHARS` в `apps/sync/models/messages.py`; на клиенте — `apps/sync/ui/constants/sync-limits.js` (`SYNC_MESSAGE_TEXT_MAX_CHARS`), ввод в `message-composer.js`.
+- Длинные строки без пробелов в пузырьке не должны вылезать за ширину: `overflow-wrap` на тексте в `message-bubble.js`.
 
 ## Frontend (Lit 3 + PlatformApp)
 
@@ -121,6 +132,7 @@ apps/sync/ui/
     sync-ws.service.js    # WebSocket к /sync/ws, cookie auth, reconnect/backoff
   features/
     sync-sidebar.js       # platform-sidebar: Личные — участники компании (GET /company/members), поиск, DM по клику; Пространства + Каналы; аккордеоны, «Свернуть всё» / «Развернуть всё»
+    channel-settings-modal.js  # topic/group: участники, поиск + чекбоксы, массовое addChannelMember
     chat-view.js          # header + channel-picker | message-list + composer
     channel-picker.js     # сетка каналов
     message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
@@ -148,6 +160,8 @@ apps/sync/ui/
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
 - Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
 - Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`; для direct `spaceId` — `null`, иначе список сообщений не подгрузится
+- После `loadSpaces` + `loadChannels` вызывать `SyncStore.sanitizeChatSelectionAfterLoad()`: в persist хранится `selectedSpaceId` без привязки к пользователю — если у текущего юзера нет topic-каналов в выбранном пространстве, список «Каналы» пустой; санитайз переключает пространство на первое, где есть каналы пользователя (или сбрасывает, если только direct)
+- `loadSpaces` / `loadChannels` / `loadCompanyMembers`: при ошибке запроса сбрасывать `loading: false`, иначе вечный «Загрузка…»
 - API — только через `SyncAPIService`, без прямых `fetch` в компонентах
 - WebSocket — backend-first: команда → pending → `{ id, ok, result }` ack или `message.created` event
 - Zero-Guess: нет `x || 'default'` для обязательных значений, бросаем исключение

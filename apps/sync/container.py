@@ -87,7 +87,9 @@ def get_sync_container() -> SyncContainer:
         from core.config import get_settings
         settings = get_settings()
 
-        sync_db_url = settings.database.sync_url or settings.database.url
+        if not settings.database.sync_url:
+            raise ValueError("database.sync_url не задан")
+        sync_db_url = settings.database.sync_url
 
         _sync_container = SyncContainer(
             db_url=sync_db_url,

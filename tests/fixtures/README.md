@@ -147,13 +147,13 @@ async def test_with_worker(rag_worker):
 Все сервисы используют **единую тестовую конфигурацию** из `services.py`:
 
 ```python
+from tests.fixtures.test_database_env import TEST_DATABASE_ENV
+
 _COMMON_TEST_ENV = {
+    **TEST_DATABASE_ENV,
     "TESTING": "true",
-    "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-    "DATABASE__SHARED_URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-    "DATABASE__CRM_URL": "postgresql+asyncpg://platform_user:admin@localhost:5434/platform_test",
-    "DATABASE__REDIS_URL": "redis://localhost:6380/0",
-    "TASKS__BROKER_URL": "redis://localhost:6380/1",
+    "DATABASE__REDIS_URL": "redis://localhost:63792/0",
+    "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "AUTH__PERMISSIONS_ENABLED": "false",
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
     "S3__DEFAULT_BUCKET": "test-bucket",

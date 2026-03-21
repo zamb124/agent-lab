@@ -17,17 +17,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 
 from core.db.models import Base
-from core.db.service_registry import register_service
-
-
-def _get_sync_db_url() -> str:
-    """Получает URL БД для Sync из конфига сервиса."""
-    from apps.sync.config import get_sync_settings
-    settings = get_sync_settings()
-    return settings.database.sync_url or settings.database.url
-
-
-register_service("sync", _get_sync_db_url, "apps.sync.db.models")
 
 
 class SyncSpace(Base):
@@ -92,6 +81,11 @@ class SyncChannelMember(Base):
     user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
+    last_read_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
 
     __table_args__ = (
         Index("ix_sync_channel_members_company", "company_id"),

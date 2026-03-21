@@ -216,6 +216,26 @@ export const SyncStore = {
         });
     },
 
+    /**
+     * Частичное обновление полей канала в списке (превью, непрочитанные).
+     * @param {string} channelId
+     * @param {Record<string, unknown>} fields
+     */
+    patchChannelFields(channelId, fields) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (!fields || typeof fields !== 'object') {
+            throw new Error('fields обязателен.');
+        }
+        baseStore.setState(s => ({
+            channels: {
+                ...s.channels,
+                list: s.channels.list.map(c => (c.id === channelId ? { ...c, ...fields } : c)),
+            },
+        }));
+    },
+
     setReplyToMessage(msg) {
         baseStore.setState(s => ({
             chat: { ...s.chat, replyToMessage: msg, editMessage: null },
@@ -482,25 +502,93 @@ export const SyncStore = {
 
     async loadSpaces(syncApi) {
         baseStore.setState(s => ({ spaces: { ...s.spaces, loading: true } }));
-        const items = await syncApi.getSpaces();
-        this.setSpaces(items);
-        return items;
+        try {
+            const items = await syncApi.getSpaces();
+            this.setSpaces(items);
+            return items;
+        } catch (e) {
+            baseStore.setState(s => ({ spaces: { ...s.spaces, loading: false } }));
+            throw e;
+        }
     },
 
     async loadChannels(syncApi) {
         baseStore.setState(s => ({ channels: { ...s.channels, loading: true } }));
-        const items = await syncApi.getChannels();
-        this.setChannels(items);
-        return items;
+        try {
+            const items = await syncApi.getChannels();
+            this.setChannels(items);
+            return items;
+        } catch (e) {
+            baseStore.setState(s => ({ channels: { ...s.channels, loading: false } }));
+            throw e;
+        }
     },
 
     async loadCompanyMembers(syncApi) {
         baseStore.setState(s => ({ companyMembers: { ...s.companyMembers, loading: true } }));
-        const items = await syncApi.getCompanyMembers();
-        baseStore.setState(s => ({
-            companyMembers: { list: items, loading: false },
-        }));
-        return items;
+        try {
+            const items = await syncApi.getCompanyMembers();
+            baseStore.setState(s => ({
+                companyMembers: { list: items, loading: false },
+            }));
+            return items;
+        } catch (e) {
+            baseStore.setState(s => ({ companyMembers: { ...s.companyMembers, loading: false } }));
+            throw e;
+        }
+    },
+
+    /**
+     * После загрузки списков: выровнять выбранное пространство с каналами пользователя.
+     * Persist `selectedSpaceId` не привязан к аккаунту — возможен выбор пространства без topic-каналов у этого юзера (пустой список в сайдбаре).
+     */
+    sanitizeChatSelectionAfterLoad() {
+        baseStore.setState(s => {
+            const spaces = s.spaces.list;
+            const channels = s.channels.list;
+            let selectedSpaceId = s.chat.selectedSpaceId;
+            let selectedChannelId = s.chat.selectedChannelId;
+
+            const validSpaceIds = new Set(spaces.map(x => x.id));
+            if (selectedSpaceId != null && selectedSpaceId !== '' && !validSpaceIds.has(selectedSpaceId)) {
+                selectedSpaceId = null;
+            }
+
+            if (selectedChannelId != null && selectedChannelId !== '') {
+                const ch = channels.find(c => c.id === selectedChannelId);
+                if (!ch) {
+                    selectedChannelId = null;
+                } else if (ch.type !== 'direct' && ch.space_id) {
+                    selectedSpaceId = ch.space_id;
+                }
+            }
+
+            const topicChannels = channels.filter(c => c.type !== 'direct' && c.space_id);
+            if (topicChannels.length > 0) {
+                const inSelected = selectedSpaceId
+                    ? topicChannels.filter(c => c.space_id === selectedSpaceId).length
+                    : 0;
+                if (inSelected === 0) {
+                    selectedSpaceId = topicChannels[0].space_id;
+                }
+            } else {
+                selectedSpaceId = null;
+            }
+
+            if (
+                selectedSpaceId === s.chat.selectedSpaceId
+                && selectedChannelId === s.chat.selectedChannelId
+            ) {
+                return s;
+            }
+            return {
+                chat: {
+                    ...s.chat,
+                    selectedSpaceId,
+                    selectedChannelId,
+                },
+            };
+        });
     },
 
     /**
@@ -510,8 +598,9 @@ export const SyncStore = {
         if (typeof peerUserId !== 'string' || peerUserId === '') {
             throw new Error('peerUserId обязателен.');
         }
+        const want = String(peerUserId);
         return (
-            this.getDirectChannels().find(c => c.peer && c.peer.id === peerUserId) ?? null
+            this.getDirectChannels().find(c => c.peer && String(c.peer.id) === want) ?? null
         );
     },
 
@@ -519,6 +608,8 @@ export const SyncStore = {
         baseStore.setState(s => ({ messages: { ...s.messages, loading: true } }));
         const items = await syncApi.getMessages(channelId);
         this.setMessages(items);
+        await syncApi.markChannelRead(channelId);
+        this.patchChannelFields(channelId, { unread_count: 0 });
         return items;
     },
 

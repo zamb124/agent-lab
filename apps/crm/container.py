@@ -172,13 +172,16 @@ def get_crm_container() -> CRMContainer:
         from core.config import get_settings
         settings = get_settings()
         
-        crm_db_url = settings.database.crm_url or settings.database.url
-        
+        if not settings.database.crm_url:
+            raise ValueError("database.crm_url не задан")
+        if not settings.database.shared_url:
+            raise ValueError("database.shared_url не задан")
+
         _crm_container = CRMContainer(
-            db_url=crm_db_url,
+            db_url=settings.database.crm_url,
             shared_db_url=settings.database.shared_url
         )
-        logger.info(f"CRMContainer инициализирован с БД: {crm_db_url[:50]}...")
+        logger.info(f"CRMContainer инициализирован с БД: {settings.database.crm_url[:50]}...")
     return _crm_container
 
 

@@ -115,7 +115,9 @@ async def process_document_upload(
     settings = get_settings()
     from core.db.repositories.document_status_repository import DocumentStatusRepository
 
-    status_repo = DocumentStatusRepository(settings.database.url)
+    if not settings.database.rag_url:
+        raise ValueError("database.rag_url не задан")
+    status_repo = DocumentStatusRepository(settings.database.rag_url)
 
     await status_repo.update_status(document_id, "processing")
     logger.info(f"RAG Worker: статус -> processing для {document_id}")

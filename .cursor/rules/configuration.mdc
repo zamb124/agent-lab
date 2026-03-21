@@ -8,8 +8,10 @@ alwaysApply: false
 
 Запомни навсегда:
 1. **ENV переменные** (высший приоритет)
-2. **conf.json** / **conf.local.json**
+2. **Корневой** `conf.json` / `conf.local.json` в корне репозитория (отдельных `apps/*/conf.json` нет)
 3. **Значения по умолчанию**
+
+Переопределения под конкретный сервис — в корневом `conf.json` в ключе `services.<имя>` (например `services.agents`, `services.rag_worker`).
 
 ENV переменные ВСЕГДА побеждают JSON!
 
@@ -18,8 +20,11 @@ ENV переменные ВСЕГДА побеждают JSON!
 Используй двойное подчеркивание `__` для вложенных полей:
 
 <good_example>
-# Правильный формат
-DATABASE__URL=postgresql+asyncpg://user:pass@host:5432/db
+# Правильный формат (БД — отдельный URL на логическую базу)
+DATABASE__SHARED_URL=postgresql+asyncpg://user:pass@host:5432/platform_shared
+DATABASE__AGENTS_URL=postgresql+asyncpg://user:pass@host:5432/platform_agents
+# Для обратной совместимости то же, что shared_url:
+# DATABASE__URL=postgresql+asyncpg://...
 LLM__PROVIDERS__OPENAI__API_KEY=sk-...
 SERVER__PORT=8001
 </good_example>
@@ -39,7 +44,7 @@ DATABASE.URL=...           # Точка вместо подчеркивания
 from core.config import settings
 
 # Читаем настройки
-db_url = settings.database.url
+shared_db_url = settings.database.shared_url
 api_key = settings.llm.providers["openai"].api_key
 </good_example>
 
@@ -98,7 +103,7 @@ services:
   app:
     environment:
       # Переопределяем localhost на имя сервиса
-      - DATABASE__URL=postgresql+asyncpg://user:pass@postgres:5432/db
+      - DATABASE__SHARED_URL=postgresql+asyncpg://user:pass@postgres:5432/platform_shared
       - REDIS__HOST=redis
       - RABBITMQ__HOST=rabbitmq
 </good_example>
@@ -115,7 +120,7 @@ services:
 
 <good_example>
 # .env (не коммитится)
-DATABASE__URL=postgresql+asyncpg://prod_user:SecurePass123@prod.db.com:5432/prod
+DATABASE__SHARED_URL=postgresql+asyncpg://prod_user:SecurePass123@prod.db.com:5432/platform_shared
 LLM__PROVIDERS__OPENAI__API_KEY=sk-prod-key-...
 AUTH__SECRET_KEY=super-secret-key-...
 </good_example>
@@ -124,16 +129,16 @@ AUTH__SECRET_KEY=super-secret-key-...
 # conf.json (коммитится)
 {
   "database": {
-    "url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agent_platform"
+    "shared_url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/platform_shared"
   }
 }
 </good_example>
 
 <bad_example>
-# conf.json - НЕ ТАК
+# conf.json - НЕ ТАК (секреты в репозитории)
 {
   "database": {
-    "url": "postgresql+asyncpg://prod_user:SuperSecretPassword@prod-db.company.com:5432/production"
+    "shared_url": "postgresql+asyncpg://prod_user:SuperSecretPassword@prod-db.company.com:5432/platform_shared"
   }
 }
 </bad_example>
@@ -155,7 +160,7 @@ cp conf.local.json.example conf.local.json
     "default_provider": "ollama"
   },
   "database": {
-    "url": "postgresql+asyncpg://dev:dev@localhost:5433/dev_db"
+    "shared_url": "postgresql+asyncpg://dev:dev@localhost:5433/platform_shared"
   },
   "s3": {
     "enabled": true,
@@ -256,10 +261,10 @@ export S3__ENABLED=true
 from core.config import settings
 
 def init_database():
-    if not settings.database.url:
-        raise ValueError("DATABASE__URL не настроен")
-    
-    engine = create_engine(settings.database.url)
+    if not settings.database.shared_url:
+        raise ValueError("DATABASE__SHARED_URL не настроен")
+
+    engine = create_engine(settings.database.shared_url)
     return engine
 </good_example>
 
@@ -272,7 +277,7 @@ def init_database():
 DATABASE_URL=postgres://...
 
 # Правильно
-DATABASE__URL=postgresql+asyncpg://...
+DATABASE__SHARED_URL=postgresql+asyncpg://...
 ```
 
 ### Ошибка 2: ENV не переопределяет JSON
@@ -297,14 +302,14 @@ DATABASE__URL=postgresql+asyncpg://...
 <good_example>
 from core.config import settings
 
-logger.info(f"Database host: {settings.database.url.split('@')[1].split('/')[0]}")
+logger.info(f"Database host: {settings.database.shared_url.split('@')[1].split('/')[0]}")
 logger.info(f"LLM provider: {settings.llm.default_provider}")
 logger.info(f"Server port: {settings.server.port}")
 </good_example>
 
 <bad_example>
 # НЕ логируй полные URL с паролями
-logger.info(f"Database URL: {settings.database.url}")  # НЕ ТАК
+logger.info(f"Database URL: {settings.database.shared_url}")  # НЕ ТАК
 </bad_example>
 
 ## Документация

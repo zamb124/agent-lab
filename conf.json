@@ -25,9 +25,11 @@
     }
   },
   "database": {
-    "url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
-    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
-    "sync_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_db",
+    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shared",
+    "agents_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_agents",
+    "crm_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_crm",
+    "sync_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_sync",
+    "rag_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_rag",
     "redis_url": "redis://localhost:63791/0"
   },
   "tasks": {
@@ -112,7 +114,7 @@
         "context_window": 1000000,
         "temperature": 0.2,
         "description": "Быстрая версия Gemini 2.5",
-        "input_cost_per_token": 0.00003,
+        "input_cost_per_token": 3e-05,
         "output_cost_per_token": 0.00025
       },
       "google/gemini-2.0-flash": {
@@ -120,15 +122,15 @@
         "context_window": 1000000,
         "temperature": 0.2,
         "description": "Gemini 2.0 Flash - очень быстрая",
-        "input_cost_per_token": 0.00001,
-        "output_cost_per_token": 0.00004
+        "input_cost_per_token": 1e-05,
+        "output_cost_per_token": 4e-05
       },
       "x-ai/grok-code-fast-1": {
         "max_tokens": 8192,
         "context_window": 200000,
         "temperature": 0.2,
         "description": "Grok для кода - очень быстрая",
-        "input_cost_per_token": 0.00002,
+        "input_cost_per_token": 2e-05,
         "output_cost_per_token": 0.00015
       },
       "x-ai/grok-4-fast": {
@@ -136,16 +138,16 @@
         "context_window": 131072,
         "temperature": 0.2,
         "description": "Grok 4 Fast - быстрая версия",
-        "input_cost_per_token": 0.00002,
-        "output_cost_per_token": 0.00005
+        "input_cost_per_token": 2e-05,
+        "output_cost_per_token": 5e-05
       },
       "deepseek/deepseek-v3-0324": {
         "max_tokens": 8192,
         "context_window": 64000,
         "temperature": 0.2,
         "description": "DeepSeek V3 - отличная для кода",
-        "input_cost_per_token": 0.000024,
-        "output_cost_per_token": 0.000084
+        "input_cost_per_token": 2.4e-05,
+        "output_cost_per_token": 8.4e-05
       },
       "openai/gpt-4o": {
         "max_tokens": 4096,
@@ -160,24 +162,24 @@
         "context_window": 32768,
         "temperature": 0.2,
         "description": "GPT OSS 20B - открытая модель OpenAI",
-        "input_cost_per_token": 0.000003,
-        "output_cost_per_token": 0.000014
+        "input_cost_per_token": 3e-06,
+        "output_cost_per_token": 1.4e-05
       },
       "openai/gpt-oss-120b": {
         "max_tokens": 8192,
         "context_window": 32768,
         "temperature": 0.2,
         "description": "GPT OSS 120B - большая открытая модель OpenAI",
-        "input_cost_per_token": 0.000004,
-        "output_cost_per_token": 0.00004
+        "input_cost_per_token": 4e-06,
+        "output_cost_per_token": 4e-05
       },
       "google/gemini-2.5-flash-preview-image": {
         "max_tokens": 8192,
         "context_window": 1000000,
         "temperature": 0.1,
         "description": "Gemini 2.5 Flash Preview Image - генерация изображений",
-        "input_cost_per_token": 0.0000003,
-        "output_cost_per_token": 0.0000025
+        "input_cost_per_token": 3e-07,
+        "output_cost_per_token": 2.5e-06
       },
       "mock-gpt-4": {
         "max_tokens": 8192,
@@ -251,7 +253,9 @@
     }
   },
   "migration": {
-    "default_flows": ["apps.agents.flows.faq_flow.faq_flow_config"],
+    "default_flows": [
+      "apps.agents.flows.faq_flow.faq_flow_config"
+    ],
     "default_agents": [],
     "default_tools": [],
     "migrate_dependencies": true
@@ -259,12 +263,10 @@
   "rag": {
     "enabled": true,
     "default_provider": "pgvector",
-    
     "embedding": {
       "model": "baai/bge-m3",
       "dimension": 1024
     },
-    
     "providers": {
       "pgvector": {
         "enabled": true,
@@ -283,6 +285,241 @@
         "embedding_platform_markup": 1.1,
         "base_url": "https://api.agentset.ai",
         "timeout": 60
+      }
+    }
+  },
+  "services": {
+    "agents": {
+      "service_name": "agents",
+      "database": {
+        "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shared",
+        "agents_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_agents",
+        "redis_url": "redis://localhost:63791/0"
+      },
+      "server": {
+        "name": "agents",
+        "host": "0.0.0.0",
+        "port": 8001,
+        "debug": true,
+        "cors_origins": [
+          "*"
+        ]
+      },
+      "auth": {
+        "jwt_secret": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
+        "session_secret": "YOUR_SESSION_SECRET_KEY_CHANGE_IN_PRODUCTION",
+        "jwt_algorithm": "HS256",
+        "access_token_expire_minutes": 420,
+        "refresh_token_expire_days": 7,
+        "permissions_enabled": false
+      },
+      "tasks": {
+        "broker_url": "redis://localhost:63791/0"
+      },
+      "logging": {
+        "level": "INFO",
+        "log_dir": "logs",
+        "max_bytes": 10485760,
+        "backup_count": 5,
+        "truncate_limit": 1000
+      },
+      "tracing": {
+        "enabled": true,
+        "postgres_enabled": true,
+        "tempo_enabled": false,
+        "service_name": "agents",
+        "retention_days": 30
+      },
+      "llm": {
+        "provider": "openrouter",
+        "default_model": "anthropic/claude-sonnet-4.5",
+        "vision_model": "google/gemini-2.5-pro",
+        "temperature": 0.2,
+        "timeout": 120,
+        "openrouter": {
+          "base_url": "https://openrouter.ai/api/v1",
+          "site_url": "https://humanitec.ru",
+          "site_name": "Humanitec"
+        }
+      },
+      "s3": {
+        "enabled": false,
+        "default_bucket": "files",
+        "endpoint_url": "YOUR_S3_ENDPOINT_URL",
+        "access_key": "YOUR_S3_ACCESS_KEY",
+        "secret_key": "YOUR_S3_SECRET_KEY",
+        "region": "us-east-1"
+      },
+      "external_agents": {
+        "agents": [],
+        "health_check_interval": 60
+      },
+      "files": {
+        "max_size_mb": 10,
+        "allowed_extensions": [
+          ".txt",
+          ".pdf",
+          ".docx",
+          ".png",
+          ".jpg",
+          ".jpeg"
+        ]
+      },
+      "mock": {
+        "enabled": false
+      },
+      "push": {
+        "enabled": false
+      }
+    },
+    "crm": {
+      "server": {
+        "name": "crm",
+        "port": 8003
+      }
+    },
+    "sync": {
+      "server": {
+        "name": "sync",
+        "port": 8005
+      }
+    },
+    "rag": {
+      "service_name": "rag",
+      "database": {
+        "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shared",
+        "rag_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_rag"
+      },
+      "server": {
+        "name": "rag",
+        "host": "0.0.0.0",
+        "port": 8004,
+        "debug": true,
+        "cors_origins": [
+          "*"
+        ]
+      },
+      "auth": {
+        "jwt_secret": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
+        "session_secret": "YOUR_SESSION_SECRET_KEY_CHANGE_IN_PRODUCTION",
+        "jwt_algorithm": "HS256",
+        "access_token_expire_minutes": 420,
+        "refresh_token_expire_days": 7,
+        "permissions_enabled": true
+      },
+      "logging": {
+        "level": "INFO",
+        "log_dir": "logs",
+        "max_bytes": 10485760,
+        "backup_count": 5,
+        "truncate_limit": 1000
+      },
+      "rag": {
+        "enabled": true,
+        "default_provider": "pgvector",
+        "embedding": {
+          "model": "baai/bge-m3",
+          "dimension": 1024
+        },
+        "providers": {
+          "pgvector": {
+            "enabled": true,
+            "embedding_api_key": "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",
+            "embedding_cost_per_1m_tokens": 5.0,
+            "embedding_platform_markup": 1.1,
+            "chunk_size": 1000,
+            "chunk_overlap": 100,
+            "timeout": 60
+          },
+          "agentset": {
+            "enabled": true,
+            "api_key": "agentset_MrUnHaYpdrNDCMeK",
+            "embedding_api_key": "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",
+            "embedding_cost_per_1m_tokens": 5.0,
+            "embedding_platform_markup": 1.1,
+            "base_url": "https://api.agentset.ai",
+            "timeout": 60
+          }
+        }
+      },
+      "s3": {
+        "enabled": true,
+        "default_bucket": "files",
+        "buckets": {
+          "files": {
+            "provider": "minio",
+            "bucket_name": "files",
+            "access_key_id": "minioadmin",
+            "secret_access_key": "minioadmin",
+            "region_name": "us-east-1",
+            "endpoint_url": "http://localhost:9000",
+            "enabled": true
+          }
+        }
+      }
+    },
+    "frontend": {
+      "service_name": "frontend",
+      "database": {
+        "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shared",
+        "redis_url": "redis://localhost:63791/0"
+      },
+      "server": {
+        "name": "frontend",
+        "host": "0.0.0.0",
+        "port": 8002,
+        "debug": true,
+        "cors_origins": [
+          "*"
+        ]
+      },
+      "auth": {
+        "jwt_secret": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
+        "session_secret": "YOUR_SESSION_SECRET_KEY_CHANGE_IN_PRODUCTION",
+        "jwt_algorithm": "HS256",
+        "access_token_expire_minutes": 420,
+        "refresh_token_expire_days": 7,
+        "permissions_enabled": false
+      },
+      "logging": {
+        "level": "INFO",
+        "log_dir": "logs",
+        "max_bytes": 10485760,
+        "backup_count": 5,
+        "truncate_limit": 1000
+      }
+    },
+    "rag_worker": {
+      "service": {
+        "name": "rag-worker",
+        "version": "1.0.0"
+      },
+      "database": {
+        "shared_url": "${DATABASE__SHARED_URL}",
+        "rag_url": "${DATABASE__RAG_URL}",
+        "redis_url": "${DATABASE__REDIS_URL}"
+      },
+      "tasks": {
+        "broker_url": "${TASKS__BROKER_URL}"
+      },
+      "rag": {
+        "enabled": true,
+        "default_provider": "pgvector",
+        "providers": {
+          "pgvector": {
+            "enabled": true,
+            "db_url": "${DATABASE__RAG_URL}",
+            "embedding_api_key": "${RAG__EMBEDDING_API_KEY}"
+          }
+        },
+        "embedding": {
+          "model": "baai/bge-m3",
+          "dimension": 1024
+        }
+      },
+      "logging": {
+        "level": "INFO",
+        "format": "json"
       }
     }
   }

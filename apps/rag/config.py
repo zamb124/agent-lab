@@ -3,7 +3,6 @@
 """
 
 from typing import Optional
-from pathlib import Path
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
@@ -31,8 +30,7 @@ def get_rag_settings() -> RAGSettings:
     """
     global _rag_settings
     if _rag_settings is None:
-        service_config_path = Path(__file__).parent / "conf.json"
-        merged_config = load_merged_config(service_config_path=service_config_path)
+        merged_config = load_merged_config(service_name="rag")
         _rag_settings = RAGSettings(**merged_config)
     
     return _rag_settings

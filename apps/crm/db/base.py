@@ -52,7 +52,9 @@ class CRMDatabase:
         if cls._instance is None:
             if db_url is None:
                 from core.config import get_settings
-                db_url = get_settings().database.url
+                db_url = get_settings().database.crm_url
+                if not db_url:
+                    raise ValueError("database.crm_url не задан")
             cls._instance = cls(db_url)
         return cls._instance
     

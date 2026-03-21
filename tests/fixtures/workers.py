@@ -18,6 +18,8 @@ from typing import Any, Dict, List
 import pytest
 from filelock import FileLock
 
+from tests.fixtures.test_database_env import TEST_DATABASE_ENV
+
 
 # Константы для файлов блокировки и PID
 _TASKIQ_WORKER_LOCK = "/tmp/platform_test_taskiq_worker.lock"
@@ -330,8 +332,8 @@ def taskiq_worker():
         pid_file=_TASKIQ_WORKER_PID,
         command=[sys.executable, "-m", "taskiq", "worker", "apps.broker.worker:broker", "-w", "2"],
         env={
+            **TEST_DATABASE_ENV,
             "TESTING": "true",
-            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
@@ -374,9 +376,8 @@ def rag_worker():
         pid_file=_RAG_WORKER_PID,
         command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:broker", "-w", "2"],
         env={
+            **TEST_DATABASE_ENV,
             "TESTING": "true",
-            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
-            "DATABASE__SHARED_URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_shared_test",
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
@@ -436,8 +437,8 @@ def taskiq_scheduler():
         stderr=stderr_log,
         env={
             **os.environ,
+            **TEST_DATABASE_ENV,
             "TESTING": "true",
-            "DATABASE__URL": "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_test",
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",

@@ -65,8 +65,27 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose-prod.yaml,conf.json,apps/agents/conf.json,apps/crm/conf.json,apps/frontend/conf.json,apps/rag/conf.json,apps/rag_worker/conf.json,apps/sync/conf.json"
+          source: "docker-compose-prod.yaml,conf.json"
           target: /opt/agent-lab/
+
+      # docker-compose-prod монтирует ./migrations/postgres/init.sql — без файла на хосте
+      # первый старт Postgres с пустым volume не создаст platform_agents и остальные БД.
+      - name: Ensure migrations path on server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: mkdir -p /opt/agent-lab/migrations/postgres
+
+      - name: Copy Postgres init.sql for volume mount
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "migrations/postgres/init.sql"
+          target: /opt/agent-lab/migrations/postgres/
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1

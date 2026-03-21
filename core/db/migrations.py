@@ -1,193 +1,177 @@
 """
-Функции для запуска Alembic миграций.
+Функции для запуска Alembic миграций по всем сервисным БД.
 
-Используется для автоматического запуска миграций при старте сервиса в dev режиме.
-Поддерживает multi-db через service_registry.
+Каждый сервис имеет собственное Alembic-дерево в migrations/<service>/.
+
+Перед вызовом run_migrations_async() реестр должен быть заполнен (см. migrations/services.json
+и core.db.migration_manifest.bootstrap_migration_registry).
 """
 
 import logging
 from pathlib import Path
 
-from alembic.config import Config
 from alembic import command
+from alembic.config import Config
 
 logger = logging.getLogger(__name__)
 
 
-def _get_alembic_config(migration_path: str = "migrations") -> Config | None:
-    """
-    Создает конфигурацию Alembic.
-    
-    Args:
-        migration_path: Путь к директории с миграциями
-        
-    Returns:
-        Config или None если alembic.ini не найден
-    """
-    project_root = Path(__file__).parent.parent.parent
-    alembic_ini_path = project_root / migration_path / "alembic.ini"
-    
-    if not alembic_ini_path.exists():
-        logger.warning(f"alembic.ini not found at {alembic_ini_path}")
+def _get_project_root() -> Path:
+    return Path(__file__).parent.parent.parent
+
+
+def _make_alembic_config(script_location: str, db_url: str) -> Config | None:
+    root = _get_project_root()
+    ini_path = root / script_location / "alembic.ini"
+
+    if not ini_path.exists():
+        logger.warning(f"alembic.ini не найден: {ini_path}")
         return None
-    
-    alembic_cfg = Config(str(alembic_ini_path))
-    alembic_cfg.set_main_option("script_location", str(project_root / migration_path))
-    
-    return alembic_cfg
+
+    cfg = Config(str(ini_path))
+    cfg.set_main_option("script_location", str(root / script_location))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    return cfg
 
 
-def run_migrations(migration_path: str = "migrations") -> None:
+def _assert_full_registry() -> None:
+    from core.db.migration_manifest import get_migration_service_names
+    from core.db.service_registry import get_all_services
+
+    expected = set(get_migration_service_names())
+    names = {s.name for s in get_all_services()}
+    missing = expected - names
+    if missing:
+        raise ValueError(
+            "Реестр миграций неполный, не хватает сервисов: "
+            f"{sorted(missing)}. Вызовите core.db.migration_manifest.bootstrap_migration_registry() "
+            "или: python -m scripts.db_migrate …"
+        )
+
+
+def run_migrations() -> None:
+    import asyncio
+
+    asyncio.run(run_migrations_async())
+
+
+async def run_migrations_async(service: str | None = None) -> None:
     """
-    Запускает все pending миграции (синхронно через asyncio.run).
-    
-    Использовать при запуске из sync контекста (CLI, Makefile).
-    Итерируется по всем уникальным БД из service_registry.
-    
+    Применяет upgrade head.
+
     Args:
-        migration_path: Путь к директории с миграциями
-    """
-    alembic_cfg = _get_alembic_config(migration_path)
-    if not alembic_cfg:
-        return
-    
-    logger.info(f"Running migrations from {migration_path}...")
-    command.upgrade(alembic_cfg, "head")
-    logger.info("Migrations completed")
-
-
-async def run_migrations_async(migration_path: str = "migrations") -> None:
-    """
-    Запускает все pending миграции (асинхронно).
-    
-    Использовать при запуске из async контекста (FastAPI lifespan, pytest-asyncio).
-    Итерируется по всем уникальным БД из service_registry.
-    Передает connection через cfg.attributes чтобы избежать asyncio.run() внутри event loop.
-    
-    Args:
-        migration_path: Путь к директории с миграциями
+        service: если задано — только это дерево; иначе все сервисы из реестра.
     """
     from sqlalchemy import pool
     from sqlalchemy.ext.asyncio import create_async_engine
-    from core.db.service_registry import get_unique_db_urls
-    
-    alembic_cfg = _get_alembic_config(migration_path)
-    if not alembic_cfg:
-        return
-    
-    db_urls = get_unique_db_urls()
-    
-    if not db_urls:
-        logger.warning("No database URLs registered, skipping migrations")
-        return
-    
-    logger.info(f"Running async migrations from {migration_path}...")
-    
-    for db_url, services in db_urls.items():
-        logger.info(f"Migrating DB for services: {services}")
-        
+    from core.db.service_registry import get_all_services
+
+    _assert_full_registry()
+
+    services = get_all_services()
+    if service is not None:
+        services = [s for s in services if s.name == service]
+        if not services:
+            raise ValueError(f"Сервис {service!r} не найден в реестре")
+
+    for svc in services:
+        db_url = svc.get_db_url()
+        cfg = _make_alembic_config(svc.alembic_script_location, db_url)
+        if cfg is None:
+            continue
+
+        logger.info(f"Миграция сервиса '{svc.name}' → {db_url[:60]}…")
+
         engine = create_async_engine(db_url, poolclass=pool.NullPool)
-        
-        async with engine.begin() as conn:
-            await conn.run_sync(_run_upgrade_with_connection, alembic_cfg)
-        
+        async with engine.connect() as conn:
+            await conn.run_sync(_run_upgrade, cfg)
         await engine.dispose()
-        
-        logger.info(f"Migrations completed for: {services}")
+
+        logger.info(f"Миграция '{svc.name}' завершена")
 
 
-def _run_upgrade_with_connection(connection, alembic_cfg: Config) -> None:
-    """
-    Запускает upgrade передавая connection через attributes.
-    
-    Args:
-        connection: SQLAlchemy connection
-        alembic_cfg: Alembic Config
-    """
-    alembic_cfg.attributes["connection"] = connection
-    command.upgrade(alembic_cfg, "head")
+def _run_upgrade(sync_conn, cfg: Config) -> None:
+    cfg.attributes["connection"] = sync_conn
+    command.upgrade(cfg, "head")
 
 
-def get_current_revision(migration_path: str = "migrations") -> str | None:
-    """
-    Возвращает текущую версию миграции.
-    
-    Args:
-        migration_path: Путь к директории с миграциями
-        
-    Returns:
-        ID текущей ревизии или None если миграции не применялись
-    """
-    from alembic.script import ScriptDirectory
-    from alembic.runtime.migration import MigrationContext
-    from sqlalchemy import create_engine
-    from core.db.service_registry import get_unique_db_urls
-    
-    alembic_cfg = _get_alembic_config(migration_path)
-    if not alembic_cfg:
-        return None
-    
-    script = ScriptDirectory.from_config(alembic_cfg)
-    
-    # Берем первую БД из реестра
-    db_urls = get_unique_db_urls()
-    if not db_urls:
-        return None
-    
-    db_url = list(db_urls.keys())[0]
-    sync_url = db_url.replace("+asyncpg", "")
-    engine = create_engine(sync_url)
-    
-    with engine.connect() as conn:
-        ctx = MigrationContext.configure(conn)
-        return ctx.get_current_revision()
+async def run_downgrade_async(service: str, revision: str) -> None:
+    from sqlalchemy import pool
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from core.db.service_registry import get_service_by_name
+
+    _assert_full_registry()
+    svc = get_service_by_name(service)
+    db_url = svc.get_db_url()
+    cfg = _make_alembic_config(svc.alembic_script_location, db_url)
+    if cfg is None:
+        raise ValueError(f"Нет alembic.ini для сервиса {service!r}")
+
+    engine = create_async_engine(db_url, poolclass=pool.NullPool)
+    async with engine.connect() as conn:
+        await conn.run_sync(_run_downgrade, cfg, revision)
+    await engine.dispose()
 
 
-def get_pending_migrations(migration_path: str = "migrations") -> list[str]:
-    """
-    Возвращает список pending миграций.
-    
-    Args:
-        migration_path: Путь к директории с миграциями
-        
-    Returns:
-        Список ID ревизий которые ещё не применены
-    """
-    from alembic.script import ScriptDirectory
-    from alembic.runtime.migration import MigrationContext
-    from sqlalchemy import create_engine
-    from core.db.service_registry import get_unique_db_urls
-    
-    alembic_cfg = _get_alembic_config(migration_path)
-    if not alembic_cfg:
-        return []
-    
-    script = ScriptDirectory.from_config(alembic_cfg)
-    
-    # Берем первую БД из реестра
-    db_urls = get_unique_db_urls()
-    if not db_urls:
-        return []
-    
-    db_url = list(db_urls.keys())[0]
-    sync_url = db_url.replace("+asyncpg", "")
-    engine = create_engine(sync_url)
-    
-    with engine.connect() as conn:
-        ctx = MigrationContext.configure(conn)
-        current = ctx.get_current_revision()
-        
-    pending = []
-    for rev in script.walk_revisions():
-        if current is None or rev.revision != current:
-            pending.append(rev.revision)
-        if rev.revision == current:
-            break
-            
-    return pending
+def _run_downgrade(sync_conn: object, cfg: Config, revision: str) -> None:
+    cfg.attributes["connection"] = sync_conn
+    command.downgrade(cfg, revision)
 
 
-if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    run_migrations()
+async def run_current_async(service: str) -> None:
+    from sqlalchemy import pool
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from core.db.service_registry import get_service_by_name
+
+    _assert_full_registry()
+    svc = get_service_by_name(service)
+    db_url = svc.get_db_url()
+    cfg = _make_alembic_config(svc.alembic_script_location, db_url)
+    if cfg is None:
+        raise ValueError(f"Нет alembic.ini для сервиса {service!r}")
+
+    engine = create_async_engine(db_url, poolclass=pool.NullPool)
+    async with engine.connect() as conn:
+        await conn.run_sync(_run_current, cfg)
+    await engine.dispose()
+
+
+def _run_current(sync_conn: object, cfg: Config) -> None:
+    cfg.attributes["connection"] = sync_conn
+    command.current(cfg)
+
+
+def run_history(service: str) -> None:
+    from core.db.service_registry import get_service_by_name
+
+    _assert_full_registry()
+    svc = get_service_by_name(service)
+    db_url = svc.get_db_url()
+    cfg = _make_alembic_config(svc.alembic_script_location, db_url)
+    if cfg is None:
+        raise ValueError(f"Нет alembic.ini для сервиса {service!r}")
+    command.history(cfg)
+
+
+def run_heads(service: str) -> None:
+    from core.db.service_registry import get_service_by_name
+
+    _assert_full_registry()
+    svc = get_service_by_name(service)
+    db_url = svc.get_db_url()
+    cfg = _make_alembic_config(svc.alembic_script_location, db_url)
+    if cfg is None:
+        raise ValueError(f"Нет alembic.ini для сервиса {service!r}")
+    command.heads(cfg)
+
+
+def run_revision(service: str, message: str, *, autogenerate: bool) -> None:
+    from core.db.service_registry import get_service_by_name
+
+    _assert_full_registry()
+    svc = get_service_by_name(service)
+    db_url = svc.get_db_url()
+    cfg = _make_alembic_config(svc.alembic_script_location, db_url)
+    if cfg is None:
+        raise ValueError(f"Нет alembic.ini для сервиса {service!r}")
+    command.revision(cfg, message=message, autogenerate=autogenerate)

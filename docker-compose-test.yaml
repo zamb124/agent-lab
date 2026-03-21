@@ -3,17 +3,19 @@ name: agentlab-test
 services:
   postgres-test:
     platform: "linux/amd64"
-    image: pgvector/pgvector:pg15
+    image: pgvector/pgvector:pg17
     container_name: agentlab_postgres_test
     environment:
-      POSTGRES_DB: platform_test
+      POSTGRES_DB: platform_shared
       POSTGRES_USER: platform_user
       POSTGRES_PASSWORD: admin
     ports:
       - "54322:5432"
+    volumes:
+      - ./migrations/postgres/init.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
     command: postgres -c max_connections=300
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_test"]
+      test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_shared"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -86,7 +88,11 @@ services:
       postgres-test:
         condition: service_healthy
     environment:
-      - DATABASE__URL=postgresql://platform_user:admin@postgres-test:5432/platform_test
+      - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
+      - DATABASE__AGENTS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
+      - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
+      - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
+      - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -108,7 +114,11 @@ services:
       postgres-test:
         condition: service_healthy
     environment:
-      - DATABASE__URL=postgresql://platform_user:admin@postgres-test:5432/platform_test
+      - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
+      - DATABASE__AGENTS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
+      - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
+      - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
+      - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -131,7 +141,8 @@ services:
       postgres-test:
         condition: service_healthy
     environment:
-      - DATABASE__URL=postgresql://platform_user:admin@postgres-test:5432/platform_test
+      - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
+      - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -163,7 +174,11 @@ services:
       rag-worker-test:
         condition: service_started
     environment:
-      - DATABASE__URL=postgresql://platform_user:admin@postgres-test:5432/platform_test
+      - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
+      - DATABASE__AGENTS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
+      - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
+      - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
+      - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true

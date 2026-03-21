@@ -172,11 +172,7 @@ deploy-rag:
 conf:
 	@echo "Копирование conf.json на продакшен..."
 	scp conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/conf.json
-	scp apps/agents/conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/apps/agents/conf.json
-	scp apps/frontend/conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/apps/frontend/conf.json
-	scp apps/crm/conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/apps/crm/conf.json
-	scp apps/rag/conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/apps/rag/conf.json
-	@echo "Конфиги скопированы!"
+	@echo "Конфиг скопирован (единый корневой conf.json, слои сервисов внутри services.*)."
 
 deploy-code: docker-build docker-push
 	@echo "Deploy with code changes (uses Docker cache for deps)..."

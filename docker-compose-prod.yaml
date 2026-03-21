@@ -7,8 +7,11 @@ name: agentlab-prod
 # Общие переменные окружения
 # ============================================
 x-common-env: &common-env
-  DATABASE__URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_db
-  DATABASE__SHARED_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_db
+  DATABASE__SHARED_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_shared
+  DATABASE__AGENTS_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_agents
+  DATABASE__CRM_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_crm
+  DATABASE__SYNC_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_sync
+  DATABASE__RAG_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_rag
   DATABASE__REDIS_URL: redis://redis:6379/0
   DATABASE__AUTO_MIGRATE: "false"
   TASKS__BROKER_URL: redis://redis:6379/1
@@ -18,7 +21,6 @@ x-common-env: &common-env
   SERVER__CRM_SERVICE_URL: http://crm:8003
   SERVER__RAG_SERVICE_URL: http://rag:8004
   SERVER__SYNC_SERVICE_URL: http://sync:8005
-  DATABASE__SYNC_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_db
   AUTH__JWT_SECRET: ${AUTH__JWT_SECRET:-change-me-in-production}
   AUTH__PROVIDERS__YANDEX__CLIENT_ID: ${AUTH_YANDEX_CLIENT_ID}
   AUTH__PROVIDERS__YANDEX__CLIENT_SECRET: ${AUTH_YANDEX_CLIENT_SECRET}
@@ -49,17 +51,18 @@ services:
   # Infrastructure
   # ============================================
   postgres:
-    image: pgvector/pgvector:pg15
+    image: pgvector/pgvector:pg17
     container_name: agentlab_postgres
     environment:
-      POSTGRES_DB: platform_db
+      POSTGRES_DB: platform_shared
       POSTGRES_USER: platform_user
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./migrations/postgres/init.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
     command: postgres -c max_connections=300
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_db"]
+      test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_shared"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -90,7 +93,7 @@ services:
   migrations:
     <<: *app
     container_name: agentlab_migrations
-    command: ["python", "-m", "core.db.migrations"]
+    command: ["python", "-m", "scripts.db_migrate", "upgrade"]
     volumes:
       - ./conf.json:/app/conf.json:ro
     depends_on:
@@ -109,7 +112,6 @@ services:
       - "8001:8001"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - ./apps/agents/conf.json:/app/apps/agents/conf.json:ro
       - agents_logs:/app/logs
     environment:
       <<: *common-env
@@ -135,7 +137,6 @@ services:
       - "8002:8002"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - ./apps/frontend/conf.json:/app/apps/frontend/conf.json:ro
       - frontend_logs:/app/logs
     environment:
       <<: *common-env
@@ -161,7 +162,6 @@ services:
       - "8003:8003"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - ./apps/crm/conf.json:/app/apps/crm/conf.json:ro
       - crm_logs:/app/logs
     environment:
       <<: *common-env
@@ -187,7 +187,6 @@ services:
       - "8004:8004"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - ./apps/rag/conf.json:/app/apps/rag/conf.json:ro
       - rag_logs:/app/logs
     environment:
       <<: *common-env
@@ -213,7 +212,6 @@ services:
       - "8005:8005"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - ./apps/sync/conf.json:/app/apps/sync/conf.json:ro
       - sync_logs:/app/logs
     environment:
       <<: *common-env
@@ -276,7 +274,6 @@ services:
     command: ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - ./apps/rag_worker/conf.json:/app/apps/rag_worker/conf.json:ro
       - rag_worker_logs:/app/logs
     environment:
       <<: *common-env

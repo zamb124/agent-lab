@@ -8,6 +8,7 @@ import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncAPIService } from '../services/sync-api.service.js';
 import { SyncWsService } from '../services/sync-ws.service.js';
 import { SyncStore } from '../store/sync.store.js';
+import { lanePreviewFromMessagePayload } from '../utils/lane-preview.js';
 import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/layout/platform-island.js';
 
@@ -117,6 +118,7 @@ export class SyncApp extends PlatformApp {
             SyncStore.loadCompanyMembers(syncApi),
         ]);
 
+        SyncStore.sanitizeChatSelectionAfterLoad();
         await this._restoreLastSelection();
         this._connectWs();
     }
@@ -181,8 +183,65 @@ export class SyncApp extends PlatformApp {
             const p = msg.payload;
             if (!p || typeof p !== 'object') return;
 
+            if (msg.type === 'channel.member_added') {
+                const authUser = ServiceRegistry.auth?.user;
+                const myId = authUser?.id;
+                const added = p.added_user_id;
+                if (
+                    typeof myId === 'string'
+                    && myId !== ''
+                    && typeof added === 'string'
+                    && added === myId
+                ) {
+                    const syncApi = ServiceRegistry.get('syncApi');
+                    SyncStore.loadChannels(syncApi);
+                }
+                return;
+            }
+
+            if (msg.type === 'channel.read_updated') {
+                const authUser = ServiceRegistry.auth?.user;
+                const myId = authUser?.id;
+                if (
+                    typeof myId === 'string'
+                    && myId !== ''
+                    && p.reader_user_id === myId
+                    && typeof p.channel_id === 'string'
+                ) {
+                    SyncStore.patchChannelFields(p.channel_id, { unread_count: 0 });
+                }
+                return;
+            }
+
             if (msg.type === 'message.created' && selectedChannelId && p.channel_id === selectedChannelId) {
                 SyncStore.upsertMessage(p);
+                return;
+            }
+
+            if (msg.type === 'message.created' && !p.thread_id && typeof p.channel_id === 'string') {
+                if (p.channel_id === selectedChannelId) {
+                    return;
+                }
+                const list = SyncStore.state.channels.list;
+                if (!list.some((c) => c.id === p.channel_id)) {
+                    return;
+                }
+                const authUser = ServiceRegistry.auth?.user;
+                const myId = authUser?.id;
+                if (typeof myId !== 'string' || myId === '') {
+                    throw new Error('Нет user id для синхронизации списка каналов.');
+                }
+                const preview = lanePreviewFromMessagePayload(p);
+                const patch = {
+                    last_message_preview: preview,
+                    last_message_at: p.sent_at,
+                };
+                if (p.sender?.id !== myId) {
+                    const cur = list.find((c) => c.id === p.channel_id);
+                    const n = (typeof cur?.unread_count === 'number' ? cur.unread_count : 0) + 1;
+                    patch.unread_count = n;
+                }
+                SyncStore.patchChannelFields(p.channel_id, patch);
                 return;
             }
             if (msg.type === 'message.updated' && selectedChannelId && p.channel_id === selectedChannelId) {

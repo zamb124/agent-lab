@@ -44,6 +44,18 @@ class ChannelRead(BaseModel):
         default=None,
         description="Собеседник в direct (участник, отличный от текущего пользователя).",
     )
+    unread_count: int = Field(
+        default=0,
+        description="Число непрочитанных сообщений в основной ленте (не треды).",
+    )
+    last_message_preview: str | None = Field(
+        default=None,
+        description="Краткий текст последнего сообщения основной ленты.",
+    )
+    last_message_at: datetime | None = Field(
+        default=None,
+        description="Время последнего сообщения основной ленты.",
+    )
 
 
 class ChannelCreate(BaseModel):

@@ -249,20 +249,21 @@ export class MessageBubble extends PlatformElement {
 
             .bubble {
                 position: relative;
+                min-width: 0;
                 max-width: min(720px, 90%);
                 border-radius: var(--radius-2xl);
-                padding: var(--space-3) var(--space-4);
+                padding: var(--space-2) var(--space-3);
                 border: 1px solid;
             }
 
             .bubble--forwarded .bubble-header {
-                padding-left: 22px;
+                padding-left: 18px;
             }
 
             .forwarded-corner {
                 position: absolute;
-                left: 10px;
-                top: 10px;
+                left: 8px;
+                top: 8px;
                 z-index: 1;
                 display: flex;
                 align-items: center;
@@ -290,8 +291,8 @@ export class MessageBubble extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                gap: var(--space-3);
-                margin-bottom: var(--space-2);
+                gap: var(--space-2);
+                margin-bottom: var(--space-1);
             }
 
             .bubble-header-end {
@@ -319,7 +320,7 @@ export class MessageBubble extends PlatformElement {
             .bubble-body {
                 display: flex;
                 align-items: flex-end;
-                gap: var(--space-2);
+                gap: var(--space-1);
             }
 
             .bubble-contents {
@@ -361,12 +362,6 @@ export class MessageBubble extends PlatformElement {
                 text-underline-offset: 4px;
             }
 
-            .sender-own {
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-            }
-
             .thread-btn {
                 background: transparent;
                 border: 1px solid var(--glass-border-subtle);
@@ -387,14 +382,16 @@ export class MessageBubble extends PlatformElement {
             .bubble-contents .contents-inner {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-2);
+                gap: var(--space-1);
             }
 
             .msg-text {
                 font-size: var(--text-base);
                 color: var(--text-primary);
                 white-space: pre-wrap;
-                line-height: 1.6;
+                overflow-wrap: anywhere;
+                word-break: normal;
+                line-height: 1.45;
             }
 
             .code-block {
@@ -431,51 +428,88 @@ export class MessageBubble extends PlatformElement {
                 color: var(--error);
             }
 
-            .reply-preview {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                border-left: 3px solid var(--accent);
-                padding-left: var(--space-2);
-                margin-bottom: var(--space-2);
+            .reply-quote {
+                display: block;
+                width: 100%;
+                margin: 0 0 var(--space-1) 0;
+                padding: var(--space-1) var(--space-2);
+                border: none;
+                border-radius: var(--radius-md);
+                text-align: left;
+                cursor: pointer;
+                font: inherit;
                 max-width: 100%;
+                box-sizing: border-box;
+                border-left: 4px solid var(--text-tertiary);
+                background: var(--glass-solid-subtle);
+            }
+
+            .reply-quote--parent-own {
+                border-left-color: rgb(5, 150, 105);
+                background: rgba(16, 185, 129, 0.26);
+            }
+
+            .reply-quote--parent-other {
+                border-left-color: rgb(2, 132, 199);
+                background: rgba(147, 197, 253, 0.52);
+            }
+
+            .reply-quote--unknown {
+                border-left-color: var(--text-tertiary);
+                background: var(--glass-solid-subtle);
+            }
+
+            .reply-quote:hover {
+                filter: brightness(0.97);
+            }
+
+            .reply-quote:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 1px;
+            }
+
+            .reply-quote__author {
+                display: block;
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                margin-bottom: 1px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
 
-            button.reply-preview {
-                display: block;
-                width: 100%;
-                margin: 0;
-                border: none;
-                background: transparent;
-                font: inherit;
-                color: inherit;
-                text-align: left;
-                cursor: pointer;
-                border-radius: var(--radius-md);
+            .reply-quote--parent-own .reply-quote__author {
+                color: rgb(4, 120, 87);
             }
 
-            button.reply-preview:hover {
+            .reply-quote--parent-other .reply-quote__author {
+                color: rgb(3, 105, 161);
+            }
+
+            .reply-quote--unknown .reply-quote__author {
                 color: var(--text-secondary);
             }
 
-            button.reply-preview:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 1px;
+            .reply-quote__text {
+                display: block;
+                font-size: var(--text-xs);
+                color: var(--text-primary);
+                line-height: 1.35;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             .edited-badge {
                 font-size: 10px;
                 color: var(--text-tertiary);
-                margin-left: var(--space-2);
             }
 
             .reactions-row {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 4px;
-                margin-top: var(--space-2);
+                margin-top: var(--space-1);
             }
 
             .reaction-chip {
@@ -642,15 +676,25 @@ export class MessageBubble extends PlatformElement {
         if (!pid) return null;
         const all = SyncStore.getDisplayMessages();
         const p = all.find(m => m.id === pid);
-        let label = 'Ответ на сообщение';
-        if (p) {
-            const snippet = extractPlainText(p).slice(0, 120);
-            const who = toShortUsername(p.sender?.display_name ?? '');
-            label = `Ответ ${who}: ${snippet}`;
-        }
+        const myId = ServiceRegistry.auth?.user?.id;
+        const parentIsOwn =
+            typeof myId === 'string' &&
+            p &&
+            typeof p.sender?.id === 'string' &&
+            p.sender.id === myId;
+        const quoteClass = !p
+            ? 'reply-quote--unknown'
+            : parentIsOwn
+              ? 'reply-quote--parent-own'
+              : 'reply-quote--parent-other';
+        const who = p ? toShortUsername(p.sender?.display_name ?? '') : 'Сообщение';
+        const snippetRaw = p ? extractPlainText(p).slice(0, 160) : '';
+        const snippet = snippetRaw !== '' ? snippetRaw : 'Сообщение';
+
         return html`
-            <button type="button" class="reply-preview" @click=${this._onReplyPreviewClick}>
-                ${label}
+            <button type="button" class="reply-quote ${quoteClass}" @click=${this._onReplyPreviewClick}>
+                <span class="reply-quote__author">${who}</span>
+                <span class="reply-quote__text">${snippet}</span>
             </button>
         `;
     }
@@ -686,6 +730,9 @@ export class MessageBubble extends PlatformElement {
         const { msg, isOwn, canFocusThread, flashActive, deleting } = this;
         const sorted = [...(msg.contents ?? [])].sort((a, b) => a.order - b.order);
         const fwdMeta = this._forwardedMeta();
+        const hasEdited = Boolean(msg.edited_at);
+        const hasHeaderEnd = this._isPinned() || canFocusThread;
+        const showBubbleHeader = !isOwn || hasEdited || hasHeaderEnd;
 
         return html`
             <div
@@ -710,33 +757,33 @@ export class MessageBubble extends PlatformElement {
                             <platform-icon name="share" size="12"></platform-icon>
                         </span>
                     ` : ''}
-                    <div class="bubble-header">
-                        <div class="sender-info">
-                            ${isOwn ? html`
-                                <span class="sender-own">${toShortUsername(msg.sender?.display_name ?? '')}</span>
-                            ` : html`
-                                <button
-                                    class="sender-btn"
-                                    @click=${() => { this._profileOpen = true; }}
-                                >
-                                    ${toShortUsername(msg.sender?.display_name ?? '')}
-                                </button>
-                            `}
-                            ${msg.edited_at ? html`<span class="edited-badge">изм.</span>` : ''}
-                        </div>
-                        ${this._isPinned() || canFocusThread ? html`
-                            <div class="bubble-header-end">
-                                ${this._isPinned() ? html`
-                                    <span class="pin-mark" title="Закреплено">
-                                        <platform-icon name="target" size="12"></platform-icon>
-                                    </span>
+                    ${showBubbleHeader ? html`
+                        <div class="bubble-header">
+                            <div class="sender-info">
+                                ${!isOwn ? html`
+                                    <button
+                                        class="sender-btn"
+                                        @click=${() => { this._profileOpen = true; }}
+                                    >
+                                        ${toShortUsername(msg.sender?.display_name ?? '')}
+                                    </button>
                                 ` : ''}
-                                ${canFocusThread ? html`
-                                    <button class="thread-btn" @click=${this._focusThread}>Тред</button>
-                                ` : ''}
+                                ${hasEdited ? html`<span class="edited-badge">изм.</span>` : ''}
                             </div>
-                        ` : ''}
-                    </div>
+                            ${hasHeaderEnd ? html`
+                                <div class="bubble-header-end">
+                                    ${this._isPinned() ? html`
+                                        <span class="pin-mark" title="Закреплено">
+                                            <platform-icon name="target" size="12"></platform-icon>
+                                        </span>
+                                    ` : ''}
+                                    ${canFocusThread ? html`
+                                        <button class="thread-btn" @click=${this._focusThread}>Тред</button>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : ''}
                     ${this._parentPreview()}
                     <div class="bubble-body">
                         <div class="bubble-contents">

@@ -36,11 +36,9 @@ def get_frontend_settings() -> FrontendSettings:
     """
     global _frontend_settings
     if _frontend_settings is None:
-        from pathlib import Path
         from core.config.loader import load_merged_config
-        
-        service_config_path = Path(__file__).parent / "conf.json"
-        merged_config = load_merged_config(service_config_path=service_config_path)
+
+        merged_config = load_merged_config(service_name="frontend")
         _frontend_settings = FrontendSettings(**merged_config)
     
     return _frontend_settings

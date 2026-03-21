@@ -22,7 +22,7 @@ from core.db.storage import Storage
 from core.db.base_repository import BaseRepository
 from core.db.base_sql_repository import BaseSQLRepository
 from core.db.migrations import run_migrations, run_migrations_async
-from core.db.service_registry import register_service, get_unique_db_urls
+from core.db.service_registry import register_service, get_unique_db_urls, get_service_by_name
 
 __all__ = [
     "get_engine",
@@ -36,6 +36,7 @@ __all__ = [
     "run_migrations_async",
     "register_service",
     "get_unique_db_urls",
+    "get_service_by_name",
     "Storage",
     "BaseRepository",
     "BaseSQLRepository",

@@ -50,7 +50,9 @@ class SyncDatabase:
             if db_url is None:
                 from core.config import get_settings
                 settings = get_settings()
-                db_url = settings.database.sync_url or settings.database.url
+                db_url = settings.database.sync_url
+                if not db_url:
+                    raise ValueError("database.sync_url не задан")
             cls._instance = cls(db_url)
         return cls._instance
 
@@ -121,6 +123,11 @@ class SyncDatabase:
                 "sync_messages.forwarded_from_channel_name",
                 "ALTER TABLE sync_messages ADD COLUMN IF NOT EXISTS "
                 "forwarded_from_channel_name VARCHAR(255) NULL",
+            ),
+            (
+                "sync_channel_members.last_read_at",
+                "ALTER TABLE sync_channel_members ADD COLUMN IF NOT EXISTS "
+                "last_read_at TIMESTAMP WITH TIME ZONE NULL",
             ),
         ]
         for _label, sql in statements:
