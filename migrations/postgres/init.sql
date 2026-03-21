@@ -16,5 +16,8 @@ GRANT ALL PRIVILEGES ON DATABASE platform_rag TO platform_user;
 \connect platform_shared
 CREATE EXTENSION IF NOT EXISTS vector;
 
+\connect platform_crm
+CREATE EXTENSION IF NOT EXISTS vector;
+
 \connect platform_rag
 CREATE EXTENSION IF NOT EXISTS vector;

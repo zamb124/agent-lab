@@ -27,13 +27,19 @@ alwaysApply: false
 | sync    | platform_sync     | migrations/sync/      | DATABASE__SYNC_URL          |
 | rag     | platform_rag      | migrations/rag/       | DATABASE__RAG_URL           |
 
+**Таблицы по БД (важно для baseline и JOIN):**
+
+- **platform_agents**: KV-таблицы агентов/nodes/tools/… плюс **`storage`** (префиксы `llm_model:`, embed, файлы) и **`mcp_servers`** — не путать с `storage` в `platform_shared`.
+- **platform_crm**: реляционные CRM-таблицы плюс **`vector_documents`** (pgvector) для `JOIN crm_entities` при семантическом поиске; дубли по смыслу с RAG не смешиваются: RAG-документы живут в **platform_rag**, сущности CRM — в **platform_crm**.
+- **platform_rag**: `document_processing_status`, `vector_documents` для пайплайна RAG.
+
 У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `agents` Alembic не найдёт эту ревизию в `migrations/agents/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт.
 
 ## PostgreSQL и pgvector
 
 Расширение в SQL называется **`vector`** (пакет pgvector в каталоге PostgreSQL), не `pgvector`. В миграциях: `CREATE EXTENSION IF NOT EXISTS vector`.
 
-Нужен сервер с установленным pgvector: образ **`pgvector/pgvector:pg17`** (`docker-compose-dev.yaml`, `docker-compose-prod.yaml`, `docker-compose-test.yaml`) или сборка Postgres с пакетом pgvector на хосте. Обычный `postgres:17` без pgvector миграции shared/rag не пройдут.
+Нужен сервер с установленным pgvector: образ **`pgvector/pgvector:pg17`** (`docker-compose-dev.yaml`, `docker-compose-prod.yaml`, `docker-compose-test.yaml`) или сборка Postgres с пакетом pgvector на хосте. Обычный `postgres:17` без pgvector миграции shared/crm/rag не пройдут. В `init.sql` расширение `vector` подключается к `platform_shared`, `platform_crm`, `platform_rag` (см. `services.json` → `postgres.vector_extensions`).
 
 ## Структура папки migrations/
 

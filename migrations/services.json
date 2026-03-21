@@ -34,6 +34,6 @@
       "platform_sync",
       "platform_rag"
     ],
-    "vector_extensions": ["platform_shared", "platform_rag"]
+    "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]
   }
 }
