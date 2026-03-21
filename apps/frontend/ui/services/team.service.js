@@ -12,10 +12,10 @@ export class TeamService extends BaseService {
     }
     
     /**
-     * Пригласить нового участника
+     * Создать ссылку-приглашение в компанию
      */
-    async inviteMember(email, role) {
-        return this.post('/api/team/invite', { email, role });
+    async generateInviteLink(role = 'developer') {
+        return this.post('/api/invites/generate', { role });
     }
     
     /**

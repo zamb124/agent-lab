@@ -22,6 +22,8 @@ SKIP_PATHS = [
     "/static/*",
     "/.well-known/*",
     "/favicon.ico",
+    "/apple-touch-icon.png",
+    "/apple-touch-icon-precomposed.png",
     "/health",
     "/agents/health",
     "/crm/health",
@@ -82,6 +84,9 @@ ROUTE_RULES: List[RouteRule] = [
     # АВТОРИЗАЦИЯ ТРЕБУЕТСЯ, НО СУБДОМЕН НЕ ОБЯЗАТЕЛЕН
     # ============================================================================
     
+    # Страница принятия инвайта — публичная (JS сам проверяет авторизацию)
+    RouteRule("/join", auth_required=False, context_type="anonymous"),
+
     # Управление компаниями (пользователь авторизован, но ещё не выбрал компанию)
     RouteRule("/select-company", context_type="frontend", auth_required=True),
     RouteRule("/api/companies/check-slug", context_type="frontend", auth_required=True),
@@ -95,6 +100,13 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/frontend/api/embed/configs/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/embed/configs", context_type="api", auth_required=True),
     
+    # Принятие инвайта (auth, но без субдомена — пользователь ещё может не иметь компании)
+    RouteRule("/api/invites/accept", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/api/invites/accept", context_type="frontend", auth_required=True),
+    # Генерация инвайта (auth + субдомен — только owner/admin действующей компании)
+    RouteRule("/api/invites/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/invites/*", context_type="api", auth_required=True),
+
     # API фронтенда для управления командой
     RouteRule("/api/team/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/team/*", context_type="api", auth_required=True),
@@ -128,10 +140,14 @@ ROUTE_RULES: List[RouteRule] = [
     # Универсальный эндпоинт информации о пользователе (доступен на всех сервисах)
     RouteRule("/api/auth/me", context_type="api", auth_required=True),
     RouteRule("/api/auth/me/*", context_type="api", auth_required=True),
+    # Остальные core auth без префикса сервиса (после /api/auth/me — см. /login выше)
+    RouteRule("/api/auth/*", context_type="api", auth_required=True),
     RouteRule("/auth/me", context_type="api", auth_required=True),
     RouteRule("/auth/me/*", context_type="api", auth_required=True),
     RouteRule("/*/api/auth/me", context_type="api", auth_required=True),
     RouteRule("/*/api/auth/me/*", context_type="api", auth_required=True),
+    # Остальные core auth endpoints (/providers, /attrs/..., switch-company) на всех сервисах
+    RouteRule("/*/api/auth/*", context_type="api", auth_required=True),
     
     # ============================================================================
     # ТРЕБУЕТСЯ АВТОРИЗАЦИЯ И СУБДОМЕН (компания)
@@ -206,6 +222,7 @@ ROUTE_RULES: List[RouteRule] = [
 # Страницы где разрешен доступ без субдомена
 NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/select-company",
+    "/join",
     "/api/companies/check-slug",
     "/api/companies/me",
     "/api/companies",
@@ -218,6 +235,8 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/frontend/api/companies/check-slug",
     "/frontend/api/companies/me",
     "/frontend/api/companies",
+    "/api/invites/accept",
+    "/frontend/api/invites/accept",
     "/*/test",  # E2E тестовые страницы (TESTING mode only)
 ]
 

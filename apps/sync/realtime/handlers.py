@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Optional
 from uuid import uuid4
 
 from apps.sync.db.models import SyncSpace, SyncChannel, SyncThread, SyncGitResourceRef
@@ -36,6 +37,7 @@ from apps.sync.realtime.events import (
     event_space_created,
     event_thread_created,
 )
+from core.db.repositories.user_repository import UserRepository
 
 
 class CommandExecutionResult:
@@ -53,6 +55,7 @@ async def execute_command(
     threads: ThreadRepository,
     messages: MessageRepository,
     git_refs: GitResourceRefRepository,
+    user_repository: Optional[UserRepository] = None,
 ) -> CommandExecutionResult:
     if cmd.type == "spaces.create":
         payload = SpacesCreatePayload.model_validate(cmd.payload)
@@ -72,6 +75,7 @@ async def execute_command(
             company_id=cmd.company_id,
             threads=threads,
             messages=messages,
+            user_repository=user_repository,
         )
         return CommandExecutionResult(ok=True, result=thread, events=[event_thread_created(thread)])
 
@@ -83,6 +87,7 @@ async def execute_command(
             actor_user_id=cmd.actor_user_id,
             company_id=cmd.company_id,
             messages=messages,
+            user_repository=user_repository,
         )
         return CommandExecutionResult(ok=True, result=message, events=[event_message_created(message)])
 
@@ -100,6 +105,17 @@ async def execute_command(
         return CommandExecutionResult(ok=True, result=ref, events=[event_git_resource_upserted(ref)])
 
     raise RuntimeError(f"Неизвестный тип команды: {cmd.type!r}.")
+
+
+async def _user_brief(user_repository: Optional[UserRepository], user_id: str) -> UserBrief:
+    display_name = user_id
+    avatar_url = None
+    if user_repository is not None:
+        u = await user_repository.get(user_id)
+        if u is not None:
+            display_name = u.name
+            avatar_url = u.avatar_url
+    return UserBrief(id=user_id, display_name=display_name, avatar_url=avatar_url)
 
 
 async def _create_space(body, *, actor_user_id: str, company_id: str, spaces: SpaceRepository) -> SpaceRead:
@@ -165,6 +181,7 @@ async def _send_message(
     actor_user_id: str,
     company_id: str,
     messages: MessageRepository,
+    user_repository: Optional[UserRepository] = None,
 ) -> MessageRead:
     message_id = uuid4().hex
     sent_at = datetime.now(tz=UTC)
@@ -179,12 +196,13 @@ async def _send_message(
         sent_at=sent_at,
         contents=body.contents,
     )
+    sender = await _user_brief(user_repository, actor_user_id)
     return MessageRead(
         id=message_id,
         channel_id=channel_id,
         thread_id=body.thread_id,
         parent_message_id=body.parent_message_id,
-        sender=UserBrief(id=actor_user_id, display_name=actor_user_id),
+        sender=sender,
         status=MessageStatus.SENT,
         sent_at=sent_at,
         edited_at=None,
@@ -199,6 +217,7 @@ async def _create_thread(
     company_id: str,
     threads: ThreadRepository,
     messages: MessageRepository,
+    user_repository: Optional[UserRepository] = None,
 ) -> ThreadRead:
     root = await messages.get(body.root_message_id)
     if root is None:
@@ -215,13 +234,14 @@ async def _create_thread(
         created_by_user_id=actor_user_id,
     )
     await threads.create(entity)
+    created_by = await _user_brief(user_repository, actor_user_id)
     return ThreadRead(
         id=thread_id,
         channel_id=root.channel_id,
         root_message_id=body.root_message_id,
         title=body.title,
         created_at=entity.created_at,
-        created_by=UserBrief(id=actor_user_id, display_name=actor_user_id),
+        created_by=created_by,
     )
 
 

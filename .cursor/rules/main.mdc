@@ -192,6 +192,7 @@ response = await client.get("agents", "/agents/api/v1/flows/")
 
 | Тема | Файл правила |
 |------|-------------|
+| Инвайты по ссылке, JWT одноразовые | `invites.mdc` |
 | Агенты: ноды, skills, interrupt | `agents_logic.mdc` |
 | Архитектура agents сервиса | `agents.mdc` |
 | Архитектурные принципы | `architecture.mdc` |

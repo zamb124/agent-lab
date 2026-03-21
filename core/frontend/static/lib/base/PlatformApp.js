@@ -4,9 +4,11 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { ServiceRegistry } from '../services/ServiceRegistry.js';
+import { AppEvents } from '../utils/types.js';
 
 // PWA Install Banner для iOS/Android
 import '../components/pwa-install-banner.js';
+import '../components/glass-toast.js';
 
 export class PlatformApp extends PlatformElement {
     static styles = [
@@ -54,6 +56,16 @@ export class PlatformApp extends PlatformElement {
         this._servicesInitialized = false;
         this._authChecked = false;
         this._isAuthenticated = false;
+        this._handleToast = this._handleToast.bind(this);
+    }
+
+    _handleToast(e) {
+        const { type, message, duration } = e.detail;
+        const toast = document.createElement('glass-toast');
+        toast.type = type;
+        toast.message = message;
+        toast.duration = duration;
+        document.body.appendChild(toast);
     }
 
     /**
@@ -133,6 +145,8 @@ export class PlatformApp extends PlatformElement {
         
         super.connectedCallback();
 
+        window.addEventListener(AppEvents.TOAST_SHOW, this._handleToast);
+
         // Проверка авторизации
         if (!this._authChecked) {
             this._isAuthenticated = await this.checkAuth();
@@ -154,6 +168,7 @@ export class PlatformApp extends PlatformElement {
     }
 
     disconnectedCallback() {
+        window.removeEventListener(AppEvents.TOAST_SHOW, this._handleToast);
         super.disconnectedCallback();
         if (this.router) {
             this.router.stop();

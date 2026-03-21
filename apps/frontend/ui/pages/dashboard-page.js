@@ -289,6 +289,13 @@ export class DashboardPage extends PlatformElement {
                 description: 'Управление документами и поиск',
                 path: '/rag',
             },
+            {
+                id: 'sync',
+                name: 'Sync',
+                logo: '/static/core/assets/service_logos/sync_logo.svg',
+                description: 'Инженерный чат с Git-интеграцией',
+                path: '/sync',
+            },
         ];
 
         return html`

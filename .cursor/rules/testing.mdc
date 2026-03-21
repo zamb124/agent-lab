@@ -1529,3 +1529,9 @@ session_id = f"{agent_id}:{context_id}"
 session_id = f"{context_id}:{agent_id}"  # неправильный порядок
 session_id = context_id  # нет agent_id
 ```
+
+## Сквозные сервисы и внешние зависимости
+
+- Фикстура `test_a2a_agent` указывает URL тестового A2A-агента. В `docker-compose-test.yaml` контейнер `test-a2a-agent` проброшен на хост как **18052** (внутри контейнера порт 8005).
+- `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи, чтобы E2E push (`tests/e2e/push/`) получали ключ без локального `conf.local.json`.
+- Реальные вызовы BotHub/OpenAPI в `test_llm_providers.py` при 401/403 от внешнего API помечаются как skip (невалидный или отозванный ключ в CI).

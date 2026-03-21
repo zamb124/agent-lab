@@ -8,6 +8,12 @@ import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '../modals/user-info-modal.js';
 
+function formatMessageTime(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
 function toShortUsername(displayName) {
     const raw = (displayName || '').trim();
     if (raw === '') return 'Пользователь';
@@ -17,6 +23,27 @@ function toShortUsername(displayName) {
     const first = parts[0] ?? raw;
     if (first.includes('@')) return first.split('@')[0] || first;
     return raw;
+}
+
+function initialsForAvatar(displayName) {
+    const label = toShortUsername(displayName);
+    if (label === 'Пользователь') return '?';
+    const parts = label.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        const a = parts[0][0] ?? '';
+        const b = parts[1][0] ?? '';
+        return (a + b).toUpperCase();
+    }
+    const w = parts[0] ?? label;
+    return w.slice(0, 2).toUpperCase();
+}
+
+function hueFromUserId(userId) {
+    let h = 0;
+    for (let i = 0; i < userId.length; i++) {
+        h = (h * 31 + userId.charCodeAt(i)) >>> 0;
+    }
+    return h % 360;
 }
 
 function renderContent(content) {
@@ -74,6 +101,8 @@ export class MessageBubble extends PlatformElement {
 
             .bubble-row {
                 display: flex;
+                align-items: flex-end;
+                gap: var(--space-2);
             }
 
             .bubble-row.own {
@@ -84,6 +113,49 @@ export class MessageBubble extends PlatformElement {
                 justify-content: flex-start;
             }
 
+            .avatar-slot {
+                flex: 0 0 auto;
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                overflow: hidden;
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+            }
+
+            .avatar-slot button {
+                width: 100%;
+                height: 100%;
+                padding: 0;
+                border: none;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: transparent;
+            }
+
+            .avatar-img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
+            }
+
+            .avatar-initials {
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 13px;
+                font-weight: var(--font-semibold);
+                color: #fff;
+                letter-spacing: 0.02em;
+                user-select: none;
+            }
+
             .bubble {
                 max-width: min(720px, 90%);
                 border-radius: var(--radius-2xl);
@@ -91,14 +163,18 @@ export class MessageBubble extends PlatformElement {
                 border: 1px solid;
             }
 
+            .bubble-row.other .bubble {
+                max-width: min(720px, calc(90% - 44px));
+            }
+
             .bubble.own {
-                border-color: rgba(56, 189, 248, 0.2);
-                background: rgba(14, 165, 233, 0.12);
+                border-color: rgba(16, 185, 129, 0.35);
+                background: rgba(16, 185, 129, 0.16);
             }
 
             .bubble.other {
-                border-color: var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
+                border-color: rgba(56, 189, 248, 0.28);
+                background: rgba(147, 197, 253, 0.35);
             }
 
             .bubble-header {
@@ -113,6 +189,36 @@ export class MessageBubble extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                min-width: 0;
+            }
+
+            .bubble-body {
+                display: flex;
+                align-items: flex-end;
+                gap: var(--space-2);
+            }
+
+            .bubble-contents {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+
+            .bubble-time {
+                flex: 0 0 auto;
+                align-self: flex-end;
+                font-size: 11px;
+                line-height: 1.25;
+                letter-spacing: 0.02em;
+                white-space: nowrap;
+                padding-bottom: 1px;
+            }
+
+            .bubble.other .bubble-time {
+                color: var(--text-tertiary);
+            }
+
+            .bubble.own .bubble-time {
+                color: rgba(6, 95, 70, 0.8);
             }
 
             .sender-btn {
@@ -131,9 +237,10 @@ export class MessageBubble extends PlatformElement {
                 text-underline-offset: 4px;
             }
 
-            .timestamp {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
+            .sender-own {
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
             }
 
             .thread-btn {
@@ -153,7 +260,7 @@ export class MessageBubble extends PlatformElement {
                 color: var(--text-primary);
             }
 
-            .contents {
+            .bubble-contents .contents-inner {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
@@ -192,11 +299,11 @@ export class MessageBubble extends PlatformElement {
                 color: var(--text-secondary);
             }
 
-            .status-pending {
+            .bubble-time.status-pending {
                 color: var(--text-tertiary);
             }
 
-            .status-failed {
+            .bubble-time.status-failed {
                 color: var(--error);
             }
         `
@@ -216,11 +323,41 @@ export class MessageBubble extends PlatformElement {
         }
     }
 
-    _renderTimestamp() {
+    _renderAvatarSlot() {
+        const sender = this.msg.sender;
+        if (!sender || typeof sender.id !== 'string') {
+            throw new Error('Сообщение без отправителя.');
+        }
+        const shortName = toShortUsername(sender.display_name ?? '');
+        const initials = initialsForAvatar(sender.display_name ?? '');
+        const hue = hueFromUserId(sender.id);
+        const initialsStyle = `background: hsl(${hue} 48% 42%);`;
+        const face = sender.avatar_url
+            ? html`
+                <img class="avatar-img" src=${sender.avatar_url} alt=${shortName} />
+            `
+            : html`
+                <span class="avatar-initials" style=${initialsStyle}>${initials}</span>
+            `;
+
+        return html`
+            <div class="avatar-slot">
+                <button type="button" @click=${() => { this._profileOpen = true; }} aria-label=${`Профиль: ${shortName}`}>
+                    ${face}
+                </button>
+            </div>
+        `;
+    }
+
+    _renderTimeMeta() {
         const { status, sent_at } = this.msg;
-        if (status === 'pending') return html`<span class="timestamp status-pending">Отправка...</span>`;
-        if (status === 'failed') return html`<span class="timestamp status-failed">Ошибка</span>`;
-        return html`<span class="timestamp">${new Date(sent_at).toLocaleString()}</span>`;
+        if (status === 'pending') {
+            return html`<span class="bubble-time status-pending">Отправка...</span>`;
+        }
+        if (status === 'failed') {
+            return html`<span class="bubble-time status-failed">Ошибка</span>`;
+        }
+        return html`<span class="bubble-time">${formatMessageTime(sent_at)}</span>`;
     }
 
     render() {
@@ -230,25 +367,32 @@ export class MessageBubble extends PlatformElement {
 
         return html`
             <div class="bubble-row ${isOwn ? 'own' : 'other'}">
+                ${isOwn ? '' : this._renderAvatarSlot()}
                 <div class="bubble ${isOwn ? 'own' : 'other'}">
                     <div class="bubble-header">
                         <div class="sender-info">
-                            ${!isOwn ? html`
+                            ${isOwn ? html`
+                                <span class="sender-own">${toShortUsername(msg.sender?.display_name ?? '')}</span>
+                            ` : html`
                                 <button
                                     class="sender-btn"
                                     @click=${() => { this._profileOpen = true; }}
                                 >
                                     ${toShortUsername(msg.sender?.display_name ?? '')}
                                 </button>
-                            ` : ''}
-                            ${this._renderTimestamp()}
+                            `}
                         </div>
                         ${canFocusThread ? html`
                             <button class="thread-btn" @click=${this._focusThread}>Тред</button>
                         ` : ''}
                     </div>
-                    <div class="contents">
-                        ${sorted.map(c => renderContent(c))}
+                    <div class="bubble-body">
+                        <div class="bubble-contents">
+                            <div class="contents-inner">
+                                ${sorted.map(c => renderContent(c))}
+                            </div>
+                        </div>
+                        ${this._renderTimeMeta()}
                     </div>
                 </div>
             </div>

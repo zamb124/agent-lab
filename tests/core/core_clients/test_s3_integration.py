@@ -7,6 +7,7 @@ import tempfile
 import uuid
 from pathlib import Path
 import os
+from urllib.parse import urlparse
 
 from core.files.s3_client import S3ClientFactory
 from core.files.models import FileRecord, FileStatus
@@ -242,10 +243,10 @@ class TestS3Integration:
                 await client.delete_object(key)
             await client.close()
     
-    async def test_copy_object(self):
+    async def test_copy_object(self, minio_bucket):
         """Тест копирования объектов"""
         skip_if_s3_disabled()
-        client = S3ClientFactory.create_client_for_bucket('vkbucket')
+        client = minio_bucket
         
         # Создаем исходный файл
         source_key = f"test/copy_source_{uuid.uuid4().hex[:8]}.txt"
@@ -303,7 +304,8 @@ class TestS3Integration:
             )
             
             assert download_url is not None
-            assert 'hb.ru-msk.vkcloud-storage.ru' in download_url
+            endpoint_netloc = urlparse(client.endpoint_url).netloc
+            assert endpoint_netloc in download_url
             assert test_key in download_url
             print(f"✅ Presigned URL создан: {download_url[:100]}...")
             

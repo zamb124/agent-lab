@@ -154,6 +154,13 @@ export class FrontendApp extends PlatformApp {
             const response = await this.auth.validateToken();
             return response !== null;
         }
+
+        // Страница принятия инвайта — публичная, компонент сам проверяет auth
+        if (path === '/join') {
+            this._isLanding = true;
+            this._productPage = null;
+            return true;
+        }
         
         this._isLanding = false;
         this._productPage = null;
@@ -199,7 +206,11 @@ export class FrontendApp extends PlatformApp {
             if (path === '/select-company') {
                 return html`<select-company-page></select-company-page>`;
             }
-            
+
+            if (path === '/join') {
+                return html`<join-page></join-page>`;
+            }
+
             if (path === '/products/agents') {
                 return html`<product-agents-page></product-agents-page>`;
             }

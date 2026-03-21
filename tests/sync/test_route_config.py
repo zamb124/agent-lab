@@ -14,11 +14,18 @@ def test_sync_ui_shell_is_public() -> None:
         assert rule.auth_required is False, f"{path}: expected auth_required=False"
 
 
-def test_sync_ws_requires_api_auth() -> None:
+def test_sync_ws_is_public_middleware_auth_in_handler() -> None:
     matcher = RouteMatcher()
     rule = matcher.match("/sync/ws")
     assert rule is not None
-    assert rule.context_type == "api"
+    assert rule.context_type == "anonymous"
+    assert rule.auth_required is False
+
+
+def test_prefixed_auth_providers_matches() -> None:
+    matcher = RouteMatcher()
+    rule = matcher.match("/frontend/api/auth/providers")
+    assert rule is not None
     assert rule.auth_required is True
 
 

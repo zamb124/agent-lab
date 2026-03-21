@@ -4,8 +4,48 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
 import './message-bubble.js';
+
+function startOfLocalDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function localDayKey(iso) {
+    const t = new Date(iso);
+    if (Number.isNaN(t.getTime())) return '';
+    return `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}`;
+}
+
+function formatDayDividerLabel(iso) {
+    const msgDate = new Date(iso);
+    if (Number.isNaN(msgDate.getTime())) return '';
+    const msgStart = startOfLocalDay(msgDate);
+    const todayStart = startOfLocalDay(new Date());
+    const diffDays = Math.round((todayStart - msgStart) / 86400000);
+    if (diffDays === 0) return 'Сегодня';
+    if (diffDays === 1) return 'Вчера';
+    return msgDate.toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+    });
+}
+
+function buildListItems(messages) {
+    const items = [];
+    let prevDayKey = null;
+    for (const msg of messages) {
+        const key = localDayKey(msg.sent_at);
+        if (key !== prevDayKey) {
+            prevDayKey = key;
+            items.push({ kind: 'day', sentAt: msg.sent_at });
+        }
+        items.push({ kind: 'msg', msg });
+    }
+    return items;
+}
 
 export class MessageList extends PlatformElement {
     static properties = {
@@ -50,6 +90,22 @@ export class MessageList extends PlatformElement {
                 padding: var(--space-4);
                 text-align: center;
             }
+
+            .day-divider {
+                display: flex;
+                justify-content: center;
+                margin: var(--space-2) 0 var(--space-3);
+            }
+
+            .day-divider span {
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                color: var(--text-tertiary);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                padding: 4px 14px;
+                border-radius: var(--radius-full);
+            }
         `
     ];
 
@@ -70,15 +126,26 @@ export class MessageList extends PlatformElement {
             this._loading = state.messages.loading;
             this._focusedThreadId = state.chat.focusedThreadId;
             this._messages = SyncStore.getDisplayMessages();
+            this._syncCurrentUserId();
             this._scrollIfSticky();
         });
 
-        this._currentUserId = ServiceRegistry.auth?.user?.id ?? null;
+        this._syncCurrentUserId();
+        this._onAuthChange = () => this._syncCurrentUserId();
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
         this._unsubscribe?.();
+        window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
+    }
+
+    _syncCurrentUserId() {
+        const id = ServiceRegistry.auth?.user?.id ?? null;
+        if (this._currentUserId !== id) {
+            this._currentUserId = id;
+        }
     }
 
     updated() {
@@ -107,18 +174,30 @@ export class MessageList extends PlatformElement {
             return m.thread_id === this._focusedThreadId;
         });
 
+        const items = buildListItems(filtered);
+
         return html`
             <div class="list" @scroll=${this._onScroll}>
                 ${this._loading ? html`<div class="loading-text">Загрузка сообщений...</div>` : ''}
                 ${!this._loading && filtered.length === 0 ? html`<div class="empty-text">Сообщений пока нет.</div>` : ''}
-                ${filtered.map(msg => html`
-                    <message-bubble
-                        .msg=${msg}
-                        .isOwn=${this._currentUserId !== null && msg.sender?.id === this._currentUserId}
-                        .canFocusThread=${this._focusedThreadId === null && msg.thread_id !== null}
-                        @focus-thread=${(e) => SyncStore.setFocusedThread(e.detail.threadId)}
-                    ></message-bubble>
-                `)}
+                ${items.map((item) => {
+                    if (item.kind === 'day') {
+                        return html`
+                            <div class="day-divider">
+                                <span>${formatDayDividerLabel(item.sentAt)}</span>
+                            </div>
+                        `;
+                    }
+                    const msg = item.msg;
+                    return html`
+                        <message-bubble
+                            .msg=${msg}
+                            .isOwn=${this._currentUserId !== null && msg.sender?.id === this._currentUserId}
+                            .canFocusThread=${this._focusedThreadId === null && msg.thread_id !== null}
+                            @focus-thread=${(e) => SyncStore.setFocusedThread(e.detail.threadId)}
+                        ></message-bubble>
+                    `;
+                })}
             </div>
         `;
     }

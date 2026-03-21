@@ -119,6 +119,10 @@ class MyModal extends GlassModal {
 - `this.warning(message)` — жёлтое уведомление
 - `this.info(message)` — синее уведомление
 
+Отображение: `PlatformApp` слушает `AppEvents.TOAST_SHOW` и монтирует `glass-toast` в `document.body` (отдельный слушатель в приложениях не нужен).
+
+Копирование в буфер на HTTP (не localhost): `navigator.clipboard.writeText` часто падает — использовать `copyTextToClipboard` из `@platform/lib/utils/clipboard.js` (fallback через `textarea` + `execCommand`).
+
 **Другие методы:**
 - `this.emit(name, detail)` — диспатч CustomEvent
 - `this.use(selector)` — подписка на Store

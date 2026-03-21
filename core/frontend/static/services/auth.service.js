@@ -1,7 +1,7 @@
 /**
  * Сервис авторизации
  * ВАЖНО: Токен хранится в httponly cookie, JS НЕ читает его напрямую!
- * Вся проверка авторизации идет через API /api/v1/auth/me
+ * Проверка авторизации через GET {baseUrl}/api/auth/me (cookie)
  */
 import { BaseService } from '../lib/services/BaseService.js';
 import { AppEvents } from '../lib/utils/types.js';
@@ -50,6 +50,7 @@ export class AuthService extends BaseService {
             console.log('✅ Пользователь авторизован:', userData);
             this.user = {
                 id: userData.user_id,
+                name: userData.name,
                 company_id: userData.company_id,
                 roles: userData.roles || []
             };
@@ -111,7 +112,7 @@ export class AuthService extends BaseService {
      */
     async getAvailableProviders() {
         try {
-            const response = await this.get('/auth/providers');
+            const response = await this.get('/api/auth/providers');
             return response.providers || ['yandex', 'google', 'github'];
         } catch (e) {
             return ['yandex', 'google', 'github'];

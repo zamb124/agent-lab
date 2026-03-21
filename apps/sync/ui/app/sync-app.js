@@ -116,7 +116,7 @@ export class SyncApp extends PlatformApp {
             SyncStore.loadChannels(syncApi),
         ]);
 
-        this._restoreLastSelection();
+        await this._restoreLastSelection();
         this._connectWs();
     }
 
@@ -127,14 +127,18 @@ export class SyncApp extends PlatformApp {
         this._ws = null;
     }
 
-    _restoreLastSelection() {
+    async _restoreLastSelection() {
         const { selectedChannelId } = SyncStore.state.chat;
         if (!selectedChannelId) return;
 
         const channel = SyncStore.state.channels.list.find(c => c.id === selectedChannelId);
         if (!channel) {
             SyncStore.selectChannel(null, null);
+            return;
         }
+
+        const syncApi = ServiceRegistry.get('syncApi');
+        await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
     }
 
     _connectWs() {

@@ -15,7 +15,11 @@ globs:
 - **Auth**: платформенный `AuthMiddleware` + `get_context()`
 - **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket
 - **TaskIQ broker**: один инстанс в `apps/sync/realtime/broker.py` — и `handle_command.kiq()`, и `taskiq worker apps.sync_worker.worker:broker` (реэкспорт из того же модуля)
-- **UI**: SolidJS в `apps/sync/ui/`
+- **UI**: Lit в `apps/sync/ui/`
+
+## Вход с консоли (frontend)
+
+С дашборда и боковой панели: `apps/frontend/ui/pages/dashboard-page.js` (карточка «Сервисы»), `apps/frontend/ui/components/frontend-sidebar.js` (блок «Сервисы») — открытие `/sync` в новой вкладке, иконка `/static/core/assets/service_logos/sync_logo.svg`.
 
 ## Структура
 
@@ -134,6 +138,7 @@ apps/sync/ui/
 
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
 - Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
+- Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`, иначе список сообщений не подгрузится
 - API — только через `SyncAPIService`, без прямых `fetch` в компонентах
 - WebSocket — backend-first: команда → pending → `{ id, ok, result }` ack или `message.created` event
 - Zero-Guess: нет `x || 'default'` для обязательных значений, бросаем исключение

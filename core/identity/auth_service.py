@@ -98,10 +98,11 @@ class AuthService:
         return self._providers.get(provider_name)
 
     async def start_auth(
-        self, 
-        provider_name: AuthProvider, 
+        self,
+        provider_name: AuthProvider,
         redirect_uri: str,
-        original_host: str = None
+        original_host: str = None,
+        return_path: str = None,
     ) -> str:
         """
         Начинает процесс авторизации.
@@ -120,7 +121,7 @@ class AuthService:
 
         state = secrets.token_urlsafe(32)
 
-        await self._save_auth_state(state, provider_name, redirect_uri, original_host)
+        await self._save_auth_state(state, provider_name, redirect_uri, original_host, return_path)
 
         auth_url = provider.get_authorization_url(state, redirect_uri)
 
@@ -218,17 +219,19 @@ class AuthService:
         return True
 
     async def _save_auth_state(
-        self, 
-        state: str, 
-        provider: AuthProvider, 
+        self,
+        state: str,
+        provider: AuthProvider,
         redirect_uri: str,
-        original_host: str = None
+        original_host: str = None,
+        return_path: str = None,
     ):
         """Сохраняет временное состояние авторизации"""
         state_data = {
             "provider": provider.value,
             "redirect_uri": redirect_uri,
             "original_host": original_host,
+            "return_path": return_path,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 

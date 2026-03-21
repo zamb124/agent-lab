@@ -6,7 +6,6 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import './channel-picker.js';
 import './message-list.js';
 import './message-composer.js';
@@ -163,12 +162,6 @@ export class ChatView extends PlatformElement {
     disconnectedCallback() {
         super.disconnectedCallback?.();
         this._unsubscribe?.();
-    }
-
-    async _selectChannel(channel) {
-        SyncStore.selectChannel(channel.space_id, channel.id);
-        const syncApi = ServiceRegistry.get('syncApi');
-        await SyncStore.loadMessages(syncApi, channel.id);
     }
 
     _selectedChannel() {

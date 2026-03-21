@@ -41,7 +41,10 @@ async def auth_callback(
     
     # Получаем оригинальный хост из state (субдомен откуда пользователь пришел)
     original_host = auth_state.get("original_host")
-    
+
+    # Опциональный путь для возврата после авторизации (напр. /join?token=...)
+    return_path = auth_state.get("return_path")
+
     # redirect_uri должен совпадать с тем что был при start_auth (на базовом домене)
     redirect_uri = auth_state.get("redirect_uri")
     
@@ -64,8 +67,17 @@ async def auth_callback(
     
     # Используем оригинальный хост для редиректа (если был субдомен)
     target_host = original_host or request.headers.get("host", "localhost:8002")
-    
-    if not user.companies or len(user.companies) == 0:
+
+    # Если был запрошен возврат на конкретный путь — используем его
+    if return_path:
+        from core.utils.domain import is_local
+        scheme = "http" if is_local(target_host) else "https"
+        # Допускаем только пути (начинаются с /), не внешние URL
+        if return_path.startswith("/"):
+            redirect_url = f"{scheme}://{target_host}{return_path}"
+        else:
+            redirect_url = build_url(target_host, "/select-company")
+    elif not user.companies or len(user.companies) == 0:
         redirect_url = build_url(target_host, "/select-company?action=create")
     elif len(user.companies) == 1:
         company_id = list(user.companies.keys())[0]

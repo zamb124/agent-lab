@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
 import '@platform/lib/components/layout/platform-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
@@ -173,8 +174,9 @@ export class SyncSidebar extends PlatformElement {
         SyncStore.selectSpace(spaceId);
     }
 
-    _selectChannel(channel) {
-        SyncStore.selectChannel(channel.space_id, channel.id);
+    async _selectChannel(channel) {
+        const syncApi = ServiceRegistry.get('syncApi');
+        await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
         if (window.innerWidth < 768) {
             SyncStore.setMobileSidebarOpen(false);
         }

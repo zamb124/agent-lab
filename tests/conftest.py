@@ -1057,9 +1057,9 @@ async def ensure_minio_bucket():
 def test_a2a_agent():
     """
     Предоставляет URL тестового A2A агента из docker-compose-test.yaml.
-    Сервис должен быть запущен: docker-compose -f docker-compose-test.yaml up test-a2a-agent
+    Контейнер слушает 8005, на хосте проброшен порт 18052 (см. docker-compose-test.yaml).
     """
-    yield "http://localhost:8005"
+    yield "http://localhost:18052"
 
 
 @pytest_asyncio.fixture

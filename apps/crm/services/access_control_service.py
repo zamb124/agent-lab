@@ -61,6 +61,8 @@ class AccessControlService:
         )
         
         for grant in namespace_grants:
+            if grant.grant_type == "public":
+                continue
             if await self._check_grant(grant, user_id, company_id):
                 return True
         

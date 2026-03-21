@@ -232,4 +232,9 @@ export const SyncStore = {
         this.setMessages(items);
         return items;
     },
+
+    async selectChannelAndLoadMessages(syncApi, spaceId, channelId) {
+        this.selectChannel(spaceId, channelId);
+        await this.loadMessages(syncApi, channelId);
+    },
 };

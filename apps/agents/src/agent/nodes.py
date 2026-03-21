@@ -500,7 +500,7 @@ class ReactNode(BaseNode):
         agent_state = self._prepare_state(state, inputs)
 
         if self.tool_refs and self._loaded_tools is None:
-            self._loaded_tools = await self._load_tools()
+            self._loaded_tools = await self._load_tools(agent_state)
 
         logger.info(f"[node:{self.node_id}] Запуск ReactNode")
 
@@ -526,7 +526,7 @@ class ReactNode(BaseNode):
         if self._runner is not None:
             return self._runner
 
-        tools = await self.get_tools()
+        tools = await self.get_tools(state)
         llm = self._get_llm(state)
         prompt = self.react_node_prompt or ""
 
@@ -542,14 +542,14 @@ class ReactNode(BaseNode):
 
         return self._runner
 
-    async def get_tools(self) -> List[Any]:
+    async def get_tools(self, state: Optional[ExecutionState] = None) -> List[Any]:
         """Возвращает список tools."""
         if self._loaded_tools is not None:
             return self._loaded_tools
         
         # Загружаем tools из tool_refs если они есть
         if self.tool_refs:
-            self._loaded_tools = await self._load_tools()
+            self._loaded_tools = await self._load_tools(state)
             return self._loaded_tools
         
         # Если нет tool_refs, возвращаем атрибут класса tools (для кастомных нод)
@@ -625,25 +625,32 @@ class ReactNode(BaseNode):
             output_schema=output_schema,
         )
 
-    async def _load_tools(self) -> List[Any]:
+    async def _load_tools(self, state: Optional[ExecutionState] = None) -> List[Any]:
         """
         Создаёт tools из inline конфигов.
         
-        Node resources наследуются tools - если нода имеет resources,
-        они передаются в каждый tool.
+        Иерархия resources для tools как у CodeNode: agent → node → tool (правее сильнее).
         """
         container = get_container()
         
-        # Передаём node resources в tools
-        node_resources = self.config.get("resources", {})
-        if node_resources:
-            # Добавляем resources в каждый tool_ref
+        agent_resources = {}
+        skill_resources = {}
+        if state is not None:
+            agent_resources = (state.agent_config or {}).get("resources") or {}
+            skill_id = getattr(state, "skill_id", None)
+            if skill_id and skill_id != "default":
+                skills = (state.agent_config or {}).get("skills", {}) or {}
+                skill_cfg = skills.get(skill_id, {}) or {}
+                skill_resources = skill_cfg.get("resources") or {}
+        node_resources_cfg = self.config.get("resources", {}) or {}
+        merged_node_level = {**agent_resources, **skill_resources, **node_resources_cfg}
+        
+        if merged_node_level:
             enriched_refs = []
             for ref in self.tool_refs:
                 if isinstance(ref, dict):
-                    # Merge: tool resources переопределяют node resources
-                    tool_resources = ref.get("resources", {})
-                    merged_resources = {**node_resources, **tool_resources}
+                    tool_resources = ref.get("resources", {}) or {}
+                    merged_resources = {**merged_node_level, **tool_resources}
                     enriched_ref = {**ref, "resources": merged_resources}
                     enriched_refs.append(enriched_ref)
                 else:

@@ -100,9 +100,8 @@ export class ChannelPicker extends PlatformElement {
     }
 
     async _pick(channel) {
-        SyncStore.selectChannel(channel.space_id, channel.id);
         const syncApi = ServiceRegistry.get('syncApi');
-        await SyncStore.loadMessages(syncApi, channel.id);
+        await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
     }
 
     render() {

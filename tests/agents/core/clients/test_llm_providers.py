@@ -11,6 +11,8 @@
 import os
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, patch, MagicMock
+
+import httpx
 import pytest
 
 
@@ -369,7 +371,14 @@ class TestLLMModelsServiceRealAPI:
         mock_repo = MagicMock(spec=LLMModelRepository)
         service = LLMModelsService(mock_repo)
         
-        models = await service._fetch_bothub_models()
+        try:
+            models = await service._fetch_bothub_models()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (401, 403):
+                pytest.skip(
+                    "BotHub API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
+                )
+            raise
         
         # BotHub должен вернуть список моделей
         assert isinstance(models, list)
@@ -551,7 +560,6 @@ class TestLLMModelsServiceRealAPI:
         Тест структуры ответа от BotHub API.
         Проверяем что парсим response правильно.
         """
-        import httpx
         from apps.agents.config import get_settings
         
         settings = get_settings()
@@ -566,6 +574,10 @@ class TestLLMModelsServiceRealAPI:
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(url, headers=headers)
+            if response.status_code in (401, 403):
+                pytest.skip(
+                    "BotHub API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
+                )
             response.raise_for_status()
             data = response.json()
         

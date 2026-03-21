@@ -68,6 +68,13 @@ export class FrontendSidebar extends PlatformElement {
                 background: var(--glass-solid-medium);
             }
 
+            .nav-icon img {
+                width: 20px;
+                height: 20px;
+                display: block;
+                object-fit: contain;
+            }
+
             .nav-label {
                 flex: 1;
             }
@@ -266,6 +273,14 @@ export class FrontendSidebar extends PlatformElement {
                     <button class="service-link" @click=${() => this._openExternalService('/rag')}>
                         <span class="nav-icon">R</span>
                         <span>RAG</span>
+                        <span class="external-icon">↗</span>
+                    </button>
+
+                    <button class="service-link" @click=${() => this._openExternalService('/sync')}>
+                        <span class="nav-icon">
+                            <img src="/static/core/assets/service_logos/sync_logo.svg" alt="" />
+                        </span>
+                        <span>Sync</span>
                         <span class="external-icon">↗</span>
                     </button>
                 </div>

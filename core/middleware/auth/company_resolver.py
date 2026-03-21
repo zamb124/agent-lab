@@ -13,6 +13,12 @@ from core.utils.tokens import TokenData
 
 logger = logging.getLogger(__name__)
 
+# POST принятия инвайта: пользователь намеренно ещё не в members этой компании
+_INVITE_ACCEPT_PATHS = frozenset({
+    "/api/invites/accept",
+    "/frontend/api/invites/accept",
+})
+
 
 class CompanyResolver:
     """Определяет компанию из запроса"""
@@ -62,13 +68,23 @@ class CompanyResolver:
             if token_data and token_data.user_id:
                 user = await self.container.user_repository.get(token_data.user_id)
                 if user and company_id not in user.companies:
-                    logger.warning(
-                        f"Пользователь {token_data.user_id} не имеет доступа к компании {company_id} (субдомен: {subdomain})"
-                    )
-                    raise HTTPException(
-                        status_code=403,
-                        detail=f"У вас нет доступа к компании {subdomain}"
-                    )
+                    path = request.url.path
+                    if (
+                        request.method == "POST"
+                        and path in _INVITE_ACCEPT_PATHS
+                    ):
+                        logger.info(
+                            f"Принятие инвайта: {token_data.user_id} ещё не участник {company_id}, "
+                            f"проверку membership пропускаем (path={path})"
+                        )
+                    else:
+                        logger.warning(
+                            f"Пользователь {token_data.user_id} не имеет доступа к компании {company_id} (субдомен: {subdomain})"
+                        )
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"У вас нет доступа к компании {subdomain}"
+                        )
             
             company = await company_repo.get(company_id)
             if company:

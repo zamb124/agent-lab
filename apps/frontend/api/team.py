@@ -215,4 +215,3 @@ async def remove_member(
         "success": True,
         "message": "Участник удален из команды"
     }
-

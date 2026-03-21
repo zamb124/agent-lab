@@ -114,10 +114,11 @@ async def create_company(
         company_id=company_id,
         name=name,
         subdomain=slug,
-        owner_id=user.user_id,
-        status="active"
+        owner_user_id=user.user_id,
+        status="active",
+        members={user.user_id: ["owner"]},
     )
-    
+
     await company_repo.set(company)
     logger.info(f"✅ Создана компания {company.company_id} (subdomain: {slug})")
     

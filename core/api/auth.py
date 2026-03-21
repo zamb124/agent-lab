@@ -57,7 +57,13 @@ async def get_auth_providers(auth_service: AuthServiceDep):
 
 
 @router.get("/login/{provider_name}")
-async def start_auth(request: Request, provider_name: str, auth_service: AuthServiceDep, redirect_uri: str = None):
+async def start_auth(
+    request: Request,
+    provider_name: str,
+    auth_service: AuthServiceDep,
+    redirect_uri: str = None,
+    return_path: str = None,
+):
     """
     Начинает процесс авторизации с выбранным провайдером.
 
@@ -109,7 +115,12 @@ async def start_auth(request: Request, provider_name: str, auth_service: AuthSer
     logger.info(f"start_auth: original_host={original_host}, redirect_uri={redirect_uri}")
 
     try:
-        auth_url = await auth_service.start_auth(provider, redirect_uri, original_host=original_host)
+        auth_url = await auth_service.start_auth(
+            provider,
+            redirect_uri,
+            original_host=original_host,
+            return_path=return_path,
+        )
         return {"auth_url": auth_url, "provider": provider_name}
     except ValueError as e:
         logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)

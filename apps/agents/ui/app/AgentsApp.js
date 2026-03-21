@@ -4,7 +4,6 @@
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
-import { AppEvents } from '@platform/lib/utils/types.js';
 import { A2AService } from '../services/a2a.service.js';
 import { AgentsStore } from '../store/agents.store.js';
 import '../components/sidebar/agents-sidebar.js';
@@ -46,30 +45,6 @@ export class AgentsApp extends PlatformApp {
     static properties = {
         ...PlatformApp.properties,
     };
-
-    constructor() {
-        super();
-        this._handleToast = this._handleToast.bind(this);
-    }
-
-    connectedCallback() {
-        super.connectedCallback();
-        window.addEventListener(AppEvents.TOAST_SHOW, this._handleToast);
-    }
-
-    disconnectedCallback() {
-        super.disconnectedCallback();
-        window.removeEventListener(AppEvents.TOAST_SHOW, this._handleToast);
-    }
-
-    _handleToast(e) {
-        const { type, message, duration } = e.detail;
-        const toast = document.createElement('glass-toast');
-        toast.type = type;
-        toast.message = message;
-        toast.duration = duration;
-        document.body.appendChild(toast);
-    }
 
     _toggleMobileMenu() {
         const sidebar = this.shadowRoot.querySelector('agents-sidebar');

@@ -1,0 +1,79 @@
+---
+description: "Инвайты invite приглашения ссылка join компания invite_link"
+alwaysApply: false
+---
+
+# Инвайты по ссылке
+
+## Архитектура
+
+Одноразовые JWT для приглашения пользователей в компанию. Ключевое: **отдельный тип токена** — не смешивать с сессионным `TokenData`.
+
+### Файлы
+
+| Файл | Назначение |
+|------|-----------|
+| `core/utils/invite_tokens.py` | `InviteTokenService` (create/validate), `burn_invite_token()` Redis SET NX |
+| `apps/frontend/api/invites.py` | `POST /api/invites/generate`, `POST /api/invites/accept` |
+| `apps/frontend/ui/pages/join-page.js` | SPA-страница `/join?token=...` |
+| `apps/frontend/ui/services/team.service.js` | `generateInviteLink(role)` |
+| `core/middleware/auth/company_resolver.py` | Для `POST` на `.../invites/accept` на субдомене компании **не** требуется, чтобы пользователь уже был в `user.companies` (иначе 403 до хендлера) |
+
+## Invite JWT payload
+
+```python
+{
+    "typ": "invite",
+    "aud": "invite",
+    "company_id": "...",
+    "role": "developer",
+    "jti": "<uuid4>",
+    "iat": <timestamp>,
+    "exp": <timestamp>,  # TTL: 7 дней
+}
+```
+
+## Одноразовость
+
+Redis ключ: `invite:used:{jti}`, TTL = оставшееся время жизни токена.
+
+**Порядок проверки в accept:**
+1. Валидация JWT (подпись, тип, аудитория, истечение)
+2. Существование компании
+3. Если пользователь **уже участник** → идемпотентный OK, **без расхода токена**
+4. Иначе: `SET NX` → если токен уже сожжён → 410 Gone
+5. Добавление в `company.members` + `user.companies` + `user.active_company_id`
+6. Перевыпуск сессионного токена с новым `company_id` в cookie
+
+## UX-потоки
+
+**Не авторизован:** `/join?token=...` → join-page показывает OAuth-кнопки → при клике передаёт `return_path=/join?token=...` → после OAuth возврат на `/join` → auto-accept.
+
+**Уже авторизован:** `/join?token=...` → join-page сразу вызывает accept.
+
+**Уже участник:** accept возвращает `already_member=true`, ссылка НЕ сжигается.
+
+**Истёкший/использованный/поддельный:** 410/403 с понятным текстом на UI.
+
+## return_path в OAuth
+
+`GET /api/auth/login/{provider}?return_path=/join?token=...`
+
+`return_path` хранится в `auth_state` (Redis, TTL 10 мин), в callback используется для редиректа вместо `/select-company` / `/dashboard`. Допускаются только пути начинающиеся с `/` (без внешних URL).
+
+## Права
+
+- `generate`: только owner/admin действующей компании (требует `company` в state)
+- `accept`: любой авторизованный пользователь, без обязательного `company_id` в сессии
+
+## Route config
+
+- `/join` — `auth_required=False` (SPA-страница, JS сам проверяет auth)
+- `/api/invites/accept`, `/frontend/api/invites/accept` — `auth_required=True`, в `NO_SUBDOMAIN_ALLOWED_PATHS`; `CompanyResolver` для `frontend` пропускает проверку «участник компании с субдомена» только для этих путей и метода `POST`
+- `/api/invites/*`, `/frontend/api/invites/*` — `auth_required=True`, `context_type="api"`
+
+## Тесты
+
+Интеграционные: [`tests/frontend/api/test_invites_api.py`](tests/frontend/api/test_invites_api.py) — реальные `frontend_client` (ASGI), БД через `frontend_container`, Redis из `DATABASE__REDIS_URL`. Без моков сервисов; просроченный/неверная подпись — отдельные JWT, подписанные тем же секретом или заведомо неверным ключом.
+
+Запуск: `pytest tests/frontend/api/test_invites_api.py -v`

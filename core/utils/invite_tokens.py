@@ -1,0 +1,140 @@
+"""
+Одноразовые инвайт-токены для приглашения пользователей в компанию.
+
+Отдельный тип JWT (typ="invite") — не смешивать с сессионным TokenData.
+Одноразовость обеспечивается Redis SET NX по jti.
+"""
+
+import uuid
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+import jwt
+from pydantic import BaseModel, Field
+
+from core.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+INVITE_TOKEN_TYPE = "invite"
+INVITE_TOKEN_AUDIENCE = "invite"
+INVITE_EXPIRES_SECONDS = 60 * 60 * 24 * 7  # 7 дней
+INVITE_REDIS_KEY_PREFIX = "invite:used:"
+
+
+class InviteTokenData(BaseModel):
+    """Данные инвайт-токена"""
+
+    company_id: str = Field(description="ID компании")
+    role: str = Field(description="Роль приглашённого в компании")
+    jti: str = Field(description="Уникальный ID токена (для одноразовости)")
+    exp: datetime = Field(description="Время истечения")
+    iat: datetime = Field(description="Время создания")
+    typ: str = Field(default=INVITE_TOKEN_TYPE)
+    aud: str = Field(default=INVITE_TOKEN_AUDIENCE)
+
+
+class InviteTokenService:
+    """Сервис создания и проверки инвайт-токенов"""
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self._secret = settings.auth.jwt_secret_key
+        if not self._secret:
+            raise ValueError("JWT secret key не настроен (auth.jwt_secret_key)")
+        self._algorithm = "HS256"
+
+    def create(self, company_id: str, role: str) -> tuple[str, str]:
+        """
+        Создаёт одноразовый инвайт-токен.
+
+        Returns:
+            (jwt_string, jti) — строка токена и его уникальный ID
+        """
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(seconds=INVITE_EXPIRES_SECONDS)
+        jti = str(uuid.uuid4())
+
+        payload = {
+            "typ": INVITE_TOKEN_TYPE,
+            "aud": INVITE_TOKEN_AUDIENCE,
+            "company_id": company_id,
+            "role": role,
+            "jti": jti,
+            "iat": int(now.timestamp()),
+            "exp": int(expires_at.timestamp()),
+        }
+
+        token = jwt.encode(payload, self._secret, algorithm=self._algorithm)
+        logger.info(f"Создан инвайт-токен jti={jti} для компании {company_id}, роль={role}")
+        return token, jti
+
+    def validate(self, token: str) -> InviteTokenData:
+        """
+        Проверяет подпись и содержимое инвайт-токена.
+
+        Raises:
+            jwt.ExpiredSignatureError: токен истёк
+            jwt.InvalidTokenError: неверная подпись или формат
+            ValueError: неверный typ/aud
+        """
+        payload = jwt.decode(
+            token,
+            self._secret,
+            algorithms=[self._algorithm],
+            audience=INVITE_TOKEN_AUDIENCE,
+        )
+
+        if payload.get("typ") != INVITE_TOKEN_TYPE:
+            raise ValueError(f"Неверный тип токена: {payload.get('typ')!r}")
+
+        return InviteTokenData(
+            company_id=payload["company_id"],
+            role=payload["role"],
+            jti=payload["jti"],
+            exp=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
+            iat=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
+            typ=payload["typ"],
+            aud=payload["aud"],
+        )
+
+
+async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
+    """
+    Атомарно «сжигает» инвайт-токен в Redis (SET NX).
+
+    Returns:
+        True — токен успешно записан (ещё не использовался)
+        False — токен уже был использован ранее
+    """
+    try:
+        import redis.asyncio as aioredis
+    except ImportError as exc:
+        raise RuntimeError("redis не установлен") from exc
+
+    settings = get_settings()
+    key = f"{INVITE_REDIS_KEY_PREFIX}{jti}"
+
+    client = aioredis.from_url(
+        settings.database.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
+    )
+    try:
+        result = await client.set(key, "1", nx=True, ex=ttl_seconds)
+        return result is True
+    finally:
+        await client.aclose()
+
+
+_invite_token_service: Optional[InviteTokenService] = None
+
+
+def get_invite_token_service() -> InviteTokenService:
+    """Получает глобальный экземпляр сервиса инвайт-токенов"""
+    global _invite_token_service
+    if _invite_token_service is None:
+        _invite_token_service = InviteTokenService()
+    return _invite_token_service

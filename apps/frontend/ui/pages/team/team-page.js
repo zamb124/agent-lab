@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '@platform/lib/components/layout/page-header.js';
 
@@ -222,8 +223,8 @@ export class TeamPage extends PlatformElement {
     render() {
         return html`
             <page-header title="Команда">
-                <button slot="actions" class="primary-button" @click=${this._onInviteClick}>
-                    + Пригласить участника
+                <button slot="actions" class="primary-button" @click=${this._onCopyInviteLink}>
+                    + Скопировать ссылку-приглашение
                 </button>
             </page-header>
 
@@ -243,9 +244,9 @@ export class TeamPage extends PlatformElement {
                 <div class="empty-state">
                     <div class="empty-icon">T</div>
                     <h2 class="empty-title">Нет участников</h2>
-                    <p class="empty-description">Пригласите первого члена команды</p>
-                    <button class="primary-button" @click=${this._onInviteClick}>
-                        Пригласить участника
+                    <p class="empty-description">Скопируйте ссылку-приглашение и отправьте коллеге</p>
+                    <button class="primary-button" @click=${this._onCopyInviteLink}>
+                        Скопировать ссылку-приглашение
                     </button>
                 </div>
             `;
@@ -308,14 +309,21 @@ export class TeamPage extends PlatformElement {
         return name[0].toUpperCase();
     }
 
-    _onInviteClick() {
-        const modal = document.createElement('invite-member-modal');
-        document.body.appendChild(modal);
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('invited', async () => {
-            await this._reloadMembers();
-            this.success('Приглашение отправлено');
-        });
+    async _onCopyInviteLink() {
+        let result;
+        try {
+            result = await this.services.get('team').generateInviteLink('developer');
+        } catch {
+            this.error('Не удалось создать ссылку-приглашение');
+            return;
+        }
+
+        try {
+            await copyTextToClipboard(result.invite_url);
+            this.success('Ссылка-приглашение скопирована в буфер обмена');
+        } catch {
+            this.error('Ссылка создана, но буфер обмена недоступен. Откройте ответ API и скопируйте invite_url.');
+        }
     }
 
     async _reloadMembers() {

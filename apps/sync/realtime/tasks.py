@@ -7,6 +7,7 @@ import json
 import redis.asyncio as redis
 
 from apps.sync.config import get_sync_settings
+from apps.sync.container import get_sync_container
 from apps.sync.db.base import SyncDatabase
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
@@ -40,6 +41,9 @@ async def handle_command(cmd: dict) -> dict:
     messages = MessageRepository(db)
     git_refs = GitResourceRefRepository(db)
 
+    container = get_sync_container()
+    user_repository = container.user_repository
+
     exec_res = await execute_command(
         command,
         spaces=spaces,
@@ -47,6 +51,7 @@ async def handle_command(cmd: dict) -> dict:
         threads=threads,
         messages=messages,
         git_refs=git_refs,
+        user_repository=user_repository,
     )
 
     r = redis.from_url(settings.database.redis_url)

@@ -186,6 +186,10 @@ export class MessageComposer extends PlatformElement {
         const auth = ServiceRegistry.auth;
         const userId = auth?.user?.id;
         if (!userId) throw new Error('Не удалось определить user_id.');
+        const displayName =
+            typeof auth?.user?.name === 'string' && auth.user.name.trim() !== ''
+                ? auth.user.name.trim()
+                : 'Вы';
 
         const messageCreate = {
             thread_id: this._focusedThreadId,
@@ -198,7 +202,7 @@ export class MessageComposer extends PlatformElement {
             channel_id: this.channelId,
             thread_id: this._focusedThreadId,
             parent_message_id: null,
-            sender: { id: userId, display_name: 'Вы', avatar_url: null },
+            sender: { id: userId, display_name: displayName, avatar_url: null },
             status: 'pending',
             sent_at: new Date().toISOString(),
             edited_at: null,

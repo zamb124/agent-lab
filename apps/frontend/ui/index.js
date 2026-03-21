@@ -16,6 +16,7 @@ import '@platform/lib/components/platform-user.js';
 // Импортируем страницы
 import './pages/landing-page.js';
 import './pages/select-company-page.js';
+import './pages/join-page.js';
 import './pages/dashboard-page.js';
 import './pages/team/team-page.js';
 import './pages/api-keys/api-keys-page.js';
