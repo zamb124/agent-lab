@@ -74,7 +74,7 @@ humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
 
 ### Postgres `unhealthy` при деплое
 
-Healthcheck в `docker-compose-prod.yaml` использует `pg_isready` с `POSTGRES_USER`, с запасным вариантом `-U postgres` для volume, где суперпользователь ещё только `postgres`. Первый старт с `init.sql` (несколько БД + `CREATE EXTENSION vector`) на медленном диске может занять больше минуты — заданы `start_period: 90s` и больше `retries`.
+Healthcheck в `docker-compose-prod.yaml` использует `pg_isready` с `platform_user`, с запасным вариантом `-U postgres` для volume, где суперпользователь ещё только `postgres`. Первый старт с `init.sql` (несколько БД + `CREATE EXTENSION vector`) на медленном диске может идти несколько минут — `start_period: 300s`, `timeout: 30s` на команду проверки, чтобы не обрывать `pg_isready` раньше времени.
 
 Если контейнер всё равно unhealthy: `docker logs agentlab_postgres`, проверить OOM, права на volume, ошибки init. После смены `POSTGRES_PASSWORD` старый volume продолжит старый пароль в данных — приложение может не подключаться, но локальный `pg_isready` часто всё ещё проходит.
 

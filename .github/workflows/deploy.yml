@@ -124,7 +124,15 @@ jobs:
             docker compose -f docker-compose-prod.yaml up -d postgres redis
             sleep 5
 
-            docker compose -f docker-compose-prod.yaml run --rm migrations
+            docker compose -f docker-compose-prod.yaml run --rm migrations || {
+              echo "=== docker compose ps ==="
+              docker compose -f docker-compose-prod.yaml ps -a
+              echo "=== agentlab_postgres logs ==="
+              docker logs agentlab_postgres --tail 200 2>&1 || true
+              echo "=== agentlab_postgres inspect health ==="
+              docker inspect agentlab_postgres --format '{{json .State.Health}}' 2>&1 || true
+              exit 1
+            }
 
             docker compose -f docker-compose-prod.yaml up -d \
               agents frontend crm rag sync \
