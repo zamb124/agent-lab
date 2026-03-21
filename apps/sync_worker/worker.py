@@ -7,7 +7,7 @@
 from apps.sync_worker.config import get_settings
 get_settings()
 
-from apps.sync_worker.broker import broker
+from apps.sync.realtime.broker import broker
 
 import apps.sync.realtime.tasks  # noqa: F401
 

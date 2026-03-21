@@ -14,6 +14,7 @@ globs:
 - **Изоляция**: `company_id` во всех таблицах, из `get_context()` автоматически
 - **Auth**: платформенный `AuthMiddleware` + `get_context()`
 - **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket
+- **TaskIQ broker**: один инстанс в `apps/sync/realtime/broker.py` — и `handle_command.kiq()`, и `taskiq worker apps.sync_worker.worker:broker` (реэкспорт из того же модуля)
 - **UI**: SolidJS в `apps/sync/ui/`
 
 ## Структура
@@ -91,15 +92,51 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 - Результат команды: `{ id, ok, result, error_code, error_detail }` (WsResultFrame)
 - Realtime-событие: `{ type, payload }` (RealtimeEvent, broadcast всем)
 
-## Frontend (SolidJS)
+## Frontend (Lit 3 + PlatformApp)
 
-Frontend живёт в `apps/sync/ui/` (собранный) и `apps/sync/ui-src/` (исходники, SolidJS + Vite + Tailwind + Kobalte).
+UI живёт в `apps/sync/ui/`, следует единому платформенному стеку (Lit 3 / BaseStore / BaseService / PlatformApp), идентичному `rag`, `crm`, `agents`.
 
-- `shared/*` не импортирует `pages/*`
-- Компоненты `pages/chat/*` не ходят в сеть — только props
-- Единственная точка запросов: `shared/api.ts` (`apiFetch`)
-- Zero-Guess на фронте: `x || "default"` для обязательных значений — запрещено, бросать `throw`
-- WebSocket: Backend-first — UI отправляет команду -> pending -> подтверждение по событию
+### Стек и структура
+
+```
+apps/sync/ui/
+  index.html              # import map Lit, @platform/lib/, tokens.css
+  index.js                # импорт компонентов
+  app/sync-app.js         # extends PlatformApp, checkAuth() через AuthService
+  store/sync.store.js     # BaseStore: spaces, channels, messages, ws, ui
+  services/
+    sync-api.service.js   # extends BaseService, /sync/api/v1/*
+    sync-ws.service.js    # WebSocket к /sync/ws, cookie auth, reconnect/backoff
+  features/
+    sync-sidebar.js       # platform-sidebar + spaces + channels
+    chat-view.js          # header + channel-picker | message-list + composer
+    channel-picker.js     # сетка каналов
+    message-list.js       # список сообщений, автоскролл, фильтр по треду
+    message-bubble.js     # рендер всех типов контента + user-info-modal
+    message-composer.js   # текст + Enter, emoji, image upload
+    thread-drawer.js      # drawer со списком тредов
+  modals/
+    create-space-modal.js
+    create-channel-modal.js
+    user-info-modal.js
+```
+
+### Контракт
+
+- Точка входа: `/sync` (требует auth, redirect → `/login` через `PlatformApp.redirectToAuth()`)
+- API: только `/sync/api/v1/*`
+- Auth: только cookie-based через `ServiceRegistry.auth` (`/sync/api/auth/me`)
+- WebSocket: только `/sync/ws` (cookie auth при upgrade, без token в query)
+- Статика: `/sync/ui/static/*` (public)
+- Без legacy `/api/*`, `/ws`, `/auth`, `/chat`, localStorage JWT
+
+### Правила
+
+- Auth при 401 → `redirectToAuth()` → платформенный login flow
+- Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
+- API — только через `SyncAPIService`, без прямых `fetch` в компонентах
+- WebSocket — backend-first: команда → pending → `{ id, ok, result }` ack или `message.created` event
+- Zero-Guess: нет `x || 'default'` для обязательных значений, бросаем исключение
 
 ## Ключевые файлы
 
@@ -108,3 +145,5 @@ Frontend живёт в `apps/sync/ui/` (собранный) и `apps/sync/ui-src
 - `apps/sync/realtime/handlers.py` - бизнес-логика команд
 - `apps/sync/realtime/tasks.py` - TaskIQ задачи
 - `apps/sync/ws.py` - WebSocket, PubSubFanout
+- `apps/sync/ui/app/sync-app.js` - главный компонент
+- `apps/sync/ui/store/sync.store.js` - состояние

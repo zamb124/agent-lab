@@ -69,7 +69,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),
     RouteRule("/redoc", auth_required=False, context_type="anonymous"),
     RouteRule("/openapi.json", auth_required=False, context_type="anonymous"),
-    
+
     # Вебхуки (без JWT, используют свою аутентификацию)
     RouteRule("/agents/api/v1/webhook/telegram/*", auth_required=False, context_type="webhook", channel="telegram"),
     RouteRule("/agents/api/v1/webhook/whatsapp/*", auth_required=False, context_type="webhook", channel="whatsapp"),
@@ -185,6 +185,22 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/rag/ui", context_type="anonymous", auth_required=False),
     RouteRule("/rag", context_type="frontend", auth_required=True),
     RouteRule("/rag/", context_type="frontend", auth_required=True),
+
+    # Sync Service
+    # Статика и SPA-оболочка — public; checkAuth() на стороне JS → redirectToAuth()
+    RouteRule("/sync/ui/static/*", auth_required=False, context_type="anonymous"),
+    # API и WS — защищены на сервере
+    RouteRule("/sync/api/v1/*", context_type="api", auth_required=True),
+    RouteRule("/sync/api/auth/*", context_type="api", auth_required=True),
+    RouteRule("/sync/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
+    RouteRule("/sync/api/push/*", context_type="api", auth_required=True),
+    # /sync/ws — auth внутри хендлера через get_user_from_websocket()
+    RouteRule("/sync/ws", auth_required=False, context_type="anonymous"),
+    RouteRule("/sync/ws/*", auth_required=False, context_type="anonymous"),
+    # SPA catch-all — public, чтобы JS мог загрузиться и сделать redirect сам
+    RouteRule("/sync", auth_required=False, context_type="anonymous"),
+    RouteRule("/sync/", auth_required=False, context_type="anonymous"),
+    RouteRule("/sync/*", auth_required=False, context_type="anonymous"),
 ]
 
 # Страницы где разрешен доступ без субдомена

@@ -12,7 +12,7 @@ from taskiq.exceptions import TaskiqResultTimeoutError
 from apps.sync.config import get_sync_settings
 from apps.sync.realtime.commands import CommandEnvelope, WsCommandFrame, WsResultFrame
 from apps.sync.realtime.tasks import handle_command
-from core.context import get_context
+from core.websocket.auth import get_user_from_websocket
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -123,14 +123,15 @@ fanout = PubSubFanout()
 
 
 async def websocket_endpoint(websocket: WebSocket) -> None:
-    """WebSocket endpoint с auth через платформу."""
-    context = get_context()
-    if not context or not context.user:
-        await websocket.close(code=1008)
+    """WebSocket endpoint с auth через cookie (по образцу core/websocket/router.py)."""
+    user = await get_user_from_websocket(websocket)
+    if not user or not user.user_id:
+        await websocket.close(code=1008, reason="Authentication required")
+        logger.warning("ws sync: подключение отклонено — нет авторизации")
         return
 
-    user_id = context.user.user_id
-    company_id = context.active_company.company_id
+    user_id = user.user_id
+    company_id = user.active_company_id
     settings = get_sync_settings()
 
     try:
