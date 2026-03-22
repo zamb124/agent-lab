@@ -16,7 +16,7 @@
 #     "email": "admin@humanitec.ru",
 #     "services": [
 #       {"name": "frontend", "port": 8002, "path": "/",      "websocket": false},
-#       {"name": "agents",   "port": 8001, "path": "/agents","websocket": false},
+#       {"name": "agents",   "port": 8001, "path": "/flows","websocket": false},
 #       {"name": "crm",      "port": 8003, "path": "/crm",   "websocket": false},
 #       {"name": "rag",      "port": 8004, "path": "/rag",   "websocket": false},
 #       {"name": "sync",     "port": 8005, "path": "/sync",  "websocket": true}

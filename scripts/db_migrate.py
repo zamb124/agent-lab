@@ -8,7 +8,7 @@
 Использование:
   uv run python -m scripts.db_migrate upgrade
   uv run python -m scripts.db_migrate upgrade --service shared
-  uv run python -m scripts.db_migrate revision -m "msg" --service agents --autogenerate
+  uv run python -m scripts.db_migrate revision -m "msg" --service flows --autogenerate
 """
 
 from __future__ import annotations

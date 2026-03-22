@@ -279,16 +279,16 @@ class ToolExecutionError(ExecutionError):
         )
 
 
-class AgentExecutionError(ExecutionError):
+class FlowExecutionError(ExecutionError):
     """
-    Базовая ошибка выполнения агента.
+    Базовая ошибка выполнения flow.
     """
     
-    code = "AGENT_EXECUTION_ERROR"
-    message = "Ошибка выполнения агента"
+    code = "FLOW_EXECUTION_ERROR"
+    message = "Ошибка выполнения flow"
 
 
-class NodeCallLimitError(AgentExecutionError):
+class NodeCallLimitError(FlowExecutionError):
     """
     Превышен лимит вызовов ноды.
     """
@@ -304,18 +304,18 @@ class NodeCallLimitError(AgentExecutionError):
         )
 
 
-class AgentInfiniteLoopError(AgentExecutionError):
+class FlowInfiniteLoopError(FlowExecutionError):
     """
-    Превышено максимальное количество итераций агента.
+    Превышено максимальное количество итераций flow.
     """
     
-    code = "AGENT_INFINITE_LOOP"
-    message = "Превышено максимальное количество итераций агента"
+    code = "FLOW_INFINITE_LOOP"
+    message = "Превышено максимальное количество итераций flow"
     
-    def __init__(self, agent_id: str, max_iterations: int, **kwargs):
+    def __init__(self, flow_id: str, max_iterations: int, **kwargs):
         super().__init__(
-            message=f"Агент '{agent_id}' превысил лимит итераций: {max_iterations}",
-            payload={"agent_id": agent_id, "max_iterations": max_iterations},
+            message=f"Flow '{flow_id}' превысил лимит итераций: {max_iterations}",
+            payload={"flow_id": flow_id, "max_iterations": max_iterations},
             **kwargs,
         )
 
@@ -491,9 +491,9 @@ __all__ = [
     "ExecutionError",
     "NodeExecutionError",
     "ToolExecutionError",
-    "AgentExecutionError",
+    "FlowExecutionError",
     "NodeCallLimitError",
-    "AgentInfiniteLoopError",
+    "FlowInfiniteLoopError",
     "SafeEvalError",
     "ExternalAPIError",
     "TimeoutError",

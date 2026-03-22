@@ -20,7 +20,7 @@ class PlatformHandler:
     
     async def extract_company_from_webhook_path(self, path: str, platform: str) -> Company:
         """Извлекает компанию из пути webhook"""
-        prefix = f"/agents/api/v1/webhook/{platform}/"
+        prefix = f"/flows/api/v1/webhook/{platform}/"
         if not path.startswith(prefix):
             raise HTTPException(status_code=400, detail=f"Invalid webhook path: {path}")
         

@@ -44,7 +44,7 @@ class TraceContext(BaseModel):
     # Идентификаторы запроса
     task_id: Optional[str] = None
     context_id: Optional[str] = None
-    agent_id: Optional[str] = None
+    flow_id: Optional[str] = None
     skill_id: Optional[str] = None
     channel: Optional[str] = None
     is_resume: bool = False

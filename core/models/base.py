@@ -50,7 +50,7 @@ class FlexibleBaseModel(BaseModel):
     - Ответов от внешних API
     
     НЕ использовать для:
-    - AgentConfig
+    - FlowConfig
     - NodeConfig
     - Любой конфигурации из БД
     

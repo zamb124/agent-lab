@@ -1,5 +1,5 @@
 ---
-description: "ExecutionState - состояние выполнения агента"
+description: "ExecutionState — состояние выполнения flow"
 alwaysApply: false
 ---
 # ExecutionState
@@ -14,14 +14,15 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
     task_id: str           # ID задачи
     context_id: str        # ID контекста
     user_id: str           # ID пользователя
-    session_id: str        # agent_id:context_id
+    session_id: str        # flow_id:context_id
     
     content: str           # Входной запрос
     response: str          # Итоговый ответ
+    result: Any            # Произвольный результат ноды/tool (CodeNode, inline execute)
     
     messages: List[Message]           # История сообщений
     tool_results: Dict[str, Any]      # Результаты tools
-    variables: Dict[str, Any]         # Переменные агента
+    variables: Dict[str, Any]         # Переменные flow (variables)
     
     current_nodes: List[str]          # Текущие ноды (для resume)
 
@@ -49,7 +50,6 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
 Чтение:
 
     value = state.my_custom_field
-    value = getattr(state, 'field', default)
 
 ## Merge при параллельном выполнении
 
@@ -61,9 +61,9 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
 
 ## current_nodes
 
-Для nested agents сбрасывается:
+Для вложенного вызова flow (skill / child) сбрасывается:
 
-    new_state.current_nodes = []  # nested agent начнёт со своего entry
+    new_state.current_nodes = []  # вложенный flow начнёт со своего entry
 
 ## Границы сериализации
 
@@ -92,4 +92,4 @@ model_dump() / model_validate() только в:
 ## Файлы
 
 - core/state/__init__.py - ExecutionState
-- apps/agents/src/db/state_repository.py - сохранение в БД
+- apps/flows/src/db/state_repository.py - сохранение в БД

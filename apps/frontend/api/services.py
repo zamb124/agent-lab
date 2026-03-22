@@ -22,7 +22,7 @@ async def get_services_status(container: ContainerDep):
         Список сервисов с их статусом
     """
     services_config = [
-        {"name": "agents", "url": "/agents/api/v1/health"},
+        {"name": "agents", "url": "/flows/api/v1/health"},
         {"name": "crm", "url": "/crm/api/v1/health"},
         {"name": "rag", "url": "/rag/api/health"},
     ]

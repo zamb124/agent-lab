@@ -102,7 +102,7 @@ DELETE /rag/api/v1/namespaces/{id}?provider={name}
 GET    /rag/api/v1/namespaces/{id}/documents?provider={name}
 POST   /rag/api/v1/namespaces/{id}/documents?provider={name}
        (multipart/form-data: file, metadata JSON)
-DELETE /rag/api/v1/namespaces/{id}/documents/{doc_id}?provider={name}
+DELETE /rag/api/v1/namespaces/{id}/documents/{document_id}?provider={name}
 ```
 
 **Search:**
@@ -376,7 +376,7 @@ class NamespaceManager:
         """
 ```
 
-**Использование в Agents:**
+**Использование из сервиса flows:**
 ```python
 # В конфигурации flow
 "rag_config": {
@@ -394,7 +394,7 @@ namespace_id = await namespace_manager.resolve_namespace(
 
 ## Inter-service Communication
 
-RAG Service используется другими сервисами (CRM, Agents) через `ServiceClient`:
+RAG Service используется другими сервисами (CRM, flows) через `ServiceClient`:
 
 ```python
 from core.clients.service_client import ServiceClient

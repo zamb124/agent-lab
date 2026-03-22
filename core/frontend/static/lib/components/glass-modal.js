@@ -41,7 +41,8 @@ export class GlassModal extends PlatformElement {
                 z-index: var(--z-modal, 1000);
                 opacity: 0;
                 visibility: hidden;
-                transition: opacity var(--duration-normal, 0.3s), visibility var(--duration-normal, 0.3s);
+                transition: opacity var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out),
+                    visibility var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out);
             }
 
             :host([open]) .modal-overlay {
@@ -69,10 +70,10 @@ export class GlassModal extends PlatformElement {
                     0 16px 48px rgba(0, 0, 0, 0.4),
                     0 4px 16px rgba(0, 0, 0, 0.25));
                 
-                transform: translateY(24px) scale(0.95);
+                transform: translateY(16px) scale(0.96);
                 opacity: 0;
-                transition: transform var(--duration-slow, 0.4s) var(--easing-spring, cubic-bezier(0.34, 1.56, 0.64, 1)), 
-                            opacity var(--duration-normal, 0.3s),
+                transition: transform var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth)),
+                            opacity var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out),
                             width var(--duration-normal, 0.3s) ease,
                             height var(--duration-normal, 0.3s) ease,
                             max-width var(--duration-normal, 0.3s) ease,
@@ -337,6 +338,16 @@ export class GlassModal extends PlatformElement {
             :host-context([data-theme="light"]) .header-btn:hover {
                 background: rgba(15, 23, 42, 0.12);
                 color: rgba(15, 23, 42, 0.9);
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .modal-overlay {
+                    transition-duration: 1ms !important;
+                }
+
+                .modal {
+                    transition-duration: 1ms !important;
+                }
             }
         `
     ];

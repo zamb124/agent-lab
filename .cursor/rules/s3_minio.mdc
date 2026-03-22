@@ -101,6 +101,14 @@ export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://localhost:9000
 export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://minio-test:9000
 ```
 
+### HTTP(S)_PROXY и локальный MinIO
+
+Если в окружении заданы `HTTP_PROXY` / `HTTPS_PROXY`, **botocore** по умолчанию шлёт запросы через прокси. Тогда обращение к `http://127.0.0.1:19001` может уйти на внешний прокси; ответ часто выглядит как **`InvalidAccessKeyId`** (не тот сервер). В `core/files/s3_client.py` для `provider: minio` и для endpoint на `localhost` / `127.0.0.1` в `Config` передаётся `proxies={}`, чтобы не использовать env-прокси для этого клиента.
+
+### NoSuchBucket на MinIO
+
+У MinIO bucket **не появляется сам** при первом `PutObject` (в отличие от сценариев, где bucket создают вручную в консоли). Имя bucket задаётся в конфиге (`bucket_name` / ключ в `s3.buckets`). Для `provider: minio` клиент в `S3Client` делает `HeadBucket` и при отсутствии — `CreateBucket` с **тем же** именем из конфига (без хардкода в коде). Для облачных провайдеров (Selectel, AWS) bucket по-прежнему создаётся администратором вне приложения.
+
 ### RequestTimeTooSkewed (локальный MinIO)
 
 Подпись SigV4 использует время **процесса Python** (хост: `uv run scripts/run.py …`). MinIO сверяет с **своим** временем в контейнере. Ошибка не специфична для sync: тот же клиент и у rag/crm — отличие часто в том, что **облачный S3** (VK, Yandex) держит время по NTP, а **MinIO в Docker Desktop** иногда «уезжает» относительно macOS после сна VM.
@@ -398,6 +406,79 @@ endpoint_url = "http://localhost:19001"   # dev MinIO
 # НЕ используй 127.0.0.1 внутри контейнера
 endpoint_url = "http://127.0.0.1:9000"   # ❌
 ```
+
+## Единый паттерн работы с файлами
+
+### Что является файловым хранилищем (этот раздел)
+
+Произвольные файлы (изображения, документы, вложения сообщений, аватары) — загрузка,
+скачивание, метаданные. Используется `FileRecord` в shared DB + generic file router.
+
+### Что НЕ является нарушением
+
+**RAG-конвейер** (`apps/rag/`, `core/rag/`) — это обработка документов для векторного поиска:
+асинхронная очередь, chunking, embedding, хранение в `vector_documents`. RAG работает со своим S3
+напрямую — это намеренная архитектура, не нарушение.
+
+**CRM-вложения** (`apps/crm/api/attachments.py`) — вложения к сущностям CRM идут в RAG
+(чтобы стать поисковыми документами). Они не хранятся через generic file router.
+
+### Запрещённые паттерны
+
+- `file_record.direct_s3_url` — свойство удалено, прямые S3 URL запрещены в ответах
+- `s3_client.get_public_url()` — запрещён в API-обработчиках (разрешён только в RAG internals)
+- Сервис-специфичные аналоги `FileRead`/`FileUploadResponse` — используйте `FileResponse` из `core.files`
+- Регистрировать файловый роутер вручную — он добавляется через `create_service_app`
+
+## Единый доступ к файлам через API
+
+### Запрет прямых S3 URL
+
+API никогда не должен возвращать клиенту прямой S3/MinIO URL вида `http://127.0.0.1:19001/...`.
+Такой URL не работает у конечного пользователя (другой хост/порт, не same-origin).
+
+**Правило:** загрузка файла → сохранение в `FileRecord` → возврат same-origin URL через download-роутер.
+
+### Архитектура файлового роутера
+
+`core/files/api.py` предоставляет `build_file_api_router(get_file_repo, service_api_prefix)`.
+Роутер автоматически подключается в `create_service_app` для всех сервисов с включённым S3.
+Никакого кода на уровне сервиса не нужно.
+
+Результирующие эндпоинты (после стриппинга префикса сервиса ingress'ом):
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| `POST` | `/{svc}/api/v1/files/` | Загрузка файла |
+| `GET` | `/{svc}/api/v1/files/download/{file_id}` | Стриминг файла |
+| `GET` | `/{svc}/api/v1/files/{file_id}` | Метаданные файла |
+
+### Логика доступа в хендлере
+
+- `is_public=True` — файл отдаётся без проверки авторизации (аватары, публичные вложения).
+- `is_public=False` — хендлер сверяет `FileRecord.company_id` с `context.active_company.company_id`;
+  несовпадение → 403.
+
+Маршрут регистрируется в `route_config.py` с `auth_required=False` — middleware не блокирует запросы,
+проверку для приватных файлов делает сам хендлер.
+
+### Загрузка файла
+
+Файлы загружаются через `POST /{svc}/api/v1/files/`. Сервис не пишет никакого кода —
+всё реализовано в `core/files/api.py`. `FileRecord` создаётся с `company_id`,
+`download_url` и `checksum` автоматически.
+
+### `FileRecord.download_url`
+
+Поле `FileRecord.download_url: Optional[str]` — same-origin URL, устанавливается сервисом при загрузке.
+Свойство `FileRecord.url` возвращает `download_url` если задан, иначе фолбек
+`/api/v1/files/download/{file_id}` (сервис flows, для обратной совместимости).
+
+### `SyncFile.storage_url`
+
+Поле `storage_url` в таблице `sync_files` — nullable. Новые загрузки файлов идут только через
+`FileRecord` (shared DB); `SyncFile`-строки больше не создаются. Таблица сохранена для
+исторических FK-ссылок.
 
 ## Best Practices
 

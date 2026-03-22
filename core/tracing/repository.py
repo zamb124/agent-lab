@@ -24,7 +24,7 @@ class SpanRepository:
     Репозиторий для работы со spans в PostgreSQL.
     
     Использует нормализованную таблицу spans с отдельными колонками
-    для быстрого поиска по user_id, agent_id, session и т.д.
+    для быстрого поиска по user_id, flow_id, session и т.д.
     """
 
     def __init__(self, storage: "Storage"):
@@ -57,7 +57,7 @@ class SpanRepository:
                     user_groups=span_data.get("user_groups"),
                     session_auth=span_data.get("session_auth"),
                     session_agent=span_data.get("session_agent"),
-                    agent_id=span_data.get("agent_id"),
+                    flow_id=span_data.get("flow_id"),
                     task_id=span_data.get("task_id"),
                     context_id=span_data.get("context_id"),
                     skill_id=span_data.get("skill_id"),
@@ -141,7 +141,7 @@ class SpanRepository:
 
     async def get_spans_by_agent(
         self,
-        agent_id: str,
+        flow_id: str,
         from_time: Optional[datetime] = None,
         to_time: Optional[datetime] = None,
         limit: int = 100,
@@ -150,7 +150,7 @@ class SpanRepository:
         from core.db.models import Spans
         
         async with self._storage._get_session() as session:
-            stmt = select(Spans).where(Spans.agent_id == agent_id)
+            stmt = select(Spans).where(Spans.flow_id == flow_id)
             
             if from_time:
                 stmt = stmt.where(Spans.start_time >= from_time)
@@ -165,19 +165,19 @@ class SpanRepository:
 
     async def get_spans_by_flow(
         self,
-        agent_id: str,
+        flow_id: str,
         from_time: Optional[datetime] = None,
         to_time: Optional[datetime] = None,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Получает spans для flow (алиас для get_spans_by_agent)."""
-        return await self.get_spans_by_agent(agent_id, from_time, to_time, limit)
+        return await self.get_spans_by_agent(flow_id, from_time, to_time, limit)
 
     async def search_traces(
         self,
         user_id: Optional[str] = None,
         session_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
+        flow_id: Optional[str] = None,
         from_time: Optional[datetime] = None,
         to_time: Optional[datetime] = None,
         limit: int = 100,
@@ -201,9 +201,9 @@ class SpanRepository:
             if session_id:
                 stmt = stmt.where(Spans.session_agent == session_id)
                 count_stmt = count_stmt.where(Spans.session_agent == session_id)
-            if agent_id:
-                stmt = stmt.where(Spans.agent_id == agent_id)
-                count_stmt = count_stmt.where(Spans.agent_id == agent_id)
+            if flow_id:
+                stmt = stmt.where(Spans.flow_id == flow_id)
+                count_stmt = count_stmt.where(Spans.flow_id == flow_id)
             if from_time:
                 stmt = stmt.where(Spans.start_time >= from_time)
                 count_stmt = count_stmt.where(Spans.start_time >= from_time)
@@ -252,7 +252,7 @@ class SpanRepository:
             "user_groups": row.user_groups,
             "session_auth": row.session_auth,
             "session_agent": row.session_agent,
-            "agent_id": row.agent_id,
+            "flow_id": row.flow_id,
             "task_id": row.task_id,
             "context_id": row.context_id,
             "skill_id": row.skill_id,

@@ -9,7 +9,7 @@
 - Автоматически останавливается после завершения тестов
 
 Доступные сервисы:
-- agents_service: Agents сервис (порт 9001)
+- flows_service: flows-сервис (порт 9001)
 - rag_service: RAG сервис (порт 9002)
 - crm_service: CRM сервис (порт 9003)
 - frontend_service: Frontend сервис (порт 9004)
@@ -22,8 +22,8 @@ from tests.fixtures.workers import SessionServerManager
 
 
 # Константы для lock файлов
-_AGENTS_SERVER_LOCK = "/tmp/platform_test_agents_server.lock"
-_AGENTS_SERVER_PID = "/tmp/platform_test_agents_server.pid"
+_FLOWS_SERVER_LOCK = "/tmp/platform_test_flows_server.lock"
+_FLOWS_SERVER_PID = "/tmp/platform_test_flows_server.pid"
 
 _RAG_SERVER_LOCK = "/tmp/platform_test_rag_server.lock"
 _RAG_SERVER_PID = "/tmp/platform_test_rag_server.pid"
@@ -46,7 +46,7 @@ _COMMON_TEST_ENV = {
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "AUTH__PERMISSIONS_ENABLED": "false",
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
-    "SERVER__AGENTS_SERVICE_URL": "http://localhost:9001",
+    "SERVER__FLOWS_SERVICE_URL": "http://localhost:9001",
     "SERVER__RAG_SERVICE_URL": "http://localhost:9002",
     "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
     "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
@@ -64,12 +64,12 @@ _COMMON_TEST_ENV = {
 
 
 @pytest.fixture(scope="session")
-def agents_service():
+def flows_service():
     """
-    Agents сервис как реальный HTTP сервер на порту 9001.
+    Сервис flows как реальный HTTP на порту 9001.
     
     Используется для:
-    - AI агенты и flows
+    - flows и графы
     - Обработка задач через TaskIQ
     - WebSocket connections
     
@@ -79,10 +79,10 @@ def agents_service():
     - TaskIQ worker (должен быть запущен отдельно)
     """
     manager = SessionServerManager(
-        name="Agents",
-        lock_file=_AGENTS_SERVER_LOCK,
-        pid_file=_AGENTS_SERVER_PID,
-        app_path="apps.agents.main:app",
+        name="Flows",
+        lock_file=_FLOWS_SERVER_LOCK,
+        pid_file=_FLOWS_SERVER_PID,
+        app_path="apps.flows.main:app",
         port=9001,
         startup_wait=20.0,
         env=_COMMON_TEST_ENV
@@ -210,7 +210,7 @@ def sync_service():
 
 
 @pytest.fixture(scope="session")
-def all_services(agents_service, rag_service, crm_service, frontend_service, sync_service):
+def all_services(flows_service, rag_service, crm_service, frontend_service, sync_service):
     """
     Запускает все сервисы платформы.
     
@@ -224,7 +224,7 @@ def all_services(agents_service, rag_service, crm_service, frontend_service, syn
     5. Sync (9005) - зависит от PostgreSQL и Redis
     """
     return {
-        "agents": "http://localhost:9001",
+        "flows": "http://localhost:9001",
         "rag": "http://localhost:9002",
         "crm": "http://localhost:9003",
         "frontend": "http://localhost:9004",

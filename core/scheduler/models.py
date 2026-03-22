@@ -37,7 +37,7 @@ class ScheduledTaskInfo(FlexibleBaseModel):
     
     id: str = Field(..., description="ID задачи")
     schedule_id: Optional[str] = Field(default=None, description="ID в RedisScheduleSource")
-    agent_id: str = Field(..., description="ID агента")
+    flow_id: str = Field(..., description="ID агента")
     session_id: str = Field(..., description="ID сессии")
     user_id: str = Field(..., description="ID пользователя")
     

@@ -44,10 +44,6 @@
       "title": "Flow Config",
       "description": "Flow configuration reference"
     },
-    "agent_config": {
-      "title": "Agent Config",
-      "description": "Agent configuration reference"
-    },
     "interface": {
       "title": "Interface",
       "description": "Communication interface for responses"

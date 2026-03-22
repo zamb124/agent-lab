@@ -45,7 +45,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
                 user_name=context.user.name if context.user else None,
                 user_groups=context.metadata.get("grps", []) if context.metadata else [],
                 session_auth=context.session_id,
-                agent_id=context.agent_id,
+                flow_id=context.flow_id,
                 channel=context.channel,
             )
 

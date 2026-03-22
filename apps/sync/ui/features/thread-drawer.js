@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
+import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 
 export class ThreadDrawer extends PlatformElement {
     static properties = {
@@ -17,6 +18,7 @@ export class ThreadDrawer extends PlatformElement {
         PlatformElement.styles,
         glassStyles,
         buttonStyles,
+        modalShellStyles,
         css`
             .backdrop {
                 position: fixed;

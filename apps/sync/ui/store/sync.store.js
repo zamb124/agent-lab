@@ -50,8 +50,8 @@ const baseStore = new BaseStore('sync', {
     ui: {
         mobileSidebarOpen: false,
         threadDrawerOpen: false,
-        showCreateSpace: false,
-        showCreateChannel: false,
+        spaceSettingsCreate: false,
+        channelSettingsCreate: false,
         sidebarSectionOpen: {
             direct: true,
             spaces: true,
@@ -262,13 +262,19 @@ export const SyncStore = {
             throw new Error('channelId обязателен.');
         }
         baseStore.setState(s => ({
-            ui: { ...s.ui, channelSettingsChannelId: channelId },
+            ui: { ...s.ui, channelSettingsChannelId: channelId, channelSettingsCreate: false },
+        }));
+    },
+
+    openChannelSettingsCreate() {
+        baseStore.setState(s => ({
+            ui: { ...s.ui, channelSettingsChannelId: null, channelSettingsCreate: true },
         }));
     },
 
     closeChannelSettings() {
         baseStore.setState(s => ({
-            ui: { ...s.ui, channelSettingsChannelId: null },
+            ui: { ...s.ui, channelSettingsChannelId: null, channelSettingsCreate: false },
         }));
     },
 
@@ -277,13 +283,19 @@ export const SyncStore = {
             throw new Error('spaceId обязателен.');
         }
         baseStore.setState(s => ({
-            ui: { ...s.ui, spaceSettingsSpaceId: spaceId },
+            ui: { ...s.ui, spaceSettingsSpaceId: spaceId, spaceSettingsCreate: false },
+        }));
+    },
+
+    openSpaceSettingsCreate() {
+        baseStore.setState(s => ({
+            ui: { ...s.ui, spaceSettingsSpaceId: null, spaceSettingsCreate: true },
         }));
     },
 
     closeSpaceSettings() {
         baseStore.setState(s => ({
-            ui: { ...s.ui, spaceSettingsSpaceId: null },
+            ui: { ...s.ui, spaceSettingsSpaceId: null, spaceSettingsCreate: false },
         }));
     },
 
@@ -471,14 +483,6 @@ export const SyncStore = {
         baseStore.setState(s => ({ ui: { ...s.ui, threadDrawerOpen: open } }));
     },
 
-    setShowCreateSpace(show) {
-        baseStore.setState(s => ({ ui: { ...s.ui, showCreateSpace: show } }));
-    },
-
-    setShowCreateChannel(show) {
-        baseStore.setState(s => ({ ui: { ...s.ui, showCreateChannel: show } }));
-    },
-
     /**
      * @param {'direct'|'spaces'|'channels'} key
      * @param {boolean} open
@@ -651,7 +655,7 @@ export const SyncStore = {
         }
         const want = String(peerUserId);
         return (
-            this.getDirectChannels().find(c => c.peer && String(c.peer.id) === want) ?? null
+            this.getDirectChannels().find(c => c.peer && String(c.peer.user_id) === want) ?? null
         );
     },
 

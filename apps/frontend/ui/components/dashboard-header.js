@@ -165,9 +165,9 @@ export class DashboardHeader extends PlatformElement {
                         Dashboard
                     </a>
                     <a 
-                        href="/agents" 
-                        class="nav-link ${this._isActive('/agents') ? 'active' : ''}"
-                        @click=${(e) => this._handleNavigation('/agents', e)}
+                        href="/flows" 
+                        class="nav-link ${this._isActive('/flows') ? 'active' : ''}"
+                        @click=${(e) => this._handleNavigation('/flows', e)}
                     >
                         Агенты
                     </a>

@@ -99,8 +99,6 @@ class FileProcessor:
             public=public,
         )
 
-        s3_url = s3_client.get_public_url(s3_key) if public else None
-
         file_record = FileMetadata(
             file_id=file_id,
             provider=s3_client.provider_name,
@@ -111,6 +109,7 @@ class FileProcessor:
             s3_key=s3_key,
             s3_endpoint=s3_client.endpoint_url,
             uploaded_by=uploaded_by,
+            is_public=public,
             status=FileStatus.READY,
             metadata=metadata or {},
             tags=tags or [],
@@ -172,7 +171,7 @@ class FileProcessor:
             f"{size_mb:.2f} MB" if size_mb >= 1 else f"{file_record.file_size} байт"
         )
 
-        url = getattr(file_record, 'url', None) or getattr(file_record, 'direct_s3_url', None) or f"/api/v1/files/download/{file_record.file_id}"
+        url = file_record.url
 
         return (
             f"[FILE] "
@@ -362,8 +361,6 @@ class AudioProcessor:
             content_type=content_type,
             public=public,
         )
-
-        s3_url = s3_client.get_public_url(s3_key) if public else None
 
         transcription = None
         transcription_status = "pending"

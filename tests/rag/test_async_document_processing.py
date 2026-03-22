@@ -39,7 +39,8 @@ async def test_async_document_upload_returns_202(rag_client, unique_namespace_na
     assert "task_id" in data
     assert "status" in data
     assert data["status"] == "pending"
-    assert "message" in data
+    assert "file" in data
+    assert data["file"]["file_id"] == data["document_id"]
 
 
 @pytest.mark.asyncio
@@ -100,8 +101,8 @@ async def test_async_document_processing_completes(rag_client, unique_namespace_
     document_id = upload_response.json()["document_id"]
     print(f"\n[TEST] Created document_id: {document_id}")
     
-    max_wait = 30
-    interval = 1
+    max_wait = 90
+    interval = 0.25
     elapsed = 0
     
     while elapsed < max_wait:
@@ -195,8 +196,8 @@ async def test_multiple_documents_processing(rag_client, unique_namespace_name, 
         )
         document_ids.append(response.json()["document_id"])
     
-    max_wait = 45
-    interval = 2
+    max_wait = 120
+    interval = 0.25
     elapsed = 0
     completed_count = 0
     

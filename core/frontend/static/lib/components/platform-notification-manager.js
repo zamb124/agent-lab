@@ -48,7 +48,7 @@ export class PlatformNotificationManager extends PlatformElement {
     _connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         
-        // Определяем префикс сервиса из pathname (например /crm/, /agents/, /rag/)
+        // Определяем префикс сервиса из pathname (например /crm/, /flows/, /rag/)
         const pathname = window.location.pathname;
         const serviceMatch = pathname.match(/^\/([^\/]+)/);
         const servicePrefix = serviceMatch && !['static', 'api', 'ws'].includes(serviceMatch[1]) 

@@ -50,9 +50,9 @@ async def _message_read_from_entity(
         )
     u = users_by_id.get(m.sender_user_id)
     if u is None:
-        sender = UserBrief(id=m.sender_user_id, display_name=m.sender_user_id, avatar_url=None)
+        sender = UserBrief(user_id=m.sender_user_id, display_name=m.sender_user_id, avatar_url=None)
     else:
-        sender = UserBrief(id=m.sender_user_id, display_name=u.name, avatar_url=u.avatar_url)
+        sender = UserBrief(user_id=m.sender_user_id, display_name=u.name, avatar_url=u.avatar_url)
 
     return message_read_from_entity(m=m, contents=contents, sender=sender)
 

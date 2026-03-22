@@ -13,9 +13,9 @@ for _k, _v in TEST_DATABASE_ENV.items():
     os.environ.setdefault(_k, _v)
 os.environ.setdefault("S3__ENABLED", "true")
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
-os.environ.setdefault("S3__BUCKETS__DEFAULT__ENDPOINT_URL", "http://localhost:19002")
-os.environ.setdefault("S3__BUCKETS__DEFAULT__ACCESS_KEY_ID", "minioadmin")
-os.environ.setdefault("S3__BUCKETS__DEFAULT__SECRET_ACCESS_KEY", "minioadmin")
+os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
+os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID", "minioadmin")
+os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY", "minioadmin")
 import uuid
 from collections.abc import AsyncIterator
 
@@ -28,7 +28,7 @@ from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.db.repositories.file_repository import FileRepository
+from apps.sync.db.repositories.file_repository import SyncFileRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 
 from sqlalchemy import text
@@ -113,8 +113,8 @@ def message_repo(sync_database: SyncDatabase) -> MessageRepository:
 
 
 @pytest.fixture()
-def file_repo(sync_database: SyncDatabase) -> FileRepository:
-    return FileRepository(db=sync_database)
+def file_repo(sync_database: SyncDatabase) -> SyncFileRepository:
+    return SyncFileRepository(db=sync_database)
 
 
 @pytest.fixture()

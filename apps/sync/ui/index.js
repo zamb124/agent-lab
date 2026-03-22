@@ -17,8 +17,6 @@ import './features/message-list.js';
 import './features/message-bubble.js';
 import './features/message-composer.js';
 import './features/thread-drawer.js';
-import './modals/create-space-modal.js';
-import './modals/create-channel-modal.js';
 import './modals/space-settings-modal.js';
 import './modals/channel-settings-modal.js';
 import './modals/user-info-modal.js';

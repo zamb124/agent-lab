@@ -16,6 +16,7 @@ const ICON_MAP = {
     'check': 'check',
     'info': 'info',
     'agent': 'agent',
+    'llm_node': 'agent',
     'plus': 'plus',
     'chat': 'chat',
     'file': 'file',

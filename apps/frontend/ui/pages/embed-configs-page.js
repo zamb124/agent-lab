@@ -232,7 +232,7 @@ export class EmbedConfigsPage extends PlatformElement {
                         ${configs.map((config) => html`
                             <tr>
                                 <td>${config.name}</td>
-                                <td>${config.agent_id}</td>
+                                <td>${config.flow_id}</td>
                                 <td>
                                     <span class="status-badge ${config.status}">
                                         ${config.status}

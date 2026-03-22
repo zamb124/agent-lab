@@ -65,7 +65,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 FROM base-final AS agents
 COPY --from=docs-builder /app/site ./apps/agents/site
 EXPOSE 8001
-CMD ["python", "-m", "apps.agents.main"]
+CMD ["python", "-m", "apps.flows.main"]
 
 # Frontend
 FROM base-final AS frontend

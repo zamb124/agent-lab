@@ -273,7 +273,7 @@ export class DashboardPage extends PlatformElement {
                 name: 'Agents Builder',
                 logo: '/static/core/assets/service_logos/agents_logo.svg',
                 description: 'Создание и управление AI-агентами',
-                path: '/agents',
+                path: '/flows',
             },
             {
                 id: 'crm',

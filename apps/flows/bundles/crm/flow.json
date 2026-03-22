@@ -1,0 +1,74 @@
+{
+  "id": "crm",
+  "name": "CRM AI Flow",
+  "description": "Единый flow для CRM: skills (анализ, резюмирование и др.)",
+  "version": "1.0.0",
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "prompt": "prompts/main.md",
+      "llm_config": {
+        "model": "anthropic/claude-sonnet-4.5",
+        "temperature": 0.1
+      },
+      "tools": [],
+      "output_key": "response"
+    }
+  },
+  "edges": [],
+  "skills": {
+    "analyze": {
+      "name": "AI Analysis",
+      "description": "Анализ текста и извлечение entities/relationships",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/analyze.md",
+          "llm_config": {
+            "model": "x-ai/grok-code-fast-1",
+            "temperature": 0.1
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "summarize": {
+      "name": "Daily Summary",
+      "description": "Создание ежедневных резюме",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/summarize.md",
+          "llm_config": {
+            "model": "x-ai/grok-code-fast-1",
+            "temperature": 0.3
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "deduplicate": {
+      "name": "Deduplicate Check",
+      "description": "Сравнивает две сущности и определяет дубликат ли это",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/deduplicate.md",
+          "llm_config": {
+            "model": "x-ai/grok-code-fast-1",
+            "temperature": 0.1
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    }
+  }
+}
+

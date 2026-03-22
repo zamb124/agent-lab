@@ -33,12 +33,12 @@ pytest_plugins = [
 ```python
 # Unit тесты (ASGI transport, быстрые)
 async def test_agents_api(agents_client):
-    response = await agents_client.get("/agents/api/v1/agents")
+    response = await agents_client.get("/flows/api/v1/flows")
     assert response.status_code == 200
 
 # E2E тесты (реальный HTTP, полная интеграция)
 async def test_agents_e2e(agents_client_http):
-    response = await agents_client_http.get("/agents/api/v1/agents")
+    response = await agents_client_http.get("/flows/api/v1/flows")
     assert response.status_code == 200
 ```
 

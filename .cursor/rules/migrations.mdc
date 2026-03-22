@@ -14,6 +14,10 @@ alwaysApply: false
 
 # Миграции БД
 
+## Переименования схемы без пошаговых ALTER
+
+В средах, где данные БД можно сбросить (локальная разработка, чистые стенды), **достаточно удалить базу и заново выполнить `upgrade head`**: актуальная схема задаётся baseline и последующими ревизиями. Отдельные миграции вида `RENAME COLUMN` для переименования полей **не обязательны**, если команда договорилась о пересоздании БД.
+
 ## Архитектура
 
 Каждый сервис имеет **собственную PostgreSQL-базу** и **собственное Alembic-дерево**:
@@ -21,18 +25,18 @@ alwaysApply: false
 | Сервис  | БД                | Дерево миграций       | Переменная окружения        |
 |---------|-------------------|-----------------------|-----------------------------|
 | shared  | platform_shared   | migrations/shared/    | DATABASE__SHARED_URL        |
-| agents  | platform_agents   | migrations/agents/    | DATABASE__AGENTS_URL        |
+| flows   | platform_agents   | migrations/flows/     | DATABASE__FLOWS_URL        |
 | crm     | platform_crm      | migrations/crm/       | DATABASE__CRM_URL           |
 | sync    | platform_sync     | migrations/sync/      | DATABASE__SYNC_URL          |
 | rag     | platform_rag      | migrations/rag/       | DATABASE__RAG_URL           |
 
 **Таблицы по БД (важно для baseline и JOIN):**
 
-- **platform_agents**: KV-таблицы агентов/nodes/tools/… плюс **`storage`** (префиксы `llm_model:`, embed, файлы) и **`mcp_servers`** — не путать с `storage` в `platform_shared`.
+- **platform_agents**: KV-таблицы flows/nodes/tools/… плюс **`storage`** (префиксы `llm_model:`, embed, файлы) и **`mcp_servers`** — не путать с `storage` в `platform_shared`.
 - **platform_crm**: реляционные CRM-таблицы плюс **`vector_documents`** (pgvector) для `JOIN crm_entities` при семантическом поиске; дубли по смыслу с RAG не смешиваются: RAG-документы живут в **platform_rag**, сущности CRM — в **platform_crm**.
 - **platform_rag**: `document_processing_status`, `vector_documents` для пайплайна RAG.
 
-У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `agents` Alembic не найдёт эту ревизию в `migrations/agents/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт.
+У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт.
 
 ## PostgreSQL и pgvector
 
@@ -51,7 +55,7 @@ migrations/
 │   ├── alembic.ini
 │   ├── env.py
 │   └── versions/
-├── agents/
+├── flows/
 ├── crm/
 ├── sync/
 ├── rag/
@@ -60,7 +64,7 @@ migrations/
 
 ## Манифест `migrations/services.json`
 
-- `services[]`: `name`, `models_module`, `database_url_key` (поле `DatabaseConfig`: `shared_url`, `agents_url`, …).
+- `services[]`: `name`, `models_module`, `database_url_key` (поле `DatabaseConfig`: `shared_url`, `flows_url`, …).
 - Регистрация в `core.db.migration_manifest.register_migration_services()`; bootstrap: `bootstrap_migration_registry()`.
 - При добавлении сервиса: правка `services.json`, дерево `migrations/<name>/`, при необходимости строк в `postgres/init.sql` и переменных в корневом `conf.json` (`database.*`).
 
@@ -82,7 +86,7 @@ migrations/
 ```bash
 uv run python -m scripts.db_migrate upgrade
 uv run python -m scripts.db_migrate upgrade --service shared
-uv run python -m scripts.db_migrate revision -m "описание" --service agents --autogenerate
+uv run python -m scripts.db_migrate revision -m "описание" --service flows --autogenerate
 uv run python -m scripts.db_migrate revision -m "описание" --service crm --empty
 uv run python -m scripts.db_migrate downgrade --service sync
 uv run python -m scripts.db_migrate current --service rag

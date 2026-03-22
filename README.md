@@ -190,16 +190,16 @@ uv run taskiq worker apps.broker.worker:broker
 
 ### Apps (apps/)
 Бизнес-логика приложения:
-- **apps/agents/** - Управление агентами, флоу и инструментами.
+- **apps/flows/** - Управление агентами, флоу и инструментами.
 - **apps/frontend/** - Веб-интерфейс.
 - **apps/worker.py** - Точка входа для фоновых задач.
 
-### API Layer (apps/agents/api/v1/)
+### API Layer (apps/flows/api/v1/)
 REST API endpoints для управления системой.
 
-### Services (apps/agents/services/)
+### Services (apps/flows/services/)
 Бизнес-логика:
-- **agent_factory.py** - Создание агентов.
+- **flow_factory.py** - Создание агентов.
 - **flow_factory.py** - Создание флоу.
 - **graph_builder.py** - Построение графов.
 - **migrator.py** - Миграция конфигурации.
@@ -221,7 +221,7 @@ REST API endpoints для управления системой.
 
 ### Основные технологии
 
-- **Python 3.12+** - Современная версия Python
+- **Python 3.13+** - Современная версия Python
 - **UV** - Быстрый пакетный менеджер (замена pip/poetry)
 - **FastAPI** - Асинхронный веб-фреймворк
 - **PostgreSQL** - База данных с JSONB поддержкой

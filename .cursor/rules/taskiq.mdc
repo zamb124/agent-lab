@@ -30,18 +30,26 @@ core/tasks/
 ├── session_lock.py      # SessionLockMiddleware для FIFO per session
 └── worker.py            # TaskiqWorker entry point (экспортирует scheduler)
 
-apps/agents/tasks/
-├── __init__.py          # Экспорт задач
-├── agent_tasks.py       # process_agent_task
-└── message_tasks.py     # send_message_task
+apps/broker/broker.py    # platform broker (queue "default"), импортирует core.tasks.broker
 
-apps/agents/tools/task/
-└── delayed_task_tools.py # create_delayed_task, list_delayed_tasks, cancel_delayed_task
+apps/flows/src/tasks/
+├── __init__.py
+├── flow_tasks.py        # process_flow_task
+├── tool_tasks.py        # execute_tool
+├── eval_task.py         # execute_inline_code
+├── push_notification_tasks.py
+├── scheduled_tasks.py
+└── ...
+
+apps/flows/tools/
+└── scheduling.py        # @tool: schedule_cron_task, schedule_one_time_task, list_scheduled_tasks, ...
 
 apps/frontend/tasks/
-├── __init__.py          # Экспорт задач
-└── notification_tasks.py # send_notification_task
+├── __init__.py
+└── notification_tasks.py
 ```
+
+Задачи flows регистрируются на `broker` из `apps/broker/broker.py` (очередь `default`), фабрика брокера — `core/tasks/broker.py`.
 
 ## Брокер и Scheduler
 
@@ -132,37 +140,37 @@ return result.return_value
 
 ## Основные задачи
 
-### process_agent_task
+### process_flow_task
 
-Главная задача для выполнения agent. Делегирует выполнение в `BaseChannel.process_task()`.
+Главная задача для выполнения flow. Делегирует выполнение в `BaseChannel.process_task()`.
 
 ```python
-from apps.agents.src.tasks.agent_tasks import process_agent_task
+from apps.flows.src.tasks.flow_tasks import process_flow_task
 
-task = await process_agent_task.kiq(
-    agent_id="example_react",
-    task_id="task-123",
-    context_id="ctx-456",
-    session_id="example_react:ctx-456",  # FIFO гарантируется для этой сессии
+# В проде context_data обязателен (см. тело process_flow_task — Context из middleware).
+task = await process_flow_task.kiq(
+    flow_id="example_react",
+    session_id="example_react:ctx-456",
     user_id="user-789",
     content="Привет",
-    channel="a2a",
     skill_id="default",
-    user_groups=["user"],
-    variables={},
-    files=[],
+    channel="a2a",
+    task_id="task-123",
+    context_id="ctx-456",
     is_resume=False,
+    files=[],
+    context_data={...},
 )
 ```
 
-**Внутри process_agent_task:**
-1. Получает канал через `get_channel(channel, agent_id)`
+**Внутри process_flow_task:**
+1. Получает канал через `get_channel(channel, flow_id)`
 2. Подготавливает `PreparedTaskParams`
 3. Вызывает `channel.process_task(params)`
 4. Внутри `process_task`:
    - Создаёт `Emitter` для публикации событий
-   - Загружает `Agent` через `AgentFactory`
-   - Запускает `await agent.run(state)`
+   - Загружает `Flow` через `FlowFactory`
+   - Запускает `await flow.run(state)`
    - Публикует `emit_complete()` или `emit_interrupt()`
    - Сохраняет state через `StateRepository`
 
@@ -171,7 +179,7 @@ task = await process_agent_task.kiq(
 Выполнение tool в изолированном окружении.
 
 ```python
-from apps.agents.src.tasks.tool_tasks import execute_tool
+from apps.flows.src.tasks.tool_tasks import execute_tool
 
 result = await execute_tool.kiq(
     tool_config={
@@ -191,14 +199,14 @@ result = await execute_tool.kiq(
 # }
 ```
 
-**Используется в ReactNodeRunner** для параллельного выполнения tools.
+**Используется в LlmNodeRunner** для параллельного выполнения tools.
 
 ### execute_inline_code
 
 Выполнение inline кода через SafeEval.
 
 ```python
-from apps.agents.src.tasks.eval_task import execute_inline_code
+from apps.flows.src.tasks.eval_task import execute_inline_code
 
 result = await execute_inline_code.kiq(
     code="def run(state): return state.get('x', 0) * 2",
@@ -213,7 +221,7 @@ result = await execute_inline_code.kiq(
 Отправка push notification о статусе задачи.
 
 ```python
-from apps.agents.src.tasks.push_notification_tasks import send_task_update
+from apps.flows.src.tasks.push_notification_tasks import send_task_update
 
 await send_task_update.kiq(
     task_id="task-123",
@@ -242,8 +250,8 @@ await send_task_update.kiq(
 subscriber = EventSubscriber(redis_client)
 
 # Запускаем worker
-await process_agent_task.kiq(
-    agent_id=agent_id,
+await process_flow_task.kiq(
+    flow_id=flow_id,
     task_id=task_id,
     context_id=context_id,
     content=content,
@@ -270,12 +278,12 @@ Worker публикует события через `Emitter`:
 ```python
 # В BaseChannel.process_task()
 emitter = Emitter(redis_client, state)
+flow = await flow_factory.get_flow(flow_id)
 
 try:
-    # Выполняем agent
-    result_state = await agent.run(state)
+    result_state = await flow.run(state)
     await emitter.emit_complete(result_state.response)
-except AgentInterrupt as e:
+except FlowInterrupt as e:
     await emitter.emit_interrupt(e.question)
 except Exception as e:
     await emitter.emit_error(str(e))
@@ -370,10 +378,10 @@ async def taskiq_broker(event_loop):
 
 ```python
 @pytest.mark.asyncio
-async def test_agent_task(taskiq_broker, test_context):
-    from apps.agents.tasks.agent_tasks import process_agent_task
+async def test_process_flow_task(taskiq_broker, test_context):
+    from apps.flows.src.tasks.flow_tasks import process_flow_task
     
-    task = await process_agent_task.kiq(
+    task = await process_flow_task.kiq(
         flow_id="test_flow",
         session_id="test_session",
         # ...
@@ -393,105 +401,17 @@ async def test_agent_task(taskiq_broker, test_context):
 6. **ВСЕГДА** используй `retry_on_error=True` для критичных задач
 7. **ПОМНИ** что задачи с session_id выполняются последовательно (FIFO)
 
-## Отложенные задачи (Delayed Tasks)
+## Планирование и напоминания (scheduler + тулы)
 
-### Архитектура
+Инфраструктура: **Redis schedule source** + **TaskiqScheduler** (`core/tasks/broker.py`, `core/scheduler/`). Запланированные срабатывания для flows выполняет задача **`execute_scheduled_task`** (`apps/flows/src/tasks/scheduled_tasks.py`, очередь broker **`scheduled`**), а не прямой вызов `process_flow_task.schedule_by_time` — расписание создаёт **`ScheduleService`** (`apps/flows/src/services/schedule_service.py`) через `execute_scheduled_task.kicker().schedule_by_time` / `schedule_by_cron` / `schedule_by_interval`.
 
-Отложенные задачи реализованы через `taskiq-redis`:
-- **ListRedisScheduleSource** - хранит расписание в Redis List
-- **TaskiqScheduler** - выполняет задачи по расписанию
-- **schedule_by_time()** - метод для планирования на конкретное время
+### Тулы расписания для `llm_node`
 
-### Создание отложенной задачи
+Файл: `apps/flows/tools/scheduling.py`. Имена тулов: `schedule_cron_task`, `schedule_interval_task`, `schedule_one_time_task`, `list_scheduled_tasks`, `cancel_scheduled_task`. Внутри вызывается `ScheduleService` контейнера flows.
 
-```python
-from datetime import datetime, timezone, timedelta
-from apps.agents.tasks.agent_tasks import process_agent_task
-from core.tasks import schedule_source
+Требования: в `state` передан **`session_id`** в формате `flow_id:context_id`, иначе `ValueError`.
 
-# Время выполнения
-execute_at = datetime.now(timezone.utc) + timedelta(minutes=30)
-
-# Планирование задачи
-schedule = await process_agent_task.schedule_by_time(
-    schedule_source,
-    execute_at,
-    flow_id="flow_123",
-    session_id="session_456",
-    message="Напоминание: проверить статус заказа",
-    platform="api",
-    user_id="user_789",
-    company_id="company_abc",
-    metadata={"delayed": True, "task_type": "reminder"},
-)
-
-# schedule.schedule_id - ID для отмены
-```
-
-### Отмена отложенной задачи
-
-```python
-await schedule.unschedule()
-```
-
-### Тулы для агентов
-
-Агенты могут создавать отложенные задачи через тулы:
-
-```python
-from apps.agents.tools.task.delayed_task_tools import (
-    create_delayed_task,
-    list_delayed_tasks,
-    cancel_delayed_task,
-    get_delayed_task_status,
-)
-
-class MyAgent(BaseAgent):
-    tools = [create_delayed_task, list_delayed_tasks]
-    prompt = """
-    Можешь создавать отложенные задачи:
-    - create_delayed_task(delay_seconds=3600, message="Напоминание")
-    - create_delayed_task(delay_seconds=60, tool_call={"name": "check_status", "args": {"order_id": "123"}})
-    """
-```
-
-### Типы отложенных задач
-
-1. **Текстовое сообщение**:
-```python
-await create_delayed_task.invoke({
-    "delay_seconds": 3600,
-    "message": "Напоминание через час"
-})
-```
-
-2. **Вызов функции (tool_call)**:
-```python
-await create_delayed_task.invoke({
-    "delay_seconds": 60,
-    "tool_call": {
-        "name": "check_order_status",
-        "args": {"order_id": "ORD-12345"}
-    }
-})
-```
-
-### Хранение в state
-
-Созданные отложенные задачи сохраняются в `state["store"]["delayed_tasks"]`:
-
-```python
-state["store"]["delayed_tasks"] = {
-    "task_abc123": {
-        "task_id": "task_abc123",
-        "schedule_id": "sched_xyz",
-        "execute_at": "2025-01-15T15:00:00Z",
-        "message": "Напоминание",
-        "tool_call": None,
-        "status": "scheduled"
-    }
-}
-```
+Дополнительно тулы дописывают в state список **`scheduled_tasks`** (см. `scheduling.py`).
 
 ### Запуск Scheduler
 

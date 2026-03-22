@@ -209,7 +209,7 @@ class PgVectorProvider(BaseRAGProvider):
         metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> RAGDocument:
-        s3_key, bucket_name, original_filename, _ = await self._upload_file_to_s3(
+        s3_key, bucket_name, original_filename = await self._upload_file_to_s3(
             file_path, namespace_id, public=False
         )
 
@@ -238,13 +238,16 @@ class PgVectorProvider(BaseRAGProvider):
         metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> RAGDocument:
-        file_data, bucket_name, original_filename = await self._download_file_from_s3(s3_key)
+        doc_metadata = metadata or {}
+        bucket_key = doc_metadata.get("s3_bucket")
+        file_data, bucket_name, original_filename = await self._download_file_from_s3(
+            s3_key, bucket_config_key=bucket_key
+        )
 
         filename = document_name or original_filename
         file_text = self._parser.parse_bytes(file_data, filename)
         file_type = self._parser.get_file_type(filename)
 
-        doc_metadata = metadata or {}
         doc_metadata["file_type"] = file_type
         doc_metadata["s3_key"] = s3_key
         doc_metadata["s3_bucket"] = bucket_name

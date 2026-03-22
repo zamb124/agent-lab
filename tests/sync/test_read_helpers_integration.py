@@ -49,7 +49,7 @@ async def test_channel_read_direct_peer_without_user_repo(
         company_id=company_id,
     )
     assert read.peer is not None
-    assert read.peer.id == "bob"
+    assert read.peer.user_id == "bob"
     assert read.peer.display_name == "bob"
 
 
@@ -92,7 +92,7 @@ async def test_channel_read_direct_peer_with_user_repository(
         company_id=company_id,
     )
     assert read.peer is not None
-    assert read.peer.id == peer_id
+    assert read.peer.user_id == peer_id
     assert read.peer.display_name == "Peer Display Name"
 
 
@@ -152,7 +152,7 @@ def test_message_read_from_entity_builds_read() -> None:
             order=0,
         ),
     ]
-    sender = UserBrief(id="sender1", display_name="Sender", avatar_url=None)
+    sender = UserBrief(user_id="sender1", display_name="Sender", avatar_url=None)
     out: MessageRead = message_read_from_entity(m=m, contents=contents, sender=sender)
     assert out.id == "m1"
     assert out.sender.display_name == "Sender"

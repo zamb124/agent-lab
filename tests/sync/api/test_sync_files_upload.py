@@ -21,11 +21,11 @@ async def test_upload_file_multipart(
     )
     assert r.status_code == 200, r.text
     data = r.json()
-    assert "file" in data
-    assert data["file"]["original_name"] == "hello.txt"
-    assert data["file"]["size_bytes"] == 11
+    assert data["original_name"] == "hello.txt"
+    assert data["file_size"] == 11
+    assert "/sync/api/v1/files/download/" in data["url"]
 
-    file_id = data["file"]["id"]
+    file_id = data["file_id"]
     gr = await sync_client.get(f"/sync/api/v1/files/{file_id}", headers=auth_headers_system)
     assert gr.status_code == 200
-    assert gr.json()["id"] == file_id
+    assert gr.json()["file_id"] == file_id

@@ -236,7 +236,7 @@ async def process_document(self, document_id: str, user_id: str):
 ### Agents: Завершение задачи
 
 ```python
-# apps/agents/src/runner.py
+# apps/flows/src/runner.py
 from core.websocket.publisher import notify_user, Notification, NotificationType
 
 async def on_task_complete(self, task_id: str, user_id: str, result: dict):
@@ -248,7 +248,7 @@ async def on_task_complete(self, task_id: str, user_id: str, result: dict):
             message=f"Задача {task_id} выполнена",
             service="agents",
             priority="normal",
-            action_url=f"/agents/tasks/{task_id}",
+            action_url=f"/flows/tasks/{task_id}",
             data={
                 "task_id": task_id,
                 "result": result

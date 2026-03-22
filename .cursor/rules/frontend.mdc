@@ -113,6 +113,13 @@ class MyModal extends GlassModal {
 - `this.icon` — IconService
 - `this.companies` — CompaniesService
 
+## IconService и `platform-icon`
+
+- Реализация: `core/frontend/static/services/icon.service.js` — словарь **`ICON_MAP`**: логическое имя иконки → базовое имя файла в `core/frontend/static/assets/icons/{name}.svg`.
+- Новое имя без дублирования SVG: добавить ключ в `ICON_MAP` (например `'llm_node': 'agent'` — то же изображение, другое имя для UI).
+- Компонент: `core/frontend/static/lib/components/platform-icon.js` — атрибут **`name`** должен существовать в `ICON_MAP`, иначе загрузка падает с ошибкой в консоль.
+- Редактор flows (`apps/flows/ui/`): узел типа **`llm_node`** везде использует **`name="llm_node"`** (сайдбар типов, канва, `llm-node-editor`), не `agent`.
+
 **Короткие методы notify:**
 - `this.success(message)` — зелёное уведомление
 - `this.error(message)` — красное уведомление

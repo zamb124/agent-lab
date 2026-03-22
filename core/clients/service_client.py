@@ -85,7 +85,7 @@ class ServiceClient:
         Выполняет HTTP запрос к сервису.
         
         Args:
-            service: Имя сервиса (agents, crm, frontend)
+            service: Имя сервиса (flows, crm, frontend)
             method: HTTP метод (GET, POST, PUT, DELETE)
             path: Путь запроса (без базового URL)
             timeout: Таймаут запроса

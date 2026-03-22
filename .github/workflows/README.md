@@ -48,7 +48,7 @@
 │                                                                 │
 │  Сервисы (один образ, разные command):                          │
 │  ┌──────────┬──────┬────────────────────────────────────────┐   │
-│  │ agents   │ 8001 │ python -m apps.agents.main             │   │
+│  │ agents   │ 8001 │ python -m apps.flows.main             │   │
 │  │ frontend │ 8002 │ python -m apps.frontend.main           │   │
 │  │ crm      │ 8003 │ python -m apps.crm.main                │   │
 │  │ rag      │ 8004 │ python -m apps.rag.main                │   │

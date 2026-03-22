@@ -14,12 +14,14 @@ import './thread-drawer.js';
 import '../modals/channel-settings-modal.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/platform-icon.js';
+import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 
 export class ChatView extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         glassStyles,
         buttonStyles,
+        modalShellStyles,
         css`
             :host {
                 display: flex;
@@ -411,9 +413,9 @@ export class ChatView extends PlatformElement {
             if (typeof p.avatar_url === 'string' && p.avatar_url !== '') {
                 return html`<img class="header-entity-img" src=${p.avatar_url} alt="" />`;
             }
-            const label = typeof p.display_name === 'string' ? p.display_name : p.id;
+            const label = typeof p.display_name === 'string' ? p.display_name : p.user_id;
             const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-            const hue = this._hueFromString(p.id);
+            const hue = this._hueFromString(p.user_id);
             return html`
                 <span class="header-entity-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
             `;
@@ -529,10 +531,25 @@ export class ChatView extends PlatformElement {
             selectedChannel && selectedChannel.type !== 'direct' && !focusedThreadId
         );
 
+        const channelSettingsCreate = this._ui.channelSettingsCreate;
         const settingsChannelId = this._ui.channelSettingsChannelId;
         const settingsChannel = typeof settingsChannelId === 'string' && settingsChannelId !== ''
             ? this._channels.list.find(c => c.id === settingsChannelId) ?? null
             : null;
+        const selectedSpaceId = this._chat.selectedSpaceId;
+        const channelCreateDraft = channelSettingsCreate
+            ? {
+                id: null,
+                type: 'topic',
+                space_id: typeof selectedSpaceId === 'string' && selectedSpaceId !== ''
+                    ? selectedSpaceId
+                    : null,
+                name: '',
+                avatar_url: null,
+            }
+            : null;
+        const channelForModal = channelSettingsCreate ? channelCreateDraft : settingsChannel;
+        const channelModalOpen = channelSettingsCreate || settingsChannel !== null;
 
         const headerLead = selectedChannel
             ? html`<div class="header-leading">${this._headerLeadingGraphic(selectedChannel)}</div>`
@@ -659,8 +676,9 @@ export class ChatView extends PlatformElement {
             <thread-drawer></thread-drawer>
 
             <channel-settings-modal
-                .open=${settingsChannel !== null}
-                .channel=${settingsChannel}
+                .open=${channelModalOpen}
+                .channel=${channelForModal}
+                .createMode=${channelSettingsCreate}
                 @close=${() => SyncStore.closeChannelSettings()}
             ></channel-settings-modal>
         `;

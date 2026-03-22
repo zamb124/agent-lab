@@ -1,0 +1,200 @@
+---
+description: "Runtime flows: ноды, tools, skills, FlowInterrupt, InterruptManager"
+alwaysApply: true
+---
+# Flows — краткий справочник
+
+## NodeType (7 типов)
+
+| Тип | Описание |
+|-----|----------|
+| llm_node | LLM + tools |
+| code | Python код: execute(args, state) |
+| flow | Вызов skill (flow_id + skill_id) |
+| remote_flow | A2A вызов удалённого flow |
+| external_api | HTTP запрос |
+| mcp | MCP tool |
+| channel | Отправка сообщений (Telegram, Webhook, Email) |
+
+## Любая нода = Tool
+
+NodeAsToolWrapper оборачивает ЛЮБУЮ ноду для LlmNode:
+
+    tools: [
+      {"tool_id": "calc", "type": "code", "code": "..."},
+      {"tool_id": "skill", "type": "flow", "flow_id": "self", "skill_id": "math"},
+      {"tool_id": "api", "type": "external_api", "url": "..."},
+    ]
+
+## LlmNode - параллельное выполнение
+
+LLM возвращает несколько tool_calls → asyncio.gather → все выполняются параллельно.
+
+Merge:
+- messages → extend (все добавляются)
+- tool_results → merge (все результаты)
+- остальное → last wins
+
+## CodeNode
+
+    def execute(args, state):
+        state.result = args['value'] * 2
+        return {'result': state.result}
+
+Последняя функция в коде = entry point.
+
+## Маппинги
+
+input_mapping - откуда берём данные:
+
+    input_mapping: {
+        "query": "@state:user_query",   # из state.user_query
+        "limit": "@const:10",           # константа
+    }
+
+output_mapping - куда пишем результат:
+
+    output_mapping: {
+        "result": "calculation_result"  # result → state.calculation_result
+    }
+
+## Skills как Tools
+
+Один flow может вызывать свои skills как tools:
+
+    {
+        "tool_id": "my_skill",
+        "type": "flow",
+        "flow_id": "self_flow",  // тот же flow
+        "skill_id": "math_skill",
+        "args_schema": {"x": {"type": "integer"}}
+    }
+
+## Структура FlowConfig
+
+    {
+      "flow_id": "my_flow",
+      "entry": "main",
+      "nodes": {
+        "main": {"type": "llm_node", "prompt": "...", "tools": [...]}
+      },
+      "edges": [{"from_node": "main", "to_node": null}],
+      "skills": {
+        "math_skill": {"name": "Math", "entry": "calc", "nodes": {...}}
+      }
+    }
+
+## Triggers (точки входа)
+
+Триггеры запускают flow из внешних источников:
+
+| Тип | Описание |
+|-----|----------|
+| telegram | Webhook от Telegram бота |
+| webhook | HTTP POST запрос |
+| cron | Расписание (TaskIQ) |
+
+    "triggers": {
+      "tg": {
+        "type": "telegram",
+        "config": {"bot_token": "@var:bot_token"},
+        "input_mapping": {"content": "@trigger:message.text"},
+        "output_actions": [...]
+      }
+    }
+
+## ChannelNode (отправка сообщений)
+
+    {
+      "type": "channel",
+      "channel": "telegram",  // telegram, webhook
+      "action": "send_message",
+      "channel_config": {"bot_token": "..."},
+      "input_mapping": {"recipient": "@state:chat_id", "text": "@state:response"}
+    }
+
+Как tool в LlmNode:
+
+    {"tool_id": "notify", "type": "channel", "channel": "webhook", ...}
+
+## FlowInterrupt - Механизм Прерывания
+
+Бросает `FlowInterrupt(question="...")` → выполнение останавливается → вопрос уходит пользователю.
+
+### State при interrupt
+
+    state.interrupt: InterruptData          # Вопрос
+    state.interrupt_path: List[PathItem]    # Путь к месту прерывания
+    state.nested_states: Dict[str, Data]    # Состояния вложенных вызовов (skills/tools)
+    state.current_nodes: List[str]          # Где остановились на графе
+
+### Сценарий 1: ask_user tool в LlmNode
+
+    LlmNode → ask_user → FlowInterrupt
+    
+- `interrupt_path = [{type: "tool", id: "ask_user"}]`
+- Resume: ответ → tool result в messages → LLM продолжает
+
+### Сценарий 2: ask_user во вложенном llm_node (как tool)
+
+    LlmNode → child_flow (llm_node tool) → ask_user → FlowInterrupt
+    
+- `interrupt_path = [{type: "llm_node", id: "child_flow"}, {type: "tool", id: "ask_user"}]`
+- `nested_states["child_flow"]` = сохранённое состояние child
+- Resume: по `interrupt_path[0]` → загрузить nested_state → передать ответ → child продолжает
+
+### Сценарий 3: FlowNode (subflow на графе) с CodeNode
+
+    Parent flow → FlowNode("call_child") → Child flow → CodeNode → FlowInterrupt
+    
+- FlowNode - это нода на графе (type: "flow"), не tool!
+- `current_nodes = ["call_child"]` - где остановились
+- CodeNode может бросить `raise FlowInterrupt(question="...")` 
+- Resume: `Flow.run()` видит `interrupt + content` → продолжает с `current_nodes`
+- FlowNode вызывается повторно, передаёт `state.content` (ответ) в child
+
+### Сценарий 4: FlowNode с LlmNode + ask_user
+
+    Parent (LlmNode tool) → child_flow → LlmNode → ask_user
+    
+- Комбинация сценариев 2 и 3
+- `interrupt_path` содержит путь: `[child_flow, ask_user]`
+- `nested_states["child_flow"]` хранит историю messages
+- Resume: ответ попадает как tool result в messages child → LLM child продолжает
+
+### Как бросить interrupt
+
+В CodeNode/tool:
+
+    from apps.flows.src.runtime.exceptions import FlowInterrupt
+    raise FlowInterrupt(question="Как вас зовут?")
+
+Или использовать готовую функцию:
+
+    from apps.flows.src.eval.state_utils import ask_user
+    ask_user("Как вас зовут?")
+
+### Ключевые компоненты
+
+- `InterruptManager.save_nested_state()` - сохраняет state
+- `InterruptManager.load_nested_state()` - загружает при resume
+- `InterruptManager.push_interrupt_path()` - добавляет в НАЧАЛО пути
+- `Flow.run()` - определяет resume по `state.interrupt + state.content`
+
+### Merge при interrupt
+
+- `messages` - extend
+- `nested_states` - update напрямую
+- `interrupt_path` - копируется целиком
+- остальное - last wins
+
+## Ключевые файлы
+
+- apps/flows/src/runtime/nodes.py - все ноды
+- apps/flows/src/runtime/runners/llm_runner.py - LlmNode логика
+- apps/flows/src/tools/node_wrapper.py - NodeAsToolWrapper (interrupt для вложенных flow)
+- apps/flows/src/tools/registry.py - ToolRegistry
+- apps/flows/src/state/interrupt_manager.py - InterruptManager
+- apps/flows/src/triggers/ - триггеры (handlers, executor, registry)
+- apps/flows/src/channels/ - каналы (telegram.py, webhook.py)
+- core/state/__init__.py - ExecutionState, NestedStateData

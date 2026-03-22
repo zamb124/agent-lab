@@ -14,13 +14,13 @@ class DocumentationQuery(BaseModel):
     language: str = Field(default="python", description="python, javascript, typescript")
     
     # Ракурс (perspective) - для какого контекста нужна документация
-    perspective: str = Field(default="editor", description="editor, agent, tool, node")
+    perspective: str = Field(default="editor", description="editor, flow, tool, node")
     
     # Фильтры
     categories: Optional[List[str]] = Field(default=None, description="http, llm, data, files, interaction, state, logic, basic")
     groups: Optional[List[str]] = Field(default=None, description="Группы tools")
     tags: Optional[List[str]] = Field(default=None, description="Произвольные теги")
-    node_type: Optional[str] = Field(default=None, description="function, tool, react_node, external_api")
+    node_type: Optional[str] = Field(default=None, description="function, tool, llm_node, external_api")
     
     # Что включить в ответ
     include_modules: bool = True

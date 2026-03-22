@@ -1,2 +1,0 @@
-# Example Custom Agent Class
-

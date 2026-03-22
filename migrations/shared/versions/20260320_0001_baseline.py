@@ -116,7 +116,7 @@ def upgrade() -> None:
         sa.Column("user_groups", postgresql.JSONB(), nullable=True),
         sa.Column("session_auth", sa.String(), nullable=True),
         sa.Column("session_agent", sa.String(), nullable=True),
-        sa.Column("agent_id", sa.String(), nullable=True),
+        sa.Column("flow_id", sa.String(), nullable=True),
         sa.Column("task_id", sa.String(), nullable=True),
         sa.Column("context_id", sa.String(), nullable=True),
         sa.Column("skill_id", sa.String(), nullable=True),
@@ -134,7 +134,7 @@ def upgrade() -> None:
     op.create_index("ix_spans_user_id", "spans", ["user_id"])
     op.create_index("ix_spans_session_auth", "spans", ["session_auth"])
     op.create_index("ix_spans_session_agent", "spans", ["session_agent"])
-    op.create_index("ix_spans_agent_id", "spans", ["agent_id"])
+    op.create_index("ix_spans_agent_id", "spans", ["flow_id"])
     op.create_index("ix_spans_task_id", "spans", ["task_id"])
     op.create_index("ix_spans_context_id", "spans", ["context_id"])
 

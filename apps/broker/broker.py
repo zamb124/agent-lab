@@ -30,8 +30,8 @@ broker.on_event("startup")(recovery_handler)
 # Обработчики запуска и остановки воркера
 async def worker_startup(state: TaskiqState) -> None:
     """Инициализация контейнера при старте worker."""
-    from apps.agents.config import get_settings
-    from apps.agents.src.container import get_container
+    from apps.flows.config import get_settings
+    from apps.flows.src.container import get_container
     from core.tracing import setup_tracing
     from core.tracing.tracer import set_span_repository
 

@@ -11,11 +11,11 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_agents_service_health(agents_client):
+async def test_flows_service_health(flows_client):
     """Проверка что agents сервис работает"""
     # Health endpoint создается автоматически в create_service_app
     # Префикс сервиса: /agents
-    response = await agents_client.get("/agents/health")
+    response = await flows_client.get("/flows/health")
     assert response.status_code == 200
     print("✅ Agents service: UP")
 
@@ -31,7 +31,7 @@ async def test_frontend_service_health(frontend_client):
 @pytest.mark.asyncio
 async def test_container_setup(container):
     """Проверка что DI контейнер настроен корректно"""
-    assert container.agent_repository is not None
+    assert container.flow_repository is not None
     assert container.tool_repository is not None
     assert container.node_repository is not None
     assert container.company_repository is not None
@@ -61,24 +61,23 @@ async def test_registry_file_exists():
     from pathlib import Path
     import yaml
     
-    registry_path = Path(__file__).parent.parent.parent.parent / "apps" / "agents" / "registry.yaml"
+    registry_path = Path(__file__).parent.parent.parent.parent / "apps" / "flows" / "registry.yaml"
     
     assert registry_path.exists(), f"Registry не найден: {registry_path}"
     
     with open(registry_path, "r", encoding="utf-8") as f:
         registry = yaml.safe_load(f)
     
-    assert "agents" in registry, "Registry должен содержать секцию agents"
+    assert "flows" in registry, "Registry должен содержать секцию flows"
     assert "tools" in registry, "Registry должен содержать секцию tools"
     assert "defaults" in registry, "Registry должен содержать секцию defaults"
     
-    # Проверка что есть хотя бы один public агент
-    agents = registry["agents"]
-    public_agents = [a for a in agents if isinstance(a, dict) and a.get("public")]
+    flows = registry["flows"]
+    public_flows = [f for f in flows if isinstance(f, dict) and f.get("public")]
     
-    assert len(public_agents) > 0, "Должен быть хотя бы один public агент"
+    assert len(public_flows) > 0, "Должен быть хотя бы один public flow"
     
-    print(f"✅ Registry: OK ({len(agents)} агентов, {len(public_agents)} public)")
+    print(f"✅ Registry: OK ({len(flows)} flows, {len(public_flows)} public)")
 
 
 @pytest.mark.asyncio
@@ -90,10 +89,10 @@ async def test_auth_token_creation(auth_token):
 
 
 @pytest.mark.asyncio  
-async def test_company_api_endpoint_exists(agents_client):
+async def test_company_api_endpoint_exists(flows_client):
     """Проверка что endpoint /company/init зарегистрирован"""
     # Запрос без тела должен вернуть 422 (validation error), а не 404
-    response = await agents_client.post("/agents/api/v1/company/init")
+    response = await flows_client.post("/flows/api/v1/company/init")
     
     # 422 = endpoint существует, но запрос некорректен
     # 404 = endpoint не найден

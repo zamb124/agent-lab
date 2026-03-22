@@ -18,7 +18,7 @@ async def _user_brief(user_repository: UserRepository | None, user_id: str) -> U
         if u is not None:
             display_name = u.name
             avatar_url = u.avatar_url
-    return UserBrief(id=user_id, display_name=display_name, avatar_url=avatar_url)
+    return UserBrief(user_id=user_id, display_name=display_name, avatar_url=avatar_url)
 
 
 async def channel_read_from_entity(

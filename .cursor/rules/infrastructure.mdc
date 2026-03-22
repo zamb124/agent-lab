@@ -26,13 +26,13 @@ alwaysApply: false
 
 ```
 humanitec.ru/           → frontend-svc  :8002
-humanitec.ru/agents     → agents-svc    :8001
+humanitec.ru/flows      → flows (apps.flows) :8001
 humanitec.ru/crm        → crm-svc       :8003
 humanitec.ru/rag        → rag-svc       :8004
 humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
 
 *.humanitec.ru/         → frontend-svc  :8002  (поддомен = slug компании)
-*.humanitec.ru/agents   → agents-svc    :8001
+*.humanitec.ru/flows    → flows (apps.flows) :8001
 *.humanitec.ru/crm      → crm-svc       :8003
 ...
 ```
@@ -45,7 +45,7 @@ humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
 
 | Сервис | Порт | Команда |
 |---|---|---|
-| agents | 8001 | `python -m apps.agents.main` |
+| flows | 8001 | `python -m apps.flows.main` |
 | frontend | 8002 | `python -m apps.frontend.main` |
 | crm | 8003 | `python -m apps.crm.main` |
 | rag | 8004 | `python -m apps.rag.main` |
@@ -66,7 +66,7 @@ humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
 2. SCP на `/opt/agent-lab/`: `docker-compose-prod.yaml`, `conf.json`, **`migrations/postgres/init.sql`** (нужен bind-mount у сервиса `postgres`)
 3. SSH: `docker compose pull` → `postgres`+`redis` → одноразовый контейнер **`migrations`** (`python -m scripts.db_migrate upgrade`) → остальные сервисы
 
-`x-common-env` в `docker-compose-prod.yaml` задаёт `DATABASE__SHARED_URL`, `DATABASE__AGENTS_URL`, … на хост `postgres` и отдельные имена БД — они **перекрывают** URL из `conf.json` внутри контейнеров. Репозиторный `conf.json` с `localhost` на сервере не мешает, пока заданы переменные окружения compose.
+`x-common-env` в `docker-compose-prod.yaml` задаёт `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, … на хост `postgres` и отдельные имена БД — они **перекрывают** URL из `conf.json` внутри контейнеров. Репозиторный `conf.json` с `localhost` на сервере не мешает, пока заданы переменные окружения compose.
 
 Секреты — в GitHub Secrets (environment `production`).
 

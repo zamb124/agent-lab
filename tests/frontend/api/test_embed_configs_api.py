@@ -16,29 +16,29 @@ async def test_agent():
     Создает тестового агента для API тестов.
     Использует текущий контекст из test_context или middleware.
     """
-    from apps.agents.src.container import get_container as get_agents_container
-    from apps.agents.src.models.agent_config import AgentConfig
+    from apps.flows.src.container import get_container
+    from apps.flows.src.models.flow_config import FlowConfig
     
-    agents_container = get_agents_container()
+    flows_container = get_container()
     
-    agent = AgentConfig(
-        agent_id="test_agent",
+    agent = FlowConfig(
+        flow_id="test_agent",
         name="Test Agent",
         entry="main",
         nodes={
             "main": {
-                "type": "react_node",
+                "type": "llm_node",
                 "prompt": "Test prompt",
                 "next": None
             }
         },
     )
-    await agents_container.agent_repository.set(agent)
+    await flows_container.flow_repository.set(agent)
     
     yield agent
     
     # Cleanup
-    await agents_container.agent_repository.delete("test_agent")
+    await flows_container.flow_repository.delete("test_agent")
 
 
 @pytest_asyncio.fixture
@@ -79,14 +79,14 @@ async def auth_headers_other_company(frontend_client, frontend_container):
 async def test_auth_with_agent(frontend_container):
     """
     Создаёт пользователя, компанию И агента в одной компании.
-    Возвращает headers и agents_container для cleanup.
+    Возвращает headers и flows_container для cleanup.
     """
     import uuid
     from core.utils.tokens import get_token_service
     from core.models.identity_models import User, Company
     from core.context import set_context, clear_context, Context
-    from apps.agents.src.container import get_container as get_agents_container
-    from apps.agents.src.models.agent_config import AgentConfig
+    from apps.flows.src.container import get_container
+    from apps.flows.src.models.flow_config import FlowConfig
     
     # Создаём компанию
     company_id = f"test_company_{uuid.uuid4().hex[:8]}"
@@ -116,21 +116,21 @@ async def test_auth_with_agent(frontend_container):
         channel="test",
     ))
     
-    agents_container = get_agents_container()
-    agent = AgentConfig(
-        agent_id="test_agent",
+    flows_container = get_container()
+    agent = FlowConfig(
+        flow_id="test_agent",
         name="Test Agent",
         entry="main",
-        nodes={"main": {"type": "react_node", "prompt": "Test", "next": None}},
+        nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
     )
-    await agents_container.agent_repository.set(agent)
+    await flows_container.flow_repository.set(agent)
     clear_context()
     
     # Генерируем токен
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
     
-    yield {"Authorization": f"Bearer {token}"}, agents_container, company_id
+    yield {"Authorization": f"Bearer {token}"}, flows_container, company_id
     
     # Cleanup агента
     set_context(Context(
@@ -139,7 +139,7 @@ async def test_auth_with_agent(frontend_container):
         session_id="test",
         channel="test",
     ))
-    await agents_container.agent_repository.delete("test_agent")
+    await flows_container.flow_repository.delete("test_agent")
     clear_context()
 
 
@@ -152,8 +152,8 @@ async def test_auth_with_agent_other_company(frontend_container):
     from core.utils.tokens import get_token_service
     from core.models.identity_models import User, Company
     from core.context import set_context, clear_context, Context
-    from apps.agents.src.container import get_container as get_agents_container
-    from apps.agents.src.models.agent_config import AgentConfig
+    from apps.flows.src.container import get_container
+    from apps.flows.src.models.flow_config import FlowConfig
     
     # Создаём ДРУГУЮ компанию
     company_id = f"test_company_other_{uuid.uuid4().hex[:8]}"
@@ -183,21 +183,21 @@ async def test_auth_with_agent_other_company(frontend_container):
         channel="test",
     ))
     
-    agents_container = get_agents_container()
-    agent = AgentConfig(
-        agent_id="test_agent_other",
+    flows_container = get_container()
+    agent = FlowConfig(
+        flow_id="test_agent_other",
         name="Other Test Agent",
         entry="main",
-        nodes={"main": {"type": "react_node", "prompt": "Test", "next": None}},
+        nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
     )
-    await agents_container.agent_repository.set(agent)
+    await flows_container.flow_repository.set(agent)
     clear_context()
     
     # Генерируем токен
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
     
-    yield {"Authorization": f"Bearer {token}"}, agents_container, company_id
+    yield {"Authorization": f"Bearer {token}"}, flows_container, company_id
     
     # Cleanup агента
     set_context(Context(
@@ -206,7 +206,7 @@ async def test_auth_with_agent_other_company(frontend_container):
         session_id="test",
         channel="test",
     ))
-    await agents_container.agent_repository.delete("test_agent_other")
+    await flows_container.flow_repository.delete("test_agent_other")
     clear_context()
 
 
@@ -214,7 +214,7 @@ async def test_auth_with_agent_other_company(frontend_container):
 async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест создания конфигурации виджета"""
     
-    auth_headers, agents_container, company_id = test_auth_with_agent
+    auth_headers, flows_container, company_id = test_auth_with_agent
     
     # Создаем конфигурацию
     response = await frontend_client.post(
@@ -222,7 +222,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
         headers=auth_headers,
         json={
             "name": "Test Widget",
-            "agent_id": "test_agent",
+            "flow_id": "test_agent",
             "allowed_origins": ["https://example.com", "https://test.com"],
             "theme": "dark",
             "position": "bottom-right",
@@ -245,7 +245,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
     # Проверяем ответ
     assert "embed_id" in data
     assert data["name"] == "Test Widget"
-    assert data["agent_id"] == "test_agent"
+    assert data["flow_id"] == "test_agent"
     assert data["allowed_origins"] == ["https://example.com", "https://test.com"]
     assert data["status"] == "active"
     assert data["theme"] == "dark"
@@ -269,7 +269,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
 async def test_list_embed_configs(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест получения списка конфигураций"""
     
-    auth_headers, agents_container, company_id = test_auth_with_agent
+    auth_headers, flows_container, company_id = test_auth_with_agent
     
     # Создаем несколько конфигураций
     embed_ids = []
@@ -279,7 +279,7 @@ async def test_list_embed_configs(frontend_client: AsyncClient, test_auth_with_a
             headers=auth_headers,
             json={
                 "name": f"Widget {i}",
-                "agent_id": "test_agent",  # Используем существующего агента
+                "flow_id": "test_agent",  # Используем существующего агента
             }
         )
         assert response.status_code == 200
@@ -314,7 +314,7 @@ async def test_list_embed_configs(frontend_client: AsyncClient, test_auth_with_a
 async def test_get_embed_config(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест получения конкретной конфигурации"""
     
-    auth_headers, agents_container, company_id = test_auth_with_agent
+    auth_headers, flows_container, company_id = test_auth_with_agent
     
     # Создаем конфигурацию
     create_response = await frontend_client.post(
@@ -322,7 +322,7 @@ async def test_get_embed_config(frontend_client: AsyncClient, test_auth_with_age
         headers=auth_headers,
         json={
             "name": "Get Test Widget",
-            "agent_id": "test_agent",
+            "flow_id": "test_agent",
             "greeting_message": "Test greeting",
         }
     )
@@ -341,7 +341,7 @@ async def test_get_embed_config(frontend_client: AsyncClient, test_auth_with_age
     
     assert data["embed_id"] == embed_id
     assert data["name"] == "Get Test Widget"
-    assert data["agent_id"] == "test_agent"
+    assert data["flow_id"] == "test_agent"
     assert data["greeting_message"] == "Test greeting"
     
     # Cleanup
@@ -355,7 +355,7 @@ async def test_get_embed_config(frontend_client: AsyncClient, test_auth_with_age
 async def test_update_embed_config(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест обновления конфигурации"""
     
-    auth_headers, agents_container, company_id = test_auth_with_agent
+    auth_headers, flows_container, company_id = test_auth_with_agent
     
     # Создаем конфигурацию
     create_response = await frontend_client.post(
@@ -363,7 +363,7 @@ async def test_update_embed_config(frontend_client: AsyncClient, test_auth_with_
         headers=auth_headers,
         json={
             "name": "Original Name",
-            "agent_id": "test_agent",
+            "flow_id": "test_agent",
             "theme": "dark",
         }
     )
@@ -389,7 +389,7 @@ async def test_update_embed_config(frontend_client: AsyncClient, test_auth_with_
     assert data["name"] == "Updated Name"
     assert data["theme"] == "light"
     assert data["status"] == "disabled"
-    assert data["agent_id"] == "test_agent"  # Не изменился
+    assert data["flow_id"] == "test_agent"  # Не изменился
     
     # Cleanup
     await frontend_client.delete(
@@ -402,7 +402,7 @@ async def test_update_embed_config(frontend_client: AsyncClient, test_auth_with_
 async def test_delete_embed_config(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест удаления конфигурации"""
     
-    auth_headers, agents_container, company_id = test_auth_with_agent
+    auth_headers, flows_container, company_id = test_auth_with_agent
     
     # Создаем конфигурацию
     create_response = await frontend_client.post(
@@ -410,7 +410,7 @@ async def test_delete_embed_config(frontend_client: AsyncClient, test_auth_with_
         headers=auth_headers,
         json={
             "name": "Delete Test",
-            "agent_id": "test_agent",
+            "flow_id": "test_agent",
         }
     )
     
@@ -440,7 +440,7 @@ async def test_delete_embed_config(frontend_client: AsyncClient, test_auth_with_
 async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест получения кода для встраивания"""
     
-    auth_headers, agents_container, company_id = test_auth_with_agent
+    auth_headers, flows_container, company_id = test_auth_with_agent
     
     # Создаем конфигурацию
     create_response = await frontend_client.post(
@@ -448,7 +448,7 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
         headers=auth_headers,
         json={
             "name": "Code Test",
-            "agent_id": "test_agent",
+            "flow_id": "test_agent",
         }
     )
     
@@ -493,8 +493,8 @@ async def test_company_isolation(
     Конфигурации одной компании не должны быть видны другой.
     """
     
-    auth_headers, agents_container, company_id = test_auth_with_agent
-    auth_headers_other, agents_container_other, company_id_other = test_auth_with_agent_other_company
+    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers_other, flows_container_other, company_id_other = test_auth_with_agent_other_company
     
     # Создаем конфигурацию в компании 1
     response1 = await frontend_client.post(
@@ -502,7 +502,7 @@ async def test_company_isolation(
         headers=auth_headers,
         json={
             "name": "Company 1 Widget",
-            "agent_id": "test_agent",
+            "flow_id": "test_agent",
         }
     )
     
@@ -515,7 +515,7 @@ async def test_company_isolation(
         headers=auth_headers_other,
         json={
             "name": "Company 2 Widget",
-            "agent_id": "test_agent_other",
+            "flow_id": "test_agent_other",
         }
     )
     
@@ -576,7 +576,7 @@ async def test_create_config_requires_auth(frontend_client: AsyncClient):
         "/frontend/api/embed/configs",
         json={
             "name": "Unauthorized Test",
-            "agent_id": "test_agent",
+            "flow_id": "test_agent",
         }
     )
     
@@ -592,7 +592,7 @@ async def test_create_config_with_nonexistent_agent(frontend_client: AsyncClient
         headers=auth_headers,
         json={
             "name": "Invalid Agent Test",
-            "agent_id": "nonexistent_agent_12345",
+            "flow_id": "nonexistent_agent_12345",
         }
     )
     

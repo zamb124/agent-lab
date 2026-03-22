@@ -27,7 +27,7 @@ class TimestampedModel(BaseModel):
 class UserBrief(BaseModel):
     """Краткая информация о пользователе (общая для всей платформы)."""
 
-    id: str = Field(description="Идентификатор пользователя.")
+    user_id: str = Field(description="Идентификатор пользователя.")
     display_name: str = Field(description="Отображаемое имя.")
     avatar_url: str | None = Field(
         default=None,

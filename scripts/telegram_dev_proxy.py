@@ -39,13 +39,13 @@ class TelegramPollingBot:
     
     def __init__(
         self,
-        agent_id: str,
+        flow_id: str,
         trigger_id: str,
         bot_token: str,
         secret_token: Optional[str],
         local_url: str,
     ):
-        self.agent_id = agent_id
+        self.flow_id = flow_id
         self.trigger_id = trigger_id
         self.bot_token = bot_token
         self.secret_token = secret_token
@@ -56,7 +56,7 @@ class TelegramPollingBot:
         
     @property
     def trigger_url(self) -> str:
-        return f"{self.local_url}/agents/api/v1/triggers/telegram/{self.agent_id}/{self.trigger_id}"
+        return f"{self.local_url}/flows/api/v1/triggers/telegram/{self.flow_id}/{self.trigger_id}"
     
     @property
     def telegram_api_url(self) -> str:
@@ -76,12 +76,12 @@ class TelegramPollingBot:
             )
             
             if response.status_code != 200:
-                logger.error(f"[{self.agent_id}/{self.trigger_id}] Telegram API error: {response.text}")
+                logger.error(f"[{self.flow_id}/{self.trigger_id}] Telegram API error: {response.text}")
                 return []
             
             data = response.json()
             if not data.get("ok"):
-                logger.error(f"[{self.agent_id}/{self.trigger_id}] Telegram API error: {data}")
+                logger.error(f"[{self.flow_id}/{self.trigger_id}] Telegram API error: {data}")
                 return []
             
             return data.get("result", [])
@@ -89,7 +89,7 @@ class TelegramPollingBot:
         except httpx.TimeoutException:
             return []
         except Exception as e:
-            logger.error(f"[{self.agent_id}/{self.trigger_id}] Error getting updates: {e}")
+            logger.error(f"[{self.flow_id}/{self.trigger_id}] Error getting updates: {e}")
             return []
     
     async def forward_update(self, client: httpx.AsyncClient, update: Dict[str, Any]) -> bool:
@@ -108,26 +108,26 @@ class TelegramPollingBot:
             
             if response.status_code == 200:
                 logger.info(
-                    f"[{self.agent_id}/{self.trigger_id}] "
+                    f"[{self.flow_id}/{self.trigger_id}] "
                     f"Update {update['update_id']} forwarded successfully"
                 )
                 return True
             else:
                 logger.error(
-                    f"[{self.agent_id}/{self.trigger_id}] "
+                    f"[{self.flow_id}/{self.trigger_id}] "
                     f"Failed to forward update: {response.status_code} - {response.text}"
                 )
                 return False
                 
         except Exception as e:
-            logger.error(f"[{self.agent_id}/{self.trigger_id}] Error forwarding update: {e}")
+            logger.error(f"[{self.flow_id}/{self.trigger_id}] Error forwarding update: {e}")
             return False
     
     async def run(self):
         """Основной цикл polling."""
         self.running = True
         logger.info(
-            f"[{self.agent_id}/{self.trigger_id}] "
+            f"[{self.flow_id}/{self.trigger_id}] "
             f"Starting polling for bot token ...{self.bot_token[-8:]}"
         )
         
@@ -150,14 +150,14 @@ class TelegramPollingBot:
                     text = message.get("text", "")[:50] if message else ""
                     chat_id = message.get("chat", {}).get("id") if message else None
                     logger.info(
-                        f"[{self.agent_id}/{self.trigger_id}] "
+                        f"[{self.flow_id}/{self.trigger_id}] "
                         f"Received update {update_id}: chat={chat_id}, text='{text}...'"
                     )
                     
                     # Пересылаем в локальный сервер
                     await self.forward_update(client, update)
         
-        logger.info(f"[{self.agent_id}/{self.trigger_id}] Polling stopped")
+        logger.info(f"[{self.flow_id}/{self.trigger_id}] Polling stopped")
     
     def start(self) -> asyncio.Task:
         """Запускает polling в background task."""
@@ -181,7 +181,7 @@ class TelegramDevProxy:
     
     async def load_telegram_triggers(self) -> List[Dict[str, Any]]:
         """Загружает все Telegram триггеры из БД."""
-        from apps.agents.src.container import get_container
+        from apps.flows.src.container import get_container
         
         container = get_container()
         await container.initialize()
@@ -189,7 +189,7 @@ class TelegramDevProxy:
         triggers = []
         
         # Получаем все агенты
-        agents = await container.agent_repository.list_all()
+        agents = await container.flow_repository.list_all()
         
         for agent in agents:
             if not agent.triggers:
@@ -206,20 +206,20 @@ class TelegramDevProxy:
                     
                     if not bot_token:
                         logger.warning(
-                            f"Agent {agent.agent_id} trigger {trigger_id}: "
+                            f"Agent {agent.flow_id} trigger {trigger_id}: "
                             f"bot_token not found"
                         )
                         continue
                     
                     triggers.append({
-                        "agent_id": agent.agent_id,
+                        "flow_id": agent.flow_id,
                         "trigger_id": trigger_id,
                         "bot_token": bot_token,
                         "secret_token": trigger.config.get("secret_token"),
                     })
                     
                     logger.info(
-                        f"Found Telegram trigger: {agent.agent_id}/{trigger_id} "
+                        f"Found Telegram trigger: {agent.flow_id}/{trigger_id} "
                         f"(token: ...{bot_token[-8:]})"
                     )
         
@@ -248,7 +248,7 @@ class TelegramDevProxy:
         # Создаём боты для каждого триггера
         for trigger_data in triggers:
             bot = TelegramPollingBot(
-                agent_id=trigger_data["agent_id"],
+                flow_id=trigger_data["flow_id"],
                 trigger_id=trigger_data["trigger_id"],
                 bot_token=trigger_data["bot_token"],
                 secret_token=trigger_data["secret_token"],

@@ -20,7 +20,7 @@ ATTR_CHANNEL = "platform.channel"
 ATTR_IS_RESUME = "platform.is_resume"
 
 # Agent
-ATTR_FLOW_ID = "platform.agent_id"
+ATTR_FLOW_ID = "platform.flow_id"
 ATTR_FLOW_ENTRY = "platform.flow.entry_node"
 ATTR_FLOW_VARIABLES_COUNT = "platform.flow.variables_count"
 ATTR_SKILL_ID = "platform.skill_id"
@@ -38,6 +38,7 @@ ATTR_AGENT_TOOLS_COUNT = "platform.agent.tools_count"
 
 # ReAct
 ATTR_REACT_ITERATION = "platform.react.iteration"
+ATTR_LLM_NODE_LABEL = "platform.llm_node.label"
 
 # LLM
 ATTR_LLM_MODEL = "platform.llm.model"

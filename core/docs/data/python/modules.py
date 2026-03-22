@@ -138,7 +138,7 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {"name": "channel", "type": "property", "doc": "Канал коммуникации: 'a2a', 'telegram', 'api'"},
         {"name": "user_id", "type": "property", "doc": "ID пользователя"},
         {"name": "session_id", "type": "property", "doc": "ID сессии"},
-        {"name": "agent_id", "type": "property", "doc": "ID агента"},
+        {"name": "flow_id", "type": "property", "doc": "ID агента"},
         {"name": "metadata", "type": "property", "doc": "Метаданные запроса (dict)"},
     ],
     "channel": [

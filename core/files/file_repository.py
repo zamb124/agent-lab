@@ -16,10 +16,13 @@ logger = logging.getLogger(__name__)
 class FileRepository(BaseRepository[FileRecord]):
     """
     Репозиторий для работы с файлами.
-    is_global=False - файлы изолированы по компаниям.
+
+    is_global=True — записи хранятся без префикса компании.
+    Доступ для приватных файлов контролируется на уровне хендлера (сверка company_id),
+    а не на уровне ключей хранилища.
     """
-    
-    is_global = False
+
+    is_global = True
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=FileRecord)

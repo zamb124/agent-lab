@@ -157,7 +157,7 @@ class TestServicesAPI:
         assert "rag" in services_dict
         
         # Проверяем URL сервисов
-        assert services_dict["agents"]["url"] == "/agents"
+        assert services_dict["agents"]["url"] == "/flows"
         assert services_dict["crm"]["url"] == "/crm"
         assert services_dict["rag"]["url"] == "/rag"
 

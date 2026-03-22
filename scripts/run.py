@@ -28,9 +28,9 @@ if str(project_root) not in sys.path:
 # Конфигурация сервисов
 SERVICES = {
     # FastAPI сервисы (uvicorn)
-    "agents": {
+    "flows": {
         "type": "uvicorn",
-        "app": "apps.agents.main:app",
+        "app": "apps.flows.main:app",
         "port": "8001",
     },
     "frontend": {

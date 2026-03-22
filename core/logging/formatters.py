@@ -58,8 +58,8 @@ class JSONFormatter(logging.Formatter):
             if hasattr(context, 'channel') and context.channel:
                 context_info["channel"] = context.channel
 
-            if hasattr(context, 'agent_id') and context.agent_id:
-                context_info["agent_id"] = context.agent_id
+            if hasattr(context, 'flow_id') and context.flow_id:
+                context_info["flow_id"] = context.flow_id
 
             if context_info:
                 log_entry["context"] = context_info
@@ -130,12 +130,12 @@ class StructuredConsoleFormatter(logging.Formatter):
             if ctx.session_id:
                 ctx_parts.append(f"[SESS:{ctx.session_id}]")
 
-            if ctx.agent_config:
-                agent_id = getattr(ctx.agent_config, 'agent_id', 'unknown')
-                ctx_parts.append(f"[AGENT:{agent_id}]")
+            if ctx.flow_config:
+                flow_id = getattr(ctx.flow_config, 'flow_id', 'unknown')
+                ctx_parts.append(f"[AGENT:{flow_id}]")
 
-            if ctx.agent_id:
-                ctx_parts.append(f"[AGENT_ID:{ctx.agent_id}]")
+            if ctx.flow_id:
+                ctx_parts.append(f"[AGENT_ID:{ctx.flow_id}]")
 
         # Собираем контекст в одну строку
         context_str = " ".join(ctx_parts)

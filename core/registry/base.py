@@ -25,8 +25,8 @@ class ResourceRegistry(ABC, Generic[T]):
     
     Examples:
         >>> registry = NodeRegistry()
-        >>> registry.register("react_node", ReactNode)
-        >>> node_class = registry.get("react_node")
+        >>> registry.register("llm_node", LlmNode)
+        >>> node_class = registry.get("llm_node")
     """
     
     def __init__(self):

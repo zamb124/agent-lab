@@ -44,10 +44,6 @@
       "title": "Конфигурация flow",
       "description": "FlowConfig для текущего запроса"
     },
-    "agent_config": {
-      "title": "Конфигурация агента",
-      "description": "AgentConfig для текущего запроса"
-    },
     "interface": {
       "title": "Интерфейс",
       "description": "Интерфейс для отправки промежуточных сообщений (reasoning, thinking, etc)"

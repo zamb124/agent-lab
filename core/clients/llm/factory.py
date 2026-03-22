@@ -980,7 +980,7 @@ def get_llm_for_state(
     Returns:
         MockLLM или реальный LLMClient
     """
-    from apps.agents.src.mock import get_mock_for_llm
+    from apps.flows.src.mock import get_mock_for_llm
     
     # Проверяем mock
     if state:

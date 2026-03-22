@@ -1,0 +1,61 @@
+{
+  "id": "example_custom_class",
+  "name": "Пример кастомного класса react-ноды",
+  "description": "Демонстрация llm_node_class для кастомной логики ноды flow",
+  "tags": [
+    "example",
+    "custom_class",
+    "demo"
+  ],
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "llm_node_class": "apps.flows.bundles.example_custom_class.custom_flow.CustomFlowWithLogging",
+      "prompt": "Ты полезный ассистент компании {company_name}. Отвечай кратко и по делу. Используй ask_user если нужна дополнительная информация.",
+      "tools": [
+        "ask_user"
+      ],
+      "llm": {
+        "model": "gpt-4o",
+        "temperature": 0.3
+      }
+    },
+    "preprocessor": {
+      "type": "llm_node",
+      "llm_node_class": "apps.flows.bundles.example_custom_class.custom_flow.CustomFlowWithPreprocessing",
+      "prompt": "Ты ассистент с предобработкой. Учитывай время суток в ответах.",
+      "tools": [
+        "ask_user"
+      ],
+      "llm": {
+        "model": "gpt-4o",
+        "temperature": 0.5
+      }
+    }
+  },
+  "variables": {
+    "company_name": "@var:company_name"
+  },
+  "skills": {
+    "with_preprocessing": {
+      "name": "С предобработкой",
+      "description": "Skill с нодой предобработки входных данных",
+      "entry": "preprocessor"
+    }
+  },
+  "permission": [
+    "admin",
+    "developers"
+  ],
+  "edges": [
+    {
+      "from": "main",
+      "to": null
+    },
+    {
+      "from": "preprocessor",
+      "to": null
+    }
+  ]
+}

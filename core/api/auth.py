@@ -105,8 +105,8 @@ async def start_auth(
         current_path = request.url.path
         if current_path.startswith("/frontend/"):
             callback_path = "/frontend/api/auth/callback"
-        elif current_path.startswith("/agents/"):
-            callback_path = "/agents/api/auth/callback"
+        elif current_path.startswith("/flows/"):
+            callback_path = "/flows/api/auth/callback"
         else:
             callback_path = "/api/auth/callback"
         

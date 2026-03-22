@@ -59,7 +59,7 @@ services:
     platform: "linux/amd64"
     build:
       context: .
-      dockerfile: apps/test_a2a_agent/Dockerfile
+      dockerfile: apps/test_a2a_sample/Dockerfile
     container_name: agentlab_a2a_test
     ports:
       - "18052:8005"
@@ -90,7 +90,7 @@ services:
         condition: service_healthy
     environment:
       - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
-      - DATABASE__AGENTS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
+      - DATABASE__FLOWS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
       - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
@@ -117,7 +117,7 @@ services:
         condition: service_healthy
     environment:
       - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
-      - DATABASE__AGENTS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
+      - DATABASE__FLOWS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
       - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
@@ -178,7 +178,7 @@ services:
         condition: service_started
     environment:
       - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
-      - DATABASE__AGENTS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
+      - DATABASE__FLOWS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
       - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag

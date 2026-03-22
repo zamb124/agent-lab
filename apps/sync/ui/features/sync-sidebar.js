@@ -67,18 +67,68 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--text-secondary);
             }
 
-            .nav-row {
+            .nav-row-wrap {
                 display: flex;
                 align-items: stretch;
                 gap: 0;
                 margin-bottom: var(--space-1);
                 width: 100%;
                 min-width: 0;
+                box-sizing: border-box;
+                border-radius: var(--radius-lg);
+                border: 1px solid transparent;
+                background: transparent;
+                transition: all var(--duration-fast);
             }
 
-            .nav-row > .nav-item {
+            .nav-row-wrap:hover {
+                background: var(--glass-solid-subtle);
+                border-color: var(--glass-border-subtle);
+            }
+
+            .nav-row-wrap.active {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+            }
+
+            .nav-row-wrap.active .nav-item--in-wrap {
+                color: var(--accent);
+                font-weight: var(--font-semibold);
+            }
+
+            .nav-row-wrap.active .row-gear {
+                color: var(--accent);
+            }
+
+            .nav-row-wrap.active:hover {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+            }
+
+            .nav-row-wrap .row-gear {
+                align-self: center;
+                margin-right: var(--space-1);
+            }
+
+            .nav-row-wrap > .nav-item--in-wrap {
                 flex: 1;
                 min-width: 0;
+            }
+
+            .nav-item--in-wrap {
+                border: none;
+                background: transparent;
+                margin-bottom: 0;
+            }
+
+            .nav-item--in-wrap:hover {
+                background: transparent;
+                border-color: transparent;
+                color: inherit;
+            }
+
+            .nav-row-wrap:hover:not(.active) .nav-item--in-wrap {
+                color: var(--text-primary);
             }
 
             .nav-item {
@@ -332,7 +382,7 @@ export class SyncSidebar extends PlatformElement {
                 display: none !important;
             }
 
-            :host([collapsed]) .sync-sidebar-inner .nav-row {
+            :host([collapsed]) .sync-sidebar-inner .nav-row-wrap {
                 justify-content: center;
                 margin-bottom: var(--space-1);
             }
@@ -489,9 +539,9 @@ export class SyncSidebar extends PlatformElement {
             if (typeof p.avatar_url === 'string' && p.avatar_url !== '') {
                 return html`<img class="entity-avatar" src=${p.avatar_url} alt="" />`;
             }
-            const label = typeof p.display_name === 'string' ? p.display_name : p.id;
+            const label = typeof p.display_name === 'string' ? p.display_name : p.user_id;
             const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-            const hue = this._hueFromString(p.id);
+            const hue = this._hueFromString(p.user_id);
             return html`
                 <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
             `;
@@ -626,7 +676,7 @@ export class SyncSidebar extends PlatformElement {
                                 aria-label="Создать пространство"
                                 @click=${(e) => {
                                     e.stopPropagation();
-                                    SyncStore.setShowCreateSpace(true);
+                                    SyncStore.openSpaceSettingsCreate();
                                 }}
                             >+</button>
                         </div>
@@ -634,10 +684,12 @@ export class SyncSidebar extends PlatformElement {
                             <div class="section-scroll">
                                 ${this._spaces.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
                                 ${this._spaces.list.map(space => html`
-                                    <div class="nav-row">
+                                    <div
+                                        class="nav-row-wrap ${space.id === selectedSpaceId ? 'active' : ''}"
+                                    >
                                         <button
                                             type="button"
-                                            class="nav-item ${space.id === selectedSpaceId ? 'active' : ''}"
+                                            class="nav-item nav-item--in-wrap"
                                             @click=${() => this._selectSpace(space.id)}
                                         >
                                             <div class="nav-item-main">
@@ -680,7 +732,7 @@ export class SyncSidebar extends PlatformElement {
                                 aria-label="Создать канал"
                                 @click=${(e) => {
                                     e.stopPropagation();
-                                    SyncStore.setShowCreateChannel(true);
+                                    SyncStore.openChannelSettingsCreate();
                                 }}
                             >+</button>
                         </div>
@@ -694,10 +746,12 @@ export class SyncSidebar extends PlatformElement {
                                     const rowMeta = this._channelRowMeta(channel);
                                     const showGear = channel.type !== 'direct';
                                     return html`
-                                    <div class="nav-row">
+                                    <div
+                                        class="nav-row-wrap ${channel.id === selectedChannelId ? 'active' : ''}"
+                                    >
                                         <button
                                             type="button"
-                                            class="nav-item ${channel.id === selectedChannelId ? 'active' : ''}"
+                                            class="nav-item nav-item--in-wrap"
                                             @click=${() => this._selectChannel(channel)}
                                         >
                                             <div class="nav-item-main">

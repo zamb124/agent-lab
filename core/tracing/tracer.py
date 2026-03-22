@@ -127,13 +127,14 @@ class PlatformTracer:
             "user_groups": trace_ctx.user_groups if trace_ctx else None,
             "session_auth": trace_ctx.session_auth if trace_ctx else None,
             "session_agent": trace_ctx.session_agent if trace_ctx else None,
-            "agent_id": trace_ctx.agent_id if trace_ctx else all_attrs.get(attr.ATTR_FLOW_ID),
+            "flow_id": trace_ctx.flow_id if trace_ctx else all_attrs.get(attr.ATTR_FLOW_ID),
             "task_id": trace_ctx.task_id if trace_ctx else all_attrs.get(attr.ATTR_TASK_ID),
             "context_id": trace_ctx.context_id if trace_ctx else all_attrs.get(attr.ATTR_CONTEXT_ID),
             "skill_id": trace_ctx.skill_id if trace_ctx else all_attrs.get(attr.ATTR_SKILL_ID),
             "channel": trace_ctx.channel if trace_ctx else all_attrs.get(attr.ATTR_CHANNEL),
             "node_id": all_attrs.get(attr.ATTR_NODE_ID),
-            "agent_name": all_attrs.get(attr.ATTR_AGENT_NAME),
+            "agent_name": all_attrs.get(attr.ATTR_AGENT_NAME)
+            or all_attrs.get(attr.ATTR_LLM_NODE_LABEL),
             "is_resume": trace_ctx.is_resume if trace_ctx else all_attrs.get(attr.ATTR_IS_RESUME),
             "attributes": all_attrs,
             "events": None,
@@ -150,7 +151,7 @@ class PlatformTracer:
         session_agent: Optional[str] = None,
         task_id: Optional[str] = None,
         context_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
+        flow_id: Optional[str] = None,
         skill_id: Optional[str] = None,
         channel: Optional[str] = None,
         is_resume: bool = False,
@@ -167,7 +168,7 @@ class PlatformTracer:
             session_agent=session_agent,
             task_id=task_id,
             context_id=context_id,
-            agent_id=agent_id,
+            flow_id=flow_id,
             skill_id=skill_id,
             channel=channel,
             is_resume=is_resume,
@@ -193,8 +194,8 @@ class PlatformTracer:
             attrs[attr.ATTR_TASK_ID] = trace_ctx.task_id
         if trace_ctx.context_id:
             attrs[attr.ATTR_CONTEXT_ID] = trace_ctx.context_id
-        if trace_ctx.agent_id:
-            attrs[attr.ATTR_FLOW_ID] = trace_ctx.agent_id
+        if trace_ctx.flow_id:
+            attrs[attr.ATTR_FLOW_ID] = trace_ctx.flow_id
         if trace_ctx.skill_id:
             attrs[attr.ATTR_SKILL_ID] = trace_ctx.skill_id
         if trace_ctx.channel:
@@ -232,7 +233,7 @@ class PlatformTracer:
     @asynccontextmanager
     async def flow_span(
         self,
-        agent_id: str,
+        flow_id: str,
         entry_node: str,
         trace_ctx: Optional[TraceContext] = None,
     ) -> AsyncGenerator[Span, None]:
@@ -243,18 +244,18 @@ class PlatformTracer:
 
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
-        attributes[attr.ATTR_FLOW_ID] = agent_id
+        attributes[attr.ATTR_FLOW_ID] = flow_id
         attributes[attr.ATTR_FLOW_ENTRY] = entry_node
 
         with self._otel_tracer.start_as_current_span(
-            name=f"flow.{agent_id}",
+            name=f"flow.{flow_id}",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
         ) as span:
             try:
                 yield span
             finally:
-                await self._save_span(span, f"flow.{agent_id}", "INTERNAL", start_time, trace_ctx)
+                await self._save_span(span, f"flow.{flow_id}", "INTERNAL", start_time, trace_ctx)
 
     @asynccontextmanager
     async def node_span(
@@ -284,40 +285,41 @@ class PlatformTracer:
                 await self._save_span(span, f"node.{node_type}.{node_id}", "INTERNAL", start_time, trace_ctx)
 
     @asynccontextmanager
-    async def agent_span(
+    async def llm_node_span(
         self,
-        agent_name: str,
-        agent_id: Optional[str] = None,
+        node_label: str,
+        flow_id: Optional[str] = None,
         model: Optional[str] = None,
         trace_ctx: Optional[TraceContext] = None,
     ) -> AsyncGenerator[Span, None]:
-        """Span для выполнения агента."""
+        """Span на весь ReAct-цикл llm_node (LLM + tools)."""
         if not is_tracing_enabled():
             yield trace.get_current_span()
             return
 
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
-        attributes[attr.ATTR_AGENT_NAME] = agent_name
-        attributes[attr.ATTR_AGENT_ID] = agent_id or agent_name
+        attributes[attr.ATTR_LLM_NODE_LABEL] = node_label
+        if flow_id:
+            attributes[attr.ATTR_FLOW_ID] = flow_id
         if model:
             attributes[attr.ATTR_LLM_MODEL] = model
 
         with self._otel_tracer.start_as_current_span(
-            name=f"agent.{agent_name}",
+            name=f"llm_node.{node_label}",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
         ) as span:
             try:
                 yield span
             finally:
-                await self._save_span(span, f"agent.{agent_name}", "INTERNAL", start_time, trace_ctx)
+                await self._save_span(span, f"llm_node.{node_label}", "INTERNAL", start_time, trace_ctx)
 
     @asynccontextmanager
     async def react_iteration_span(
         self,
         iteration: int,
-        agent_name: str,
+        node_label: str,
         trace_ctx: Optional[TraceContext] = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для одной итерации ReAct цикла."""
@@ -328,7 +330,7 @@ class PlatformTracer:
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_REACT_ITERATION] = iteration
-        attributes[attr.ATTR_AGENT_NAME] = agent_name
+        attributes[attr.ATTR_LLM_NODE_LABEL] = node_label
 
         with self._otel_tracer.start_as_current_span(
             name=f"react.iteration.{iteration}",
@@ -430,7 +432,7 @@ class PlatformTracer:
         tool_name: str,
         tool_call_id: str,
         args: Dict[str, Any],
-        is_agent_tool: bool = False,
+        nested_flow_tool: bool = False,
         trace_ctx: Optional[TraceContext] = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для вызова tool."""
@@ -442,7 +444,7 @@ class PlatformTracer:
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_TOOL_NAME] = tool_name
         attributes[attr.ATTR_TOOL_CALL_ID] = tool_call_id
-        attributes[attr.ATTR_TOOL_IS_AGENT] = is_agent_tool
+        attributes[attr.ATTR_TOOL_IS_AGENT] = nested_flow_tool
         # Обрезаем args для безопасности
         args_str = str(args)[:500]
         attributes[attr.ATTR_TOOL_ARGS] = args_str

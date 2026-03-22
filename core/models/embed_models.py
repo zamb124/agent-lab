@@ -36,7 +36,7 @@ class EmbedConfig(BaseModel):
         description="Человекочитаемое название виджета",
         json_schema_extra={"placeholder": "Чат на главной странице"},
     )
-    agent_id: str = Field(
+    flow_id: str = Field(
         title="ID агента",
         description="Агент, который будет отвечать в этом виджете",
     )

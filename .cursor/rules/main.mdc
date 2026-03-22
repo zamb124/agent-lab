@@ -16,7 +16,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 
 | Сервис | Порт | Описание |
 |--------|------|----------|
-| agents | 8001 | AI агенты, flows, skills, A2A |
+| flows | 8001 | Flows: графы, skills, A2A |
 | frontend | 8002 | Управление платформой, UI |
 | crm | 8003 | CRM: entities, graph, access control |
 | rag | 8004 | RAG: документы, семантический поиск |
@@ -110,7 +110,7 @@ obj.field  # прямое обращение
 
 ```python
 # ЗАПРЕЩЕНО в core/
-from apps.agents.config import get_settings
+from apps.flows.config import get_settings
 from apps.crm.db.repositories import EntityRepository
 
 # ПРАВИЛЬНО в apps/
@@ -160,7 +160,7 @@ service = container.entity_service
 
 ### Конфигурация
 
-Каскад: ENV (высший) -> conf.json/conf.local.json -> defaults. БД: `DATABASE__SHARED_URL`, `DATABASE__AGENTS_URL`, `DATABASE__CRM_URL`, `DATABASE__SYNC_URL`, `DATABASE__RAG_URL`, `DATABASE__REDIS_URL` (см. `configuration.mdc`, `database.mdc`). Устаревшее `DATABASE__URL` читается как алиас к `shared_url`.
+Каскад: ENV (высший) -> conf.json/conf.local.json -> defaults. БД: `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, `DATABASE__CRM_URL`, `DATABASE__SYNC_URL`, `DATABASE__RAG_URL`, `DATABASE__REDIS_URL` (см. `configuration.mdc`, `database.mdc`). Устаревшее `DATABASE__URL` читается как алиас к `shared_url`.
 
 ### Асинхронность
 
@@ -171,9 +171,9 @@ service = container.entity_service
 ТОЛЬКО `ServiceClient`. Запрещён прямой `httpx.AsyncClient` между сервисами.
 
 ```python
-from core.clients import get_service_client
-client = get_service_client()
-response = await client.get("agents", "/agents/api/v1/flows/")
+from core.clients import ServiceClient
+client = ServiceClient()
+response = await client.get("flows", "/flows/api/v1/flows/")
 ```
 
 ### LLM
@@ -184,17 +184,25 @@ response = await client.get("agents", "/agents/api/v1/flows/")
 
 `get_context()` для доступа к user, company_id, trace_id. Репозитории берут company_id из контекста автоматически.
 
+## Управление зависимостями
+
+UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
+
+## Документация библиотек
+
+Используй Context7 для получения актуальной документации FastAPI, SQLAlchemy, pgvector, TaskIQ и других библиотек.
+
 ## INLINE-FIRST
 
-Платформа = JSON-конфиги агентов в БД. Код в `apps/agents/src/` — это runtime-библиотека, не бизнес-логика.
+Платформа = JSON-конфиги flows в БД. Код в `apps/flows/src/` — это runtime-библиотека, не бизнес-логика.
 
 ## Навигация по правилам
 
 | Тема | Файл правила |
 |------|-------------|
 | Инвайты по ссылке, JWT одноразовые | `invites.mdc` |
-| Агенты: ноды, skills, interrupt | `agents_logic.mdc` |
-| Архитектура agents сервиса | `agents.mdc` |
+| Flows: ноды, skills, interrupt | `flows_logic.mdc` |
+| Сервис flows: архитектура | `flows.mdc` |
 | Архитектурные принципы | `architecture.mdc` |
 | Конфигурация | `configuration.mdc` |
 | БД, репозитории, модели | `database.mdc` |
@@ -210,8 +218,8 @@ response = await client.get("agents", "/agents/api/v1/flows/")
 | S3 и MinIO | `s3_minio.mdc` |
 | Инфраструктура: сервер, ingress, деплой | `infrastructure.mdc` |
 | Сессии | `session.mdc` |
-| Tools для агентов | `tools.mdc` |
+| Tools для flows | `tools.mdc` |
 | MCP серверы | `mcp.mdc` |
 | Уведомления | `notifications.mdc` |
 | Миграции БД | `migrations.mdc` |
-| Проект: UV, порты, стиль | `project.mdc` |
+| Доменные имена (flow, user_id) | `domain_naming.mdc` |

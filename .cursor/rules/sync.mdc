@@ -121,7 +121,7 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 ## Frontend (Lit 3 + PlatformApp)
 
-UI живёт в `apps/sync/ui/`, следует единому платформенному стеку (Lit 3 / BaseStore / BaseService / PlatformApp), идентичному `rag`, `crm`, `agents`.
+UI живёт в `apps/sync/ui/`, следует единому платформенному стеку (Lit 3 / BaseStore / BaseService / PlatformApp), идентичному `rag`, `crm`, `flows`.
 
 ### Стек и структура
 
@@ -136,8 +136,7 @@ apps/sync/ui/
     sync-ws.service.js    # WebSocket к /sync/ws, cookie auth, reconnect/backoff
   features/
     sync-sidebar.js       # platform-sidebar: Личные — участники компании (GET /company/members), поиск, DM по клику; Пространства + Каналы; аккордеоны, «Свернуть всё» / «Развернуть всё»
-    channel-settings-modal.js  # topic/group: участники, поиск + чекбоксы, массовое addChannelMember
-    chat-view.js          # header (аватар/иконка: direct peer, канал, space или folder) + channel-picker | message-list + composer
+    chat-view.js          # header (аватар/иконка: direct peer, канал, space или folder) + channel-picker | message-list + composer; channel-settings-modal (createMode)
     channel-picker.js     # сетка каналов
     message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
     message-bubble.js     # контент, ПКМ-меню, реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation
@@ -145,8 +144,8 @@ apps/sync/ui/
     message-composer.js   # текст + Enter, emoji, image, reply и редактирование через store
     thread-drawer.js      # drawer со списком тредов
   modals/
-    create-space-modal.js
-    create-channel-modal.js
+    space-settings-modal.js   # пространство: создание и редактирование (spaceSettingsCreate / spaceSettingsSpaceId)
+    channel-settings-modal.js # канал: создание (createMode) и участники; экземпляр в chat-view
     user-info-modal.js
 ```
 
@@ -173,7 +172,7 @@ apps/sync/ui/
 ## Тестирование
 
 - **Без моков сервисов:** интеграционные и API-тесты Sync используют реальную БД (`tests/sync/conftest.py`, `SyncDatabase`, `TRUNCATE` между тестами), реальный Redis и реальный TaskIQ worker для очереди `sync` — так же, как в рабочем окружении. Не подменять репозитории, `execute_command`, `dispatch_sync_command`, `handle_command.kiq` через `unittest.mock` / `monkeypatch`.
-- **S3 / MinIO:** в тестовом окружении bucket должен существовать (имя из `S3__DEFAULT_BUCKET` / `conf.json`); тесты загрузки файлов **не** используют `pytest.skip` при отсутствии бакета — только жёсткие `assert` (инфраструктура обязательна).
+- **S3 / MinIO:** тесты задают `S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL` на `localhost:19002` (см. `tests/conftest.py`), чтобы совпадать с `ensure_minio_bucket` и `docker-compose-test`; в `conf.json` у `test-bucket` часто указан порт **19001** (dev MinIO) — без override возможен `NoSuchBucket` при живом MinIO. Тесты загрузки файлов без `pytest.skip` по бакету.
 - **Фикстуры:** `company_id` / `unique_id` для изоляции данных; контекст запроса (`set_context`) — через те же механизмы, что и middleware, без фейкового `get_context`.
 - **Скоуп:** репозитории — `tests/sync/db/`; дальше — HTTP/WebSocket/realtime с живой инфраструктурой по мере добавления тестов. UI — Playwright по общим правилам `testing.mdc`, без мока бэкенда.
 - **Покрытие и запуск тестов:** `tests/sync/README.md`.

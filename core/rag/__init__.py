@@ -8,7 +8,7 @@ RAG система с поддержкой различных провайдер
 """
 
 from .base_provider import BaseRAGProvider
-from .models import RAGDocument, RAGSearchResult, RAGNamespace, AgentRAGConfig
+from .models import RAGDocument, RAGSearchResult, RAGNamespace, FlowRAGConfig
 from .factory import (
     get_rag_provider,
     get_default_rag_provider,
@@ -25,7 +25,7 @@ __all__ = [
     "RAGDocument",
     "RAGSearchResult",
     "RAGNamespace",
-    "AgentRAGConfig",
+    "FlowRAGConfig",
     # Factory
     "get_rag_provider",
     "get_default_rag_provider",

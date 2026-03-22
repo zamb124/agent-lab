@@ -33,7 +33,7 @@ class CompiledGraph(StrictBaseModel):
     """
     Неизменяемый скомпилированный граф агента.
     
-    Результат компиляции AgentConfig + SkillConfig.
+    Результат компиляции FlowConfig + SkillConfig.
     Все проверки пройдены, граф готов к выполнению.
     
     Zero-Guess гарантии:
@@ -44,7 +44,7 @@ class CompiledGraph(StrictBaseModel):
     - Input/Output схемы совместимы (если указаны)
     """
     
-    agent_id: str = Field(..., description="ID агента")
+    flow_id: str = Field(..., description="ID агента")
     skill_id: str = Field(default="default", description="ID применённого skill")
     entry_node: str = Field(..., description="Стартовая нода")
     
@@ -84,13 +84,13 @@ class GraphCompiler:
     
     Examples:
         >>> compiler = GraphCompiler()
-        >>> graph = compiler.compile(agent_config, skill_id="default")
+        >>> graph = compiler.compile(flow_config, skill_id="default")
         >>> # Граф валиден и готов к исполнению
     """
     
     def compile(
         self,
-        agent_config: Any,  # AgentConfig
+        flow_config: Any,  # FlowConfig
         skill_config: Optional[Any] = None,  # SkillConfig
         variables: Optional[Dict[str, Any]] = None,
     ) -> CompiledGraph:
@@ -105,7 +105,7 @@ class GraphCompiler:
         5. Skills не конфликтуют
         
         Args:
-            agent_config: Конфигурация агента
+            flow_config: Конфигурация агента
             skill_config: Конфигурация skill (опционально)
             variables: Предрезолвнутые переменные
         
@@ -119,7 +119,7 @@ class GraphCompiler:
             InvalidGraphError: Если структура графа невалидна
         """
         # Применяем skill к базовой конфигурации
-        effective_config = self._apply_skill(agent_config, skill_config)
+        effective_config = self._apply_skill(flow_config, skill_config)
         
         # Валидируем entry ноду
         self._validate_entry_node(effective_config)
@@ -147,7 +147,7 @@ class GraphCompiler:
         ]
         
         return CompiledGraph(
-            agent_id=agent_config.agent_id,
+            flow_id=flow_config.flow_id,
             skill_id=skill_config.name if skill_config else "default",
             entry_node=effective_config["entry"],
             nodes=effective_config["nodes"],
@@ -158,19 +158,19 @@ class GraphCompiler:
     
     def _apply_skill(
         self,
-        agent_config: Any,
+        flow_config: Any,
         skill_config: Optional[Any],
     ) -> Dict[str, Any]:
         """
         Применяет skill к базовой конфигурации агента.
         
-        TODO: Эта логика будет перенесена из AgentFactory.
+        TODO: Эта логика будет перенесена из FlowFactory.
         Пока возвращаем базовую конфигурацию.
         """
         return {
-            "entry": agent_config.entry,
-            "nodes": dict(agent_config.nodes),
-            "edges": list(agent_config.edges),
+            "entry": flow_config.entry,
+            "nodes": dict(flow_config.nodes),
+            "edges": list(flow_config.edges),
         }
     
     def _validate_entry_node(self, config: Dict[str, Any]) -> None:

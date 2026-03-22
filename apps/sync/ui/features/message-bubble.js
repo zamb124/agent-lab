@@ -558,12 +558,12 @@ export class MessageBubble extends PlatformElement {
 
     _renderAvatarSlot() {
         const sender = this.msg.sender;
-        if (!sender || typeof sender.id !== 'string') {
+        if (!sender || typeof sender.user_id !== 'string') {
             throw new Error('Сообщение без отправителя.');
         }
         const shortName = toShortUsername(sender.display_name ?? '');
         const initials = initialsForAvatar(sender.display_name ?? '');
-        const hue = hueFromUserId(sender.id);
+        const hue = hueFromUserId(sender.user_id);
         const initialsStyle = `background: hsl(${hue} 48% 42%);`;
         const face = sender.avatar_url
             ? html`
@@ -681,7 +681,7 @@ export class MessageBubble extends PlatformElement {
             typeof myId === 'string' &&
             p &&
             typeof p.sender?.id === 'string' &&
-            p.sender.id === myId;
+            p.sender.user_id === myId;
         const quoteClass = !p
             ? 'reply-quote--unknown'
             : parentIsOwn

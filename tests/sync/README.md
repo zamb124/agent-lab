@@ -15,7 +15,7 @@
 uv run pytest tests/sync/ -v
 ```
 
-В тестовом окружении MinIO и bucket обязательны (`S3__*` в [`conftest.py`](conftest.py) и корневом `tests/conftest.py`); тесты загрузки не пропускаются. Тест `test_upload_returns_503_when_s3_disabled_via_env` отдельно проверяет ветку 503 через временный `S3__ENABLED=false` и сброс singleton настроек.
+В тестовом окружении MinIO и bucket обязательны. Корневой [`tests/conftest.py`](../conftest.py) задаёт `S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL=http://localhost:19002`, чтобы совпадать с `minio-test` из `docker-compose-test.yaml` (в `conf.json` у alias `test-bucket` по умолчанию порт **19001** под dev MinIO — без этого override приложение в тестах ходило бы на другой порт, чем фикстура `ensure_minio_bucket`). Тест `test_upload_returns_503_when_s3_disabled_via_env` отдельно проверяет ветку 503 через временный `S3__ENABLED=false` и сброс singleton настроек.
 
 ## Критерии готовности (green)
 

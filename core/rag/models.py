@@ -42,7 +42,7 @@ class RAGNamespace(BaseModel):
     metadata: Dict[str, Any] = {}
 
 
-class AgentRAGConfig(BaseModel):
+class FlowRAGConfig(BaseModel):
     """Конфигурация RAG для flow"""
     
     enabled: bool = False

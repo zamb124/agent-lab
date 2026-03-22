@@ -8,11 +8,13 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
+import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 
 export class ChannelSettingsModal extends PlatformElement {
     static properties = {
         open: { type: Boolean },
         channel: { type: Object },
+        createMode: { type: Boolean },
         _members: { state: true },
         _companyMembers: { state: true },
         _search: { state: true },
@@ -28,6 +30,7 @@ export class ChannelSettingsModal extends PlatformElement {
         glassStyles,
         buttonStyles,
         formStyles,
+        modalShellStyles,
         css`
             .backdrop {
                 position: fixed;
@@ -289,6 +292,7 @@ export class ChannelSettingsModal extends PlatformElement {
         super();
         this.open = false;
         this.channel = null;
+        this.createMode = false;
         this._members = [];
         this._companyMembers = { list: [], loading: false };
         this._search = '';
@@ -315,12 +319,24 @@ export class ChannelSettingsModal extends PlatformElement {
     }
 
     updated(changed) {
-        if (changed.has('open') && this.open && this.channel?.id) {
-            this._loadMembers();
+        const ch = this.channel;
+        const hasChannel = Boolean(
+            ch && (this.createMode || (typeof ch.id === 'string' && ch.id !== '')),
+        );
+        const canEdit = this.open && hasChannel;
+        if (changed.has('open') && canEdit) {
+            if (!this.createMode && ch?.id) {
+                this._loadMembers();
+            }
             this._syncEditFromChannel();
         }
-        if (changed.has('channel') && this.open && this.channel?.id) {
-            this._loadMembers();
+        if (changed.has('channel') && canEdit) {
+            if (!this.createMode && ch?.id) {
+                this._loadMembers();
+            }
+            this._syncEditFromChannel();
+        }
+        if (changed.has('createMode') && this.open && ch && this.createMode) {
             this._syncEditFromChannel();
         }
     }
@@ -376,6 +392,40 @@ export class ChannelSettingsModal extends PlatformElement {
             throw new Error('Некорректный ответ загрузки файла (нет storage_url).');
         }
         this._editAvatarUrl = res.file.storage_url;
+    }
+
+    async _createChannel() {
+        const ch = this.channel;
+        if (!ch) {
+            throw new Error('Канал не выбран.');
+        }
+        const spaceId = ch.space_id;
+        if (typeof spaceId !== 'string' || spaceId === '') {
+            throw new Error('Сначала выбери пространство слева.');
+        }
+        const name = this._editName.trim();
+        if (!name) {
+            throw new Error('Имя канала обязательно.');
+        }
+        this._savingProfile = true;
+        this._error = null;
+        try {
+            const syncApi = ServiceRegistry.get('syncApi');
+            const created = await syncApi.createChannel(spaceId, name);
+            const url = this._editAvatarUrl.trim();
+            if (url !== '') {
+                await syncApi.updateChannel(created.id, {
+                    name,
+                    avatar_url: url,
+                });
+            }
+            await SyncStore.loadChannels(syncApi);
+            SyncStore.sanitizeChatSelectionAfterLoad();
+            await SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, created.id);
+            this._close();
+        } finally {
+            this._savingProfile = false;
+        }
     }
 
     async _saveChannelProfile() {
@@ -498,15 +548,27 @@ export class ChannelSettingsModal extends PlatformElement {
         if (!this.open || !this.channel) return html``;
 
         const ch = this.channel;
-        const title = typeof ch.name === 'string' && ch.name.trim() !== '' ? ch.name : ch.id;
+        const createMode = this.createMode;
+        const title = createMode
+            ? 'Создать канал'
+            : (typeof ch.name === 'string' && ch.name.trim() !== '' ? ch.name : ch.id);
         const candidates = this._candidatesForAdd();
         const pickCount = this._selectedCount();
+        const primaryLabel = createMode
+            ? (this._savingProfile ? 'Создаём…' : 'Создать')
+            : (this._savingProfile ? 'Сохранение…' : 'Сохранить');
+
+        const metaLine = createMode
+            ? (typeof ch.space_id === 'string' && ch.space_id !== ''
+                ? `Пространство: ${ch.space_id.slice(0, 8)}…`
+                : 'Выбери пространство в списке слева.')
+            : `${ch.type}${ch.space_id ? ` · space: ${ch.space_id.slice(0, 8)}…` : ''}`;
 
         return html`
             <div class="backdrop" @click=${(e) => { if (e.target === e.currentTarget) this._close(); }}>
                 <div class="modal" @click=${(e) => e.stopPropagation()}>
                     <div class="modal-title">${title}</div>
-                    <div class="modal-meta">${ch.type}${ch.space_id ? ` · space: ${ch.space_id.slice(0, 8)}…` : ''}</div>
+                    <div class="modal-meta">${metaLine}</div>
 
                     ${this._error ? html`<div class="error">${this._error}</div>` : ''}
 
@@ -557,14 +619,18 @@ export class ChannelSettingsModal extends PlatformElement {
                             class="btn btn-primary"
                             ?disabled=${this._savingProfile}
                             @click=${() => {
-                                this._saveChannelProfile().catch((err) => {
+                                const run = createMode
+                                    ? this._createChannel()
+                                    : this._saveChannelProfile();
+                                run.catch((err) => {
                                     this._error = err instanceof Error ? err.message : String(err);
                                     this._savingProfile = false;
                                 });
                             }}
-                        >${this._savingProfile ? 'Сохранение…' : 'Сохранить'}</button>
+                        >${primaryLabel}</button>
                     </div>
 
+                    ${createMode ? '' : html`
                     <div class="section-label">Участники</div>
                     ${this._loading
                         ? html`<div class="modal-meta">Загрузка…</div>`
@@ -639,9 +705,10 @@ export class ChannelSettingsModal extends PlatformElement {
                             >Добавить выбранных (${pickCount})</button>
                         </div>
                     ` : ''}
+                    `}
 
                     <div class="footer-actions">
-                        <button type="button" class="btn" @click=${this._close}>Закрыть</button>
+                        <button type="button" class="btn" @click=${this._close}>${createMode ? 'Отмена' : 'Закрыть'}</button>
                     </div>
                 </div>
             </div>

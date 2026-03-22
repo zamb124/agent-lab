@@ -16,7 +16,7 @@ class CRMSettings(BaseSettings):
     
     Наследуется от BaseSettings, добавляя специфичные для CRM поля.
     Все базовые поля (database, auth, logging, etc) доступны из родителя.
-    URL agents сервиса берется из server.agents_service_url (SERVER__AGENTS_SERVICE_URL).
+    URL сервиса flows берется из server.flows_service_url (SERVER__FLOWS_SERVICE_URL).
     """
     
     rag_namespace_prefix: str = Field(

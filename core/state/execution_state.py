@@ -24,7 +24,7 @@ class InterruptData(FlexibleBaseModel):
 class InterruptPathItem(FlexibleBaseModel):
     """Элемент пути прерывания"""
     
-    type: str = Field(..., description="Тип: tool, react_node, agent")
+    type: str = Field(..., description="Тип: tool, llm_node, flow")
     id: str = Field(..., description="ID ноды/tool")
     tool_call: Optional[Dict[str, Any]] = Field(default=None, description="Данные tool_call")
 
@@ -129,13 +129,13 @@ class ExecutionState(FlexibleBaseModel):
     task_id: str = Field(..., description="ID задачи A2A")
     context_id: str = Field(..., description="ID контекста A2A")
     user_id: str = Field(..., description="ID пользователя")
-    session_id: str = Field(..., description="ID сессии в формате agent_id:context_id")
+    session_id: str = Field(..., description="ID сессии в формате flow_id:context_id")
     
     # ========================================================================
     # Agent Config - полный inline конфиг агента
     # ========================================================================
     
-    agent_config: Dict[str, Any] = Field(
+    flow_config: Dict[str, Any] = Field(
         default_factory=dict, 
         description="Полный inline конфиг агента (nodes, edges, resources, skills и т.д.)"
     )
@@ -150,17 +150,17 @@ class ExecutionState(FlexibleBaseModel):
     @field_validator("session_id")
     @classmethod
     def validate_session_id_format(cls, v: str) -> str:
-        """Валидирует что session_id в формате agent_id:context_id."""
+        """Валидирует что session_id в формате flow_id:context_id."""
         if not v:
             raise ValueError("session_id is required")
         if ":" not in v:
             raise ValueError(
-                f"session_id must be in format 'agent_id:context_id', got: '{v}'. "
-                "Session ID должен содержать ':' для извлечения agent_id."
+                f"session_id must be in format 'flow_id:context_id', got: '{v}'. "
+                "Session ID должен содержать ':' для извлечения flow_id."
             )
-        agent_id, context_id = v.split(":", 1)
-        if not agent_id:
-            raise ValueError(f"agent_id part of session_id is empty: '{v}'")
+        flow_id, context_id = v.split(":", 1)
+        if not flow_id:
+            raise ValueError(f"flow_id part of session_id is empty: '{v}'")
         if not context_id:
             raise ValueError(f"context_id part of session_id is empty: '{v}'")
         return v
@@ -172,6 +172,10 @@ class ExecutionState(FlexibleBaseModel):
     
     content: Optional[str] = Field(default=None, description="Входное сообщение")
     response: Optional[str] = Field(default=None, description="Ответ агента")
+    result: Optional[Any] = Field(
+        default=None,
+        description="Произвольный результат ноды или tool (CodeNode, inline execute)",
+    )
     messages: List[Message] = Field(default_factory=list, description="История сообщений")
     user_groups: List[str] = Field(default_factory=list, description="Группы пользователя")
     
@@ -364,20 +368,20 @@ class ExecutionState(FlexibleBaseModel):
     @property
     def resources(self) -> Dict[str, Any]:
         """
-        Resources из agent_config.
+        Resources из flow_config.
         
         Возвращает Dict[str, ResourceDefinition] (inline resources).
         """
-        return self.agent_config.get("resources", {})
+        return self.flow_config.get("resources", {})
     
     def get_node_config(self, node_id: str) -> Optional[Dict[str, Any]]:
-        """Получает конфиг ноды из agent_config."""
-        nodes = self.agent_config.get("nodes", {})
+        """Получает конфиг ноды из flow_config."""
+        nodes = self.flow_config.get("nodes", {})
         return nodes.get(node_id)
     
     def get_skill_config(self, skill_id: str) -> Optional[Dict[str, Any]]:
-        """Получает конфиг skill из agent_config."""
-        skills = self.agent_config.get("skills", {})
+        """Получает конфиг skill из flow_config."""
+        skills = self.flow_config.get("skills", {})
         return skills.get(skill_id)
     
     @classmethod
@@ -398,7 +402,7 @@ class ExecutionState(FlexibleBaseModel):
             task_id: ID задачи
             context_id: ID контекста
             user_id: ID пользователя
-            session_id: ID сессии в формате agent_id:context_id
+            session_id: ID сессии в формате flow_id:context_id
             content: Входное сообщение
             skill_id: ID skill
             **kwargs: Дополнительные поля

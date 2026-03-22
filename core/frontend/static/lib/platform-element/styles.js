@@ -18,6 +18,6 @@ export const baseStyles = css`
 `;
 
 export { formStyles } from '../styles/shared/form.styles.js';
-export { modalStyles, modalUtilityStyles } from '../styles/shared/modal.styles.js';
+export { modalStyles, modalUtilityStyles, modalShellStyles } from '../styles/shared/modal.styles.js';
 export { buttonStyles, iconButtonStyles } from '../styles/shared/button.styles.js';
 

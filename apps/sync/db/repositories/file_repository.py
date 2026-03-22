@@ -9,8 +9,8 @@ from apps.sync.db.models import SyncFile
 logger = logging.getLogger(__name__)
 
 
-class FileRepository(BaseSyncRepository[SyncFile]):
-    """Репозиторий для файлов с изоляцией по company_id."""
+class SyncFileRepository(BaseSyncRepository[SyncFile]):
+    """Репозиторий для SyncFile-записей с изоляцией по company_id."""
 
     def __init__(self, db: SyncDatabase):
         super().__init__(db=db)

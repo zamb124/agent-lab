@@ -93,7 +93,7 @@ class SessionWorkerManager:
         command: List[str],
         env: Dict[str, str] = None,
         cleanup_patterns: List[str] = None,
-        startup_wait: float = 3.0,
+        startup_wait: float = 2.0,
         log_file: str = None,
         err_file: str = None,
     ):
@@ -105,7 +105,7 @@ class SessionWorkerManager:
             command: Команда для запуска worker
             env: Переменные окружения
             cleanup_patterns: Паттерны для pkill (очистка старых процессов)
-            startup_wait: Время ожидания запуска (секунды)
+            startup_wait: Верхняя граница ожидания живого процесса после Popen (секунды)
             log_file: Путь к файлу stdout логов
             err_file: Путь к файлу stderr логов
         """
@@ -135,7 +135,7 @@ class SessionWorkerManager:
                 capture_output=True
             )
         
-        time.sleep(1)
+        time.sleep(0.05)
         print(f"✅ Старые {self.name} worker процессы очищены")
     
     def _increment_ref_count(self) -> int:
@@ -199,18 +199,25 @@ class SessionWorkerManager:
             env={**os.environ, **self.env},
         )
         
-        # Даем worker время запуститься
-        time.sleep(self.startup_wait)
-        
-        # Проверяем что worker запустился
-        if worker_process.poll() is not None:
-            worker_log.close()
-            worker_err.close()
-            with open(self.err_file, "r") as f:
-                err_content = f.read()
-            raise RuntimeError(
-                f"{self.name} worker failed to start. Error log:\n{err_content}"
-            )
+        # Живой процесс без немедленного exit достаточен; дальше taskiq поднимется сам.
+        # Не держим секунды sleep: при pytest-xdist lock общий, другие gw ждут здесь же.
+        bootstrap_ok_at = min(0.35, self.startup_wait)
+        started = time.monotonic()
+        while True:
+            if worker_process.poll() is not None:
+                worker_log.close()
+                worker_err.close()
+                with open(self.err_file, "r") as f:
+                    err_content = f.read()
+                raise RuntimeError(
+                    f"{self.name} worker failed to start. Error log:\n{err_content}"
+                )
+            elapsed = time.monotonic() - started
+            if elapsed >= self.startup_wait:
+                break
+            if elapsed >= bootstrap_ok_at:
+                break
+            time.sleep(0.05)
         
         # Сохраняем PID
         self.pid_path.write_text(str(worker_process.pid))
@@ -346,7 +353,6 @@ def taskiq_worker():
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
-        startup_wait=3.0,
         log_file="/tmp/taskiq_worker_test.log",
         err_file="/tmp/taskiq_worker_test_err.log",
     )
@@ -384,10 +390,8 @@ def rag_worker():
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
-            "S3__ENDPOINT_URL": "http://localhost:19002",
-            "S3__ACCESS_KEY": "minioadmin",
-            "S3__SECRET_KEY": "minioadmin",
-            "S3__BUCKET_NAME": "platform-test",
+            "S3__DEFAULT_BUCKET": "test-bucket",
+            "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
             "RAG__PROVIDERS__PGVECTOR__MOCK_EMBEDDINGS": "true",
         },
         cleanup_patterns=[
@@ -395,7 +399,6 @@ def rag_worker():
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
-        startup_wait=3.0,
         log_file="/tmp/rag_worker_test.log",
         err_file="/tmp/rag_worker_test_err.log",
     )
@@ -441,7 +444,6 @@ def sync_worker():
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
-        startup_wait=4.0,
         log_file="/tmp/sync_taskiq_worker_test.log",
         err_file="/tmp/sync_taskiq_worker_test_err.log",
     )

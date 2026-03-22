@@ -38,9 +38,9 @@ class DatabaseConfig(BaseModel):
         default=None,
         validation_alias=AliasChoices("shared_url", "url"),
     )
-    agents_url: Optional[str] = Field(
+    flows_url: Optional[str] = Field(
         default=None,
-        validation_alias=AliasChoices("agents_url", "agents_db_url"),
+        validation_alias=AliasChoices("flows_url"),
     )
     crm_url: Optional[str] = None
     sync_url: Optional[str] = None
@@ -76,21 +76,24 @@ class ServerConfig(BaseModel):
     debug: bool = False
 
     # URL сервисов для межсервисного взаимодействия
-    agents_service_url: Optional[str] = None
+    flows_service_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("flows_service_url"),
+    )
     crm_service_url: Optional[str] = None
     frontend_service_url: Optional[str] = None
     rag_service_url: Optional[str] = None
     sync_service_url: Optional[str] = None
 
     # Порты по умолчанию для каждого сервиса
-    _default_ports: Dict[str, int] = {"agents": 8001, "frontend": 8002, "crm": 8003, "rag": 8004, "sync": 8005}
+    _default_ports: Dict[str, int] = {"flows": 8001, "frontend": 8002, "crm": 8003, "rag": 8004, "sync": 8005}
 
     def get_service_url(self, service: Optional[str] = None) -> str:
         """
         Возвращает URL сервиса.
 
         Args:
-            service: Имя сервиса (agents, crm, frontend, rag). Если None - URL текущего сервиса.
+            service: Имя сервиса (flows, crm, frontend, rag). Если None - URL текущего сервиса.
         """
         if service is None:
             return f"http://localhost:{self.port}"
@@ -103,9 +106,9 @@ class ServerConfig(BaseModel):
         default_port = self._default_ports.get(service, 8001)
         return f"http://localhost:{default_port}"
 
-    def get_agents_service_url(self) -> str:
-        """URL сервиса agents (для обратной совместимости)"""
-        return self.get_service_url("agents")
+    def get_flows_service_url(self) -> str:
+        """URL сервиса flows."""
+        return self.get_service_url("flows")
 
     workers: int = 4
     worker_class: str = "uvicorn.workers.UvicornWorker"
@@ -223,15 +226,6 @@ class PaymentProvidersConfig(BaseModel):
     )
 
 
-class MigrationSettings(BaseModel):
-    """Настройки миграции для новых компаний"""
-
-    default_flows: list[str] = Field(default_factory=list)
-    default_agents: list[str] = Field(default_factory=list)
-    default_tools: list[str] = Field(default_factory=list)
-    migrate_dependencies: bool = True
-
-
 class EmbeddingConfig(BaseModel):
     """Конфигурация embedding модели."""
 
@@ -341,7 +335,7 @@ class BothubProviderConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """Конфигурация модели"""
+    """Конфигурация модели — переопределение temperature/max_tokens для конкретной модели"""
 
     temperature: float = Field(default=0.2)
     max_tokens: Optional[int] = Field(default=None)

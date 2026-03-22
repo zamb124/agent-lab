@@ -272,9 +272,9 @@ class BaseContainer:
         Регистрирует CRUD роутер для репозитория.
         
         Args:
-            repository_name: Имя репозитория (например, "agent_repository")
+            repository_name: Имя репозитория (например, "flow_repository")
             repository: Экземпляр репозитория
-            prefix: Префикс пути (например, "/agents")
+            prefix: Префикс пути (например, "/flows")
             tags: Теги для OpenAPI
             repository_dependency: Dependency функция для получения репозитория
         """

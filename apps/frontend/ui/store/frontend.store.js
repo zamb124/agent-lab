@@ -7,7 +7,7 @@ import { BaseStore } from '@platform/lib/store/BaseStore.js';
 const baseStore = new BaseStore('frontend', {
     entities: {
         companies: [],
-        currentCompanyId: null,
+        activeCompanyId: null,
         team: {
             members: [],
             loading: false,
@@ -92,9 +92,9 @@ export const FrontendStore = {
         }));
     },
 
-    setCurrentCompanyId(companyId) {
+    setActiveCompanyId(companyId) {
         baseStore.setState((s) => ({
-            entities: { ...s.entities, currentCompanyId: companyId },
+            entities: { ...s.entities, activeCompanyId: companyId },
         }));
     },
 

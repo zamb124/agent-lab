@@ -7,10 +7,13 @@ S3 клиент для работы с объектным хранилищем.
 
 import asyncio
 import logging
-from typing import Optional, Dict, Any, Union, List
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+from urllib.parse import urlparse
+
 import aioboto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from core.config import get_settings
 
@@ -60,6 +63,33 @@ class S3Client:
         self._session = None
         self._client = None
         self._client_lock: Optional[asyncio.Lock] = None
+        self._minio_bucket_lock: Optional[asyncio.Lock] = None
+        self._minio_ready_buckets: set[str] = set()
+
+    def _s3_endpoint_should_not_use_http_proxy(self) -> bool:
+        """
+        Иначе botocore подставит HTTP(S)_PROXY из окружения: запрос к MinIO на
+        localhost уйдёт на внешний прокси, ответ часто приходит как InvalidAccessKeyId.
+        """
+        if self.provider_name == "minio":
+            return True
+        raw = self.endpoint_url
+        if not raw or not isinstance(raw, str):
+            return False
+        host = urlparse(raw.strip()).hostname
+        if host is None:
+            return False
+        return host in ("localhost", "127.0.0.1", "::1", "[::1]")
+
+    def _botocore_client_config(self) -> Optional[Config]:
+        kwargs: dict[str, Any] = {}
+        if self.provider_name == "vkcloud":
+            kwargs["signature_version"] = "s3"
+        if self._s3_endpoint_should_not_use_http_proxy():
+            kwargs["proxies"] = {}
+        if not kwargs:
+            return None
+        return Config(**kwargs)
 
     def _get_client_lock(self) -> asyncio.Lock:
         """Получает или создает лок для клиента"""
@@ -76,9 +106,10 @@ class S3Client:
                     if self._session is None:
                         self._session = aioboto3.Session()
 
-                    client_config = {}
-                    if self.provider_name == "vkcloud":
-                        client_config["config"] = Config(signature_version="s3")
+                    client_config: dict[str, Any] = {}
+                    bc = self._botocore_client_config()
+                    if bc is not None:
+                        client_config["config"] = bc
 
                     self._client = await self._session.client(
                         "s3",
@@ -90,6 +121,39 @@ class S3Client:
                     ).__aenter__()
 
         return self._client
+
+    async def _ensure_minio_bucket_exists(self, bucket: str) -> None:
+        """
+        MinIO не создаёт bucket при первом PutObject. Имя берётся только из конфига
+        (self.bucket_name / аргумент), без захардкоженных строк в коде.
+        Облачные S3 (Selectel, AWS) bucket создаёт администратор — не трогаем.
+        """
+        if self.provider_name != "minio":
+            return
+        if bucket in self._minio_ready_buckets:
+            return
+        if self._minio_bucket_lock is None:
+            self._minio_bucket_lock = asyncio.Lock()
+        async with self._minio_bucket_lock:
+            if bucket in self._minio_ready_buckets:
+                return
+            client = await self._get_client()
+            try:
+                await client.head_bucket(Bucket=bucket)
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                missing = code in ("404", "NoSuchBucket") or status == 404
+                if not missing:
+                    raise
+                try:
+                    await client.create_bucket(Bucket=bucket)
+                    logger.info("S3 MinIO: создан bucket %s", bucket)
+                except ClientError as create_exc:
+                    ccode = create_exc.response.get("Error", {}).get("Code", "")
+                    if ccode not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+                        raise
+            self._minio_ready_buckets.add(bucket)
 
     async def close(self):
         """Закрывает соединения клиента"""
@@ -135,6 +199,7 @@ class S3Client:
         if not bucket:
             raise ValueError("Bucket не указан")
 
+        await self._ensure_minio_bucket_exists(bucket)
         client = await self._get_client()
 
         extra_args = {}
@@ -182,6 +247,7 @@ class S3Client:
         if not bucket:
             raise ValueError("Bucket не указан")
 
+        await self._ensure_minio_bucket_exists(bucket)
         client = await self._get_client()
 
         extra_args = {}

@@ -1,0 +1,401 @@
+{
+  "id": "example_react",
+  "name": "Пример ReAct flow",
+  "description": "Демонстрация возможностей ReAct: tools, вложенные subflow, interrupt, variables, skills, mock",
+  "tags": ["example", "react", "demo", "mock"],
+  "permission": ["admin", "developers"],
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "node_id": "example_main_agent"
+    },
+    "direct_subflow": {
+      "type": "llm_node",
+      "node_id": "example_subflow"
+    },
+    "explicit_loop": {
+      "type": "llm_node",
+      "node_id": "explicit_finish_agent"
+    },
+    "explicit_relaxed": {
+      "type": "llm_node",
+      "node_id": "explicit_relaxed_agent"
+    }
+  },
+  "edges": [
+    {"from": "main", "to": null},
+    {"from": "direct_subflow", "to": null},
+    {"from": "explicit_loop", "to": null},
+    {"from": "explicit_relaxed", "to": null}
+  ],
+  "variables": {
+    "company_name": {
+      "value": "@var:company_name",
+      "public": true,
+      "title": "Название компании",
+      "description": "Название компании для использования в ответах flow"
+    },
+    "max_response_length": {
+      "value": "500",
+      "public": true,
+      "title": "Максимальная длина ответа",
+      "description": "Максимальное количество символов в ответе"
+    },
+    "support_contacts": {
+      "value": "@var:support_contacts",
+      "public": false
+    }
+  },
+  "mock": {
+    "enabled": false,
+    "tools": {
+      "calculator": 42
+    },
+    "flows": {
+      "example_subflow": "Mock ответ вложенного subflow: данные собраны успешно"
+    },
+    "nodes": {
+      "main": {
+        "response": "Mock ответ от главной ноды flow"
+      }
+    }
+  },
+  "skills": {
+    "concise": {
+      "name": "Краткие ответы",
+      "description": "Режим коротких ответов для мобильных устройств",
+      "variables": {
+        "max_response_length": {
+          "value": "200",
+          "public": false
+        }
+      },
+      "variables_mode": "merge"
+    },
+    "detailed": {
+      "name": "Подробные ответы",
+      "description": "Режим детальных ответов для десктопа",
+      "variables": {
+        "max_response_length": {
+          "value": "2000",
+          "public": false
+        }
+      },
+      "variables_mode": "merge"
+    },
+    "no_subflow": {
+      "name": "Без вложенного subflow",
+      "description": "Режим без делегирования во вложенный flow",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt_file": "prompts/main.md",
+          "tools": ["calculator", "ask_user"],
+          "llm": {"model": "gpt-4o", "temperature": 0.3}
+        }
+      },
+      "nodes_mode": "replace"
+    },
+    "direct_mode": {
+      "name": "Прямой вход в subflow",
+      "description": "Пропуск главной ноды, прямой вход в ноду вложенного subflow",
+      "entry": "direct_subflow"
+    },
+    "test_tools": {
+      "name": "Тестирование tools",
+      "description": "Skill с mock для всех tools - для unit тестов",
+      "mock": {
+        "enabled": true,
+        "tools": {
+          "calculator": 100,
+          "ask_user": "Автоответ от mock ask_user"
+        }
+      }
+    },
+    "test_subflows": {
+      "name": "Тестирование вложенных subflow",
+      "description": "Skill с mock для вложенных flow — для интеграционных тестов",
+      "mock": {
+        "enabled": true,
+        "flows": {
+          "example_subflow": "Mock: subflow вернул тестовые данные"
+        }
+      }
+    },
+    "test_llm": {
+      "name": "Тестирование LLM",
+      "description": "Skill с mock для LLM ответов - для e2e тестов без реальных вызовов LLM",
+      "mock": {
+        "enabled": true,
+        "llm": [
+          {"type": "text", "content": "Mock ответ 1 от LLM"},
+          {"type": "tool_call", "tool": "calculator", "args": {"expression": "2+2"}},
+          {"type": "text", "content": "Mock финальный ответ после calculator"}
+        ],
+        "tools": {
+          "calculator": 4
+        }
+      }
+    },
+    "test_full": {
+      "name": "Полное мокирование",
+      "description": "Skill с mock для всех компонентов - полная изоляция",
+      "mock": {
+        "enabled": true,
+        "llm": [
+          {"type": "text", "content": "Полностью замоканный ответ"}
+        ],
+        "tools": {
+          "calculator": 999,
+          "ask_user": "Mock user response"
+        },
+        "flows": {
+          "example_subflow": "Mock subflow response"
+        },
+        "nodes": {
+          "main": {
+            "response": "Mock node response"
+          },
+          "direct_subflow": {
+            "response": "Mock direct subflow node response"
+          }
+        }
+      }
+    },
+    "explicit_mode": {
+      "name": "Режим явного завершения (строгий)",
+      "description": "Нода завершается ТОЛЬКО через finish tool. При тексте без finish - получает reminder.",
+      "entry": "explicit_loop"
+    },
+    "explicit_relaxed_mode": {
+      "name": "Режим явного завершения (нестрогий)",
+      "description": "Желательно через finish, но текстовый ответ тоже принимается.",
+      "entry": "explicit_relaxed"
+    },
+    "test_explicit": {
+      "name": "Тест explicit режима",
+      "description": "Тестирование режима explicit с mock LLM",
+      "entry": "explicit_loop",
+      "mock": {
+        "enabled": true,
+        "llm": [
+          {"type": "tool_call", "tool": "calculator", "args": {"expression": "10+5"}},
+          {"type": "tool_call", "tool": "finish", "args": {"answer": "Результат: 10+5 = 15"}}
+        ],
+        "tools": {
+          "calculator": 15
+        }
+      }
+    }
+  },
+
+  "evaluation": {
+      "contains_check": {
+      "name": "contains",
+      "description": "Проверка что ответ содержит слово",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Привет!"},
+          "check": {"type": "string", "value": "contains:привет|здравствуй"}
+        }
+      ]
+      },
+
+      "not_contains_check": {
+      "name": "not_contains",
+      "description": "Проверка что ответ НЕ содержит слово",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Расскажи о погоде"},
+          "check": {"type": "string", "value": "not_contains:ошибка|error"}
+        }
+      ]
+      },
+
+      "regex_check": {
+      "name": "regex",
+      "description": "Проверка регулярным выражением",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Сколько будет 2 + 2?"},
+          "check": {"type": "string", "value": "regex:\\b4\\b"}
+        }
+      ]
+      },
+
+    "length_check": {
+      "name": "length",
+      "description": "Проверка длины ответа",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Привет"},
+          "check": {"type": "string", "value": "length:10-500"}
+        }
+      ]
+      },
+
+    "length_range_check": {
+      "name": "length range",
+      "description": "Проверка длины ответа в диапазоне",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Привет"},
+          "check": {"type": "string", "value": "length:10-500"}
+        }
+      ]
+      },
+
+    "state_equality_check": {
+      "name": "state equality",
+      "description": "Проверка равенства state",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Привет"},
+          "check": {"type": "string", "value": "state:response!=null"}
+        }
+      ]
+      },
+
+    "function_check": {
+      "name": "Python функция",
+        "description": "Проверка через Python функцию",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Сколько будет 15 + 27?"},
+          "check": {"type": "string", "value": "apps.flows.bundles.example_react.checks.check_calculator_result"}
+        }
+      ]
+      },
+
+    "inline_function": {
+      "name": "Inline функции",
+      "description": "Генератор и проверка через inline код",
+      "turns": [
+        {
+          "input": {"type": "function", "value": "def generate():\n    return 'Тестовое сообщение'"},
+          "check": {"type": "function", "value": "def check(state, response):\n    return len(response) > 5"}
+        }
+      ]
+      },
+
+    "multi_step": {
+      "name": "Многошаговый диалог",
+      "description": "Несколько шагов с проверками",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Привет!"},
+          "check": {"type": "string", "value": "contains:привет|здравствуй"}
+        },
+        {
+          "input": {"type": "text", "value": "Посчитай 10 + 5"},
+          "check": {"type": "string", "value": "contains:15"}
+        },
+        {
+          "input": {"type": "text", "value": "А теперь умножь на 2"},
+          "check": {"type": "string", "value": "contains:30"}
+        }
+        ]
+      },
+
+    "flow_dialog_test": {
+      "name": "Диалоговый тест (tester + judge)",
+      "description": "Нода-тестер ведёт диалог, нода-судья оценивает",
+      "max_turns": 5,
+      "turns": [
+        {
+          "input": {"type": "node", "value": "evaluation_tester"},
+          "check": {"type": "node", "value": "evaluation_judge"}
+        }
+      ]
+    },
+
+    "inline_flows": {
+      "name": "Inline ноды (tester + judge)",
+      "description": "Тестер и судья определены inline в evaluation",
+      "max_turns": 3,
+      "turns": [
+        {
+          "input": {
+            "type": "node",
+            "node": {
+              "node_id": "evaluation_tester",
+              "name": "Inline Tester",
+              "prompt": "Ты тестер. Задай 2-3 вопроса агенту и заверши [TEST_COMPLETE]."
+            }
+          },
+          "check": {
+            "type": "node",
+            "node": {
+              "node_id": "evaluation_judge",
+              "name": "Inline Judge",
+              "prompt": "Оцени диалог. Верни JSON: {\"passed\": true, \"scores\": {\"quality\": 8}, \"feedback\": \"...\"}"
+            }
+          }
+        }
+        ]
+      },
+
+    "inline_flows_with_tools": {
+      "name": "Inline ноды с tools",
+      "description": "Тестер и судья с инструментами",
+      "max_turns": 5,
+      "turns": [
+        {
+          "input": {
+            "type": "node",
+            "node": {
+              "node_id": "smart_tester",
+              "name": "Smart Tester",
+              "prompt": "Ты умный тестер. Используй калькулятор для проверки вычислений. Заверши [TEST_COMPLETE].",
+              "tools": [
+                {"tool_id": "calculator", "title": "Калькулятор"}
+              ]
+            }
+          },
+          "check": {
+            "type": "node",
+            "node": {
+              "node_id": "smart_judge",
+              "name": "Smart Judge",
+              "prompt": "Оцени диалог. Проверь корректность ответов. Верни JSON: {\"passed\": true, \"scores\": {\"accuracy\": 9, \"helpfulness\": 8}, \"feedback\": \"...\"}",
+              "tools": [
+                {"tool_id": "calculator", "title": "Калькулятор"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    "inline_function_with_state": {
+      "name": "Inline функция со state",
+      "description": "Генератор и проверка используют state",
+      "turns": [
+        {
+          "input": {"type": "function", "value": "def generate():\n    import random\n    return f'Случайное число: {random.randint(1, 100)}'"},
+          "check": {"type": "function", "value": "def check(state, response):\n    has_number = any(c.isdigit() for c in response)\n    return {'has_number': has_number, 'long_enough': len(response) > 10}"}
+        }
+      ]
+    },
+
+    "mixed_turns": {
+      "name": "Смешанные типы",
+      "description": "Разные типы input и check в одном тесте",
+      "turns": [
+        {
+          "input": {"type": "text", "value": "Привет!"},
+          "check": {"type": "string", "value": "contains:привет"}
+      },
+        {
+          "input": {"type": "function", "value": "def generate():\n    return 'Сколько будет 5 * 5?'"},
+          "check": {"type": "function", "value": "def check(s, r):\n    return '25' in r"}
+        },
+        {
+          "input": {"type": "text", "value": "Спасибо за помощь!"},
+          "check": {"type": "string", "value": "not_contains:ошибка"}
+        }
+      ]
+      }
+  }
+}

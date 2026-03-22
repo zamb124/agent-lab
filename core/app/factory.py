@@ -9,13 +9,15 @@
 
 Пример использования:
     from core.app import create_service_app
-    
+    from apps.flows.config import FlowSettings
+    from apps.flows.src.container import get_container
+
     app = create_service_app(
-        service_name="agents",
-        settings_class=AgentsSettings,
-        get_container=get_agents_container,
-        routers=[agents_router, flows_router],
-        on_startup=my_startup_func
+        service_name="flows",
+        settings_class=FlowSettings,
+        get_container=get_container,
+        routers=[api_v1_router, registry_router],
+        on_startup=my_startup_func,
     )
 """
 
@@ -95,7 +97,7 @@ def create_service_app(
     Создает FastAPI приложение для сервиса.
     
     Args:
-        service_name: Имя сервиса (например, "agents")
+        service_name: Имя сервиса (например, "flows")
         settings_class: Класс настроек (наследник BaseSettings)
         get_container: Функция получения контейнера
         routers: Список API роутеров (prefix зависит от api_version)
@@ -106,7 +108,7 @@ def create_service_app(
         cors_origins: Разрешенные origins для CORS
         extra_middlewares: Дополнительные middleware [(MiddlewareClass, {kwargs}), ...]
         static_mounts: Статические директории [(path, directory, name), ...]
-        api_version: Версия API ("v1" для agents, None для frontend)
+        api_version: Версия API ("v1" для flows и др., None для frontend)
         docs_url, redoc_url, openapi_url: Пути для документации
         include_auth_middleware: Включать ли AuthMiddleware
         include_crud_routers: Включать ли автоматические CRUD роутеры
@@ -216,7 +218,7 @@ def create_service_app(
             app.add_middleware(middleware_class, **kwargs)
     
     # API prefix
-    # api_version="v1" → /agents/api/v1 (REST API)
+    # api_version="v1" → /flows/api/v1 (REST API)
     # api_version=None → /frontend (сайт без /api/)
     if api_version:
         api_prefix = f"/{settings.server.name}/api/{api_version}"
@@ -241,7 +243,18 @@ def create_service_app(
         for router in routers:
             tags = router.tags or [service_name]
             app.include_router(router, prefix=api_prefix, tags=tags)
-    
+
+    # Файловый роутер (upload/download/metadata) — добавляется автоматически
+    # для всех сервисов с включённым S3 и заданной api_version
+    if api_version and settings.s3.enabled:
+        from core.files.api import build_file_api_router
+        _file_router = build_file_api_router(
+            get_file_repo=lambda: container.file_repository,
+            service_api_prefix=api_prefix,
+        )
+        app.include_router(_file_router, prefix=f"{api_prefix}/files")
+        logger.info(f"Файловый роутер подключён: {api_prefix}/files")
+
     # Core auth роутер (автоматически для всех сервисов)
     auth_prefix = f"/{service_name}/api/auth"
     logger.info(f"Подключение core auth роутера ({auth_prefix}/*)")

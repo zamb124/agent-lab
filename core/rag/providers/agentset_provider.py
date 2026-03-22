@@ -235,9 +235,10 @@ class AgentsetRAGProvider(BaseRAGProvider):
         2. Передаем публичный URL в Agentset через fileUrl
         3. Agentset скачивает и обрабатывает
         """
-        s3_key, bucket_name, original_filename, file_url = await self._upload_file_to_s3(
-            file_path, namespace_id, public=True
+        s3_key, bucket_name, original_filename = await self._upload_file_to_s3(
+            file_path, namespace_id, public=False
         )
+        file_url = await self._generate_signed_url(s3_key)
         
         doc_name = document_name or original_filename
         

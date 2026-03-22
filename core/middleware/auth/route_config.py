@@ -25,7 +25,7 @@ SKIP_PATHS = [
     "/apple-touch-icon.png",
     "/apple-touch-icon-precomposed.png",
     "/health",
-    "/agents/health",
+    "/flows/health",
     "/crm/health",
     "/debug/*",
 ]
@@ -73,12 +73,12 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/openapi.json", auth_required=False, context_type="anonymous"),
 
     # Вебхуки (без JWT, используют свою аутентификацию)
-    RouteRule("/agents/api/v1/webhook/telegram/*", auth_required=False, context_type="webhook", channel="telegram"),
-    RouteRule("/agents/api/v1/webhook/whatsapp/*", auth_required=False, context_type="webhook", channel="whatsapp"),
-    RouteRule("/agents/api/v1/payments/webhook/*", skip=True),
+    RouteRule("/flows/api/v1/webhook/telegram/*", auth_required=False, context_type="webhook", channel="telegram"),
+    RouteRule("/flows/api/v1/webhook/whatsapp/*", auth_required=False, context_type="webhook", channel="whatsapp"),
+    RouteRule("/flows/api/v1/payments/webhook/*", skip=True),
     
     # API для встраивания - публичный доступ для встраиваемых виджетов
-    RouteRule("/agents/api/v1/embed/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/flows/api/v1/embed/*", auth_required=False, context_type="anonymous"),
     
     # ============================================================================
     # АВТОРИЗАЦИЯ ТРЕБУЕТСЯ, НО СУБДОМЕН НЕ ОБЯЗАТЕЛЕН
@@ -164,30 +164,33 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/settings/*", context_type="frontend", auth_required=True),
     RouteRule("/settings", context_type="frontend", auth_required=True),
     
-    # UI агентов - статика без авторизации (должна быть перед /agents/ui/*)
-    RouteRule("/agents/ui/static/*", auth_required=False, context_type="anonymous"),
+    # UI агентов - статика без авторизации (должна быть перед /flows/ui/*)
+    RouteRule("/flows/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/ui/static/*", auth_required=False, context_type="anonymous"),
     
     # UI агентов - страницы (требуют авторизацию)
-    RouteRule("/agents/ui/*", context_type="frontend", auth_required=True),
-    RouteRule("/agents/ui", context_type="frontend", auth_required=True),
-    RouteRule("/agents", context_type="frontend", auth_required=True),
+    RouteRule("/flows/ui/*", context_type="frontend", auth_required=True),
+    RouteRule("/flows/ui", context_type="frontend", auth_required=True),
+    RouteRule("/flows", context_type="frontend", auth_required=True),
     # Прямой доступ на порт сервиса (без nginx-префикса /agents)
     RouteRule("/ui/*", context_type="frontend", auth_required=True),
     RouteRule("/ui", context_type="frontend", auth_required=True),
     
+    # Скачивание файлов — публичный доступ для всех сервисов;
+    # приватные файлы проверяются самим хендлером по company_id
+    RouteRule("*/api/v1/files/download/*", context_type="api", auth_required=False),
+    RouteRule("*/v1/files/download/*", context_type="api", auth_required=False),
+
     # API агентов (новый путь)
-    RouteRule("/agents/v1/auth/me", context_type="api", auth_required=True),
-    RouteRule("/agents/v1/files/download/*", context_type="api", auth_required=False),
-    RouteRule("/agents/v1/*", context_type="api", auth_required=True),
-    
+    RouteRule("/flows/v1/auth/me", context_type="api", auth_required=True),
+    RouteRule("/flows/v1/*", context_type="api", auth_required=True),
+
     # API агентов (устаревший путь /api/v1)
-    RouteRule("/agents/api/v1/auth/me", context_type="api", auth_required=True),
-    RouteRule("/agents/api/v1/files/download/*", context_type="api", auth_required=False),
-    RouteRule("/agents/api/v1/*", context_type="api", auth_required=True),
+    RouteRule("/flows/api/v1/auth/me", context_type="api", auth_required=True),
+    RouteRule("/flows/api/v1/*", context_type="api", auth_required=True),
     
     # Эндпоинты протокола A2A (выполнение агента без префикса /api/)
-    RouteRule("/agents/*", context_type="a2a", auth_required=True),
+    RouteRule("/flows/*", context_type="a2a", auth_required=True),
     
     # CRM (если используется)
     RouteRule("/crm/api/v1/*", context_type="api", auth_required=True),

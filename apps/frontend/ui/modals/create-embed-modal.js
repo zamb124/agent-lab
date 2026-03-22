@@ -118,7 +118,7 @@ export class CreateEmbedModal extends PlatformElement {
         
         await this.services.get('embed').create({
             name: this._name.trim(),
-            agent_id: this._agentId.trim(),
+            flow_id: this._agentId.trim(),
             position: this._position,
             theme: this._theme,
             status: 'active',

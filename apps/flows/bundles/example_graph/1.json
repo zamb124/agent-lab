@@ -1,0 +1,701 @@
+{
+  "mock": null,
+  "name": "Пример ReAct агента",
+  "tags": [
+    "example",
+    "react",
+    "demo",
+    "mock"
+  ],
+  "edges": [],
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "llm": {
+        "model": "gpt-4o",
+        "temperature": 0.2
+      },
+      "type": "llm_node",
+      "node_id": "example_main_agent",
+      "position": {
+        "x": 380,
+        "y": 250
+      }
+    },
+    "direct_subflow": {
+      "llm": {
+        "model": "gpt-4o",
+        "temperature": 0.2
+      },
+      "type": "llm_node",
+      "node_id": "example_subflow",
+      "position": {
+        "x": 380,
+        "y": 100
+      }
+    }
+  },
+  "store": {},
+  "hidden": false,
+  "skills": {
+    "concise": {
+      "mock": null,
+      "name": "Краткие ответы",
+      "tags": [],
+      "edges": null,
+      "entry": null,
+      "nodes": null,
+      "variables": {
+        "max_response_length": {
+          "title": null,
+          "value": "200",
+          "public": false,
+          "description": null
+        }
+      },
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "Режим коротких ответов для мобильных устройств",
+      "variables_mode": "merge"
+    },
+    "detailed": {
+      "mock": null,
+      "name": "Подробные ответы",
+      "tags": [],
+      "edges": null,
+      "entry": null,
+      "nodes": null,
+      "variables": {
+        "max_response_length": {
+          "title": null,
+          "value": "2000",
+          "public": false,
+          "description": null
+        }
+      },
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "Режим детальных ответов для десктопа",
+      "variables_mode": "merge"
+    },
+    "test_llm": {
+      "mock": null,
+      "name": "Тестирование LLM",
+      "tags": [],
+      "edges": null,
+      "entry": null,
+      "nodes": null,
+      "variables": {},
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "Skill с mock для LLM ответов - для e2e тестов без реальных вызовов LLM",
+      "variables_mode": "merge"
+    },
+    "test_full": {
+      "mock": null,
+      "name": "Полное мокирование",
+      "tags": [],
+      "edges": null,
+      "entry": null,
+      "nodes": null,
+      "variables": {},
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "Skill с mock для всех компонентов - полная изоляция",
+      "variables_mode": "merge"
+    },
+    "test_tools": {
+      "mock": null,
+      "name": "Тестирование tools",
+      "tags": [],
+      "edges": null,
+      "entry": null,
+      "nodes": null,
+      "variables": {},
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "Skill с mock для всех tools - для unit тестов",
+      "variables_mode": "merge"
+    },
+    "direct_mode": {
+      "mock": null,
+      "name": "Прямой доступ к субагенту",
+      "tags": [],
+      "edges": null,
+      "entry": "direct_subflow",
+      "nodes": null,
+      "variables": {},
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "Пропуск главного агента, прямой вход в субагента",
+      "variables_mode": "merge"
+    },
+    "no_subflow": {
+      "mock": null,
+      "name": "Без субагента",
+      "tags": [],
+      "edges": null,
+      "entry": null,
+      "nodes": {
+        "main": {
+          "llm": {
+            "model": "gpt-4o",
+            "temperature": 0.3
+          },
+          "type": "llm_node",
+          "tools": [
+            "calculator",
+            "ask_user"
+          ],
+          "prompt": "# Главный агент\n\nТы КОЛЯ полезный ассистент компании {company_name}.\n\n## Твои возможности:\n- Выполнять математические вычисления (tool: calculator)\n- Задавать уточняющие вопросы пользователю (tool: ask_user)\n- Делегировать задачи субагенту для поиска информации (tool: example_subflow)\n\n## Правила:\n1. Всегда отвечай вежливо и по делу\n2. Если не хватает информации - спроси у пользователя\n3. Для сложных вычислений используй calculator\n4. Максимальная длина ответа: {max_response_length} символов\n\n## Контакты поддержки:\n{support_contacts}\n\n",
+          "prompt_file": "prompts/main.md"
+        }
+      },
+      "variables": {},
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "Режим без делегирования субагенту",
+      "variables_mode": "merge"
+    },
+    "test_subflows": {
+      "mock": null,
+      "name": "Тестирование субагентов",
+      "tags": [],
+      "edges": null,
+      "entry": null,
+      "nodes": null,
+      "variables": {},
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "Skill с mock для субагентов - для интеграционных тестов",
+      "variables_mode": "merge"
+    },
+    "superskill_c2c1b9": {
+      "mock": null,
+      "name": "superskill",
+      "tags": [],
+      "edges": null,
+      "entry": null,
+      "nodes": {
+        "main": {
+          "llm": {
+            "model": "grok-code-fast-1",
+            "temperature": 0.3
+          },
+          "name": "Главный агент примера",
+          "tags": [],
+          "type": "llm_node",
+          "tools": [
+            "calculator",
+            "example_subflow",
+            "format_greeting"
+          ],
+          "prompt": "# Главный агент 1\n\nТы КОЛЯ полезный ассистент компании {company_name}.\n\n## Твои возможности:\n- Выполнять математические вычисления (tool: calculator)\n- Задавать уточняющие вопросы пользователю (tool: ask_user)\n- Делегировать задачи субагенту для поиска информации (tool: example_subflow)\n\n## Правила:\n1. Всегда отвечай вежливо и по делу\n2. Если не хватает информации - спроси у пользователя\n3. Для сложных вычислений используй calculator\n4. Максимальная длина ответа: {max_response_length} символов\n\n## Контакты поддержки:\n{support_contacts}\n\n",
+          "position": {
+            "x": 380,
+            "y": 250
+          },
+          "description": "Демонстрационный агент с полным набором возможностей"
+        }
+      },
+      "variables": {
+        "company_name": {
+          "title": "Название компании",
+          "value": "@var:company_name",
+          "public": true,
+          "description": "Название компании для использования в ответах агента"
+        },
+        "support_contacts": {
+          "title": null,
+          "value": "@var:support_contacts",
+          "public": false,
+          "description": null
+        },
+        "max_response_length": {
+          "title": "Максимальная длина ответа",
+          "value": "500",
+          "public": true,
+          "description": "Максимальное количество символов в ответе агента"
+        }
+      },
+      "edges_mode": "replace",
+      "nodes_mode": "replace",
+      "permission": null,
+      "description": "",
+      "variables_mode": "merge"
+    }
+  },
+  "source": "file",
+  "node_id": "example_react",
+  "timeout": null,
+  "channels": {
+    "a2a": {}
+  },
+  "variables": {
+    "company_name": {
+      "title": "Название компании",
+      "value": "@var:company_name",
+      "public": true,
+      "description": "Название компании для использования в ответах агента"
+    },
+    "support_contacts": {
+      "title": null,
+      "value": "@var:support_contacts",
+      "public": false,
+      "description": null
+    },
+    "max_response_length": {
+      "title": "Максимальная длина ответа",
+      "value": "500",
+      "public": true,
+      "description": "Максимальное количество символов в ответе агента"
+    }
+  },
+  "created_at": null,
+  "evaluation": {
+    "flow_dialog_test": {
+      "name": "Диалоговый тест (tester + judge)",
+      "turns": [
+        {
+          "check": {
+            "type": "flow",
+            "agent": null,
+            "value": "evaluation_judge"
+          },
+          "input": {
+            "type": "flow",
+            "agent": null,
+            "value": "evaluation_tester"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 5,
+      "skill_ids": "*",
+      "description": "Нода-тестер ведёт диалог, нода-судья оценивает"
+    },
+    "multi_step": {
+      "name": "Многошаговый диалог",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "contains:привет|здравствуй"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Привет!"
+          }
+        },
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "contains:15"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Посчитай 10 + 5"
+          }
+        },
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "contains:30"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "А теперь умножь на 2"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Несколько шагов с проверками"
+    },
+    "mixed_turns": {
+      "name": "Смешанные типы",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "contains:привет"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Привет!"
+          }
+        },
+        {
+          "check": {
+            "type": "function",
+            "agent": null,
+            "value": "def check(s, r):\n    return '25' in r"
+          },
+          "input": {
+            "type": "function",
+            "agent": null,
+            "value": "def generate():\n    return 'Сколько будет 5 * 5?'"
+          }
+        },
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "not_contains:ошибка"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Спасибо за помощь!"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Разные типы input и check в одном тесте"
+    },
+    "regex_check": {
+      "name": "regex",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "regex:\\b4\\b"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Сколько будет 2 + 2?"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Проверка регулярным выражением"
+    },
+    "length_check": {
+      "name": "length",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "length:10-500"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Привет"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Проверка длины ответа"
+    },
+    "inline_flows": {
+      "name": "Inline агенты",
+      "turns": [
+        {
+          "check": {
+            "type": "flow",
+            "agent": {
+              "name": "Inline Judge",
+              "tags": [],
+              "store": {},
+              "tools": [],
+              "prompt": "Оцени диалог. Верни JSON: {\"passed\": true, \"scores\": {\"quality\": 8}, \"feedback\": \"...\"}",
+              "source": "manual",
+              "node_id": "inline_judge",
+              "code_mode": "code_reference",
+              "created_at": null,
+              "llm_config": null,
+              "updated_at": null,
+              "description": null,
+              "function_class": null,
+              "local_variables": {}
+            },
+            "value": ""
+          },
+          "input": {
+            "type": "flow",
+            "agent": {
+              "name": "Inline Tester",
+              "tags": [],
+              "store": {},
+              "tools": [],
+              "prompt": "Ты тестер. Задай 2-3 вопроса агенту и заверши [TEST_COMPLETE].",
+              "source": "manual",
+              "node_id": "inline_tester",
+              "code_mode": "code_reference",
+              "created_at": null,
+              "llm_config": null,
+              "updated_at": null,
+              "description": null,
+              "function_class": null,
+              "local_variables": {}
+            },
+            "value": ""
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 3,
+      "skill_ids": "*",
+      "description": "Тестер и судья определены inline"
+    },
+    "contains_check": {
+      "name": "contains",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "contains:привет|здравствуй"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Привет!"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Проверка что ответ содержит слово"
+    },
+    "function_check": {
+      "name": "Python функция",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "apps.flows.bundles.example_react.checks.check_calculator_result"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Сколько будет 15 + 27?"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Проверка через Python функцию"
+    },
+    "inline_function": {
+      "name": "Inline функции",
+      "turns": [
+        {
+          "check": {
+            "type": "function",
+            "agent": null,
+            "value": "def check(state, response):\n    return len(response) > 5"
+          },
+          "input": {
+            "type": "function",
+            "agent": null,
+            "value": "def generate():\n    return 'Тестовое сообщение'"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Генератор и проверка через inline код"
+    },
+    "length_range_check": {
+      "name": "length range",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "length:10-500"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Привет"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Проверка длины ответа в диапазоне"
+    },
+    "not_contains_check": {
+      "name": "not_contains",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "not_contains:ошибка|error"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Расскажи о погоде"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Проверка что ответ НЕ содержит слово"
+    },
+    "state_equality_check": {
+      "name": "state equality",
+      "turns": [
+        {
+          "check": {
+            "type": "string",
+            "agent": null,
+            "value": "state:response!=null"
+          },
+          "input": {
+            "type": "text",
+            "agent": null,
+            "value": "Привет"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Проверка равенства state"
+    },
+    "inline_flows_with_tools": {
+      "name": "Inline агенты с tools",
+      "turns": [
+        {
+          "check": {
+            "type": "flow",
+            "agent": {
+              "name": "Smart Judge",
+              "tags": [],
+              "store": {},
+              "tools": [
+                {
+                  "tags": [],
+                  "type": "function",
+                  "title": "Калькулятор",
+                  "params": {},
+                  "tool_id": "calculator",
+                  "mock_map": null,
+                  "code_mode": "code_reference",
+                  "permission": null,
+                  "description": null,
+                  "inline_code": null,
+                  "function_path": null,
+                  "call_parameters": {}
+                }
+              ],
+              "prompt": "Оцени диалог. Проверь корректность ответов. Верни JSON: {\"passed\": true, \"scores\": {\"accuracy\": 9, \"helpfulness\": 8}, \"feedback\": \"...\"}",
+              "source": "manual",
+              "node_id": "smart_judge",
+              "code_mode": "code_reference",
+              "created_at": null,
+              "llm_config": null,
+              "updated_at": null,
+              "description": null,
+              "function_class": null,
+              "local_variables": {}
+            },
+            "value": ""
+          },
+          "input": {
+            "type": "flow",
+            "agent": {
+              "name": "Smart Tester",
+              "tags": [],
+              "store": {},
+              "tools": [
+                {
+                  "tags": [],
+                  "type": "function",
+                  "title": "Калькулятор",
+                  "params": {},
+                  "tool_id": "calculator",
+                  "mock_map": null,
+                  "code_mode": "code_reference",
+                  "permission": null,
+                  "description": null,
+                  "inline_code": null,
+                  "function_path": null,
+                  "call_parameters": {}
+                }
+              ],
+              "prompt": "Ты умный тестер. Используй калькулятор для проверки вычислений. Заверши [TEST_COMPLETE].",
+              "source": "manual",
+              "node_id": "smart_tester",
+              "code_mode": "code_reference",
+              "created_at": null,
+              "llm_config": null,
+              "updated_at": null,
+              "description": null,
+              "function_class": null,
+              "local_variables": {}
+            },
+            "value": ""
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 5,
+      "skill_ids": "*",
+      "description": "Тестер и судья с инструментами"
+    },
+    "inline_function_with_state": {
+      "name": "Inline функция со state",
+      "turns": [
+        {
+          "check": {
+            "type": "function",
+            "agent": null,
+            "value": "def check(state, response):\n    has_number = any(c.isdigit() for c in response)\n    return {'has_number': has_number, 'long_enough': len(response) > 10}"
+          },
+          "input": {
+            "type": "function",
+            "agent": null,
+            "value": "def generate():\n    import random\n    return f'Случайное число: {random.randint(1, 100)}'"
+          }
+        }
+      ],
+      "timeout": 300,
+      "max_turns": 10,
+      "skill_ids": "*",
+      "description": "Генератор и проверка используют state"
+    }
+  },
+  "permission": null,
+  "updated_at": null,
+  "description": "Демонстрация возможностей ReAct агента: tools, субагенты, interrupt, variables, skills, mock",
+  "max_retries": 0
+}

@@ -8,7 +8,7 @@ name: agentlab-prod
 # ============================================
 x-common-env: &common-env
   DATABASE__SHARED_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_shared
-  DATABASE__AGENTS_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_agents
+  DATABASE__FLOWS_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_agents
   DATABASE__CRM_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_crm
   DATABASE__SYNC_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_sync
   DATABASE__RAG_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_rag
@@ -115,7 +115,7 @@ services:
   agents:
     <<: *app
     container_name: agentlab_agents
-    command: ["python", "-m", "apps.agents.main"]
+    command: ["python", "-m", "apps.flows.main"]
     ports:
       - "8001:8001"
     volumes:

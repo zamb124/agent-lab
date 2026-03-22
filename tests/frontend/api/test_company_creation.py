@@ -3,12 +3,14 @@
 
 Тестируем полный flow:
 1. Frontend: POST /frontend/api/companies - создание компании
-2. Agents: POST /agents/api/v1/company/init - инициализация агентов
+2. Agents: POST /flows/api/v1/company/init - инициализация агентов
 3. Проверка: агенты и тулы появились в БД для новой компании
 """
 
-import pytest
 import asyncio
+import time
+
+import pytest
 from httpx import AsyncClient
 
 
@@ -16,7 +18,7 @@ from httpx import AsyncClient
 @pytest.mark.real_taskiq  # Используем реальный TaskIQ worker
 async def test_company_creation_with_agents_initialization(
     frontend_client: AsyncClient,
-    agents_client: AsyncClient,
+    flows_client: AsyncClient,
     auth_token: str,
     container,
     unique_id: str,
@@ -79,8 +81,8 @@ async def test_company_creation_with_agents_initialization(
     
     # Шаг 4: Запускаем инициализацию через agents API с авторизацией
     # Используем тот же токен что и для создания компании
-    response = await agents_client.post(
-        "/agents/api/v1/company/init",
+    response = await flows_client.post(
+        "/flows/api/v1/company/init",
         json={
             "company_id": company_id,
             "company_name": company_name,
@@ -96,8 +98,8 @@ async def test_company_creation_with_agents_initialization(
     
     print(f"✅ Инициализация запущена: task_id={task_id}")
     
-    # Шаг 5: Ждем завершения TaskIQ задачи (максимум 30 секунд)
-    max_wait = 30
+    # Шаг 5: Ждем завершения TaskIQ задачи (полный прогон нагружает очередь worker)
+    max_wait = 90
     wait_interval = 1
     
     # Устанавливаем контекст новой компании для проверки
@@ -123,7 +125,7 @@ async def test_company_creation_with_agents_initialization(
     set_context(test_context)
     
     try:
-        agent_repo = container.agent_repository
+        agent_repo = container.flow_repository
         
         # Ждем пока агенты появятся в БД
         agents_loaded = False
@@ -144,7 +146,7 @@ async def test_company_creation_with_agents_initialization(
         
         # Проверка что загружены ТОЛЬКО public агенты
         agents = await agent_repo.list_all()
-        agent_ids = [agent.agent_id for agent in agents]
+        agent_ids = [agent.flow_id for agent in agents]
         
         print(f"📋 Загруженные агенты: {agent_ids}")
         
@@ -187,8 +189,8 @@ async def test_company_creation_with_agents_initialization(
         company_token = token_service.create_token(user_id, company_id=company_id)
         
         # Делаем запрос к agents API с контекстом компании
-        api_response = await agents_client.get(
-            "/agents/api/v1/agents/",
+        api_response = await flows_client.get(
+            "/flows/api/v1/flows/",
             headers={
                 "Authorization": f"Bearer {company_token}",
                 "X-Company-Id": company_id
@@ -198,7 +200,7 @@ async def test_company_creation_with_agents_initialization(
         assert api_response.status_code == 200, f"API failed: {api_response.text}"
         
         api_agents = api_response.json()
-        api_agent_ids = [agent["agent_id"] for agent in api_agents]
+        api_agent_ids = [agent["flow_id"] for agent in api_agents]
         
         print(f"✅ API вернул {len(api_agents)} агентов: {api_agent_ids[:5]}...")  # Показываем первые 5
         
@@ -224,7 +226,7 @@ async def test_company_creation_with_agents_initialization(
 
 @pytest.mark.asyncio
 async def test_company_init_endpoint_directly(
-    agents_client: AsyncClient,
+    flows_client: AsyncClient,
     container,
     unique_id: str,
     auth_token: str
@@ -257,8 +259,8 @@ async def test_company_init_endpoint_directly(
     
     try:
         # Тест 1: Попытка инициализировать system (должна быть ошибка)
-        response = await agents_client.post(
-            "/agents/api/v1/company/init",
+        response = await flows_client.post(
+            "/flows/api/v1/company/init",
             json={
                 "company_id": "system",
                 "company_name": "System"
@@ -275,8 +277,8 @@ async def test_company_init_endpoint_directly(
         test_company_id = f"test_company_{unique_id}"
         test_company_name = f"Test Company {unique_id}"
         
-        response = await agents_client.post(
-            "/agents/api/v1/company/init",
+        response = await flows_client.post(
+            "/flows/api/v1/company/init",
             json={
                 "company_id": test_company_id,
                 "company_name": test_company_name
@@ -349,7 +351,7 @@ async def test_check_slug_availability(
 
 
 @pytest.mark.asyncio
-async def test_company_creation_without_agents_service(
+async def test_company_creation_without_flows_service(
     frontend_client: AsyncClient,
     auth_token: str,
     container,
@@ -391,7 +393,7 @@ async def test_company_creation_without_agents_service(
 @pytest.mark.asyncio
 async def test_company_agents_api_with_context(
     frontend_client: AsyncClient,
-    agents_client: AsyncClient,
+    flows_client: AsyncClient,
     auth_token: str,
     container,
     unique_id: str,
@@ -437,34 +439,52 @@ async def test_company_agents_api_with_context(
     print(f"✅ Созданы компании: {company1_id}, {company2_id}")
     
     # Инициализируем агенты для обеих компаний
-    await agents_client.post(
-        "/agents/api/v1/company/init",
+    await flows_client.post(
+        "/flows/api/v1/company/init",
         json={"company_id": company1_id, "company_name": company1_name, "subdomain": company1_slug},
         headers={"Authorization": f"Bearer {auth_token}"}
     )
     
-    await agents_client.post(
-        "/agents/api/v1/company/init",
+    await flows_client.post(
+        "/flows/api/v1/company/init",
         json={"company_id": company2_id, "company_name": company2_name, "subdomain": company2_slug},
         headers={"Authorization": f"Bearer {auth_token}"}
     )
-    
-    # Ждем загрузки агентов
-    await asyncio.sleep(3)
-    
-    # Получаем user_id из auth_token для создания токенов
+
     from core.utils.tokens import get_token_service
+
     token_service = get_token_service()
     token_data = token_service.validate_token(auth_token)
     user_id = token_data.user_id
-    
-    # Получаем токены для каждой компании с реальным user_id
     token1 = token_service.create_token(user_id, company_id=company1_id)
     token2 = token_service.create_token(user_id, company_id=company2_id)
+
+    deadline = time.monotonic() + 90.0
+    while time.monotonic() < deadline:
+        r1 = await flows_client.get(
+            "/flows/api/v1/flows/",
+            headers={
+                "Authorization": f"Bearer {token1}",
+                "X-Company-Id": company1_id,
+            },
+        )
+        r2 = await flows_client.get(
+            "/flows/api/v1/flows/",
+            headers={
+                "Authorization": f"Bearer {token2}",
+                "X-Company-Id": company2_id,
+            },
+        )
+        if r1.status_code == 200 and r2.status_code == 200:
+            j1 = r1.json()
+            j2 = r2.json()
+            if isinstance(j1, list) and isinstance(j2, list) and len(j1) > 0 and len(j2) > 0:
+                break
+        await asyncio.sleep(0.1)
     
     # Проверка 1: Компания 1 видит своих агентов
-    response1 = await agents_client.get(
-        "/agents/api/v1/agents/",
+    response1 = await flows_client.get(
+        "/flows/api/v1/flows/",
         headers={
             "Authorization": f"Bearer {token1}",
             "X-Company-Id": company1_id
@@ -477,8 +497,8 @@ async def test_company_agents_api_with_context(
     assert len(agents1) > 0, "Компания 1 должна видеть агенты"
     
     # Проверка 2: Компания 2 видит своих агентов
-    response2 = await agents_client.get(
-        "/agents/api/v1/agents/",
+    response2 = await flows_client.get(
+        "/flows/api/v1/flows/",
         headers={
             "Authorization": f"Bearer {token2}",
             "X-Company-Id": company2_id
@@ -491,8 +511,8 @@ async def test_company_agents_api_with_context(
     assert len(agents2) > 0, "Компания 2 должна видеть агенты"
     
     # Проверка 3: Обе компании видят одинаковые public агенты (так как загружаются из registry)
-    agent_ids1 = {agent["agent_id"] for agent in agents1}
-    agent_ids2 = {agent["agent_id"] for agent in agents2}
+    agent_ids1 = {agent["flow_id"] for agent in agents1}
+    agent_ids2 = {agent["flow_id"] for agent in agents2}
     
     print(f"📋 Агенты компании 1: {agent_ids1}")
     print(f"📋 Агенты компании 2: {agent_ids2}")
@@ -507,10 +527,10 @@ async def test_company_agents_api_with_context(
     
     # Проверка 4: Получение конкретного агента
     if agents1:
-        test_agent_id = agents1[0]["agent_id"]
+        test_agent_id = agents1[0]["flow_id"]
         
-        response = await agents_client.get(
-            f"/agents/api/v1/agents/{test_agent_id}",
+        response = await flows_client.get(
+            f"/flows/api/v1/flows/{test_agent_id}",
             headers={
                 "Authorization": f"Bearer {token1}",
                 "X-Company-Id": company1_id
@@ -519,7 +539,7 @@ async def test_company_agents_api_with_context(
         
         assert response.status_code == 200
         agent_detail = response.json()
-        assert agent_detail["agent_id"] == test_agent_id
+        assert agent_detail["flow_id"] == test_agent_id
         
         print(f"✅ Получение конкретного агента работает: {test_agent_id}")
     

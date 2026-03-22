@@ -11,7 +11,7 @@
 Полный E2E flow создания компании:
 
 1. **Frontend API**: Создание компании через `POST /api/companies`
-2. **Agents API**: Автоматический вызов `POST /agents/api/v1/company/init`
+2. **Agents API**: Автоматический вызов `POST /flows/api/v1/company/init`
 3. **TaskIQ**: Выполнение фоновой задачи `init_company_resources`
 4. **DB Verification**: Проверка что public агенты загружены в namespace компании
 5. **Filtering**: Проверка что internal агенты НЕ загружены
@@ -141,7 +141,7 @@ KEYS subdomain:*
 │  - user assigned    │
 └──────┬──────────────┘
        │ ServiceClient.post()
-       │ POST /agents/api/v1/company/init
+       │ POST /flows/api/v1/company/init
        ▼
 ┌─────────────┐
 │   Agents    │
@@ -195,12 +195,12 @@ uv run python -m apps.broker.run_worker
 
 ### Агенты не загружаются
 
-**Причина**: Некорректный registry.yaml или ошибка в AgentsLoader
+**Причина**: Некорректный registry.yaml или ошибка в FlowsLoader
 
 **Решение**:
 ```bash
 # Проверить registry
-cat apps/agents/registry.yaml
+cat apps/flows/registry.yaml
 
 # Проверить логи TaskIQ
 pytest -v -s --log-cli-level=DEBUG

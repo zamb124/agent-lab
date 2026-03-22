@@ -11,20 +11,20 @@
 """
 
 # Инициализируем settings (agents)
-from apps.agents.config import get_settings
+from apps.flows.config import get_settings
 get_settings()
 
 # Импортируем broker из apps.broker.broker
 from apps.broker.broker import broker
 
 # Регистрируем tasks сервиса agents
-import apps.agents.src.tasks.agent_tasks  # noqa: F401
-import apps.agents.src.tasks.eval_task  # noqa: F401
-import apps.agents.src.tasks.node_tasks  # noqa: F401
-import apps.agents.src.tasks.tool_tasks  # noqa: F401
-import apps.agents.src.tasks.push_notification_tasks  # noqa: F401
-import apps.agents.src.tasks.scheduled_tasks  # noqa: F401
-import apps.agents.src.tasks.company_init_tasks  # noqa: F401
+import apps.flows.src.tasks.flow_tasks  # noqa: F401
+import apps.flows.src.tasks.eval_task  # noqa: F401
+import apps.flows.src.tasks.node_tasks  # noqa: F401
+import apps.flows.src.tasks.tool_tasks  # noqa: F401
+import apps.flows.src.tasks.push_notification_tasks  # noqa: F401
+import apps.flows.src.tasks.scheduled_tasks  # noqa: F401
+import apps.flows.src.tasks.company_init_tasks  # noqa: F401
 
 # CRM attachment tasks теперь в rag broker (apps/rag_worker/worker.py)
 # import apps.crm.tasks.attachment_tasks  # noqa: F401

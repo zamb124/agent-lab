@@ -29,11 +29,6 @@ class RAGContainer(BaseContainer):
         from core.db.repositories.document_status_repository import DocumentStatusRepository
         return DocumentStatusRepository(self.db_url)
     
-    async def get_s3_client(self):
-        """Получает единый S3 клиент для работы с файлами"""
-        from core.files.s3_client import get_default_s3_client
-        return await get_default_s3_client()
-
 
 _container: Optional[RAGContainer] = None
 

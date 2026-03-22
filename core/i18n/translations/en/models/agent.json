@@ -1,7 +1,7 @@
 {
   "title_plural": "Agents",
   "fields": {
-    "agent_id": {
+    "flow_id": {
       "title": "AGENT ID"
     },
     "name": {

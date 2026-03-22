@@ -187,7 +187,7 @@ result = await entity_service.analyze_text_with_ai(
 
 ```python
 response = await a2a_client.call(
-    agent_id="crm_analyzer",
+    flow_id="crm_analyzer",
     method="analyze_text",
     params={"text": "...", "prompt": "..."}
 )

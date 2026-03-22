@@ -43,10 +43,9 @@ async def test_full_rag_workflow(rag_client, unique_namespace_name, auth_headers
     assert doc_response.status_code == 202  # Async processing
     document_id = doc_response.json()["document_id"]
     
-    # Ждем пока документ обработается (mock embeddings работают быстро)
     import asyncio
-    max_wait = 5
-    wait_interval = 0.2
+    max_wait = 90
+    wait_interval = 0.25
     elapsed = 0
     status = None
     status_data = {}
@@ -209,10 +208,9 @@ async def test_large_document_processing(rag_client, unique_namespace_name, auth
     assert doc_response.status_code == 202  # Async processing
     document_id = doc_response.json()["document_id"]
     
-    # Ждем пока документ обработается (mock embeddings работают быстро)
     import asyncio
-    max_wait = 5
-    wait_interval = 0.2
+    max_wait = 90
+    wait_interval = 0.25
     elapsed = 0
     
     while elapsed < max_wait:

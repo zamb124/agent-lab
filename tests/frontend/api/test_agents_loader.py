@@ -20,7 +20,7 @@ async def test_init_company_resources_for_system(container, unique_id: str):
     2. Контекст устанавливается корректно
     3. Возвращается статистика
     """
-    from apps.agents.src.tasks.company_init_tasks import init_company_resources
+    from apps.flows.src.tasks.company_init_tasks import init_company_resources
     from core.context import get_context, clear_context
     
     clear_context()
@@ -59,7 +59,7 @@ async def test_init_company_resources_for_regular_company(
     2. Internal агенты НЕ загружаются
     3. Контекст устанавливается для компании
     """
-    from apps.agents.src.tasks.company_init_tasks import init_company_resources
+    from apps.flows.src.tasks.company_init_tasks import init_company_resources
     from core.context import set_context, clear_context, Context
     from core.models.identity_models import User, Company
     
@@ -97,9 +97,9 @@ async def test_init_company_resources_for_regular_company(
     set_context(test_context)
     
     try:
-        agent_repo = container.agent_repository
+        agent_repo = container.flow_repository
         agents = await agent_repo.list_all()
-        agent_ids = [agent.agent_id for agent in agents]
+        agent_ids = [agent.flow_id for agent in agents]
         
         print(f"📋 Загруженные агенты в {test_company_id}: {agent_ids}")
         
@@ -118,19 +118,20 @@ async def test_init_company_resources_for_regular_company(
 
 
 @pytest.mark.asyncio
-async def test_agents_loader_filter_public(container, unique_id: str):
+async def test_flows_loader_filter_public(container, unique_id: str):
     """
-    Прямой тест AgentsLoader.load_all_for_company с фильтрацией.
+    Прямой тест FlowsLoader.load_all_for_company с фильтрацией.
     """
-    from apps.agents.src.services.agents_loader import AgentsLoader
+    from apps.flows.src.services.flows_loader import FlowsLoader
     from core.context import set_context, clear_context, Context
     from core.models.identity_models import User, Company
     
     test_company_id = f"test_filter_{unique_id}"
     
     # Путь к registry
-    registry_path = Path(__file__).parent.parent.parent.parent / "apps" / "agents" / "registry.yaml"
-    agents_dir = Path(__file__).parent.parent.parent.parent / "apps" / "agents" / "agents"
+    repo_root = Path(__file__).parent.parent.parent.parent
+    registry_path = repo_root / "apps" / "flows" / "registry.yaml"
+    bundles_dir = repo_root / "apps" / "flows" / "bundles"
     
     # Устанавливаем контекст компании
     test_context = Context(
@@ -146,9 +147,9 @@ async def test_agents_loader_filter_public(container, unique_id: str):
     set_context(test_context)
     
     try:
-        loader = AgentsLoader(
-            agents_dir=agents_dir,
-            agent_repository=container.agent_repository,
+        loader = FlowsLoader(
+            bundles_dir=bundles_dir,
+            flow_repository=container.flow_repository,
             node_repository=container.node_repository,
             tool_repository=container.tool_repository,
             registry_path=registry_path,
@@ -162,12 +163,12 @@ async def test_agents_loader_filter_public(container, unique_id: str):
         
         print(f"📊 С фильтром: {stats_filtered}")
         
-        agents_filtered = await container.agent_repository.list_all()
+        agents_filtered = await container.flow_repository.list_all()
         filtered_count = len(agents_filtered)
         
         # Очищаем для второго теста
         for agent in agents_filtered:
-            await container.agent_repository.delete(agent.agent_id)
+            await container.flow_repository.delete(agent.flow_id)
         
         # Тест 2: Загрузка без фильтра (все агенты)
         stats_all = await loader.load_all_for_company(
@@ -177,7 +178,7 @@ async def test_agents_loader_filter_public(container, unique_id: str):
         
         print(f"📊 Без фильтра: {stats_all}")
         
-        agents_all = await container.agent_repository.list_all()
+        agents_all = await container.flow_repository.list_all()
         all_count = len(agents_all)
         
         # Без фильтра должно быть больше или равно
@@ -204,7 +205,7 @@ async def test_system_vs_company_loading(container, unique_id: str):
     - Company: загружены только PUBLIC агенты
     - System имеет >= агентов чем company
     """
-    from apps.agents.src.tasks.company_init_tasks import init_company_resources
+    from apps.flows.src.tasks.company_init_tasks import init_company_resources
     from core.context import set_context, clear_context, Context
     from core.models.identity_models import User, Company
     

@@ -1,0 +1,181 @@
+"""
+FlowDiscoveryService — регистрация и health-check внешних flows (EXTERNAL / A2A).
+"""
+
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
+
+from core.clients import A2AClient
+from apps.flows.config import ExternalFlowConfig
+from apps.flows.src.db.flow_repository import FlowRepository
+from core.logging import get_logger
+from apps.flows.src.models import FlowConfig, FlowType, ExternalAgentStatus
+
+logger = get_logger(__name__)
+
+
+class FlowDiscoveryService:
+    """
+    Обнаружение и учёт внешних flows (type=EXTERNAL): регистрация по URL, health-check.
+    """
+
+    def __init__(
+        self,
+        repository: FlowRepository,
+        a2a_client: A2AClient,
+    ):
+        self._repository = repository
+        self._a2a_client = a2a_client
+
+    async def init_from_config(self, external_flows_config: List[ExternalFlowConfig]) -> int:
+        """Регистрирует flows из конфигурации приложения."""
+        registered = 0
+
+        for item in external_flows_config:
+            try:
+                flow_cfg = await self.register_agent(
+                    url=item.url,
+                    auth_headers=item.auth_headers,
+                    name=item.name,
+                )
+                registered += 1
+                logger.info(f"Flow '{flow_cfg.name}' registered from config: {item.url}")
+            except Exception as e:
+                logger.warning(f"Failed to register external flow from config {item.url}: {e}")
+
+        logger.info(f"Initialized {registered}/{len(external_flows_config)} external flows from config")
+        return registered
+
+    async def register_agent(
+        self,
+        url: str,
+        auth_headers: Optional[Dict[str, str]] = None,
+        name: Optional[str] = None,
+    ) -> FlowConfig:
+        """
+        Регистрирует внешний flow по A2A base URL.
+
+        Raises:
+            ValueError: endpoint недоступен или дубликат URL
+        """
+        url = url.rstrip("/")
+
+        stored_flows = await self._repository.list_all(limit=10000)
+        for existing in stored_flows:
+            if existing.type == FlowType.EXTERNAL and existing.url == url:
+                logger.info(f"External flow already registered: {url}")
+                return existing
+
+        card_payload = await self._fetch_agent_card(url, auth_headers)
+
+        flow_id = self._generate_flow_id(url)
+        display_name = name or card_payload.get("name", flow_id)
+
+        now = datetime.now(timezone.utc)
+
+        flow_cfg = FlowConfig(
+            flow_id=flow_id,
+            type=FlowType.EXTERNAL,
+            url=url,
+            name=display_name,
+            description=card_payload.get("description", ""),
+            auth_headers=auth_headers or {},
+            status=ExternalAgentStatus.ACTIVE,
+            last_health_check=now,
+            agent_card=card_payload,
+            created_at=now,
+            updated_at=now,
+        )
+
+        await self._repository.set(flow_cfg)
+        logger.info(f"Registered external flow: {display_name} ({url})")
+
+        return flow_cfg
+
+    async def unregister_agent(self, flow_id: str) -> bool:
+        """Удаляет запись EXTERNAL flow из репозитория."""
+        result = await self._repository.delete(flow_id)
+        if result:
+            logger.info(f"Unregistered external flow: {flow_id}")
+        return result
+
+    async def get_flow(self, flow_id: str) -> Optional[FlowConfig]:
+        """Внешний flow (EXTERNAL) по flow_id."""
+        flow_cfg = await self._repository.get(flow_id)
+        if flow_cfg and flow_cfg.type == FlowType.EXTERNAL:
+            return flow_cfg
+        return None
+
+    async def get_flow_by_url(self, url: str) -> Optional[FlowConfig]:
+        """Внешний flow по нормализованному base URL."""
+        url = url.rstrip("/")
+        stored_flows = await self._repository.list_all(limit=10000)
+        for row in stored_flows:
+            if row.type == FlowType.EXTERNAL and row.url == url:
+                return row
+        return None
+
+    async def list_agents(self, only_active: bool = True) -> List[FlowConfig]:
+        """Список EXTERNAL flows (имя метода историческое; сущность — flow)."""
+        stored_flows = await self._repository.list_all(limit=10000)
+        external = [row for row in stored_flows if row.type == FlowType.EXTERNAL]
+
+        if only_active:
+            return [row for row in external if row.status == ExternalAgentStatus.ACTIVE]
+        return external
+
+    async def health_check_all(self) -> Dict[str, bool]:
+        """Health-check по всем записям в репозитории."""
+        rows = await self._repository.list_all()
+        results: Dict[str, bool] = {}
+
+        for row in rows:
+            is_healthy = await self.health_check_agent(row.flow_id)
+            results[row.flow_id] = is_healthy
+
+        return results
+
+    async def health_check_agent(self, flow_id: str) -> bool:
+        """Health-check для EXTERNAL flow по flow_id."""
+        ext_cfg = await self._repository.get(flow_id)
+        if ext_cfg is None or ext_cfg.type != FlowType.EXTERNAL:
+            return False
+
+        try:
+            card_payload = await self._fetch_agent_card(ext_cfg.url, ext_cfg.auth_headers)
+
+            ext_cfg.status = ExternalAgentStatus.ACTIVE
+            ext_cfg.last_health_check = datetime.now(timezone.utc)
+            ext_cfg.agent_card = card_payload
+            ext_cfg.updated_at = datetime.now(timezone.utc)
+            await self._repository.set(ext_cfg)
+
+            logger.debug(f"External flow {flow_id} is healthy")
+            return True
+
+        except Exception as e:
+            logger.warning(f"External flow {flow_id} health check failed: {e}")
+
+            ext_cfg.status = ExternalAgentStatus.UNHEALTHY
+            ext_cfg.last_health_check = datetime.now(timezone.utc)
+            ext_cfg.updated_at = datetime.now(timezone.utc)
+            await self._repository.set(ext_cfg)
+
+            return False
+
+    async def _fetch_agent_card(
+        self,
+        url: str,
+        auth_headers: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """HTTP: A2A agent-card (спека A2A)."""
+        return await self._a2a_client.get_agent_card(url, auth_headers)
+
+    def _generate_flow_id(self, url: str) -> str:
+        """Стабильный flow_id из host:port URL."""
+        parsed = urlparse(url)
+        host = parsed.hostname or "unknown"
+        port = parsed.port or 80
+
+        return f"{host}_{port}".replace(".", "_").replace("-", "_")

@@ -21,7 +21,7 @@ def _extract_short_name(scope_id: str, max_length: int = 20) -> str:
     
     Args:
         scope_id: Полный ID
-            - Из кода: "apps.agents.flows.lawyer_flow.lawyer_flow" → "lawyer_flow"
+            - Из кода: "apps.flows.flows.lawyer_flow.lawyer_flow" → "lawyer_flow"
             - Из БД: "flow_abc123" → "flow_abc123"
         max_length: Максимальная длина результата
         
@@ -45,7 +45,7 @@ async def get_or_create_namespace(scope_type: str, scope_id: str) -> str:
     
     Args:
         scope_type: Тип скоупа (company, flow, session)
-        scope_id: ID скоупа (company_123, apps.agents.flows.lawyer_flow.lawyer_flow, etc)
+        scope_id: ID скоупа (company_123, apps.flows.flows.lawyer_flow.lawyer_flow, etc)
         
     Returns:
         Реальный namespace_id в Agentset

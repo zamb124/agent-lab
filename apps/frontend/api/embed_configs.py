@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/embed/configs", tags=["embed_configs"])
 class CreateEmbedConfigRequest(BaseModel):
     """Запрос на создание конфигурации виджета"""
     name: str = Field(description="Название виджета")
-    agent_id: str = Field(description="ID агента")
+    flow_id: str = Field(description="ID агента")
     allowed_origins: List[str] = Field(default_factory=list, description="Разрешенные домены")
     theme: str = Field(default="dark", description="Тема оформления")
     position: str = Field(default="bottom-right", description="Позиция на странице")
@@ -35,7 +35,7 @@ class CreateEmbedConfigRequest(BaseModel):
 class UpdateEmbedConfigRequest(BaseModel):
     """Запрос на обновление конфигурации виджета"""
     name: Optional[str] = None
-    agent_id: Optional[str] = None
+    flow_id: Optional[str] = None
     allowed_origins: Optional[List[str]] = None
     status: Optional[EmbedStatus] = None
     theme: Optional[str] = None
@@ -52,7 +52,7 @@ class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
     embed_id: str
     name: str
-    agent_id: str
+    flow_id: str
     allowed_origins: List[str]
     status: EmbedStatus
     theme: str
@@ -102,12 +102,13 @@ async def create_embed_config(
         raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
     
     # Проверяем существование агента
-    from apps.agents.src.container import get_container as get_agents_container
-    agents_container = get_agents_container()
-    agent = await agents_container.agent_repository.get(request_data.agent_id)
+    from apps.flows.src.container import get_container
+
+    flows_container = get_container()
+    agent = await flows_container.flow_repository.get(request_data.flow_id)
     
     if not agent:
-        raise HTTPException(status_code=404, detail=f"Агент {request_data.agent_id} не найден")
+        raise HTTPException(status_code=404, detail=f"Агент {request_data.flow_id} не найден")
     
     # Генерируем уникальный embed_id
     embed_id = f"embed_{uuid.uuid4().hex[:16]}"
@@ -116,7 +117,7 @@ async def create_embed_config(
     config = EmbedConfig(
         embed_id=embed_id,
         name=request_data.name,
-        agent_id=request_data.agent_id,
+        flow_id=request_data.flow_id,
         allowed_origins=request_data.allowed_origins,
         status=EmbedStatus.ACTIVE,
         theme=request_data.theme,
@@ -143,7 +144,7 @@ async def create_embed_config(
     return EmbedConfigResponse(
         embed_id=config.embed_id,
         name=config.name,
-        agent_id=config.agent_id,
+        flow_id=config.flow_id,
         allowed_origins=config.allowed_origins,
         status=config.status,
         theme=config.theme,
@@ -190,7 +191,7 @@ async def list_embed_configs(
         EmbedConfigResponse(
             embed_id=c.embed_id,
             name=c.name,
-            agent_id=c.agent_id,
+            flow_id=c.flow_id,
             allowed_origins=c.allowed_origins,
             status=c.status,
             theme=c.theme,
@@ -230,7 +231,7 @@ async def get_embed_config(
     return EmbedConfigResponse(
         embed_id=config.embed_id,
         name=config.name,
-        agent_id=config.agent_id,
+        flow_id=config.flow_id,
         allowed_origins=config.allowed_origins,
         status=config.status,
         theme=config.theme,
@@ -281,7 +282,7 @@ async def update_embed_config(
     return EmbedConfigResponse(
         embed_id=config.embed_id,
         name=config.name,
-        agent_id=config.agent_id,
+        flow_id=config.flow_id,
         allowed_origins=config.allowed_origins,
         status=config.status,
         theme=config.theme,

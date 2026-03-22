@@ -2,319 +2,71 @@
 description: "Правила работы с конфигурацией"
 alwaysApply: false
 ---
-# Правила работы с конфигурацией
+# Конфигурация
 
-## Порядок приоритетов
+## Приоритет
 
-Запомни навсегда:
-1. **ENV переменные** (высший приоритет)
-2. **Корневой** `conf.json` / `conf.local.json` в корне репозитория (отдельных `apps/*/conf.json` нет)
-3. **Значения по умолчанию**
+1. **ENV** (высший)
+2. **`conf.local.json`** (корень репо, не в git)
+3. **`conf.json`** (корень репо)
+4. Дефолты в **Pydantic-моделях** ([`core/config/models.py`](core/config/models.py))
 
-Переопределения под конкретный сервис — в корневом `conf.json` в ключе `services.<имя>` (например `services.agents`, `services.rag_worker`).
+Загрузка: [`core/config/loader.py`](core/config/loader.py) — мерж файлов, затем слой **`services.<имя_сервиса>`** поверх общего (для `load_merged_config(service_name="flows")` и т.д.), ключ `services` из результата убирается.
 
-ENV переменные ВСЕГДА побеждают JSON!
+Отдельных `apps/*/conf.json` нет.
 
-## Формат ENV переменных
+## ENV
 
-Используй двойное подчеркивание `__` для вложенных полей:
+Вложенность через **`__`** (верхний регистр секций):
 
-<good_example>
-# Правильный формат (БД — отдельный URL на логическую базу)
-DATABASE__SHARED_URL=postgresql+asyncpg://user:pass@host:5432/platform_shared
-DATABASE__AGENTS_URL=postgresql+asyncpg://user:pass@host:5432/platform_agents
-# Для обратной совместимости то же, что shared_url:
-# DATABASE__URL=postgresql+asyncpg://...
-LLM__PROVIDERS__OPENAI__API_KEY=sk-...
+```
+DATABASE__SHARED_URL=...
+DATABASE__FLOWS_URL=...
+DATABASE__REDIS_URL=...
+LLM__OPENROUTER__API_KEY=...
+LLM__PROVIDER=openrouter
 SERVER__PORT=8001
-</good_example>
-
-<bad_example>
-# Неправильный формат
-DATABASE_URL=...           # Одинарное подчеркивание
-database__url=...          # Нижний регистр
-DATABASE.URL=...           # Точка вместо подчеркивания
-</bad_example>
-
-## Работа с конфигурацией
-
-### Чтение настроек
-
-<good_example>
-from core.config import settings
-
-# Читаем настройки
-shared_db_url = settings.database.shared_url
-api_key = settings.llm.providers["openai"].api_key
-</good_example>
-
-<bad_example>
-# НЕ читай напрямую из JSON
-import json
-with open("conf.json") as f:
-    config = json.load(f)  # НЕ ТАК
-</bad_example>
-
-### Добавление новых настроек
-
-1. Добавь в модель конфигурации (`app/core/config.py`):
-
-<good_example>
-class MyServiceConfig(BaseModel):
-    enabled: bool = False
-    api_key: Optional[str] = None
-    timeout: int = 30
-
-class Settings(BaseSettings):
-    my_service: MyServiceConfig = Field(default_factory=MyServiceConfig)
-</good_example>
-
-2. Добавь в `conf.json`:
-
-<good_example>
-{
-  "my_service": {
-    "enabled": true,
-    "api_key": "key-...",
-    "timeout": 60
-  }
-}
-</good_example>
-
-3. Используй в коде:
-
-<good_example>
-from core.config import settings
-
-if settings.my_service.enabled:
-    client = MyClient(
-        api_key=settings.my_service.api_key,
-        timeout=settings.my_service.timeout
-    )
-</good_example>
-
-## Docker и ENV переменные
-
-При работе с Docker ВСЕГДА переопределяй хосты через ENV:
-
-<good_example>
-# docker-compose.yml
-services:
-  app:
-    environment:
-      # Переопределяем localhost на имя сервиса
-      - DATABASE__SHARED_URL=postgresql+asyncpg://user:pass@postgres:5432/platform_shared
-      - REDIS__HOST=redis
-      - RABBITMQ__HOST=rabbitmq
-</good_example>
-
-<bad_example>
-# НЕ создавай отдельный conf.docker.json
-# НЕ меняй conf.json для Docker
-# НЕ хардкодь хосты в коде
-</bad_example>
-
-## Чувствительные данные
-
-НИКОГДА не храни секреты в `conf.json`:
-
-<good_example>
-# .env (не коммитится)
-DATABASE__SHARED_URL=postgresql+asyncpg://prod_user:SecurePass123@prod.db.com:5432/platform_shared
-LLM__PROVIDERS__OPENAI__API_KEY=sk-prod-key-...
-AUTH__SECRET_KEY=super-secret-key-...
-</good_example>
-
-<good_example>
-# conf.json (коммитится)
-{
-  "database": {
-    "shared_url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/platform_shared"
-  }
-}
-</good_example>
-
-<bad_example>
-# conf.json - НЕ ТАК (секреты в репозитории)
-{
-  "database": {
-    "shared_url": "postgresql+asyncpg://prod_user:SuperSecretPassword@prod-db.company.com:5432/platform_shared"
-  }
-}
-</bad_example>
-
-## Локальная разработка
-
-Создай `conf.local.json` для локальных экспериментов:
-
-<good_example>
-# Скопируй пример и отредактируй
-cp conf.local.json.example conf.local.json
-
-# conf.local.json (в .gitignore, не коммитится)
-{
-  "server": {
-    "port": 8002
-  },
-  "llm": {
-    "default_provider": "ollama"
-  },
-  "database": {
-    "shared_url": "postgresql+asyncpg://dev:dev@localhost:5433/platform_shared"
-  },
-  "s3": {
-    "enabled": true,
-    "default_bucket": "test-bucket",
-    "buckets": {
-      "test-bucket": {
-        "provider": "minio",
-        "access_key_id": "minioadmin",
-        "secret_access_key": "minioadmin",
-        "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:19001",
-        "enabled": true
-      }
-    }
-  }
-}
-</good_example>
-
-## S3 / MinIO конфигурация
-
-### Development и Testing
-
-В dev и test окружениях используется **MinIO** - S3-совместимое хранилище:
-
-<good_example>
-# conf.json - конфигурация для MinIO
-{
-  "s3": {
-    "enabled": true,
-    "default_bucket": "vkbucket",
-    "buckets": {
-      "test-bucket": {
-        "provider": "minio",
-        "access_key_id": "minioadmin",
-        "secret_access_key": "minioadmin",
-        "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:19001",
-        "enabled": true
-      }
-    }
-  }
-}
-</good_example>
-
-**MinIO доступен:**
-- Dev: `http://localhost:19001` (API), `http://localhost:19011` (Console)
-- Test: `http://localhost:9002` (API), `http://localhost:9003` (Console)
-- Credentials: `minioadmin` / `minioadmin`
-
-**Запуск MinIO:**
-```bash
-make dev-up    # Поднимает MinIO в dev окружении
-make test      # Автоматически использует MinIO для тестов
+SERVER__FLOWS_SERVICE_URL=http://localhost:8001
+TASKS__BROKER_URL=redis://...
 ```
 
-### Production
+`DATABASE__URL` — алиас к `shared_url` (обратная совместимость).
 
-В production используется внешний S3 (VK Cloud):
+## Структура conf.json
 
-<good_example>
-# conf.json - production конфигурация
-{
-  "s3": {
-    "enabled": true,
-    "default_bucket": "vkbucket",
-    "buckets": {
-      "vkbucket": {
-        "provider": "vkcloud",
-        "access_key_id": "...",
-        "secret_access_key": "...",
-        "region_name": "ru-msk",
-        "endpoint_url": "https://hb.ru-msk.vkcloud-storage.ru",
-        "enabled": true
-      }
-    }
-  }
-}
-</good_example>
+**Общий слой** (один раз): `database`, `tasks`, `auth`, `llm`, `rag`, `s3`, `server`, …
 
-### Переопределение через ENV
+- **`database`**: `shared_url`, `flows_url`, `crm_url`, `sync_url`, `rag_url`, `redis_url` — не дублировать внутри `services.*`.
+- **`server`**: плоские URL для межсервисных вызовов — `flows_service_url`, `crm_service_url`, `frontend_service_url`, `rag_service_url`, `sync_service_url` (см. `ServerConfig`). Вложенного `server.services.*` нет.
+- **`llm`**: `provider`, `default_model`, провайдеры (`openrouter`, `bothub`, …), опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id модели; каталог цен в JSON не храним.
+- **`services.<имя>`**: только отличия от общего слоя (порт, `auth.permissions_enabled`, свой `llm` для flows, override `rag.providers` у rag-сервиса и т.д.).
 
-<good_example>
-# Переключить default bucket на MinIO
-export S3__DEFAULT_BUCKET=test-bucket
+Воркеры (rag_worker и др.) при необходимости настраиваются через **ENV**, не через плейсхолдеры `${...}` в JSON.
 
-# Переопределить endpoint для test-bucket
-export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://minio-test:9000
+## Код
 
-# Включить/выключить S3
-export S3__ENABLED=true
-</good_example>
-
-## Проверка конфигурации
-
-Перед использованием проверь что значение корректное:
-
-<good_example>
+```python
 from core.config import settings
 
-def init_database():
-    if not settings.database.shared_url:
-        raise ValueError("DATABASE__SHARED_URL не настроен")
+settings.database.shared_url
+settings.llm.provider
+settings.llm.openrouter.api_key  # если provider openrouter
+settings.auth.jwt_secret_key
+settings.server.get_service_url("flows")
+```
 
-    engine = create_engine(settings.database.shared_url)
-    return engine
-</good_example>
+Новая секция: модель в [`core/config/models.py`](core/config/models.py), поле в [`BaseSettings`](core/config/base.py) или в `FlowSettings` / `RAGSettings` и т.д., затем ключ в `conf.json`.
+
+## Секреты
+
+Секреты — в **ENV** / секрет-хранилище, не в коммитимом `conf.json`.
+
+## Миграции БД
+
+Схемы БД — деревья **`migrations/<сервис>/`**, манифест **`migrations/services.json`**. Это не блок `migration` в `conf.json`.
 
 ## Типичные ошибки
 
-### Ошибка 1: Неправильный формат ENV
-
-```bash
-# Неправильно
-DATABASE_URL=postgres://...
-
-# Правильно
-DATABASE__SHARED_URL=postgresql+asyncpg://...
-```
-
-### Ошибка 2: ENV не переопределяет JSON
-
-Причина: используется одинарное подчеркивание или неправильный регистр.
-
-Решение: проверь имя переменной в `docker-compose.yml` или `.env`.
-
-### Ошибка 3: Секреты в Git
-
-Причина: `conf.json` с паролями попал в коммит.
-
-Решение:
-1. Удали пароли из `conf.json`
-2. Добавь их в `.env` или ENV переменные
-3. Используй `git rm --cached conf.json` если нужно
-
-## Отладка
-
-Логируй конфигурацию при старте (без секретов):
-
-<good_example>
-from core.config import settings
-
-logger.info(f"Database host: {settings.database.shared_url.split('@')[1].split('/')[0]}")
-logger.info(f"LLM provider: {settings.llm.default_provider}")
-logger.info(f"Server port: {settings.server.port}")
-</good_example>
-
-<bad_example>
-# НЕ логируй полные URL с паролями
-logger.info(f"Database URL: {settings.database.shared_url}")  # НЕ ТАК
-</bad_example>
-
-## Документация
-
-При изменении конфигурации обновляй:
-- `docs/configuration.md` - документацию
-- Примеры в `conf.example` если он есть
-- README.md если меняется запуск
+- Неверное имя ENV (одинарное `_`, нижний регистр секций).
+- Дублирование `database` в `services.*` без необходимости.
+- Ожидание полей в JSON без объявления в Pydantic (отбрасываются или игнорируются).

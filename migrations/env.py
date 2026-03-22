@@ -25,9 +25,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.db.models import Base
 
 # Импорт моделей - они автоматически регистрируются в Base.metadata и service_registry
-# Agents models
-from apps.agents.src.db.models import (
-    Agents, AgentsVersions, Nodes, Tools, States,
+# Flows service models
+from apps.flows.src.db.models import (
+    Flows, FlowsVersions, Nodes, Tools, States,
     EvaluationResults, ScheduledTasks
 )
 # Push models (core)

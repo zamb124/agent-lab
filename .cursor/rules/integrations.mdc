@@ -1,5 +1,5 @@
 ---
-description: "Интеграции: A2A, TaskIQ, Redis Pub/Sub, HTTP, Remote Agents"
+description: "Интеграции: A2A, TaskIQ, Redis Pub/Sub, HTTP, внешние flows (A2A)"
 alwaysApply: false
 ---
 # Интеграции
@@ -25,7 +25,7 @@ result = await task.wait_result(timeout=30)
 ```
 
 **Основные задачи:**
-- `process_agent_task` - выполнение агента
+- `process_flow_task` - выполнение flow
 - `execute_tool` - выполнение tool
 - `execute_inline_code` - SafeEval для inline кода
 
@@ -44,7 +44,7 @@ schedule = await my_task.schedule_by_time(
 **Stream-First:** LLM ВСЕГДА через `.stream()`, все события через Redis Pub/Sub.
 
 ```python
-from apps.agents.src.streaming import Emitter, EventSubscriber
+from apps.flows.src.streaming import Emitter, EventSubscriber
 
 # Публикация (в worker)
 emitter = Emitter(redis_client, state)
@@ -72,14 +72,14 @@ async for event in subscriber.subscribe(task_id):
 ### Межсервисное взаимодействие - ТОЛЬКО ServiceClient
 
 ```python
-from core.clients import get_service_client
+from core.clients import ServiceClient
 
-client = get_service_client()
-response = await client.get("agents", "/agents/api/v1/flows/")
+client = ServiceClient()
+response = await client.get("flows", "/flows/api/v1/flows/")
 response = await client.post("crm", "/crm/api/v1/entities/", json=data)
 ```
 
-**Сервисы:** `agents`, `crm`, `frontend`
+**Сервисы:** `flows`, `crm`, `frontend`
 
 **Преимущества:**
 - Автоматическая передача trace_id, авторизации
@@ -102,39 +102,39 @@ async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
 
 **ЗАПРЕЩЕНО:** `httpx.AsyncClient()` напрямую!
 
-## Remote Agents (A2A протокол)
+## Внешние flows (A2A протокол)
 
-### Регистрация внешних агентов
+### Регистрация по URL
 
 ```python
-# Из конфига
-await container.agent_discovery.init_from_config(config.external_agents.agents)
+# Из конфига (список в `ExternalFlowsConfig.flows`)
+await container.flow_discovery.init_from_config(config.external_flows.flows)
 
-# Динамическая
-agent = await container.agent_discovery.register_agent(
-    url="http://agent:8080",
+# Динамическая регистрация (метод исторически называется register_agent — регистрирует flow по A2A card)
+external_flow = await container.flow_discovery.register_agent(
+    url="http://remote-flow:8080",
     auth_headers={"Authorization": "Bearer token"}
 )
 ```
 
-### RemoteAgentNode в agent.json
+### RemoteFlowNode в конфиге flow
 
 ```json
 {
-  "type": "remote_agent",
-  "agent_id": "external_agent",
+  "type": "remote_flow",
+  "flow_id": "external_flow",
   "input_mapping": {"content": "@state:user_query"},
   "skill_id": "default"
 }
 ```
 
-**Требования к внешнему агенту:**
+**Требования к внешнему endpoint (A2A):**
 - `GET /.well-known/agent-card.json`
 - `POST /tasks/send` (JSON-RPC 2.0)
 
 ## External API
 
-### ExternalAPINode в agent.json
+### ExternalAPINode в конфиге ноды / FlowConfig
 
 ```json
 {

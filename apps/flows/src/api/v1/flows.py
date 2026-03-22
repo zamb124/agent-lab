@@ -1,0 +1,799 @@
+"""
+API endpoints для flows.
+"""
+
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+
+from apps.flows.src.container import FlowContainer, get_container
+from core.logging import get_logger
+from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig
+from apps.flows.src.services.flow_validator import FlowValidator
+
+logger = get_logger(__name__)
+
+
+def _generate_flow_url(flow_id: str, flow_kind: Optional[FlowType] = None, external_url: Optional[str] = None) -> str:
+    """Публичный URL flow (или внешний base URL для EXTERNAL)."""
+    if flow_kind == FlowType.EXTERNAL and external_url:
+        return external_url
+    
+    from core.config import get_settings
+    settings = get_settings()
+    return f"https://{settings.server.host}:{settings.server.port}/flows/{flow_id}"
+
+
+async def _inline_tools_in_nodes(
+    nodes: Dict[str, Dict[str, Any]], 
+    container: FlowContainer
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Инлайнит tools в nodes flow.
+    
+    Для каждой ноды:
+    - Инлайнит tools (поле tools в llm_node)
+    - Инлайнит code для нод типа tool с tool_id
+    """
+    for node_id, node_config in nodes.items():
+        # Инлайним tools для llm_node
+        tools = node_config.get("tools", [])
+        if tools:
+            node_config["tools"] = await _inline_tools_list(tools, container)
+        
+        # Инлайним code для tool нод с tool_id
+        if node_config.get("type") == "tool" and node_config.get("tool_id") and not node_config.get("code"):
+            tool_id = node_config["tool_id"]
+            tool_ref = await container.tool_repository.get(tool_id)
+            if tool_ref and tool_ref.code:
+                node_config["code"] = tool_ref.code
+                if tool_ref.args_schema:
+                    node_config["args_schema"] = {
+                        k: {"type": v.type, "description": v.description}
+                        for k, v in tool_ref.args_schema.items()
+                    }
+                if tool_ref.description and not node_config.get("description"):
+                    node_config["description"] = tool_ref.description
+    return nodes
+
+
+async def _inline_tools_list(
+    tools: List[Any], 
+    container: FlowContainer
+) -> List[Dict[str, Any]]:
+    """Инлайнит список tools."""
+    inlined = []
+    for tool in tools:
+        inlined_tool = await _inline_single_tool(tool, container)
+        if inlined_tool:
+            inlined.append(inlined_tool)
+    return inlined
+
+
+async def _inline_single_tool(
+    tool: Any, 
+    container: FlowContainer
+) -> Dict[str, Any] | None:
+    """Инлайнит один tool."""
+    if isinstance(tool, str):
+        # tool_id - достаём из библиотеки
+        tool_ref = await container.tool_repository.get(tool)
+        if tool_ref:
+            return tool_ref.model_dump()
+        
+        # Может быть node (llm_node as tool)
+        node = await container.node_repository.get(tool)
+        if node:
+            return await _node_to_inline_tool(node, container)
+        
+        # Может быть flow из репозитория (как tool по flow_id)
+        flow_cfg = await container.flow_repository.get(tool)
+        if flow_cfg:
+            return _flow_config_to_inline_tool(flow_cfg)
+        
+        raise HTTPException(status_code=400, detail=f"Tool '{tool}' not found in library")
+    
+    elif isinstance(tool, dict):
+        tool_id = tool.get("tool_id")
+        
+        # Если это llm_node - рекурсивно инлайним его tools
+        if tool.get("type") == "llm_node" or tool.get("prompt"):
+            if "tools" in tool:
+                tool["tools"] = await _inline_tools_list(tool["tools"], container)
+            return tool
+        
+        # Если нет code - дополняем из библиотеки
+        if tool_id and not tool.get("code"):
+            tool_ref = await container.tool_repository.get(tool_id)
+            if tool_ref and tool_ref.code:
+                merged = tool_ref.model_dump()
+                merged.update(tool)  # Переопределения из запроса приоритетнее
+                return merged
+        
+        return tool
+    
+    return None
+
+
+async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> Dict[str, Any]:
+    """Конвертирует NodeConfig в inline tool."""
+    result = {
+        "tool_id": node.node_id,
+        "type": node.type.value if hasattr(node.type, "value") else node.type,
+        "name": node.name,
+        "description": node.description,
+        "prompt": node.prompt,
+    }
+    if node.llm_override:
+        result["llm"] = node.llm_override.model_dump()
+    if node.code:
+        result["code"] = node.code
+    if node.tools:
+        tools_list = [t.model_dump() if hasattr(t, "model_dump") else t for t in node.tools]
+        result["tools"] = await _inline_tools_list(tools_list, container)
+    return result
+
+
+def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> Dict[str, Any]:
+    """Конвертирует FlowConfig в inline tool."""
+    return {
+        "tool_id": flow_cfg.flow_id,
+        "type": "flow",
+        "name": flow_cfg.name,
+        "description": flow_cfg.description,
+        "entry": flow_cfg.entry,
+        "nodes": flow_cfg.nodes,
+        "edges": [e.model_dump() for e in flow_cfg.edges] if flow_cfg.edges else [],
+    }
+
+router = APIRouter(tags=["flows"])
+
+
+class EdgeRequest(BaseModel):
+    """Edge в запросе"""
+
+    model_config = {"populate_by_name": True}
+
+    from_node: str
+    to_node: Optional[str]
+    condition: Optional[str] = None
+
+
+class SkillRequest(BaseModel):
+    """Skill в запросе"""
+
+    name: str
+    description: str = ""
+    tags: List[str] = []
+    entry: Optional[str] = None
+    nodes: Optional[Dict[str, Any]] = None
+    edges: Optional[List[Dict[str, Any]]] = None
+    variables: Dict[str, Any] = {}
+
+
+class SkillResponse(BaseModel):
+    """Skill в ответе"""
+
+    name: str
+    description: str = ""
+    tags: List[str] = []
+    entry: Optional[str] = None
+    nodes: Optional[Dict[str, Any]] = None
+    edges: Optional[List[Dict[str, Any]]] = None
+    variables: Dict[str, Any] = {}
+    nodes_mode: Optional[str] = None
+    edges_mode: Optional[str] = None
+    variables_mode: Optional[str] = None
+
+
+def _skill_config_to_response(skill: SkillConfig) -> SkillResponse:
+    """Конвертирует SkillConfig в SkillResponse."""
+    edges = None
+    if skill.edges:
+        edges = []
+        for e in skill.edges:
+            if e is None:
+                continue
+            edges.append({
+                "from": e.from_node,
+                "to": e.to_node,
+                "condition": e.condition
+            })
+        if not edges:
+            edges = None
+    
+    # Конвертируем mode в строку (может быть Enum или уже строка)
+    nodes_mode = None
+    if skill.nodes_mode:
+        nodes_mode = skill.nodes_mode.value if hasattr(skill.nodes_mode, 'value') else str(skill.nodes_mode)
+    
+    edges_mode = None
+    if skill.edges_mode:
+        edges_mode = skill.edges_mode.value if hasattr(skill.edges_mode, 'value') else str(skill.edges_mode)
+    
+    variables_mode = None
+    if skill.variables_mode:
+        variables_mode = skill.variables_mode.value if hasattr(skill.variables_mode, 'value') else str(skill.variables_mode)
+    
+    return SkillResponse(
+        name=skill.name,
+        description=skill.description,
+        tags=skill.tags,
+        entry=skill.entry,
+        nodes=skill.nodes,
+        edges=edges,
+        variables=skill.variables,
+        nodes_mode=nodes_mode,
+        edges_mode=edges_mode,
+        variables_mode=variables_mode,
+    )
+
+
+def _skill_request_to_config(skill_id: str, skill: SkillRequest) -> SkillConfig:
+    """Конвертирует SkillRequest в SkillConfig."""
+    edges = None
+    if skill.edges:
+        edges = [
+            Edge(
+                from_node=e.get("from") or e.get("from_node"),
+                to_node=e.get("to") or e.get("to_node"),
+                condition=e.get("condition"),
+            )
+            for e in skill.edges
+        ]
+    return SkillConfig(
+        name=skill.name,
+        description=skill.description,
+        tags=skill.tags,
+        entry=skill.entry,
+        nodes=skill.nodes,
+        edges=edges,
+        variables=skill.variables,
+    )
+
+
+async def get_container_dep() -> FlowContainer:
+    """Dependency для получения контейнера"""
+    return get_container()
+
+
+class FlowCreateRequest(BaseModel):
+    """Запрос на создание агента"""
+
+    flow_id: str
+    name: str
+    description: Optional[str] = None
+    entry: str
+    nodes: Dict[str, Any]
+    edges: List[Dict[str, Any]]
+    variables: Dict[str, Any] = {}
+    tags: List[str] = []
+    skills: Dict[str, SkillRequest] = {}
+    evaluation: Optional[Dict[str, Any]] = None
+    triggers: Dict[str, Any] = {}
+    resources: Dict[str, Any] = {}
+
+
+class FlowResponse(BaseModel):
+    """Ответ с данными агента"""
+
+    flow_id: str
+    version: str = ""
+    name: str
+    description: Optional[str]
+    type: Optional[FlowType] = FlowType.LOCAL
+    
+    # LOCAL flow
+    entry: Optional[str] = None
+    nodes: Optional[Dict[str, Any]] = None
+    edges: Optional[List[Dict[str, Any]]] = None
+    variables: Dict[str, Any] = {}
+    tags: List[str] = []
+    skills: Dict[str, SkillResponse] = {}
+    evaluation: Optional[Dict[str, Any]] = None
+    hidden: bool = False
+    
+    # EXTERNAL flow (A2A)
+    url: Optional[str] = None
+    auth_headers: Optional[Dict[str, str]] = None
+    status: Optional[str] = None
+    last_health_check: Optional[str] = None
+    agent_card: Optional[Dict[str, Any]] = None
+    
+    # A2A capabilities
+    capabilities: Dict[str, Any] = {
+        "streaming": True,
+        "pushNotifications": True,
+    }
+    
+    # Триггеры агента
+    triggers: Dict[str, Any] = {}
+    
+    # Ресурсы агента
+    resources: Dict[str, Any] = {}
+
+
+class FlowValidateRequest(BaseModel):
+    """Запрос на валидацию агента"""
+
+    nodes: Dict[str, Any]
+    edges: List[Dict[str, Any]]
+    entry: str
+    variables: Dict[str, Any] = {}
+    flow_id: Optional[str] = None
+
+
+class ValidationErrorResponse(BaseModel):
+    """Ошибка валидации"""
+
+    code: str
+    message: str
+    severity: str
+    node_id: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+
+class FlowValidateResponse(BaseModel):
+    """Ответ на валидацию агента"""
+
+    valid: bool
+    errors: List[ValidationErrorResponse] = []
+    state_keys_used: List[str] = []
+    var_keys_used: List[str] = []
+
+
+@router.post("/validate", response_model=FlowValidateResponse)
+async def validate_flow(
+    request: FlowValidateRequest,
+    container: FlowContainer = Depends(get_container_dep),
+) -> FlowValidateResponse:
+    """
+    Валидирует конфигурацию агента без сохранения.
+    
+    Проверяет:
+    - Структуру графа (entry, edges, достижимость нод)
+    - Ссылки на агенты, tools, subflows
+    - Переменные @var:
+    - Парсит inline code на обращения к state
+    - Пробует собрать исполняемый flow
+    """
+    validator = FlowValidator(
+        flow_repository=container.flow_repository,
+        tool_repository=container.tool_repository,
+        node_repository=container.node_repository,
+    )
+    
+    result = await validator.validate(
+        nodes=request.nodes,
+        edges=request.edges,
+        entry=request.entry,
+        variables=request.variables,
+        flow_id=request.flow_id,
+    )
+    
+    return FlowValidateResponse(
+        valid=result.valid,
+        errors=[
+            ValidationErrorResponse(
+                code=e.code,
+                message=e.message,
+                severity=e.severity.value,
+                node_id=e.node_id,
+                details=e.details,
+            )
+            for e in result.errors
+        ],
+        state_keys_used=list(result.state_keys_used),
+        var_keys_used=list(result.var_keys_used),
+    )
+
+
+@router.get("/", response_model=List[FlowResponse])
+async def list_flows(
+    type: Optional[FlowType] = None,
+    limit: int = Query(1000, ge=1, le=10000, description="Максимум flows"),
+    container: FlowContainer = Depends(get_container_dep),
+) -> List[FlowResponse]:
+    """Список всех flows с опциональным фильтром по типу (local/external)"""
+    flows = await container.flow_repository.list_all(limit=limit)
+    
+    # Фильтруем по типу если указан
+    if type is not None:
+        flows = [f for f in flows if f.type == type]
+    
+    result = []
+    for f in flows:
+        skills_response = {
+            skill_id: _skill_config_to_response(skill)
+            for skill_id, skill in (f.skills or {}).items()
+        }
+        evaluation_dict = None
+        if f.evaluation:
+            evaluation_dict = {k: v.model_dump() if hasattr(v, 'model_dump') else v for k, v in f.evaluation.items()}
+        hidden = getattr(f, 'hidden', False)
+        
+        response_data = {
+            "flow_id": f.flow_id,
+            "version": f.version,
+            "name": f.name,
+            "description": f.description,
+            "type": f.type,
+            "tags": f.tags,
+            "hidden": hidden,
+        }
+        
+        # LOCAL flow
+        if f.type == FlowType.LOCAL:
+            response_data.update({
+                "entry": f.entry,
+                "nodes": f.nodes,
+                "edges": [
+                    {"from": e.from_node, "to": e.to_node, "condition": e.condition}
+                    for e in f.edges
+                ],
+                "variables": f.variables,
+                "skills": skills_response,
+                "evaluation": evaluation_dict,
+            })
+        # EXTERNAL flow (A2A endpoint)
+        elif f.type == FlowType.EXTERNAL:
+            status_value = f.status.value if isinstance(f.status, ExternalAgentStatus) else f.status
+            response_data.update({
+                "url": f.url,
+                "auth_headers": f.auth_headers,
+                "status": status_value,
+                "last_health_check": f.last_health_check.isoformat() if f.last_health_check else None,
+                "agent_card": f.agent_card,
+            })
+        
+        result.append(FlowResponse(**response_data))
+    return result
+
+
+async def _validate_tool_nodes(
+    nodes: Dict[str, Dict[str, Any]], 
+    container: FlowContainer
+) -> None:
+    """Валидирует tool_id в tool нодах."""
+    for node_id, node_config in nodes.items():
+        if node_config.get("type") == "tool":
+            tool_id = node_config.get("tool_id")
+            has_code = "code" in node_config and node_config.get("code")
+            
+            if tool_id and not has_code:
+                tool = await container.tool_repository.get(tool_id)
+                if tool is None:
+                    node = await container.node_repository.get(tool_id)
+                    if node is None:
+                        flow_cfg = await container.flow_repository.get(tool_id)
+                        if flow_cfg is None:
+                            raise HTTPException(
+                                status_code=400, 
+                                detail=f"Tool '{tool_id}' not found in library"
+                            )
+
+
+@router.post("/", response_model=FlowResponse)
+async def create_flow(
+    request: FlowCreateRequest, container: FlowContainer = Depends(get_container_dep)
+) -> FlowResponse:
+    """Создаёт flow."""
+    # Валидируем tool_id в tool нодах
+    await _validate_tool_nodes(dict(request.nodes), container)
+    
+    # Инлайним tools - заменяем tool_id на полные конфиги с кодом ПЕРЕД валидацией
+    nodes = await _inline_tools_in_nodes(dict(request.nodes), container)
+    
+    # Валидируем ссылки (node_id, tool_id, flow_id) после инлайна
+    validator = FlowValidator(
+        flow_repository=container.flow_repository,
+        tool_repository=container.tool_repository,
+        node_repository=container.node_repository,
+    )
+    validation_result = await validator.validate(
+        nodes=nodes,
+        edges=request.edges,
+        entry=request.entry,
+        variables=request.variables or {},
+    )
+    
+    if not validation_result.valid:
+        errors = [e.message for e in validation_result.errors]
+        raise HTTPException(
+            status_code=400,
+            detail="; ".join(errors)
+        )
+
+    edges = [
+        Edge(
+            from_node=e.get("from") or e.get("from_node"),
+            to_node=e.get("to") or e.get("to_node"),
+            condition=e.get("condition"),
+        )
+        for e in request.edges
+    ]
+
+    skills = {
+        skill_id: _skill_request_to_config(skill_id, skill)
+        for skill_id, skill in request.skills.items()
+    }
+
+    flow_config = FlowConfig(
+        flow_id=request.flow_id,
+        name=request.name,
+        description=request.description,
+        entry=request.entry,
+        nodes=nodes,  # Инлайненные nodes
+        edges=edges,
+        variables=request.variables,
+        tags=request.tags,
+        skills=skills,
+        evaluation=request.evaluation,
+        source="api",
+    )
+
+    await container.flow_repository.set(flow_config)
+
+    skills_response = {
+        skill_id: _skill_config_to_response(skill)
+        for skill_id, skill in flow_config.skills.items()
+    }
+
+
+    return FlowResponse(
+        flow_id=flow_config.flow_id,
+        version=flow_config.version or "",
+        name=flow_config.name,
+        description=flow_config.description,
+        type=flow_config.type or FlowType.LOCAL,
+        entry=flow_config.entry,
+        nodes=flow_config.nodes,
+        edges=[
+            {"from": e.from_node, "to": e.to_node, "condition": e.condition}
+            for e in flow_config.edges
+        ],
+        variables=flow_config.variables,
+        tags=flow_config.tags,
+        skills=skills_response,
+        evaluation=request.evaluation,
+        hidden=getattr(flow_config, 'hidden', False),
+        url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
+    )
+
+
+@router.get("/{flow_id}", response_model=FlowResponse)
+async def get_flow(
+    flow_id: str, container: FlowContainer = Depends(get_container_dep)
+) -> FlowResponse:
+    """Получает flow по ID."""
+    try:
+        flow_cfg = await container.flow_repository.get(flow_id)
+        if flow_cfg is None:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        
+        evaluation_dict = None
+        if flow_cfg.evaluation:
+            if hasattr(flow_cfg.evaluation, "model_dump"):
+                evaluation_dict = flow_cfg.evaluation.model_dump()
+            else:
+                evaluation_dict = flow_cfg.evaluation
+        
+        skills_response = {}
+        if flow_cfg.skills:
+            for skill_id, skill in flow_cfg.skills.items():
+                try:
+                    skills_response[skill_id] = _skill_config_to_response(skill)
+                except Exception as e:
+                    logger.error(f"Ошибка конвертации skill '{skill_id}': {e}", exc_info=True)
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Ошибка обработки skill '{skill_id}': {str(e)}"
+                    )
+        
+        edges_list = []
+        if flow_cfg.edges:
+            for e in flow_cfg.edges:
+                if e is None:
+                    continue
+                edges_list.append({
+                    "from": e.from_node,
+                    "to": e.to_node,
+                    "condition": e.condition
+                })
+        
+        triggers_response = {}
+        if flow_cfg.triggers:
+            for trigger_id, trigger in flow_cfg.triggers.items():
+                triggers_response[trigger_id] = trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
+        
+        return FlowResponse(
+            flow_id=flow_cfg.flow_id,
+            version=flow_cfg.version or "",
+            name=flow_cfg.name,
+            description=flow_cfg.description,
+            type=flow_cfg.type or FlowType.LOCAL,
+            entry=flow_cfg.entry,
+            nodes=flow_cfg.nodes or {},
+            edges=edges_list,
+            variables=flow_cfg.variables or {},
+            tags=flow_cfg.tags or [],
+            skills=skills_response,
+            evaluation=evaluation_dict,
+            hidden=getattr(flow_cfg, 'hidden', False),
+            url=_generate_flow_url(flow_cfg.flow_id, flow_cfg.type, getattr(flow_cfg, 'url', None)),
+            triggers=triggers_response,
+            resources=flow_cfg.resources or {},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка получения flow '{flow_id}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка получения flow: {str(e)}")
+
+
+@router.put("/{flow_id}", response_model=FlowResponse)
+async def update_flow(
+    flow_id: str,
+    request: FlowCreateRequest,
+    container: FlowContainer = Depends(get_container_dep),
+) -> FlowResponse:
+    """Обновляет flow (новая версия)."""
+    existing = await container.flow_repository.get(flow_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    # Инлайним tools - заменяем tool_id на полные конфиги с кодом
+    nodes = await _inline_tools_in_nodes(dict(request.nodes), container)
+
+    edges = [
+        Edge(
+            from_node=e.get("from") or e.get("from_node"),
+            to_node=e.get("to") or e.get("to_node"),
+            condition=e.get("condition"),
+        )
+        for e in request.edges
+    ]
+
+    skills = {
+        skill_id: _skill_request_to_config(skill_id, skill)
+        for skill_id, skill in request.skills.items()
+    }
+
+    triggers = {
+        trigger_id: TriggerConfig(**trigger_data) if isinstance(trigger_data, dict) else trigger_data
+        for trigger_id, trigger_data in request.triggers.items()
+    }
+
+    resources = request.resources or {}
+
+    flow_config = FlowConfig(
+        flow_id=flow_id,
+        name=request.name,
+        description=request.description,
+        entry=request.entry,
+        nodes=nodes,  # Инлайненные nodes
+        edges=edges,
+        variables=request.variables,
+        tags=request.tags,
+        skills=skills,
+        evaluation=request.evaluation,
+        source=existing.source,
+        triggers=triggers,
+        resources=resources,
+    )
+
+    await container.flow_repository.set(flow_config)
+
+    skills_response = {
+        skill_id: _skill_config_to_response(skill)
+        for skill_id, skill in flow_config.skills.items()
+    }
+
+    triggers_response = {
+        trigger_id: trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
+        for trigger_id, trigger in flow_config.triggers.items()
+    }
+
+    return FlowResponse(
+        flow_id=flow_config.flow_id,
+        version=flow_config.version or "",
+        name=flow_config.name,
+        description=flow_config.description,
+        type=flow_config.type or FlowType.LOCAL,
+        entry=flow_config.entry,
+        nodes=flow_config.nodes,
+        edges=[
+            {"from": e.from_node, "to": e.to_node, "condition": e.condition}
+            for e in flow_config.edges
+        ],
+        variables=flow_config.variables,
+        tags=flow_config.tags,
+        skills=skills_response,
+        evaluation=request.evaluation,
+        hidden=getattr(flow_config, 'hidden', False),
+        url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
+        triggers=triggers_response,
+        resources=flow_config.resources or {},
+    )
+
+
+@router.delete("/{flow_id}")
+async def delete_flow(
+    flow_id: str, container: FlowContainer = Depends(get_container_dep)
+) -> dict:
+    """Удаляет flow."""
+    deleted = await container.flow_repository.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"status": "deleted", "flow_id": flow_id}
+
+
+@router.get("/{flow_id}/versions", response_model=List[str])
+async def list_versions(
+    flow_id: str, container: FlowContainer = Depends(get_container_dep)
+) -> List[str]:
+    """Список версий flow."""
+    versions = await container.flow_repository.list_versions(flow_id)
+    return versions
+
+
+@router.get("/{flow_id}/versions/{version}", response_model=FlowResponse)
+async def get_version(
+    flow_id: str,
+    version: str,
+    container: FlowContainer = Depends(get_container_dep),
+) -> FlowResponse:
+    """Конкретная версия flow."""
+    version_cfg = await container.flow_repository.get_version(flow_id, version)
+    if version_cfg is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    skills_response = {
+        skill_id: _skill_config_to_response(skill)
+        for skill_id, skill in (version_cfg.skills or {}).items()
+    }
+    
+    edges_list = [
+        {"from": e.from_node, "to": e.to_node, "condition": e.condition}
+        for e in (version_cfg.edges or []) if e
+    ]
+    
+    return FlowResponse(
+        flow_id=version_cfg.flow_id,
+        version=version_cfg.version or "",
+        name=version_cfg.name,
+        description=version_cfg.description,
+        type=version_cfg.type or FlowType.LOCAL,
+        entry=version_cfg.entry,
+        nodes=version_cfg.nodes or {},
+        edges=edges_list,
+        variables=version_cfg.variables or {},
+        tags=version_cfg.tags or [],
+        skills=skills_response,
+        hidden=getattr(version_cfg, 'hidden', False),
+        url=_generate_flow_url(version_cfg.flow_id, version_cfg.type, getattr(version_cfg, 'url', None)),
+    )
+
+
+@router.post("/{flow_id}/versions/{version}/rollback")
+async def rollback_version(
+    flow_id: str,
+    version: str,
+    container: FlowContainer = Depends(get_container_dep),
+) -> Dict[str, Any]:
+    """
+    Откатывает flow к указанной версии.
+    
+    Делает указанную версию latest (не удаляет новые версии).
+    """
+    success = await container.flow_repository.rollback_to_version(flow_id, version)
+    if not success:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    return {
+        "status": "success",
+        "message": f"Flow '{flow_id}' rolled back to version {version}",
+        "flow_id": flow_id,
+        "version": version,
+    }

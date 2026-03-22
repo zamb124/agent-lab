@@ -14,6 +14,7 @@ pytest_plugins = [
     "tests.fixtures.clients",
     "tests.fixtures.auth",
     "tests.fixtures.push",
+    "tests.fixtures.mcp_http_stub",
 ]
 
 import json
@@ -43,13 +44,15 @@ os.environ.setdefault("AUTH__PERMISSIONS_ENABLED", "false")
 # Default tenant для тестов
 os.environ.setdefault("SERVER__DEFAULT_TENANT_ID", "test_tenant")
 # Порты сервисов для тестов (900X чтобы не конфликтовать с production)
-os.environ.setdefault("SERVER__AGENTS_SERVICE_URL", "http://localhost:9001")
+os.environ.setdefault("SERVER__FLOWS_SERVICE_URL", "http://localhost:9001")
 os.environ.setdefault("SERVER__RAG_SERVICE_URL", "http://localhost:9002")
 os.environ.setdefault("SERVER__CRM_SERVICE_URL", "http://localhost:9003")
 os.environ.setdefault("SERVER__FRONTEND_SERVICE_URL", "http://localhost:9004")
 os.environ.setdefault("SERVER__SYNC_SERVICE_URL", "http://localhost:9005")
-# S3 конфигурация для тестов - используем test-bucket вместо vkbucket
+# S3: дефолтный alias test-bucket и endpoint тестового MinIO (docker-compose-test: 19002).
+# В conf.json у test-bucket указан 19001 (dev); без override тесты создавали бакет на 19002, а приложение — на 19001.
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
+os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
 # RAG config для тестов (pgvector в PostgreSQL)
 os.environ.setdefault("RAG__ENABLED", "true")
 os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
@@ -93,18 +96,20 @@ print(f"✅ Broker overridden in platform_broker_module")
 
 from core.clients.llm import MockLLM, get_global_mock_llm, setup_mock_responses
 from core.context import Context, Company, User
-from apps.agents.main import app as fastapi_app
+from apps.flows.main import app as fastapi_app
 
 print(f"📦 Apps imported, checking broker IDs:")
 print(f"   platform_broker_module.broker id: {id(platform_broker_module.broker)}")
 
 # Проверяем что задачи зарегистрированы
-from apps.agents.src.tasks.agent_tasks import process_agent_task
-print(f"   process_agent_task.broker id: {id(process_agent_task.broker)}")
-print(f"   Are they same? {id(test_broker) == id(process_agent_task.broker)}")
+from apps.flows.src.tasks.flow_tasks import process_flow_task
+print(f"   process_flow_task.broker id: {id(process_flow_task.broker)}")
+print(f"   Are they same? {id(test_broker) == id(process_flow_task.broker)}")
 
 
 _DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"
+# Один gw держит lock на DROP + run_migrations_async по всем сервисам; при -n auto остальные ждут дольше 120s.
+_DB_SETUP_LOCK_TIMEOUT_SEC = int(os.environ.get("PLATFORM_TEST_DB_LOCK_TIMEOUT", "1800"))
 
 
 async def _alembic_version_ready(db_url: str) -> bool:
@@ -149,7 +154,7 @@ async def setup_database_before_tests():
                 print(f"   Порт {port} освобожден")
         except Exception:
             pass
-    time.sleep(2)
+    time.sleep(0.35)
     print("Все тестовые порты свободны!\n")
 
     db_url = os.environ.get("DATABASE__SHARED_URL", TEST_DATABASE_ENV["DATABASE__SHARED_URL"])
@@ -158,7 +163,7 @@ async def setup_database_before_tests():
         print("БД уже подготовлена (alembic_version есть, одна ревизия), пропуск дропа и миграций.\n")
         yield
     else:
-        lock = FileLock(_DB_SETUP_LOCK, timeout=120)
+        lock = FileLock(_DB_SETUP_LOCK, timeout=_DB_SETUP_LOCK_TIMEOUT_SEC)
         with lock:
             if await _alembic_version_ready(db_url):
                 print("БД подготовлена другим процессом, пропуск.\n")
@@ -225,7 +230,15 @@ def pytest_configure(config):
     # Удаляем маркеры если они старше 1 часа (зависли от предыдущего запуска)
     max_age_seconds = 3600
     
-    for marker in [_APP_INIT_LOCK, _APP_INIT_DONE, _TASKIQ_WORKER_LOCK, _TASKIQ_WORKER_PID, _RAG_WORKER_LOCK, _RAG_WORKER_PID]:
+    for marker in [
+        _DB_SETUP_LOCK,
+        _APP_INIT_LOCK,
+        _APP_INIT_DONE,
+        _TASKIQ_WORKER_LOCK,
+        _TASKIQ_WORKER_PID,
+        _RAG_WORKER_LOCK,
+        _RAG_WORKER_PID,
+    ]:
         path = pathlib.Path(marker)
         if path.exists():
             age = time.time() - path.stat().st_mtime
@@ -240,6 +253,28 @@ def pytest_configure(config):
         junit_path.parent.mkdir(parents=True, exist_ok=True)
 
 
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items: list) -> None:
+    """
+    Тесты с маркером real_taskiq используют один глобальный Redis-ключ для
+    передачи mock-ответов LLM в agents subprocess. При параллельном -n X
+    разные gw-workers пишут в один ключ и мешают друг другу, а сессионный
+    flows_service на порту 9001 останавливается досрочно, когда первый gw
+    завершает сессию.
+
+    Решение: все real_taskiq тесты — в одну xdist_group, чтобы pytest-xdist
+    с --dist=loadgroup запускал их строго на одном gw-worker последовательно.
+    Остальные тесты продолжают распараллеливаться.
+
+    tryfirst=True обязателен: xdist remote.py тоже регистрирует
+    pytest_collection_modifyitems и добавляет @gname к nodeid по существующим
+    маркерам. Наш хук должен выполниться ДО xdist, чтобы маркер уже был виден.
+    """
+    for item in items:
+        if item.get_closest_marker("real_taskiq"):
+            item.add_marker(pytest.mark.xdist_group("real_taskiq"))
+
+
 @pytest.fixture(autouse=True)
 def test_context(request):
     """
@@ -249,7 +284,7 @@ def test_context(request):
     Не применяется к API тестам (они используют middleware).
     """
     # Пропускаем для API тестов - там контекст устанавливает middleware
-    if 'api' in request.node.nodeid and ('frontend_client' in request.fixturenames or 'agents_client' in request.fixturenames):
+    if 'api' in request.node.nodeid and ('frontend_client' in request.fixturenames or 'flows_client' in request.fixturenames):
         yield None
         return
     
@@ -284,7 +319,7 @@ def unique_id() -> str:
 def mock_context() -> Context:
     """
     Фикстура для мок Context в тестах.
-    Используется когда тесты вызывают process_agent_task напрямую, минуя middleware.
+    Используется когда тесты вызывают process_flow_task напрямую, минуя middleware.
     """
     return Context(
         user=User(user_id="test_user", name="Test User"),
@@ -363,7 +398,7 @@ def state():
     Реальный пустой state для тестов.
     Возвращает ExecutionState с минимальными обязательными полями.
     """
-    from apps.agents.src.state.execution_state import ExecutionState
+    from apps.flows.src.state.execution_state import ExecutionState
     return ExecutionState(
         task_id="test-task-id",
         context_id="test-context-id",
@@ -377,7 +412,7 @@ def state_with_content():
     """
     Реальный state с content.
     """
-    from apps.agents.src.state.execution_state import ExecutionState
+    from apps.flows.src.state.execution_state import ExecutionState
     return ExecutionState(
         task_id="test-task-id",
         context_id="test-context-id",
@@ -398,7 +433,7 @@ def make_test_state():
             state = make_test_state(content="hello", user={"name": "John"})
             result = await node.run(state)
     """
-    from apps.agents.src.state.execution_state import ExecutionState
+    from apps.flows.src.state.execution_state import ExecutionState
     
     def _make_state(**kwargs) -> ExecutionState:
         defaults = {
@@ -441,7 +476,7 @@ def sync_tools(request, monkeypatch):
     
     Патчит:
     - execute_tool.kiq - выполняет tools напрямую
-    - process_agent_task.kiq - выполняет agent tasks напрямую  
+    - process_flow_task.kiq - выполняет agent tasks напрямую  
     - send_task_update.kiq - выполняет push notifications напрямую
     - send_webhook.kiq - выполняет webhooks напрямую
     - Redis pub/sub - in-memory очередь для streaming событий
@@ -451,8 +486,8 @@ def sync_tools(request, monkeypatch):
         yield
         return
     import asyncio
-    from apps.agents.src.tasks import agent_tasks, tool_tasks
-    from apps.agents.src.tasks import push_notification_tasks
+    from apps.flows.src.tasks import flow_tasks, tool_tasks
+    from apps.flows.src.tasks import push_notification_tasks
     
     # In-memory pub/sub для streaming
     _channels: Dict[str, asyncio.Queue] = {}
@@ -498,7 +533,7 @@ def sync_tools(request, monkeypatch):
                 )
                 kwargs["context_data"] = mock_ctx.model_dump()
             
-            result = await agent_tasks.process_agent_task(**kwargs)
+            result = await flow_tasks.process_flow_task(**kwargs)
             return SyncTaskResult(result)
         except Exception as e:
             return SyncTaskResult(error=e)
@@ -547,7 +582,7 @@ def sync_tools(request, monkeypatch):
     
     # Патчим kiq методы
     monkeypatch.setattr(tool_tasks.execute_tool, "kiq", sync_tool_kiq)
-    monkeypatch.setattr(agent_tasks.process_agent_task, "kiq", sync_agent_kiq)
+    monkeypatch.setattr(flow_tasks.process_flow_task, "kiq", sync_agent_kiq)
     monkeypatch.setattr(push_notification_tasks.send_task_update, "kiq", sync_send_task_update_kiq)
     monkeypatch.setattr(push_notification_tasks.send_webhook, "kiq", sync_send_webhook_kiq)
     
@@ -582,33 +617,29 @@ async def app(taskiq_worker):
     
     scope="session" - приложение поднимается один раз на все тесты.
     
-    При pytest-xdist используется filelock для синхронизации - 
-    первый worker инициализирует БД, остальные ждут завершения.
+    При pytest-xdist каждый gw-worker поднимает свой lifespan независимо.
+    Первый worker касается маркера (только для логирования), lock отпускается
+    до yield — все воркеры работают параллельно.
     
     ВАЖНО: Scheduler НЕ запускается автоматически! Тесты которым нужен scheduler
     должны явно использовать фикстуру taskiq_scheduler.
     """
     import pathlib
-    
-    lock = FileLock(_APP_INIT_LOCK, timeout=300)
+
     done_marker = pathlib.Path(_APP_INIT_DONE)
-    
-    try:
-        with lock:
-            # Первый worker создаёт маркер после инициализации
-            first_init = not done_marker.exists()
-            
-            async with fastapi_app.router.lifespan_context(fastapi_app):
-                if first_init:
-                    done_marker.touch()
-                yield fastapi_app
-    finally:
-        # Освобождаем lock явно
-        if lock.is_locked:
-            lock.release()
-    
-    # Очистка маркера при завершении (только один раз)
-    # Не удаляем здесь, т.к. другие workers могут ещё работать
+    lock = FileLock(_APP_INIT_LOCK, timeout=300)
+
+    # Кратко захватываем lock только чтобы пометить первый запуск.
+    # Lock освобождается до yield, поэтому остальные gw-workers не блокируются.
+    with lock:
+        if not done_marker.exists():
+            done_marker.touch()
+
+    # Каждый xdist-worker поднимает свой lifespan (отдельный процесс, своя
+    # Redis-сессия). Startup-операции (load_tools_to_db, load_flows_to_db)
+    # идемпотентны, параллельное выполнение безопасно.
+    async with fastapi_app.router.lifespan_context(fastapi_app):
+        yield fastapi_app
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -632,7 +663,7 @@ def container(app):
     DI контейнер agents приложения.
     Зависит от app чтобы lifespan уже отработал.
     """
-    from apps.agents.src.container import get_container
+    from apps.flows.src.container import get_container
 
     c = get_container()
     # В тестах по умолчанию без воркера (локальное выполнение)
@@ -713,8 +744,8 @@ def inline_tools():
             "description": "Задает вопрос пользователю",
             "args_schema": {"question": {"type": "string", "description": "Вопрос для пользователя"}},
             "code": """async def execute(args: dict, state: dict = None):
-    from apps.agents.src.agent.exceptions import AgentInterrupt
-    raise AgentInterrupt(question=args.get('question', ''))
+    from apps.flows.src.runtime.exceptions import FlowInterrupt
+    raise FlowInterrupt(question=args.get('question', ''))
 """
         },
         "reason": {
@@ -728,7 +759,7 @@ def inline_tools():
 
 
 @pytest_asyncio.fixture
-async def agents_app():
+async def flows_app():
     """
     FastAPI приложение agents сервиса для интеграционных тестов.
     
@@ -737,7 +768,7 @@ async def agents_app():
     - Мок LLM (через TESTING=true)
     - Тестовую БД (Redis, Postgres)
     """
-    from apps.agents.main import app
+    from apps.flows.main import app
     yield app
 
 
@@ -760,17 +791,17 @@ async def frontend_app():
 
 
 @pytest_asyncio.fixture
-async def agents_client(agents_app):
+async def flows_client(flows_app):
     """
     HTTP клиент для тестирования agents API.
     
     Usage:
-        async def test_api(agents_client):
-            response = await agents_client.get("/agents/api/health")
+        async def test_api(flows_client):
+            response = await flows_client.get("/flows/api/health")
             assert response.status_code == 200
     """
     async with AsyncClient(
-        transport=ASGITransport(app=agents_app),
+        transport=ASGITransport(app=flows_app),
         base_url="http://testserver"
     ) as client:
         yield client
@@ -820,28 +851,28 @@ async def test_agent(app, container):
     
     Usage:
         async def test_api(frontend_client, test_agent):
-            # test_agent.agent_id == "test_agent"
+            # test_agent.flow_id == "test_agent"
     """
-    from apps.agents.src.models.agent_config import AgentConfig
+    from apps.flows.src.models.flow_config import FlowConfig
     
-    agent = AgentConfig(
-        agent_id="test_agent",
+    agent = FlowConfig(
+        flow_id="test_agent",
         name="Test Agent",
         entry="main",
         nodes={
             "main": {
-                "type": "react_node",
+                "type": "llm_node",
                 "prompt": "Test prompt",
                 "next": None
             }
         },
     )
-    await container.agent_repository.set(agent)
+    await container.flow_repository.set(agent)
     
     yield agent
     
     # Cleanup - выполнится даже если тест упал
-    await container.agent_repository.delete("test_agent")
+    await container.flow_repository.delete("test_agent")
 
 
 @pytest_asyncio.fixture
@@ -853,26 +884,26 @@ async def test_agent_fixture(app, unique_id):
     
     Usage:
         async def test_something(test_agent_fixture):
-            agent_id, container = test_agent_fixture
-            # Создайте агента с agent_id
+            flow_id, container = test_agent_fixture
+            # Создайте агента с flow_id
             # Cleanup произойдет автоматически
     """
-    from apps.agents.src.container import get_container
+    from apps.flows.src.container import get_container
     
     container = get_container()
-    agent_ids_to_cleanup = []
+    flow_ids_to_cleanup = []
     
-    def register_agent(agent_id: str):
-        """Регистрирует agent_id для cleanup"""
-        agent_ids_to_cleanup.append(agent_id)
-        return agent_id
+    def register_agent(flow_id: str):
+        """Регистрирует flow_id для cleanup"""
+        flow_ids_to_cleanup.append(flow_id)
+        return flow_id
     
     yield register_agent, container
     
     # Cleanup всех зарегистрированных агентов
-    for agent_id in agent_ids_to_cleanup:
+    for flow_id in flow_ids_to_cleanup:
         try:
-            await container.agent_repository.delete(agent_id)
+            await container.flow_repository.delete(flow_id)
         except Exception:
             pass  # Игнорируем ошибки cleanup
 
@@ -1031,37 +1062,38 @@ async def mock_embeddings(monkeypatch):
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def ensure_minio_bucket():
     """
-    Создает test-bucket в MinIO если его нет (session-scoped, один раз за все тесты).
+    Гарантирует бакет test-bucket на тестовом MinIO (порт 19002, docker-compose-test).
+
+    Должен совпадать с S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL в этом conftest:
+    иначе бакет создаётся на одном хосте, а приложение (conf.json с 19001) пишет в другой — NoSuchBucket.
     """
     try:
         import aioboto3
         from botocore.exceptions import ClientError
-        
+
         session = aioboto3.Session()
         async with session.client(
-            's3',
-            endpoint_url='http://localhost:19002',
-            aws_access_key_id='minioadmin',
-            aws_secret_access_key='minioadmin',
+            "s3",
+            endpoint_url="http://localhost:19002",
+            aws_access_key_id="minioadmin",
+            aws_secret_access_key="minioadmin",
         ) as client:
             try:
-                await client.head_bucket(Bucket='test-bucket')
+                await client.head_bucket(Bucket="test-bucket")
             except ClientError:
-                # Bucket не существует - создаем
-                await client.create_bucket(Bucket='test-bucket')
-                print("✅ Created test-bucket in MinIO")
+                await client.create_bucket(Bucket="test-bucket")
+                print("Created test-bucket in MinIO (localhost:19002)")
     except Exception as e:
-        print(f"⚠️  Failed to create MinIO bucket: {e}")
-        # Не падаем - тесты без S3 могут работать
-    
+        print(f"Failed to ensure MinIO bucket test-bucket on localhost:19002: {e}")
+
     yield
 
 
 @pytest.fixture(scope="session")
-def test_a2a_agent():
+def test_a2a_sample():
     """
-    Предоставляет URL тестового A2A агента из docker-compose-test.yaml.
-    Контейнер слушает 8005, на хосте проброшен порт 18052 (см. docker-compose-test.yaml).
+    URL тестового A2A sample из docker-compose-test.yaml.
+    Контейнер слушает 8005, на хосте проброшен порт 18052.
     """
     yield "http://localhost:18052"
 
@@ -1069,13 +1101,13 @@ def test_a2a_agent():
 @pytest_asyncio.fixture
 async def test_node_in_db(container, unique_id):
     """Создает тестовую ноду в БД для валидации."""
-    from apps.agents.src.models import NodeConfig
+    from apps.flows.src.models import NodeConfig
     
     node_id = f"test_node_{unique_id}"
     node = NodeConfig(
         node_id=node_id,
         name="Test Node",
-        type="react_node",
+        type="llm_node",
         prompt="Test prompt",
     )
     await container.node_repository.set(node)
@@ -1086,11 +1118,11 @@ async def test_node_in_db(container, unique_id):
 @pytest_asyncio.fixture
 async def test_agent_for_tool(container, unique_id):
     """Создает тестового агента для использования как tool."""
-    from apps.agents.src.models import AgentConfig
+    from apps.flows.src.models import FlowConfig
     
-    agent_id = f"test_agent_{unique_id}"
-    agent = AgentConfig(
-        agent_id=agent_id,
+    flow_id = f"test_agent_{unique_id}"
+    agent = FlowConfig(
+        flow_id=flow_id,
         name="Test Agent as Tool",
         entry="main",
         nodes={
@@ -1100,9 +1132,9 @@ async def test_agent_for_tool(container, unique_id):
             }
         },
     )
-    await container.agent_repository.set(agent)
-    yield agent_id
-    await container.agent_repository.delete(agent_id)
+    await container.flow_repository.set(agent)
+    yield flow_id
+    await container.flow_repository.delete(flow_id)
 
 
 

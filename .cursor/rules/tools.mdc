@@ -1,12 +1,12 @@
 ---
-description: "Tools для агентов - inline конфиги"
+description: "Tools для flows — inline конфиги"
 alwaysApply: false
 ---
 # Tools - Inline конфигурация
 
 ## Основной принцип
 
-Tools = inline конфиги внутри агента. Декоратор @tool устарел!
+Tools = inline конфиги внутри ноды / FlowConfig. Декоратор @tool устарел!
 
 ## Структура tool
 
@@ -63,12 +63,12 @@ JSON Schema для LLM - какие параметры tool принимает:
         "code": "def execute(args, state):\n    return {'data': args['input'].upper()}"
     }
 
-### AgentNode (type: "agent")
+### FlowNode (type: "flow")
 
     {
         "tool_id": "call_skill",
-        "type": "agent",
-        "agent_id": "helper_agent",
+        "type": "flow",
+        "flow_id": "helper_flow",
         "skill_id": "translate",
         "args_schema": {"text": {"type": "string"}}
     }
@@ -92,6 +92,19 @@ JSON Schema для LLM - какие параметры tool принимает:
         "mcp_tool": "search",
         "args_schema": {"query": {"type": "string"}}
     }
+
+### LlmNode (type: "llm_node")
+
+Вложенный ReAct-узел как tool у родительского `llm_node` (inline prompt + tools у дочернего узла):
+
+    {
+        "tool_id": "nested_reasoner",
+        "type": "llm_node",
+        "prompt": "...",
+        "tools": [...]
+    }
+
+См. также `flows_logic.mdc` (interrupt, `NodeAsToolWrapper`).
 
 ## Функция execute
 
@@ -127,7 +140,7 @@ JSON Schema для LLM - какие параметры tool принимает:
 ## Встроенные tools
 
 - ask_user - прерывает выполнение, спрашивает пользователя
-- finish - завершает ReactNode с ответом
+- finish - завершает LlmNode с ответом
 
 ## ToolRegistry
 

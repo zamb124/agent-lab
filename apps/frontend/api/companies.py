@@ -140,7 +140,7 @@ async def create_company(
         service_client = container.service_client
         init_response = await service_client.post(
             "agents",
-            "/agents/api/v1/company/init",
+            "/flows/api/v1/company/init",
             json={
                 "company_id": company_id,
                 "company_name": name,

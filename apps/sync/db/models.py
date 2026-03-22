@@ -209,7 +209,7 @@ class SyncFile(Base):
     original_name: Mapped[str] = mapped_column(String(255), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    storage_url: Mapped[str] = mapped_column(Text, nullable=False)
+    storage_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     checksum: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

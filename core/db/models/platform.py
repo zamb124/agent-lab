@@ -19,7 +19,7 @@ class Storage(Base):
     Таблица для key-value хранения сущностей.
 
     Ключи имеют префиксы:
-    - agent:agent_id
+    - agent:flow_id
     - flow:flow_id
     - session:session_id
     """
@@ -200,7 +200,7 @@ class Spans(Base):
     """
     Таблица для хранения OpenTelemetry spans.
 
-    Нормализованная структура для быстрого поиска по user_id, agent_id, session.
+    Нормализованная структура для быстрого поиска по user_id, flow_id, session.
     """
 
     __tablename__ = "spans"
@@ -226,7 +226,7 @@ class Spans(Base):
     session_auth: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     session_agent: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
 
-    agent_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    flow_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     task_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     context_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     skill_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

@@ -67,7 +67,7 @@ services:
   #   platform: "linux/amd64"
   #   build:
   #     context: .
-  #     dockerfile: apps/agents/agents/external_cat_agent/Dockerfile
+  #     dockerfile: apps/flows/agents/external_cat_agent/Dockerfile
   #   container_name: platform-external-cat-agent-dev
   #   ports:
   #     - "8004:8002"

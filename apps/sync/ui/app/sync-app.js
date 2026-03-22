@@ -293,8 +293,6 @@ export class SyncApp extends PlatformApp {
                 </platform-island>
             </div>
 
-            <create-space-modal></create-space-modal>
-            <create-channel-modal></create-channel-modal>
             <space-settings-modal></space-settings-modal>
         `;
     }

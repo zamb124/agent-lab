@@ -27,7 +27,7 @@ export const modalStyles = css`
         backdrop-filter: blur(30px) saturate(200%);
         -webkit-backdrop-filter: blur(30px) saturate(200%);
         z-index: -1;
-        animation: backdropFadeIn var(--duration-normal, 0.3s) ease-out;
+        animation: backdropFadeIn var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out);
     }
     
     @keyframes backdropFadeIn {
@@ -57,7 +57,7 @@ export const modalStyles = css`
             0 16px 48px rgba(0, 0, 0, 0.4),
             0 4px 16px rgba(0, 0, 0, 0.25));
         
-        animation: modalEnter var(--duration-slow, 0.4s) var(--easing-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+        animation: modalEnter var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth));
     }
     
     /* Liquid shine pseudo-element */
@@ -101,7 +101,7 @@ export const modalStyles = css`
     @keyframes modalEnter {
         from {
             opacity: 0;
-            transform: scale(0.95) translateY(20px);
+            transform: scale(0.96) translateY(12px);
         }
         to {
             opacity: 1;
@@ -331,5 +331,69 @@ export const modalUtilityStyles = css`
         line-height: var(--leading-relaxed, 1.6);
         color: var(--text-secondary, rgba(255, 255, 255, 0.65));
         text-align: center;
+    }
+`;
+
+/**
+ * Кастомные модалки (Lit): классы .backdrop + .modal / .modal-box / .drawer / .panel.
+ * Длительности и easing — через CSS-переменные из tokens.css.
+ */
+export const modalShellStyles = css`
+    @keyframes platformModalBackdropIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes platformModalPanelIn {
+        from {
+            opacity: 0;
+            transform: scale(0.96) translateY(12px);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    }
+
+    @keyframes platformDrawerIn {
+        from {
+            opacity: 0;
+            transform: translateX(14px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .backdrop:not(.modal-backdrop-no-animate) {
+        animation: platformModalBackdropIn var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out) both;
+    }
+
+    .modal,
+    .modal-box {
+        animation: platformModalPanelIn var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth)) both;
+    }
+
+    .drawer {
+        animation: platformDrawerIn var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth)) both;
+    }
+
+    .panel {
+        animation: platformModalPanelIn var(--modal-popover-duration, var(--duration-fast)) var(--modal-panel-easing, var(--easing-smooth)) both;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .backdrop:not(.modal-backdrop-no-animate),
+        .modal,
+        .modal-box,
+        .drawer,
+        .panel {
+            animation-duration: 1ms !important;
+        }
     }
 `;

@@ -6,9 +6,9 @@
       "database_url_key": "shared_url"
     },
     {
-      "name": "agents",
-      "models_module": "apps.agents.src.db.models",
-      "database_url_key": "agents_url"
+      "name": "flows",
+      "models_module": "apps.flows.src.db.models",
+      "database_url_key": "flows_url"
     },
     {
       "name": "crm",

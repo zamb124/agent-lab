@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 
 export class UserInfoModal extends PlatformElement {
     static properties = {
@@ -16,6 +17,7 @@ export class UserInfoModal extends PlatformElement {
         PlatformElement.styles,
         glassStyles,
         buttonStyles,
+        modalShellStyles,
         css`
             .backdrop {
                 position: fixed;
@@ -115,7 +117,7 @@ export class UserInfoModal extends PlatformElement {
                         </div>
                         <div>
                             <div class="field-label">user_id</div>
-                            <div class="field-value">${this.sender.id}</div>
+                            <div class="field-value">${this.sender.user_id}</div>
                         </div>
                         ${this.sender.avatar_url ? html`
                             <div>

@@ -143,12 +143,12 @@ class AgentURN(URN):
     type: Literal["agent"] = Field(default="agent", description="Тип: agent")
     
     @classmethod
-    def create(cls, agent_id: str) -> "AgentURN":
+    def create(cls, flow_id: str) -> "AgentURN":
         """
         Создаёт AgentURN из ID.
         
         Args:
-            agent_id: ID агента
+            flow_id: ID агента
         
         Returns:
             AgentURN объект
@@ -157,7 +157,7 @@ class AgentURN(URN):
             >>> AgentURN.create("customer_service")
             AgentURN('urn:iman:agent:customer_service')
         """
-        return cls(id=agent_id)
+        return cls(id=flow_id)
 
 
 class NodeURN(URN):

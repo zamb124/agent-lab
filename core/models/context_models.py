@@ -33,7 +33,7 @@ class Context(BaseModel):
         title="Канал",
         description="Канал откуда поступил запрос (a2a, telegram, whatsapp)",
     )
-    agent_id: Optional[str] = Field(
+    flow_id: Optional[str] = Field(
         default=None,
         title="ID агента",
         description="ID текущего агента",
@@ -73,10 +73,10 @@ class Context(BaseModel):
         title="Переменные компании",
         description="Переменные компании для использования в промптах",
     )
-    agent_config: Optional[Any] = Field(
+    flow_config: Optional[Any] = Field(
         default=None,
         title="Конфигурация агента",
-        description="AgentConfig для текущего запроса",
+        description="FlowConfig для текущего запроса",
     )
     auth_token: Optional[str] = Field(
         default=None,
@@ -107,7 +107,7 @@ class Context(BaseModel):
             "user_companies": [c.model_dump() for c in self.user_companies],
             "session_id": self.session_id,
             "channel": self.channel,
-            "agent_id": self.agent_id,
+            "flow_id": self.flow_id,
             "host": self.host,
             "flow_variables": self.flow_variables,
             "company_variables": self.company_variables,
@@ -138,7 +138,7 @@ class Context(BaseModel):
             user_companies=[Company.model_validate(c) for c in user_companies_data],
             session_id=data.get("session_id"),
             channel=data.get("channel", "unknown"),
-            agent_id=data.get("agent_id"),
+            flow_id=data.get("flow_id"),
             host=data.get("host", ""),
             flow_variables=data.get("flow_variables", {}),
             company_variables=data.get("company_variables", {}),

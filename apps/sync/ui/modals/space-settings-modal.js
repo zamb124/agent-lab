@@ -1,11 +1,12 @@
 /**
- * Настройки пространства: имя, описание, аватар (URL или загрузка файла).
+ * Пространство: создание и редактирование (имя, описание, аватар).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 import { SyncStore } from '../store/sync.store.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 
@@ -23,6 +24,7 @@ export class SpaceSettingsModal extends PlatformElement {
         glassStyles,
         buttonStyles,
         formStyles,
+        modalShellStyles,
         css`
             .backdrop {
                 position: fixed;
@@ -151,7 +153,18 @@ export class SpaceSettingsModal extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         this._unsubscribe = SyncStore.subscribe((state) => {
+            const create = state.ui.spaceSettingsCreate;
             const nextId = state.ui.spaceSettingsSpaceId;
+            if (create) {
+                if (this._syncedForSpaceId !== '__create__') {
+                    this._syncedForSpaceId = '__create__';
+                    this._spaceId = null;
+                    this._name = '';
+                    this._description = '';
+                    this._avatarUrl = '';
+                }
+                return;
+            }
             if (nextId === null) {
                 this._syncedForSpaceId = null;
                 this._spaceId = null;
@@ -197,11 +210,8 @@ export class SpaceSettingsModal extends PlatformElement {
         this._avatarUrl = res.file.storage_url;
     }
 
-    async _save() {
-        const id = this._spaceId;
-        if (typeof id !== 'string' || id === '') {
-            throw new Error('Пространство не выбрано.');
-        }
+    async _submit() {
+        const create = SyncStore.state.ui.spaceSettingsCreate;
         const name = this._name.trim();
         if (!name) {
             throw new Error('Название пространства обязательно.');
@@ -210,9 +220,28 @@ export class SpaceSettingsModal extends PlatformElement {
         try {
             const syncApi = ServiceRegistry.get('syncApi');
             const url = this._avatarUrl.trim();
+            const description = this._description.trim() || null;
+            if (create) {
+                const created = await syncApi.createSpace(name, description);
+                if (url !== '') {
+                    await syncApi.updateSpace(created.id, {
+                        name,
+                        description,
+                        avatar_url: url,
+                    });
+                }
+                await SyncStore.loadSpaces(syncApi);
+                SyncStore.selectSpace(created.id);
+                this._close();
+                return;
+            }
+            const id = this._spaceId;
+            if (typeof id !== 'string' || id === '') {
+                throw new Error('Пространство не выбрано.');
+            }
             await syncApi.updateSpace(id, {
                 name,
-                description: this._description.trim() || null,
+                description,
                 avatar_url: url === '' ? null : url,
             });
             await SyncStore.loadSpaces(syncApi);
@@ -223,16 +252,24 @@ export class SpaceSettingsModal extends PlatformElement {
     }
 
     render() {
+        const ui = SyncStore.state.ui;
+        const isCreate = ui.spaceSettingsCreate;
         const id = this._spaceId;
-        if (typeof id !== 'string' || id === '') {
+        if (!isCreate && (typeof id !== 'string' || id === '')) {
             return html``;
         }
+
+        const title = isCreate ? 'Создать пространство' : 'Настройки пространства';
+        const primaryLabel = isCreate
+            ? (this._saving ? 'Создаём…' : 'Создать')
+            : (this._saving ? 'Сохранение…' : 'Сохранить');
+        const descLabel = isCreate ? 'Описание (опционально)' : 'Описание';
 
         const av = this._avatarUrl.trim();
         return html`
             <div class="backdrop" @click=${this._close}>
                 <div class="modal" @click=${(e) => e.stopPropagation()}>
-                    <div class="modal-title">Настройки пространства</div>
+                    <div class="modal-title">${title}</div>
 
                     <div class="field">
                         <label class="label">Название</label>
@@ -246,7 +283,7 @@ export class SpaceSettingsModal extends PlatformElement {
                     </div>
 
                     <div class="field">
-                        <label class="label">Описание</label>
+                        <label class="label">${descLabel}</label>
                         <input
                             class="input"
                             .value=${this._description}
@@ -301,14 +338,14 @@ export class SpaceSettingsModal extends PlatformElement {
                             class="btn btn-primary"
                             ?disabled=${this._saving}
                             @click=${() => {
-                                this._save().catch((err) => {
+                                this._submit().catch((err) => {
                                     const t = err instanceof Error ? err.message : String(err);
                                     this.error(t);
                                     this._saving = false;
                                 });
                             }}
                         >
-                            ${this._saving ? 'Сохранение…' : 'Сохранить'}
+                            ${primaryLabel}
                         </button>
                     </div>
                 </div>

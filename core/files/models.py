@@ -67,6 +67,13 @@ class FileRecord(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Дополнительные метаданные файла")
     tags: List[str] = Field(default_factory=list, description="Теги для категоризации")
     is_public: bool = Field(default=False, description="Доступен ли файл без авторизации")
+    download_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "Same-origin URL для скачивания через API (устанавливается сервисом при загрузке). "
+            "Если не задан, используется /api/v1/files/download/{file_id}."
+        ),
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Время создания файла"
@@ -83,23 +90,52 @@ class FileRecord(BaseModel):
         return f"s3:{self.provider}:{self.file_id}"
 
     @property
-    def direct_s3_url(self) -> Optional[str]:
-        """Прямой S3 URL для доступа к файлу"""
-        if not self.s3_endpoint or not self.s3_bucket or not self.s3_key:
-            return None
-
-        endpoint = self.s3_endpoint.rstrip('/')
-        return f"{endpoint}/{self.s3_bucket}/{self.s3_key}"
-
-    @property
     def url(self) -> str:
-        """Прокси URL для доступа к файлу через API (для контроля доступа)"""
+        """
+        Same-origin URL для доступа к файлу через API.
+
+        Если сервис задал download_url при загрузке — возвращает его.
+        Иначе возвращает путь agents-сервиса (для обратной совместимости).
+        """
+        if self.download_url:
+            return self.download_url
         return f"/api/v1/files/download/{self.file_id}"
 
     @property
     def audio_id(self) -> str:
         """Алиас для file_id для обратной совместимости с AudioRecord"""
         return self.file_id
+
+
+class FileResponse(BaseModel):
+    """
+    Публичное представление файла для API-ответов.
+
+    Не содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).
+    Используется как return-тип всех file-эндпоинтов во всех сервисах.
+    """
+
+    file_id: str
+    original_name: str
+    content_type: str
+    file_size: int
+    url: str
+    checksum: Optional[str] = None
+    is_public: bool
+    created_at: datetime
+
+    @classmethod
+    def from_record(cls, record: "FileRecord") -> "FileResponse":
+        return cls(
+            file_id=record.file_id,
+            original_name=record.original_name,
+            content_type=record.content_type,
+            file_size=record.file_size,
+            url=record.url,
+            checksum=record.checksum,
+            is_public=record.is_public,
+            created_at=record.created_at,
+        )
 
 
 class AudioRecord(FileRecord):

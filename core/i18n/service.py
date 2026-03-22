@@ -223,7 +223,7 @@ class TranslationManager:
         logger.debug("Сканирование Pydantic моделей...")
         
         # Сканируем директории с моделями
-        model_dirs = [Path("apps/agents/models"), Path("apps/frontend")]
+        model_dirs = [Path("apps/flows/models"), Path("apps/frontend")]
         
         for model_dir in model_dirs:
             if model_dir.exists():

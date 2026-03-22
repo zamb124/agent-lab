@@ -7,12 +7,12 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.sync.db.models import SyncFile
-from apps.sync.db.repositories.file_repository import FileRepository
+from apps.sync.db.repositories.file_repository import SyncFileRepository
 
 
 @pytest.mark.asyncio
 async def test_file_create_and_get(
-    file_repo: FileRepository,
+    file_repo: SyncFileRepository,
     sync_db_clean: None,
     company_id: str,
 ) -> None:
@@ -36,7 +36,7 @@ async def test_file_create_and_get(
 
 @pytest.mark.asyncio
 async def test_file_list_all_company_isolation(
-    file_repo: FileRepository,
+    file_repo: SyncFileRepository,
     sync_db_clean: None,
     company_id: str,
 ) -> None:

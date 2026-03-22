@@ -85,7 +85,7 @@
       "name": "AI Агенты",
       "short_name": "Агенты",
       "description": "Конструктор AI-агентов",
-      "url": "/agents",
+      "url": "/flows",
       "icons": [
         {
           "src": "/static/core/pwa/icons/shortcut-agents.png",

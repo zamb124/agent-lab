@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 
 const QUICK_REACTIONS = ['😀', '👍', '🤝', '❤️', '😢', '🔥', '🤔'];
 
@@ -19,6 +20,7 @@ export class MessageContextMenu extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         glassStyles,
+        modalShellStyles,
         css`
             :host {
                 display: block;
@@ -147,7 +149,7 @@ export class MessageContextMenu extends PlatformElement {
         if (!this.open) return html``;
         const { x, y } = this._position();
         return html`
-            <div class="backdrop" @click=${this._close}></div>
+            <div class="backdrop modal-backdrop-no-animate" @click=${this._close}></div>
             <div class="panel" style=${`left:${x}px;top:${y}px`}>
                 <div class="reactions" @click=${(e) => e.stopPropagation()}>
                     ${QUICK_REACTIONS.map(em => html`

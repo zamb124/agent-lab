@@ -402,12 +402,10 @@ class EntityService:
             ]
         }
         
-        # URL из config.json через settings
-        agents_base_url = settings.server.get_service_url("agents")
-        
-        # A2AClient автоматически добавит заголовки из контекста
+        flows_base_url = settings.server.get_flows_service_url().rstrip("/")
+
         response = await self._a2a_client.send_task(
-            base_url=f"{agents_base_url}/agents/api/v1/crm",
+            base_url=f"{flows_base_url}/flows/api/v1/crm",
             content=text,
             skill_id="analyze",
             metadata={
@@ -522,10 +520,10 @@ class EntityService:
         
         
         settings = get_settings()
-        agents_url = settings.server.get_agents_service_url()
+        flows_url = settings.server.get_flows_service_url()
         
         response = await self._a2a_client.send_task(
-            base_url=f"{agents_url}/agents/api/v1/crm",
+            base_url=f"{flows_url}/flows/api/v1/crm",
             content=json.dumps(payload),
             skill_id="summarize",
             metadata={"company_id": company_id}
@@ -712,8 +710,8 @@ class EntityService:
     ) -> DeduplicateResult:
         """Вызывает агента со skill deduplicate для сравнения сущностей"""
         settings = get_settings()
-        agents_base_url = settings.server.get_service_url("agents")
-        
+        flows_base_url = settings.server.get_flows_service_url().rstrip("/")
+
         variables = {
             "extracted_entity": {
                 "type": extracted.entity_type,
@@ -731,7 +729,7 @@ class EntityService:
         }
         
         response = await self._a2a_client.send_task(
-            base_url=f"{agents_base_url}/agents/api/v1/crm",
+            base_url=f"{flows_base_url}/flows/api/v1/crm",
             content=f"Compare: {extracted.name} vs {candidate.name}",
             skill_id="deduplicate",
             metadata={"variables": variables}

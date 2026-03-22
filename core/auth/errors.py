@@ -37,26 +37,26 @@ class PermissionDeniedA2AError(BaseModel):
     )
 
     @classmethod
-    def for_flow(cls, agent_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
+    def for_flow(cls, flow_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
         """Создает ошибку для отказа доступа к flow."""
         return cls(
-            message=f"Permission denied for flow '{agent_id}'",
+            message=f"Permission denied for flow '{flow_id}'",
             data={
                 "entity_type": "flow",
-                "entity_id": agent_id,
+                "entity_id": flow_id,
                 "required_groups": required_groups,
             },
         )
 
     @classmethod
-    def for_skill(cls, skill_id: str, agent_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
+    def for_skill(cls, skill_id: str, flow_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
         """Создает ошибку для отказа доступа к skill."""
         return cls(
-            message=f"Permission denied for skill '{skill_id}' in flow '{agent_id}'",
+            message=f"Permission denied for skill '{skill_id}' in flow '{flow_id}'",
             data={
                 "entity_type": "skill",
                 "entity_id": skill_id,
-                "agent_id": agent_id,
+                "flow_id": flow_id,
                 "required_groups": required_groups,
             },
         )

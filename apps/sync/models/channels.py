@@ -5,7 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _validate_avatar_url(v: str | None) -> str | None:
+    if v is not None and not v.startswith("/"):
+        raise ValueError("avatar_url должен быть относительным URL платформы (начинается с /)")
+    return v
 
 from apps.sync.models.common import UserBrief
 
@@ -87,18 +93,14 @@ class ChannelCreate(BaseModel):
 class ChannelUpdate(BaseModel):
     """Обновление настроек канала."""
 
-    name: str | None = Field(
-        default=None,
-        description="Новое имя канала.",
-    )
-    is_private: bool | None = Field(
-        default=None,
-        description="Новый флаг приватности.",
-    )
-    avatar_url: str | None = Field(
-        default=None,
-        description="URL аватара или null для сброса.",
-    )
+    name: str | None = Field(default=None, description="Новое имя канала.")
+    is_private: bool | None = Field(default=None, description="Новый флаг приватности.")
+    avatar_url: str | None = Field(default=None, description="URL аватара или null для сброса.")
+
+    @field_validator("avatar_url")
+    @classmethod
+    def avatar_url_must_be_relative(cls, v: str | None) -> str | None:
+        return _validate_avatar_url(v)
 
 
 class ChannelMemberRead(BaseModel):
