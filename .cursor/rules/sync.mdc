@@ -10,7 +10,7 @@ globs:
 
 ## Архитектура
 
-- **БД**: SQLAlchemy реляционный (паттерн CRM: `SyncDatabase` + `BaseSyncRepository`). При старте сервиса вызывается `SyncContainer.init_db()` → `create_tables()` и **`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`** для колонок, добавленных в модели после создания таблиц (иначе `create_all` не обновляет существующие таблицы).
+- **БД**: SQLAlchemy реляционный (`SyncDatabase` + `BaseSyncRepository`). Схема **только Alembic** (`migrations/sync/`, `make migrate`). Старт сервиса не создаёт таблицы.
 - **Изоляция**: `company_id` во всех таблицах, из `get_context()` автоматически
 - **Auth**: платформенный `AuthMiddleware` + `get_context()`
 - **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket

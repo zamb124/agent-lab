@@ -16,7 +16,6 @@ from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
-from apps.crm.db.models import Base
 from core.context import get_context
 
 logger = logging.getLogger(__name__)
@@ -66,25 +65,6 @@ class CRMDatabase:
     def session(self) -> AsyncSession:
         """Создает новую сессию"""
         return self._session_factory()
-    
-    async def create_tables(self, drop_existing: bool = False):
-        """
-        Создает все таблицы CRM.
-        
-        Args:
-            drop_existing: Если True - сначала удаляет существующие таблицы.
-                          Используется в тестах для пересоздания схемы.
-        """
-        async with self._engine.begin() as conn:
-            if drop_existing:
-                await conn.run_sync(Base.metadata.drop_all)
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("CRM таблицы созданы")
-    
-    async def drop_tables(self):
-        """Удаляет все таблицы CRM (для тестов)"""
-        async with self._engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
 
 
 class BaseCRMRepository(ABC, Generic[T]):

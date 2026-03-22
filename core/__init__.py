@@ -24,7 +24,7 @@ Core - общая инфраструктура Humanitec.
 __version__ = "1.0.0"
 
 from core.config import get_settings, load_merged_config, BaseSettings
-from core.db import Storage, BaseRepository, BaseSQLRepository, get_engine, create_tables
+from core.db import Storage, BaseRepository, BaseSQLRepository, get_engine
 from core.models import User, Company, Context, Language, AuthProvider, ProviderUserInfo, AuthResult
 from core.context import get_context, set_context, clear_context
 from core.auth import (
@@ -56,7 +56,6 @@ __all__ = [
     "BaseRepository",
     "BaseSQLRepository",
     "get_engine",
-    "create_tables",
     "permission_checker",
     "PermissionChecker",
     "PermissionDeniedError",

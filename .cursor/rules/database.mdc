@@ -8,6 +8,8 @@ alwaysApply: false
 
 **ВСЕ данные ТОЛЬКО через репозитории. Storage - приватный класс.**
 
+Схема PostgreSQL задаётся **только Alembic** (`migrations/<сервис>/`, `make migrate`). В `apps/*` не вызывать `Base.metadata.create_all` и не выполнять скрытые DDL-обходы.
+
 ## Три главных правила кода
 
 1. **НИКАКИХ локальных импортов** - все импорты в начале файла
@@ -37,8 +39,9 @@ core/db/
 ├── base_repository.py      # BaseRepository (композиция с Storage)
 ├── service_registry.py     # реестр: name, get_db_url, alembic_script_location
 ├── migrations.py           # run_migrations_async(), Alembic helpers
-├── cli.py                  # argparse: подкоманды (вызывается из scripts.db_migrate)
 └── repositories/           # core репозитории (shared БД)
+
+См. `scripts/db_migrate.py` — единственная CLI для миграций (argparse).
 
 apps/agents/src/db/
 ├── models.py               # Agents, AgentsVersions, Nodes, Tools, States,

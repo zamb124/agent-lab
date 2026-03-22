@@ -345,18 +345,24 @@ export class PlatformUser extends PlatformElement {
 
             :host-context(platform-sidebar[collapsed]) .user-button {
                 justify-content: center;
-                width: auto;
-                max-width: 100%;
-                min-width: 0;
+                align-items: center;
+                width: 40px;
+                height: 40px;
+                min-width: 40px;
+                min-height: 40px;
+                flex-shrink: 0;
                 gap: 0;
-                padding: var(--space-2);
+                padding: 0;
+                background: transparent;
+                border: none;
+                border-radius: var(--radius-full);
+                box-shadow: none;
                 box-sizing: border-box;
             }
 
-            :host-context(platform-sidebar[collapsed]) .user-avatar {
-                width: 32px;
-                height: 32px;
-                font-size: var(--text-xs);
+            :host-context(platform-sidebar[collapsed]) .user-button:hover {
+                background: var(--glass-solid-subtle);
+                box-shadow: none;
             }
 
             .user-container {

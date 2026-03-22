@@ -69,11 +69,6 @@ class SyncContainer(BaseContainer):
         from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
         return GitResourceRefRepository(db=self.sync_db)
 
-    async def init_db(self):
-        """Инициализация БД - создание таблиц"""
-        await self.sync_db.create_tables()
-        logger.info("Sync БД инициализирована")
-
 
 # === Глобальный контейнер ===
 

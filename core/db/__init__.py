@@ -15,7 +15,6 @@ from core.db.database import (
     session,
     get_db,
     wait_for_db,
-    create_tables,
     close_db,
 )
 from core.db.storage import Storage
@@ -30,7 +29,6 @@ __all__ = [
     "session",
     "get_db",
     "wait_for_db",
-    "create_tables",
     "close_db",
     "run_migrations",
     "run_migrations_async",

@@ -38,9 +38,19 @@ def sync_db_url() -> str:
 
 @pytest_asyncio.fixture(scope="session")
 async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
-    """Создаёт SyncDatabase и таблицы для тестовой сессии."""
+    """Создаёт SyncDatabase; схема только через Alembic (дерево migrations/sync)."""
+    import core.config.base as config_base
+
+    os.environ["DATABASE__SYNC_URL"] = sync_db_url
+    config_base._settings_instance = None
+
+    from core.db.migration_manifest import bootstrap_migration_registry
+    from core.db.migrations import run_migrations_async
+
+    bootstrap_migration_registry()
+    await run_migrations_async(service="sync")
+
     db = SyncDatabase(sync_db_url)
-    await db.create_tables(drop_existing=True)
     yield db
 
 

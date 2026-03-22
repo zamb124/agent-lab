@@ -375,6 +375,8 @@ class MySidebar extends PlatformElement {
 - `.sidebar-text`, `.sidebar-section-title`
 - `::slotted([data-hide-collapsed])`
 
+`<platform-user>` внутри свёрнутого `platform-sidebar` сам переходит в компактный вид (`:host-context(platform-sidebar[collapsed])`): скрываются имя/email и chevron; кнопка без «таблетки» (прозрачный фон, без рамки и тени), остаётся только круглый аватар 40×40 по центру.
+
 ```html
 <!-- Этот элемент скроется в collapsed mode -->
 <div data-hide-collapsed>Скрыть при сворачивании</div>

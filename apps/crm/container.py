@@ -153,11 +153,6 @@ class CRMContainer(BaseContainer):
             entity_repo=self.entity_repository,
             access_control=self.access_control_service
         )
-    
-    async def init_db(self):
-        """Инициализация БД - создание таблиц"""
-        await self.crm_db.create_tables()
-        logger.info("CRM БД инициализирована")
 
 
 # === Глобальный контейнер ===

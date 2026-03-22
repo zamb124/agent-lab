@@ -5,7 +5,6 @@ globs:
   - "**/db/models.py"
   - "**/db/models/**"
   - "core/db/migrations.py"
-  - "core/db/cli.py"
   - "scripts/db_migrate.py"
   - "core/db/service_registry.py"
   - "core/db/migration_manifest.py"
@@ -76,7 +75,7 @@ migrations/
 Все команды — через **`python -m scripts.db_migrate`** (после `uv run` локально):
 
 1. `bootstrap_migration_registry()` — реестр и импорт моделей по `services.json`.
-2. Делегирование в `core.db.cli`: подкоманды `upgrade`, `revision`, `downgrade`, `current`, `history`, `heads`.
+2. Подкоманды `upgrade`, `revision`, `downgrade`, `current`, `history`, `heads` (argparse в том же модуле).
 
 Примеры:
 
@@ -108,8 +107,7 @@ command: ["python", "-m", "scripts.db_migrate", "upgrade"]
 - `migrations/services.json` — манифест миграций и списка БД Postgres
 - `migrations/postgres/init.sql` — первичное создание БД в Docker (см. `docker-compose`)
 - `core/db/migration_manifest.py` — загрузка манифеста, регистрация, bootstrap
-- `scripts/db_migrate.py` — точка входа → `core.db.cli`
-- `core/db/cli.py` — argparse-подкоманды Alembic
+- `scripts/db_migrate.py` — точка входа и argparse для Alembic
 - `migrations/<svc>/env.py`, `versions/`
 - `core/db/migrations.py` — `run_migrations_async()`, и т.д.
 - `core/db/service_registry.py`
