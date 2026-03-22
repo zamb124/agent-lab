@@ -51,6 +51,7 @@ services:
   # Infrastructure
   # ============================================
   postgres:
+    # Мажорная версия PG должна совпадать с данными в volume. Смена мажора без pg_dump/pg_upgrade — только новый volume.
     image: pgvector/pgvector:pg17
     container_name: agentlab_postgres
     environment:
