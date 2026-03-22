@@ -1,44 +1,21 @@
 """
 Конфигурация для Sync Service.
 
-Расширяет BaseSettings. URL sync БД берётся из settings.database.sync_url.
+SyncSettings — тот же BaseSettings, что и у остальных сервисов. Процесс sync (HTTP
+или TaskIQ worker) должен один раз выставить глобальные настройки через
+set_settings(SyncSettings(**load_merged_config(service_name="sync"))): так делает
+create_service_app в main и загрузчик apps.sync_worker.worker.
 """
 
-from typing import Optional
-
 from core.config import BaseSettings
-from core.config.loader import load_merged_config
 
 
 class SyncSettings(BaseSettings):
     """
     Настройки Sync сервиса.
 
-    Наследуется от BaseSettings, все базовые поля (database, auth, logging, etc)
-    доступны из родителя. URL sync БД: settings.database.sync_url.
+    URL sync БД: settings.database.sync_url. S3 и прочее — общий блок settings.s3
+    (корневой conf.json + conf.local.json, плюс слой services.sync при merge).
     """
+
     pass
-
-
-_sync_settings: Optional[SyncSettings] = None
-
-
-def get_sync_settings() -> SyncSettings:
-    """
-    Получает настройки Sync сервиса.
-
-    Создает SyncSettings из конфигурации, загружая базовые настройки
-    и добавляя специфичные для Sync.
-    """
-    global _sync_settings
-    if _sync_settings is None:
-        merged_config = load_merged_config(service_name="sync")
-        _sync_settings = SyncSettings(**merged_config)
-
-    return _sync_settings
-
-
-def reset_sync_settings():
-    """Сбрасывает настройки (для тестов)"""
-    global _sync_settings
-    _sync_settings = None

@@ -6,16 +6,18 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from apps.sync.models.channels import ChannelCreate, ChannelRead
+from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelUpdate
 from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
 from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
-from apps.sync.models.spaces import SpaceCreate, SpaceRead
+from apps.sync.models.spaces import SpaceCreate, SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadCreate, ThreadRead
 
 
 CommandType = Literal[
     "spaces.create",
+    "spaces.update",
     "channels.create",
+    "channels.update",
     "channels.mark_read",
     "threads.create",
     "messages.send",
@@ -65,8 +67,18 @@ class SpacesCreatePayload(BaseModel):
     body: SpaceCreate
 
 
+class SpacesUpdatePayload(BaseModel):
+    space_id: str
+    body: SpaceUpdate
+
+
 class ChannelsCreatePayload(BaseModel):
     body: ChannelCreate
+
+
+class ChannelsUpdatePayload(BaseModel):
+    channel_id: str
+    body: ChannelUpdate
 
 
 class ChannelsMarkReadPayload(BaseModel):

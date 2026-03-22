@@ -40,6 +40,7 @@ services:
     networks:
       - dev-net
 
+  # MinIO в Docker VM; uvicorn с хоста подписывает SigV4 по часам macOS — при дрейфе VM см. make dev-minio-restart
   minio:
     platform: "linux/amd64"
     image: minio/minio:latest

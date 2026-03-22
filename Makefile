@@ -1,5 +1,5 @@
 .PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base
-.PHONY: dev-up dev-down dev-logs test test-down test-unit test-integration prod-up prod-down prod-logs
+.PHONY: dev-up dev-down dev-logs dev-minio-restart test test-down test-unit test-integration prod-up prod-down prod-logs
 .PHONY: test-frontend test-rag run-rag
 
 # Docker Registry
@@ -37,6 +37,11 @@ dev-clean:
 	@echo "🧹 Полная очистка Development окружения (включая volumes)..."
 	docker-compose -f docker-compose-dev.yaml down -v
 	@echo "✅ Dev окружение очищено"
+
+# Перезапуск только MinIO: при RequestTimeTooSkewed (подпись с хоста vs время в контейнере MinIO)
+dev-minio-restart:
+	docker-compose -f docker-compose-dev.yaml restart minio
+	@echo "MinIO dev перезапущен. Проверка UTC: date -u и docker exec agentlab_minio_dev date -u"
 
 # Test Environment (порты: 54322, 63792, 19002-19012, 18052) - ТОЛЬКО для автотестов
 test:
@@ -218,7 +223,8 @@ help:
 	@echo "  make dev-down        - Остановить dev окружение"
 	@echo "  make dev-logs        - Логи dev окружения"
 	@echo "  make dev-clean       - Полная очистка (включая volumes)"
-	@echo "  MinIO Console: http://localhost:9001 (minioadmin/minioadmin)"
+	@echo "  make dev-minio-restart - Перезапуск MinIO (часто убирает RequestTimeTooSkewed при dev на macOS)"
+	@echo "  MinIO Console (dev): http://localhost:19011 (minioadmin/minioadmin)"
 	@echo ""
 	@echo "Testing (порты: 54322, 63792, 19002-19012) - ТОЛЬКО для автотестов:"
 	@echo "  make test            - Запустить все тесты (включая MinIO)"

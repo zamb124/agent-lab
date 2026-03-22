@@ -9,7 +9,7 @@ import redis.asyncio as redis
 from fastapi import WebSocket, WebSocketDisconnect
 from taskiq.exceptions import TaskiqResultTimeoutError
 
-from apps.sync.config import get_sync_settings
+from core.config import get_settings
 from apps.sync.realtime.commands import CommandEnvelope, WsCommandFrame, WsResultFrame
 from apps.sync.realtime.tasks import handle_command
 from core.websocket.auth import get_user_from_websocket
@@ -76,7 +76,7 @@ class PubSubFanout:
     async def start(self) -> None:
         if self._task is not None:
             return
-        settings = get_sync_settings()
+        settings = get_settings()
         self._redis = redis.from_url(settings.database.redis_url)
         self._task = asyncio.create_task(self._run())
 
@@ -132,7 +132,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     user_id = user.user_id
     company_id = user.active_company_id
-    settings = get_sync_settings()
+    settings = get_settings()
 
     try:
         await manager.connect(user_id, websocket)

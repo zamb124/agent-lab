@@ -538,6 +538,10 @@ class S3ClientFactory:
         if not bucket_config.secret_access_key:
             raise ValueError(f"secret_access_key не настроен для bucket {bucket_name}")
 
+        from core.files.s3_sigv4_clock import ensure_sigv4_clock_aligned_with_endpoint
+
+        ensure_sigv4_clock_aligned_with_endpoint(bucket_config.endpoint_url)
+
         return S3Client(
             bucket_name=bucket_name,
             access_key_id=bucket_config.access_key_id,

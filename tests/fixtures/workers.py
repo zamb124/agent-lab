@@ -27,6 +27,9 @@ _TASKIQ_WORKER_PID = "/tmp/platform_test_taskiq_worker.pid"
 _RAG_WORKER_LOCK = "/tmp/platform_test_rag_worker.lock"
 _RAG_WORKER_PID = "/tmp/platform_test_rag_worker.pid"
 
+_SYNC_WORKER_LOCK = "/tmp/platform_test_sync_taskiq_worker.lock"
+_SYNC_WORKER_PID = "/tmp/platform_test_sync_taskiq_worker.pid"
+
 
 class SessionWorkerManager:
     """
@@ -397,6 +400,52 @@ def rag_worker():
         err_file="/tmp/rag_worker_test_err.log",
     )
     
+    with manager.start() as worker_process:
+        yield worker_process
+
+
+@pytest.fixture(scope="session")
+def sync_worker():
+    """
+    TaskIQ worker очереди sync (apps.sync_worker.worker:broker).
+
+    Нужен для REST/WS, где вызывается handle_command.kiq() (создание space/channel и т.д.).
+    """
+    if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
+        yield None
+        return
+
+    manager = SessionWorkerManager(
+        name="SyncTaskIQ",
+        lock_file=_SYNC_WORKER_LOCK,
+        pid_file=_SYNC_WORKER_PID,
+        command=[
+            sys.executable,
+            "-m",
+            "taskiq",
+            "worker",
+            "apps.sync_worker.worker:broker",
+            "-w",
+            "2",
+        ],
+        env={
+            **TEST_DATABASE_ENV,
+            "TESTING": "true",
+            "DATABASE__REDIS_URL": "redis://localhost:63792/0",
+            "TASKS__BROKER_URL": "redis://localhost:63792/1",
+            "AUTH__PERMISSIONS_ENABLED": "false",
+        },
+        cleanup_patterns=[
+            "apps.sync_worker.worker",
+            "taskiq.*worker",
+            "multiprocessing.spawn.*spawn_main",
+            "multiprocessing.resource_tracker",
+        ],
+        startup_wait=4.0,
+        log_file="/tmp/sync_taskiq_worker_test.log",
+        err_file="/tmp/sync_taskiq_worker_test_err.log",
+    )
+
     with manager.start() as worker_process:
         yield worker_process
 

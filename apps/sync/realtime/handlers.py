@@ -14,11 +14,11 @@ from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
-from apps.sync.models.channels import ChannelRead, ChannelType
+from apps.sync.models.channels import ChannelRead, ChannelType, ChannelUpdate
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.messages import MessageContentModel, MessageCreate, MessageRead, MessageStatus
-from apps.sync.models.spaces import SpaceRead
+from apps.sync.models.spaces import SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadRead
 from apps.sync.realtime.commands import (
     ChannelsCreatePayload,
@@ -33,6 +33,8 @@ from apps.sync.realtime.commands import (
     MessagesReactPayload,
     MessagesSendPayload,
     SpacesCreatePayload,
+    SpacesUpdatePayload,
+    ChannelsUpdatePayload,
     ThreadsCreatePayload,
 )
 from apps.sync.realtime.events import (
@@ -75,10 +77,32 @@ async def execute_command(
         space = await _create_space(payload.body, actor_user_id=cmd.actor_user_id, company_id=cmd.company_id, spaces=spaces)
         return CommandExecutionResult(ok=True, result=space, events=[event_space_created(space)])
 
+    if cmd.type == "spaces.update":
+        payload = SpacesUpdatePayload.model_validate(cmd.payload)
+        space = await _update_space(
+            payload.space_id,
+            payload.body,
+            actor_user_id=cmd.actor_user_id,
+            company_id=cmd.company_id,
+            spaces=spaces,
+        )
+        return CommandExecutionResult(ok=True, result=space, events=[])
+
     if cmd.type == "channels.create":
         payload = ChannelsCreatePayload.model_validate(cmd.payload)
         channel = await _create_channel(payload.body, actor_user_id=cmd.actor_user_id, company_id=cmd.company_id, channels=channels)
         return CommandExecutionResult(ok=True, result=channel, events=[event_channel_created(channel)])
+
+    if cmd.type == "channels.update":
+        payload = ChannelsUpdatePayload.model_validate(cmd.payload)
+        channel = await _update_channel(
+            payload.channel_id,
+            payload.body,
+            actor_user_id=cmd.actor_user_id,
+            company_id=cmd.company_id,
+            channels=channels,
+        )
+        return CommandExecutionResult(ok=True, result=channel, events=[])
 
     if cmd.type == "channels.mark_read":
         payload = ChannelsMarkReadPayload.model_validate(cmd.payload)
@@ -254,9 +278,74 @@ async def _create_space(body, *, actor_user_id: str, company_id: str, spaces: Sp
         id=space_id,
         name=entity.name,
         description=entity.description,
+        avatar_url=entity.avatar_url,
         created_at=entity.created_at,
         created_by_user_id=actor_user_id,
     )
+
+
+async def _update_space(
+    space_id: str,
+    body: SpaceUpdate,
+    *,
+    actor_user_id: str,
+    company_id: str,
+    spaces: SpaceRepository,
+) -> SpaceRead:
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise ValueError("Нет полей для обновления пространства.")
+    entity = await spaces.get(space_id)
+    if entity is None:
+        raise ValueError(f"Пространство {space_id} не найдено.")
+    if entity.company_id != company_id:
+        raise PermissionError("Пространство принадлежит другой компании.")
+    if "name" in data:
+        entity.name = data["name"]
+    if "description" in data:
+        entity.description = data["description"]
+    if "avatar_url" in data:
+        entity.avatar_url = data["avatar_url"]
+    await spaces.update(entity)
+    return SpaceRead(
+        id=entity.space_id,
+        name=entity.name,
+        description=entity.description,
+        avatar_url=entity.avatar_url,
+        created_at=entity.created_at,
+        created_by_user_id=entity.created_by_user_id,
+    )
+
+
+async def _update_channel(
+    channel_id: str,
+    body: ChannelUpdate,
+    *,
+    actor_user_id: str,
+    company_id: str,
+    channels: ChannelRepository,
+) -> ChannelRead:
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise ValueError("Нет полей для обновления канала.")
+    role = await channels.get_member_role(channel_id, actor_user_id)
+    if role is None:
+        raise PermissionError(f"Пользователь не состоит в канале {channel_id}.")
+    if role not in ("owner", "admin"):
+        raise PermissionError("Изменение настроек канала доступно только ролям owner и admin.")
+    entity = await channels.get(channel_id)
+    if entity is None:
+        raise ValueError(f"Канал {channel_id} не найден.")
+    if entity.company_id != company_id:
+        raise PermissionError("Канал принадлежит другой компании.")
+    if "name" in data:
+        entity.name = data["name"]
+    if "is_private" in data:
+        entity.is_private = data["is_private"]
+    if "avatar_url" in data:
+        entity.avatar_url = data["avatar_url"]
+    await channels.update(entity)
+    return _channel_read_entity(entity)
 
 
 async def _create_channel(body, *, actor_user_id: str, company_id: str, channels: ChannelRepository) -> ChannelRead:

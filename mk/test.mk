@@ -1,6 +1,6 @@
 .PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit
 
-WORKERS ?= 2
+WORKERS ?= 1
 
 test-up:
 	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test test-a2a-agent worker-test scheduler-test rag-worker-test

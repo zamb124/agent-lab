@@ -6,14 +6,14 @@ import json
 
 import redis.asyncio as redis
 
-from apps.sync.config import get_sync_settings
+from core.config import get_settings
 from apps.sync.realtime.events import RealtimeEvent
 
 
 async def publish_realtime_events(events: list[RealtimeEvent]) -> None:
     if not events:
         return
-    settings = get_sync_settings()
+    settings = get_settings()
     r = redis.from_url(settings.database.redis_url)
     try:
         for event in events:

@@ -117,6 +117,26 @@ async def frontend_client():
         yield client
 
 
+@pytest_asyncio.fixture
+async def sync_app():
+    """FastAPI приложение Sync (ASGI)."""
+    from apps.sync.main import app
+
+    yield app
+
+
+@pytest_asyncio.fixture
+async def sync_client(sync_app, sync_worker):
+    """
+    HTTP клиент для Sync API (ASGI, lifespan включён).
+
+    Зависит от sync_worker: эндпоинты с handle_command.kiq() ждут очередь sync.
+    """
+    transport = ASGITransport(app=sync_app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
 # ==============================================================================
 # HTTP Clients (для E2E тестов с реальными серверами)
 # ==============================================================================

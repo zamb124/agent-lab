@@ -433,6 +433,8 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
 - S3Client (используй реальный MinIO)
 - Любые внутренние компоненты
 
+**Sync Service (`tests/sync/`, интеграционные тесты API и realtime):** только реальные фикстуры — PostgreSQL sync (`DATABASE__SYNC_URL`, миграции Alembic), Redis, TaskIQ worker с брокером `sync`, реальные репозитории и `execute_command` / HTTP к живому приложению. Нельзя подменять `handle_command.kiq`, `dispatch_sync_command`, репозитории или WebSocket через `unittest.mock` / `monkeypatch` ради «упрощения». Исключение по платформе — только **MockLLM** там, где он уже принят для agents. Подробности — `.cursor/rules/sync.mdc` (раздел «Тестирование») и `tests/sync/README.md`.
+
 ---
 
 ## ИЗОЛЯЦИЯ ТЕСТОВ: ОБЯЗАТЕЛЬНО unique_id

@@ -67,7 +67,23 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--text-secondary);
             }
 
+            .nav-row {
+                display: flex;
+                align-items: stretch;
+                gap: 0;
+                margin-bottom: var(--space-1);
+                width: 100%;
+                min-width: 0;
+            }
+
+            .nav-row > .nav-item {
+                flex: 1;
+                min-width: 0;
+            }
+
             .nav-item {
+                position: relative;
+                box-sizing: border-box;
                 display: flex;
                 align-items: flex-start;
                 gap: var(--space-2);
@@ -81,7 +97,7 @@ export class SyncSidebar extends PlatformElement {
                 width: 100%;
                 text-align: left;
                 transition: all var(--duration-fast);
-                margin-bottom: var(--space-1);
+                margin-bottom: 0;
             }
 
             .nav-item:hover {
@@ -177,29 +193,6 @@ export class SyncSidebar extends PlatformElement {
                 margin-top: var(--space-2);
             }
 
-            .lists-toolbar {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 6px;
-                padding: 0 var(--space-3) var(--space-2);
-            }
-
-            .toolbar-btn {
-                font-size: 10px;
-                font-weight: var(--font-medium);
-                padding: 4px 8px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-tertiary);
-                cursor: pointer;
-            }
-
-            .toolbar-btn:hover {
-                color: var(--text-secondary);
-                border-color: var(--glass-border-medium);
-            }
-
             .section-header--toggle {
                 cursor: pointer;
                 user-select: none;
@@ -265,6 +258,122 @@ export class SyncSidebar extends PlatformElement {
 
             .direct-search::placeholder {
                 color: var(--text-tertiary);
+            }
+
+            .entity-avatar {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                object-fit: cover;
+            }
+
+            .entity-avatar-initials {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 11px;
+                font-weight: var(--font-semibold);
+                color: #fff;
+            }
+
+            .nav-item-main {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-2);
+            }
+
+            .row-gear {
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 28px;
+                height: 28px;
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                transition: color var(--duration-fast), background var(--duration-fast);
+            }
+
+            .row-gear:hover {
+                background: var(--glass-solid-subtle);
+                color: var(--accent);
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .section-title,
+            :host([collapsed]) .sync-sidebar-inner .chevron-rot,
+            :host([collapsed]) .sync-sidebar-inner .direct-search,
+            :host([collapsed]) .sync-sidebar-inner .section-empty,
+            :host([collapsed]) .sync-sidebar-inner .loading-text,
+            :host([collapsed]) .sync-sidebar-inner .add-btn {
+                display: none !important;
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .section-header--toggle {
+                justify-content: center;
+                padding-left: var(--space-2);
+                padding-right: var(--space-2);
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .nav-item-inner,
+            :host([collapsed]) .sync-sidebar-inner .nav-item-label,
+            :host([collapsed]) .sync-sidebar-inner .nav-item-preview,
+            :host([collapsed]) .sync-sidebar-inner .nav-item-type {
+                display: none !important;
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .nav-row {
+                justify-content: center;
+                margin-bottom: var(--space-1);
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .nav-item {
+                justify-content: center;
+                align-items: center;
+                padding: var(--space-2) var(--space-1);
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .nav-item-main {
+                flex: 0 0 auto;
+                min-width: 0;
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .row-gear {
+                display: none !important;
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .nav-item-unread {
+                position: absolute;
+                top: 4px;
+                right: 4px;
+                min-width: 8px;
+                min-height: 8px;
+                width: 8px;
+                height: 8px;
+                padding: 0;
+                font-size: 0;
+                border-radius: 50%;
+                margin: 0;
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .channels-section {
+                border-top: none;
+                padding-top: var(--space-2);
+                margin-top: 0;
+            }
+
+            :host([collapsed]) .sync-sidebar-inner .section-scroll {
+                max-height: none;
             }
         `
     ];
@@ -340,10 +449,11 @@ export class SyncSidebar extends PlatformElement {
         }
     }
 
-    _hueFromUserId(userId) {
+    _hueFromString(value) {
+        const s = typeof value === 'string' ? value : String(value ?? '');
         let h = 0;
-        for (let i = 0; i < userId.length; i++) {
-            h = (h * 31 + userId.charCodeAt(i)) >>> 0;
+        for (let i = 0; i < s.length; i++) {
+            h = (h * 31 + s.charCodeAt(i)) >>> 0;
         }
         return h % 360;
     }
@@ -354,9 +464,47 @@ export class SyncSidebar extends PlatformElement {
         }
         const label = typeof member.name === 'string' ? member.name : member.user_id;
         const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-        const hue = this._hueFromUserId(member.user_id);
+        const hue = this._hueFromString(member.user_id);
         return html`
             <span class="peer-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+        `;
+    }
+
+    _spaceAvatar(space) {
+        const url = space.avatar_url;
+        if (typeof url === 'string' && url !== '') {
+            return html`<img class="entity-avatar" src=${url} alt="" />`;
+        }
+        const label = typeof space.name === 'string' ? space.name : space.id;
+        const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
+        const hue = this._hueFromString(space.id);
+        return html`
+            <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+        `;
+    }
+
+    _channelAvatar(channel) {
+        if (channel.type === 'direct' && channel.peer) {
+            const p = channel.peer;
+            if (typeof p.avatar_url === 'string' && p.avatar_url !== '') {
+                return html`<img class="entity-avatar" src=${p.avatar_url} alt="" />`;
+            }
+            const label = typeof p.display_name === 'string' ? p.display_name : p.id;
+            const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
+            const hue = this._hueFromString(p.id);
+            return html`
+                <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+            `;
+        }
+        const url = channel.avatar_url;
+        if (typeof url === 'string' && url !== '') {
+            return html`<img class="entity-avatar" src=${url} alt="" />`;
+        }
+        const label = typeof channel.name === 'string' ? channel.name : channel.id;
+        const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
+        const hue = this._hueFromString(channel.id);
+        return html`
+            <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
         `;
     }
 
@@ -402,22 +550,7 @@ export class SyncSidebar extends PlatformElement {
                 ?collapsed=${this.collapsed}
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
             >
-                <div>
-                    <div class="lists-toolbar">
-                        <button
-                            type="button"
-                            class="toolbar-btn"
-                            title="Свернуть списки пространств, каналов и личных чатов"
-                            @click=${() => SyncStore.collapseAllSidebarSections()}
-                        >Свернуть всё</button>
-                        <button
-                            type="button"
-                            class="toolbar-btn"
-                            title="Развернуть все секции"
-                            @click=${() => SyncStore.expandAllSidebarSections()}
-                        >Развернуть всё</button>
-                    </div>
-
+                <div class="sync-sidebar-inner">
                     <div class="channels-section">
                         <div
                             class="section-header section-header--toggle"
@@ -455,14 +588,16 @@ export class SyncSidebar extends PlatformElement {
                                         class="nav-item ${this._isDirectRowActive(member, selectedChannelId) ? 'active' : ''}"
                                         @click=${() => this._openDirectWithMember(member)}
                                     >
-                                        ${this._memberAvatar(member)}
-                                        <div class="nav-item-inner">
-                                            <div class="nav-item-title-row">
-                                                <span class="nav-item-label">${member.name}</span>
+                                        <div class="nav-item-main">
+                                            ${this._memberAvatar(member)}
+                                            <div class="nav-item-inner">
+                                                <div class="nav-item-title-row">
+                                                    <span class="nav-item-label">${member.name}</span>
+                                                </div>
+                                                ${rowMeta.preview
+                                                    ? html`<span class="nav-item-preview">${rowMeta.preview}</span>`
+                                                    : ''}
                                             </div>
-                                            ${rowMeta.preview
-                                                ? html`<span class="nav-item-preview">${rowMeta.preview}</span>`
-                                                : ''}
                                         </div>
                                         ${rowMeta.unread > 0
                                             ? html`<span class="nav-item-unread">${rowMeta.unread}</span>`
@@ -499,13 +634,30 @@ export class SyncSidebar extends PlatformElement {
                             <div class="section-scroll">
                                 ${this._spaces.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
                                 ${this._spaces.list.map(space => html`
-                                    <button
-                                        class="nav-item ${space.id === selectedSpaceId ? 'active' : ''}"
-                                        @click=${() => this._selectSpace(space.id)}
-                                    >
-                                        <platform-icon name="folder" size="16"></platform-icon>
-                                        <span class="nav-item-label">${space.name}</span>
-                                    </button>
+                                    <div class="nav-row">
+                                        <button
+                                            type="button"
+                                            class="nav-item ${space.id === selectedSpaceId ? 'active' : ''}"
+                                            @click=${() => this._selectSpace(space.id)}
+                                        >
+                                            <div class="nav-item-main">
+                                                ${this._spaceAvatar(space)}
+                                                <span class="nav-item-label">${space.name}</span>
+                                            </div>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="row-gear"
+                                            title="Настройки пространства"
+                                            aria-label="Настройки пространства"
+                                            @click=${(e) => {
+                                                e.stopPropagation();
+                                                SyncStore.openSpaceSettings(space.id);
+                                            }}
+                                        >
+                                            <platform-icon name="settings" size="16"></platform-icon>
+                                        </button>
+                                    </div>
                                 `)}
                             </div>
                         ` : ''}
@@ -540,25 +692,45 @@ export class SyncSidebar extends PlatformElement {
                                     : ''}
                                 ${channelsForSpace.map((channel) => {
                                     const rowMeta = this._channelRowMeta(channel);
+                                    const showGear = channel.type !== 'direct';
                                     return html`
-                                    <button
-                                        class="nav-item ${channel.id === selectedChannelId ? 'active' : ''}"
-                                        @click=${() => this._selectChannel(channel)}
-                                    >
-                                        <platform-icon name="chat" size="16"></platform-icon>
-                                        <div class="nav-item-inner">
-                                            <div class="nav-item-title-row">
-                                                <span class="nav-item-label">${channel.name ?? channel.id}</span>
-                                                <span class="nav-item-type">${channel.type}</span>
+                                    <div class="nav-row">
+                                        <button
+                                            type="button"
+                                            class="nav-item ${channel.id === selectedChannelId ? 'active' : ''}"
+                                            @click=${() => this._selectChannel(channel)}
+                                        >
+                                            <div class="nav-item-main">
+                                                ${this._channelAvatar(channel)}
+                                                <div class="nav-item-inner">
+                                                    <div class="nav-item-title-row">
+                                                        <span class="nav-item-label">${channel.name ?? channel.id}</span>
+                                                        <span class="nav-item-type">${channel.type}</span>
+                                                    </div>
+                                                    ${rowMeta.preview
+                                                        ? html`<span class="nav-item-preview">${rowMeta.preview}</span>`
+                                                        : ''}
+                                                </div>
                                             </div>
-                                            ${rowMeta.preview
-                                                ? html`<span class="nav-item-preview">${rowMeta.preview}</span>`
+                                            ${rowMeta.unread > 0
+                                                ? html`<span class="nav-item-unread">${rowMeta.unread}</span>`
                                                 : ''}
-                                        </div>
-                                        ${rowMeta.unread > 0
-                                            ? html`<span class="nav-item-unread">${rowMeta.unread}</span>`
-                                            : ''}
-                                    </button>
+                                        </button>
+                                        ${showGear ? html`
+                                            <button
+                                                type="button"
+                                                class="row-gear"
+                                                title="Настройки канала"
+                                                aria-label="Настройки канала"
+                                                @click=${(e) => {
+                                                    e.stopPropagation();
+                                                    SyncStore.openChannelSettings(channel.id);
+                                                }}
+                                            >
+                                                <platform-icon name="settings" size="16"></platform-icon>
+                                            </button>
+                                        ` : ''}
+                                    </div>
                                 `;
                                 })}
                             </div>

@@ -199,6 +199,14 @@ export class SyncApp extends PlatformApp {
                 return;
             }
 
+            if (msg.type === 'space.created') {
+                const syncApi = ServiceRegistry.get('syncApi');
+                void SyncStore.loadSpaces(syncApi).then(() => {
+                    SyncStore.sanitizeChatSelectionAfterLoad();
+                });
+                return;
+            }
+
             if (msg.type === 'channel.read_updated') {
                 const authUser = ServiceRegistry.auth?.user;
                 const myId = authUser?.id;
@@ -287,6 +295,7 @@ export class SyncApp extends PlatformApp {
 
             <create-space-modal></create-space-modal>
             <create-channel-modal></create-channel-modal>
+            <space-settings-modal></space-settings-modal>
         `;
     }
 }

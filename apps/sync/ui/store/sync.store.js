@@ -63,6 +63,8 @@ const baseStore = new BaseStore('sync', {
         forwardMessage: null,
         flashMessageId: null,
         deletingMessageIds: [],
+        channelSettingsChannelId: null,
+        spaceSettingsSpaceId: null,
     },
 }, {
     persist: true,
@@ -233,6 +235,55 @@ export const SyncStore = {
                 ...s.channels,
                 list: s.channels.list.map(c => (c.id === channelId ? { ...c, ...fields } : c)),
             },
+        }));
+    },
+
+    /**
+     * @param {string} spaceId
+     * @param {Record<string, unknown>} fields
+     */
+    patchSpaceFields(spaceId, fields) {
+        if (typeof spaceId !== 'string' || spaceId === '') {
+            throw new Error('spaceId обязателен.');
+        }
+        if (!fields || typeof fields !== 'object') {
+            throw new Error('fields обязателен.');
+        }
+        baseStore.setState(s => ({
+            spaces: {
+                ...s.spaces,
+                list: s.spaces.list.map(sp => (sp.id === spaceId ? { ...sp, ...fields } : sp)),
+            },
+        }));
+    },
+
+    openChannelSettings(channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        baseStore.setState(s => ({
+            ui: { ...s.ui, channelSettingsChannelId: channelId },
+        }));
+    },
+
+    closeChannelSettings() {
+        baseStore.setState(s => ({
+            ui: { ...s.ui, channelSettingsChannelId: null },
+        }));
+    },
+
+    openSpaceSettings(spaceId) {
+        if (typeof spaceId !== 'string' || spaceId === '') {
+            throw new Error('spaceId обязателен.');
+        }
+        baseStore.setState(s => ({
+            ui: { ...s.ui, spaceSettingsSpaceId: spaceId },
+        }));
+    },
+
+    closeSpaceSettings() {
+        baseStore.setState(s => ({
+            ui: { ...s.ui, spaceSettingsSpaceId: null },
         }));
     },
 

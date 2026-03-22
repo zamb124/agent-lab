@@ -92,3 +92,26 @@ async def test_space_company_isolation(space_repo: SpaceRepository, sync_db_clea
 
     list_b = await space_repo.list_all(company_id="company_b")
     assert [s.space_id for s in list_b] == ["space_b"]
+
+
+@pytest.mark.asyncio
+async def test_get_by_name_same_name_different_companies(
+    space_repo: SpaceRepository,
+    sync_db_clean: None,
+) -> None:
+    """Одинаковое имя в разных компаниях — разные записи."""
+    for cid, sid in (("co_x", "sp_x"), ("co_y", "sp_y")):
+        await space_repo.create(
+            SyncSpace(
+                space_id=sid,
+                company_id=cid,
+                name="SharedName",
+                created_at=datetime.now(tz=UTC),
+                created_by_user_id="u1",
+            )
+        )
+    ax = await space_repo.get_by_name("SharedName", company_id="co_x")
+    ay = await space_repo.get_by_name("SharedName", company_id="co_y")
+    assert ax is not None and ay is not None
+    assert ax.space_id == "sp_x"
+    assert ay.space_id == "sp_y"

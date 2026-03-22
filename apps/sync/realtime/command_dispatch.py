@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from apps.sync.config import get_sync_settings
+from core.config import get_settings
 from apps.sync.container import get_sync_container
 from apps.sync.db.base import SyncDatabase
 from apps.sync.db.repositories.channel_repository import ChannelRepository
@@ -29,7 +29,7 @@ async def dispatch_sync_command(command: CommandEnvelope) -> dict[str, Any]:
         command.company_id,
     )
 
-    settings = get_sync_settings()
+    settings = get_settings()
     if not settings.database.sync_url:
         raise ValueError("database.sync_url не задан")
     sync_db_url = settings.database.sync_url

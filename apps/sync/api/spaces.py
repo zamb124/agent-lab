@@ -1,10 +1,13 @@
 """API роутер для пространств (Spaces)."""
 
+import uuid
+
 from fastapi import APIRouter, Depends
 
 from apps.sync.container import get_sync_container
 from apps.sync.models.common import PaginationRequest
-from apps.sync.models.spaces import SpaceRead, SpaceCreate
+from apps.sync.models.spaces import SpaceRead, SpaceCreate, SpaceUpdate
+from apps.sync.realtime.command_dispatch import dispatch_sync_command
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
 from core.context import get_context
@@ -26,6 +29,7 @@ async def list_spaces(pagination: PaginationRequest = Depends()) -> list[SpaceRe
             id=s.space_id,
             name=s.name,
             description=s.description,
+            avatar_url=s.avatar_url,
             created_at=s.created_at,
             created_by_user_id=s.created_by_user_id,
         )
@@ -49,3 +53,20 @@ async def create_space(body: SpaceCreate) -> SpaceRead:
     if res.is_err:
         raise RuntimeError(f"Command failed: {res.error}")
     return SpaceRead.model_validate(res.return_value["result"])
+
+
+@router.patch("/{space_id}")
+async def update_space(space_id: str, body: SpaceUpdate) -> SpaceRead:
+    """Обновление пространства (команда в процессе API)."""
+    context = get_context()
+    cmd = CommandEnvelope(
+        id=uuid.uuid4().hex,
+        actor_user_id=context.user.user_id,
+        company_id=context.active_company.company_id,
+        type="spaces.update",
+        payload={"space_id": space_id, "body": body.model_dump(exclude_unset=True)},
+    )
+    out = await dispatch_sync_command(cmd)
+    if not out.get("ok"):
+        raise RuntimeError(f"Command failed: {out.get('error_detail')}")
+    return SpaceRead.model_validate(out["result"])

@@ -4,8 +4,12 @@
 Запуск: taskiq worker apps.sync_worker.worker:broker
 """
 
-from apps.sync_worker.config import get_settings
-get_settings()
+from core.config import set_settings
+from core.config.loader import load_merged_config
+
+from apps.sync.config import SyncSettings
+
+set_settings(SyncSettings(**load_merged_config(service_name="sync")))
 
 from apps.sync.realtime.broker import broker
 

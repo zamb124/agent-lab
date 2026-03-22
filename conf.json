@@ -212,7 +212,7 @@
         "access_key_id": "minioadmin",
         "secret_access_key": "minioadmin",
         "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:19002",
+        "endpoint_url": "http://127.0.0.1:19001",
         "enabled": true
       }
     }

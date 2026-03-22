@@ -44,6 +44,10 @@ class ChannelRead(BaseModel):
         default=None,
         description="Собеседник в direct (участник, отличный от текущего пользователя).",
     )
+    avatar_url: str | None = Field(
+        default=None,
+        description="URL аватара канала (topic/group).",
+    )
     unread_count: int = Field(
         default=0,
         description="Число непрочитанных сообщений в основной ленте (не треды).",
@@ -90,6 +94,10 @@ class ChannelUpdate(BaseModel):
     is_private: bool | None = Field(
         default=None,
         description="Новый флаг приватности.",
+    )
+    avatar_url: str | None = Field(
+        default=None,
+        description="URL аватара или null для сброса.",
     )
 
 

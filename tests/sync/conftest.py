@@ -6,6 +6,16 @@
 from __future__ import annotations
 
 import os
+
+from tests.fixtures.test_database_env import TEST_DATABASE_ENV
+
+for _k, _v in TEST_DATABASE_ENV.items():
+    os.environ.setdefault(_k, _v)
+os.environ.setdefault("S3__ENABLED", "true")
+os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
+os.environ.setdefault("S3__BUCKETS__DEFAULT__ENDPOINT_URL", "http://localhost:19002")
+os.environ.setdefault("S3__BUCKETS__DEFAULT__ACCESS_KEY_ID", "minioadmin")
+os.environ.setdefault("S3__BUCKETS__DEFAULT__SECRET_ACCESS_KEY", "minioadmin")
 import uuid
 from collections.abc import AsyncIterator
 
@@ -26,8 +36,6 @@ from sqlalchemy import text
 
 def _get_sync_test_db_url() -> str:
     """URL тестовой БД sync. Берётся из ENV или дефолт."""
-    from tests.fixtures.test_database_env import TEST_DATABASE_ENV
-
     return os.environ.get("DATABASE__SYNC_URL", TEST_DATABASE_ENV["DATABASE__SYNC_URL"])
 
 
@@ -43,6 +51,10 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
 
     os.environ["DATABASE__SYNC_URL"] = sync_db_url
     config_base._settings_instance = None
+
+    from apps.sync.container import reset_sync_container
+
+    reset_sync_container()
 
     from core.db.migration_manifest import bootstrap_migration_registry
     from core.db.migrations import run_migrations_async
@@ -108,3 +120,11 @@ def file_repo(sync_database: SyncDatabase) -> FileRepository:
 @pytest.fixture()
 def git_ref_repo(sync_database: SyncDatabase) -> GitResourceRefRepository:
     return GitResourceRefRepository(db=sync_database)
+
+
+@pytest.fixture()
+def sync_user_repository(sync_database: SyncDatabase):
+    """UserRepository shared БД (как в dispatch_sync_command)."""
+    from apps.sync.container import get_sync_container
+
+    return get_sync_container().user_repository

@@ -11,6 +11,7 @@ from apps.sync.models.channels import (
     ChannelMemberAdd,
     ChannelMemberRead,
     ChannelRead,
+    ChannelUpdate,
 )
 from apps.sync.models.common import PaginationRequest
 from apps.sync.realtime.command_dispatch import dispatch_sync_command
@@ -59,6 +60,23 @@ async def list_channels(
             )
         )
     return out
+
+
+@router.patch("/{channel_id}")
+async def update_channel(channel_id: str, body: ChannelUpdate) -> ChannelRead:
+    """Обновление канала (команда в процессе API)."""
+    context = get_context()
+    cmd = CommandEnvelope(
+        id=uuid.uuid4().hex,
+        actor_user_id=context.user.user_id,
+        company_id=context.active_company.company_id,
+        type="channels.update",
+        payload={"channel_id": channel_id, "body": body.model_dump(exclude_unset=True)},
+    )
+    out = await dispatch_sync_command(cmd)
+    if not out.get("ok"):
+        raise RuntimeError(f"Command failed: {out.get('error_detail')}")
+    return ChannelRead.model_validate(out["result"])
 
 
 @router.post("/{channel_id}/read", status_code=204)

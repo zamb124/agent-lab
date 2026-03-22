@@ -32,18 +32,80 @@ export class PlatformUser extends PlatformElement {
         this._menuOpen = false;
         this._companySelectorOpen = false;
         this._avatarBroken = false;
+        this._boundRepositionMenu = this._syncCollapsedMenuPosition.bind(this);
+        this._boundDocumentClick = (e) => this._handleDocumentClick(e);
     }
 
     connectedCallback() {
         super.connectedCallback();
         this._loadUser();
         window.addEventListener(AppEvents.AUTH_CHANGE, () => this._loadUser());
-        document.addEventListener('click', (e) => this._handleDocumentClick(e));
+        document.addEventListener('click', this._boundDocumentClick);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        document.removeEventListener('click', (e) => this._handleDocumentClick(e));
+        document.removeEventListener('click', this._boundDocumentClick);
+        this._detachCollapsedMenuListeners();
+        this._clearCollapsedMenuPosition();
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (changedProperties.has('_menuOpen')) {
+            if (this._menuOpen) {
+                this._attachCollapsedMenuListeners();
+                this.updateComplete.then(() => this._syncCollapsedMenuPosition());
+            } else {
+                this._detachCollapsedMenuListeners();
+                this._clearCollapsedMenuPosition();
+            }
+        }
+    }
+
+    _attachCollapsedMenuListeners() {
+        window.addEventListener('resize', this._boundRepositionMenu);
+        window.addEventListener('scroll', this._boundRepositionMenu, true);
+    }
+
+    _detachCollapsedMenuListeners() {
+        window.removeEventListener('resize', this._boundRepositionMenu);
+        window.removeEventListener('scroll', this._boundRepositionMenu, true);
+    }
+
+    _clearCollapsedMenuPosition() {
+        this.style.removeProperty('--user-menu-fixed-left');
+        this.style.removeProperty('--user-menu-fixed-bottom');
+        this.style.removeProperty('--user-menu-fixed-width');
+    }
+
+    _syncCollapsedMenuPosition() {
+        if (!this._menuOpen) {
+            return;
+        }
+        const sidebar = this.closest('platform-sidebar');
+        if (!sidebar?.hasAttribute('collapsed')) {
+            this._clearCollapsedMenuPosition();
+            return;
+        }
+        const btn = this.renderRoot?.querySelector('.user-button');
+        if (!btn) {
+            return;
+        }
+        const rect = btn.getBoundingClientRect();
+        const margin = 8;
+        const maxW = Math.min(240, window.innerWidth - 2 * margin);
+        let left = rect.left;
+        if (left + maxW > window.innerWidth - margin) {
+            left = window.innerWidth - maxW - margin;
+        }
+        if (left < margin) {
+            left = margin;
+        }
+        const bottom = window.innerHeight - rect.top + margin;
+        this.style.setProperty('--user-menu-fixed-left', `${left}px`);
+        this.style.setProperty('--user-menu-fixed-bottom', `${bottom}px`);
+        this.style.setProperty('--user-menu-fixed-width', `${maxW}px`);
     }
 
     async _loadUser() {
@@ -111,7 +173,9 @@ export class PlatformUser extends PlatformElement {
     }
 
     _handleDocumentClick(e) {
-        if (!this.contains(e.target) && this._menuOpen) {
+        const path = e.composedPath();
+        const inside = path.includes(this);
+        if (!inside && this._menuOpen) {
             this._menuOpen = false;
             this._companySelectorOpen = false;
             this.requestUpdate();
@@ -363,6 +427,20 @@ export class PlatformUser extends PlatformElement {
             :host-context(platform-sidebar[collapsed]) .user-button:hover {
                 background: var(--glass-solid-subtle);
                 box-shadow: none;
+            }
+
+            :host-context(platform-sidebar[collapsed]) .user-menu {
+                position: fixed;
+                left: var(--user-menu-fixed-left, 0px);
+                bottom: var(--user-menu-fixed-bottom, auto);
+                right: auto;
+                top: auto;
+                width: var(--user-menu-fixed-width, min(240px, calc(100vw - 16px)));
+                min-width: 200px;
+                max-height: min(70vh, calc(100vh - 24px));
+                overflow-x: hidden;
+                overflow-y: auto;
+                z-index: var(--z-modal, 5000);
             }
 
             .user-container {

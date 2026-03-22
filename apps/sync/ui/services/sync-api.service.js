@@ -16,6 +16,17 @@ export class SyncAPIService extends BaseService {
         return this.post('/spaces/', { name, description: description || null });
     }
 
+    /**
+     * @param {string} spaceId
+     * @param {Record<string, unknown>} body
+     */
+    async updateSpace(spaceId, body) {
+        if (typeof spaceId !== 'string' || spaceId === '') {
+            throw new Error('spaceId обязателен.');
+        }
+        return this.patch(`/spaces/${encodeURIComponent(spaceId)}`, body);
+    }
+
     async getChannels(limit = 200) {
         return this.get(`/channels/?limit=${limit}`);
     }
@@ -70,6 +81,17 @@ export class SyncAPIService extends BaseService {
             is_private: false,
             member_ids: null,
         });
+    }
+
+    /**
+     * @param {string} channelId
+     * @param {Record<string, unknown>} body
+     */
+    async updateChannel(channelId, body) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        return this.patch(`/channels/${encodeURIComponent(channelId)}`, body);
     }
 
     /**

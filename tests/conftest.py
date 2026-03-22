@@ -566,6 +566,7 @@ def sync_tools(request, monkeypatch):
 # Worker фикстуры вынесены в tests/fixtures/workers.py для переиспользования
 from tests.fixtures.workers import (  # noqa: F401
     rag_worker,
+    sync_worker,
     taskiq_broker,
     taskiq_scheduler,
     taskiq_worker,

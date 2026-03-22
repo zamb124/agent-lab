@@ -16,6 +16,10 @@ class SpaceRead(BaseModel):
         default=None,
         description="Описание пространства.",
     )
+    avatar_url: str | None = Field(
+        default=None,
+        description="URL аватара (изображение).",
+    )
     created_at: datetime = Field(description="Время создания пространства.")
     created_by_user_id: str = Field(description="Создатель пространства.")
 
@@ -40,4 +44,8 @@ class SpaceUpdate(BaseModel):
     description: str | None = Field(
         default=None,
         description="Новое описание пространства.",
+    )
+    avatar_url: str | None = Field(
+        default=None,
+        description="URL аватара или null для сброса.",
     )

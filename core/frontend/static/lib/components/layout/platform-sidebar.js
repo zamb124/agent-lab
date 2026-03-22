@@ -141,28 +141,20 @@ export class PlatformSidebar extends PlatformElement {
             return html`<slot name="logo"></slot>`;
         }
 
+        const logoTitle = this._isMobile ? '' : (this.collapsed ? 'Развернуть сайдбар' : 'Свернуть сайдбар');
         return html`
             <div class="sidebar-logo">
                 ${this.logoSrc ? html`
-                    <div 
-                        class="sidebar-logo-icon ${this.collapsed ? 'clickable' : ''}" 
-                        @click=${this.collapsed ? this.toggleCollapse : null}
-                        title="${this.collapsed ? 'Развернуть сайдбар' : ''}"
+                    <div
+                        class="sidebar-logo-icon ${this._isMobile ? '' : 'clickable'}"
+                        @click=${this._isMobile ? null : this.toggleCollapse}
+                        title=${logoTitle}
                     >
                         <img src="${this.logoSrc}" alt="${this.logoText || 'Logo'}">
                     </div>
                 ` : ''}
                 ${this.logoText ? html`
                     <span class="sidebar-logo-text">${this.logoText}</span>
-                ` : ''}
-                ${!this.collapsed ? html`
-                    <button 
-                        class="collapse-btn" 
-                        title="Свернуть" 
-                        @click=${this.toggleCollapse}
-                    >
-                        <platform-icon name="chevron-left" size="18"></platform-icon>
-                    </button>
                 ` : ''}
             </div>
         `;

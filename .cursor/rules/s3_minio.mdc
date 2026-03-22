@@ -101,6 +101,35 @@ export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://localhost:9000
 export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://minio-test:9000
 ```
 
+### RequestTimeTooSkewed (локальный MinIO)
+
+Подпись SigV4 использует время **процесса Python** (хост: `uv run scripts/run.py …`). MinIO сверяет с **своим** временем в контейнере. Ошибка не специфична для sync: тот же клиент и у rag/crm — отличие часто в том, что **облачный S3** (VK, Yandex) держит время по NTP, а **MinIO в Docker Desktop** иногда «уезжает» относительно macOS после сна VM.
+
+**Сравнить UTC на хосте и в MinIO** (имя контейнера — `docker ps`, в dev часто `agentlab_minio_dev`):
+
+```bash
+date -u
+docker exec agentlab_minio_dev date -u
+```
+
+Если расхождение большое: перезапуск **Docker Desktop** или `docker restart <minio_container>`, затем снова сравнить. Повторяющаяся проблема — обновить Docker Desktop / проверить энергосбережение Mac.
+
+#### Политика: чтобы проблема не всплывала (dev / test / prod)
+
+**В коде приложения отключить проверку времени для S3 SigV4 нельзя** — это ограничение протокола. Решение всегда в **синхронизации часов** на стороне клиента (процесс Python) и сервера (MinIO или облачный S3).
+
+| Окружение | Что сделать |
+|-----------|-------------|
+| **Prod** | На ВМ/нодах Kubernetes включить **NTP** (chrony / systemd-timesyncd / то, что даёт облако). У managed S3 (VK, Yandex, AWS) время на стороне сервиса уже выверено — чаще ломается только клиент (CI, бэкенд на своей ВМ): там тоже обязателен NTP. |
+| **Test / CI** | Раннеры GitHub/GitLab и т.п. обычно с синхронизированным временем. **Self-hosted** runner или контейнер с тестами: поставить NTP в образе/на хосте. MinIO в `docker-compose-test`: после старта контейнеров сравнить `date -u` на хосте CI и `docker exec … date -u`. |
+| **Dev** | Mac/Windows: автоматическая дата и время. MinIO в Docker Desktop: при дрейфе VM — перезапуск Docker или контейнера MinIO (см. команды выше). |
+
+**Итог:** на проде и в нормальном CI проблема почти не встречается, если **везде включён NTP**. На локальном dev с Docker Desktop единственный «плавающий» участок — **VM Docker vs хост**; от этого спасает перезапуск Docker/MinIO и обновление Docker Desktop, а не настройка репозитория.
+
+**Что сделано в репозитории (не «магия», а удобство):** цель `make dev-minio-restart` — перезапустить только сервис `minio` в `docker-compose-dev.yaml` (контейнер `agentlab_minio_dev`). Одной правкой `docker-compose` расхождение **хост ↔ контейнер** не убрать: это не баг YAML. **Тесты** (`docker-compose-test`, контейнер `tests-runner`) и MinIO живут в одной Docker-сети и делят одно время VM — там skew между «хостом ноутбука» и MinIO не возникает. **Прод**: NTP на серверах, не фича приложения.
+
+**Автоподстройка SigV4:** при создании S3-клиента (`S3ClientFactory.create_client`) вызывается `core/files/s3_sigv4_clock.py`: по HTTP `Date` с `endpoint_url` (сначала `GET …/minio/health/live`, затем `HEAD /`) вычисляется сдвиг и подменяется `botocore.compat.get_current_datetime` на время процесса. Снимает типичный `RequestTimeTooSkewed` dev (Mac ↔ MinIO). Если endpoint недоступен при старте клиента — подстройки нет, остаётся NTP и `make dev-minio-restart`. Один сдвиг на процесс — не смешивать в одном процессе два endpoint с принципиально разным временем без перезапуска.
+
 ## Использование в коде
 
 ### Создание клиента

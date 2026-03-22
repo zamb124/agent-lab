@@ -42,12 +42,53 @@ export class ChatView extends PlatformElement {
                 flex-shrink: 0;
             }
 
+            .header-leading {
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .header-entity-img {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                object-fit: cover;
+                flex-shrink: 0;
+            }
+
+            .header-entity-initials {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: #fff;
+            }
+
+            .header-icon-fallback {
+                width: 40px;
+                height: 40px;
+                border-radius: var(--radius-lg);
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: var(--glass-solid-medium);
+                color: var(--accent);
+                border: 1px solid var(--glass-border-subtle);
+            }
+
             .header-channel-hit {
                 flex: 1 1 auto;
                 min-width: 0;
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
+                justify-content: flex-start;
                 gap: var(--space-3);
                 padding: var(--space-2) var(--space-3);
                 margin: 0;
@@ -89,6 +130,15 @@ export class ChatView extends PlatformElement {
                 flex: 1 1 auto;
                 min-width: 0;
                 padding: var(--space-2) var(--space-3);
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: var(--space-3);
+            }
+
+            .header-channel-static .header-channel-text {
+                min-width: 0;
+                flex: 1 1 auto;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
@@ -269,10 +319,10 @@ export class ChatView extends PlatformElement {
     static properties = {
         _chat: { state: true },
         _channels: { state: true },
+        _spaces: { state: true },
         _wsState: { state: true },
         _threadIds: { state: true },
         _ui: { state: true },
-        _channelSettingsOpen: { state: true },
     };
 
     constructor() {
@@ -280,10 +330,10 @@ export class ChatView extends PlatformElement {
         const s = SyncStore.state;
         this._chat = s.chat;
         this._channels = s.channels;
+        this._spaces = s.spaces;
         this._wsState = s.ws.state;
         this._threadIds = [];
         this._ui = SyncStore.state.ui;
-        this._channelSettingsOpen = false;
     }
 
     connectedCallback() {
@@ -291,12 +341,10 @@ export class ChatView extends PlatformElement {
         this._unsubscribe = SyncStore.subscribe(state => {
             this._chat = state.chat;
             this._channels = state.channels;
+            this._spaces = state.spaces;
             this._wsState = state.ws.state;
             this._threadIds = SyncStore.getThreadIds();
             this._ui = state.ui;
-            if (!state.chat.selectedChannelId) {
-                this._channelSettingsOpen = false;
-            }
         });
     }
 
@@ -332,6 +380,70 @@ export class ChatView extends PlatformElement {
             : (ch.name ?? ch.id);
         if (focusedThreadId) return `Канал: ${chLabel} • thread_id: ${focusedThreadId}`;
         return ch.type ?? '';
+    }
+
+    _hueFromString(value) {
+        const s = typeof value === 'string' ? value : String(value ?? '');
+        let h = 0;
+        for (let i = 0; i < s.length; i++) {
+            h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        }
+        return h % 360;
+    }
+
+    _resolvedSpace(channel) {
+        if (!channel?.space_id) {
+            return null;
+        }
+        const sid = channel.space_id;
+        return this._spaces.list.find(sp => sp.id === sid) ?? null;
+    }
+
+    /**
+     * Слева в шапке: собеседник (direct), аватар канала/пространства или запасная иконка.
+     */
+    _headerLeadingGraphic(channel) {
+        if (!channel) {
+            return html``;
+        }
+        if (channel.type === 'direct' && channel.peer) {
+            const p = channel.peer;
+            if (typeof p.avatar_url === 'string' && p.avatar_url !== '') {
+                return html`<img class="header-entity-img" src=${p.avatar_url} alt="" />`;
+            }
+            const label = typeof p.display_name === 'string' ? p.display_name : p.id;
+            const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
+            const hue = this._hueFromString(p.id);
+            return html`
+                <span class="header-entity-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+            `;
+        }
+        const chUrl = typeof channel.avatar_url === 'string' && channel.avatar_url !== ''
+            ? channel.avatar_url
+            : null;
+        if (chUrl) {
+            return html`<img class="header-entity-img" src=${chUrl} alt="" />`;
+        }
+        const space = this._resolvedSpace(channel);
+        const spaceUrl = space && typeof space.avatar_url === 'string' && space.avatar_url !== ''
+            ? space.avatar_url
+            : null;
+        if (spaceUrl) {
+            return html`<img class="header-entity-img" src=${spaceUrl} alt="" />`;
+        }
+        if (channel.space_id && space) {
+            return html`
+                <div class="header-icon-fallback" aria-hidden="true">
+                    <platform-icon name="folder" size="22"></platform-icon>
+                </div>
+            `;
+        }
+        const label = typeof channel.name === 'string' ? channel.name : channel.id;
+        const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
+        const hue = this._hueFromString(channel.id);
+        return html`
+            <span class="header-entity-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+        `;
     }
 
     _messageListEl() {
@@ -390,11 +502,7 @@ export class ChatView extends PlatformElement {
         if (!ch || ch.type === 'direct' || this._chat.focusedThreadId) {
             return;
         }
-        this._channelSettingsOpen = true;
-    }
-
-    _closeChannelSettings() {
-        this._channelSettingsOpen = false;
+        SyncStore.openChannelSettings(ch.id);
     }
 
     async _forwardModalPick(toChannelId) {
@@ -421,6 +529,15 @@ export class ChatView extends PlatformElement {
             selectedChannel && selectedChannel.type !== 'direct' && !focusedThreadId
         );
 
+        const settingsChannelId = this._ui.channelSettingsChannelId;
+        const settingsChannel = typeof settingsChannelId === 'string' && settingsChannelId !== ''
+            ? this._channels.list.find(c => c.id === settingsChannelId) ?? null
+            : null;
+
+        const headerLead = selectedChannel
+            ? html`<div class="header-leading">${this._headerLeadingGraphic(selectedChannel)}</div>`
+            : html``;
+
         return html`
             <div class="chat-header">
                 ${showChannelSettings ? html`
@@ -430,6 +547,7 @@ export class ChatView extends PlatformElement {
                         title="Настройки канала"
                         @click=${this._openChannelSettings}
                     >
+                        ${headerLead}
                         <div class="header-channel-text">
                             <div class="header-title">${this._getTitle()}</div>
                             ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
@@ -438,8 +556,11 @@ export class ChatView extends PlatformElement {
                     </button>
                 ` : html`
                     <div class="header-channel-static">
-                        <div class="header-title">${this._getTitle()}</div>
-                        ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
+                        ${headerLead}
+                        <div class="header-channel-text">
+                            <div class="header-title">${this._getTitle()}</div>
+                            ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
+                        </div>
                     </div>
                 `}
                 <div class="header-actions">
@@ -538,9 +659,9 @@ export class ChatView extends PlatformElement {
             <thread-drawer></thread-drawer>
 
             <channel-settings-modal
-                .open=${this._channelSettingsOpen}
-                .channel=${selectedChannel}
-                @close=${this._closeChannelSettings}
+                .open=${settingsChannel !== null}
+                .channel=${settingsChannel}
+                @close=${() => SyncStore.closeChannelSettings()}
             ></channel-settings-modal>
         `;
     }
