@@ -14,19 +14,13 @@ async def test_upload_empty_file_400(
     auth_headers_system,
     sync_db_clean: None,
 ) -> None:
-    from core.config import get_settings
-
-    settings = get_settings()
-    if not settings.s3.enabled or not settings.s3.default_bucket:
-        raise RuntimeError("Нужны S3__ENABLED и bucket для ветки загрузки.")
-
     files = {"file": ("empty.txt", io.BytesIO(b""), "text/plain")}
     r = await sync_client.post(
         "/sync/api/v1/files/",
         headers=auth_headers_system,
         files=files,
     )
-    assert r.status_code == 400
+    assert r.status_code == 400, r.text
     assert "Пустой" in r.json()["detail"]
 
 

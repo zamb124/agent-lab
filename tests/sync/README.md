@@ -15,11 +15,11 @@
 uv run pytest tests/sync/ -v
 ```
 
-Для тестов загрузки файлов нужны MinIO/S3 (см. переменные `S3__*` в окружении) и `S3__ENABLED=true`. Тест `test_upload_returns_503_when_s3_disabled_via_env` временно выключает S3 через `S3__ENABLED=false` и сброс глобальных настроек.
+В тестовом окружении MinIO и bucket обязательны (`S3__*` в [`conftest.py`](conftest.py) и корневом `tests/conftest.py`); тесты загрузки не пропускаются. Тест `test_upload_returns_503_when_s3_disabled_via_env` отдельно проверяет ветку 503 через временный `S3__ENABLED=false` и сброс singleton настроек.
 
 ## Критерии готовности (green)
 
-1. `uv run pytest tests/sync/ -v` проходит целиком при поднятой инфраструктуре: Postgres (порты из `TEST_DATABASE_ENV`), Redis (`63792`), MinIO для S3-веток (если включены тесты файлов), процесс **Sync HTTP** на `9005` для WebSocket-тестов, **sync_worker** в фикстурах.
+1. `uv run pytest tests/sync/ -v` проходит целиком при поднятой инфраструктуре: Postgres (порты из `TEST_DATABASE_ENV`), Redis (`63792`), MinIO с bucket из конфига (тесты файлов без пропусков), процесс **Sync HTTP** на `9005` для WebSocket-тестов, **sync_worker** в фикстурах.
 2. Нет подмены внешних клиентов: используются реальные БД, Redis, TaskIQ, при необходимости — отдельный ASGI-клиент с другим `S3__ENABLED` без мока S3-клиента.
 
 ## Матрица покрытия

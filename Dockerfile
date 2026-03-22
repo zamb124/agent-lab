@@ -22,7 +22,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group worker-base \
         --group rag-worker \
         --group crm \
-        --group rag
+        --group rag \
+        --group sync
 
 # ============================================
 # Stage 3: Docs builder (для сборки документации)
