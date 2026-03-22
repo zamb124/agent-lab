@@ -114,10 +114,6 @@ export class AgentsSidebar extends PlatformElement {
             :host([collapsed]) .footer-link span {
                 display: none;
             }
-
-            :host([collapsed]) platform-user {
-                display: none;
-            }
         `
     ];
 

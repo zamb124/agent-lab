@@ -73,6 +73,10 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 
 На сервере путь `/opt/agent-lab/migrations/postgres/init.sql` обязан быть **файлом**, не каталогом. Иначе в логах Postgres: `could not read from input file: Is a directory`, сервисные БД не создаются, миграции падают с `database "platform_agents" does not exist`. В workflow перед копированием `init.sql` выполняется `rm -rf` этого пути, чтобы не оставался каталог от ошибочной прошлой выкладки.
 
+### Сбой при деплое: `TLS handshake timeout` к `ghcr.io`
+
+Это сетевой отказ с **сервера** до GitHub Container Registry (не GitHub Actions). В workflow для `docker login` и `docker compose pull` заданы повторы с паузой. Если ошибка повторяется стабильно — проверить на сервере: `curl -vI https://ghcr.io/v2/`, DNS, маршрут, firewall; при необходимости прокси или зеркало образов.
+
 ## Конфигурация
 
 | Источник | Что содержит | Где хранится |

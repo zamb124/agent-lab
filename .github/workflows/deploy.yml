@@ -110,6 +110,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 30m
           envs: IMAGE_TAG,IMAGE,POSTGRES_PASSWORD,AUTH__JWT_SECRET,SELECTEL_ACCESS_KEY,SELECTEL_SECRET_KEY,AUTH_YANDEX_CLIENT_ID,AUTH_YANDEX_CLIENT_SECRET,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GITHUB_CLIENT_ID,AUTH_GITHUB_CLIENT_SECRET,GHCR_TOKEN,GITHUB_ACTOR
           script: |
             set -e
@@ -119,9 +120,33 @@ jobs:
 
             cd /opt/agent-lab
 
-            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+            # ghcr.io с сервера иногда даёт TLS handshake timeout — несколько попыток с паузой
+            retry() {
+              local attempt max=5 delay=25
+              for attempt in $(seq 1 $max); do
+                if "$@"; then
+                  return 0
+                fi
+                if [ "$attempt" -lt "$max" ]; then
+                  echo "Команда не удалась (попытка $attempt/$max), повтор через ${delay}s..."
+                  sleep "$delay"
+                fi
+              done
+              return 1
+            }
 
-            docker compose -f docker-compose-prod.yaml pull
+            for attempt in $(seq 1 5); do
+              if echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin; then
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                exit 1
+              fi
+              echo "docker login: попытка $attempt/5 не удалась, повтор через 25s..."
+              sleep 25
+            done
+
+            retry docker compose -f docker-compose-prod.yaml pull
 
             docker compose -f docker-compose-prod.yaml up -d postgres redis
             sleep 5

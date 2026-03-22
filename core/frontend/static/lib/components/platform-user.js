@@ -330,6 +330,35 @@ export class PlatformUser extends PlatformElement {
                 width: 100%;
             }
 
+            :host-context(platform-sidebar[collapsed]) .user-info,
+            :host-context(platform-sidebar[collapsed]) .chevron {
+                display: none;
+            }
+
+            :host-context(platform-sidebar[collapsed]) .user-container {
+                display: flex;
+                justify-content: center;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+
+            :host-context(platform-sidebar[collapsed]) .user-button {
+                justify-content: center;
+                width: auto;
+                max-width: 100%;
+                min-width: 0;
+                gap: 0;
+                padding: var(--space-2);
+                box-sizing: border-box;
+            }
+
+            :host-context(platform-sidebar[collapsed]) .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: var(--text-xs);
+            }
+
             .user-container {
                 position: relative;
                 width: 100%;

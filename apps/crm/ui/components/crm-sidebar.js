@@ -205,9 +205,15 @@ export class CRMSidebar extends PlatformElement {
 
             :host([collapsed]) .user-section {
                 flex-direction: column;
+                align-items: center;
             }
 
-            :host([collapsed]) platform-user,
+            :host([collapsed]) .user-section platform-user {
+                flex: 0 0 auto;
+                width: 100%;
+                min-width: 0;
+            }
+
             :host([collapsed]) platform-notification-manager {
                 display: none;
             }
