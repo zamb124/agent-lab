@@ -24,6 +24,7 @@ import subprocess
 import sys
 import time
 import uuid
+from collections.abc import Generator
 from typing import Any, Dict, List
 
 import pytest
@@ -273,6 +274,40 @@ def pytest_collection_modifyitems(items: list) -> None:
     for item in items:
         if item.get_closest_marker("real_taskiq"):
             item.add_marker(pytest.mark.xdist_group("real_taskiq"))
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(120, func_only=True))
+        elif item.nodeid.startswith("tests/sync/"):
+            item.add_marker(pytest.mark.xdist_group("sync_db"))
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_runtest_call(item) -> Generator[None, object, object]:
+    """
+    Для real_taskiq: глобальный alarm из pytest_runtest_protocol считает время
+    с начала setup — ложные дампы. Снимаем его в начале call и ставим новый
+    с тем же faulthandler_timeout только на фазу call (тело теста).
+    """
+    if not item.get_closest_marker("real_taskiq"):
+        return (yield)
+
+    import faulthandler
+
+    from _pytest.faulthandler import (
+        fault_handler_stderr_fd_key,
+        get_exit_on_timeout_config_value,
+        get_timeout_config_value,
+    )
+
+    faulthandler.cancel_dump_traceback_later()
+    timeout = get_timeout_config_value(item.config)
+    if timeout > 0:
+        stderr = item.config.stash[fault_handler_stderr_fd_key]
+        exit_on = get_exit_on_timeout_config_value(item.config)
+        faulthandler.dump_traceback_later(timeout, file=stderr, exit=exit_on)
+    try:
+        return (yield)
+    finally:
+        faulthandler.cancel_dump_traceback_later()
 
 
 @pytest.fixture(autouse=True)

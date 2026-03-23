@@ -30,7 +30,7 @@ class TestServicesAPI:
         
         # Проверяем что есть основные сервисы
         service_names = [s["name"] for s in statuses]
-        assert "agents" in service_names
+        assert "flows" in service_names
         assert "crm" in service_names
         assert "rag" in service_names
         
@@ -100,7 +100,7 @@ class TestServicesAPI:
         for resp in responses:
             assert len(resp) > 0
             service_names = {s["name"] for s in resp}
-            assert service_names == {"agents", "crm", "rag"}
+            assert service_names == {"flows", "crm", "rag"}
 
     async def test_services_status_handles_unavailable_services(
         self, 
@@ -152,12 +152,12 @@ class TestServicesAPI:
         services_dict = {s["name"]: s for s in statuses}
         
         # Проверяем что все ключевые сервисы присутствуют
-        assert "agents" in services_dict
+        assert "flows" in services_dict
         assert "crm" in services_dict
         assert "rag" in services_dict
         
         # Проверяем URL сервисов
-        assert services_dict["agents"]["url"] == "/flows"
+        assert services_dict["flows"]["url"] == "/flows"
         assert services_dict["crm"]["url"] == "/crm"
         assert services_dict["rag"]["url"] == "/rag"
 

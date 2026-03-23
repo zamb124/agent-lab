@@ -178,10 +178,12 @@ def run(state):
         assert data["output_state"]["result"] == "executed"
         assert data["output_state"]["doubled"] == 42
         
-        # Проверка diff
+        # Проверка diff: в /code/execute поле result заранее нормализуется как None
         diff_by_path = {d["path"]: d for d in data["diff"]}
         assert "result" in diff_by_path
-        assert diff_by_path["result"]["change_type"] == "added"
+        assert diff_by_path["result"]["change_type"] == "changed"
+        assert diff_by_path["result"]["old_value"] is None
+        assert diff_by_path["result"]["new_value"] == "executed"
         assert "doubled" in diff_by_path
         assert diff_by_path["doubled"]["change_type"] == "added"
     

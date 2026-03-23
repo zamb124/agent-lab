@@ -13,7 +13,15 @@ alwaysApply: false
 
 Запрещено мокать: `StateRepository`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
 
-**Sync Service** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker. Нельзя подменять `handle_command.kiq`, `dispatch_sync_command`, репозитории или WebSocket через `unittest.mock` / `monkeypatch`. Подробности: `.cursor/rules/sync.mdc`, `tests/sync/README.md`.
+**Sync Service** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker. Нельзя подменять `handle_command.kiq`, `dispatch_sync_command`, репозитории или WebSocket через `unittest.mock` / `monkeypatch`. Подробности: `.cursor/rules/sync.mdc`, `tests/sync/README.md`. Очистка БД в `sync_db_clean` — **DELETE** по порядку FK (не `TRUNCATE`: меньше жёстких блокировок). Все тесты под `tests/sync/` автоматически в **`xdist_group("sync_db")`** — при `-n` и `--dist=loadgroup` выполняются **на одном gw последовательно**, без параллельной гонки за одной схемой.
+
+### Зависание `make test` / pytest
+
+**Жёсткий лимит** — плагин **pytest-timeout** (`timeout`, `timeout_method`, `timeout_func_only` в `pytest.ini`): по истечении времени тест **прерывается** (при `timeout_method = thread` — через `os._exit`, teardown может не выполниться). **`timeout_func_only = true`** — считается время **тела** теста (фаза call), не длительность тяжёлых фикстур. Глобально по умолчанию **5 с**; у **`@pytest.mark.real_taskiq`** без своего `@pytest.mark.timeout` в коллекции выставляется **120 с** (см. `pytest_collection_modifyitems` в `tests/conftest.py`). Переопределение на тест: **`@pytest.mark.timeout(300)`**; отключить для теста: **`@pytest.mark.timeout(0)`**. Отключить глобально на прогон: **`PYTEST_TIMEOUT=0`** или **`pytest -o timeout=0`**.
+
+Встроенный **`faulthandler_timeout`** отключён (**`0`**): он только печатает стеки и не гарантирует остановку; дублировать смысла нет. Для **`real_taskiq`** в `tests/conftest.py` остаётся хук **`pytest_runtest_call`** (на случай снова включить `faulthandler_timeout` в конфиге).
+
+Прервать прогон: **Ctrl+C** или `pkill -f "pytest.*tests/"`. Лог: `make test WORKERS=2 2>&1 | tee logs/make-test.log`.
 
 ---
 

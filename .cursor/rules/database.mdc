@@ -75,20 +75,7 @@ class BaseRepository(ABC, Generic[T]):
         company_id = context.active_company.company_id
         return f"company:{company_id}:{key}"
     
-    @abstractmethod
-    def _get_key(self, entity_id: str) -> str:
-        """Базовый ключ БЕЗ префикса компании"""
-        pass
-    
-    @abstractmethod
-    def _get_prefix(self) -> str:
-        """Префикс для поиска"""
-        pass
-    
-    @abstractmethod
-    def _get_table_name(self) -> str:
-        """Имя таблицы БД"""
-        pass
+    # _get_key / _get_prefix / _get_table_name — переопределяются при необходимости (дефолты в BaseRepository)
     
     @abstractmethod
     def _extract_entity_id(self, entity: T) -> str:
@@ -311,13 +298,9 @@ MyRepositoryDep = Annotated[MyRepository, Depends(get_my_repository)]
 ### Импорты моделей
 
 ```python
-# Можно импортировать из apps.flows.src.models (реэкспорт)
-from apps.flows.src.models import User, Company, FlowConfig, FileRecord
-
-# Или напрямую из core
 from core.models import User, Company
 from core.files.models import FileRecord
-from apps.flows.src.models import FlowConfig
+from apps.flows.src.models import FlowConfig, NodeConfig
 ```
 
 ### Кастомный Field
@@ -351,9 +334,9 @@ class User(BaseModel):
 ```python
 # User → UserRepository (core/db/repositories/)
 # Company → CompanyRepository (core/db/repositories/)
-# FlowConfig → FlowRepository (apps/flows/src/db/repositories/)
-# NodeConfig → NodeRepository (apps/flows/src/db/repositories/)
-# ExecutionState → StateRepository (apps/flows/src/db/repositories/)
+# FlowConfig → FlowRepository (apps/flows/src/db/flow_repository.py)
+# NodeConfig → NodeRepository (apps/flows/src/db/node_repository.py)
+# ExecutionState → DatabaseStateRepository (apps/flows/src/db/state_repository.py)
 ```
 
 **НИКОГДА не работай с моделями через Storage напрямую:**
@@ -371,29 +354,18 @@ flow_config = await flow_repo.get("my_flow")
 
 ## API репозиториев
 
-**Единообразный интерфейс:**
+Для классов **`BaseRepository`**: `get`, `set`, `delete`, `list_all`, `get_many` (где реализовано).
 
-```python
-# Получить
-entity = await repo.get(entity_id)
-
-# Сохранить
-await repo.set(entity)
-
-# Удалить
-await repo.delete(entity_id)
-
-# Список всех
-entities = await repo.list_all(limit=100)
-
-# Получить несколько
-entities_dict = await repo.get_many([id1, id2, id3])
-```
+`EvaluationRepository` / `ScheduledTaskRepository` — свои методы (`save`, `list_tasks`, …), без унифицированного `set` как у KV-репозиториев.
 
 ## В API endpoints
 
 ```python
+from fastapi import APIRouter, HTTPException
+
 from apps.flows.src.container import get_container
+
+router = APIRouter()
 
 @router.get("/{flow_id}")
 async def get_flow(flow_id: str):
@@ -431,11 +403,11 @@ async def test_example(
 1. **ВСЕГДА** через репозитории, НИКОГДА напрямую Storage
 2. **НИКОГДА** не добавляй префикс `company:` вручную
 3. **ВСЕГДА** определяй `is_global` в классе
-4. **НИКОГДА** не используй параметр `force_global`
+4. **НИКОГДА** не обходи изоляцию через `force_global` у **`Storage`** из прикладного кода (репозитории используют `BaseRepository._build_final_key`)
 5. **ВСЕГДА** получай репозитории из контейнера
 6. **НЕТ дубликатов** между core и apps
 7. **Shared модели** (User, Company, FileRecord) → core → shared БД
-8. **Бизнес-модели** (FlowConfig, NodeConfig, ExecutionState) → apps/flows → service БД
+8. **Модели конфигов flows** (FlowConfig, NodeConfig, …) → apps/flows; **ExecutionState** (тип) → core/state; персист состояния → `DatabaseStateRepository` → service БД
 9. Используй **core.fields.Field** везде (Pydantic v2 совместимый)
 
 **Нарушение приведет к ошибкам изоляции и дублированию данных!**

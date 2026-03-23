@@ -66,17 +66,32 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
     yield db
 
 
+_SYNC_DELETE_ORDER = (
+    # Дочерние таблицы первыми; без TRUNCATE — меньше AccessExclusiveLock и deadlock с xdist.
+    "sync_message_files",
+    "sync_message_contents",
+    "sync_messages",
+    "sync_threads",
+    "sync_git_resource_refs",
+    "sync_files",
+    "sync_channel_members",
+    "sync_channels",
+    "sync_spaces",
+)
+
+
 @pytest_asyncio.fixture()
 async def sync_db_clean(sync_database: SyncDatabase) -> None:
-    """Очищает все sync таблицы перед каждым тестом через TRUNCATE CASCADE."""
+    """Полная очистка данных sync перед тестом: DELETE по порядку FK (без TRUNCATE)."""
     async with sync_database.session() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE "
-            "sync_message_files, sync_message_contents, sync_messages, "
-            "sync_git_resource_refs, sync_files, sync_threads, "
-            "sync_channel_members, sync_channels, sync_spaces "
-            "RESTART IDENTITY CASCADE"
-        ))
+        for table in _SYNC_DELETE_ORDER:
+            await session.execute(text(f'DELETE FROM "{table}"'))
+        seq_row = await session.execute(
+            text("SELECT pg_get_serial_sequence('sync_message_contents', 'id')")
+        )
+        seq_name = seq_row.scalar_one_or_none()
+        if seq_name:
+            await session.execute(text(f"SELECT setval('{seq_name}', 1, false)"))
         await session.commit()
 
 

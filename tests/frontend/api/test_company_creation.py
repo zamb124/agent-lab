@@ -391,6 +391,7 @@ async def test_company_creation_without_flows_service(
 
 
 @pytest.mark.asyncio
+@pytest.mark.real_taskiq
 async def test_company_agents_api_with_context(
     frontend_client: AsyncClient,
     flows_client: AsyncClient,
@@ -460,6 +461,7 @@ async def test_company_agents_api_with_context(
     token2 = token_service.create_token(user_id, company_id=company2_id)
 
     deadline = time.monotonic() + 90.0
+    flows_ready = False
     while time.monotonic() < deadline:
         r1 = await flows_client.get(
             "/flows/api/v1/flows/",
@@ -479,8 +481,13 @@ async def test_company_agents_api_with_context(
             j1 = r1.json()
             j2 = r2.json()
             if isinstance(j1, list) and isinstance(j2, list) and len(j1) > 0 and len(j2) > 0:
+                flows_ready = True
                 break
         await asyncio.sleep(0.1)
+    
+    assert flows_ready, (
+        "Агенты не появились в API за 90 с после company/init (ожидание TaskIQ)"
+    )
     
     # Проверка 1: Компания 1 видит своих агентов
     response1 = await flows_client.get(

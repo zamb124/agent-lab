@@ -122,8 +122,9 @@ class PythonNamespaceBuilder:
         # FlowInterrupt для ask_user и interrupt
         namespace["FlowInterrupt"] = FlowInterrupt
         
-        # Стандартные модули
-        namespace["math"] = math
+        # Стандартный math только если ресурс flow не занял имя "math"
+        if "math" not in self.resources:
+            namespace["math"] = math
         namespace["ast"] = ast
         namespace["operator"] = operator
         namespace["json"] = importlib.import_module("json")

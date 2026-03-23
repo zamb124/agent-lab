@@ -77,10 +77,10 @@ class TestMockConfig:
         assert config.tools["search"] == ["result1", "result2"]
 
     def test_with_agents(self):
-        """Конфиг с mock для agents."""
+        """Конфиг с mock для flows (поле flows)."""
         config = MockConfig(
             enabled=True,
-            agents={
+            flows={
                 "consultant": "Mock консультация",
                 "analyzer": {"result": "analysis"}
             }

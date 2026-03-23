@@ -585,6 +585,8 @@ async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
         input_state_normalized.setdefault("breakpoint_hit", None)
         input_state_normalized.setdefault("breakpoint_state", None)
         input_state_normalized.setdefault("interrupt", None)
+        input_state_normalized.setdefault("flow_config", {})
+        input_state_normalized.setdefault("result", None)
         
         node_config = await _build_node_config(request)
         output_state = await _execute_node(node_config, input_state_normalized, flow_id=flow_id)

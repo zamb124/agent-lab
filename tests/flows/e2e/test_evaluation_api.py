@@ -849,7 +849,9 @@ class TestFlowTypeEvaluation:
         assert result.get_total_score() is not None
         assert result.judge_feedback is not None
 
-    async def test_flow_dialog_test_judge_fail_marks_test_failed(self, client, mock_llm_redis, mock_llm):
+    async def test_flow_dialog_test_judge_fail_marks_test_failed(
+        self, client, mock_llm_redis, mock_llm, container
+    ):
         """Проверяем что если судья ставит passed=false, тест failed."""
         await setup_mock_llm_redis(
             mock_llm_redis,
@@ -869,7 +871,16 @@ class TestFlowTypeEvaluation:
         data = await run_evaluation(client, "example_react", "flow_dialog_test", "test_full")
 
         state = get_task_state(data)
-        assert state == "failed", "Тест должен быть failed если судья поставил passed=false"
+        assert state == "completed", (
+            "A2A задача evaluation завершается в completed; passed/failed хранится в результате оценки"
+        )
+        results = await container.evaluation_repository.get_latest_results(
+            "example_react", "test_full", limit=1
+        )
+        assert len(results) >= 1
+        assert results[0].status == "failed", (
+            "Тест должен быть failed если судья поставил passed=false"
+        )
 
     async def test_flow_dialog_test_max_turns_limit(self, client, mock_llm_redis, mock_llm):
         """Проверяем что тест останавливается по max_turns."""

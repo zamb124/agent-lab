@@ -34,10 +34,10 @@ async def test_init_company_resources_for_system(container, unique_id: str):
     
     assert result["status"] == "completed"
     assert result["company_id"] == "system"
-    assert result["agents"] >= 0  # Должны быть агенты
+    assert result["flows"] >= 0
     assert result["nodes"] >= 0
     
-    print(f"✅ System загружено: agents={result['agents']}, nodes={result['nodes']}")
+    print(f"✅ System загружено: flows={result['flows']}, nodes={result['nodes']}")
     
     # Контекст должен быть очищен после выполнения
     context = get_context()
@@ -80,7 +80,7 @@ async def test_init_company_resources_for_regular_company(
     
     print(
         f"✅ Company {test_company_id} загружено: "
-        f"agents={result['agents']}, nodes={result['nodes']}"
+        f"flows={result['flows']}, nodes={result['nodes']}"
     )
     
     # Проверяем что агенты загружены в namespace компании
@@ -218,7 +218,7 @@ async def test_system_vs_company_loading(container, unique_id: str):
         subdomain="system"
     )
     
-    system_agents_count = system_result["agents"]
+    system_agents_count = system_result["flows"]
     
     print(f"📊 System: {system_agents_count} агентов")
     
@@ -231,7 +231,7 @@ async def test_system_vs_company_loading(container, unique_id: str):
         subdomain=f"test-vs-{unique_id}"
     )
     
-    company_agents_count = company_result["agents"]
+    company_agents_count = company_result["flows"]
     
     print(f"📊 Company: {company_agents_count} агентов")
     

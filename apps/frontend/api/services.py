@@ -22,7 +22,7 @@ async def get_services_status(container: ContainerDep):
         Список сервисов с их статусом
     """
     services_config = [
-        {"name": "agents", "url": "/flows/api/v1/health"},
+        {"name": "flows", "url": "/flows/api/v1/health"},
         {"name": "crm", "url": "/crm/api/v1/health"},
         {"name": "rag", "url": "/rag/api/health"},
     ]
@@ -39,18 +39,20 @@ async def get_services_status(container: ContainerDep):
             response = await service_client.get(service_name, health_url)
             response_time = (time.time() - start_time) * 1000
             
+            display_url = "/flows" if service_name == "flows" else f"/{service_name}"
             status = ServiceStatus(
                 name=service_name,
                 status="healthy",
-                url=f"/{service_name}",
+                url=display_url,
                 response_time=round(response_time, 2)
             )
         except Exception as e:
             logger.warning(f"Сервис {service_name} недоступен: {e}")
+            display_url = "/flows" if service_name == "flows" else f"/{service_name}"
             status = ServiceStatus(
                 name=service_name,
                 status="unhealthy",
-                url=f"/{service_name}",
+                url=display_url,
                 response_time=None
             )
         

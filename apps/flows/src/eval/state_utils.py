@@ -129,7 +129,7 @@ def set_nested(data: 'ExecutionState | dict', path: str, value: Any) -> 'Executi
         else:
             current = data
             for key in keys[:-1]:
-                if not hasattr(current, key):
+                if not hasattr(current, key) or getattr(current, key) is None:
                     setattr(current, key, {})
                 current = getattr(current, key)
                 if not isinstance(current, dict):

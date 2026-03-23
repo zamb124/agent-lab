@@ -1616,20 +1616,30 @@ def execute(args, state):
             {"type": "text", "content": "Done"},
         ])
         
-        # Создаём flow_config с resources
+        # Имя ресурса не "math": в namespace уже есть стандартный модуль math
         flow_config = {
             "resources": {
-                "math": ResourceReference.model_validate(code_resource).model_dump()
+                "arith": ResourceReference.model_validate(code_resource).model_dump()
             }
+        }
+        
+        tool_with_arith = {
+            **tool,
+            "code": """
+def execute(args, state):
+    result = arith.double(args['n'])
+    state.result = result
+    return {'result': result}
+""",
         }
         
         llm_node = LlmNode(
             node_id="calc_node",
             config={
                 "prompt": "Calculate",
-                "tools": [tool],
+                "tools": [tool_with_arith],
                 "resources": {
-                    "math": ResourceReference.model_validate(code_resource)
+                    "arith": ResourceReference.model_validate(code_resource)
                 }
             }
         )
