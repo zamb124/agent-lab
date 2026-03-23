@@ -148,6 +148,7 @@ export class SpaceSettingsModal extends PlatformElement {
         this._description = '';
         this._avatarUrl = '';
         this._saving = false;
+        this._lastModalOpenTag = null;
     }
 
     connectedCallback() {
@@ -163,27 +164,29 @@ export class SpaceSettingsModal extends PlatformElement {
                     this._description = '';
                     this._avatarUrl = '';
                 }
-                return;
-            }
-            if (nextId === null) {
+            } else if (nextId === null) {
                 this._syncedForSpaceId = null;
                 this._spaceId = null;
-                return;
-            }
-            if (nextId === this._syncedForSpaceId) {
+            } else if (nextId === this._syncedForSpaceId) {
                 this._spaceId = nextId;
-                return;
+            } else {
+                const sp = state.spaces.list.find((x) => x.id === nextId);
+                if (!sp) {
+                    SyncStore.closeSpaceSettings();
+                } else {
+                    this._syncedForSpaceId = nextId;
+                    this._spaceId = nextId;
+                    this._name = typeof sp.name === 'string' ? sp.name : '';
+                    this._description = typeof sp.description === 'string' ? sp.description : '';
+                    this._avatarUrl = typeof sp.avatar_url === 'string' ? sp.avatar_url : '';
+                }
             }
-            const sp = state.spaces.list.find((x) => x.id === nextId);
-            if (!sp) {
-                SyncStore.closeSpaceSettings();
-                return;
+
+            const openTag = `${create ? '1' : '0'}:${nextId ?? ''}`;
+            if (openTag !== this._lastModalOpenTag) {
+                this._lastModalOpenTag = openTag;
+                this.requestUpdate();
             }
-            this._syncedForSpaceId = nextId;
-            this._spaceId = nextId;
-            this._name = typeof sp.name === 'string' ? sp.name : '';
-            this._description = typeof sp.description === 'string' ? sp.description : '';
-            this._avatarUrl = typeof sp.avatar_url === 'string' ? sp.avatar_url : '';
         });
     }
 

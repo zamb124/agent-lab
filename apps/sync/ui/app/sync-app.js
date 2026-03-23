@@ -75,6 +75,7 @@ export class SyncApp extends PlatformApp {
         this._ui = SyncStore.state.ui;
         this._ws = null;
         this._unsubscribe = null;
+        this._typingPruneTimer = null;
     }
 
     setupStore() {
@@ -126,6 +127,10 @@ export class SyncApp extends PlatformApp {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        if (this._typingPruneTimer != null) {
+            clearInterval(this._typingPruneTimer);
+            this._typingPruneTimer = null;
+        }
         this._unsubscribe?.();
         this._ws?.close();
         this._ws = null;
@@ -172,8 +177,10 @@ export class SyncApp extends PlatformApp {
             if (!msg || typeof msg !== 'object') return;
 
             if (typeof msg.ok === 'boolean' && typeof msg.id === 'string') {
-                if (msg.ok && msg.result) {
-                    SyncStore.resolvePending(msg.id, msg.result);
+                if (msg.ok) {
+                    if (msg.result) {
+                        SyncStore.resolvePending(msg.id, msg.result);
+                    }
                 } else {
                     SyncStore.failPending(msg.id);
                 }
@@ -204,6 +211,24 @@ export class SyncApp extends PlatformApp {
                 const syncApi = ServiceRegistry.get('syncApi');
                 void SyncStore.loadSpaces(syncApi).then(() => {
                     SyncStore.sanitizeChatSelectionAfterLoad();
+                });
+                return;
+            }
+
+            if (msg.type === 'channel.typing') {
+                const authUser = ServiceRegistry.auth?.user;
+                const myId = authUser?.id;
+                if (typeof p.user?.user_id === 'string' && typeof myId === 'string' && myId !== '' && p.user.user_id === myId) {
+                    return;
+                }
+                if (typeof p.channel_id !== 'string') {
+                    throw new Error('channel.typing: нет channel_id.');
+                }
+                SyncStore.applyChannelTyping({
+                    channel_id: p.channel_id,
+                    thread_id: p.thread_id ?? null,
+                    typing: !!p.typing,
+                    user: p.user,
                 });
                 return;
             }
@@ -287,6 +312,13 @@ export class SyncApp extends PlatformApp {
         });
 
         ws.connect();
+
+        if (this._typingPruneTimer != null) {
+            clearInterval(this._typingPruneTimer);
+        }
+        this._typingPruneTimer = setInterval(() => {
+            SyncStore.pruneExpiredTypingPeers();
+        }, 1200);
     }
 
     render() {

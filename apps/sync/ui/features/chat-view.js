@@ -2,6 +2,7 @@
  * ChatView — основной контейнер чата: хедер + список сообщений + composer
  */
 import { html, css } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
@@ -34,14 +35,62 @@ export class ChatView extends PlatformElement {
 
             .chat-header {
                 display: flex;
+                flex-direction: column;
                 align-items: stretch;
-                justify-content: space-between;
-                gap: var(--space-3);
+                gap: 0;
                 padding: var(--space-2) var(--space-4);
                 border-bottom: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 backdrop-filter: blur(var(--glass-blur-medium));
                 flex-shrink: 0;
+            }
+
+            .header-body {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                min-width: 0;
+                width: 100%;
+            }
+
+            .mobile-menu-btn {
+                display: none;
+            }
+
+            @media (max-width: 767px) {
+                .mobile-menu-btn {
+                    display: flex;
+                    width: 36px;
+                    height: 36px;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: var(--radius-lg);
+                    background: var(--glass-solid-strong);
+                    backdrop-filter: blur(var(--glass-blur-medium));
+                    border: 1px solid var(--glass-border-medium);
+                    color: var(--text-primary);
+                    cursor: pointer;
+                    flex-shrink: 0;
+                    transition: all var(--duration-fast) var(--easing-default);
+                    box-shadow: var(--glass-shadow-subtle);
+                    padding: 0;
+                }
+
+                .mobile-menu-btn:hover {
+                    background: var(--glass-solid-medium);
+                }
+
+                .mobile-menu-btn.hidden {
+                    display: none;
+                }
+            }
+
+            .header-channel-wrap {
+                flex: 1 1 auto;
+                min-width: 0;
+                display: flex;
+                align-items: center;
             }
 
             .header-leading {
@@ -86,6 +135,7 @@ export class ChatView extends PlatformElement {
             }
 
             .header-channel-hit {
+                width: 100%;
                 flex: 1 1 auto;
                 min-width: 0;
                 display: flex;
@@ -129,6 +179,7 @@ export class ChatView extends PlatformElement {
             }
 
             .header-channel-static {
+                width: 100%;
                 flex: 1 1 auto;
                 min-width: 0;
                 padding: var(--space-2) var(--space-3);
@@ -212,6 +263,14 @@ export class ChatView extends PlatformElement {
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
+            }
+
+            .typing-line {
+                flex-shrink: 0;
+                padding: var(--space-2) var(--space-4) 0;
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                min-height: 1.25rem;
             }
 
             .ws-badge {
@@ -325,6 +384,8 @@ export class ChatView extends PlatformElement {
         _wsState: { state: true },
         _threadIds: { state: true },
         _ui: { state: true },
+        _isMobile: { state: true },
+        _typingPeersByChannel: { state: true },
     };
 
     constructor() {
@@ -336,10 +397,16 @@ export class ChatView extends PlatformElement {
         this._wsState = s.ws.state;
         this._threadIds = [];
         this._ui = SyncStore.state.ui;
+        this._isMobile = false;
+        this._resizeObserver = null;
+        this._typingPeersByChannel = s.typingPeersByChannel ?? {};
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._checkMobileViewport();
+        this._resizeObserver = new ResizeObserver(() => this._checkMobileViewport());
+        this._resizeObserver.observe(document.body);
         this._unsubscribe = SyncStore.subscribe(state => {
             this._chat = state.chat;
             this._channels = state.channels;
@@ -347,12 +414,26 @@ export class ChatView extends PlatformElement {
             this._wsState = state.ws.state;
             this._threadIds = SyncStore.getThreadIds();
             this._ui = state.ui;
+            this._typingPeersByChannel = state.typingPeersByChannel ?? {};
         });
     }
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._resizeObserver?.disconnect();
+        this._resizeObserver = null;
         this._unsubscribe?.();
+    }
+
+    _checkMobileViewport() {
+        this._isMobile = window.innerWidth <= 767;
+    }
+
+    _openMobileSidebar() {
+        window.dispatchEvent(new CustomEvent('platform-sidebar-open', {
+            bubbles: true,
+            composed: true,
+        }));
     }
 
     _selectedChannel() {
@@ -551,13 +632,22 @@ export class ChatView extends PlatformElement {
         const channelForModal = channelSettingsCreate ? channelCreateDraft : settingsChannel;
         const channelModalOpen = channelSettingsCreate || settingsChannel !== null;
 
+        const auth = ServiceRegistry.auth;
+        const myUserId = auth?.user?.id;
+        const typingLine = selectedChannelId
+            ? SyncStore.getTypingIndicatorLine(
+                selectedChannelId,
+                focusedThreadId ?? null,
+                typeof myUserId === 'string' ? myUserId : undefined,
+            )
+            : '';
+
         const headerLead = selectedChannel
             ? html`<div class="header-leading">${this._headerLeadingGraphic(selectedChannel)}</div>`
             : html``;
 
-        return html`
-            <div class="chat-header">
-                ${showChannelSettings ? html`
+        const showMobileMenuBtn = this._isMobile && !this._ui.mobileSidebarOpen;
+        const channelBlock = showChannelSettings ? html`
                     <button
                         type="button"
                         class="header-channel-hit"
@@ -579,11 +669,27 @@ export class ChatView extends PlatformElement {
                             ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
                         </div>
                     </div>
-                `}
-                <div class="header-actions">
-                    <span class="ws-badge ${this._wsState}">${this._wsState}</span>
+                `;
 
-                    ${focusedThreadId ? html`
+        return html`
+            <div class="chat-header">
+                <div class="header-body">
+                    <button
+                        type="button"
+                        class=${classMap({ 'mobile-menu-btn': true, hidden: !showMobileMenuBtn })}
+                        title="Открыть меню"
+                        aria-label="Открыть меню"
+                        @click=${this._openMobileSidebar}
+                    >
+                        <platform-icon name="hamburger" size="20"></platform-icon>
+                    </button>
+                    <div class="header-channel-wrap">
+                        ${channelBlock}
+                    </div>
+                    <div class="header-actions">
+                        <span class="ws-badge ${this._wsState}">${this._wsState}</span>
+
+                        ${focusedThreadId ? html`
                         <button class="back-btn" @click=${() => SyncStore.setFocusedThread(null)}>
                             <platform-icon name="chevron-left" size="14"></platform-icon>
                             Назад
@@ -592,19 +698,13 @@ export class ChatView extends PlatformElement {
                         <button
                             class="icon-btn"
                             title="Треды"
-                            ?disabled=${this._threadIds.length === 0}
+                            ?disabled=${!selectedChannelId}
                             @click=${() => SyncStore.setThreadDrawerOpen(true)}
                         >
-                            <platform-icon name="chat" size="16"></platform-icon>
-                        </button>
-                        <button
-                            class="icon-btn"
-                            title="Меню"
-                            @click=${() => SyncStore.setMobileSidebarOpen(true)}
-                        >
-                            <platform-icon name="hamburger" size="16"></platform-icon>
+                            <platform-icon name="list" size="16"></platform-icon>
                         </button>
                     `}
+                    </div>
                 </div>
             </div>
 
@@ -641,6 +741,9 @@ export class ChatView extends PlatformElement {
                         </div>
                     ` : ''}
                     <message-list .channelId=${selectedChannelId}></message-list>
+                    ${typingLine
+        ? html`<div class="typing-line" role="status">${typingLine}</div>`
+        : ''}
                     <message-composer .channelId=${selectedChannelId}></message-composer>
                 `}
             </div>

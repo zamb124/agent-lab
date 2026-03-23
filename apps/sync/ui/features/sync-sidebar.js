@@ -599,6 +599,12 @@ export class SyncSidebar extends PlatformElement {
                 logo-text="Sync Chat"
                 ?collapsed=${this.collapsed}
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
+                @mobile-change=${(e) => {
+                    const o = e.detail?.open;
+                    if (typeof o === 'boolean') {
+                        SyncStore.setMobileSidebarOpen(o);
+                    }
+                }}
             >
                 <div class="sync-sidebar-inner">
                     <div class="channels-section">

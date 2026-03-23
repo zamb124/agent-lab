@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.types import Scope, Receive, Send
 
 from core.app import create_service_app
 from core.config import get_settings
@@ -20,6 +21,15 @@ from apps.sync.ws import fanout, websocket_endpoint
 from apps.sync.api import get_api_router
 
 logger = logging.getLogger(__name__)
+
+
+class NoCacheStaticFiles(StaticFiles):
+    """StaticFiles с Cache-Control: no-cache для браузерного сброса модулей при разработке."""
+
+    async def get_response(self, path: str, scope: Scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
 
 async def on_startup(app: FastAPI, container, settings):
     """Инициализация PubSubFanout. Схема БД только через Alembic (make migrate)."""
@@ -50,12 +60,12 @@ app = create_service_app(
 
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
 if core_frontend_path.exists():
-    app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
+    app.mount("/static/core", NoCacheStaticFiles(directory=core_frontend_path), name="core_frontend")
     logger.info(f"Core frontend библиотека смонтирована: {core_frontend_path}")
 
 sync_ui_path = Path(__file__).parent / "ui"
 if sync_ui_path.exists():
-    app.mount("/sync/ui/static", StaticFiles(directory=sync_ui_path, html=True), name="sync_ui")
+    app.mount("/sync/ui/static", NoCacheStaticFiles(directory=sync_ui_path, html=True), name="sync_ui")
     logger.info(f"Sync UI смонтирован: {sync_ui_path}")
 
 

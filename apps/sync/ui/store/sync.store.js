@@ -28,6 +28,7 @@ const baseStore = new BaseStore('sync', {
         loading: false,
     },
     peerReadAtByChannel: {},
+    typingPeersByChannel: {},
     companyMembers: {
         list: [],
         loading: false,
@@ -63,6 +64,7 @@ const baseStore = new BaseStore('sync', {
         forwardModalOpen: false,
         forwardMessage: null,
         flashMessageId: null,
+        flashMessageSeq: 0,
         deletingMessageIds: [],
         channelSettingsChannelId: null,
         spaceSettingsSpaceId: null,
@@ -412,7 +414,11 @@ export const SyncStore = {
             _flashMessageTimer = null;
         }
         baseStore.setState(s => ({
-            ui: { ...s.ui, flashMessageId: messageId },
+            ui: {
+                ...s.ui,
+                flashMessageId: messageId,
+                flashMessageSeq: (s.ui.flashMessageSeq ?? 0) + 1,
+            },
         }));
         _flashMessageTimer = setTimeout(() => {
             _flashMessageTimer = null;
@@ -497,17 +503,132 @@ export const SyncStore = {
     },
 
     selectChannel(spaceId, channelId) {
-        baseStore.setState(s => ({
-            chat: {
-                ...s.chat,
-                selectedSpaceId: spaceId,
-                selectedChannelId: channelId,
-                focusedThreadId: null,
-                replyToMessage: null,
-                editMessage: null,
-                pinnedNavigateIndex: 0,
-            },
-        }));
+        baseStore.setState(s => {
+            const prevCh = s.chat.selectedChannelId;
+            const typingPeersByChannel = { ...s.typingPeersByChannel };
+            if (typeof prevCh === 'string' && prevCh !== '' && prevCh !== channelId) {
+                delete typingPeersByChannel[prevCh];
+            }
+            return {
+                chat: {
+                    ...s.chat,
+                    selectedSpaceId: spaceId,
+                    selectedChannelId: channelId,
+                    focusedThreadId: null,
+                    replyToMessage: null,
+                    editMessage: null,
+                    pinnedNavigateIndex: 0,
+                },
+                typingPeersByChannel,
+            };
+        });
+    },
+
+    /**
+     * @param {{ channel_id: string, thread_id: string | null | undefined, typing: boolean, user: { user_id: string, display_name?: string | null } }} payload
+     */
+    applyChannelTyping(payload) {
+        const channelId = payload.channel_id;
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channel.typing: channel_id обязателен.');
+        }
+        const u = payload.user;
+        if (!u || typeof u.user_id !== 'string' || u.user_id === '') {
+            throw new Error('channel.typing: user.user_id обязателен.');
+        }
+        const uid = u.user_id;
+        const name = typeof u.display_name === 'string' && u.display_name.trim() !== ''
+            ? u.display_name.trim()
+            : uid;
+        const tid = payload.thread_id === undefined || payload.thread_id === null || payload.thread_id === ''
+            ? null
+            : payload.thread_id;
+        const typing = !!payload.typing;
+        baseStore.setState(s => {
+            const prev = s.typingPeersByChannel[channelId] ?? [];
+            let next = [...prev];
+            if (!typing) {
+                next = next.filter(row => !(row.user_id === uid && (row.thread_id ?? null) === tid));
+            } else {
+                const until = Date.now() + 4500;
+                const idx = next.findIndex(
+                    row => row.user_id === uid && (row.thread_id ?? null) === tid,
+                );
+                const row = { user_id: uid, display_name: name, thread_id: tid, until };
+                if (idx >= 0) {
+                    next[idx] = row;
+                } else {
+                    next.push(row);
+                }
+            }
+            return {
+                typingPeersByChannel: {
+                    ...s.typingPeersByChannel,
+                    [channelId]: next,
+                },
+            };
+        });
+    },
+
+    pruneExpiredTypingPeers() {
+        const now = Date.now();
+        baseStore.setState(s => {
+            const src = s.typingPeersByChannel;
+            const nextMap = {};
+            let changed = false;
+            for (const [ch, rows] of Object.entries(src)) {
+                const kept = rows.filter(r => r.until > now);
+                if (kept.length !== rows.length) {
+                    changed = true;
+                }
+                if (kept.length > 0) {
+                    nextMap[ch] = kept;
+                } else if (rows.length > 0) {
+                    changed = true;
+                }
+            }
+            if (!changed && Object.keys(nextMap).length === Object.keys(src).length) {
+                return s;
+            }
+            return { typingPeersByChannel: nextMap };
+        });
+    },
+
+    /**
+     * @param {string} channelId
+     * @param {string | null} focusedThreadId
+     * @param {string | undefined} myUserId
+     * @returns {string}
+     */
+    getTypingIndicatorLine(channelId, focusedThreadId, myUserId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            return '';
+        }
+        const now = Date.now();
+        const list = baseStore.state.typingPeersByChannel[channelId] ?? [];
+        const f = focusedThreadId === undefined || focusedThreadId === null || focusedThreadId === ''
+            ? null
+            : focusedThreadId;
+        const peers = list.filter((row) => {
+            if (row.until <= now) return false;
+            if (typeof myUserId === 'string' && myUserId !== '' && row.user_id === myUserId) {
+                return false;
+            }
+            const rt = row.thread_id ?? null;
+            return rt === f;
+        });
+        if (peers.length === 0) {
+            return '';
+        }
+        peers.sort((a, b) => a.display_name.localeCompare(b.display_name, 'ru'));
+        if (peers.length === 1) {
+            return `${peers[0].display_name} печатает…`;
+        }
+        if (peers.length === 2) {
+            return `${peers[0].display_name}, ${peers[1].display_name} печатают…`;
+        }
+        const rest = peers.length - 2;
+        return `${peers[0].display_name}, ${peers[1].display_name} и ещё ${rest}…`;
     },
 
     setFocusedThread(threadId) {

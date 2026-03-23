@@ -23,6 +23,7 @@ from apps.sync.models.threads import ThreadRead
 from apps.sync.realtime.commands import (
     ChannelsCreatePayload,
     ChannelsMarkReadPayload,
+    ChannelsTypingPayload,
     CommandEnvelope,
     GitResourcesUpsertPayload,
     MessagesDeletePayload,
@@ -43,6 +44,7 @@ from apps.sync.realtime.events import (
     event_channel_created,
     event_channel_pins_changed,
     event_channel_read_updated,
+    event_channel_typing,
     event_git_resource_upserted,
     event_message_created,
     event_message_deleted,
@@ -129,6 +131,36 @@ async def execute_command(
                     payload.channel_id,
                     cmd.actor_user_id,
                     read_at,
+                ),
+            ],
+        )
+
+    if cmd.type == "channels.typing":
+        payload = ChannelsTypingPayload.model_validate(cmd.payload)
+        if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+            raise PermissionError(
+                f"Пользователь не состоит в канале {payload.channel_id}."
+            )
+        if payload.thread_id is not None and payload.thread_id != "":
+            row = await threads.get(payload.thread_id)
+            if row is None:
+                raise ValueError(f"Тред {payload.thread_id} не найден.")
+            if row.company_id != cmd.company_id:
+                raise ValueError("Тред не принадлежит компании.")
+            if row.channel_id != payload.channel_id:
+                raise ValueError("Тред не принадлежит указанному каналу.")
+        if user_repository is None:
+            raise ValueError("user_repository обязателен для channels.typing.")
+        user_brief = await _user_brief(user_repository, cmd.actor_user_id)
+        return CommandExecutionResult(
+            ok=True,
+            result=None,
+            events=[
+                event_channel_typing(
+                    channel_id=payload.channel_id,
+                    thread_id=payload.thread_id if payload.thread_id else None,
+                    typing=payload.typing,
+                    user=user_brief,
                 ),
             ],
         )

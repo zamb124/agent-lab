@@ -285,6 +285,134 @@ async def test_channels_mark_read_not_member(
 
 
 @pytest.mark.asyncio
+async def test_channels_typing_member_ok(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    sync_user_repository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    ch = SyncChannel(
+        channel_id="ch_typ",
+        company_id=company_id,
+        space_id=None,
+        type=ChannelType.GROUP.value,
+        name="g",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id="u1",
+    )
+    await channel_repo.create(ch)
+    await channel_repo.upsert_member("ch_typ", "u1", "owner", company_id=company_id)
+    cmd = _cmd(
+        actor="u1",
+        company_id=company_id,
+        typ="channels.typing",
+        payload={"channel_id": "ch_typ", "typing": True, "thread_id": None},
+    )
+    res = await execute_command(
+        cmd,
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        user_repository=sync_user_repository,
+    )
+    assert res.ok
+    assert res.result is None
+    assert len(res.events) == 1
+    assert res.events[0].type == "channel.typing"
+    assert res.events[0].payload["channel_id"] == "ch_typ"
+    assert res.events[0].payload["typing"] is True
+    assert res.events[0].payload["user"]["user_id"] == "u1"
+
+
+@pytest.mark.asyncio
+async def test_channels_typing_not_member(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    sync_user_repository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    ch = SyncChannel(
+        channel_id="ch_typ2",
+        company_id=company_id,
+        space_id=None,
+        type=ChannelType.GROUP.value,
+        name="g",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id="u1",
+    )
+    await channel_repo.create(ch)
+    cmd = _cmd(
+        actor="stranger",
+        company_id=company_id,
+        typ="channels.typing",
+        payload={"channel_id": "ch_typ2", "typing": True},
+    )
+    with pytest.raises(PermissionError, match="не состоит"):
+        await execute_command(
+            cmd,
+            spaces=space_repo,
+            channels=channel_repo,
+            threads=thread_repo,
+            messages=message_repo,
+            git_refs=git_ref_repo,
+            user_repository=sync_user_repository,
+        )
+
+
+@pytest.mark.asyncio
+async def test_channels_typing_thread_not_found(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    sync_user_repository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    ch = SyncChannel(
+        channel_id="ch_tthr",
+        company_id=company_id,
+        space_id=None,
+        type=ChannelType.GROUP.value,
+        name="g",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id="u1",
+    )
+    await channel_repo.create(ch)
+    await channel_repo.upsert_member("ch_tthr", "u1", "owner", company_id=company_id)
+    cmd = _cmd(
+        actor="u1",
+        company_id=company_id,
+        typ="channels.typing",
+        payload={"channel_id": "ch_tthr", "typing": True, "thread_id": "missing_thread"},
+    )
+    with pytest.raises(ValueError, match="не найден"):
+        await execute_command(
+            cmd,
+            spaces=space_repo,
+            channels=channel_repo,
+            threads=thread_repo,
+            messages=message_repo,
+            git_refs=git_ref_repo,
+            user_repository=sync_user_repository,
+        )
+
+
+@pytest.mark.asyncio
 async def test_messages_send_and_mark_read(
     space_repo,
     channel_repo,

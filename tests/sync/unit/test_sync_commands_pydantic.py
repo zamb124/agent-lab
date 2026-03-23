@@ -44,3 +44,25 @@ def test_ws_command_frame() -> None:
         {"id": "id1", "type": "spaces.create", "payload": {"body": {"name": "W", "description": None}}}
     )
     assert f.type == "spaces.create"
+
+
+def test_ws_command_frame_channels_typing() -> None:
+    f = WsCommandFrame.model_validate(
+        {
+            "id": "a" * 32,
+            "type": "channels.typing",
+            "payload": {"channel_id": "ch1", "typing": True, "thread_id": None},
+        }
+    )
+    assert f.type == "channels.typing"
+
+
+def test_command_envelope_channels_typing() -> None:
+    env = CommandEnvelope(
+        id="b" * 32,
+        actor_user_id="u1",
+        company_id="c1",
+        type="channels.typing",
+        payload={"channel_id": "ch1", "typing": False},
+    )
+    assert env.type == "channels.typing"

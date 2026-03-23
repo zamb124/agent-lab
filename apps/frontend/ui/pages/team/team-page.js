@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 import { FrontendStore } from '../../store/frontend.store.js';
+import '../../modals/edit-team-member-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 
 export class TeamPage extends PlatformElement {
@@ -200,14 +201,26 @@ export class TeamPage extends PlatformElement {
 
     constructor() {
         super();
+        this._canManageTeam = false;
         this.state = this.use((s) => ({
             members: s.entities.team.members,
             loading: s.entities.team.loading,
         }));
     }
 
+    _computeCanManageTeam() {
+        const u = this.services.get('auth').user;
+        if (!u || !Array.isArray(u.roles)) {
+            return false;
+        }
+        return u.roles.includes('owner') || u.roles.includes('admin');
+    }
+
     async connectedCallback() {
         super.connectedCallback();
+        await this.services.get('auth').validateToken();
+        this._canManageTeam = this._computeCanManageTeam();
+        this.requestUpdate();
         await this._loadMembers();
     }
 
@@ -276,22 +289,28 @@ export class TeamPage extends PlatformElement {
                 </div>
                 
                 <div class="member-actions">
-                    <button 
-                        class="icon-button" 
-                        title="Изменить роль"
-                        @click=${() => this._onEditRole(member)}
-                    >
-                        E
-                    </button>
-                    ${!member.roles.includes('owner') ? html`
-                        <button 
-                            class="icon-button danger" 
-                            title="Удалить"
-                            @click=${() => this._onRemoveMember(member)}
-                        >
-                            X
-                        </button>
-                    ` : ''}
+                    ${this._canManageTeam
+                        ? html`
+                              <button
+                                  class="icon-button"
+                                  title="Изменить роль"
+                                  @click=${() => this._onEditRole(member)}
+                              >
+                                  E
+                              </button>
+                              ${!member.roles.includes('owner')
+                                  ? html`
+                                        <button
+                                            class="icon-button danger"
+                                            title="Удалить"
+                                            @click=${() => this._onRemoveMember(member)}
+                                        >
+                                            X
+                                        </button>
+                                    `
+                                  : ''}
+                          `
+                        : ''}
                 </div>
             </div>
         `;
@@ -330,7 +349,11 @@ export class TeamPage extends PlatformElement {
     }
 
     _onEditRole(member) {
-        this.info('Функция в разработке');
+        const modal = document.createElement('edit-team-member-modal');
+        document.body.appendChild(modal);
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('saved', () => this._reloadMembers());
+        modal.show(member);
     }
 
     async _onRemoveMember(member) {

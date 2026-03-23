@@ -19,6 +19,7 @@ CommandType = Literal[
     "channels.create",
     "channels.update",
     "channels.mark_read",
+    "channels.typing",
     "threads.create",
     "messages.send",
     "messages.mark_read",
@@ -83,6 +84,12 @@ class ChannelsUpdatePayload(BaseModel):
 
 class ChannelsMarkReadPayload(BaseModel):
     channel_id: str
+
+
+class ChannelsTypingPayload(BaseModel):
+    channel_id: str
+    typing: bool
+    thread_id: str | None = None
 
 
 class ThreadsCreatePayload(BaseModel):

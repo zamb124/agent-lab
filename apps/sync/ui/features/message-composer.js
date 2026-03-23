@@ -58,6 +58,8 @@ export class MessageComposer extends PlatformElement {
         _text: { state: true },
         _emojiOpen: { state: true },
         _attachMenuOpen: { state: true },
+        _pendingAttachments: { state: true },
+        _uploading: { state: true },
         _focusedThreadId: { state: true },
         _replyToMessage: { state: true },
         _editMessage: { state: true },
@@ -170,10 +172,15 @@ export class MessageComposer extends PlatformElement {
                 border-radius: var(--radius-md);
                 text-align: left;
                 transition: background var(--duration-fast);
+                user-select: none;
             }
 
             .attach-item:hover {
                 background: var(--glass-solid-medium);
+            }
+
+            .attach-item input[type="file"] {
+                display: none;
             }
 
             .emoji-popup {
@@ -303,14 +310,74 @@ export class MessageComposer extends PlatformElement {
                 white-space: nowrap;
             }
 
-            input[type="file"] {
-                display: none;
+            .attachments-strip {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                padding: var(--space-2) 0;
             }
 
-            .attach-uploading {
+            .attachment-thumb-wrap {
+                position: relative;
+                flex-shrink: 0;
+            }
+
+            .attachment-thumb {
+                width: 72px;
+                height: 72px;
+                border-radius: var(--radius-lg);
+                object-fit: cover;
+                border: 1px solid var(--glass-border-subtle);
+                display: block;
+            }
+
+            .attachment-thumb-doc {
+                width: 72px;
+                height: 72px;
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+                color: var(--text-secondary);
+            }
+
+            .attachment-thumb-doc-name {
+                font-size: 9px;
+                color: var(--text-tertiary);
+                max-width: 60px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                text-align: center;
+            }
+
+            .attachment-remove {
+                position: absolute;
+                top: -6px;
+                right: -6px;
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: var(--error, #ef4444);
+                color: white;
+                border: none;
+                cursor: pointer;
+                font-size: 11px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                line-height: 1;
+                padding: 0;
+            }
+
+            .uploading-hint {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
-                padding: var(--space-1) var(--space-3);
+                padding: var(--space-1) 0;
             }
         `
     ];
@@ -321,10 +388,14 @@ export class MessageComposer extends PlatformElement {
         this._text = '';
         this._emojiOpen = false;
         this._attachMenuOpen = false;
+        this._pendingAttachments = [];
+        this._uploading = false;
         this._focusedThreadId = null;
         this._replyToMessage = null;
         this._editMessage = null;
         this._editSourceId = null;
+        this._typingDebounceTimer = null;
+        this._lastTypingContext = null;
     }
 
     connectedCallback() {
@@ -348,11 +419,23 @@ export class MessageComposer extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        clearTimeout(this._typingDebounceTimer);
+        this._typingDebounceTimer = null;
+        const ctx = this._lastTypingContext;
+        if (ctx) {
+            this._emitTypingWs(false, ctx.channelId, ctx.threadId);
+        }
         this._unsubscribe?.();
     }
 
     updated(changedProperties) {
         super.updated(changedProperties);
+        if (changedProperties.has('channelId') || changedProperties.has('_focusedThreadId')) {
+            const ctx = this._lastTypingContext;
+            if (ctx) {
+                this._emitTypingWs(false, ctx.channelId, ctx.threadId);
+            }
+        }
         if (!changedProperties.has('_replyToMessage')) return;
         const prev = changedProperties.get('_replyToMessage');
         const cur = this._replyToMessage;
@@ -391,11 +474,81 @@ export class MessageComposer extends PlatformElement {
             return;
         }
         this._text = raw;
+        this._scheduleTypingPing();
+    }
+
+    _emitTypingWs(typing, channelId, threadId) {
+        const ws = ServiceRegistry.get('syncWs');
+        if (!ws || ws.state !== 'open') {
+            if (!typing) {
+                this._lastTypingContext = null;
+            }
+            return;
+        }
+        if (!channelId) {
+            if (!typing) {
+                this._lastTypingContext = null;
+            }
+            return;
+        }
+        const tid = threadId === undefined || threadId === null ? null : threadId;
+        ws.sendJson({
+            id: randomUuidV4(),
+            type: 'channels.typing',
+            payload: { channel_id: channelId, thread_id: tid, typing },
+        });
+        if (typing) {
+            this._lastTypingContext = { channelId, threadId: tid };
+        } else {
+            this._lastTypingContext = null;
+        }
+    }
+
+    _scheduleTypingPing() {
+        clearTimeout(this._typingDebounceTimer);
+        if (!this.channelId) {
+            return;
+        }
+        const t = this._text.trim();
+        if (t === '') {
+            const ctx = this._lastTypingContext;
+            if (ctx) {
+                this._emitTypingWs(false, ctx.channelId, ctx.threadId);
+            }
+            return;
+        }
+        this._typingDebounceTimer = setTimeout(() => {
+            this._typingDebounceTimer = null;
+            if (!this.channelId || this._text.trim() === '') {
+                return;
+            }
+            const tid = this._focusedThreadId ?? null;
+            this._emitTypingWs(true, this.channelId, tid);
+        }, 450);
+    }
+
+    _flushTypingNotTyping() {
+        clearTimeout(this._typingDebounceTimer);
+        this._typingDebounceTimer = null;
+        const ctx = this._lastTypingContext;
+        if (ctx) {
+            this._emitTypingWs(false, ctx.channelId, ctx.threadId);
+        }
+    }
+
+    _onTextareaBlur() {
+        this._flushTypingNotTyping();
     }
 
     async _sendText() {
         const text = this._text.trim();
-        if (!text || !this.channelId) return;
+        const hasPending = this._pendingAttachments.length > 0;
+
+        if (!this.channelId) return;
+        if (!text && !hasPending) return;
+
+        this._flushTypingNotTyping();
+
         if (text.length > SYNC_MESSAGE_TEXT_MAX_CHARS) {
             window.dispatchEvent(
                 new CustomEvent(AppEvents.TOAST_SHOW, {
@@ -406,6 +559,11 @@ export class MessageComposer extends PlatformElement {
                     },
                 })
             );
+            return;
+        }
+
+        if (hasPending) {
+            await this._sendWithAttachments(text);
             return;
         }
 
@@ -467,33 +625,21 @@ export class MessageComposer extends PlatformElement {
         }
     }
 
-    _openMediaPicker() {
-        this._attachMenuOpen = false;
-        this.shadowRoot?.querySelector('input.input-media')?.click();
-    }
-
-    _openDocumentPicker() {
-        this._attachMenuOpen = false;
-        this.shadowRoot?.querySelector('input.input-document')?.click();
-    }
-
-    async _pickAttachments(contentType, e) {
-        const input = e.currentTarget;
-        const fileList = input.files;
-        if (!fileList || fileList.length === 0) return;
+    async _sendWithAttachments(text) {
         if (!this.channelId) throw new Error('Выбери канал.');
-
-        input.value = '';
+        this._uploading = true;
 
         const syncApi = ServiceRegistry.get('syncApi');
-        const uploads = await Promise.all(
-            Array.from(fileList).map(f => syncApi.uploadFile(f))
-        );
+        const snapshot = this._pendingAttachments.slice();
+
+        const uploads = await Promise.all(snapshot.map(a => syncApi.uploadFile(a.file)));
+
+        snapshot.forEach(a => { if (a.localUrl) URL.revokeObjectURL(a.localUrl); });
 
         const fileBlocks = uploads.map((res, idx) => {
             if (!res?.file_id) throw new Error(`Некорректный ответ загрузки файла #${idx + 1}.`);
             return {
-                type: contentType,
+                type: snapshot[idx].contentType,
                 data: {
                     file_id: res.file_id,
                     filename: res.original_name,
@@ -505,7 +651,6 @@ export class MessageComposer extends PlatformElement {
         });
 
         const contents = [];
-        const text = this._text.trim();
         if (text) {
             contents.push({ type: 'text/plain', data: { body: text }, order: 0 });
             fileBlocks.forEach((b, i) => { b.order = i + 1; });
@@ -520,9 +665,32 @@ export class MessageComposer extends PlatformElement {
         };
 
         this._text = '';
+        this._pendingAttachments = [];
+        this._uploading = false;
         SyncStore.clearReplyToMessage();
         await syncApi.sendMessage(this.channelId, messageCreate);
         await SyncStore.loadMessages(syncApi, this.channelId);
+    }
+
+    _pickAttachments(contentType, e) {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+        e.target.value = '';
+        this._attachMenuOpen = false;
+
+        const staged = files.map(file => ({
+            file,
+            contentType,
+            localUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+        }));
+        this._pendingAttachments = [...this._pendingAttachments, ...staged];
+    }
+
+    _removeAttachment(idx) {
+        const next = [...this._pendingAttachments];
+        const removed = next.splice(idx, 1)[0];
+        if (removed?.localUrl) URL.revokeObjectURL(removed.localUrl);
+        this._pendingAttachments = next;
     }
 
     _insertEmoji(em) {
@@ -542,6 +710,7 @@ export class MessageComposer extends PlatformElement {
         }
         this._text = next;
         this._emojiOpen = false;
+        this._scheduleTypingPing();
     }
 
     _onKeyDown(e) {
@@ -570,6 +739,31 @@ export class MessageComposer extends PlatformElement {
         return toShortUsernameForReply(m?.sender?.display_name ?? '');
     }
 
+    _renderAttachmentsStrip() {
+        if (this._pendingAttachments.length === 0) return '';
+        return html`
+            <div class="attachments-strip">
+                ${this._pendingAttachments.map((a, idx) => html`
+                    <div class="attachment-thumb-wrap">
+                        ${a.localUrl ? html`
+                            <img class="attachment-thumb" src=${a.localUrl} alt=${a.file.name}>
+                        ` : html`
+                            <div class="attachment-thumb-doc">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M14 2v6h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                </svg>
+                                <span class="attachment-thumb-doc-name">${a.file.name}</span>
+                            </div>
+                        `}
+                        <button class="attachment-remove" title="Удалить" @click=${() => this._removeAttachment(idx)}>×</button>
+                    </div>
+                `)}
+                ${this._uploading ? html`<span class="uploading-hint">Отправка...</span>` : ''}
+            </div>
+        `;
+    }
+
     render() {
         return html`
             <div class="composer">
@@ -588,14 +782,13 @@ export class MessageComposer extends PlatformElement {
                         <button type="button" @click=${() => SyncStore.clearReplyToMessage()}>Отмена</button>
                     </div>
                 ` : ''}
+                ${this._renderAttachmentsStrip()}
                 <div class="row">
                     <button class="icon-btn" title="Прикрепить файл" @click=${() => { this._attachMenuOpen = !this._attachMenuOpen; this._emojiOpen = false; }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                             <path d="M12.5 6.5L6.4 12.6a4 4 0 105.7 5.7l7.1-7.1a6 6 0 10-8.5-8.5l-7.1 7.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </button>
-                    <input class="input-media" type="file" accept="image/*,video/*" multiple @change=${e => this._pickAttachments('file/image', e)}>
-                    <input class="input-document" type="file" accept="*/*" multiple @change=${e => this._pickAttachments('file/document', e)}>
 
                     <textarea
                         class="textarea"
@@ -603,6 +796,7 @@ export class MessageComposer extends PlatformElement {
                         placeholder="Сообщение..."
                         .value=${this._text}
                         @input=${this._onTextInput}
+                        @blur=${this._onTextareaBlur}
                         @keydown=${this._onKeyDown}
                     ></textarea>
 
@@ -627,21 +821,23 @@ export class MessageComposer extends PlatformElement {
 
                     ${this._attachMenuOpen ? html`
                         <div class="attach-popup">
-                            <button class="attach-item" @click=${this._openMediaPicker}>
+                            <label class="attach-item">
+                                <input type="file" accept="image/*,video/*" multiple @change=${e => this._pickAttachments('file/image', e)}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                                     <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8"/>
                                     <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
                                     <path d="M3 16l5-5 4 4 3-3 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                                 Фото или видео
-                            </button>
-                            <button class="attach-item" @click=${this._openDocumentPicker}>
+                            </label>
+                            <label class="attach-item">
+                                <input type="file" accept="*/*" multiple @change=${e => this._pickAttachments('file/document', e)}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                                     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                     <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                                 </svg>
                                 Файл
-                            </button>
+                            </label>
                         </div>
                     ` : ''}
                     ${this._emojiOpen ? html`

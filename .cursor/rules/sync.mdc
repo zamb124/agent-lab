@@ -92,7 +92,7 @@ WebSocket /sync/ws        ────┘
 
 Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.upsert`).
 
-Дополнительные команды сообщений и канала: `messages.edit`, `messages.delete`, `messages.forward`, `messages.react`, `messages.pin`, **`channels.mark_read`** (обновляет `sync_channel_members.last_read_at` до `max(sent_at)` корневой ленты или «сейчас», если сообщений нет). События: `message.updated`, `message.deleted`, `message.reaction_changed`, `channel.pins_changed`, **`channel.read_updated`** (`channel_id`, `reader_user_id`, `read_at` ISO) — другие вкладки клиента могут сбросить локальный бейдж.
+Дополнительные команды сообщений и канала: `messages.edit`, `messages.delete`, `messages.forward`, `messages.react`, `messages.pin`, **`channels.mark_read`** (обновляет `sync_channel_members.last_read_at` до `max(sent_at)` корневой ленты или «сейчас», если сообщений нет), **`channels.typing`** (эфемерно, без записи в БД: участник канала сигнализирует `typing`/`thread_id`; событие **`channel.typing`** в Redis Pub/Sub). События: `message.updated`, `message.deleted`, `message.reaction_changed`, `channel.pins_changed`, **`channel.read_updated`** (`channel_id`, `reader_user_id`, `read_at` ISO) — другие вкладки клиента могут сбросить локальный бейдж.
 
 **Сводка канала в списке (GET /channels):** в `ChannelRead` поля `unread_count` (только корневая лента, чужие сообщения после `last_read_at`; `last_read_at IS NULL` — все такие сообщения считаются непрочитанными), `last_message_preview`, `last_message_at`. Счётчик и превью считаются в `MessageRepository.channel_lane_summaries_batch`. После открытия ленты клиент вызывает **`POST /channels/{channel_id}/read`** (`dispatch_sync_command`, та же бизнес-логика, что у команды `channels.mark_read`) — см. `SyncStore.loadMessages` + `markChannelRead`. Realtime: для чужих каналов `message.created` без `thread_id` обновляет превью в `sync-app.js`; непрочитанные — только если отправитель не текущий пользователь.
 
@@ -139,7 +139,7 @@ apps/sync/ui/
     chat-view.js          # header (аватар/иконка: direct peer, канал, space или folder) + channel-picker | message-list + composer; channel-settings-modal (createMode)
     channel-picker.js     # сетка каналов
     message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
-    message-bubble.js     # контент, ПКМ-меню, реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation
+    message-bubble.js     # контент, ПКМ-меню, реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation; `file/image` и `mock/image` — кнопка скачивания поверх превью (правый верхний угол), `file/document` — карточка со ссылкой скачивания
     message-context-menu.js
     message-composer.js   # текст + Enter, emoji, image, reply и редактирование через store
     thread-drawer.js      # drawer со списком тредов
@@ -160,6 +160,8 @@ apps/sync/ui/
 
 ### Правила
 
+- Mobile (`max-width: 767px`): в `chat-view.js` кнопка меню слева в шапке открывает сайдбар через событие `platform-sidebar-open` (как `page-header`); `sync-sidebar` на `@mobile-change` у `platform-sidebar` обновляет `ui.mobileSidebarOpen`. Панель тредов: иконка `list`, доступна при выбранном канале (в т.ч. когда тредов ещё нет).
+- Индикатор «печатает»: клиент шлёт по WS команду `channels.typing`, сервер публикует событие `channel.typing` (без БД); `sync-app.js` принимает broadcast, `SyncStore.applyChannelTyping` / `getTypingIndicatorLine`, строка над композером в `chat-view.js`; ack WS с `ok: true` и без `result` не вызывает `failPending`.
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
 - Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
 - Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`; для direct `spaceId` — `null`, иначе список сообщений не подгрузится

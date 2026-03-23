@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from apps.sync.models.channels import ChannelRead
+from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.messages import MessageRead, MessageStatus
 from apps.sync.models.spaces import SpaceRead
@@ -19,6 +20,7 @@ EventType = Literal[
     "channel.created",
     "channel.member_added",
     "channel.read_updated",
+    "channel.typing",
     "thread.created",
     "message.created",
     "message.status_changed",
@@ -69,6 +71,25 @@ def event_channel_read_updated(
             "channel_id": channel_id,
             "reader_user_id": reader_user_id,
             "read_at": read_at.isoformat(),
+        },
+    )
+
+
+def event_channel_typing(
+    *,
+    channel_id: str,
+    thread_id: str | None,
+    typing: bool,
+    user: UserBrief,
+) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="channel.typing",
+        channel_id=channel_id,
+        payload={
+            "channel_id": channel_id,
+            "thread_id": thread_id,
+            "typing": typing,
+            "user": user.model_dump(mode="json"),
         },
     )
 

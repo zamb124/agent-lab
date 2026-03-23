@@ -35,6 +35,7 @@ uv run pytest tests/sync/ -v
 | Dispatch + Redis | `realtime/test_dispatch_redis_publish.py` | После `dispatch_sync_command` подписчик на `sync.realtime.events` получает JSON события |
 | HTTP (smoke) | `api/test_sync_http.py` | Список/создание space, patch, каналы |
 | HTTP (матрица) | `api/test_sync_http_matrix.py` | 401 без Bearer, 403/404 по каналам и тредам, company members, git GET/POST, цепочка сообщений + read |
+| HTTP (вложения) | `api/test_sync_messages_attachments.py` | Загрузка в S3, сообщение с `file/document` / `file/image` + текст, два документа в одном сообщении, лента |
 | WebSocket | `api/test_sync_websocket.py` | Успех через TaskIQ, отказ без cookie (403 handshake), `ok: false` при ошибке задачи, две команды подряд |
 | Файлы | `api/test_sync_files_upload.py`, `api/test_sync_files_negative.py` | Загрузка при S3; пустой файл 400; метаданные 404; 503 при `S3__ENABLED=false` через env |
 | Маршруты | `test_route_config.py` | Публичные/защищённые пути AuthMiddleware |

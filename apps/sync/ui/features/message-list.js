@@ -130,6 +130,7 @@ export class MessageList extends PlatformElement {
         this._selectedMessageIds = [];
         this._pinnedMessageIds = [];
         this._flashMessageId = null;
+        this._flashMessageSeq = 0;
         this._deletingMessageIds = [];
         this._peerReadAtByChannel = {};
         this._selectedChannelType = null;
@@ -158,6 +159,7 @@ export class MessageList extends PlatformElement {
             this._selectedMessageIds = state.ui.selectedMessageIds;
             this._syncChannelMeta(state);
             this._flashMessageId = state.ui.flashMessageId ?? null;
+            this._flashMessageSeq = state.ui.flashMessageSeq ?? 0;
             this._deletingMessageIds = Array.isArray(state.ui.deletingMessageIds)
                 ? state.ui.deletingMessageIds
                 : [];
@@ -265,6 +267,7 @@ export class MessageList extends PlatformElement {
                     const msg = item.msg;
                     const selected = this._selectedMessageIds.includes(msg.id);
                     const flashActive = this._flashMessageId === msg.id;
+                    const flashSeq = flashActive ? this._flashMessageSeq : 0;
                     const deleting = this._deletingMessageIds.includes(msg.id);
                     return html`
                         <message-bubble
@@ -276,6 +279,7 @@ export class MessageList extends PlatformElement {
                             .selected=${selected}
                             .deleting=${deleting}
                             .flashActive=${flashActive}
+                            .flashSeq=${flashSeq}
                             .isOwn=${this._currentUserId !== null && senderUserId(msg.sender) === this._currentUserId}
                             .peerReadAt=${peerReadAt}
                             .channelType=${this._selectedChannelType}

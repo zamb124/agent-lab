@@ -70,6 +70,12 @@ function _formatFileSize(bytes) {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} ГБ`;
 }
 
+const _svgImageDownload = html`
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 3v13M5 15l7 7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>`;
+
 function renderContent(content) {
     if (content.type === 'text/plain') {
         const body = content.data?.body;
@@ -92,9 +98,21 @@ function renderContent(content) {
         const fileId = content.data?.file_id;
         if (typeof fileId !== 'string') throw new Error('Некорректный mock/image контент.');
         const src = `/sync/api/v1/files/download/${fileId}`;
+        const alt = typeof content.data?.alt_text === 'string' ? content.data.alt_text : '';
+        const dlName = alt.trim() !== '' ? alt.trim() : `image-${fileId.slice(0, 12)}`;
         return html`
             <div class="file-image-wrap">
-                <img class="file-image" src=${src} alt=${content.data?.alt_text ?? ''} loading="lazy">
+                <div class="file-image-frame">
+                    <img class="file-image" src=${src} alt=${alt} loading="lazy">
+                    <a
+                        class="file-image-dl"
+                        href=${src}
+                        download=${dlName}
+                        target="_blank"
+                        title="Скачать"
+                        @click=${(e) => e.stopPropagation()}
+                    >${_svgImageDownload}</a>
+                </div>
             </div>
         `;
     }
@@ -102,9 +120,20 @@ function renderContent(content) {
         const { file_id: fileId, filename } = content.data ?? {};
         if (typeof fileId !== 'string') throw new Error('Некорректный file/image контент.');
         const src = `/sync/api/v1/files/download/${fileId}`;
+        const label = typeof filename === 'string' && filename.trim() !== '' ? filename.trim() : `file-${fileId.slice(0, 12)}`;
         return html`
             <div class="file-image-wrap">
-                <img class="file-image" src=${src} alt=${filename ?? ''} loading="lazy">
+                <div class="file-image-frame">
+                    <img class="file-image" src=${src} alt=${label} loading="lazy">
+                    <a
+                        class="file-image-dl"
+                        href=${src}
+                        download=${label}
+                        target="_blank"
+                        title="Скачать"
+                        @click=${(e) => e.stopPropagation()}
+                    >${_svgImageDownload}</a>
+                </div>
                 ${filename ? html`<div class="file-image-caption">${filename}</div>` : ''}
             </div>
         `;
@@ -170,6 +199,7 @@ export class MessageBubble extends PlatformElement {
         selectionMode: { type: Boolean },
         selected: { type: Boolean },
         flashActive: { type: Boolean },
+        flashSeq: { type: Number },
         deleting: { type: Boolean },
         peerReadAt: { type: String },
         channelType: { type: String },
@@ -491,6 +521,13 @@ export class MessageBubble extends PlatformElement {
                 max-width: 320px;
             }
 
+            .file-image-frame {
+                position: relative;
+                display: inline-block;
+                max-width: 100%;
+                line-height: 0;
+            }
+
             .file-image {
                 max-width: 100%;
                 max-height: 400px;
@@ -498,6 +535,32 @@ export class MessageBubble extends PlatformElement {
                 cursor: pointer;
                 display: block;
                 object-fit: contain;
+            }
+
+            .file-image-dl {
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                z-index: 2;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                border-radius: var(--radius-md);
+                background: rgba(0, 0, 0, 0.48);
+                color: #fff;
+                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+                text-decoration: none;
+                transition: background var(--duration-fast), transform var(--duration-fast);
+            }
+
+            .file-image-dl:hover {
+                background: rgba(0, 0, 0, 0.65);
+            }
+
+            .file-image-dl:active {
+                transform: scale(0.96);
             }
 
             .file-image-caption {
@@ -719,6 +782,7 @@ export class MessageBubble extends PlatformElement {
         this.selectionMode = false;
         this.selected = false;
         this.flashActive = false;
+        this.flashSeq = 0;
         this.deleting = false;
         this.peerReadAt = null;
         this.channelType = null;
@@ -733,6 +797,20 @@ export class MessageBubble extends PlatformElement {
             this.emit('focus-thread', { threadId: this.msg.thread_id });
         }
     }
+
+    updated(changedProperties) {
+        super.updated?.(changedProperties);
+        if (!this.flashActive) return;
+        const prevSeq = changedProperties.get('flashSeq');
+        if (prevSeq === undefined || prevSeq === 0) return;
+        if (prevSeq === this.flashSeq) return;
+        const bubble = this.shadowRoot?.querySelector('.bubble-row.flash-target .bubble');
+        if (!bubble) return;
+        bubble.style.animation = 'none';
+        void bubble.offsetWidth;
+        bubble.style.animation = '';
+    }
+
 
     _renderAvatarSlot() {
         const sender = this.msg.sender;

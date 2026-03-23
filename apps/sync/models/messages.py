@@ -93,8 +93,8 @@ class CustomToolResponseContent(BaseModel):
 ContentData = Union[
     TextPlainContent,
     CodeBlockContent,
-    MockImageContent,
     FileAttachmentContent,
+    MockImageContent,
     GitReferenceContent,
     CustomToolResponseContent,
 ]
