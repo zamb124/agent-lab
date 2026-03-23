@@ -71,7 +71,9 @@
 
 Compose монтирует этот путь в `agentlab_postgres` как `/docker-entrypoint-initdb.d/01-init-databases.sql`. При **первом** создании тома данных выполняется SQL: дополнительные БД (`platform_agents`, …) и `CREATE EXTENSION vector` там, где нужно.
 
-На сервере путь `/opt/agent-lab/migrations/postgres/init.sql` обязан быть **файлом**, не каталогом. Иначе в логах Postgres: `could not read from input file: Is a directory`, сервисные БД не создаются, миграции падают с `database "platform_agents" does not exist`. В workflow перед копированием `init.sql` выполняется `rm -rf` этого пути, чтобы не оставался каталог от ошибочной прошлой выкладки.
+На сервере путь `/opt/agent-lab/migrations/postgres/init.sql` обязан быть **файлом**, не каталогом. Иначе в логах Postgres: `could not read from input file: Is a directory`, сервисные БД не создаются, миграции падают с `database "platform_agents" does not exist`. В workflow перед копированием `init.sql` выполняется `rm -rf` этого пути, чтобы не оставался каталог от ошибочной прошлой выкладки. Для `appleboy/scp-action` задан `strip_components: 2`, иначе файл уезжает в `.../postgres/migrations/postgres/init.sql`, нужный путь не существует и Docker создаёт **каталог** `init.sql` при первом `compose up`.
+
+Если том Postgres уже инициализирован без дополнительных БД: удалить ошибочный каталог `init.sql`, положить файл, затем либо выполнить SQL из `init.sql` вручную в работающем Postgres, либо снести том `postgres_data` и поднять заново (данные обнулятся).
 
 ### Сбой при деплое: `TLS handshake timeout` к `ghcr.io`
 

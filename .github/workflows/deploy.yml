@@ -80,6 +80,8 @@ jobs:
             mkdir -p /opt/agent-lab/migrations/postgres
             rm -rf /opt/agent-lab/migrations/postgres/init.sql
 
+      # Без strip_components файл окажется в .../postgres/migrations/postgres/init.sql,
+      # требуемый путь .../postgres/init.sql не создаётся — Docker смонтирует его как каталог.
       - name: Copy Postgres init.sql for volume mount
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -88,6 +90,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "migrations/postgres/init.sql"
           target: /opt/agent-lab/migrations/postgres/
+          strip_components: 2
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1
@@ -119,6 +122,12 @@ jobs:
             rm -f /opt/agent-lab/.env
 
             cd /opt/agent-lab
+
+            if [ ! -f migrations/postgres/init.sql ]; then
+              echo "FATAL: migrations/postgres/init.sql должен быть обычным файлом (см. scp strip_components)."
+              ls -la migrations/postgres/ 2>/dev/null || true
+              exit 1
+            fi
 
             # ghcr.io с сервера иногда даёт TLS handshake timeout — несколько попыток с паузой
             retry() {
