@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -65,6 +66,10 @@ class ChannelRead(BaseModel):
     last_message_at: datetime | None = Field(
         default=None,
         description="Время последнего сообщения основной ленты.",
+    )
+    peer_last_read_at: Optional[datetime] = Field(
+        default=None,
+        description="Время, до которого собеседник прочитал основную ленту (только для direct).",
     )
 
 

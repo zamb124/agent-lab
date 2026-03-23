@@ -27,6 +27,7 @@ const baseStore = new BaseStore('sync', {
         list: [],
         loading: false,
     },
+    peerReadAtByChannel: {},
     companyMembers: {
         list: [],
         loading: false,
@@ -106,8 +107,15 @@ export const SyncStore = {
     },
 
     setChannels(list) {
+        const peerReadAt = {};
+        for (const ch of list) {
+            if (ch.type === 'direct' && ch.peer_last_read_at) {
+                peerReadAt[ch.id] = ch.peer_last_read_at;
+            }
+        }
         baseStore.setState(s => ({
             channels: { ...s.channels, list, loading: false },
+            peerReadAtByChannel: { ...s.peerReadAtByChannel, ...peerReadAt },
         }));
     },
 
@@ -139,6 +147,31 @@ export const SyncStore = {
                 ? [...list, message]
                 : list.map((m, i) => i === idx ? message : m);
             return { messages: { ...s.messages, list: next } };
+        });
+    },
+
+    /**
+     * Обрабатывает broadcast message.created для собственного сообщения.
+     * Атомарно убирает pending и добавляет подтверждённое сообщение —
+     * предотвращает кратковременный дубликат (pending + confirmed в одном рендере).
+     * @param {object} confirmedMessage
+     */
+    resolveOwnMessageBroadcast(confirmedMessage) {
+        baseStore.setState(s => {
+            const pending = { ...s.messages.pending };
+            for (const cmdId of Object.keys(pending)) {
+                const pm = pending[cmdId];
+                if (pm.channel_id === confirmedMessage.channel_id) {
+                    delete pending[cmdId];
+                    break;
+                }
+            }
+            const list = s.messages.list;
+            const idx = list.findIndex(m => m.id === confirmedMessage.id);
+            const next = idx === -1
+                ? [...list, confirmedMessage]
+                : list.map((m, i) => i === idx ? confirmedMessage : m);
+            return { messages: { ...s.messages, list: next, pending } };
         });
     },
 
@@ -435,6 +468,18 @@ export const SyncStore = {
             }
             return { messages: { ...s.messages, pending } };
         });
+    },
+
+    setPeerReadAt(channelId, isoStr) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (typeof isoStr !== 'string' || isoStr === '') {
+            throw new Error('isoStr обязателен.');
+        }
+        baseStore.setState(s => ({
+            peerReadAtByChannel: { ...s.peerReadAtByChannel, [channelId]: isoStr },
+        }));
     },
 
     selectSpace(spaceId) {

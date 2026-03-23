@@ -9,6 +9,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
+import { senderUserId } from '../utils/sender.js';
 import '../modals/user-info-modal.js';
 import './message-context-menu.js';
 import '@platform/lib/components/platform-icon.js';
@@ -62,6 +63,13 @@ function extractPlainText(msg) {
     return parts.join('\n').trim();
 }
 
+function _formatFileSize(bytes) {
+    if (bytes < 1024) return `${bytes} Б`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} ГБ`;
+}
+
 function renderContent(content) {
     if (content.type === 'text/plain') {
         const body = content.data?.body;
@@ -83,7 +91,50 @@ function renderContent(content) {
     if (content.type === 'mock/image') {
         const fileId = content.data?.file_id;
         if (typeof fileId !== 'string') throw new Error('Некорректный mock/image контент.');
-        return html`<div class="content-ref">Изображение: ${fileId}</div>`;
+        const src = `/sync/api/v1/files/download/${fileId}`;
+        return html`
+            <div class="file-image-wrap">
+                <img class="file-image" src=${src} alt=${content.data?.alt_text ?? ''} loading="lazy">
+            </div>
+        `;
+    }
+    if (content.type === 'file/image') {
+        const { file_id: fileId, filename } = content.data ?? {};
+        if (typeof fileId !== 'string') throw new Error('Некорректный file/image контент.');
+        const src = `/sync/api/v1/files/download/${fileId}`;
+        return html`
+            <div class="file-image-wrap">
+                <img class="file-image" src=${src} alt=${filename ?? ''} loading="lazy">
+                ${filename ? html`<div class="file-image-caption">${filename}</div>` : ''}
+            </div>
+        `;
+    }
+    if (content.type === 'file/document') {
+        const { file_id: fileId, filename, mime_type: mimeType, size } = content.data ?? {};
+        if (typeof fileId !== 'string') throw new Error('Некорректный file/document контент.');
+        const downloadUrl = `/sync/api/v1/files/download/${fileId}`;
+        const label = filename ?? 'Файл';
+        const sizeLabel = typeof size === 'number' ? _formatFileSize(size) : '';
+        return html`
+            <a class="file-card" href=${downloadUrl} download=${label} target="_blank">
+                <div class="file-card-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="file-card-info">
+                    <span class="file-card-name">${label}</span>
+                    ${sizeLabel ? html`<span class="file-card-size">${sizeLabel}</span>` : ''}
+                </div>
+                <div class="file-card-dl" title="Скачать">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 3v13M5 15l7 7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </div>
+            </a>
+        `;
     }
     if (content.type === 'git/reference') {
         const gitRefId = content.data?.git_ref_id;
@@ -98,6 +149,17 @@ function renderContent(content) {
     throw new Error(`Неподдерживаемый тип контента: ${content.type}`);
 }
 
+const checkSingle = html`
+    <svg class="check-icon" viewBox="0 0 16 10" width="14" height="9" fill="none" aria-hidden="true">
+        <path d="M1.5 5L6 9L14.5 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+
+const checkDouble = html`
+    <svg class="check-icon check-icon--read" viewBox="0 0 21 10" width="18" height="9" fill="none" aria-hidden="true">
+        <path d="M1 5L5.5 9L14 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7 5L11.5 9L20 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+
 export class MessageBubble extends PlatformElement {
     static properties = {
         msg: { type: Object },
@@ -109,6 +171,8 @@ export class MessageBubble extends PlatformElement {
         selected: { type: Boolean },
         flashActive: { type: Boolean },
         deleting: { type: Boolean },
+        peerReadAt: { type: String },
+        channelType: { type: String },
         _profileOpen: { state: true },
         _menuOpen: { state: true },
         _menuX: { state: true },
@@ -420,12 +484,124 @@ export class MessageBubble extends PlatformElement {
                 color: var(--text-secondary);
             }
 
+            .file-image-wrap {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                max-width: 320px;
+            }
+
+            .file-image {
+                max-width: 100%;
+                max-height: 400px;
+                border-radius: var(--radius-lg);
+                cursor: pointer;
+                display: block;
+                object-fit: contain;
+            }
+
+            .file-image-caption {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .file-card {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle);
+                text-decoration: none;
+                color: var(--text-primary);
+                max-width: 280px;
+                transition: background var(--duration-fast);
+            }
+
+            .file-card:hover {
+                background: var(--glass-solid-medium);
+            }
+
+            .file-card-icon {
+                flex-shrink: 0;
+                color: var(--text-secondary);
+                display: flex;
+                align-items: center;
+            }
+
+            .file-card-info {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .file-card-name {
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .file-card-size {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+
+            .file-card-dl {
+                flex-shrink: 0;
+                color: var(--text-secondary);
+                display: flex;
+                align-items: center;
+            }
+
             .bubble-time.status-pending {
                 color: var(--text-tertiary);
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
             }
 
             .bubble-time.status-failed {
                 color: var(--error);
+            }
+
+            .bubble-time.own-time {
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+            }
+
+            .sending-spinner {
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                border: 1.5px solid currentColor;
+                border-top-color: transparent;
+                border-radius: 50%;
+                animation: spin-sending 0.7s linear infinite;
+                flex-shrink: 0;
+            }
+
+            @keyframes spin-sending {
+                to { transform: rotate(360deg); }
+            }
+
+            .check-icon {
+                color: rgba(6, 95, 70, 0.65);
+                flex-shrink: 0;
+                display: inline-block;
+                vertical-align: middle;
+            }
+
+            .check-icon--read {
+                color: rgb(5, 150, 105);
             }
 
             .reply-quote {
@@ -544,6 +720,8 @@ export class MessageBubble extends PlatformElement {
         this.selected = false;
         this.flashActive = false;
         this.deleting = false;
+        this.peerReadAt = null;
+        this.channelType = null;
         this._profileOpen = false;
         this._menuOpen = false;
         this._menuX = 0;
@@ -679,9 +857,8 @@ export class MessageBubble extends PlatformElement {
         const myId = ServiceRegistry.auth?.user?.id;
         const parentIsOwn =
             typeof myId === 'string' &&
-            p &&
-            typeof p.sender?.id === 'string' &&
-            p.sender.user_id === myId;
+            p !== undefined &&
+            senderUserId(p.sender) === myId;
         const quoteClass = !p
             ? 'reply-quote--unknown'
             : parentIsOwn
@@ -715,14 +892,39 @@ export class MessageBubble extends PlatformElement {
     }
 
     _renderTimeMeta() {
-        const { status, sent_at } = this.msg;
-        if (status === 'pending') {
-            return html`<span class="bubble-time status-pending">Отправка...</span>`;
-        }
+        const { msg, isOwn, peerReadAt, channelType } = this;
+        const { status, sent_at } = msg;
+
         if (status === 'failed') {
             return html`<span class="bubble-time status-failed">Ошибка</span>`;
         }
-        return html`<span class="bubble-time">${formatMessageTime(sent_at)}</span>`;
+
+        const timeStr = formatMessageTime(sent_at);
+
+        if (!isOwn) {
+            return html`<span class="bubble-time">${timeStr}</span>`;
+        }
+
+        if (status === 'pending') {
+            return html`
+                <span class="bubble-time own-time">
+                    ${timeStr}
+                    <span class="sending-spinner"></span>
+                </span>
+            `;
+        }
+
+        const isRead = channelType === 'direct'
+            && typeof peerReadAt === 'string'
+            && peerReadAt !== ''
+            && new Date(sent_at) <= new Date(peerReadAt);
+
+        return html`
+            <span class="bubble-time own-time">
+                ${timeStr}
+                ${isRead ? checkDouble : checkSingle}
+            </span>
+        `;
     }
 
     render() {

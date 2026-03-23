@@ -38,6 +38,7 @@ async def channel_read_from_entity(
     )
     pids = entity.pinned_message_ids if isinstance(entity.pinned_message_ids, list) else []
     peer: UserBrief | None = None
+    peer_last_read_at = None
     if entity.type == ChannelType.DIRECT.value:
         member_ids = await channel_repository.list_member_user_ids(
             entity.channel_id,
@@ -46,6 +47,11 @@ async def channel_read_from_entity(
         others = [uid for uid in member_ids if uid != viewer_user_id]
         if len(others) >= 1:
             peer = await _user_brief(user_repository, others[0])
+            peer_last_read_at = await channel_repository.get_peer_last_read_at(
+                entity.channel_id,
+                viewer_user_id,
+                company_id=company_id,
+            )
     return ChannelRead(
         id=entity.channel_id,
         space_id=entity.space_id,
@@ -60,6 +66,7 @@ async def channel_read_from_entity(
         unread_count=summ.unread_count,
         last_message_preview=summ.last_message_preview,
         last_message_at=summ.last_message_at,
+        peer_last_read_at=peer_last_read_at,
     )
 
 

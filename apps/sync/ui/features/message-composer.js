@@ -8,6 +8,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
+import { senderUserId } from '../utils/sender.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from '../constants/sync-limits.js';
 
@@ -56,6 +57,7 @@ export class MessageComposer extends PlatformElement {
         channelId: { type: String },
         _text: { state: true },
         _emojiOpen: { state: true },
+        _attachMenuOpen: { state: true },
         _focusedThreadId: { state: true },
         _replyToMessage: { state: true },
         _editMessage: { state: true },
@@ -137,11 +139,49 @@ export class MessageComposer extends PlatformElement {
                 border-color: var(--accent);
             }
 
+            .attach-popup {
+                position: absolute;
+                bottom: calc(100% + 8px);
+                left: 0;
+                min-width: 180px;
+                border-radius: var(--radius-xl);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-strong);
+                backdrop-filter: blur(var(--glass-blur-strong));
+                padding: var(--space-1);
+                box-shadow: var(--glass-shadow-strong);
+                z-index: 50;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .attach-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border: none;
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                font-family: inherit;
+                cursor: pointer;
+                border-radius: var(--radius-md);
+                text-align: left;
+                transition: background var(--duration-fast);
+            }
+
+            .attach-item:hover {
+                background: var(--glass-solid-medium);
+            }
+
             .emoji-popup {
                 position: absolute;
                 bottom: calc(100% + 8px);
                 right: 44px;
-                width: 240px;
+                width: min(288px, calc(100vw - var(--space-4)));
+                box-sizing: border-box;
                 border-radius: var(--radius-xl);
                 border: 1px solid var(--glass-border-medium);
                 background: var(--glass-solid-strong);
@@ -153,11 +193,19 @@ export class MessageComposer extends PlatformElement {
 
             .emoji-grid {
                 display: grid;
-                grid-template-columns: repeat(8, 1fr);
+                grid-template-columns: repeat(8, minmax(0, 1fr));
                 gap: var(--space-1);
+                width: 100%;
             }
 
             .emoji-btn {
+                box-sizing: border-box;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 0;
+                width: 100%;
+                aspect-ratio: 1;
                 background: transparent;
                 border: none;
                 border-radius: var(--radius-md);
@@ -258,6 +306,12 @@ export class MessageComposer extends PlatformElement {
             input[type="file"] {
                 display: none;
             }
+
+            .attach-uploading {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                padding: var(--space-1) var(--space-3);
+            }
         `
     ];
 
@@ -266,6 +320,7 @@ export class MessageComposer extends PlatformElement {
         this.channelId = null;
         this._text = '';
         this._emojiOpen = false;
+        this._attachMenuOpen = false;
         this._focusedThreadId = null;
         this._replyToMessage = null;
         this._editMessage = null;
@@ -389,7 +444,7 @@ export class MessageComposer extends PlatformElement {
             channel_id: this.channelId,
             thread_id: this._focusedThreadId,
             parent_message_id: parentId,
-            sender: { id: userId, display_name: displayName, avatar_url: null },
+            sender: { user_id: userId, id: userId, display_name: displayName, avatar_url: null },
             status: 'pending',
             sent_at: new Date().toISOString(),
             edited_at: null,
@@ -412,28 +467,61 @@ export class MessageComposer extends PlatformElement {
         }
     }
 
-    async _pickImage(e) {
+    _openMediaPicker() {
+        this._attachMenuOpen = false;
+        this.shadowRoot?.querySelector('input.input-media')?.click();
+    }
+
+    _openDocumentPicker() {
+        this._attachMenuOpen = false;
+        this.shadowRoot?.querySelector('input.input-document')?.click();
+    }
+
+    async _pickAttachments(contentType, e) {
         const input = e.currentTarget;
-        const files = input.files;
-        if (!files || files.length === 0) return;
+        const fileList = input.files;
+        if (!fileList || fileList.length === 0) return;
         if (!this.channelId) throw new Error('Выбери канал.');
 
-        const file = files[0];
         input.value = '';
 
         const syncApi = ServiceRegistry.get('syncApi');
-        const res = await syncApi.uploadFile(file);
-        if (!res?.file?.id) throw new Error('Некорректный ответ загрузки файла.');
+        const uploads = await Promise.all(
+            Array.from(fileList).map(f => syncApi.uploadFile(f))
+        );
+
+        const fileBlocks = uploads.map((res, idx) => {
+            if (!res?.file_id) throw new Error(`Некорректный ответ загрузки файла #${idx + 1}.`);
+            return {
+                type: contentType,
+                data: {
+                    file_id: res.file_id,
+                    filename: res.original_name,
+                    mime_type: res.content_type,
+                    size: res.file_size,
+                },
+                order: idx,
+            };
+        });
+
+        const contents = [];
+        const text = this._text.trim();
+        if (text) {
+            contents.push({ type: 'text/plain', data: { body: text }, order: 0 });
+            fileBlocks.forEach((b, i) => { b.order = i + 1; });
+        }
+        contents.push(...fileBlocks);
 
         const parentId = this._replyToMessage?.id ?? null;
         const messageCreate = {
             thread_id: this._focusedThreadId,
             parent_message_id: parentId,
-            contents: [{ type: 'mock/image', data: { file_id: res.file.id, alt_text: null }, order: 0 }],
+            contents,
         };
 
-        await syncApi.sendMessage(this.channelId, messageCreate);
+        this._text = '';
         SyncStore.clearReplyToMessage();
+        await syncApi.sendMessage(this.channelId, messageCreate);
         await SyncStore.loadMessages(syncApi, this.channelId);
     }
 
@@ -463,10 +551,6 @@ export class MessageComposer extends PlatformElement {
         }
     }
 
-    _openFilePicker() {
-        this.shadowRoot?.querySelector('input[type="file"]')?.click();
-    }
-
     _replySnippet() {
         const m = this._replyToMessage;
         if (!m) return '';
@@ -477,7 +561,7 @@ export class MessageComposer extends PlatformElement {
     _replyQuotedParentIsOwn() {
         const m = this._replyToMessage;
         const myId = ServiceRegistry.auth?.user?.id;
-        const sid = m?.sender?.id;
+        const sid = senderUserId(m?.sender);
         return typeof myId === 'string' && typeof sid === 'string' && myId === sid;
     }
 
@@ -505,12 +589,13 @@ export class MessageComposer extends PlatformElement {
                     </div>
                 ` : ''}
                 <div class="row">
-                    <button class="icon-btn" title="Прикрепить изображение" @click=${this._openFilePicker}>
+                    <button class="icon-btn" title="Прикрепить файл" @click=${() => { this._attachMenuOpen = !this._attachMenuOpen; this._emojiOpen = false; }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                             <path d="M12.5 6.5L6.4 12.6a4 4 0 105.7 5.7l7.1-7.1a6 6 0 10-8.5-8.5l-7.1 7.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </button>
-                    <input type="file" accept="image/*" @change=${this._pickImage}>
+                    <input class="input-media" type="file" accept="image/*,video/*" multiple @change=${e => this._pickAttachments('file/image', e)}>
+                    <input class="input-document" type="file" accept="*/*" multiple @change=${e => this._pickAttachments('file/document', e)}>
 
                     <textarea
                         class="textarea"
@@ -524,7 +609,7 @@ export class MessageComposer extends PlatformElement {
                     <button
                         class="icon-btn"
                         title="Эмодзи"
-                        @click=${() => { this._emojiOpen = !this._emojiOpen; }}
+                        @click=${() => { this._emojiOpen = !this._emojiOpen; this._attachMenuOpen = false; }}
                     >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                             <path d="M12 22a10 10 0 110-20 10 10 0 010 20z" stroke="currentColor" stroke-width="1.8"/>
@@ -540,6 +625,25 @@ export class MessageComposer extends PlatformElement {
                         </svg>
                     </button>
 
+                    ${this._attachMenuOpen ? html`
+                        <div class="attach-popup">
+                            <button class="attach-item" @click=${this._openMediaPicker}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8"/>
+                                    <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M3 16l5-5 4 4 3-3 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Фото или видео
+                            </button>
+                            <button class="attach-item" @click=${this._openDocumentPicker}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                </svg>
+                                Файл
+                            </button>
+                        </div>
+                    ` : ''}
                     ${this._emojiOpen ? html`
                         <div class="emoji-popup">
                             <div class="emoji-grid">

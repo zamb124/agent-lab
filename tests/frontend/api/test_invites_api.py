@@ -260,6 +260,17 @@ class TestInvitesAcceptAPI:
         redis_val = await _redis_get(f"{INVITE_REDIS_KEY_PREFIX}{jti}")
         assert redis_val == "1"
 
+        members_resp = await frontend_client.get(
+            "/frontend/api/team/members",
+            headers=auth_headers,
+        )
+        assert members_resp.status_code == 200, members_resp.text
+        members = members_resp.json()
+        member_ids = {m["user_id"] for m in members}
+        assert owner_data.user_id in member_ids
+        assert invitee_id.user_id in member_ids
+        assert len(members) >= 2
+
     async def test_accept_second_user_same_link_returns_410(
         self,
         frontend_client: AsyncClient,

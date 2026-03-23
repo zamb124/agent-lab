@@ -212,9 +212,6 @@ export class TeamPage extends PlatformElement {
     }
 
     async _loadMembers() {
-        const { members } = this.state.value;
-        if (members.length > 0) return;
-        
         FrontendStore.setTeamLoading(true);
         const teamMembers = await this.services.get('team').getMembers();
         FrontendStore.setTeamMembers(teamMembers);

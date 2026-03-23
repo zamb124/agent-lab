@@ -189,6 +189,27 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             row.last_read_at = at
             await session.commit()
 
+    async def get_peer_last_read_at(
+        self,
+        channel_id: str,
+        viewer_user_id: str,
+        company_id: Optional[str] = None,
+    ) -> Optional[datetime]:
+        """Курсор прочитанного участника, отличного от viewer (для direct-канала)."""
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = (
+                select(SyncChannelMember.last_read_at)
+                .where(
+                    SyncChannelMember.channel_id == channel_id,
+                    SyncChannelMember.company_id == cid,
+                    SyncChannelMember.user_id != viewer_user_id,
+                )
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
     async def set_pinned_message_ids(
         self,
         channel_id: str,

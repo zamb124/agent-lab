@@ -259,19 +259,25 @@ export class FrontendSidebar extends PlatformElement {
                     <div class="section-title">Сервисы</div>
 
                     <button class="service-link" @click=${() => this._openExternalService('/flows')}>
-                        <span class="nav-icon">F</span>
+                        <span class="nav-icon">
+                            <img src="/static/core/assets/service_logos/agents_logo.svg" alt="" />
+                        </span>
                         <span>Flows</span>
                         <span class="external-icon">↗</span>
                     </button>
 
                     <button class="service-link" @click=${() => this._openExternalService('/crm')}>
-                        <span class="nav-icon">C</span>
+                        <span class="nav-icon">
+                            <img src="/static/core/assets/service_logos/crm_logo.svg" alt="" />
+                        </span>
                         <span>CRM</span>
                         <span class="external-icon">↗</span>
                     </button>
 
                     <button class="service-link" @click=${() => this._openExternalService('/rag')}>
-                        <span class="nav-icon">R</span>
+                        <span class="nav-icon">
+                            <img src="/static/core/assets/service_logos/rag_logo.svg" alt="" />
+                        </span>
                         <span>RAG</span>
                         <span class="external-icon">↗</span>
                     </button>

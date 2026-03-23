@@ -9,6 +9,7 @@ import { SyncAPIService } from '../services/sync-api.service.js';
 import { SyncWsService } from '../services/sync-ws.service.js';
 import { SyncStore } from '../store/sync.store.js';
 import { lanePreviewFromMessagePayload } from '../utils/lane-preview.js';
+import { senderUserId } from '../utils/sender.js';
 import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/layout/platform-island.js';
 
@@ -210,19 +211,27 @@ export class SyncApp extends PlatformApp {
             if (msg.type === 'channel.read_updated') {
                 const authUser = ServiceRegistry.auth?.user;
                 const myId = authUser?.id;
-                if (
-                    typeof myId === 'string'
-                    && myId !== ''
-                    && p.reader_user_id === myId
-                    && typeof p.channel_id === 'string'
-                ) {
+                if (typeof myId !== 'string' || myId === '') return;
+                if (p.reader_user_id === myId && typeof p.channel_id === 'string') {
                     SyncStore.patchChannelFields(p.channel_id, { unread_count: 0 });
+                } else if (
+                    p.reader_user_id !== myId
+                    && typeof p.channel_id === 'string'
+                    && typeof p.read_at === 'string'
+                ) {
+                    SyncStore.setPeerReadAt(p.channel_id, p.read_at);
                 }
                 return;
             }
 
             if (msg.type === 'message.created' && selectedChannelId && p.channel_id === selectedChannelId) {
-                SyncStore.upsertMessage(p);
+                const authUser = ServiceRegistry.auth?.user;
+                const myId = authUser?.id;
+                if (typeof myId === 'string' && myId !== '' && senderUserId(p.sender) === myId) {
+                    SyncStore.resolveOwnMessageBroadcast(p);
+                } else {
+                    SyncStore.upsertMessage(p);
+                }
                 return;
             }
 
@@ -244,7 +253,7 @@ export class SyncApp extends PlatformApp {
                     last_message_preview: preview,
                     last_message_at: p.sent_at,
                 };
-                if (p.sender?.id !== myId) {
+                if (senderUserId(p.sender) !== myId) {
                     const cur = list.find((c) => c.id === p.channel_id);
                     const n = (typeof cur?.unread_count === 'number' ? cur.unread_count : 0) + 1;
                     patch.unread_count = n;
@@ -268,6 +277,12 @@ export class SyncApp extends PlatformApp {
             }
             if (msg.type === 'channel.pins_changed' && p.id) {
                 SyncStore.mergeChannel(p);
+                return;
+            }
+            if (msg.type === 'message.status_changed' && selectedChannelId && p.channel_id === selectedChannelId) {
+                const mid = p.message_id;
+                if (typeof mid !== 'string') throw new Error('message.status_changed: нет message_id.');
+                SyncStore.mergeMessageFields(mid, { status: p.status });
             }
         });
 

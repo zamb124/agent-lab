@@ -29,6 +29,8 @@ class MessageContentType(str, Enum):
     TEXT_PLAIN = "text/plain"
     CODE_BLOCK = "code/block"
     MOCK_IMAGE = "mock/image"
+    FILE_IMAGE = "file/image"
+    FILE_DOCUMENT = "file/document"
     GIT_REFERENCE = "git/reference"
     CUSTOM_TOOL_RESPONSE = "custom_tool_response"
 
@@ -64,6 +66,15 @@ class MockImageContent(BaseModel):
     )
 
 
+class FileAttachmentContent(BaseModel):
+    """Вложение файла — фото/видео (file/image) или документ (file/document)."""
+
+    file_id: str = Field(description="Идентификатор файла в системе.")
+    filename: str = Field(description="Оригинальное имя файла.")
+    mime_type: str = Field(description="MIME-тип файла.")
+    size: int = Field(description="Размер файла в байтах.")
+
+
 class GitReferenceContent(BaseModel):
     """Блок, ссылающийся на абстрактный Git-ресурс."""
 
@@ -83,6 +94,7 @@ ContentData = Union[
     TextPlainContent,
     CodeBlockContent,
     MockImageContent,
+    FileAttachmentContent,
     GitReferenceContent,
     CustomToolResponseContent,
 ]

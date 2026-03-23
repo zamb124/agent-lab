@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
+import { senderUserId } from '../utils/sender.js';
 import './message-bubble.js';
 
 function startOfLocalDay(d) {
@@ -59,6 +60,8 @@ export class MessageList extends PlatformElement {
         _pinnedMessageIds: { state: true },
         _flashMessageId: { state: true },
         _deletingMessageIds: { state: true },
+        _peerReadAtByChannel: { state: true },
+        _selectedChannelType: { state: true },
     };
 
     static styles = [
@@ -128,17 +131,21 @@ export class MessageList extends PlatformElement {
         this._pinnedMessageIds = [];
         this._flashMessageId = null;
         this._deletingMessageIds = [];
+        this._peerReadAtByChannel = {};
+        this._selectedChannelType = null;
     }
 
     _syncChannelMeta(state) {
         const cid = this.channelId;
         if (!cid) {
             this._pinnedMessageIds = [];
+            this._selectedChannelType = null;
             return;
         }
         const ch = state.channels.list.find(c => c.id === cid);
         const pins = ch?.pinned_message_ids;
         this._pinnedMessageIds = Array.isArray(pins) ? pins : [];
+        this._selectedChannelType = ch?.type ?? null;
     }
 
     connectedCallback() {
@@ -154,6 +161,7 @@ export class MessageList extends PlatformElement {
             this._deletingMessageIds = Array.isArray(state.ui.deletingMessageIds)
                 ? state.ui.deletingMessageIds
                 : [];
+            this._peerReadAtByChannel = state.peerReadAtByChannel ?? {};
             this._syncCurrentUserId();
             this._scrollIfSticky();
         });
@@ -240,6 +248,7 @@ export class MessageList extends PlatformElement {
         });
 
         const items = buildListItems(filtered);
+        const peerReadAt = this._peerReadAtByChannel[this.channelId] ?? null;
 
         return html`
             <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
@@ -267,7 +276,9 @@ export class MessageList extends PlatformElement {
                             .selected=${selected}
                             .deleting=${deleting}
                             .flashActive=${flashActive}
-                            .isOwn=${this._currentUserId !== null && msg.sender?.id === this._currentUserId}
+                            .isOwn=${this._currentUserId !== null && senderUserId(msg.sender) === this._currentUserId}
+                            .peerReadAt=${peerReadAt}
+                            .channelType=${this._selectedChannelType}
                             .canFocusThread=${this._focusedThreadId === null && msg.thread_id !== null}
                             @focus-thread=${(e) => SyncStore.setFocusedThread(e.detail.threadId)}
                         ></message-bubble>
