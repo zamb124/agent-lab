@@ -103,6 +103,8 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 
 ### S3 Selectel (обязательные)
 
+Секреты в GitHub по имени `SELECTEL_*` не меняются; в `docker-compose-prod.yaml` они мапятся в `S3__BUCKETS__<ключ>` — ключ должен совпадать с `s3.default_bucket` / ключом в `s3.buckets` в `conf.json` (например `shvedzilla`).
+
 | Secret | Описание |
 |---|---|
 | `SELECTEL_ACCESS_KEY` | Selectel S3 access key |
