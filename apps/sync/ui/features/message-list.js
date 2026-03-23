@@ -10,15 +10,47 @@ import { senderUserId } from '../utils/sender.js';
 import '@platform/lib/components/glass-spinner.js';
 import './message-bubble.js';
 
-/** Скелетоны при загрузке ленты: чередование «собеседник слева» / «я справа». */
-const MESSAGE_SKELETON_ROWS = [
-    { side: 'other', widthPct: 78, minH: 44 },
-    { side: 'own', widthPct: 58, minH: 36 },
-    { side: 'other', widthPct: 66, minH: 52 },
-    { side: 'own', widthPct: 72, minH: 40 },
-    { side: 'other', widthPct: 82, minH: 38 },
-    { side: 'own', widthPct: 54, minH: 44 },
-];
+/** Детерминированный PRNG для набора скелетонов на одну сессию загрузки. */
+function mulberry32(seed) {
+    return function next() {
+        let t = (seed += 0x6d2b79f5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+/**
+ * Случайно 3–5 строк слева (голубой оттенок) и 3–5 справа (зелёный), разные размеры пузырей.
+ * Порядок: по очереди other, own, пока не исчерпаются квоты.
+ */
+function buildSkeletonPlan(seed) {
+    const rnd = mulberry32(seed >>> 0);
+    const nLeft = 3 + Math.floor(rnd() * 3);
+    const nRight = 3 + Math.floor(rnd() * 3);
+    const rows = [];
+    let left = nLeft;
+    let right = nRight;
+    while (left > 0 || right > 0) {
+        if (left > 0) {
+            rows.push({
+                side: 'other',
+                widthPct: 50 + Math.floor(rnd() * 36),
+                minH: 28 + Math.floor(rnd() * 36),
+            });
+            left -= 1;
+        }
+        if (right > 0) {
+            rows.push({
+                side: 'own',
+                widthPct: 48 + Math.floor(rnd() * 38),
+                minH: 28 + Math.floor(rnd() * 36),
+            });
+            right -= 1;
+        }
+    }
+    return rows;
+}
 
 function startOfLocalDay(d) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -73,6 +105,7 @@ export class MessageList extends PlatformElement {
         _deletingMessageIds: { state: true },
         _peerReadAtByChannel: { state: true },
         _selectedChannelType: { state: true },
+        _skeletonPlan: { state: true },
     };
 
     static styles = [
@@ -129,28 +162,45 @@ export class MessageList extends PlatformElement {
                 height: 32px;
                 border-radius: 50%;
                 flex-shrink: 0;
-                background: linear-gradient(
-                    90deg,
-                    var(--glass-solid-subtle) 0%,
-                    var(--glass-solid-medium) 50%,
-                    var(--glass-solid-subtle) 100%
-                );
                 background-size: 200% 100%;
                 animation: skeleton-shimmer 1.35s ease-in-out infinite;
             }
 
-            .skeleton-bubble {
-                max-width: min(320px, 85%);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
+            .skeleton-avatar--other {
+                border: 1px solid rgba(56, 189, 248, 0.28);
                 background: linear-gradient(
                     90deg,
-                    var(--glass-solid-subtle) 0%,
-                    var(--glass-solid-medium) 48%,
-                    var(--glass-solid-subtle) 100%
+                    rgba(56, 189, 248, 0.1) 0%,
+                    rgba(56, 189, 248, 0.24) 50%,
+                    rgba(56, 189, 248, 0.1) 100%
                 );
+            }
+
+            .skeleton-bubble {
+                max-width: min(320px, 88%);
+                border-radius: var(--radius-lg);
                 background-size: 200% 100%;
                 animation: skeleton-shimmer 1.35s ease-in-out infinite;
+            }
+
+            .skeleton-bubble--other {
+                border: 1px solid rgba(56, 189, 248, 0.32);
+                background: linear-gradient(
+                    90deg,
+                    rgba(56, 189, 248, 0.12) 0%,
+                    rgba(56, 189, 248, 0.28) 50%,
+                    rgba(56, 189, 248, 0.12) 100%
+                );
+            }
+
+            .skeleton-bubble--own {
+                border: 1px solid rgba(34, 197, 94, 0.32);
+                background: linear-gradient(
+                    90deg,
+                    rgba(34, 197, 94, 0.1) 0%,
+                    rgba(34, 197, 94, 0.26) 50%,
+                    rgba(34, 197, 94, 0.1) 100%
+                );
             }
 
             @keyframes skeleton-shimmer {
@@ -204,6 +254,13 @@ export class MessageList extends PlatformElement {
         this._deletingMessageIds = [];
         this._peerReadAtByChannel = {};
         this._selectedChannelType = null;
+        this._skeletonPlan = [];
+        this._wasLoading = false;
+    }
+
+    _regenerateSkeletonPlan() {
+        const seed = (Date.now() ^ (Math.floor(Math.random() * 0x7fffffff) << 16)) >>> 0;
+        this._skeletonPlan = buildSkeletonPlan(seed);
     }
 
     _syncChannelMeta(state) {
@@ -222,7 +279,15 @@ export class MessageList extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         this._unsubscribe = SyncStore.subscribe(state => {
-            this._loading = state.messages.loading;
+            const loading = state.messages.loading;
+            if (loading && !this._wasLoading) {
+                this._regenerateSkeletonPlan();
+            }
+            if (!loading) {
+                this._skeletonPlan = [];
+            }
+            this._wasLoading = loading;
+            this._loading = loading;
             this._focusedThreadId = state.chat.focusedThreadId;
             this._messages = SyncStore.getDisplayMessages();
             this._selectionMode = state.ui.selectionMode;
@@ -256,7 +321,10 @@ export class MessageList extends PlatformElement {
         }
     }
 
-    updated() {
+    updated(changed) {
+        if (changed.has('channelId') && this._loading) {
+            this._regenerateSkeletonPlan();
+        }
         this._scrollIfSticky();
     }
 
@@ -323,6 +391,9 @@ export class MessageList extends PlatformElement {
         const peerReadAt = this._peerReadAtByChannel[this.channelId] ?? null;
 
         if (this._loading) {
+            const plan = this._skeletonPlan.length > 0
+                ? this._skeletonPlan
+                : buildSkeletonPlan(0x9e3779b9);
             return html`
                 <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
                     <div class="messages-loading-bar" aria-busy="true" aria-live="polite">
@@ -330,16 +401,22 @@ export class MessageList extends PlatformElement {
                         <span class="messages-loading-label">Загрузка сообщений…</span>
                     </div>
                     <div class="skeleton-list" aria-hidden="true">
-                        ${MESSAGE_SKELETON_ROWS.map((row, i) => {
-            const delay = `${i * 0.07}s`;
+                        ${plan.map((row, i) => {
+            const delay = `${i * 0.06}s`;
+            const bubbleClass = row.side === 'other'
+                ? 'skeleton-bubble skeleton-bubble--other'
+                : 'skeleton-bubble skeleton-bubble--own';
             const avatar = row.side === 'other'
-                ? html`<div class="skeleton-avatar" style=${`animation-delay: ${delay}`}></div>`
+                ? html`<div
+                                    class="skeleton-avatar skeleton-avatar--other"
+                                    style=${`animation-delay: ${delay}`}
+                                ></div>`
                 : '';
             return html`
                             <div class="skeleton-row ${row.side}">
                                 ${avatar}
                                 <div
-                                    class="skeleton-bubble"
+                                    class=${bubbleClass}
                                     style=${`width: ${row.widthPct}%; min-height: ${row.minH}px; animation-delay: ${delay}`}
                                 ></div>
                             </div>
