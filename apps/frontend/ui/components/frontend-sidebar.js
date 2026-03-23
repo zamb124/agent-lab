@@ -259,8 +259,8 @@ export class FrontendSidebar extends PlatformElement {
                     <div class="section-title">Сервисы</div>
 
                     <button class="service-link" @click=${() => this._openExternalService('/flows')}>
-                        <span class="nav-icon">A</span>
-                        <span>Agents Builder</span>
+                        <span class="nav-icon">F</span>
+                        <span>Flows</span>
                         <span class="external-icon">↗</span>
                     </button>
 

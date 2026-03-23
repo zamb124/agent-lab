@@ -269,10 +269,10 @@ export class DashboardPage extends PlatformElement {
     _renderServices() {
         const services = [
             {
-                id: 'agents',
-                name: 'Agents Builder',
+                id: 'flows',
+                name: 'Flows',
                 logo: '/static/core/assets/service_logos/agents_logo.svg',
-                description: 'Создание и управление AI-агентами',
+                description: 'Конструктор flow: графы, skills и интеграции',
                 path: '/flows',
             },
             {

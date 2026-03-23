@@ -188,6 +188,8 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 
+Локально все сервисы одной командой: **`make app`** (эквивалент `uv run python scripts/run.py all`: uvicorn с `--reload`, TaskIQ worker/scheduler без reload; остановка Ctrl+C). Падение одного процесса (например порт занят) не останавливает остальные. Перед запуском при необходимости освободить порты 8001–8005.
+
 ## Документация библиотек
 
 Используй Context7 для получения актуальной документации FastAPI, SQLAlchemy, pgvector, TaskIQ и других библиотек.

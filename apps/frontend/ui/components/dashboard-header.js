@@ -169,7 +169,7 @@ export class DashboardHeader extends PlatformElement {
                         class="nav-link ${this._isActive('/flows') ? 'active' : ''}"
                         @click=${(e) => this._handleNavigation('/flows', e)}
                     >
-                        Агенты
+                        Flows
                     </a>
                     <a 
                         href="/crm" 
