@@ -41,6 +41,8 @@ class TestRunner:
     Поддерживает агентов и отдельные ноды.
     """
 
+    __test__ = False
+
     def __init__(
         self,
         target_id: str,

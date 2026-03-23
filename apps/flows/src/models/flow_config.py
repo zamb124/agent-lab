@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
@@ -166,6 +166,9 @@ class TestTurn(StrictBaseModel):
     - {"input": {"type": "text", "value": "Привет"}, "check": {"type": "string", "value": "contains:здравствуй"}}
     - {"input": {"type": "flow", "value": "tester_id"}, "check": {"type": "flow", "value": "judge_id"}}
     """
+
+    __test__: ClassVar[bool] = False
+
     input: InputConfig = Field(..., description="Конфигурация входа")
     check: Optional[CheckConfig] = Field(default=None, description="Конфигурация проверки (опционально)")
 
@@ -178,6 +181,9 @@ class TestTarget(StrictBaseModel):
     - {"type": "flow", "flow_id": "my_flow", "skill_id": "default"}
     - {"type": "node", "node_config": {"type": "llm_node", "prompt": "..."}}
     """
+
+    __test__: ClassVar[bool] = False
+
     type: TestTargetType = Field(..., description="Тип цели: flow, node")
     
     # FLOW -- тестируем другой flow (если None, используется flow_id из контекста)
@@ -203,6 +209,9 @@ class TestCaseConfig(StrictBaseModel):
     - None / {"type": "flow"} -- полный flow
     - {"type": "node", "node_config": {...}} -- отдельная нода
     """
+
+    __test__: ClassVar[bool] = False
+
     name: str = Field(..., description="Название теста")
     description: str = Field(default="", description="Описание теста")
     

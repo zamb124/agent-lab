@@ -9,6 +9,8 @@ from aiohttp import web
 
 from core.clients import A2AClient, A2AClientError
 
+from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
+
 
 class TestA2AClient:
     """Тесты A2AClient с реальным HTTP сервером."""
@@ -16,11 +18,12 @@ class TestA2AClient:
     @pytest.fixture
     async def mock_agent_server(self):
         """Поднимает тестовый HTTP сервер, имитирующий A2A агента."""
-        
+        public = {"base": "http://127.0.0.1:0"}
+
         async def handle_agent_card(request):
             return web.json_response({
                 "name": "Test Agent",
-                "url": "http://localhost:9999",
+                "url": public["base"],
                 "version": "1.0.0",
                 "skills": [{"id": "default", "name": "Default Skill"}],
             })
@@ -28,7 +31,7 @@ class TestA2AClient:
         async def handle_send_task(request):
             data = await request.json()
             content = data["params"]["message"]["parts"][0]["text"]
-            
+
             return web.json_response({
                 "jsonrpc": "2.0",
                 "id": data["id"],
@@ -46,17 +49,19 @@ class TestA2AClient:
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, "localhost", 9999)
+        site = web.TCPSite(runner, "127.0.0.1", 0)
         await site.start()
+        port = tcp_site_assigned_port(site)
+        public["base"] = f"http://127.0.0.1:{port}"
 
-        yield "http://localhost:9999"
+        yield public["base"]
 
         await runner.cleanup()
 
     @pytest.fixture
     async def error_server(self):
         """Сервер который возвращает ошибки."""
-        
+
         async def handle_error(request):
             return web.json_response(
                 {"jsonrpc": "2.0", "error": {"code": -32600, "message": "Bad request"}},
@@ -72,10 +77,12 @@ class TestA2AClient:
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, "localhost", 9998)
+        site = web.TCPSite(runner, "127.0.0.1", 0)
         await site.start()
+        port = tcp_site_assigned_port(site)
+        base = f"http://127.0.0.1:{port}"
 
-        yield "http://localhost:9998"
+        yield base
 
         await runner.cleanup()
 

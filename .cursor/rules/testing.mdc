@@ -23,6 +23,10 @@ alwaysApply: false
 
 Прервать прогон: **Ctrl+C** или `pkill -f "pytest.*tests/"`. Лог: `make test WORKERS=2 2>&1 | tee logs/make-test.log`.
 
+**PytestCollectionWarning** (`cannot collect test class ... because it has a __init__`): доменные классы с префиксом `Test*` (например `TestRunner`, `TestCaseConfig`) не должны собираться как тесты — на классе задаётся **`__test__ = False`** (для Pydantic-моделей: **`__test__: ClassVar[bool] = False`**).
+
+Каталог **`tests/frontend/browser/`** существует как пакет под будущие Playwright-тесты; `mk/test.mk` вызывает `pytest tests/frontend/browser` — без каталога была ошибка «file or directory not found».
+
 ---
 
 ## Изоляция: unique_id обязателен

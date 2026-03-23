@@ -23,6 +23,7 @@ from aiohttp import web
 from httpx import ASGITransport, AsyncClient
 from uvicorn import Config, Server
 
+from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 from tests.flows.fixtures.external_api.main import external_api_app
 
 
@@ -75,18 +76,19 @@ async def external_api_server():
 @pytest.fixture
 async def remote_flow_server():
     """Тестовый A2A сервер для remote_flow тестов."""
-    
+    public = {"base": "http://127.0.0.1:0"}
+
     async def handle_agent_card(request):
         return web.json_response({
             "name": "Test Remote Agent",
-            "url": "http://localhost:9998",
+            "url": public["base"],
             "skills": [{"id": "default", "name": "Default"}],
         })
-    
+
     async def handle_send_task(request):
         data = await request.json()
         content = data["params"]["message"]["parts"][0]["text"]
-        
+
         return web.json_response({
             "jsonrpc": "2.0",
             "id": data["id"],
@@ -97,18 +99,20 @@ async def remote_flow_server():
                 ],
             },
         })
-    
+
     app = web.Application()
     app.router.add_get("/.well-known/agent-card.json", handle_agent_card)
     app.router.add_post("/", handle_send_task)
-    
+
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "localhost", 9998)
+    site = web.TCPSite(runner, "127.0.0.1", 0)
     await site.start()
-    
-    yield "http://localhost:9998"
-    
+    port = tcp_site_assigned_port(site)
+    public["base"] = f"http://127.0.0.1:{port}"
+
+    yield public["base"]
+
     await runner.cleanup()
 
 

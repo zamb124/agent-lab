@@ -6,6 +6,8 @@
 import pytest
 from aiohttp import web
 
+from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
+
 from apps.flows.src.runtime import Flow
 from apps.flows.src.runtime.nodes import create_node, RemoteFlowNode
 from apps.flows.src.models import FlowConfig, Edge
@@ -18,11 +20,12 @@ class TestRemoteFlowNode:
     @pytest.fixture
     async def remote_flow_server(self):
         """Тестовый A2A сервер."""
+        public = {"base": "http://127.0.0.1:0"}
 
         async def handle_agent_card(request):
             return web.json_response({
                 "name": "Remote Test Agent",
-                "url": "http://localhost:9997",
+                "url": public["base"],
                 "skills": [{"id": "default", "name": "Default"}],
             })
 
@@ -47,10 +50,12 @@ class TestRemoteFlowNode:
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, "localhost", 9997)
+        site = web.TCPSite(runner, "127.0.0.1", 0)
         await site.start()
+        port = tcp_site_assigned_port(site)
+        public["base"] = f"http://127.0.0.1:{port}"
 
-        yield "http://localhost:9997"
+        yield public["base"]
 
         await runner.cleanup()
 
@@ -129,11 +134,12 @@ class TestFlowWithRemoteAgent:
     @pytest.fixture
     async def remote_flow_server(self):
         """Тестовый A2A сервер."""
+        public = {"base": "http://127.0.0.1:0"}
 
         async def handle_agent_card(request):
             return web.json_response({
                 "name": "Agent Remote Agent",
-                "url": "http://localhost:9996",
+                "url": public["base"],
                 "skills": [{"id": "default", "name": "Default"}],
             })
 
@@ -158,10 +164,12 @@ class TestFlowWithRemoteAgent:
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, "localhost", 9996)
+        site = web.TCPSite(runner, "127.0.0.1", 0)
         await site.start()
+        port = tcp_site_assigned_port(site)
+        public["base"] = f"http://127.0.0.1:{port}"
 
-        yield "http://localhost:9996"
+        yield public["base"]
 
         await runner.cleanup()
 
