@@ -82,13 +82,13 @@ jobs:
 
       # Без strip_components файл окажется в .../postgres/migrations/postgres/init.sql,
       # требуемый путь .../postgres/init.sql не создаётся — Docker смонтирует его как каталог.
-      - name: Copy Postgres init.sql for volume mount
+      - name: Copy Postgres SQL for volume mount and bootstrap
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "migrations/postgres/init.sql"
+          source: "migrations/postgres/init.sql,migrations/postgres/bootstrap_idempotent.sql"
           target: /opt/agent-lab/migrations/postgres/
           strip_components: 2
 
@@ -128,6 +128,10 @@ jobs:
               ls -la migrations/postgres/ 2>/dev/null || true
               exit 1
             fi
+            if [ ! -f migrations/postgres/bootstrap_idempotent.sql ]; then
+              echo "FATAL: migrations/postgres/bootstrap_idempotent.sql отсутствует."
+              exit 1
+            fi
 
             # ghcr.io с сервера иногда даёт TLS handshake timeout — несколько попыток с паузой
             retry() {
@@ -158,7 +162,20 @@ jobs:
             retry docker compose -f docker-compose-prod.yaml pull
 
             docker compose -f docker-compose-prod.yaml up -d postgres redis
-            sleep 5
+
+            _wait=0
+            until docker compose -f docker-compose-prod.yaml exec -T postgres pg_isready -U platform_user -d postgres >/dev/null 2>&1; do
+              _wait=$((_wait + 1))
+              if [ "$_wait" -gt 90 ]; then
+                echo "FATAL: postgres не принял соединения за ~3 минуты"
+                exit 1
+              fi
+              sleep 2
+            done
+
+            docker compose -f docker-compose-prod.yaml exec -T postgres \
+              psql -U platform_user -d postgres -v ON_ERROR_STOP=1 \
+              < migrations/postgres/bootstrap_idempotent.sql
 
             docker compose -f docker-compose-prod.yaml run --rm migrations || {
               echo "=== docker compose ps ==="

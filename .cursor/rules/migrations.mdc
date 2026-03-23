@@ -36,7 +36,7 @@ alwaysApply: false
 - **platform_crm**: реляционные CRM-таблицы плюс **`vector_documents`** (pgvector) для `JOIN crm_entities` при семантическом поиске; дубли по смыслу с RAG не смешиваются: RAG-документы живут в **platform_rag**, сущности CRM — в **platform_crm**.
 - **platform_rag**: `document_processing_status`, `vector_documents` для пайплайна RAG.
 
-У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт.
+У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Физические БД **не** создаёт Alembic; при деплое после `postgres up` выполняется идемпотентный `migrations/postgres/bootstrap_idempotent.sql` (на случай, если первый init кластера не создал сервисные БД).
 
 ## PostgreSQL и pgvector
 
@@ -50,7 +50,8 @@ alwaysApply: false
 migrations/
 ├── services.json       # манифест: сервисы, модули моделей, ключи database.*, список БД Postgres
 ├── postgres/
-│   └── init.sql        # CREATE DATABASE + vector (дублирует services.json.postgres)
+│   ├── init.sql                    # CREATE DATABASE + vector (entrypoint-initdb.d при новом томе)
+│   └── bootstrap_idempotent.sql    # то же по смыслу, идемпотентно; деплой на уже живом кластере
 ├── shared/
 │   ├── alembic.ini
 │   ├── env.py
