@@ -170,6 +170,7 @@ apps/sync/ui/
 - `loadSpaces` / `loadChannels` / `loadCompanyMembers`: при ошибке запроса сбрасывать `loading: false`, иначе вечный «Загрузка…»
 - API — только через `SyncAPIService`, без прямых `fetch` в компонентах
 - WebSocket — backend-first: команда → pending → `{ id, ok, result }` ack или `message.created` event
+- **Переподключение WS:** Redis Pub/Sub не хранит историю — после обрыва или рестарта sync пропущенные события не восстанавливаются. При втором и последующих `onOpen` (флаг `_wsEverConnected` в `sync-app.js`) вызывается `_refetchOnReconnect()`: `loadChannels` + при выбранном канале `loadMessages` (GET уже существующих эндпоинтов).
 - Zero-Guess: нет `x || 'default'` для обязательных значений, бросаем исключение
 
 ## Тестирование

@@ -76,6 +76,7 @@ export class SyncApp extends PlatformApp {
         this._ws = null;
         this._unsubscribe = null;
         this._typingPruneTimer = null;
+        this._wsEverConnected = false;
     }
 
     setupStore() {
@@ -134,6 +135,7 @@ export class SyncApp extends PlatformApp {
         this._unsubscribe?.();
         this._ws?.close();
         this._ws = null;
+        this._wsEverConnected = false;
     }
 
     async _restoreLastSelection() {
@@ -352,6 +354,15 @@ export class SyncApp extends PlatformApp {
         throw new Error(`[sync-ws] неизвестное realtime-событие: ${msg.type}`);
     }
 
+    async _refetchOnReconnect() {
+        const syncApi = ServiceRegistry.get('syncApi');
+        await SyncStore.loadChannels(syncApi);
+        const { selectedChannelId } = SyncStore.state.chat;
+        if (selectedChannelId) {
+            await SyncStore.loadMessages(syncApi, selectedChannelId);
+        }
+    }
+
     _connectWs() {
         if (this._ws) return;
 
@@ -360,7 +371,12 @@ export class SyncApp extends PlatformApp {
         ServiceRegistry.register('syncWs', ws);
 
         ws.onOpen(() => {
+            const isReconnect = this._wsEverConnected;
+            this._wsEverConnected = true;
             SyncStore.setWsState('open');
+            if (isReconnect) {
+                void this._refetchOnReconnect();
+            }
         });
 
         ws.onClose(() => {
