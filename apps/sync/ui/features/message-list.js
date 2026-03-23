@@ -7,7 +7,18 @@ import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
+import '@platform/lib/components/glass-spinner.js';
 import './message-bubble.js';
+
+/** Скелетоны при загрузке ленты: чередование «собеседник слева» / «я справа». */
+const MESSAGE_SKELETON_ROWS = [
+    { side: 'other', widthPct: 78, minH: 44 },
+    { side: 'own', widthPct: 58, minH: 36 },
+    { side: 'other', widthPct: 66, minH: 52 },
+    { side: 'own', widthPct: 72, minH: 40 },
+    { side: 'other', widthPct: 82, minH: 38 },
+    { side: 'own', widthPct: 54, minH: 44 },
+];
 
 function startOfLocalDay(d) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -85,11 +96,70 @@ export class MessageList extends PlatformElement {
                 scroll-behavior: smooth;
             }
 
-            .loading-text {
+            .messages-loading-bar {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-3);
+                padding: var(--space-2) 0 var(--space-4);
+                flex-shrink: 0;
+            }
+
+            .messages-loading-label {
                 font-size: var(--text-sm);
-                color: var(--text-tertiary);
-                padding: var(--space-4);
-                text-align: center;
+                color: var(--text-secondary);
+            }
+
+            .skeleton-row {
+                display: flex;
+                align-items: flex-end;
+                gap: var(--space-2);
+            }
+
+            .skeleton-row.other {
+                justify-content: flex-start;
+            }
+
+            .skeleton-row.own {
+                justify-content: flex-end;
+            }
+
+            .skeleton-avatar {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                background: linear-gradient(
+                    90deg,
+                    var(--glass-solid-subtle) 0%,
+                    var(--glass-solid-medium) 50%,
+                    var(--glass-solid-subtle) 100%
+                );
+                background-size: 200% 100%;
+                animation: skeleton-shimmer 1.35s ease-in-out infinite;
+            }
+
+            .skeleton-bubble {
+                max-width: min(320px, 85%);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: linear-gradient(
+                    90deg,
+                    var(--glass-solid-subtle) 0%,
+                    var(--glass-solid-medium) 48%,
+                    var(--glass-solid-subtle) 100%
+                );
+                background-size: 200% 100%;
+                animation: skeleton-shimmer 1.35s ease-in-out infinite;
+            }
+
+            @keyframes skeleton-shimmer {
+                0% {
+                    background-position: 100% 0;
+                }
+                100% {
+                    background-position: -100% 0;
+                }
             }
 
             .empty-text {
@@ -252,10 +322,37 @@ export class MessageList extends PlatformElement {
         const items = buildListItems(filtered);
         const peerReadAt = this._peerReadAtByChannel[this.channelId] ?? null;
 
+        if (this._loading) {
+            return html`
+                <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
+                    <div class="messages-loading-bar" aria-busy="true" aria-live="polite">
+                        <glass-spinner size="md"></glass-spinner>
+                        <span class="messages-loading-label">Загрузка сообщений…</span>
+                    </div>
+                    <div class="skeleton-list" aria-hidden="true">
+                        ${MESSAGE_SKELETON_ROWS.map((row, i) => {
+            const delay = `${i * 0.07}s`;
+            const avatar = row.side === 'other'
+                ? html`<div class="skeleton-avatar" style=${`animation-delay: ${delay}`}></div>`
+                : '';
+            return html`
+                            <div class="skeleton-row ${row.side}">
+                                ${avatar}
+                                <div
+                                    class="skeleton-bubble"
+                                    style=${`width: ${row.widthPct}%; min-height: ${row.minH}px; animation-delay: ${delay}`}
+                                ></div>
+                            </div>
+                        `;
+        })}
+                    </div>
+                </div>
+            `;
+        }
+
         return html`
             <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
-                ${this._loading ? html`<div class="loading-text">Загрузка сообщений...</div>` : ''}
-                ${!this._loading && filtered.length === 0 ? html`<div class="empty-text">Сообщений пока нет.</div>` : ''}
+                ${filtered.length === 0 ? html`<div class="empty-text">Сообщений пока нет.</div>` : ''}
                 ${items.map((item) => {
                     if (item.kind === 'day') {
                         return html`

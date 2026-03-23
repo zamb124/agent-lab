@@ -171,6 +171,7 @@ apps/sync/ui/
 - API — только через `SyncAPIService`, без прямых `fetch` в компонентах
 - WebSocket — backend-first: команда → pending → `{ id, ok, result }` ack или `message.created` event
 - **Переподключение WS:** Redis Pub/Sub не хранит историю — после обрыва или рестарта sync пропущенные события не восстанавливаются. При втором и последующих `onOpen` (флаг `_wsEverConnected` в `sync-app.js`) вызывается `_refetchOnReconnect()`: `loadChannels` + при выбранном канале `loadMessages` (GET уже существующих эндпоинтов).
+- **Загрузка ленты:** при `messages.loading` в `message-list.js` показываются `glass-spinner` + текст и скелетоны строк (чередование слева «чужой» с аватаром / справа «свой»), без смешивания со старыми сообщениями до прихода данных.
 - Zero-Guess: нет `x || 'default'` для обязательных значений, бросаем исключение
 
 ## Тестирование
