@@ -18,6 +18,14 @@ function _clearAllMessageDeleteTimers() {
 
 const MESSAGE_DELETE_ANIM_MS = 580;
 
+/** UUID канала в событиях и в UI должны совпадать; сравнение без учёта регистра. */
+function normalizeSyncChannelId(channelId) {
+    if (typeof channelId !== 'string' || channelId === '') {
+        throw new Error('normalizeSyncChannelId: channelId обязателен.');
+    }
+    return channelId.trim().toLowerCase();
+}
+
 const baseStore = new BaseStore('sync', {
     spaces: {
         list: [],
@@ -84,6 +92,8 @@ const baseStore = new BaseStore('sync', {
 });
 
 export const SyncStore = {
+    normalizeSyncChannelId,
+
     get state() {
         return baseStore.state;
     },
@@ -505,9 +515,9 @@ export const SyncStore = {
     selectChannel(spaceId, channelId) {
         baseStore.setState(s => {
             const prevCh = s.chat.selectedChannelId;
-            const typingPeersByChannel = { ...s.typingPeersByChannel };
+            const typingPeersByChannel = { ...(s.typingPeersByChannel ?? {}) };
             if (typeof prevCh === 'string' && prevCh !== '' && prevCh !== channelId) {
-                delete typingPeersByChannel[prevCh];
+                delete typingPeersByChannel[normalizeSyncChannelId(prevCh)];
             }
             return {
                 chat: {
@@ -544,27 +554,26 @@ export const SyncStore = {
             ? null
             : payload.thread_id;
         const typing = !!payload.typing;
+        const mapKey = normalizeSyncChannelId(channelId);
         baseStore.setState(s => {
-            const prev = s.typingPeersByChannel[channelId] ?? [];
+            const byCh = s.typingPeersByChannel ?? {};
+            const prev = byCh[mapKey] ?? [];
             let next = [...prev];
-            if (!typing) {
-                next = next.filter(row => !(row.user_id === uid && (row.thread_id ?? null) === tid));
-            } else {
-                const until = Date.now() + 4500;
-                const idx = next.findIndex(
-                    row => row.user_id === uid && (row.thread_id ?? null) === tid,
-                );
-                const row = { user_id: uid, display_name: name, thread_id: tid, until };
-                if (idx >= 0) {
-                    next[idx] = row;
-                } else {
-                    next.push(row);
-                }
+            const until = typing ? Date.now() + 5000 : Date.now() + 3000;
+            const idx = next.findIndex(
+                row => row.user_id === uid && (row.thread_id ?? null) === tid,
+            );
+            const row = { user_id: uid, display_name: name, thread_id: tid, until };
+            if (idx >= 0) {
+                next[idx] = row;
+            } else if (typing) {
+                next.push(row);
             }
             return {
+                ...s,
                 typingPeersByChannel: {
-                    ...s.typingPeersByChannel,
-                    [channelId]: next,
+                    ...byCh,
+                    [mapKey]: next,
                 },
             };
         });
@@ -573,7 +582,7 @@ export const SyncStore = {
     pruneExpiredTypingPeers() {
         const now = Date.now();
         baseStore.setState(s => {
-            const src = s.typingPeersByChannel;
+            const src = s.typingPeersByChannel ?? {};
             const nextMap = {};
             let changed = false;
             for (const [ch, rows] of Object.entries(src)) {
@@ -590,45 +599,38 @@ export const SyncStore = {
             if (!changed && Object.keys(nextMap).length === Object.keys(src).length) {
                 return s;
             }
-            return { typingPeersByChannel: nextMap };
+            return { ...s, typingPeersByChannel: nextMap };
         });
     },
 
     /**
+     * Строка под заголовком: только другие участники (себя не показываем).
+     * Без валидного myUserId нельзя отличить себя от собеседника — только raise.
+     *
      * @param {string} channelId
      * @param {string | null} focusedThreadId
-     * @param {string | undefined} myUserId
+     * @param {string} myUserId
      * @returns {string}
      */
     getTypingIndicatorLine(channelId, focusedThreadId, myUserId) {
-        if (typeof channelId !== 'string' || channelId === '') {
-            return '';
-        }
+        if (typeof channelId !== 'string' || channelId === '') return '';
+        if (typeof myUserId !== 'string' || myUserId === '') return '';
         const now = Date.now();
-        const list = baseStore.state.typingPeersByChannel[channelId] ?? [];
-        const f = focusedThreadId === undefined || focusedThreadId === null || focusedThreadId === ''
-            ? null
-            : focusedThreadId;
-        const peers = list.filter((row) => {
+        const mapKey = normalizeSyncChannelId(channelId);
+        const list = (baseStore.state.typingPeersByChannel ?? {})[mapKey] ?? [];
+        const f = focusedThreadId != null && focusedThreadId !== '' ? focusedThreadId : null;
+        const others = list.filter((row) => {
             if (row.until <= now) return false;
-            if (typeof myUserId === 'string' && myUserId !== '' && row.user_id === myUserId) {
-                return false;
-            }
             const rt = row.thread_id ?? null;
-            return rt === f;
+            if (f === null ? rt !== null : (rt !== null && rt !== f)) return false;
+            return row.user_id !== myUserId;
         });
-        if (peers.length === 0) {
-            return '';
-        }
-        peers.sort((a, b) => a.display_name.localeCompare(b.display_name, 'ru'));
-        if (peers.length === 1) {
-            return `${peers[0].display_name} печатает…`;
-        }
-        if (peers.length === 2) {
-            return `${peers[0].display_name}, ${peers[1].display_name} печатают…`;
-        }
-        const rest = peers.length - 2;
-        return `${peers[0].display_name}, ${peers[1].display_name} и ещё ${rest}…`;
+        if (others.length === 0) return '';
+        others.sort((a, b) => a.display_name.localeCompare(b.display_name, 'ru'));
+        if (others.length === 1) return `${others[0].display_name} печатает…`;
+        if (others.length === 2) return `${others[0].display_name}, ${others[1].display_name} печатают…`;
+        const rest = others.length - 2;
+        return `${others[0].display_name}, ${others[1].display_name} и ещё ${rest}…`;
     },
 
     setFocusedThread(threadId) {

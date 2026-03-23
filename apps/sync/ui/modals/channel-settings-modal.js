@@ -23,6 +23,9 @@ export class ChannelSettingsModal extends PlatformElement {
         _loading: { state: true },
         _adding: { state: true },
         _error: { state: true },
+        _editName: { state: true },
+        _editAvatarUrl: { state: true },
+        _savingProfile: { state: true },
     };
 
     static styles = [
@@ -35,7 +38,7 @@ export class ChannelSettingsModal extends PlatformElement {
             .backdrop {
                 position: fixed;
                 inset: 0;
-                z-index: 60;
+                z-index: 55;
                 background: rgba(0, 0, 0, 0.45);
                 display: flex;
                 align-items: center;
@@ -45,7 +48,7 @@ export class ChannelSettingsModal extends PlatformElement {
 
             .modal {
                 width: 100%;
-                max-width: 440px;
+                max-width: 480px;
                 max-height: min(85vh, 640px);
                 border-radius: var(--radius-2xl);
                 border: 1px solid var(--glass-border-subtle);
@@ -61,13 +64,53 @@ export class ChannelSettingsModal extends PlatformElement {
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
-                margin-bottom: var(--space-1);
+                margin-bottom: var(--space-4);
             }
 
             .modal-meta {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
+                margin-top: calc(-1 * var(--space-3));
                 margin-bottom: var(--space-4);
+            }
+
+            .field {
+                margin-bottom: var(--space-3);
+            }
+
+            .field-label {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                margin-bottom: var(--space-1);
+                display: block;
+            }
+
+            .field-input {
+                width: 100%;
+                padding: var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                font-family: inherit;
+                outline: none;
+                box-sizing: border-box;
+                transition: border-color var(--duration-fast);
+            }
+
+            .field-input:focus {
+                border-color: var(--accent);
+            }
+
+            .avatar-preview {
+                width: 64px;
+                height: 64px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 1px solid var(--glass-border-subtle);
+                display: block;
+                margin-bottom: var(--space-2);
             }
 
             .section-label {
@@ -162,7 +205,7 @@ export class ChannelSettingsModal extends PlatformElement {
                 margin-bottom: var(--space-3);
             }
 
-            .btn {
+            .toolbar .btn {
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--glass-border-subtle);
@@ -172,19 +215,60 @@ export class ChannelSettingsModal extends PlatformElement {
                 cursor: pointer;
             }
 
-            .btn:hover {
+            .toolbar .btn:hover {
                 background: var(--glass-solid-medium);
                 color: var(--text-primary);
             }
 
-            .btn-primary {
+            .toolbar .btn-primary {
                 background: var(--accent-subtle);
                 border-color: var(--accent);
                 color: var(--accent);
             }
 
-            .btn-primary:disabled {
+            .toolbar .btn-primary:disabled {
                 opacity: 0.45;
+                cursor: not-allowed;
+            }
+
+            .actions {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: var(--space-2);
+                margin-top: var(--space-5);
+            }
+
+            .actions .btn {
+                padding: var(--space-2) var(--space-4);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+            }
+
+            .actions .btn:hover {
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+            }
+
+            .actions .btn-primary {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+                color: var(--accent);
+                font-weight: var(--font-medium);
+            }
+
+            .actions .btn-primary:hover:not(:disabled) {
+                background: var(--accent);
+                color: white;
+            }
+
+            .actions .btn:disabled {
+                opacity: 0.5;
                 cursor: not-allowed;
             }
 
@@ -247,43 +331,29 @@ export class ChannelSettingsModal extends PlatformElement {
                 margin-bottom: var(--space-3);
             }
 
-            .footer-actions {
-                display: flex;
-                justify-content: flex-end;
-                gap: var(--space-2);
-                margin-top: auto;
-                padding-top: var(--space-3);
-            }
-
-            .profile-input {
-                width: 100%;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font-size: var(--text-xs);
-                font-family: inherit;
-                outline: none;
-                box-sizing: border-box;
-                margin-bottom: var(--space-2);
-            }
-
-            .profile-input:focus {
-                border-color: var(--accent);
-            }
-
-            .avatar-preview-ch {
-                width: 56px;
-                height: 56px;
-                border-radius: 50%;
-                object-fit: cover;
-                border: 1px solid var(--glass-border-subtle);
-                margin-bottom: var(--space-2);
+            .members-block {
+                margin-top: var(--space-2);
             }
 
             .file-input {
                 display: none;
+            }
+
+            .upload-img-btn {
+                margin-top: var(--space-2);
+                padding: var(--space-2) var(--space-4);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+            }
+
+            .upload-img-btn:hover {
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
             }
         `
     ];
@@ -388,10 +458,10 @@ export class ChannelSettingsModal extends PlatformElement {
         input.value = '';
         const syncApi = ServiceRegistry.get('syncApi');
         const res = await syncApi.uploadFile(file);
-        if (!res?.file?.storage_url) {
-            throw new Error('Некорректный ответ загрузки файла (нет storage_url).');
+        if (typeof res?.file_id !== 'string' || res.file_id === '' || typeof res?.url !== 'string' || res.url === '') {
+            throw new Error('Некорректный ответ загрузки файла (нет file_id или url).');
         }
-        this._editAvatarUrl = res.file.storage_url;
+        this._editAvatarUrl = res.url;
     }
 
     async _createChannel() {
@@ -549,9 +619,7 @@ export class ChannelSettingsModal extends PlatformElement {
 
         const ch = this.channel;
         const createMode = this.createMode;
-        const title = createMode
-            ? 'Создать канал'
-            : (typeof ch.name === 'string' && ch.name.trim() !== '' ? ch.name : ch.id);
+        const title = createMode ? 'Создать канал' : 'Настройки канала';
         const candidates = this._candidatesForAdd();
         const pickCount = this._selectedCount();
         const primaryLabel = createMode
@@ -562,7 +630,9 @@ export class ChannelSettingsModal extends PlatformElement {
             ? (typeof ch.space_id === 'string' && ch.space_id !== ''
                 ? `Пространство: ${ch.space_id.slice(0, 8)}…`
                 : 'Выбери пространство в списке слева.')
-            : `${ch.type}${ch.space_id ? ` · space: ${ch.space_id.slice(0, 8)}…` : ''}`;
+            : `${typeof ch.name === 'string' && ch.name.trim() !== '' ? ch.name : ch.id} · ${ch.type}${ch.space_id ? ` · пространство ${ch.space_id.slice(0, 8)}…` : ''}`;
+
+        const av = this._editAvatarUrl.trim();
 
         return html`
             <div class="backdrop" @click=${(e) => { if (e.target === e.currentTarget) this._close(); }}>
@@ -572,65 +642,47 @@ export class ChannelSettingsModal extends PlatformElement {
 
                     ${this._error ? html`<div class="error">${this._error}</div>` : ''}
 
-                    <div class="section-label">Название и аватар</div>
-                    ${this._editAvatarUrl.trim()
-                        ? html`<img class="avatar-preview-ch" src=${this._editAvatarUrl.trim()} alt="" />`
-                        : ''}
-                    <input
-                        type="text"
-                        class="profile-input"
-                        placeholder="Название канала"
-                        .value=${this._editName}
-                        @input=${(e) => {
+                    <div class="field">
+                        <label class="field-label">Название</label>
+                        <input
+                            type="text"
+                            class="field-input"
+                            placeholder="Название канала"
+                            .value=${this._editName}
+                            @input=${(e) => {
                             this._editName = e.target.value;
                         }}
-                    />
-                    <input
-                        type="text"
-                        class="profile-input"
-                        placeholder="URL аватара"
-                        .value=${this._editAvatarUrl}
-                        @input=${(e) => {
-                            this._editAvatarUrl = e.target.value;
-                        }}
-                    />
-                    <input
-                        type="file"
-                        class="file-input"
-                        id="ch-profile-avatar-file"
-                        accept="image/*"
-                        @change=${(e) => {
-                            this._pickAvatarFile(e).catch((err) => {
-                                this._error = err instanceof Error ? err.message : String(err);
-                            });
-                        }}
-                    />
-                    <div class="toolbar">
+                        />
+                    </div>
+
+                    <div class="field">
+                        <label class="field-label">Аватар</label>
+                        ${av
+        ? html`<img class="avatar-preview" src=${av} alt="" />`
+        : ''}
+                        <input
+                            type="file"
+                            class="file-input"
+                            id="ch-profile-avatar-file"
+                            accept="image/*"
+                            @change=${(e) => {
+            this._pickAvatarFile(e).catch((err) => {
+                this._error = err instanceof Error ? err.message : String(err);
+            });
+        }}
+                        />
                         <button
                             type="button"
-                            class="btn"
+                            class="upload-img-btn"
                             @click=${() => {
-                                const el = this.shadowRoot?.getElementById('ch-profile-avatar-file');
-                                if (el) el.click();
-                            }}
+            const el = this.shadowRoot?.getElementById('ch-profile-avatar-file');
+            if (el) el.click();
+        }}
                         >Загрузить изображение</button>
-                        <button
-                            type="button"
-                            class="btn btn-primary"
-                            ?disabled=${this._savingProfile}
-                            @click=${() => {
-                                const run = createMode
-                                    ? this._createChannel()
-                                    : this._saveChannelProfile();
-                                run.catch((err) => {
-                                    this._error = err instanceof Error ? err.message : String(err);
-                                    this._savingProfile = false;
-                                });
-                            }}
-                        >${primaryLabel}</button>
                     </div>
 
                     ${createMode ? '' : html`
+                    <div class="members-block">
                     <div class="section-label">Участники</div>
                     ${this._loading
                         ? html`<div class="modal-meta">Загрузка…</div>`
@@ -705,10 +757,25 @@ export class ChannelSettingsModal extends PlatformElement {
                             >Добавить выбранных (${pickCount})</button>
                         </div>
                     ` : ''}
+                    </div>
                     `}
 
-                    <div class="footer-actions">
-                        <button type="button" class="btn" @click=${this._close}>${createMode ? 'Отмена' : 'Закрыть'}</button>
+                    <div class="actions">
+                        <button type="button" class="btn" @click=${this._close}>Отмена</button>
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            ?disabled=${this._savingProfile}
+                            @click=${() => {
+            const run = createMode
+                ? this._createChannel()
+                : this._saveChannelProfile();
+            run.catch((err) => {
+                this._error = err instanceof Error ? err.message : String(err);
+                this._savingProfile = false;
+            });
+        }}
+                        >${primaryLabel}</button>
                     </div>
                 </div>
             </div>

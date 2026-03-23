@@ -7,6 +7,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
 import './channel-picker.js';
 import './message-list.js';
@@ -209,6 +210,10 @@ export class ChatView extends PlatformElement {
                 margin-top: 2px;
             }
 
+            .header-subtitle.is-typing {
+                color: var(--accent);
+            }
+
             .header-actions {
                 display: flex;
                 align-items: center;
@@ -263,14 +268,6 @@ export class ChatView extends PlatformElement {
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
-            }
-
-            .typing-line {
-                flex-shrink: 0;
-                padding: var(--space-2) var(--space-4) 0;
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                min-height: 1.25rem;
             }
 
             .ws-badge {
@@ -385,7 +382,7 @@ export class ChatView extends PlatformElement {
         _threadIds: { state: true },
         _ui: { state: true },
         _isMobile: { state: true },
-        _typingPeersByChannel: { state: true },
+        _typingSubtitle: { state: true },
     };
 
     constructor() {
@@ -399,7 +396,10 @@ export class ChatView extends PlatformElement {
         this._ui = SyncStore.state.ui;
         this._isMobile = false;
         this._resizeObserver = null;
-        this._typingPeersByChannel = s.typingPeersByChannel ?? {};
+        this._typingSubtitle = '';
+        this._boundAuthChange = () => {
+            this._syncTypingSubtitleFromStore();
+        };
     }
 
     connectedCallback() {
@@ -407,6 +407,7 @@ export class ChatView extends PlatformElement {
         this._checkMobileViewport();
         this._resizeObserver = new ResizeObserver(() => this._checkMobileViewport());
         this._resizeObserver.observe(document.body);
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
         this._unsubscribe = SyncStore.subscribe(state => {
             this._chat = state.chat;
             this._channels = state.channels;
@@ -414,15 +415,32 @@ export class ChatView extends PlatformElement {
             this._wsState = state.ws.state;
             this._threadIds = SyncStore.getThreadIds();
             this._ui = state.ui;
-            this._typingPeersByChannel = state.typingPeersByChannel ?? {};
+            this._syncTypingSubtitleFromStore();
         });
+        this._syncTypingSubtitleFromStore();
     }
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
         this._resizeObserver?.disconnect();
         this._resizeObserver = null;
         this._unsubscribe?.();
+    }
+
+    _syncTypingSubtitleFromStore() {
+        const state = SyncStore.state;
+        const sel = state.chat.selectedChannelId;
+        const myId = ServiceRegistry.auth?.user?.id;
+        if (!sel || typeof myId !== 'string' || myId === '') {
+            this._typingSubtitle = '';
+            return;
+        }
+        this._typingSubtitle = SyncStore.getTypingIndicatorLine(
+            sel,
+            state.chat.focusedThreadId ?? null,
+            myId,
+        );
     }
 
     _checkMobileViewport() {
@@ -632,15 +650,10 @@ export class ChatView extends PlatformElement {
         const channelForModal = channelSettingsCreate ? channelCreateDraft : settingsChannel;
         const channelModalOpen = channelSettingsCreate || settingsChannel !== null;
 
-        const auth = ServiceRegistry.auth;
-        const myUserId = auth?.user?.id;
-        const typingLine = selectedChannelId
-            ? SyncStore.getTypingIndicatorLine(
-                selectedChannelId,
-                focusedThreadId ?? null,
-                typeof myUserId === 'string' ? myUserId : undefined,
-            )
-            : '';
+        const typingLine = this._typingSubtitle;
+        const subtitleFallback = this._getSubtitle();
+        const headerSubtitleText = typingLine || subtitleFallback;
+        const showHeaderSubtitle = typeof headerSubtitleText === 'string' && headerSubtitleText !== '';
 
         const headerLead = selectedChannel
             ? html`<div class="header-leading">${this._headerLeadingGraphic(selectedChannel)}</div>`
@@ -657,7 +670,9 @@ export class ChatView extends PlatformElement {
                         ${headerLead}
                         <div class="header-channel-text">
                             <div class="header-title">${this._getTitle()}</div>
-                            ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
+                            ${showHeaderSubtitle ? html`
+                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">${headerSubtitleText}</div>
+                            ` : ''}
                         </div>
                         <platform-icon class="header-settings-ic" name="settings" size="20"></platform-icon>
                     </button>
@@ -666,7 +681,9 @@ export class ChatView extends PlatformElement {
                         ${headerLead}
                         <div class="header-channel-text">
                             <div class="header-title">${this._getTitle()}</div>
-                            ${this._getSubtitle() ? html`<div class="header-subtitle">${this._getSubtitle()}</div>` : ''}
+                            ${showHeaderSubtitle ? html`
+                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">${headerSubtitleText}</div>
+                            ` : ''}
                         </div>
                     </div>
                 `;
@@ -741,9 +758,6 @@ export class ChatView extends PlatformElement {
                         </div>
                     ` : ''}
                     <message-list .channelId=${selectedChannelId}></message-list>
-                    ${typingLine
-        ? html`<div class="typing-line" role="status">${typingLine}</div>`
-        : ''}
                     <message-composer .channelId=${selectedChannelId}></message-composer>
                 `}
             </div>

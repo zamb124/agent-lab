@@ -516,7 +516,7 @@ async def _handle_messages_edit(
 ) -> tuple[MessageRead, list[RealtimeEvent]]:
     if user_repository is None:
         raise ValueError("user_repository обязателен.")
-    if not await channels.is_member(payload.channel_id, actor_user_id):
+    if not await channels.is_member(payload.channel_id, actor_user_id, company_id=company_id):
         raise ValueError("Нет доступа к каналу.")
     m = await messages.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
@@ -543,7 +543,7 @@ async def _handle_messages_delete(
     messages: MessageRepository,
     channels: ChannelRepository,
 ) -> list[RealtimeEvent]:
-    if not await channels.is_member(payload.channel_id, actor_user_id):
+    if not await channels.is_member(payload.channel_id, actor_user_id, company_id=company_id):
         raise ValueError("Нет доступа к каналу.")
     m = await messages.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
@@ -578,9 +578,9 @@ async def _handle_messages_forward(
     channels: ChannelRepository,
     user_repository: Optional[UserRepository],
 ) -> tuple[MessageRead, list[RealtimeEvent]]:
-    if not await channels.is_member(payload.from_channel_id, actor_user_id):
+    if not await channels.is_member(payload.from_channel_id, actor_user_id, company_id=company_id):
         raise ValueError("Нет доступа к исходному каналу.")
-    if not await channels.is_member(payload.to_channel_id, actor_user_id):
+    if not await channels.is_member(payload.to_channel_id, actor_user_id, company_id=company_id):
         raise ValueError("Нет доступа к целевому каналу.")
     m = await messages.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
@@ -630,7 +630,7 @@ async def _handle_messages_react(
 ) -> tuple[MessageRead, list[RealtimeEvent]]:
     if user_repository is None:
         raise ValueError("user_repository обязателен.")
-    if not await channels.is_member(payload.channel_id, actor_user_id):
+    if not await channels.is_member(payload.channel_id, actor_user_id, company_id=company_id):
         raise ValueError("Нет доступа к каналу.")
     m = await messages.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
@@ -659,7 +659,7 @@ async def _handle_messages_pin(
     messages: MessageRepository,
     channels: ChannelRepository,
 ) -> tuple[ChannelRead, list[RealtimeEvent]]:
-    if not await channels.is_member(payload.channel_id, actor_user_id):
+    if not await channels.is_member(payload.channel_id, actor_user_id, company_id=company_id):
         raise ValueError("Нет доступа к каналу.")
     role = await channels.get_member_role(payload.channel_id, actor_user_id)
     if role != "owner":

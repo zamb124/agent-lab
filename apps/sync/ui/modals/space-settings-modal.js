@@ -207,10 +207,10 @@ export class SpaceSettingsModal extends PlatformElement {
         input.value = '';
         const syncApi = ServiceRegistry.get('syncApi');
         const res = await syncApi.uploadFile(file);
-        if (!res?.file?.storage_url) {
-            throw new Error('Некорректный ответ загрузки файла (нет storage_url).');
+        if (typeof res?.file_id !== 'string' || res.file_id === '' || typeof res?.url !== 'string' || res.url === '') {
+            throw new Error('Некорректный ответ загрузки файла (нет file_id или url).');
         }
-        this._avatarUrl = res.file.storage_url;
+        this._avatarUrl = res.url;
     }
 
     async _submit() {
@@ -297,18 +297,10 @@ export class SpaceSettingsModal extends PlatformElement {
                     </div>
 
                     <div class="field">
-                        <label class="label">Аватар (URL или файл)</label>
+                        <label class="label">Аватар</label>
                         ${av
                             ? html`<img class="avatar-preview" src=${av} alt="" />`
                             : ''}
-                        <input
-                            class="input"
-                            placeholder="https://..."
-                            .value=${this._avatarUrl}
-                            @input=${(e) => {
-                                this._avatarUrl = e.target.value;
-                            }}
-                        />
                         <input
                             type="file"
                             class="file-input"

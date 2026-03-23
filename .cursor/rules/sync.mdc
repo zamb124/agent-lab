@@ -153,6 +153,7 @@ apps/sync/ui/
 
 - Точка входа: `/sync` (требует auth, redirect → `/login` через `PlatformApp.redirectToAuth()`)
 - API: только `/sync/api/v1/*`
+- `POST /files/` (multipart): ответ — `core.files.models.FileResponse` (плоский JSON: `file_id`, `url`, `original_name`, …). Вложений `file.storage_url` нет; превью/аватары используют `url` (same-origin путь к `GET .../files/download/{file_id}`), вложения в сообщениях — ещё `file_id` в блоках контента.
 - Auth: только cookie-based через `ServiceRegistry.auth` (`/sync/api/auth/me`)
 - WebSocket: только `/sync/ws` (cookie auth при upgrade, без token в query)
 - Статика: `/sync/ui/static/*` (public)
@@ -161,7 +162,7 @@ apps/sync/ui/
 ### Правила
 
 - Mobile (`max-width: 767px`): в `chat-view.js` кнопка меню слева в шапке открывает сайдбар через событие `platform-sidebar-open` (как `page-header`); `sync-sidebar` на `@mobile-change` у `platform-sidebar` обновляет `ui.mobileSidebarOpen`. Панель тредов: иконка `list`, доступна при выбранном канале (в т.ч. когда тредов ещё нет).
-- Индикатор «печатает»: клиент шлёт по WS команду `channels.typing`, сервер публикует событие `channel.typing` (без БД); `sync-app.js` принимает broadcast, `SyncStore.applyChannelTyping` / `getTypingIndicatorLine`, строка над композером в `chat-view.js`; ack WS с `ok: true` и без `result` не вызывает `failPending`.
+- Индикатор «печатает»: клиент шлёт `channels.typing`, сервер — `channel.typing`; в `sync-app.js` сначала кадры с `msg.type`, затем ack (`ok` + `id`); ключи `typingPeersByChannel` — `normalizeSyncChannelId`; своё событие не кладём в store; в `getTypingIndicatorLine` при открытом треде (`focusedThreadId`) учитываются и строки с `thread_id: null` (основной ввод), и строки этого треда — иначе подзаголовок оставался бы «direct» при открытой панели тредов. Ack с `ok: true` без `result` не вызывает `failPending`.
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
 - Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
 - Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`; для direct `spaceId` — `null`, иначе список сообщений не подгрузится

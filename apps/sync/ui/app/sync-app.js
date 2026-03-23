@@ -150,6 +150,208 @@ export class SyncApp extends PlatformApp {
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
     }
 
+    /**
+     * Сначала realtime-события (есть type), затем ack команд (ok + id без type).
+     * Иначе кадры с полями ok/id перехватываются до channel.typing и индикатор не обновляется.
+     */
+    _handleWsMessage(data) {
+        const msg = JSON.parse(data);
+        if (msg === null || typeof msg !== 'object' || Array.isArray(msg)) {
+            throw new Error('[sync-ws] ожидался JSON-объект.');
+        }
+        if (typeof msg.type === 'string' && msg.type !== '') {
+            this._dispatchRealtimeEvent(msg);
+            return;
+        }
+        if (typeof msg.ok === 'boolean' && typeof msg.id === 'string') {
+            if (msg.ok) {
+                if (msg.result) {
+                    SyncStore.resolvePending(msg.id, msg.result);
+                }
+            } else {
+                SyncStore.failPending(msg.id);
+            }
+            return;
+        }
+        throw new Error(`[sync-ws] неизвестный кадр WebSocket: ${JSON.stringify(msg)}`);
+    }
+
+    _dispatchRealtimeEvent(msg) {
+        const selectedChannelId = SyncStore.state.chat.selectedChannelId;
+        let selectedNorm = null;
+        if (typeof selectedChannelId === 'string' && selectedChannelId !== '') {
+            selectedNorm = SyncStore.normalizeSyncChannelId(selectedChannelId);
+        }
+
+        if (msg.type === 'channel.typing') {
+            const p = msg.payload;
+            if (!p || typeof p.channel_id !== 'string' || p.channel_id === '') return;
+            const uid = p.user?.user_id;
+            const myId = ServiceRegistry.auth?.user?.id;
+            if (typeof myId === 'string' && myId !== '' && uid === myId) return;
+            SyncStore.applyChannelTyping({
+                channel_id: p.channel_id,
+                thread_id: p.thread_id ?? null,
+                typing: !!p.typing,
+                user: p.user,
+            });
+            return;
+        }
+
+        const p = msg.payload;
+        if (!p || typeof p !== 'object') {
+            throw new Error(`${msg.type}: payload обязателен.`);
+        }
+
+        if (msg.type === 'channel.member_added') {
+            const authUser = ServiceRegistry.auth?.user;
+            const myId = authUser?.id;
+            const added = p.added_user_id;
+            if (
+                typeof myId === 'string'
+                && myId !== ''
+                && typeof added === 'string'
+                && added === myId
+            ) {
+                const syncApi = ServiceRegistry.get('syncApi');
+                SyncStore.loadChannels(syncApi);
+            }
+            return;
+        }
+
+        if (msg.type === 'space.created') {
+            const syncApi = ServiceRegistry.get('syncApi');
+            void SyncStore.loadSpaces(syncApi).then(() => {
+                SyncStore.sanitizeChatSelectionAfterLoad();
+            });
+            return;
+        }
+
+        if (msg.type === 'channel.read_updated') {
+            const authUser = ServiceRegistry.auth?.user;
+            const myId = authUser?.id;
+            if (typeof myId !== 'string' || myId === '') {
+                throw new Error('channel.read_updated: auth.user.id обязателен.');
+            }
+            if (p.reader_user_id === myId && typeof p.channel_id === 'string') {
+                SyncStore.patchChannelFields(p.channel_id, { unread_count: 0 });
+            } else if (
+                p.reader_user_id !== myId
+                && typeof p.channel_id === 'string'
+                && typeof p.read_at === 'string'
+            ) {
+                SyncStore.setPeerReadAt(p.channel_id, p.read_at);
+            }
+            return;
+        }
+
+        if (msg.type === 'message.created' && selectedNorm && typeof p.channel_id === 'string') {
+            const pChNorm = SyncStore.normalizeSyncChannelId(p.channel_id);
+            if (pChNorm === selectedNorm) {
+                const authUser = ServiceRegistry.auth?.user;
+                const myId = authUser?.id;
+                if (typeof myId !== 'string' || myId === '') {
+                    throw new Error('message.created: auth.user.id обязателен.');
+                }
+                if (senderUserId(p.sender) === myId) {
+                    SyncStore.resolveOwnMessageBroadcast(p);
+                } else {
+                    SyncStore.upsertMessage(p);
+                }
+                return;
+            }
+        }
+
+        if (msg.type === 'message.created' && !p.thread_id && typeof p.channel_id === 'string') {
+            const pChNorm = SyncStore.normalizeSyncChannelId(p.channel_id);
+            if (selectedNorm && pChNorm === selectedNorm) {
+                return;
+            }
+            const list = SyncStore.state.channels.list;
+            if (!list.some((c) => SyncStore.normalizeSyncChannelId(c.id) === pChNorm)) {
+                return;
+            }
+            const authUser = ServiceRegistry.auth?.user;
+            const myId = authUser?.id;
+            if (typeof myId !== 'string' || myId === '') {
+                throw new Error('Нет user id для синхронизации списка каналов.');
+            }
+            const preview = lanePreviewFromMessagePayload(p);
+            const patch = {
+                last_message_preview: preview,
+                last_message_at: p.sent_at,
+            };
+            if (senderUserId(p.sender) !== myId) {
+                const cur = list.find((c) => SyncStore.normalizeSyncChannelId(c.id) === pChNorm);
+                const n = (typeof cur?.unread_count === 'number' ? cur.unread_count : 0) + 1;
+                patch.unread_count = n;
+            }
+            SyncStore.patchChannelFields(p.channel_id, patch);
+            return;
+        }
+        if (msg.type === 'message.updated') {
+            if (
+                selectedNorm
+                && typeof p.channel_id === 'string'
+                && SyncStore.normalizeSyncChannelId(p.channel_id) === selectedNorm
+            ) {
+                SyncStore.upsertMessage(p);
+            }
+            return;
+        }
+        if (msg.type === 'message.reaction_changed') {
+            if (
+                selectedNorm
+                && typeof p.channel_id === 'string'
+                && SyncStore.normalizeSyncChannelId(p.channel_id) === selectedNorm
+            ) {
+                const mid = p.message_id;
+                if (typeof mid !== 'string') throw new Error('message.reaction_changed: нет message_id.');
+                SyncStore.mergeMessageFields(mid, { reactions: p.reactions });
+            }
+            return;
+        }
+        if (msg.type === 'message.deleted') {
+            if (
+                selectedNorm
+                && typeof p.channel_id === 'string'
+                && SyncStore.normalizeSyncChannelId(p.channel_id) === selectedNorm
+            ) {
+                SyncStore.scheduleMessageRemovalAfterDeleteAnimation(p.message_id);
+            }
+            return;
+        }
+        if (msg.type === 'channel.pins_changed') {
+            if (p.id) {
+                SyncStore.mergeChannel(p);
+            }
+            return;
+        }
+        if (msg.type === 'message.status_changed') {
+            if (
+                selectedNorm
+                && typeof p.channel_id === 'string'
+                && SyncStore.normalizeSyncChannelId(p.channel_id) === selectedNorm
+            ) {
+                const mid = p.message_id;
+                if (typeof mid !== 'string') throw new Error('message.status_changed: нет message_id.');
+                SyncStore.mergeMessageFields(mid, { status: p.status });
+            }
+            return;
+        }
+
+        const noop = new Set([
+            'channel.created',
+            'thread.created',
+            'git_resource.upserted',
+        ]);
+        if (noop.has(msg.type)) {
+            return;
+        }
+
+        throw new Error(`[sync-ws] неизвестное realtime-событие: ${msg.type}`);
+    }
+
     _connectWs() {
         if (this._ws) return;
 
@@ -171,143 +373,10 @@ export class SyncApp extends PlatformApp {
         });
 
         ws.onMessage((data) => {
-            let msg;
-            try { msg = JSON.parse(data); } catch { return; }
-
-            if (!msg || typeof msg !== 'object') return;
-
-            if (typeof msg.ok === 'boolean' && typeof msg.id === 'string') {
-                if (msg.ok) {
-                    if (msg.result) {
-                        SyncStore.resolvePending(msg.id, msg.result);
-                    }
-                } else {
-                    SyncStore.failPending(msg.id);
-                }
-                return;
-            }
-
-            const selectedChannelId = SyncStore.state.chat.selectedChannelId;
-            const p = msg.payload;
-            if (!p || typeof p !== 'object') return;
-
-            if (msg.type === 'channel.member_added') {
-                const authUser = ServiceRegistry.auth?.user;
-                const myId = authUser?.id;
-                const added = p.added_user_id;
-                if (
-                    typeof myId === 'string'
-                    && myId !== ''
-                    && typeof added === 'string'
-                    && added === myId
-                ) {
-                    const syncApi = ServiceRegistry.get('syncApi');
-                    SyncStore.loadChannels(syncApi);
-                }
-                return;
-            }
-
-            if (msg.type === 'space.created') {
-                const syncApi = ServiceRegistry.get('syncApi');
-                void SyncStore.loadSpaces(syncApi).then(() => {
-                    SyncStore.sanitizeChatSelectionAfterLoad();
-                });
-                return;
-            }
-
-            if (msg.type === 'channel.typing') {
-                const authUser = ServiceRegistry.auth?.user;
-                const myId = authUser?.id;
-                if (typeof p.user?.user_id === 'string' && typeof myId === 'string' && myId !== '' && p.user.user_id === myId) {
-                    return;
-                }
-                if (typeof p.channel_id !== 'string') {
-                    throw new Error('channel.typing: нет channel_id.');
-                }
-                SyncStore.applyChannelTyping({
-                    channel_id: p.channel_id,
-                    thread_id: p.thread_id ?? null,
-                    typing: !!p.typing,
-                    user: p.user,
-                });
-                return;
-            }
-
-            if (msg.type === 'channel.read_updated') {
-                const authUser = ServiceRegistry.auth?.user;
-                const myId = authUser?.id;
-                if (typeof myId !== 'string' || myId === '') return;
-                if (p.reader_user_id === myId && typeof p.channel_id === 'string') {
-                    SyncStore.patchChannelFields(p.channel_id, { unread_count: 0 });
-                } else if (
-                    p.reader_user_id !== myId
-                    && typeof p.channel_id === 'string'
-                    && typeof p.read_at === 'string'
-                ) {
-                    SyncStore.setPeerReadAt(p.channel_id, p.read_at);
-                }
-                return;
-            }
-
-            if (msg.type === 'message.created' && selectedChannelId && p.channel_id === selectedChannelId) {
-                const authUser = ServiceRegistry.auth?.user;
-                const myId = authUser?.id;
-                if (typeof myId === 'string' && myId !== '' && senderUserId(p.sender) === myId) {
-                    SyncStore.resolveOwnMessageBroadcast(p);
-                } else {
-                    SyncStore.upsertMessage(p);
-                }
-                return;
-            }
-
-            if (msg.type === 'message.created' && !p.thread_id && typeof p.channel_id === 'string') {
-                if (p.channel_id === selectedChannelId) {
-                    return;
-                }
-                const list = SyncStore.state.channels.list;
-                if (!list.some((c) => c.id === p.channel_id)) {
-                    return;
-                }
-                const authUser = ServiceRegistry.auth?.user;
-                const myId = authUser?.id;
-                if (typeof myId !== 'string' || myId === '') {
-                    throw new Error('Нет user id для синхронизации списка каналов.');
-                }
-                const preview = lanePreviewFromMessagePayload(p);
-                const patch = {
-                    last_message_preview: preview,
-                    last_message_at: p.sent_at,
-                };
-                if (senderUserId(p.sender) !== myId) {
-                    const cur = list.find((c) => c.id === p.channel_id);
-                    const n = (typeof cur?.unread_count === 'number' ? cur.unread_count : 0) + 1;
-                    patch.unread_count = n;
-                }
-                SyncStore.patchChannelFields(p.channel_id, patch);
-                return;
-            }
-            if (msg.type === 'message.updated' && selectedChannelId && p.channel_id === selectedChannelId) {
-                SyncStore.upsertMessage(p);
-                return;
-            }
-            if (msg.type === 'message.reaction_changed' && selectedChannelId && p.channel_id === selectedChannelId) {
-                const mid = p.message_id;
-                if (typeof mid !== 'string') throw new Error('message.reaction_changed: нет message_id.');
-                SyncStore.mergeMessageFields(mid, { reactions: p.reactions });
-                return;
-            }
-            if (msg.type === 'message.deleted' && selectedChannelId && p.channel_id === selectedChannelId) {
-                SyncStore.scheduleMessageRemovalAfterDeleteAnimation(p.message_id);
-                return;
-            }
-            if (msg.type === 'channel.pins_changed' && p.id) {
-                SyncStore.mergeChannel(p);
-                return;
-            }
-            if (msg.type === 'message.status_changed' && selectedChannelId && p.channel_id === selectedChannelId) {
-                const mid = p.message_id;
-                if (typeof mid !== 'string') throw new Error('message.status_changed: нет message_id.');
-                SyncStore.mergeMessageFields(mid, { status: p.status });
+            try {
+                this._handleWsMessage(data);
+            } catch (e) {
+                console.error('[sync-ws] ошибка обработки кадра:', e, { raw: data });
             }
         });
 
