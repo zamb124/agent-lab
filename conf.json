@@ -69,7 +69,7 @@
   },
   "s3": {
     "enabled": true,
-    "default_bucket": "selectel",
+    "default_bucket": "shvedzilla",
     "buckets": {
       "shvedzilla": {
         "provider": "aws",
