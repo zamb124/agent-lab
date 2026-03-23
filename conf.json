@@ -71,7 +71,7 @@
     "enabled": true,
     "default_bucket": "selectel",
     "buckets": {
-      "selectel": {
+      "shvedzilla": {
         "provider": "aws",
         "access_key_id": "SELECTEL_ACCESS_KEY",
         "secret_access_key": "SELECTEL_SECRET_KEY",

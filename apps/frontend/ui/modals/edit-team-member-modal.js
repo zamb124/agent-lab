@@ -38,6 +38,27 @@ export class EditTeamMemberModal extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
+                position: relative;
+                z-index: 2;
+                pointer-events: auto;
+            }
+
+            label.form-item {
+                margin: 0;
+            }
+
+            .role-input {
+                width: 20px;
+                height: 20px;
+                flex-shrink: 0;
+                margin: 0;
+                cursor: pointer;
+                accent-color: var(--accent, #10b981);
+            }
+
+            .role-input:disabled {
+                cursor: not-allowed;
+                opacity: 0.6;
             }
 
             .loading-inline {
@@ -72,7 +93,14 @@ export class EditTeamMemberModal extends PlatformElement {
      */
     async show(member) {
         this._member = member;
-        this._selectedRoles = [...member.roles];
+        const raw = member.roles;
+        if (Array.isArray(raw)) {
+            this._selectedRoles = [...raw];
+        } else if (typeof raw === 'string') {
+            this._selectedRoles = [raw];
+        } else {
+            this._selectedRoles = [];
+        }
         this._ownerUserId = null;
         this._open = true;
         this._loadingSettings = true;
@@ -100,23 +128,25 @@ export class EditTeamMemberModal extends PlatformElement {
         return ALL_ROLES.filter((role) => this._selectedRoles.includes(role));
     }
 
-    _toggleRole(role) {
+    _onRoleCheckbox(role, checked) {
         if (this._loadingSettings || this._saving || !this._member) {
+            this.requestUpdate();
             return;
         }
         const isCompanyOwner = this._ownerUserId && this._member.user_id === this._ownerUserId;
-        if (isCompanyOwner && role === 'owner') {
+        if (isCompanyOwner && role === 'owner' && !checked) {
+            this.error('Роль владельца нельзя снять с владельца компании');
+            this.requestUpdate();
             return;
         }
-
-        const has = this._selectedRoles.includes(role);
-        if (has) {
-            if (this._selectedRoles.length <= 1) {
+        if (!checked) {
+            if (this._selectedRoles.length <= 1 && this._selectedRoles.includes(role)) {
                 this.error('Нужна хотя бы одна роль');
+                this.requestUpdate();
                 return;
             }
             this._selectedRoles = this._selectedRoles.filter((r) => r !== role);
-        } else {
+        } else if (!this._selectedRoles.includes(role)) {
             this._selectedRoles = [...this._selectedRoles, role];
         }
         this.requestUpdate();
@@ -203,11 +233,15 @@ export class EditTeamMemberModal extends PlatformElement {
                             this._saving ||
                             (isCompanyOwner && role === 'owner' && checked);
                         return html`
-                            <div
-                                class="form-item ${checked ? 'selected' : ''}"
-                                @click=${() => !disabled && this._toggleRole(role)}
-                            >
-                                <div class="form-checkbox">${checked ? '✓' : ''}</div>
+                            <label class="form-item ${checked ? 'selected' : ''}">
+                                <input
+                                    class="role-input"
+                                    type="checkbox"
+                                    .checked=${checked}
+                                    ?disabled=${disabled}
+                                    @change=${(e) =>
+                                        this._onRoleCheckbox(role, e.target.checked)}
+                                />
                                 <div class="form-item-content">
                                     <div class="form-item-title">${ROLE_LABELS[role]}</div>
                                     ${isCompanyOwner && role === 'owner'
@@ -216,7 +250,7 @@ export class EditTeamMemberModal extends PlatformElement {
                                           </div>`
                                         : ''}
                                 </div>
-                            </div>
+                            </label>
                         `;
                     })}
                 </div>
