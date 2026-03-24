@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Присоединиться к звонку</title>
+    <link rel="icon" type="image/svg+xml" href="/static/core/assets/service_logos/sync_logo.svg">
+
+    <script type="importmap">
+    {
+        "imports": {
+            "lit": "/static/core/assets/js/lit/lit.min.js",
+            "lit/decorators.js": "/static/core/assets/js/lit/decorators.min.js",
+            "@platform/lib/": "/static/core/lib/",
+            "@livekit/client": "https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.esm.mjs"
+        }
+    }
+    </script>
+
+    <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
+    <link rel="stylesheet" href="/static/core/assets/css/reset.css">
+</head>
+<body>
+    <call-join-page></call-join-page>
+    <script type="module" src="/sync/ui/static/features/call-join.js"></script>
+</body>
+</html>

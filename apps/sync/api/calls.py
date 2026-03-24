@@ -1,0 +1,277 @@
+"""REST API для WebRTC звонков."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import Optional
+from uuid import uuid4
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+
+from apps.sync.container import get_sync_container
+from apps.sync.db.models import SyncCall, SyncCallLink, SyncCallParticipant
+from apps.sync.models.calls import (
+    CallLinkCreate,
+    CallLinkInfo,
+    CallLinkRead,
+    CallParticipantRead,
+    CallRead,
+    GuestJoinRequest,
+    JoinResponse,
+)
+from core.calls.livekit_client import LiveKitClient
+from core.calls.models import TurnCredentials
+from core.calls.turn import generate_turn_credentials
+from core.config import get_settings
+from core.context import get_context
+from core.logging import get_logger
+
+logger = get_logger(__name__)
+
+router = APIRouter()
+
+
+def _build_call_read(call: "SyncCall", participants: list) -> CallRead:
+    return CallRead(
+        call_id=call.call_id,
+        channel_id=call.channel_id,
+        mode=call.mode,
+        call_type=call.call_type,
+        status=call.status,
+        livekit_room_name=call.livekit_room_name,
+        started_at=call.started_at,
+        ended_at=call.ended_at,
+        created_at=call.created_at,
+        created_by_user_id=call.created_by_user_id,
+        participants=[
+            CallParticipantRead(
+                user_id=p.user_id,
+                status=p.status,
+                joined_at=p.joined_at,
+                left_at=p.left_at,
+            )
+            for p in participants
+        ],
+    )
+
+
+def _livekit_client(settings) -> LiveKitClient:
+    return LiveKitClient(
+        url=settings.calls.livekit_url,
+        api_key=settings.calls.livekit_api_key,
+        api_secret=settings.calls.livekit_api_secret,
+    )
+
+
+# ─── Авторизованные эндпоинты ────────────────────────────────────────────────
+
+@router.get("/turn-credentials")
+async def get_turn_credentials() -> TurnCredentials:
+    """Временные TURN credentials для WebRTC ICE (coturn HMAC-SHA1)."""
+    settings = get_settings()
+    context = get_context()
+    return generate_turn_credentials(
+        user_id=context.user.user_id,
+        turn_host=settings.calls.turn_host,
+        turn_port=settings.calls.turn_port,
+        turn_secret=settings.calls.turn_secret,
+        ttl=settings.calls.turn_credential_ttl,
+    )
+
+
+@router.post("/links", status_code=201)
+async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRead:
+    """
+    Создаёт постоянную ссылку на звонок.
+
+    По ней может войти любой — зарегистрированный пользователь или гость.
+    Звонок создаётся в SFU-режиме при первом входе.
+    """
+    context = get_context()
+    settings = get_settings()
+    container = get_sync_container()
+
+    if not await container.channel_repository.is_member(
+        body.channel_id, context.user.user_id, company_id=context.active_company.company_id
+    ):
+        raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
+
+    link_token = uuid4().hex
+    expires_at = datetime.now(UTC) + timedelta(hours=body.ttl_hours)
+
+    link = SyncCallLink(
+        link_token=link_token,
+        channel_id=body.channel_id,
+        company_id=context.active_company.company_id,
+        call_type=body.call_type,
+        created_by_user_id=context.user.user_id,
+        expires_at=expires_at,
+    )
+    await container.call_repository.create_link(link)
+
+    base_url = str(request.base_url).rstrip("/")
+    join_url = f"{base_url}/sync/join/{link_token}"
+
+    return CallLinkRead(
+        link_token=link_token,
+        channel_id=body.channel_id,
+        call_type=body.call_type,
+        expires_at=expires_at,
+        join_url=join_url,
+    )
+
+
+@router.get("/{call_id}")
+async def get_call(call_id: str) -> CallRead:
+    """Статус звонка и список участников."""
+    context = get_context()
+    container = get_sync_container()
+    try:
+        call = await container.call_repository.get_call(call_id, context.active_company.company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    participants = await container.call_repository.list_participants(call_id)
+    return _build_call_read(call, participants)
+
+
+@router.get("/{call_id}/token")
+async def get_livekit_token(call_id: str) -> dict:
+    """
+    Выдаёт LiveKit access token для подключения к SFU-комнате.
+
+    Только для звонков в режиме sfu. Участник должен состоять в канале.
+    """
+    settings = get_settings()
+    context = get_context()
+    user_id = context.user.user_id
+    company_id = context.active_company.company_id
+
+    container = get_sync_container()
+    try:
+        call = await container.call_repository.get_call(call_id, company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if call.mode != "sfu":
+        raise HTTPException(status_code=400, detail=f"Звонок {call_id} не является SFU-звонком.")
+    if not call.livekit_room_name:
+        raise HTTPException(status_code=400, detail=f"У звонка {call_id} нет LiveKit комнаты.")
+
+    if not await container.channel_repository.is_member(call.channel_id, user_id, company_id=company_id):
+        raise HTTPException(status_code=403, detail=f"Нет доступа к каналу звонка {call_id}.")
+
+    token = _livekit_client(settings).generate_token(
+        room_name=call.livekit_room_name, identity=user_id
+    )
+    return {"token": token, "livekit_url": settings.calls.livekit_url}
+
+
+# ─── Публичные эндпоинты (без обязательного auth) ────────────────────────────
+
+@router.get("/join/{link_token}")
+async def get_link_info(link_token: str) -> CallLinkInfo:
+    """
+    Публичная информация о ссылке.
+
+    Не требует авторизации — используется страницей /sync/join/{token}
+    для отображения канала, создателя и типа звонка.
+    """
+    settings = get_settings()
+    container = get_sync_container()
+    try:
+        link = await container.call_repository.get_link(link_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    channel = await container.channel_repository.get(link.channel_id)
+    channel_name = channel.name if channel else None
+
+    creator_name = link.created_by_user_id
+    try:
+        user = await container.user_repository.get(link.created_by_user_id)
+        if user:
+            creator_name = user.name
+    except Exception:
+        pass
+
+    return CallLinkInfo(
+        link_token=link_token,
+        channel_name=channel_name,
+        creator_display_name=creator_name,
+        call_type=link.call_type,
+        expires_at=link.expires_at,
+    )
+
+
+@router.post("/join/{link_token}")
+async def join_via_link(
+    link_token: str,
+    request: Request,
+    body: Optional[GuestJoinRequest] = None,
+) -> JoinResponse:
+    """
+    Войти в звонок по ссылке.
+
+    - Зарегистрированный пользователь: auth cookie → identity = user_id.
+    - Гость: body.guest_name → identity = guest:{uuid}:{name}.
+
+    Первый вход создаёт SFU-звонок; последующие — переиспользуют.
+    """
+    settings = get_settings()
+    container = get_sync_container()
+    try:
+        link = await container.call_repository.get_link(link_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    # Определяем identity вызывающего.
+    # Публичный эндпоинт: анонимный middleware создаёт user_id="anonymous".
+    identity: str
+    context = get_context()
+    is_authenticated = context.user.user_id not in ("anonymous", "", None)
+
+    if is_authenticated:
+        identity = context.user.user_id
+    else:
+        if body is None or not body.guest_name.strip():
+            raise HTTPException(status_code=422, detail="Для гостевого входа необходимо указать guest_name.")
+        safe_name = body.guest_name.strip().replace(":", "_")
+        identity = f"guest:{uuid4().hex[:8]}:{safe_name}"
+
+    # Создаём или переиспользуем звонок
+    if link.call_id:
+        call = await container.call_repository.get_call(link.call_id, link.company_id)
+    else:
+        livekit_room_name = f"link-{link_token[:16]}"
+        await _livekit_client(settings).create_room(livekit_room_name)
+
+        call = SyncCall(
+            call_id=uuid4().hex,
+            company_id=link.company_id,
+            channel_id=link.channel_id,
+            mode="sfu",
+            call_type=link.call_type,
+            status="active",
+            livekit_room_name=livekit_room_name,
+            started_at=datetime.now(UTC),
+            created_by_user_id=link.created_by_user_id,
+        )
+        await container.call_repository.create_call(call)
+        await container.call_repository.attach_call_to_link(link_token, call.call_id)
+
+    if not call.livekit_room_name:
+        raise ValueError("У звонка нет LiveKit комнаты.")
+
+    token = _livekit_client(settings).generate_token(
+        room_name=call.livekit_room_name,
+        identity=identity,
+    )
+
+    return JoinResponse(
+        call_id=call.call_id,
+        livekit_token=token,
+        livekit_url=settings.calls.livekit_url,
+        identity=identity,
+        mode="sfu",
+    )
