@@ -32,17 +32,58 @@ export class PlatformNotificationManager extends PlatformElement {
         this._reconnectAttempts = 0;
         this._maxReconnectAttempts = 5;
         this._heartbeatInterval = null;
+        this._onSwMessage = this._onSwMessage.bind(this);
     }
 
     connectedCallback() {
         super.connectedCallback();
         this._connect();
         this._requestNotificationPermission();
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', this._onSwMessage);
+        }
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         this._disconnect();
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.removeEventListener('message', this._onSwMessage);
+        }
+    }
+
+    /**
+     * Push из service worker: при открытой вкладке ОС часто не показывает баннер —
+     * дублируем в список и toast (без второго вызова Notification API).
+     */
+    _onSwMessage(event) {
+        if (event.data?.type !== 'humanitec-web-push' || !event.data?.payload) {
+            return;
+        }
+        const p = event.data.payload;
+        const notification = {
+            title: p.title || 'Humanitec',
+            message: p.message || '',
+            type: p.tag || 'system',
+            service: 'push',
+            priority: p.priority || 'normal',
+            created_at: new Date().toISOString(),
+            data: typeof p.data === 'object' && p.data !== null ? p.data : {},
+        };
+        if (typeof p.url === 'string' && p.url) {
+            notification.action_url = p.url;
+        }
+        this.notifications = [notification, ...this.notifications].slice(0, 50);
+        this.unreadCount++;
+        this._showToast(notification);
+        this.requestUpdate();
+        this.dispatchEvent(
+            new CustomEvent('notification-received', {
+                detail: notification,
+                bubbles: true,
+                composed: true,
+            })
+        );
     }
 
     _connect() {

@@ -210,7 +210,28 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Humanitec', options)
+    (async () => {
+      const clientList = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+      for (const client of clientList) {
+        if (client.url && client.url.startsWith(self.location.origin)) {
+          client.postMessage({
+            type: 'humanitec-web-push',
+            payload: {
+              title: data.title || 'Humanitec',
+              message: data.message || data.body || '',
+              tag: data.tag || data.type,
+              priority: data.priority,
+              url: data.url || data.action_url,
+              data: data.data,
+            },
+          });
+        }
+      }
+      await self.registration.showNotification(data.title || 'Humanitec', options);
+    })()
   );
 });
 

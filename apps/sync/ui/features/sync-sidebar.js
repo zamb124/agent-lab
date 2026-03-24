@@ -11,6 +11,7 @@ import { SyncStore } from '../store/sync.store.js';
 import '@platform/lib/components/layout/platform-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
+import '@platform/lib/components/platform-notification-manager.js';
 
 export class SyncSidebar extends PlatformElement {
     static styles = [
@@ -259,6 +260,36 @@ export class SyncSidebar extends PlatformElement {
 
             .chevron-rot.is-closed {
                 transform: rotate(-90deg);
+            }
+
+            .sync-sidebar-footer {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 6px;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+
+            .sync-sidebar-footer platform-user {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .sync-sidebar-footer platform-notification-manager {
+                flex-shrink: 0;
+            }
+
+            platform-sidebar[collapsed] .sync-sidebar-footer {
+                flex-direction: column;
+                gap: 8px;
+                align-items: center;
+            }
+
+            platform-sidebar[collapsed] .sync-sidebar-footer platform-user {
+                flex: 0 0 auto;
+                width: 100%;
             }
 
             .peer-avatar {
@@ -798,8 +829,9 @@ export class SyncSidebar extends PlatformElement {
                     </div>
                 </div>
 
-                <div slot="footer">
+                <div slot="footer" class="sync-sidebar-footer">
                     <platform-user block></platform-user>
+                    <platform-notification-manager></platform-notification-manager>
                 </div>
             </platform-sidebar>
         `;
