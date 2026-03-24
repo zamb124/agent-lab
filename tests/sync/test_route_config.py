@@ -4,6 +4,14 @@ import pytest
 from core.middleware.auth.route_config import RouteMatcher
 
 
+def test_login_page_is_public() -> None:
+    matcher = RouteMatcher()
+    rule = matcher.match("/login")
+    assert rule is not None
+    assert rule.context_type == "anonymous"
+    assert rule.auth_required is False
+
+
 def test_sync_ui_shell_is_public() -> None:
     # SPA-оболочка загружается без auth — JS сам вызывает checkAuth() и redirectToAuth()
     matcher = RouteMatcher()

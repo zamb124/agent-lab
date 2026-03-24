@@ -338,16 +338,19 @@ export class PlatformNotificationManager extends PlatformElement {
 
         .notification-panel {
             position: absolute;
-            top: 100%;
-            right: 0;
-            margin-top: 8px;
-            width: 400px;
-            max-height: 600px;
+            bottom: 100%;
+            left: 0;
+            right: auto;
+            margin-bottom: 8px;
+            margin-top: 0;
+            width: min(400px, calc(100vw - 24px));
+            max-width: 400px;
+            max-height: min(600px, 70vh);
             background: var(--surface-color);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 1000;
+            z-index: var(--z-modal, 10000);
             display: flex;
             flex-direction: column;
         }

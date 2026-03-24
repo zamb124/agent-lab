@@ -37,6 +37,8 @@ ROUTE_RULES: List[RouteRule] = [
     
     # Главная страница
     RouteRule("/", auth_required=False, context_type="anonymous"),
+    # Страница входа (redirect после истечения сессии: redirectToAuth() на apex-домене)
+    RouteRule("/login", auth_required=False, context_type="anonymous"),
     
     # Страницы продуктов (публичный доступ)
     RouteRule("/products/*", auth_required=False, context_type="anonymous"),

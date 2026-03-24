@@ -265,6 +265,7 @@ export const sidebarStyles = css`
         margin-top: auto;
         padding: var(--space-4);
         border-top: 1px solid var(--glass-border-subtle);
+        overflow: visible;
     }
 
     .collapse-btn {
