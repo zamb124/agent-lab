@@ -21,6 +21,7 @@ export class SyncApp extends PlatformApp {
         _ui: { state: true },
         _activeCall: { state: true },
         _incomingCall: { state: true },
+        _activeCallChannels: { state: true },
     };
 
     static styles = [
@@ -81,6 +82,7 @@ export class SyncApp extends PlatformApp {
         this._unsubscribe = null;
         this._typingPruneTimer = null;
         this._wsEverConnected = false;
+        this._activeCallChannels = {};
     }
 
     setupStore() {
@@ -364,10 +366,12 @@ export class SyncApp extends PlatformApp {
 
         if (msg.type === 'call.incoming') {
             const myId = ServiceRegistry.auth?.user?.id;
+            const channel = SyncStore.state.channels.list.find(c => c.id === p.channel_id);
+            // Трекаем активный звонок в канале для индикатора в сайдбаре.
+            this._activeCallChannels = { ...this._activeCallChannels, [p.channel_id]: { call_id: p.call_id, call_type: p.call_type } };
             // Инициатор сам получает оверлей через WS-ack — баннер ему не нужен.
             if (p.initiator_user_id && p.initiator_user_id === myId) return;
             if (this._activeCall?.call_id === p.call_id) return;
-            const channel = SyncStore.state.channels.list.find(c => c.id === p.channel_id);
             this._incomingCall = {
                 call_id: p.call_id,
                 call_type: p.call_type,
@@ -390,6 +394,12 @@ export class SyncApp extends PlatformApp {
             }
             if (this._incomingCall?.call_id === p.call_id) {
                 this._incomingCall = null;
+            }
+            // Убираем из трекера активных звонков.
+            if (p.channel_id) {
+                const next = { ...this._activeCallChannels };
+                delete next[p.channel_id];
+                this._activeCallChannels = next;
             }
             return;
         }
@@ -414,12 +424,31 @@ export class SyncApp extends PlatformApp {
         throw new Error(`[sync-ws] неизвестное realtime-событие: ${msg.type}`);
     }
 
+    async _joinCallInChannel(channelId) {
+        const callInfo = this._activeCallChannels[channelId];
+        if (!callInfo) return;
+        const syncApi = ServiceRegistry.get('syncApi');
+        const [callData, tokenData] = await Promise.all([
+            syncApi.get(`/calls/${callInfo.call_id}`),
+            syncApi.get(`/calls/${callInfo.call_id}/token`),
+        ]);
+        const ws = ServiceRegistry.get('syncWs');
+        if (ws) {
+            const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+                (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+            ws.sendJson({ id, type: 'call.accept', payload: { call_id: callInfo.call_id } });
+        }
+        this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
+    }
+
     async _openCallOverlay(callData) {
         this._activeCall = callData;
         this._incomingCall = null;
         if (callData.mode === 'sfu') {
             const syncApi = ServiceRegistry.get('syncApi');
             const tokenData = await syncApi.get(`/calls/${callData.call_id}/token`);
+            // Пока ждали токен — звонок мог завершиться. Не перезаписываем если уже null.
+            if (!this._activeCall || this._activeCall.call_id !== callData.call_id) return;
             this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
         }
     }
@@ -522,7 +551,10 @@ export class SyncApp extends PlatformApp {
 
         return html`
             <div class="sidebar">
-                <sync-sidebar></sync-sidebar>
+                <sync-sidebar
+                    .activeCallChannels=${this._activeCallChannels}
+                    @join-call-channel=${(e) => this._joinCallInChannel(e.detail.channelId)}
+                ></sync-sidebar>
             </div>
 
             <div class="main">
@@ -536,12 +568,13 @@ export class SyncApp extends PlatformApp {
             ${this._activeCall ? html`
                 <call-overlay
                     call-id=${this._activeCall.call_id}
+                    channel-id=${this._activeCall.channel_id || ''}
                     mode=${this._activeCall.mode}
                     call-type=${this._activeCall.call_type}
                     livekit-url=${this._activeCall.livekit_url || ''}
                     livekit-token=${this._activeCall.livekit_token || ''}
-                    @call-ended=${() => this._hangupCall(this._activeCall?.call_id)}
-                    @call-hangup-request=${(e) => this._hangupCall(e.detail.callId)}
+                    @call-ended=${() => { const id = this._activeCall?.call_id; if (id) this._hangupCall(id); }}
+                    @call-hangup-request=${(e) => { if (e.detail.callId) this._hangupCall(e.detail.callId); }}
                 ></call-overlay>
             ` : ''}
 

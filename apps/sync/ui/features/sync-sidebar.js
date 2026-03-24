@@ -456,11 +456,40 @@ export class SyncSidebar extends PlatformElement {
             :host([collapsed]) .sync-sidebar-inner .section-scroll {
                 max-height: none;
             }
+
+            .call-indicator {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                padding: 2px 6px;
+                background: rgba(34,197,94,0.15);
+                border: 1px solid rgba(34,197,94,0.3);
+                border-radius: 100px;
+                font-size: 11px;
+                font-weight: 600;
+                color: #22c55e;
+                flex-shrink: 0;
+                cursor: pointer;
+                transition: background 0.15s;
+            }
+            .call-indicator:hover { background: rgba(34,197,94,0.25); }
+            .call-dot {
+                width: 6px; height: 6px;
+                border-radius: 50%;
+                background: #22c55e;
+                animation: blink 1.5s ease infinite;
+                flex-shrink: 0;
+            }
+            @keyframes blink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.3; }
+            }
         `
     ];
 
     static properties = {
         collapsed: { type: Boolean, reflect: true },
+        activeCallChannels: { type: Object },
         _spaces: { state: true },
         _channels: { state: true },
         _companyMembers: { state: true },
@@ -807,6 +836,23 @@ export class SyncSidebar extends PlatformElement {
                                                 ? html`<span class="nav-item-unread">${rowMeta.unread}</span>`
                                                 : ''}
                                         </button>
+                                        ${this.activeCallChannels?.[channel.id] ? html`
+                                            <button
+                                                type="button"
+                                                class="call-indicator"
+                                                title="Идёт звонок — войти"
+                                                @click=${(e) => {
+                                                    e.stopPropagation();
+                                                    this.dispatchEvent(new CustomEvent('join-call-channel', {
+                                                        bubbles: true, composed: true,
+                                                        detail: { channelId: channel.id },
+                                                    }));
+                                                }}
+                                            >
+                                                <span class="call-dot"></span>
+                                                Войти
+                                            </button>
+                                        ` : ''}
                                         ${showGear ? html`
                                             <button
                                                 type="button"

@@ -12,12 +12,13 @@ import { html, css, LitElement } from 'lit';
 
 class CallOverlay extends LitElement {
     static properties = {
-        callId:       { type: String, attribute: 'call-id' },
-        mode:         { type: String },
-        callType:     { type: String, attribute: 'call-type' },
-        livekitUrl:   { type: String, attribute: 'livekit-url' },
+        callId:      { type: String, attribute: 'call-id' },
+        channelId:   { type: String, attribute: 'channel-id' },
+        mode:        { type: String },
+        callType:    { type: String, attribute: 'call-type' },
+        livekitUrl:  { type: String, attribute: 'livekit-url' },
         livekitToken: { type: String, attribute: 'livekit-token' },
-        identity:     { type: String },
+        identity:    { type: String },
         _status:      { state: true },
         _error:       { state: true },
         _participants: { state: true },
@@ -290,6 +291,25 @@ class CallOverlay extends LitElement {
         }
     }
 
+    async _copyLink() {
+        if (!this.callId) return;
+        const res = await fetch('/sync/api/v1/calls/links', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ channel_id: this.channelId, call_type: this.callType || 'video' }),
+        });
+        if (!res.ok) return;
+        const { join_url } = await res.json();
+        await navigator.clipboard.writeText(join_url).catch(() => {});
+        const btn = this.shadowRoot.querySelector('[title="Скопировать ссылку на звонок"]');
+        if (btn) {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(() => { btn.innerHTML = orig; }, 2000);
+        }
+    }
+
     async _hangup() {
         this._cleanup();
         this._status = 'ended';
@@ -351,7 +371,17 @@ class CallOverlay extends LitElement {
                     ${this._status === 'active' ? html`<span class="status-dot"></span>` : ''}
                     ${this._status === 'connecting' ? 'Подключение…' : this._formatDuration(this._duration)}
                 </span>
-                <span>${this._participants.length} участн.</span>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="opacity:0.5">${this._participants.length} уч.</span>
+                    ${this.callId ? html`
+                        <button class="ctrl-btn" style="width:36px;height:36px;font-size:14px;" @click=${this._copyLink} title="Скопировать ссылку на звонок">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
+                                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
             </div>
 
             <div class="video-grid ${gridClass}">
@@ -360,14 +390,24 @@ class CallOverlay extends LitElement {
 
             <div class="controls">
                 <button class="ctrl-btn ${this._micMuted ? '' : 'active'}" @click=${this._toggleMic} title="${this._micMuted ? 'Включить' : 'Выключить'} микрофон">
-                    ${this._micMuted ? '🔇' : '🎤'}
+                    ${this._micMuted
+                        ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
+                        : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
+                    }
                 </button>
                 ${this.callType !== 'audio' ? html`
                     <button class="ctrl-btn ${this._camOff ? '' : 'active'}" @click=${this._toggleCam} title="${this._camOff ? 'Включить' : 'Выключить'} камеру">
-                        ${this._camOff ? '📷' : '📹'}
+                        ${this._camOff
+                            ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                            : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
+                        }
                     </button>
                 ` : ''}
-                <button class="ctrl-btn hangup" @click=${this._hangup} title="Завершить">📵</button>
+                <button class="ctrl-btn hangup" @click=${this._hangup} title="Завершить звонок">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C9.6 21 3 14.4 3 6c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+                    </svg>
+                </button>
             </div>
         `;
     }
