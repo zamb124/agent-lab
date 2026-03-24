@@ -184,11 +184,43 @@ EOF
 fi
 
 # ─── LiveKit: отдельный Ingress на поддомене livekit.{domain} ──────────────────
-# Браузеры требуют WSS (wss://) — LiveKit должен быть доступен через HTTPS/WSS.
-# Отдельный поддомен позволяет получить Let's Encrypt сертификат через HTTP-01.
+# Браузеры требуют WSS — LiveKit должен быть доступен через HTTPS/WSS.
+#
+# TLS-секрет для LiveKit определяется так (приоритет):
+#   1. ingress.livekit_tls_secret в conf.local.json — задай имя wildcard-секрета явно
+#   2. Если в кластере найден любой секрет с wildcard-именем — используем его
+#   3. Иначе создаём новый HTTP-01 сертификат для livekit.{domain}
+#
+# Пример conf.local.json для wildcard:
+#   "ingress": { ..., "livekit_tls_secret": "humanitec-ru-wildcard-tls" }
 LIVEKIT_SUBDOMAIN="livekit.${DOMAIN}"
-LIVEKIT_TLS_SECRET="$(echo "${LIVEKIT_SUBDOMAIN}" | tr '.' '-')-tls"
 LIVEKIT_PORT=7880
+LIVEKIT_SPECIFIC_SECRET="$(echo "${LIVEKIT_SUBDOMAIN}" | tr '.' '-')-tls"
+
+# Приоритет 1: явная настройка в conf.local.json
+_CONFIGURED_SECRET="$(jq -r '.ingress.livekit_tls_secret // empty' "${CONF_LOCAL_JSON}" 2>/dev/null || true)"
+if [[ -n "${_CONFIGURED_SECRET}" ]]; then
+  LIVEKIT_TLS_SECRET="${_CONFIGURED_SECRET}"
+  log "LiveKit TLS: использует настроенный секрет ${LIVEKIT_TLS_SECRET} (wildcard)"
+else
+  # Приоритет 2: найти wildcard-секрет на кластере (имена по распространённым паттернам)
+  _DOMAIN_DASH="$(echo "${DOMAIN}" | tr '.' '-')"
+  _FOUND_WILDCARD=""
+  for _candidate in "${_DOMAIN_DASH}-wildcard-tls" "wildcard-${_DOMAIN_DASH}-tls" "${_DOMAIN_DASH}-star-tls"; do
+    if ${SSH} "microk8s kubectl get secret ${_candidate} -n default >/dev/null 2>&1"; then
+      _FOUND_WILDCARD="${_candidate}"
+      break
+    fi
+  done
+
+  if [[ -n "${_FOUND_WILDCARD}" ]]; then
+    LIVEKIT_TLS_SECRET="${_FOUND_WILDCARD}"
+    log "LiveKit TLS: найден wildcard-сертификат ${LIVEKIT_TLS_SECRET} — используем его, новый не создаём"
+  else
+    LIVEKIT_TLS_SECRET="${LIVEKIT_SPECIFIC_SECRET}"
+    log "LiveKit TLS: wildcard не найден, будет использован ${LIVEKIT_TLS_SECRET}"
+  fi
+fi
 
 log "Создаём Service и Endpoints для LiveKit (${LIVEKIT_SUBDOMAIN}:${LIVEKIT_PORT})"
 ${SSH} "microk8s kubectl apply -f -" <<EOF
@@ -215,7 +247,7 @@ subsets:
   - port: ${LIVEKIT_PORT}
 EOF
 
-log "Создаём Ingress для ${LIVEKIT_SUBDOMAIN}"
+log "Создаём Ingress для ${LIVEKIT_SUBDOMAIN} (TLS: ${LIVEKIT_TLS_SECRET})"
 ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -248,10 +280,11 @@ spec:
               number: ${LIVEKIT_PORT}
 EOF
 
+# Создаём новый сертификат только если секрет ещё не существует в кластере
 if ${SSH} "microk8s kubectl get secret ${LIVEKIT_TLS_SECRET} -n default >/dev/null 2>&1"; then
-  log "Certificate ${LIVEKIT_TLS_SECRET} уже существует — пропускаем"
+  log "Секрет ${LIVEKIT_TLS_SECRET} уже есть в кластере — сертификат не создаём"
 else
-  log "Certificate (Let's Encrypt HTTP-01) для ${LIVEKIT_SUBDOMAIN}"
+  log "Создаём Certificate (Let's Encrypt HTTP-01) для ${LIVEKIT_SUBDOMAIN}"
   ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate

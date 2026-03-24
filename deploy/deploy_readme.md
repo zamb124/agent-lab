@@ -20,6 +20,7 @@ git push -> GitHub Actions -> ghcr.io -> SSH -> docker compose up -d
 | `.github/workflows/deploy.yml` | CI/CD пайплайн |
 | `deploy/k8.sh` | Одноразовая подготовка сервера (MicroK8s + Docker Engine + Portainer) |
 | `deploy/ingress.sh` | Настройка Ingress + cert-manager (Let's Encrypt) |
+| `deploy/wildcard-tls.sh` | Wildcard сертификат `*.{domain}` через acme.sh + reg.ru DNS API |
 
 ---
 
