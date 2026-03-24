@@ -70,6 +70,14 @@ export class TeamPage extends PlatformElement {
                 font-weight: var(--font-semibold);
                 color: white;
                 flex-shrink: 0;
+                overflow: hidden;
+            }
+
+            .member-avatar img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                border-radius: 50%;
             }
 
             .member-info {
@@ -274,7 +282,11 @@ export class TeamPage extends PlatformElement {
         
         return html`
             <div class="member-card">
-                <div class="member-avatar">${initials}</div>
+                <div class="member-avatar">
+                    ${member.avatar_url
+                        ? html`<img src=${member.avatar_url} alt="" />`
+                        : initials}
+                </div>
                 
                 <div class="member-info">
                     <h3 class="member-name">${member.name}</h3>

@@ -66,16 +66,18 @@ export const sidebarHostStyles = css`
             position: fixed;
             left: -100%;
             top: 0;
+            bottom: 0;
+            height: auto;
             z-index: var(--z-modal, 1000);
             width: 75%;
             min-width: 0;
             max-width: 320px;
-            height: 100vh;
             background: var(--glass-solid-strong);
             backdrop-filter: blur(var(--glass-blur-strong));
             -webkit-backdrop-filter: blur(var(--glass-blur-strong));
             border-right: 1px solid var(--glass-border-subtle);
             transition: left var(--duration-normal) ease;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         :host([mobile-open]) {
@@ -86,9 +88,14 @@ export const sidebarHostStyles = css`
             display: block;
             position: fixed;
             top: 0;
+            bottom: 0;
             left: 100%;
             width: 100vw;
-            height: 100vh;
+            width: var(--app-vw, 100vw);
+            height: auto;
+            min-height: 100vh;
+            min-height: var(--app-vh, 100vh);
+            min-height: -webkit-fill-available;
             background: rgba(0, 0, 0, 0.5);
             z-index: -1;
         }

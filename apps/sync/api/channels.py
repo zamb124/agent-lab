@@ -10,6 +10,7 @@ from apps.sync.models.channels import (
     ChannelCreate,
     ChannelMemberAdd,
     ChannelMemberRead,
+    ChannelNotificationSettingsUpdate,
     ChannelRead,
     ChannelUpdate,
 )
@@ -77,6 +78,42 @@ async def update_channel(channel_id: str, body: ChannelUpdate) -> ChannelRead:
     if not out.get("ok"):
         raise RuntimeError(f"Command failed: {out.get('error_detail')}")
     return ChannelRead.model_validate(out["result"])
+
+
+@router.patch("/{channel_id}/notification-settings", response_model=ChannelRead)
+async def patch_channel_notification_settings(
+    channel_id: str,
+    body: ChannelNotificationSettingsUpdate,
+) -> ChannelRead:
+    """Мьют платформенных уведомлений о сообщениях для текущего пользователя в канале."""
+    context = get_context()
+    company_id = context.active_company.company_id
+    viewer_id = context.user.user_id
+    container = get_sync_container()
+    ch = await container.channel_repository.get(channel_id)
+    if ch is None or ch.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Канал не найден.")
+    if not await container.channel_repository.is_member(channel_id, viewer_id, company_id=company_id):
+        raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
+    await container.channel_repository.set_member_notifications_muted(
+        channel_id,
+        viewer_id,
+        body.notifications_muted,
+        company_id=company_id,
+    )
+    summaries = await container.message_repository.channel_lane_summaries_batch(
+        company_id=company_id,
+        channel_ids=[channel_id],
+        viewer_user_id=viewer_id,
+    )
+    return await channel_read_from_entity(
+        ch,
+        viewer_user_id=viewer_id,
+        channel_repository=container.channel_repository,
+        user_repository=container.user_repository,
+        company_id=company_id,
+        lane_summary=summaries[channel_id],
+    )
 
 
 @router.post("/{channel_id}/read", status_code=204)

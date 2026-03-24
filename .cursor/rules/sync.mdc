@@ -37,7 +37,8 @@ apps/sync/
     repositories/   # Space, Channel, Thread, Message, File, GitResourceRef
   models/           # Pydantic API-модели (Read/Create/Update)
   api/              # REST роутеры
-  realtime/         # Command-Event (broker, commands, events, handlers, command_dispatch, tasks)
+  realtime/         # Command-Event (broker, commands, events, handlers, command_dispatch, tasks, notification_tasks)
+  ws_presence.py    # Redis-ключи онлайна по /sync/ws (для TaskIQ deliver без дубля с чат-WS)
 
 apps/sync_worker/   # TaskIQ worker (queue: sync)
 ```
@@ -48,7 +49,7 @@ apps/sync_worker/   # TaskIQ worker (queue: sync)
 |---------|-----------|----------|
 | sync_spaces | да | Пространства |
 | sync_channels | да | Каналы (direct/group/topic), `pinned_message_ids` JSONB — упорядоченный список id |
-| sync_channel_members | да | Участники каналов; `last_read_at` — курсор прочитанного **основной ленты** (`thread_id IS NULL`) для бейджа непрочитанного в UI |
+| sync_channel_members | да | Участники каналов; `last_read_at` — курсор прочитанного **основной ленты** (`thread_id IS NULL`); `notifications_muted` — не слать платформенные уведомления о новых сообщениях этому участнику в канале |
 | sync_threads | да | Треды |
 | sync_messages | да | Сообщения (`reactions` JSONB, `deleted_at`, при пересылке `forwarded_from_channel_id` / `forwarded_from_channel_name`) |
 | sync_message_contents | нет (через message FK) | Полиморфный контент |
@@ -66,7 +67,13 @@ REST POST /sync/api/v1/... ──┐
 WebSocket /sync/ws        ────┘
 ```
 
-Исключения: **`POST /channels/{id}/read`** — `dispatch_sync_command()` в процессе API (без TaskIQ). **`POST /api/v1/files/`** — загрузка multipart в S3 (`build_s3_key_from_context`, `S3ClientFactory`) + запись в `sync_files` через `FileRepository.create`, без TaskIQ (вложения в чате и аватары в UI).
+Исключения: **`POST /channels/{id}/read`** — `dispatch_sync_command()` в процессе API (без TaskIQ). **`PATCH /channels/{id}/notification-settings`** — мьют уведомлений для текущего участника через репозиторий (без TaskIQ). **`POST /api/v1/files/`** — загрузка multipart в S3 (`build_s3_key_from_context`, `S3ClientFactory`) + запись в `sync_files` через `FileRepository.create`, без TaskIQ (вложения в чате и аватары в UI).
+
+## Платформенные уведомления о сообщениях
+
+- После **`messages.send`** (только корневая лента, без `thread_id`) для каждого участника кроме отправителя ставится TaskIQ-задача **`deliver_channel_message_notification`** (`apps/sync/realtime/notification_tasks.py`). Внутри: если в Redis есть presence **`sync:ws:presence:{user_id}`** (активный `/sync/ws`) — выход без `notify_user`; иначе проверка **`notifications_muted`**; иначе **`notify_user`** (`NotificationType.SYNC_NEW_MESSAGE`, `action_url` `/sync?channel=...`).
+- Presence пишется в **`apps/sync/ws.py`** при connect/каждом кадре от клиента и снимается в `finally` при отключении (TTL ключа).
+- UI: **`platform-notification-manager`** в `apps/sync/ui/index.html`; мьют — настройки канала (`channel-settings-modal`), API см. выше. Deep link: query **`?channel=`** на старте `sync-app.js`.
 
 ### Правила
 

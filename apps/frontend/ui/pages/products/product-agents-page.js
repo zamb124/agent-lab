@@ -14,7 +14,7 @@ export class ProductAgentsPage extends PlatformElement {
                 width: 100%;
                 background: var(--landing-bg, #0F0F0F);
                 color: var(--landing-text, #FFFFFF);
-                min-height: 100vh;
+                min-height: var(--app-vh, 100vh);
             }
             
             .page-container {

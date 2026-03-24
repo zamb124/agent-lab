@@ -24,7 +24,7 @@ from core.websocket.publisher import notify_user, Notification, NotificationType
 await notify_user(
     user_id="user_123",
     notification=Notification(
-        type=NotificationType.ACCESS_REQUEST,  # ACCESS_REQUEST | ENTITY_UPDATED | TASK_COMPLETED | MENTION | SYSTEM
+        type=NotificationType.ACCESS_REQUEST,  # + SYNC_NEW_MESSAGE (sync чат)
         title="Новый запрос доступа",
         message="Пользователь John запросил доступ",
         service="crm",          # "crm" | "rag" | "flows"

@@ -19,7 +19,7 @@ export class PlatformApp extends PlatformElement {
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                min-height: 100vh;
+                min-height: var(--app-vh, 100vh);
                 padding: 40px;
             }
             

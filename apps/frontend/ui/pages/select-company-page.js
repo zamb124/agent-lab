@@ -20,7 +20,7 @@ export class SelectCompanyPage extends PlatformElement {
         css`
             :host {
                 display: block;
-                min-height: 100vh;
+                min-height: var(--app-vh, 100vh);
                 background: var(--landing-background, #0F0F0F);
                 padding: 40px 20px;
             }

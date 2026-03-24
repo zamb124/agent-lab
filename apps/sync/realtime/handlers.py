@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Optional
 from uuid import uuid4
 
+from apps.sync.channel_lane_preview import lane_preview_from_content_row
 from apps.sync.channel_read_helpers import channel_read_entity_minimal
 from apps.sync.db.models import SyncChannel, SyncGitResourceRef, SyncMessage, SyncSpace, SyncThread
 from apps.sync.db.repositories.channel_repository import ChannelRepository
@@ -15,6 +16,7 @@ from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.channels import ChannelRead, ChannelType, ChannelUpdate
+from apps.sync.realtime.notification_tasks import deliver_channel_message_notification
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.messages import MessageContentModel, MessageCreate, MessageRead, MessageStatus
@@ -62,6 +64,43 @@ class CommandExecutionResult:
         self.ok = ok
         self.result = result
         self.events = events
+
+
+async def _enqueue_channel_message_notifications(
+    *,
+    payload: MessagesSendPayload,
+    message: MessageRead,
+    company_id: str,
+    actor_user_id: str,
+    channels: ChannelRepository,
+) -> None:
+    if payload.body.thread_id:
+        return
+    entity = await channels.get(payload.channel_id)
+    if entity is None:
+        raise ValueError(f"Канал {payload.channel_id} не найден.")
+    if message.contents:
+        c0 = message.contents[0]
+        preview = lane_preview_from_content_row(c0.type.value, c0.data.model_dump())
+    else:
+        preview = "Новое сообщение"
+    if entity.type == ChannelType.DIRECT.value:
+        title = message.sender.display_name
+    else:
+        title = entity.name or "Канал"
+    member_ids = await channels.list_member_user_ids(payload.channel_id, company_id=company_id)
+    for uid in member_ids:
+        if uid == actor_user_id:
+            continue
+        await deliver_channel_message_notification.kiq(
+            recipient_user_id=uid,
+            channel_id=payload.channel_id,
+            company_id=company_id,
+            message_id=message.id,
+            sender_display_name=message.sender.display_name,
+            notification_title=title,
+            body_preview=preview,
+        )
 
 
 async def execute_command(
@@ -186,6 +225,13 @@ async def execute_command(
             company_id=cmd.company_id,
             messages=messages,
             user_repository=user_repository,
+        )
+        await _enqueue_channel_message_notifications(
+            payload=payload,
+            message=message,
+            company_id=cmd.company_id,
+            actor_user_id=cmd.actor_user_id,
+            channels=channels,
         )
         return CommandExecutionResult(ok=True, result=message, events=[event_message_created(message)])
 

@@ -52,6 +52,11 @@ async def channel_read_from_entity(
                 viewer_user_id,
                 company_id=company_id,
             )
+    notifications_muted = await channel_repository.get_member_notifications_muted(
+        entity.channel_id,
+        viewer_user_id,
+        company_id=company_id,
+    )
     return ChannelRead(
         id=entity.channel_id,
         space_id=entity.space_id,
@@ -67,6 +72,7 @@ async def channel_read_from_entity(
         last_message_preview=summ.last_message_preview,
         last_message_at=summ.last_message_at,
         peer_last_read_at=peer_last_read_at,
+        notifications_muted=notifications_muted,
     )
 
 
@@ -87,4 +93,6 @@ def channel_read_entity_minimal(entity: SyncChannel) -> ChannelRead:
         unread_count=0,
         last_message_preview=None,
         last_message_at=None,
+        peer_last_read_at=None,
+        notifications_muted=False,
     )

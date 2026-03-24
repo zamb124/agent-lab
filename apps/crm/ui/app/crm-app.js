@@ -34,14 +34,14 @@ export class CRMApp extends PlatformApp {
             :host {
                 display: flex !important;
                 flex-direction: row !important;
-                width: 100vw;
-                height: 100vh;
+                width: var(--app-vw, 100vw);
+                height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
             
             .sidebar {
-                height: 100vh;
+                height: var(--app-vh, 100vh);
                 flex-shrink: 0;
                 overflow: visible;
                 background: transparent;
@@ -49,7 +49,7 @@ export class CRMApp extends PlatformApp {
             
             .main {
                 flex: 1;
-                height: 100vh;
+                height: var(--app-vh, 100vh);
                 display: flex;
                 padding: var(--space-4);
                 gap: var(--space-4);

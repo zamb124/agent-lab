@@ -127,7 +127,10 @@ build_paths() {
 
 PATHS="$(build_paths)"
 
-# Одиночный Ingress с path-based роутингом для domain и *.domain
+# Ingress: TLS только на apex. Wildcard *.domain в одном Certificate с HTTP-01 выдать нельзя
+# (нужен DNS-01) — иначе заказ ACME зависает в pending без Secret. Поддомены компаний: см. deploy/wildcard-tls.md
+TLS_SECRET="$(echo "${DOMAIN}" | tr '.' '-')-tls"
+
 log "Создаём Ingress для ${DOMAIN} и *.${DOMAIN}"
 ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: networking.k8s.io/v1
@@ -136,7 +139,6 @@ metadata:
   name: humanitec-ingress
   namespace: default
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/configuration-snippet: |
@@ -147,8 +149,7 @@ spec:
   tls:
   - hosts:
     - ${DOMAIN}
-    - "*.${DOMAIN}"
-    secretName: $(echo "${DOMAIN}" | tr '.' '-')-tls
+    secretName: ${TLS_SECRET}
   rules:
   - host: ${DOMAIN}
     http:
@@ -160,8 +161,24 @@ ${PATHS}
 ${PATHS}
 EOF
 
-log "Ожидаем сертификаты (~30 сек)"
-sleep 30
+log "Certificate (Let's Encrypt HTTP-01, только apex ${DOMAIN})"
+${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ${TLS_SECRET}
+  namespace: default
+spec:
+  secretName: ${TLS_SECRET}
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+  - ${DOMAIN}
+EOF
+
+log "Ожидаем сертификат (~60 сек)"
+sleep 60
 
 echo
 echo "======================================"

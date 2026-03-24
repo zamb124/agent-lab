@@ -437,7 +437,7 @@ export class PlatformUser extends PlatformElement {
                 top: auto;
                 width: var(--user-menu-fixed-width, min(240px, calc(100vw - 16px)));
                 min-width: 200px;
-                max-height: min(70vh, calc(100vh - 24px));
+                max-height: min(70vh, calc(var(--app-vh, 100vh) - 24px));
                 overflow-x: hidden;
                 overflow-y: auto;
                 z-index: var(--z-modal, 5000);

@@ -22,8 +22,8 @@ export class FrontendApp extends PlatformApp {
             :host {
                 display: flex !important;
                 flex-direction: row !important;
-                width: 100vw;
-                height: 100vh;
+                width: var(--app-vw, 100vw);
+                height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
@@ -40,11 +40,11 @@ export class FrontendApp extends PlatformApp {
             product-crm-page {
                 display: block;
                 width: 100%;
-                min-height: 100vh;
+                min-height: var(--app-vh, 100vh);
             }
             
             .sidebar {
-                height: 100vh;
+                height: var(--app-vh, 100vh);
                 flex-shrink: 0;
                 overflow: visible;
                 background: transparent;
@@ -52,7 +52,7 @@ export class FrontendApp extends PlatformApp {
             
             .main {
                 flex: 1;
-                height: 100vh;
+                height: var(--app-vh, 100vh);
                 overflow-y: auto;
                 display: flex;
                 padding: var(--space-4);
@@ -60,7 +60,7 @@ export class FrontendApp extends PlatformApp {
             
             platform-island {
                 flex: 1;
-                min-height: calc(100vh - 2rem);
+                min-height: calc(var(--app-vh, 100vh) - 2rem);
             }
 
             @media (max-width: 767px) {

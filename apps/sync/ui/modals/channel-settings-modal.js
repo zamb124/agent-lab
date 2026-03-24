@@ -26,6 +26,7 @@ export class ChannelSettingsModal extends PlatformElement {
         _editName: { state: true },
         _editAvatarUrl: { state: true },
         _savingProfile: { state: true },
+        _savingMute: { state: true },
     };
 
     static styles = [
@@ -374,6 +375,7 @@ export class ChannelSettingsModal extends PlatformElement {
         this._editName = '';
         this._editAvatarUrl = '';
         this._savingProfile = false;
+        this._savingMute = false;
     }
 
     connectedCallback() {
@@ -495,6 +497,33 @@ export class ChannelSettingsModal extends PlatformElement {
             this._close();
         } finally {
             this._savingProfile = false;
+        }
+    }
+
+    async _toggleMute(e) {
+        const ch = this.channel;
+        if (!ch?.id) {
+            return;
+        }
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            return;
+        }
+        const next = Boolean(target.checked);
+        this._savingMute = true;
+        this._error = null;
+        try {
+            const syncApi = ServiceRegistry.get('syncApi');
+            const updated = await syncApi.patchChannelNotificationSettings(ch.id, {
+                notifications_muted: next,
+            });
+            SyncStore.mergeChannel(updated);
+            this.channel = updated;
+        } catch (err) {
+            this._error = err instanceof Error ? err.message : String(err);
+            target.checked = !next;
+        } finally {
+            this._savingMute = false;
         }
     }
 
@@ -641,6 +670,25 @@ export class ChannelSettingsModal extends PlatformElement {
                     <div class="modal-meta">${metaLine}</div>
 
                     ${this._error ? html`<div class="error">${this._error}</div>` : ''}
+
+                    ${!createMode && typeof ch.id === 'string' && ch.id !== ''
+                        ? html`
+                            <div class="field">
+                                <label class="field-label">Уведомления</label>
+                                <label
+                                    style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);cursor:pointer;color:var(--text-primary);"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        .checked=${Boolean(ch.notifications_muted)}
+                                        @change=${(e) => this._toggleMute(e)}
+                                        ?disabled=${this._savingMute}
+                                    />
+                                    Не беспокоить (без уведомлений о новых сообщениях)
+                                </label>
+                            </div>
+                        `
+                        : ''}
 
                     <div class="field">
                         <label class="field-label">Название</label>

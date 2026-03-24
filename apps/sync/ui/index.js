@@ -2,6 +2,7 @@
  * Sync Chat UI — точка входа
  */
 
+import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';

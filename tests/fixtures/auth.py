@@ -152,6 +152,20 @@ async def auth_headers_system_user2(auth_token_system_user2):
     return {"Authorization": f"Bearer {auth_token_system_user2}"}
 
 
+@pytest_asyncio.fixture
+async def system_user2_id(auth_token_system_user2):
+    token_service = get_token_service()
+    token_data = token_service.validate_token(auth_token_system_user2)
+    if not token_data:
+        raise ValueError("Invalid token")
+    return token_data.user_id
+
+
+@pytest_asyncio.fixture
+async def ws_cookie_system_user2(auth_token_system_user2, system_user2_id):
+    return {"Cookie": f"auth_token={auth_token_system_user2}; session_id={system_user2_id}"}
+
+
 @pytest_asyncio.fixture(scope="session")
 async def auth_token_company2(frontend_container):
     """

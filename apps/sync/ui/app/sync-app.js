@@ -25,14 +25,14 @@ export class SyncApp extends PlatformApp {
             :host {
                 display: flex !important;
                 flex-direction: row !important;
-                width: 100vw;
-                height: 100vh;
+                width: var(--app-vw, 100vw);
+                height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
 
             .sidebar {
-                height: 100vh;
+                height: var(--app-vh, 100vh);
                 flex-shrink: 0;
                 overflow: visible;
                 background: transparent;
@@ -40,7 +40,7 @@ export class SyncApp extends PlatformApp {
 
             .main {
                 flex: 1;
-                height: 100vh;
+                height: var(--app-vh, 100vh);
                 overflow: hidden;
                 display: flex;
                 padding: var(--space-4);
@@ -48,7 +48,7 @@ export class SyncApp extends PlatformApp {
 
             platform-island {
                 flex: 1;
-                min-height: calc(100vh - 2rem);
+                min-height: calc(var(--app-vh, 100vh) - 2rem);
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
@@ -122,7 +122,18 @@ export class SyncApp extends PlatformApp {
         ]);
 
         SyncStore.sanitizeChatSelectionAfterLoad();
-        await this._restoreLastSelection();
+        const params = new URLSearchParams(window.location.search);
+        const channelFromUrl = params.get('channel');
+        if (typeof channelFromUrl === 'string' && channelFromUrl !== '') {
+            const ch = SyncStore.state.channels.list.find((c) => c.id === channelFromUrl);
+            if (ch) {
+                await SyncStore.selectChannelAndLoadMessages(syncApi, ch.space_id, ch.id);
+            } else {
+                await this._restoreLastSelection();
+            }
+        } else {
+            await this._restoreLastSelection();
+        }
         this._connectWs();
     }
 

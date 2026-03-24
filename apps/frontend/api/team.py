@@ -41,7 +41,7 @@ async def get_team_members(request: Request, container: ContainerDep):
                 email=None,  # Email храним в provider mapping
                 roles=roles if isinstance(roles, list) else [roles],
                 joined_at=member_user.created_at,
-                avatar_url=None
+                avatar_url=member_user.avatar_url,
             ))
     
     return members

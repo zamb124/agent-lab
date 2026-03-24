@@ -14,8 +14,8 @@ export class FlowsApp extends PlatformApp {
         css`
             :host {
                 display: flex;
-                width: 100vw;
-                height: 100vh;
+                width: var(--app-vw, 100vw);
+                height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
@@ -28,7 +28,7 @@ export class FlowsApp extends PlatformApp {
             platform-chat {
                 flex: 1;
                 min-width: 0;
-                height: calc(100vh - 2rem);
+                height: calc(var(--app-vh, 100vh) - 2rem);
                 margin: 1rem;
                 margin-left: 0.5rem;
             }
@@ -36,7 +36,7 @@ export class FlowsApp extends PlatformApp {
             @media (max-width: 768px) {
                 platform-chat {
                     margin: 0;
-                    height: 100vh;
+                    height: var(--app-vh, 100vh);
                 }
             }
         `

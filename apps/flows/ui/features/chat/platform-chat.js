@@ -253,7 +253,7 @@ export class PlatformChat extends PlatformIsland {
             @media (max-width: 768px) {
                 :host {
                     margin: 0;
-                    height: 100vh;
+                    height: var(--app-vh, 100vh);
                     border-radius: 0;
                 }
 

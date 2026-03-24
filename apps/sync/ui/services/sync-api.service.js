@@ -43,6 +43,17 @@ export class SyncAPIService extends BaseService {
 
     /**
      * @param {string} channelId
+     * @param {{ notifications_muted: boolean }} body
+     */
+    async patchChannelNotificationSettings(channelId, body) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        return this.patch(`/channels/${encodeURIComponent(channelId)}/notification-settings`, body);
+    }
+
+    /**
+     * @param {string} channelId
      * @param {string} userId
      * @param {'owner'|'admin'|'member'|'viewer'} [role]
      */

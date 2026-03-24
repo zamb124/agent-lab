@@ -88,6 +88,11 @@ class SyncChannelMember(Base):
         nullable=True,
         default=None,
     )
+    notifications_muted: Mapped[bool] = mapped_column(
+        Boolean(),
+        default=False,
+        nullable=False,
+    )
 
     __table_args__ = (
         Index("ix_sync_channel_members_company", "company_id"),

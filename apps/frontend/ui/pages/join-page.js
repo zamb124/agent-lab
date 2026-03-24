@@ -33,7 +33,7 @@ export class JoinPage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                min-height: 100vh;
+                min-height: var(--app-vh, 100vh);
                 background: var(--bg-gradient, #0F0F0F);
                 padding: 24px;
             }

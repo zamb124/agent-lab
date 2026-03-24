@@ -291,8 +291,8 @@
                     
                     @media (max-width: 480px) {
                         .hc-chat-window {
-                            width: 100vw;
-                            height: 100vh;
+                            width: var(--app-vw, 100vw);
+                            height: var(--app-vh, 100vh);
                             border-radius: 0;
                             margin: 0;
                         }

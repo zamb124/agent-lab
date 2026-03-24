@@ -10,7 +10,7 @@ export class LandingHero extends PlatformElement {
         css`
             :host {
                 display: block;
-                min-height: 100vh;
+                min-height: var(--app-vh, 100vh);
                 position: relative;
                 overflow: hidden;
                 background: #0F0F0F;
@@ -23,7 +23,7 @@ export class LandingHero extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                min-height: calc(100vh - 71px);
+                min-height: calc(var(--app-vh, 100vh) - 71px);
                 position: relative;
             }
             

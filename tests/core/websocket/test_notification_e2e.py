@@ -238,7 +238,8 @@ async def test_notification_types_coverage(crm_client, ws_cookie_system, system_
         NotificationType.ENTITY_UPDATED,
         NotificationType.TASK_COMPLETED,
         NotificationType.MENTION,
-        NotificationType.SYSTEM
+        NotificationType.SYSTEM,
+        NotificationType.SYNC_NEW_MESSAGE,
     ]
     
     async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:

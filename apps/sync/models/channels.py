@@ -71,6 +71,10 @@ class ChannelRead(BaseModel):
         default=None,
         description="Время, до которого собеседник прочитал основную ленту (только для direct).",
     )
+    notifications_muted: bool = Field(
+        default=False,
+        description="Уведомления о новых сообщениях отключены для текущего пользователя в этом канале.",
+    )
 
 
 class ChannelCreate(BaseModel):
@@ -122,4 +126,12 @@ class ChannelMemberAdd(BaseModel):
     role: str = Field(
         default="member",
         description="Роль участника (по умолчанию member).",
+    )
+
+
+class ChannelNotificationSettingsUpdate(BaseModel):
+    """Настройки уведомлений текущего пользователя в канале."""
+
+    notifications_muted: bool = Field(
+        description="Не отправлять платформенные уведомления о новых сообщениях в этом канале.",
     )

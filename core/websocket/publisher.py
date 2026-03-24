@@ -23,6 +23,7 @@ class NotificationType(str, Enum):
     TASK_COMPLETED = "task_completed"
     MENTION = "mention"
     SYSTEM = "system"
+    SYNC_NEW_MESSAGE = "sync_new_message"
 
 
 class Notification(BaseModel):

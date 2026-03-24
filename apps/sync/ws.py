@@ -12,6 +12,7 @@ from taskiq.exceptions import TaskiqResultTimeoutError
 from core.config import get_settings
 from apps.sync.realtime.commands import CommandEnvelope, WsCommandFrame, WsResultFrame
 from apps.sync.realtime.tasks import handle_command
+from apps.sync.ws_presence import clear_sync_ws_presence, refresh_sync_ws_presence
 from core.websocket.auth import get_user_from_websocket
 from core.logging import get_logger
 
@@ -133,11 +134,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     user_id = user.user_id
     company_id = user.active_company_id
     settings = get_settings()
+    redis_url = settings.database.redis_url
+    if not redis_url:
+        raise ValueError("database.redis_url не задан для sync WebSocket presence.")
 
+    await manager.connect(user_id, websocket)
+    await refresh_sync_ws_presence(redis_url, user_id)
     try:
-        await manager.connect(user_id, websocket)
         while True:
             raw = await websocket.receive_text()
+            await refresh_sync_ws_presence(redis_url, user_id)
             frame = WsCommandFrame.model_validate_json(raw)
             logger.info("ws cmd received: user_id=%s id=%s type=%s", user_id, frame.id, frame.type)
 
@@ -175,4 +181,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             await websocket.send_text(out.model_dump_json())
 
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(user_id, websocket)
+        await clear_sync_ws_presence(redis_url, user_id)

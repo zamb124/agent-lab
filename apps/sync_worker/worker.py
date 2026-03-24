@@ -14,5 +14,6 @@ set_settings(SyncSettings(**load_merged_config(service_name="sync")))
 from apps.sync.realtime.broker import broker
 
 import apps.sync.realtime.tasks  # noqa: F401
+import apps.sync.realtime.notification_tasks  # noqa: F401
 
 __all__ = ["broker"]

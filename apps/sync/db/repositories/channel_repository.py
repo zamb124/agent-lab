@@ -129,6 +129,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
                     user_id=user_id,
                     company_id=cid,
                     role=role,
+                    notifications_muted=False,
                 )
                 session.add(member)
             await session.commit()
@@ -187,6 +188,38 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
                     f"Запись участника принадлежит другой компании: channel_id={channel_id}."
                 )
             row.last_read_at = at
+            await session.commit()
+
+    async def get_member_notifications_muted(
+        self,
+        channel_id: str,
+        user_id: str,
+        company_id: Optional[str] = None,
+    ) -> bool:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            row = await session.get(SyncChannelMember, (channel_id, user_id))
+            if row is None or row.company_id != cid:
+                raise ValueError(
+                    f"Участник канала не найден: channel_id={channel_id}, user_id={user_id}."
+                )
+            return bool(row.notifications_muted)
+
+    async def set_member_notifications_muted(
+        self,
+        channel_id: str,
+        user_id: str,
+        muted: bool,
+        company_id: Optional[str] = None,
+    ) -> None:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            row = await session.get(SyncChannelMember, (channel_id, user_id))
+            if row is None or row.company_id != cid:
+                raise ValueError(
+                    f"Участник канала не найден: channel_id={channel_id}, user_id={user_id}."
+                )
+            row.notifications_muted = muted
             await session.commit()
 
     async def get_peer_last_read_at(

@@ -305,6 +305,12 @@ export class MyForm extends PlatformElement {
 
 ---
 
+## Высота вьюпорта (iOS Safari, мобильные браузеры)
+
+Глобально в `core/frontend/static/assets/css/reset.css`: `--app-vh` / `--app-vw` (fallback `100vh`/`100vw`, при поддержке — `100dvh`/`100dvw`). Для полноэкранных layout’ов и `min-height` страниц использовать **`var(--app-vh, 100vh)`**, не сырой `100vh`. Мобильный drawer `platform-sidebar` в `sidebar.styles.js`: `position: fixed` с **`top` + `bottom`** и отступом `env(safe-area-inset-bottom)` под home indicator.
+
+---
+
 ## Layout: Platform Sidebar
 
 **Унифицированный sidebar с collapsed/mobile режимами:**

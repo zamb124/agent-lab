@@ -1,0 +1,26 @@
+"""Redis presence для /sync/ws (без моков Redis)."""
+
+from __future__ import annotations
+
+import os
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_sync_ws_presence_refresh_clear() -> None:
+    url = os.environ.get("DATABASE__REDIS_URL")
+    if not url:
+        pytest.skip("DATABASE__REDIS_URL не задан")
+
+    from apps.sync.ws_presence import (
+        clear_sync_ws_presence,
+        is_user_sync_ws_online,
+        refresh_sync_ws_presence,
+    )
+
+    uid = "test_sync_ws_presence_user"
+    await refresh_sync_ws_presence(url, uid)
+    assert await is_user_sync_ws_online(url, uid) is True
+    await clear_sync_ws_presence(url, uid)
+    assert await is_user_sync_ws_online(url, uid) is False
