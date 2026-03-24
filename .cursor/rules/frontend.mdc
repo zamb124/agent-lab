@@ -43,7 +43,7 @@ core/frontend/static/
 │   └── styles/shared/           # Переиспользуемые стили
 └── services/                    # Core сервисы (auth, theme, notify)
 
-**Версия деплоя в сайдбаре:** `platform-deployment-version` (`lib/components/platform-deployment-version.js`) запрашивает `GET {base-url}/health`, читает `deployment_version` из ответа (поле выставляет бэкенд из `SERVER__DEPLOYMENT_VERSION`). В футере `platform-sidebar` задаётся атрибут `base-url` как у приложения: `/frontend`, `/flows`, `/crm`, `/rag`, `/sync`.
+**Версия деплоя в сайдбаре:** `platform-deployment-version` (`lib/components/platform-deployment-version.js`) запрашивает `GET {base-url}/health`, читает `deployment_version` из ответа (поле выставляет бэкенд из `SERVER__DEPLOYMENT_VERSION`). Атрибут `base-url` как у `getBaseUrl()` (`/frontend`, `/flows`, …). В футере под блоком пользователя — атрибут `footer` (узкая строка по центру, не в одном ряду с `platform-user`).
 
 apps/{service}/ui/
 ├── app/{Service}App.js          # extends PlatformApp

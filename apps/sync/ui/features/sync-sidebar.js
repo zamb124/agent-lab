@@ -291,12 +291,6 @@ export class SyncSidebar extends PlatformElement {
                 flex-shrink: 0;
             }
 
-            .sync-sidebar-footer platform-deployment-version {
-                display: block;
-                width: 100%;
-                text-align: center;
-            }
-
             platform-sidebar[collapsed] .sync-sidebar-footer-row {
                 flex-direction: column;
                 gap: 8px;

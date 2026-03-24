@@ -373,8 +373,8 @@ export class RagSidebar extends PlatformElement {
                 </div>
 
                 <div slot="footer">
-                    <platform-deployment-version base-url="/rag"></platform-deployment-version>
                     <platform-user block></platform-user>
+                    <platform-deployment-version base-url="/rag" footer></platform-deployment-version>
                 </div>
             </platform-sidebar>
         `;

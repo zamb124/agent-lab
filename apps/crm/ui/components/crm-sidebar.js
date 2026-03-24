@@ -202,12 +202,6 @@ export class CRMSidebar extends PlatformElement {
                 min-width: 0;
             }
 
-            .user-section platform-deployment-version {
-                display: block;
-                width: 100%;
-                text-align: center;
-            }
-
             /* Collapsed mode */
             :host([collapsed]) .namespace-selector,
             :host([collapsed]) .nav-label,

@@ -8,6 +8,7 @@ import { PlatformElement } from '../platform-element/index.js';
 export class PlatformDeploymentVersion extends PlatformElement {
     static properties = {
         baseUrl: { attribute: 'base-url' },
+        footer: { type: Boolean, reflect: true },
         _text: { state: true },
         _title: { state: true },
     };
@@ -18,6 +19,9 @@ export class PlatformDeploymentVersion extends PlatformElement {
             :host {
                 display: block;
             }
+            :host([footer]) {
+                width: 100%;
+            }
             .line {
                 font-size: 10px;
                 line-height: 1.3;
@@ -26,12 +30,17 @@ export class PlatformDeploymentVersion extends PlatformElement {
                 padding: 2px 0 6px 0;
                 word-break: break-all;
             }
+            :host([footer]) .line {
+                text-align: center;
+                padding: 2px 0 0 0;
+            }
         `,
     ];
 
     constructor() {
         super();
         this.baseUrl = '';
+        this.footer = false;
         this._text = '';
         this._title = '';
     }
