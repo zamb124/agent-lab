@@ -366,12 +366,12 @@ export class SyncApp extends PlatformApp {
 
         if (msg.type === 'call.incoming') {
             const myId = ServiceRegistry.auth?.user?.id;
-            const channel = SyncStore.state.channels.list.find(c => c.id === p.channel_id);
-            // Трекаем активный звонок в канале для индикатора в сайдбаре.
+            // Трекаем активный звонок ВСЕГДА — нужно для индикатора в сайдбаре у всех участников.
             this._activeCallChannels = { ...this._activeCallChannels, [p.channel_id]: { call_id: p.call_id, call_type: p.call_type } };
-            // Инициатор сам получает оверлей через WS-ack — баннер ему не нужен.
+            // Инициатор уже открыл оверлей через WS-ack — баннер ему не нужен.
             if (p.initiator_user_id && p.initiator_user_id === myId) return;
             if (this._activeCall?.call_id === p.call_id) return;
+            const channel = SyncStore.state.channels.list.find(c => c.id === p.channel_id);
             this._incomingCall = {
                 call_id: p.call_id,
                 call_type: p.call_type,
@@ -482,6 +482,7 @@ export class SyncApp extends PlatformApp {
 
     _hangupCall(callId) {
         this._activeCall = null;
+        if (!callId) return;
         const ws = ServiceRegistry.get('syncWs');
         if (!ws) return;
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>

@@ -349,6 +349,7 @@ export class FlowsSidebar extends PlatformElement {
                 </sidebar-section>
 
                 <div slot="footer">
+                    <platform-deployment-version base-url="/flows"></platform-deployment-version>
                     <div class="footer-links">
                         <a class="footer-link" href="/docs" target="_blank">
                             <platform-icon name="file" size="16"></platform-icon>

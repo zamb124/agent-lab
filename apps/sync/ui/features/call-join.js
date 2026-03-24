@@ -180,17 +180,25 @@ class CallJoinPage extends LitElement {
 
     async connectedCallback() {
         super.connectedCallback();
-        await Promise.all([this._fetchLinkInfo(), this._fetchCurrentUser()]);
-        this._loading = false;
+        try {
+            await Promise.all([this._fetchLinkInfo(), this._fetchCurrentUser()]);
+        } finally {
+            // Гарантируем снятие спиннера даже при исключении.
+            this._loading = false;
+        }
     }
 
     async _fetchLinkInfo() {
-        const res = await fetch(`${API_BASE}/join/${token}`);
-        if (!res.ok) {
-            this._error = res.status === 404 ? 'Ссылка не найдена или истекла.' : 'Ошибка загрузки информации о звонке.';
-            return;
+        try {
+            const res = await fetch(`${API_BASE}/join/${token}`);
+            if (!res.ok) {
+                this._error = res.status === 404 ? 'Ссылка не найдена или истекла.' : 'Ошибка загрузки информации о звонке.';
+                return;
+            }
+            this._linkInfo = await res.json();
+        } catch {
+            this._error = 'Не удалось загрузить информацию о звонке.';
         }
-        this._linkInfo = await res.json();
     }
 
     async _fetchCurrentUser() {
@@ -206,13 +214,17 @@ class CallJoinPage extends LitElement {
         this._error = null;
         this._loading = true;
         try {
-            const body = this._currentUser ? {} : { guest_name: this._guestName.trim() };
-            const res = await fetch(`${API_BASE}/join/${token}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(body),
-            });
+            // Зарегистрированный: не отправляем тело — сервер берёт user_id из cookie.
+            // Гость: отправляем { guest_name }.
+            const fetchOptions = this._currentUser
+                ? { method: 'POST', credentials: 'include' }
+                : {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ guest_name: this._guestName.trim() }),
+                };
+            const res = await fetch(`${API_BASE}/join/${token}`, fetchOptions);
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ detail: 'Ошибка входа.' }));
                 throw new Error(err.detail || 'Ошибка входа.');

@@ -292,6 +292,7 @@ export class FrontendSidebar extends PlatformElement {
                 </div>
 
                 <div slot="footer">
+                    <platform-deployment-version base-url="/frontend"></platform-deployment-version>
                     <platform-user block></platform-user>
                 </div>
             </platform-sidebar>

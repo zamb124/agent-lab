@@ -296,7 +296,14 @@ def create_service_app(
     @app.get("/health")
     @app.get(f"/{service_name}/health")
     async def health():
-        return {"status": "healthy", "service": settings.server.name}
+        payload: dict[str, str] = {
+            "status": "healthy",
+            "service": settings.server.name,
+        }
+        dep = settings.server.deployment_version
+        if dep:
+            payload["deployment_version"] = dep
+        return payload
     
     @app.get("/")
     async def root():

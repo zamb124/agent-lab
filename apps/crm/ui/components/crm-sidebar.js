@@ -401,6 +401,7 @@ export class CRMSidebar extends PlatformElement {
                 </div>
 
                 <div slot="footer" class="user-section">
+                    <platform-deployment-version base-url="/crm"></platform-deployment-version>
                     <platform-user block></platform-user>
                     <platform-notification-manager></platform-notification-manager>
                 </div>

@@ -7,6 +7,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { sidebarHostStyles, sidebarStyles } from '../../styles/shared/sidebar.styles.js';
 import '../platform-icon.js';
+import '../platform-deployment-version.js';
 
 export class PlatformSidebar extends PlatformElement {
     static properties = {
