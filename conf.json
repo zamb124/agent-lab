@@ -18,6 +18,12 @@
   "tasks": {
     "broker_url": "redis://localhost:63791/0"
   },
+  "push": {
+    "enabled": true,
+    "vapid_public_key": "ВСТАВИТЬ_PUBLIC_ИЗ_ГЕНЕРАТОРА",
+    "vapid_private_key": "ВСТАВИТЬ_PRIVATE_ИЗ_ГЕНЕРАТОРА",
+    "vapid_email": "ops@твой-домен.ru"
+  },
   "auth": {
     "enabled": true,
     "jwt_secret_key": "dev-secret-key-change-in-production",
