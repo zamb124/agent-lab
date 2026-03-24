@@ -19,7 +19,8 @@ export class PlatformNotificationManager extends PlatformElement {
         notifications: { type: Array },
         unreadCount: { type: Number },
         isConnected: { type: Boolean },
-        showPanel: { type: Boolean }
+        showPanel: { type: Boolean },
+        _panelRect: { state: true },
     };
 
     constructor() {
@@ -28,11 +29,15 @@ export class PlatformNotificationManager extends PlatformElement {
         this.unreadCount = 0;
         this.isConnected = false;
         this.showPanel = false;
+        this._panelRect = null;
+        this._panelGlobalListeners = false;
         this._ws = null;
         this._reconnectAttempts = 0;
         this._maxReconnectAttempts = 5;
         this._heartbeatInterval = null;
         this._onSwMessage = this._onSwMessage.bind(this);
+        this._onScrollOrResize = this._onScrollOrResize.bind(this);
+        this._onDocumentPointerDown = this._onDocumentPointerDown.bind(this);
     }
 
     connectedCallback() {
@@ -44,12 +49,76 @@ export class PlatformNotificationManager extends PlatformElement {
         }
     }
 
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (changedProperties.has('notifications') && this.showPanel) {
+            this._onScrollOrResize();
+        }
+    }
+
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._detachPanelGlobalListeners();
         this._disconnect();
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.removeEventListener('message', this._onSwMessage);
         }
+    }
+
+    _computePanelRect(buttonEl) {
+        const r = buttonEl.getBoundingClientRect();
+        const width = Math.min(400, window.innerWidth - 16);
+        let left = r.left;
+        if (left + width > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - width - 8);
+        }
+        const bottom = window.innerHeight - r.top + 8;
+        return { left, bottom, width };
+    }
+
+    _onScrollOrResize() {
+        if (!this.showPanel) {
+            return;
+        }
+        const btn = this.shadowRoot?.querySelector('.notification-button');
+        if (!btn) {
+            return;
+        }
+        this._panelRect = this._computePanelRect(btn);
+        this.requestUpdate();
+    }
+
+    _onDocumentPointerDown(e) {
+        if (!this.showPanel) {
+            return;
+        }
+        const path = e.composedPath();
+        if (path.includes(this)) {
+            return;
+        }
+        this.showPanel = false;
+        this._panelRect = null;
+        this._detachPanelGlobalListeners();
+    }
+
+    _attachPanelGlobalListeners() {
+        if (this._panelGlobalListeners) {
+            return;
+        }
+        window.addEventListener('resize', this._onScrollOrResize);
+        window.addEventListener('scroll', this._onScrollOrResize, true);
+        document.addEventListener('pointerdown', this._onDocumentPointerDown, true);
+        this._panelGlobalListeners = true;
+    }
+
+    _detachPanelGlobalListeners() {
+        if (!this._panelGlobalListeners) {
+            return;
+        }
+        window.removeEventListener('resize', this._onScrollOrResize);
+        window.removeEventListener('scroll', this._onScrollOrResize, true);
+        document.removeEventListener('pointerdown', this._onDocumentPointerDown, true);
+        this._panelGlobalListeners = false;
     }
 
     /**
@@ -204,7 +273,18 @@ export class PlatformNotificationManager extends PlatformElement {
     }
 
     _togglePanel() {
-        this.showPanel = !this.showPanel;
+        if (this.showPanel) {
+            this.showPanel = false;
+            this._panelRect = null;
+            this._detachPanelGlobalListeners();
+            return;
+        }
+        const btn = this.shadowRoot?.querySelector('.notification-button');
+        if (btn) {
+            this._panelRect = this._computePanelRect(btn);
+        }
+        this.showPanel = true;
+        this._attachPanelGlobalListeners();
     }
 
     _markAsRead(index) {
@@ -219,6 +299,8 @@ export class PlatformNotificationManager extends PlatformElement {
         this.notifications = [];
         this.unreadCount = 0;
         this.showPanel = false;
+        this._panelRect = null;
+        this._detachPanelGlobalListeners();
     }
 
     _handleNotificationClick(notification, index) {
@@ -243,8 +325,11 @@ export class PlatformNotificationManager extends PlatformElement {
                     ` : ''}
                 </button>
 
-                ${this.showPanel ? html`
-                    <div class="notification-panel">
+                ${this.showPanel && this._panelRect ? html`
+                    <div
+                        class="notification-panel"
+                        style="left: ${this._panelRect.left}px; bottom: ${this._panelRect.bottom}px; width: ${this._panelRect.width}px;"
+                    >
                         <div class="panel-header">
                             <h3>Уведомления</h3>
                             ${this.notifications.length > 0 ? html`
@@ -337,20 +422,13 @@ export class PlatformNotificationManager extends PlatformElement {
         }
 
         .notification-panel {
-            position: absolute;
-            bottom: 100%;
-            left: 0;
-            right: auto;
-            margin-bottom: 8px;
-            margin-top: 0;
-            width: min(400px, calc(100vw - 24px));
-            max-width: 400px;
+            position: fixed;
             max-height: min(600px, 70vh);
             background: var(--surface-color);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: var(--z-modal, 10000);
+            z-index: var(--z-notification-panel, 30000);
             display: flex;
             flex-direction: column;
         }
