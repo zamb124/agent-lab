@@ -16,7 +16,16 @@ alwaysApply: false
 - В API и БД один тип: **`call_type: "video"`**. Значение `audio` в старых клиентах (`call.invite`, `POST /calls/links`) нормализуется в `video` на сервере; миграция `sync_0008` приводит исторические строки в БД.
 - Камера по умолчанию и при переключении: **`localStorage`** ключ `humanitec.sync.call.camera_enabled` (boolean-строка). После `enableCameraAndMicrophone()` SFU выставляет `setCameraEnabled` из LS; в P2P — `getVideoTracks().enabled`.
 - Демонстрация экрана: LiveKit `localParticipant.setScreenShareEnabled`, кнопка только если есть `getDisplayMedia`. Сетка тайлов учитывает камеру и экран отдельно (screen share крупнее через класс `screen`, `object-fit: contain`).
-- Полный экран по плитке: на каждой плитке с видео кнопка «На весь экран» (`requestFullscreen` на `.participant-tile`, `data-tile-key`), выход — повторный клик или Escape; при завершении звонка вызывается выход из fullscreen.
+- Полный экран по плитке: кнопка на плитке с видео. Выход: повторный клик (учитывается, что `document.fullscreenElement` иногда сам `<video>` внутри плитки, а не `.participant-tile` — проверка `tile.contains(fullscreenElement)`), **Escape** при фокусе на странице, синхронизация иконки через `fullscreenchange` и `data-tile-key` с `closest('.participant-tile')`; префиксы webkit / moz / ms; при завершении звонка — выход из fullscreen.
+
+### UI оверлея (устройства и качество звука, только SFU)
+
+Готового виджета устройств у LiveKit нет — в [`call-overlay.js`](apps/sync/ui/features/call-overlay.js) своя панель: **слева** кнопка (шестерёнка) — микрофон, камера, динамик; **по центру** микрофон, камера, экран, сброс; **справа** «⋯» — пункт «Качество звука» с подменю (шумодав, эхоподавление, автогромкость). Показывается только при активном SFU (`_sfuMediaUiAvailable()`); в P2P этих кнопок нет.
+
+- Смена устройства: `navigator.mediaDevices.enumerateDevices()` + `room.switchActiveDevice('audioinput' | 'videoinput' | 'audiooutput', deviceId)`. Выбор динамика — только если в браузере есть `HTMLMediaElement.setSinkId` (иначе блок скрыт).
+- Обработка звука: у публикации микрофона `LocalAudioTrack.restartTrack({ noiseSuppression, echoCancellation, autoGainControl })`. Сохранение в **localStorage**: `humanitec.sync.call.audio_noise_suppression`, `humanitec.sync.call.audio_echo_cancellation`, `humanitec.sync.call.audio_auto_gain` (строки `"true"` / `"false"`). После подключения перезапуск с этими флагами выполняется только если хотя бы один из ключей уже задан (иначе остаются дефолты захвата LiveKit/браузера).
+- Ошибки смены устройств/перезапуска: строка `_mediaSettingsError` над панелью, без перехода в полноэкранную «Ошибка звонка».
+- Атрибут `call-type="audio"`: при старте SFU камера выключается, в меню устройств скрыт выбор камеры; P2P — `getUserMedia` без видеодорожки. Текущий API чата нормализует `call_type` в `video` на сервере, но атрибут оставлен для совместимости.
 
 ## Архитектура
 

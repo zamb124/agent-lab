@@ -11,6 +11,9 @@
 import { html, css, LitElement } from 'lit';
 
 const LS_CAMERA_KEY = 'humanitec.sync.call.camera_enabled';
+const LS_AUDIO_NS_KEY = 'humanitec.sync.call.audio_noise_suppression';
+const LS_AUDIO_EC_KEY = 'humanitec.sync.call.audio_echo_cancellation';
+const LS_AUDIO_AGC_KEY = 'humanitec.sync.call.audio_auto_gain';
 
 function _readCameraPref() {
     try {
@@ -27,6 +30,44 @@ function _writeCameraPref(on) {
         localStorage.setItem(LS_CAMERA_KEY, String(on));
     } catch {
         /* ignore */
+    }
+}
+
+function _readBoolLs(key, defaultValue) {
+    try {
+        const v = localStorage.getItem(key);
+        if (v === null) return defaultValue;
+        return v === 'true';
+    } catch {
+        return defaultValue;
+    }
+}
+
+function _writeBoolLs(key, value) {
+    try {
+        localStorage.setItem(key, String(value));
+    } catch {
+        /* ignore */
+    }
+}
+
+function _readAudioCapturePrefs() {
+    return {
+        noiseSuppression: _readBoolLs(LS_AUDIO_NS_KEY, true),
+        echoCancellation: _readBoolLs(LS_AUDIO_EC_KEY, true),
+        autoGainControl: _readBoolLs(LS_AUDIO_AGC_KEY, true),
+    };
+}
+
+function _hasStoredAudioPrefs() {
+    try {
+        return (
+            localStorage.getItem(LS_AUDIO_NS_KEY) !== null
+            || localStorage.getItem(LS_AUDIO_EC_KEY) !== null
+            || localStorage.getItem(LS_AUDIO_AGC_KEY) !== null
+        );
+    } catch {
+        return false;
     }
 }
 
@@ -48,6 +89,13 @@ class CallOverlay extends LitElement {
         _camOff:      { state: true },
         _tiles:       { state: true },
         _fullscreenTileKey: { state: true },
+        _devicesMenuOpen: { state: true },
+        _moreMenuOpen: { state: true },
+        _audioQualitySubOpen: { state: true },
+        _deviceLists: { state: true },
+        _audioOutputSupported: { state: true },
+        _audioPrefs: { state: true },
+        _mediaSettingsError: { state: true },
     };
 
     static styles = css`
@@ -128,7 +176,7 @@ class CallOverlay extends LitElement {
             justify-content: center;
             background: rgba(0,0,0,0.55);
             color: #fff;
-            z-index: 2;
+            z-index: 50;
             transition: background 0.15s;
         }
 
@@ -164,14 +212,160 @@ class CallOverlay extends LitElement {
 
         .local-preview video { width: 100%; height: 100%; object-fit: cover; }
 
-        .controls {
+        .controls-bar {
+            position: relative;
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 16px;
+            justify-content: space-between;
+            gap: 12px;
             padding: 20px 24px;
             background: rgba(0,0,0,0.4);
             backdrop-filter: blur(16px);
+        }
+
+        .controls-slot {
+            display: flex;
+            align-items: center;
+            min-height: 52px;
+        }
+
+        .controls-slot--left {
+            flex: 0 0 auto;
+            justify-content: flex-start;
+            position: relative;
+        }
+
+        .controls-slot--center {
+            flex: 1 1 auto;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .controls-slot--right {
+            flex: 0 0 auto;
+            justify-content: flex-end;
+            position: relative;
+        }
+
+        .call-menu {
+            position: absolute;
+            bottom: calc(100% + 10px);
+            min-width: 220px;
+            max-width: min(320px, 92vw);
+            padding: 8px 0;
+            background: rgba(22, 22, 30, 0.98);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+            z-index: 10010;
+            color: rgba(255,255,255,0.9);
+            font-size: 13px;
+        }
+
+        .call-menu--left {
+            left: 0;
+        }
+
+        .call-menu--right {
+            right: 0;
+        }
+
+        .call-menu label {
+            display: block;
+            padding: 4px 12px 2px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: rgba(255,255,255,0.45);
+        }
+
+        .call-menu select {
+            display: block;
+            width: calc(100% - 24px);
+            margin: 0 12px 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(0,0,0,0.35);
+            color: #fff;
+            font-size: 13px;
+        }
+
+        .call-menu-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            border: none;
+            width: 100%;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+        }
+
+        .call-menu-item:hover {
+            background: rgba(255,255,255,0.06);
+        }
+
+        .call-menu-item--sub {
+            position: relative;
+            display: block;
+            padding: 0;
+        }
+
+        .call-menu-item--sub > button.call-menu-item {
+            width: 100%;
+        }
+
+        .call-menu-flyout {
+            position: absolute;
+            left: calc(100% + 4px);
+            top: 0;
+            min-width: 240px;
+            padding: 8px 0;
+            background: rgba(22, 22, 30, 0.98);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+            z-index: 10011;
+        }
+
+        .call-menu-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 14px;
+            font-size: 13px;
+        }
+
+        .call-menu-row span {
+            flex: 1;
+        }
+
+        .call-switch {
+            width: 40px;
+            height: 22px;
+            cursor: pointer;
+        }
+
+        .ctrl-btn[disabled] {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .ctrl-btn[disabled]:hover {
+            background: rgba(255,255,255,0.12);
+        }
+
+        .settings-error {
+            padding: 8px 24px 0;
+            color: #f87171;
+            font-size: 13px;
+            text-align: center;
         }
 
         .ctrl-btn {
@@ -251,25 +445,198 @@ class CallOverlay extends LitElement {
         this._sfuSessionFinished = false;
         this._fullscreenTileKey = null;
         this._onFullscreenChange = this._onFullscreenChange.bind(this);
+        this._devicesMenuOpen = false;
+        this._moreMenuOpen = false;
+        this._audioQualitySubOpen = false;
+        this._deviceLists = { audioinput: [], videoinput: [], audiooutput: [] };
+        this._audioOutputSupported = typeof HTMLMediaElement !== 'undefined'
+            && 'setSinkId' in HTMLMediaElement.prototype;
+        this._audioPrefs = _readAudioCapturePrefs();
+        this._onCallSignalHandler = (e) => this._onCallSignal(e);
+        this._onDocumentPointerDown = (e) => this._onDocumentPointerDown(e);
+        this._onDocumentKeydown = (e) => this._onDocumentKeydown(e);
+        this._mediaSettingsError = null;
+    }
+
+    _sfuMediaUiAvailable() {
+        return Boolean(this._room && this._status === 'active');
+    }
+
+    _closeMenus() {
+        this._devicesMenuOpen = false;
+        this._moreMenuOpen = false;
+        this._audioQualitySubOpen = false;
+    }
+
+    _onDocumentPointerDown(e) {
+        if (!this._devicesMenuOpen && !this._moreMenuOpen) return;
+        const path = e.composedPath();
+        const inside = path.some((n) => {
+            if (n === this || n === this.shadowRoot) return true;
+            return n instanceof Node && this.shadowRoot?.contains(n);
+        });
+        if (inside) return;
+        this._closeMenus();
+    }
+
+    _onDocumentKeydown(e) {
+        if (e.key !== 'Escape') return;
+        if (this._devicesMenuOpen || this._moreMenuOpen) {
+            this._closeMenus();
+            e.preventDefault();
+            return;
+        }
+        const fs = this._getFullscreenElement();
+        if (fs && this.shadowRoot?.contains(fs)) {
+            this._exitTileFullscreenIfOurs();
+            e.preventDefault();
+        }
+    }
+
+    async _toggleDevicesMenu(e) {
+        e.stopPropagation();
+        if (!this._sfuMediaUiAvailable()) return;
+        const next = !this._devicesMenuOpen;
+        this._moreMenuOpen = false;
+        this._audioQualitySubOpen = false;
+        this._devicesMenuOpen = next;
+        this._mediaSettingsError = null;
+        if (this._devicesMenuOpen) {
+            await this._refreshDeviceLists();
+        }
+    }
+
+    _toggleMoreMenu(e) {
+        e.stopPropagation();
+        if (!this._sfuMediaUiAvailable()) return;
+        const next = !this._moreMenuOpen;
+        this._devicesMenuOpen = false;
+        this._audioQualitySubOpen = false;
+        this._moreMenuOpen = next;
+        this._mediaSettingsError = null;
+    }
+
+    _toggleAudioQualitySub(e) {
+        e.stopPropagation();
+        this._audioQualitySubOpen = !this._audioQualitySubOpen;
+    }
+
+    async _refreshDeviceLists() {
+        if (!navigator.mediaDevices?.enumerateDevices) {
+            this._deviceLists = { audioinput: [], videoinput: [], audiooutput: [] };
+            return;
+        }
+        const all = await navigator.mediaDevices.enumerateDevices();
+        const audioinput = all.filter((d) => d.kind === 'audioinput');
+        const videoinput = all.filter((d) => d.kind === 'videoinput');
+        const audiooutput = all.filter((d) => d.kind === 'audiooutput');
+        this._deviceLists = { audioinput, videoinput, audiooutput };
+    }
+
+    async _applySavedAudioCaptureOptions() {
+        if (!this._room || !this._lk) return;
+        const { Track } = this._lk;
+        const pub = this._room.localParticipant.getTrackPublication(Track.Source.Microphone);
+        const localTrack = pub?.track;
+        if (!localTrack || typeof localTrack.restartTrack !== 'function') return;
+        const prefs = _readAudioCapturePrefs();
+        this._audioPrefs = { ...prefs };
+        await localTrack.restartTrack({
+            noiseSuppression: prefs.noiseSuppression,
+            echoCancellation: prefs.echoCancellation,
+            autoGainControl: prefs.autoGainControl,
+        });
+    }
+
+    async _setAudioPref(key, value) {
+        if (key === 'noiseSuppression') {
+            _writeBoolLs(LS_AUDIO_NS_KEY, value);
+        } else if (key === 'echoCancellation') {
+            _writeBoolLs(LS_AUDIO_EC_KEY, value);
+        } else if (key === 'autoGainControl') {
+            _writeBoolLs(LS_AUDIO_AGC_KEY, value);
+        }
+        const next = _readAudioCapturePrefs();
+        this._audioPrefs = { ...next };
+        try {
+            await this._applySavedAudioCaptureOptions();
+            this._mediaSettingsError = null;
+        } catch (err) {
+            this._mediaSettingsError = err instanceof Error ? err.message : String(err);
+        }
+    }
+
+    async _onAudioInputChange(e) {
+        const deviceId = e.target.value;
+        if (!this._room || !deviceId) return;
+        try {
+            await this._room.switchActiveDevice('audioinput', deviceId);
+            this._mediaSettingsError = null;
+        } catch (err) {
+            this._mediaSettingsError = err instanceof Error ? err.message : String(err);
+        }
+    }
+
+    async _onVideoInputChange(e) {
+        const deviceId = e.target.value;
+        if (!this._room || !deviceId) return;
+        try {
+            await this._room.switchActiveDevice('videoinput', deviceId);
+            this._mediaSettingsError = null;
+        } catch (err) {
+            this._mediaSettingsError = err instanceof Error ? err.message : String(err);
+        }
+    }
+
+    async _onAudioOutputChange(e) {
+        const deviceId = e.target.value;
+        if (!this._room || !deviceId || !this._audioOutputSupported) return;
+        try {
+            await this._room.switchActiveDevice('audiooutput', deviceId);
+            this._mediaSettingsError = null;
+        } catch (err) {
+            this._mediaSettingsError = err instanceof Error ? err.message : String(err);
+        }
+    }
+
+    _getFullscreenElement() {
+        const d = document;
+        return d.fullscreenElement
+            ?? d.webkitFullscreenElement
+            ?? d.mozFullScreenElement
+            ?? d.msFullscreenElement
+            ?? null;
     }
 
     _onFullscreenChange() {
-        const el = document.fullscreenElement ?? document.webkitFullscreenElement;
-        if (!el || !this.shadowRoot?.contains(el)) {
+        const el = this._getFullscreenElement();
+        if (!el) {
+            this._fullscreenTileKey = null;
+        } else if (!this.shadowRoot?.contains(el)) {
             this._fullscreenTileKey = null;
         } else {
-            this._fullscreenTileKey = el.getAttribute('data-tile-key');
+            let key = el.getAttribute?.('data-tile-key');
+            if (!key && typeof el.closest === 'function') {
+                const tile = el.closest('.participant-tile');
+                key = tile?.getAttribute('data-tile-key') ?? null;
+            }
+            this._fullscreenTileKey = key;
         }
         this.requestUpdate();
     }
 
     _exitTileFullscreenIfOurs() {
-        const el = document.fullscreenElement ?? document.webkitFullscreenElement;
+        const el = this._getFullscreenElement();
         if (el && this.shadowRoot?.contains(el)) {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
+            const d = document;
+            if (d.exitFullscreen) {
+                d.exitFullscreen();
+            } else if (d.webkitExitFullscreen) {
+                d.webkitExitFullscreen();
+            } else if (d.mozCancelFullScreen) {
+                d.mozCancelFullScreen();
+            } else if (d.msExitFullscreen) {
+                d.msExitFullscreen();
             }
         }
     }
@@ -279,16 +646,22 @@ class CallOverlay extends LitElement {
         const tile = e.currentTarget.closest('.participant-tile');
         if (!tile || !tile.querySelector('video')) return;
         const doc = document;
-        const current = doc.fullscreenElement ?? doc.webkitFullscreenElement;
-        if (current === tile) {
+        const current = this._getFullscreenElement();
+        if (current && (current === tile || tile.contains(current))) {
             if (doc.exitFullscreen) doc.exitFullscreen();
             else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+            else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();
+            else if (doc.msExitFullscreen) doc.msExitFullscreen();
             return;
         }
         if (tile.requestFullscreen) {
             tile.requestFullscreen();
         } else if (tile.webkitRequestFullscreen) {
             tile.webkitRequestFullscreen();
+        } else if (tile.mozRequestFullScreen) {
+            tile.mozRequestFullScreen();
+        } else if (tile.msRequestFullscreen) {
+            tile.msRequestFullscreen();
         }
     }
 
@@ -314,6 +687,10 @@ class CallOverlay extends LitElement {
         super.connectedCallback();
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
         document.addEventListener('webkitfullscreenchange', this._onFullscreenChange);
+        document.addEventListener('mozfullscreenchange', this._onFullscreenChange);
+        document.addEventListener('MSFullscreenChange', this._onFullscreenChange);
+        document.addEventListener('pointerdown', this._onDocumentPointerDown, true);
+        document.addEventListener('keydown', this._onDocumentKeydown, true);
         this._durationInterval = setInterval(() => this._duration++, 1000);
         if (this.mode !== 'sfu' && this.mode) {
             try {
@@ -330,6 +707,10 @@ class CallOverlay extends LitElement {
         super.disconnectedCallback();
         document.removeEventListener('fullscreenchange', this._onFullscreenChange);
         document.removeEventListener('webkitfullscreenchange', this._onFullscreenChange);
+        document.removeEventListener('mozfullscreenchange', this._onFullscreenChange);
+        document.removeEventListener('MSFullscreenChange', this._onFullscreenChange);
+        document.removeEventListener('pointerdown', this._onDocumentPointerDown, true);
+        document.removeEventListener('keydown', this._onDocumentKeydown, true);
         this._sfuSessionFinished = true;
         clearInterval(this._durationInterval);
         this._cleanup();
@@ -375,9 +756,23 @@ class CallOverlay extends LitElement {
 
         await this._room.connect(this.livekitUrl, this.livekitToken);
         await this._room.localParticipant.enableCameraAndMicrophone();
-        const camOn = _readCameraPref();
+        const camOn = this.callType === 'audio' ? false : _readCameraPref();
         await this._room.localParticipant.setCameraEnabled(camOn);
         this._camOff = !camOn;
+        this._audioPrefs = _readAudioCapturePrefs();
+        if (_hasStoredAudioPrefs()) {
+            try {
+                await this._applySavedAudioCaptureOptions();
+            } catch (err) {
+                this._error = err instanceof Error ? err.message : String(err);
+                this._status = 'error';
+                this._connecting = false;
+                this._room.disconnect();
+                this._room = null;
+                this._lk = null;
+                return;
+            }
+        }
         this._status = 'active';
         this._connecting = false;
         this._syncParticipants();
@@ -398,11 +793,12 @@ class CallOverlay extends LitElement {
         const turnData = await turnRes.json();
         const iceServers = [{ urls: turnData.uris, username: turnData.username, credential: turnData.credential }];
 
+        const wantVideo = this.callType !== 'audio';
         this._localStream = await navigator.mediaDevices.getUserMedia({
             audio: true,
-            video: true,
+            video: wantVideo,
         });
-        const camOn = _readCameraPref();
+        const camOn = wantVideo ? _readCameraPref() : false;
         this._localStream.getVideoTracks().forEach((t) => {
             t.enabled = camOn;
         });
@@ -410,7 +806,7 @@ class CallOverlay extends LitElement {
 
         // P2P: подключение к WS обрабатывается sync-ws.service.js и SyncStore.
         // CallOverlay получает сигналы через событие call-signal на window.
-        window.addEventListener('call-signal', this._onCallSignal.bind(this));
+        window.addEventListener('call-signal', this._onCallSignalHandler);
         this._iceServers = iceServers;
         this._status = 'active';
         this._participants = [{ identity: this.identity, isLocal: true, stream: this._localStream }];
@@ -557,14 +953,27 @@ class CallOverlay extends LitElement {
             this._localStream.getTracks().forEach(t => t.stop());
             this._localStream = null;
         }
-        window.removeEventListener('call-signal', this._onCallSignal);
+        window.removeEventListener('call-signal', this._onCallSignalHandler);
         this._lk = null;
         this._tiles = [];
+        this._mediaSettingsError = null;
+        this._closeMenus();
     }
 
     _sfuParticipantCount() {
         if (!this._room) return 0;
         return 1 + this._room.remoteParticipants.size;
+    }
+
+    _activeDeviceId(kind) {
+        if (!this._room) return '';
+        const id = this._room.getActiveDevice(kind);
+        return id ?? '';
+    }
+
+    _deviceLabel(d, index) {
+        if (d.label && d.label.trim()) return d.label;
+        return `Устройство ${index + 1}`;
     }
 
     _formatDuration(sec) {
@@ -617,33 +1026,157 @@ class CallOverlay extends LitElement {
                 ${gridItems.map((p, i) => this._renderTile(p, i))}
             </div>
 
-            <div class="controls">
-                <button class="ctrl-btn ${this._micMuted ? '' : 'active'}" @click=${this._toggleMic} title="${this._micMuted ? 'Включить' : 'Выключить'} микрофон">
-                    ${this._micMuted
-                        ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
-                        : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
-                    }
-                </button>
-                <button class="ctrl-btn ${this._camOff ? '' : 'active'}" @click=${this._toggleCam} title="${this._camOff ? 'Включить' : 'Выключить'} камеру">
-                    ${this._camOff
-                        ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
-                        : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
-                    }
-                </button>
-                ${this._room && this._canScreenShare() ? html`
-                    <button class="ctrl-btn ${screenOn ? 'active' : ''}" @click=${this._toggleScreenShare} title="${screenOn ? 'Остановить экран' : 'Показать экран'}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                            <line x1="8" y1="21" x2="16" y2="21"/>
-                            <line x1="12" y1="17" x2="12" y2="21"/>
+            ${this._mediaSettingsError ? html`
+                <div class="settings-error">${this._mediaSettingsError}</div>
+            ` : ''}
+
+            <div class="controls-bar">
+                <div class="controls-slot controls-slot--left">
+                    ${this._sfuMediaUiAvailable() ? html`
+                        <button
+                            type="button"
+                            class="ctrl-btn"
+                            style="width:48px;height:48px;"
+                            title="Микрофон, камера, динамик"
+                            @click=${this._toggleDevicesMenu}
+                        >
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                            </svg>
+                        </button>
+                        ${this._devicesMenuOpen ? html`
+                            <div class="call-menu call-menu--left" @click=${(e) => e.stopPropagation()}>
+                                <label>Микрофон</label>
+                                <select
+                                    .value=${this._activeDeviceId('audioinput')}
+                                    ?disabled=${this._deviceLists.audioinput.length === 0}
+                                    @change=${this._onAudioInputChange}
+                                >
+                                    ${this._deviceLists.audioinput.length === 0
+                                        ? html`<option value="">Нет устройств</option>`
+                                        : this._deviceLists.audioinput.map((d, i) => html`
+                                        <option value=${d.deviceId}>${this._deviceLabel(d, i)}</option>
+                                    `)}
+                                </select>
+                                ${this.callType !== 'audio' ? html`
+                                    <label>Камера</label>
+                                    <select
+                                        .value=${this._activeDeviceId('videoinput')}
+                                        ?disabled=${this._deviceLists.videoinput.length === 0}
+                                        @change=${this._onVideoInputChange}
+                                    >
+                                        ${this._deviceLists.videoinput.length === 0
+                                            ? html`<option value="">Нет устройств</option>`
+                                            : this._deviceLists.videoinput.map((d, i) => html`
+                                            <option value=${d.deviceId}>${this._deviceLabel(d, i)}</option>
+                                        `)}
+                                    </select>
+                                ` : ''}
+                                ${this._audioOutputSupported ? html`
+                                    <label>Динамик</label>
+                                    <select
+                                        .value=${this._activeDeviceId('audiooutput')}
+                                        ?disabled=${this._deviceLists.audiooutput.length === 0}
+                                        @change=${this._onAudioOutputChange}
+                                    >
+                                        ${this._deviceLists.audiooutput.length === 0
+                                            ? html`<option value="">Нет устройств</option>`
+                                            : this._deviceLists.audiooutput.map((d, i) => html`
+                                            <option value=${d.deviceId}>${this._deviceLabel(d, i)}</option>
+                                        `)}
+                                    </select>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+                    ` : ''}
+                </div>
+                <div class="controls-slot controls-slot--center">
+                    <button class="ctrl-btn ${this._micMuted ? '' : 'active'}" @click=${this._toggleMic} title="${this._micMuted ? 'Включить' : 'Выключить'} микрофон">
+                        ${this._micMuted
+                            ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
+                            : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
+                        }
+                    </button>
+                    <button class="ctrl-btn ${this._camOff ? '' : 'active'}" @click=${this._toggleCam} title="${this._camOff ? 'Включить' : 'Выключить'} камеру">
+                        ${this._camOff
+                            ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                            : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
+                        }
+                    </button>
+                    ${this._room && this._canScreenShare() ? html`
+                        <button class="ctrl-btn ${screenOn ? 'active' : ''}" @click=${this._toggleScreenShare} title="${screenOn ? 'Остановить экран' : 'Показать экран'}">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                                <line x1="8" y1="21" x2="16" y2="21"/>
+                                <line x1="12" y1="17" x2="12" y2="21"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                    <button class="ctrl-btn hangup" @click=${this._hangup} title="Завершить звонок">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C9.6 21 3 14.4 3 6c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
                         </svg>
                     </button>
-                ` : ''}
-                <button class="ctrl-btn hangup" @click=${this._hangup} title="Завершить звонок">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C9.6 21 3 14.4 3 6c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
-                    </svg>
-                </button>
+                </div>
+                <div class="controls-slot controls-slot--right">
+                    ${this._sfuMediaUiAvailable() ? html`
+                        <button
+                            type="button"
+                            class="ctrl-btn"
+                            style="width:48px;height:48px;"
+                            title="Дополнительно"
+                            @click=${this._toggleMoreMenu}
+                        >
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="5" cy="12" r="2"/>
+                                <circle cx="12" cy="12" r="2"/>
+                                <circle cx="19" cy="12" r="2"/>
+                            </svg>
+                        </button>
+                        ${this._moreMenuOpen ? html`
+                            <div class="call-menu call-menu--right" @click=${(e) => e.stopPropagation()}>
+                                <div class="call-menu-item--sub">
+                                    <button type="button" class="call-menu-item" @click=${this._toggleAudioQualitySub}>
+                                        Качество звука
+                                        <span style="opacity:0.5">›</span>
+                                    </button>
+                                    ${this._audioQualitySubOpen ? html`
+                                        <div class="call-menu-flyout" @click=${(e) => e.stopPropagation()}>
+                                            <div class="call-menu-row">
+                                                <span>Подавление шума</span>
+                                                <input
+                                                    class="call-switch"
+                                                    type="checkbox"
+                                                    .checked=${this._audioPrefs.noiseSuppression}
+                                                    @change=${(e) => this._setAudioPref('noiseSuppression', e.target.checked)}
+                                                />
+                                            </div>
+                                            <div class="call-menu-row">
+                                                <span>Эхоподавление</span>
+                                                <input
+                                                    class="call-switch"
+                                                    type="checkbox"
+                                                    .checked=${this._audioPrefs.echoCancellation}
+                                                    @change=${(e) => this._setAudioPref('echoCancellation', e.target.checked)}
+                                                />
+                                            </div>
+                                            <div class="call-menu-row">
+                                                <span>Автогромкость</span>
+                                                <input
+                                                    class="call-switch"
+                                                    type="checkbox"
+                                                    .checked=${this._audioPrefs.autoGainControl}
+                                                    @change=${(e) => this._setAudioPref('autoGainControl', e.target.checked)}
+                                                />
+                                            </div>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        ` : ''}
+                    ` : ''}
+                </div>
             </div>
         `;
     }
