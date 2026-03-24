@@ -1,0 +1,2 @@
+fira-sans 5.2.7
+fira-sans-condensed 5.2.7

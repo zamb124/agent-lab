@@ -67,7 +67,8 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (публично,
 - Зарегистрированный → identity = `user_id`, cookie auth.
 - Гость → body `{guest_name}` → identity = `guest:{uuid8}:{name}`.
 - Всегда SFU режим (P2P для гостей не поддерживается).
-- Первый вход создаёт LiveKit комнату и `SyncCall`, последующие переиспользуют.
+- `POST /calls/links` с **`call_id`** (оверлей «Скопировать ссылку»): ссылка сразу привязана к текущему `SyncCall` — гость в той же LiveKit-комнате, что и чат (`call-{uuid}`), без отдельной `link-*`.
+- Без `call_id`: первый вход по ссылке создаёт новый `SyncCall` и комнату `link-{tokenPrefix}`; последующие по той же ссылке переиспользуют.
 - Страница: `/sync/join/{token}` → `call-join.html` (публичный маршрут в `main.py`).
 - Route config: `/sync/api/v1/calls/join/*` → `auth_required=False`.
 
@@ -119,7 +120,7 @@ LiveKit `--dev` mode дефолтные ключи: `devkey` / `secret`.
 - `apps/sync/realtime/call_handlers.py` — бизнес-логика P2P/SFU
 - `apps/sync/ws.py` — прямой relay `call.signal`
 - `apps/sync/api/calls.py` — REST + публичные эндпоинты
-- `apps/sync/ui/features/call-overlay.js` — WebRTC оверлей (P2P нативный + SFU через @livekit/client CDN)
+- `apps/sync/ui/features/call-overlay.js` — WebRTC оверлей (P2P нативный + SFU через `@livekit/client`, бандл в `core/frontend/static/assets/js/livekit/`, `importmap` в `index.html` / `call-join.html`)
 - `apps/sync/ui/features/call-incoming.js` — баннер входящего звонка
 - `apps/sync/ui/features/call-join.js` — страница входа по ссылке
 - `apps/sync/ui/call-join.html` — отдельный HTML (не SPA sync)

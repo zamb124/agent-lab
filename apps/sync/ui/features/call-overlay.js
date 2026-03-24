@@ -298,7 +298,11 @@ class CallOverlay extends LitElement {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ channel_id: this.channelId, call_type: this.callType || 'video' }),
+            body: JSON.stringify({
+                channel_id: this.channelId,
+                call_type: this.callType || 'video',
+                call_id: this.callId,
+            }),
         });
         if (!res.ok) return;
         const { join_url } = await res.json();

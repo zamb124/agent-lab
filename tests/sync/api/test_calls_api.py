@@ -5,7 +5,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 import pytest
+
+from apps.sync.db.models import SyncCall
+from apps.sync.db.repositories.call_repository import CallRepository
 
 
 @pytest.mark.asyncio
@@ -214,3 +220,118 @@ async def test_join_link_flow_registered_and_guest(
     )
     assert call_r.status_code == 200
     assert call_r.json()["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_create_link_with_call_id_guest_joins_same_livekit_call(
+    sync_client,
+    auth_headers_system,
+    sync_db_clean: None,
+    call_repo: CallRepository,
+    system_user_id: str,
+) -> None:
+    """Ссылка с call_id (как из оверлея) — гость попадает в тот же звонок, без комнаты link-*."""
+    space_r = await sync_client.post(
+        "/sync/api/v1/spaces/",
+        headers=auth_headers_system,
+        json={"name": "LinkAttachSpace", "description": None},
+    )
+    assert space_r.status_code == 201
+
+    ch_r = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=auth_headers_system,
+        json={"name": "LinkAttachCh", "type": "topic", "space_id": space_r.json()["id"]},
+    )
+    assert ch_r.status_code == 201
+    channel_id = ch_r.json()["id"]
+
+    existing_call_id = uuid4().hex
+    room_name = f"call-{uuid4().hex[:16]}"
+    await call_repo.create_call(
+        SyncCall(
+            call_id=existing_call_id,
+            company_id="system",
+            channel_id=channel_id,
+            mode="sfu",
+            call_type="video",
+            status="active",
+            livekit_room_name=room_name,
+            started_at=datetime.now(UTC),
+            created_by_user_id=system_user_id,
+        )
+    )
+
+    link_r = await sync_client.post(
+        "/sync/api/v1/calls/links",
+        headers=auth_headers_system,
+        json={
+            "channel_id": channel_id,
+            "call_type": "video",
+            "ttl_hours": 1,
+            "call_id": existing_call_id,
+        },
+    )
+    assert link_r.status_code == 201
+    token = link_r.json()["link_token"]
+
+    guest = await sync_client.post(
+        f"/sync/api/v1/calls/join/{token}",
+        json={"guest_name": "Гость"},
+    )
+    assert guest.status_code == 200
+    body = guest.json()
+    assert body["call_id"] == existing_call_id
+
+
+@pytest.mark.asyncio
+async def test_create_link_call_id_wrong_channel_returns_400(
+    sync_client,
+    auth_headers_system,
+    sync_db_clean: None,
+    call_repo: CallRepository,
+    system_user_id: str,
+) -> None:
+    space_r = await sync_client.post(
+        "/sync/api/v1/spaces/",
+        headers=auth_headers_system,
+        json={"name": "LinkWrongChSpace", "description": None},
+    )
+    assert space_r.status_code == 201
+    space_id = space_r.json()["id"]
+
+    ch1 = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=auth_headers_system,
+        json={"name": "ChOne", "type": "topic", "space_id": space_id},
+    )
+    ch2 = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=auth_headers_system,
+        json={"name": "ChTwo", "type": "topic", "space_id": space_id},
+    )
+    assert ch1.status_code == 201 and ch2.status_code == 201
+    channel_a = ch1.json()["id"]
+    channel_b = ch2.json()["id"]
+
+    call_id = uuid4().hex
+    await call_repo.create_call(
+        SyncCall(
+            call_id=call_id,
+            company_id="system",
+            channel_id=channel_a,
+            mode="sfu",
+            call_type="video",
+            status="active",
+            livekit_room_name=f"call-{uuid4().hex[:16]}",
+            started_at=datetime.now(UTC),
+            created_by_user_id=system_user_id,
+        )
+    )
+
+    bad = await sync_client.post(
+        "/sync/api/v1/calls/links",
+        headers=auth_headers_system,
+        json={"channel_id": channel_b, "call_type": "video", "ttl_hours": 1, "call_id": call_id},
+    )
+    assert bad.status_code == 400

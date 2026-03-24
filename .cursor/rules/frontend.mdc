@@ -56,6 +56,8 @@ apps/{service}/ui/
 └── services/                    # API сервисы
 ```
 
+**Статика (vendor, same-origin):** Fira Sans / Fira Sans Condensed — `assets/fonts/fira-sans.css`, `fira-sans-condensed.css` и каталоги `assets/fonts/fira-sans/files/`, `fira-sans-condensed/files/` (лендинг `apps/frontend/ui/index.html`). LiveKit SDK — `assets/js/livekit/` (`@livekit/client` в Sync). Mermaid — `assets/js/mermaid/mermaid.min.js` (HTML схем flow в `apps/flows/src/api/registry.py`); для MkDocs дублируется в `docs/javascripts/mermaid.min.js`.
+
 ---
 
 ## Компоненты: Иерархия Классов

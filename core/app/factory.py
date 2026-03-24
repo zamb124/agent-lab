@@ -329,7 +329,7 @@ def create_service_app(
             Страница пустая для тестирования компонентов
             
             Предоставляет:
-            - importmap для lit (CDN)
+            - importmap для lit (локальные пути /static/core/assets/js/lit/)
             - Доступ к /static/core/* (все core компоненты)
             - Пустой контейнер #test-root
             """
@@ -341,8 +341,14 @@ def create_service_app(
     <script type="importmap">
     {
         "imports": {
-            "lit": "https://cdn.jsdelivr.net/npm/lit@3/+esm",
-            "lit/": "https://cdn.jsdelivr.net/npm/lit@3/"
+            "lit": "/static/core/assets/js/lit/lit.min.js",
+            "lit/decorators.js": "/static/core/assets/js/lit/decorators.min.js",
+            "lit/directives/class-map.js": "/static/core/assets/js/lit/directives/class-map.min.js",
+            "lit/directives/repeat.js": "/static/core/assets/js/lit/directives/repeat.min.js",
+            "lit/directives/unsafe-html.js": "/static/core/assets/js/lit/directives/unsafe-html.min.js",
+            "lit/directives/when.js": "/static/core/assets/js/lit/directives/when.min.js",
+            "@platform/lib/": "/static/core/lib/",
+            "@platform/services/": "/static/core/services/"
         }
     }
     </script>

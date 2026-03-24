@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from apps.sync.container import get_sync_container
-from apps.sync.db.models import SyncCall, SyncCallLink, SyncCallParticipant
+from apps.sync.db.models import SyncCall, SyncCallLink
 from apps.sync.models.calls import (
     CallLinkCreate,
     CallLinkInfo,
@@ -97,10 +97,33 @@ async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRe
     settings = get_settings()
     container = get_sync_container()
 
+    company_id = context.active_company.company_id
     if not await container.channel_repository.is_member(
-        body.channel_id, context.user.user_id, company_id=context.active_company.company_id
+        body.channel_id, context.user.user_id, company_id=company_id
     ):
         raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
+
+    attached_call_id: Optional[str] = None
+    if body.call_id:
+        try:
+            existing = await container.call_repository.get_call(body.call_id, company_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if existing.channel_id != body.channel_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Звонок относится к другому каналу.",
+            )
+        if existing.status not in ("ringing", "active"):
+            raise HTTPException(
+                status_code=400,
+                detail="Ссылка на конференцию доступна только для активного или входящего звонка.",
+            )
+        if existing.mode != "sfu":
+            raise HTTPException(status_code=400, detail="Гостевая ссылка поддерживается только для SFU-звонков.")
+        if not existing.livekit_room_name:
+            raise HTTPException(status_code=400, detail="У звонка нет LiveKit-комнаты.")
+        attached_call_id = existing.call_id
 
     link_token = uuid4().hex
     expires_at = datetime.now(UTC) + timedelta(hours=body.ttl_hours)
@@ -108,7 +131,8 @@ async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRe
     link = SyncCallLink(
         link_token=link_token,
         channel_id=body.channel_id,
-        company_id=context.active_company.company_id,
+        company_id=company_id,
+        call_id=attached_call_id,
         call_type=body.call_type,
         created_by_user_id=context.user.user_id,
         expires_at=expires_at,
@@ -244,7 +268,8 @@ async def join_via_link(
         safe_name = body.guest_name.strip().replace(":", "_")
         identity = f"guest:{uuid4().hex[:8]}:{safe_name}"
 
-    # Создаём или переиспользуем звонок
+    # Создаём или переиспользуем звонок (ссылка с заранее привязанным call_id — тот же LiveKit room)
+    had_call_on_link = link.call_id is not None
     if link.call_id:
         call = await container.call_repository.get_call(link.call_id, link.company_id)
     else:
@@ -267,6 +292,15 @@ async def join_via_link(
 
     if not call.livekit_room_name:
         raise ValueError("У звонка нет LiveKit комнаты.")
+
+    logger.info(
+        "join_via_link link=%s had_call_on_link=%s call_id=%s livekit_room=%s identity=%s",
+        link_token[:12],
+        had_call_on_link,
+        call.call_id,
+        call.livekit_room_name,
+        identity[:24] if identity else "",
+    )
 
     token = _livekit_client(settings).generate_token(
         room_name=call.livekit_room_name,

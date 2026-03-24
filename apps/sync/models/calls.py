@@ -38,6 +38,10 @@ class CallLinkCreate(BaseModel):
     channel_id: str
     call_type: CallType = "video"
     ttl_hours: int = Field(default=24, ge=1, le=168)
+    call_id: Optional[str] = Field(
+        default=None,
+        description="Текущий звонок: та же LiveKit-комната, что у участников чата.",
+    )
 
 
 class CallLinkRead(BaseModel):
