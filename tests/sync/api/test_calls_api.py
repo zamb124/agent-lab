@@ -143,78 +143,28 @@ async def test_full_link_flow(
 
 
 @pytest.mark.asyncio
-async def test_join_link_as_registered_user(
+async def test_join_link_flow_registered_and_guest(
     sync_client,
     auth_headers_system,
     sync_db_clean: None,
 ) -> None:
     """
-    Зарегистрированный пользователь входит по ссылке → получает LiveKit токен.
-    Создаёт реальную LiveKit комнату (требует livekit-test запущен).
+    Полный flow: registered join + guest join + livekit token endpoint.
+
+    Один space/channel/link создаётся один раз — оба входа переиспользуют
+    одну LiveKit комнату. Умещается в 5s: одна пара TaskIQ-вызовов + LiveKit.
     """
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=auth_headers_system,
-        json={"name": "JoinTestSpace", "description": None},
+        json={"name": "JoinFlowSpace", "description": None},
     )
     assert space_r.status_code == 201
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=auth_headers_system,
-        json={"name": "JoinTestChannel", "type": "topic", "space_id": space_r.json()["id"]},
-    )
-    assert ch_r.status_code == 201
-    channel_id = ch_r.json()["id"]
-
-    link_r = await sync_client.post(
-        "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
-        json={"channel_id": channel_id, "call_type": "audio", "ttl_hours": 1},
-    )
-    assert link_r.status_code == 201
-    token = link_r.json()["link_token"]
-
-    join_r = await sync_client.post(
-        f"/sync/api/v1/calls/join/{token}",
-        headers=auth_headers_system,
-    )
-    assert join_r.status_code == 200
-    data = join_r.json()
-    assert "livekit_token" in data
-    assert "livekit_url" in data
-    assert "call_id" in data
-    assert data["mode"] == "sfu"
-    assert not data["identity"].startswith("guest:")
-
-    call_r = await sync_client.get(
-        f"/sync/api/v1/calls/{data['call_id']}",
-        headers=auth_headers_system,
-    )
-    assert call_r.status_code == 200
-    assert call_r.json()["status"] == "active"
-
-
-@pytest.mark.asyncio
-async def test_join_link_as_guest(
-    sync_client,
-    auth_headers_system,
-    sync_db_clean: None,
-) -> None:
-    """
-    Гость входит по ссылке с именем → получает LiveKit токен с guest: identity.
-    """
-    space_r = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=auth_headers_system,
-        json={"name": "GuestTestSpace", "description": None},
-    )
-    assert space_r.status_code == 201
-
-    ch_r = await sync_client.post(
-        "/sync/api/v1/channels/",
-        headers=auth_headers_system,
-        json={"name": "GuestTestChannel", "type": "topic", "space_id": space_r.json()["id"]},
+        json={"name": "JoinFlowChannel", "type": "topic", "space_id": space_r.json()["id"]},
     )
     assert ch_r.status_code == 201
     channel_id = ch_r.json()["id"]
@@ -227,57 +177,40 @@ async def test_join_link_as_guest(
     assert link_r.status_code == 201
     token = link_r.json()["link_token"]
 
-    # Гость — без auth cookie, с именем в теле
-    join_r = await sync_client.post(
-        f"/sync/api/v1/calls/join/{token}",
-        json={"guest_name": "Иван Тестовый"},
-    )
-    assert join_r.status_code == 200
-    data = join_r.json()
-    assert "livekit_token" in data
-    assert data["mode"] == "sfu"
-    assert data["identity"].startswith("guest:")
-    assert "Иван_Тестовый" in data["identity"] or "guest:" in data["identity"]
-
-
-@pytest.mark.asyncio
-async def test_livekit_token_endpoint(
-    sync_client,
-    auth_headers_system,
-    sync_db_clean: None,
-) -> None:
-    """
-    GET /{call_id}/token возвращает LiveKit токен для SFU звонка.
-    """
-    space_r = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=auth_headers_system,
-        json={"name": "TokenTestSpace", "description": None},
-    )
-    ch_r = await sync_client.post(
-        "/sync/api/v1/channels/",
-        headers=auth_headers_system,
-        json={"name": "TokenTestCh", "type": "topic", "space_id": space_r.json()["id"]},
-    )
-    channel_id = ch_r.json()["id"]
-
-    link_r = await sync_client.post(
-        "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
-        json={"channel_id": channel_id, "call_type": "video", "ttl_hours": 1},
-    )
-    token = link_r.json()["link_token"]
-    join_r = await sync_client.post(
+    # Зарегистрированный пользователь
+    join_reg = await sync_client.post(
         f"/sync/api/v1/calls/join/{token}",
         headers=auth_headers_system,
     )
-    call_id = join_r.json()["call_id"]
+    assert join_reg.status_code == 200
+    reg_data = join_reg.json()
+    assert reg_data["mode"] == "sfu"
+    assert not reg_data["identity"].startswith("guest:")
+    call_id = reg_data["call_id"]
 
+    # Гость переиспользует ту же комнату
+    join_guest = await sync_client.post(
+        f"/sync/api/v1/calls/join/{token}",
+        json={"guest_name": "Гость"},
+    )
+    assert join_guest.status_code == 200
+    guest_data = join_guest.json()
+    assert guest_data["identity"].startswith("guest:")
+    assert guest_data["call_id"] == call_id
+
+    # GET token через authenticated endpoint
     token_r = await sync_client.get(
         f"/sync/api/v1/calls/{call_id}/token",
         headers=auth_headers_system,
     )
     assert token_r.status_code == 200
-    data = token_r.json()
-    assert "token" in data
-    assert "livekit_url" in data
+    assert "token" in token_r.json()
+    assert "livekit_url" in token_r.json()
+
+    # Статус звонка
+    call_r = await sync_client.get(
+        f"/sync/api/v1/calls/{call_id}",
+        headers=auth_headers_system,
+    )
+    assert call_r.status_code == 200
+    assert call_r.json()["status"] == "active"

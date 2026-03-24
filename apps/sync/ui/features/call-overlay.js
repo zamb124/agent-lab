@@ -12,17 +12,18 @@ import { html, css, LitElement } from 'lit';
 
 class CallOverlay extends LitElement {
     static properties = {
-        callId: { type: String, attribute: 'call-id' },
-        mode: { type: String },
-        callType: { type: String, attribute: 'call-type' },
-        livekitUrl: { type: String, attribute: 'livekit-url' },
+        callId:       { type: String, attribute: 'call-id' },
+        mode:         { type: String },
+        callType:     { type: String, attribute: 'call-type' },
+        livekitUrl:   { type: String, attribute: 'livekit-url' },
         livekitToken: { type: String, attribute: 'livekit-token' },
-        identity: { type: String },
-        _status: { state: true },
+        identity:     { type: String },
+        _status:      { state: true },
+        _error:       { state: true },
         _participants: { state: true },
-        _duration: { state: true },
-        _micMuted: { state: true },
-        _camOff: { state: true },
+        _duration:    { state: true },
+        _micMuted:    { state: true },
+        _camOff:      { state: true },
     };
 
     static styles = css`
@@ -162,6 +163,7 @@ class CallOverlay extends LitElement {
     constructor() {
         super();
         this._status = 'connecting';
+        this._error = null;
         this._participants = [];
         this._duration = 0;
         this._micMuted = false;
@@ -174,13 +176,17 @@ class CallOverlay extends LitElement {
 
     async connectedCallback() {
         super.connectedCallback();
-        if (this.mode === 'sfu' || !this.mode) {
-            await this._connectSFU();
-        } else {
-            await this._connectP2P();
-        }
         this._durationInterval = setInterval(() => this._duration++, 1000);
+        if (this.mode !== 'sfu' && this.mode) {
+            try {
+                await this._connectP2P();
+            } catch (err) {
+                this._error = err.message;
+                this._status = 'error';
+            }
+        }
     }
+
 
     disconnectedCallback() {
         super.disconnectedCallback();
@@ -189,6 +195,10 @@ class CallOverlay extends LitElement {
     }
 
     async _connectSFU() {
+        if (!this.livekitToken || !this.livekitUrl) {
+            throw new Error('livekitToken и livekitUrl обязательны для SFU подключения.');
+        }
+
         const { Room, RoomEvent } = await import('@livekit/client');
         this._room = new Room();
 
@@ -207,13 +217,19 @@ class CallOverlay extends LitElement {
     }
 
     async _connectP2P() {
-        // Загружаем TURN credentials
-        const turnRes = await fetch('/sync/api/v1/calls/turn-credentials', { credentials: 'include' });
-        const turnData = turnRes.ok ? await turnRes.json() : null;
+        if (!navigator.mediaDevices?.getUserMedia) {
+            throw new Error(
+                'WebRTC недоступен: страница должна открываться через HTTPS или localhost. ' +
+                'Текущий адрес: ' + window.location.origin
+            );
+        }
 
-        const iceServers = turnData
-            ? [{ urls: turnData.uris, username: turnData.username, credential: turnData.credential }]
-            : [{ urls: 'stun:stun.l.google.com:19302' }];
+        const turnRes = await fetch('/sync/api/v1/calls/turn-credentials', { credentials: 'include' });
+        if (!turnRes.ok) {
+            throw new Error(`Не удалось получить TURN credentials: ${turnRes.status}`);
+        }
+        const turnData = await turnRes.json();
+        const iceServers = [{ urls: turnData.uris, username: turnData.username, credential: turnData.credential }];
 
         this._localStream = await navigator.mediaDevices.getUserMedia({
             audio: true,
@@ -306,6 +322,16 @@ class CallOverlay extends LitElement {
     }
 
     render() {
+        if (this._status === 'error') {
+            return html`
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:20px;padding:32px;">
+                    <div style="font-size:48px;">⚠️</div>
+                    <div style="color:#f87171;font-size:16px;font-weight:600;text-align:center;">Ошибка звонка</div>
+                    <div style="color:rgba(255,255,255,0.6);font-size:13px;text-align:center;max-width:400px;">${this._error}</div>
+                    <button class="ctrl-btn hangup" @click=${this._hangup}>Закрыть</button>
+                </div>
+            `;
+        }
         if (this._status === 'ended') {
             return html`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.5);font-size:18px;">Звонок завершён</div>`;
         }
@@ -323,7 +349,7 @@ class CallOverlay extends LitElement {
             </div>
 
             <div class="video-grid ${gridClass}">
-                ${this._participants.map(p => this._renderTile(p))}
+                ${this._participants.map((p, i) => this._renderTile(p, i))}
             </div>
 
             <div class="controls">
@@ -340,44 +366,45 @@ class CallOverlay extends LitElement {
         `;
     }
 
-    _renderTile(participant) {
+    _renderTile(participant, index) {
         const label = participant.isLocal ? 'Вы' : participant.identity;
-        const hasVideo = participant.videoTrack || (participant.isLocal && participant.stream);
+        const hasVideo = participant.isLocal
+            ? Array.from(this._room?.localParticipant?.videoTrackPublications?.values() ?? [])[0]?.track != null
+            : participant.videoTrack != null;
 
         return html`
-            <div class="participant-tile">
+            <div class="participant-tile" data-idx=${index}>
                 ${hasVideo
-                    ? html`<video
-                        autoplay playsinline
-                        ?muted=${participant.isLocal}
-                        ${this._videoRefDirective(participant)}
-                    ></video>`
-                    : html`<div class="avatar-placeholder">${label[0]?.toUpperCase()}</div>`
+                    ? html`<video autoplay playsinline ?muted=${participant.isLocal}></video>`
+                    : html`<div class="avatar-placeholder">${label?.[0]?.toUpperCase() ?? '?'}</div>`
                 }
                 <span class="participant-name">${label}</span>
             </div>
         `;
     }
 
-    // Кастомный ref для привязки LiveKit track к video-элементу
-    _videoRefDirective(participant) {
-        return { [Symbol.toPrimitive]: () => '' };
-    }
-
-    updated() {
-        // Привязываем LiveKit треки к video-элементам после рендера
+    updated(changedProps) {
+        // SFU: подключаемся когда получили токен первый раз.
+        if ((this.mode === 'sfu' || !this.mode) && !this._room && this.livekitToken) {
+            this._connectSFU();
+        }
+        // Привязываем LiveKit треки к video-элементам.
         if (!this._room) return;
-        const tiles = this.shadowRoot.querySelectorAll('.participant-tile video');
+        const tiles = this.shadowRoot.querySelectorAll('.participant-tile');
         this._participants.forEach((p, i) => {
-            const el = tiles[i];
-            if (!el) return;
+            const videoEl = tiles[i]?.querySelector('video');
+            if (!videoEl) return;
             if (p.isLocal) {
-                const localVideo = Array.from(
+                const localTrack = Array.from(
                     this._room.localParticipant.videoTrackPublications.values()
                 )[0]?.track;
-                if (localVideo) localVideo.attach(el);
-            } else if (p.videoTrack) {
-                p.videoTrack.attach(el);
+                if (localTrack && videoEl._lkTrack !== localTrack) {
+                    localTrack.attach(videoEl);
+                    videoEl._lkTrack = localTrack;
+                }
+            } else if (p.videoTrack && videoEl._lkTrack !== p.videoTrack) {
+                p.videoTrack.attach(videoEl);
+                videoEl._lkTrack = p.videoTrack;
             }
         });
     }

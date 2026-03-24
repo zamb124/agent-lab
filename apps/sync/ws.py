@@ -12,10 +12,10 @@ from taskiq.exceptions import TaskiqResultTimeoutError
 from core.config import get_settings
 from apps.sync.realtime.commands import CallSignalPayload, CommandEnvelope, WsCommandFrame, WsResultFrame
 from apps.sync.realtime.events import event_call_signal
+from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.tasks import handle_command
 from apps.sync.ws_presence import clear_sync_ws_presence, refresh_sync_ws_presence
 from core.websocket.auth import get_user_from_websocket
-from core.websocket.manager import notification_manager
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -151,14 +151,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             if frame.type == "call.signal":
                 signal_payload = CallSignalPayload.model_validate(frame.payload)
-                await notification_manager.publish(
-                    signal_payload.target_user_id,
-                    event_call_signal(
-                        signal_payload.call_id,
-                        signal_payload.signal_type,
-                        signal_payload.data,
-                    ).model_dump(mode="json"),
+                # Broadcast через sync.realtime.events; target_user_id в payload — клиент фильтрует.
+                signal_event = event_call_signal(
+                    signal_payload.call_id,
+                    signal_payload.signal_type,
+                    signal_payload.data,
                 )
+                signal_event.payload["target_user_id"] = signal_payload.target_user_id
+                signal_event.payload["sender_user_id"] = user_id
+                await publish_realtime_events([signal_event])
                 out = WsResultFrame(id=frame.id, ok=True, result=None)
                 await websocket.send_text(out.model_dump_json())
                 continue

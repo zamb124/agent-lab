@@ -1,4 +1,9 @@
-"""Обработчики realtime-команд для WebRTC звонков."""
+"""Обработчики realtime-команд для WebRTC звонков.
+
+Все события публикуются через sync.realtime.events → /sync/ws (broadcast).
+Клиент фильтрует по channel_id / target_user_id в payload.
+notification_manager здесь не используется — call-события не платформенные уведомления.
+"""
 
 from __future__ import annotations
 
@@ -28,11 +33,9 @@ from apps.sync.realtime.events import (
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
 from core.logging import get_logger
-from core.websocket.manager import notification_manager
 
 logger = get_logger(__name__)
 
-# Порог: при количестве участников канала > P2P_MAX используется SFU.
 P2P_MAX = 2
 
 
@@ -65,7 +68,11 @@ async def handle_call_invite(
     calls: CallRepository,
     channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
-    """Создаёт звонок и уведомляет участников канала."""
+    """Создаёт звонок.
+
+    Возвращает call.incoming как broadcast-событие для /sync/ws.
+    Клиент фильтрует: показывает баннер только тем, кто не является инициатором.
+    """
     payload = CallInvitePayload.model_validate(cmd.payload)
 
     if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
@@ -73,7 +80,11 @@ async def handle_call_invite(
 
     existing = await calls.get_active_call_for_channel(payload.channel_id, cmd.company_id)
     if existing is not None:
-        raise ValueError(f"В канале уже есть активный звонок: {existing.call_id}")
+        now = datetime.now(UTC)
+        await calls.update_call_status(existing.call_id, "ended", ended_at=now)
+        for p in await calls.list_participants(existing.call_id):
+            if p.status == "joined":
+                await calls.update_participant_status(existing.call_id, p.user_id, "left", left_at=now)
 
     member_ids = await channels.list_member_user_ids(payload.channel_id, company_id=cmd.company_id)
     mode = "p2p" if len(member_ids) <= P2P_MAX else "sfu"
@@ -114,20 +125,18 @@ async def handle_call_invite(
     participants = await calls.list_participants(call.call_id)
     call_read = _call_read_from_entities(call, participants)
 
-    # Уведомляем каждого участника персонально через notification_manager (platform:notifications).
-    incoming_event = event_call_incoming(call_read)
-    for uid in member_ids:
-        if uid != cmd.actor_user_id:
-            await notification_manager.publish(uid, incoming_event.model_dump(mode="json"))
+    # Broadcast через sync.realtime.events → /sync/ws.
+    # Payload содержит initiator_user_id — клиент не показывает баннер инициатору.
+    incoming = event_call_incoming(call_read)
+    incoming.payload["initiator_user_id"] = cmd.actor_user_id
 
-    return call_read, []
+    return call_read, [incoming]
 
 
 async def handle_call_accept(
     cmd: CommandEnvelope,
     calls: CallRepository,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
-    """Участник принимает звонок."""
     payload = CallAcceptPayload.model_validate(cmd.payload)
     call = await calls.get_call(payload.call_id, cmd.company_id)
 
@@ -148,23 +157,16 @@ async def handle_call_accept(
         await calls.get_call(payload.call_id, cmd.company_id), participants
     )
 
-    accepted_event = event_call_accepted(payload.call_id, cmd.actor_user_id)
-    joined_event = event_call_participant_joined(payload.call_id, cmd.actor_user_id)
-
-    # Уведомляем всех joined-участников.
-    for p in participants:
-        if p.user_id != cmd.actor_user_id and p.status == "joined":
-            await notification_manager.publish(p.user_id, accepted_event.model_dump(mode="json"))
-            await notification_manager.publish(p.user_id, joined_event.model_dump(mode="json"))
-
-    return call_read, []
+    return call_read, [
+        event_call_accepted(payload.call_id, cmd.actor_user_id),
+        event_call_participant_joined(payload.call_id, cmd.actor_user_id),
+    ]
 
 
 async def handle_call_decline(
     cmd: CommandEnvelope,
     calls: CallRepository,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
-    """Участник отклоняет звонок."""
     payload = CallDeclinePayload.model_validate(cmd.payload)
     call = await calls.get_call(payload.call_id, cmd.company_id)
 
@@ -172,23 +174,16 @@ async def handle_call_decline(
         raise ValueError("Звонок уже завершён.")
 
     await calls.update_participant_status(payload.call_id, cmd.actor_user_id, "declined")
-
     participants = await calls.list_participants(payload.call_id)
     call_read = _call_read_from_entities(call, participants)
 
-    declined_event = event_call_declined(payload.call_id, cmd.actor_user_id)
-    for p in participants:
-        if p.user_id != cmd.actor_user_id and p.status in ("invited", "joined"):
-            await notification_manager.publish(p.user_id, declined_event.model_dump(mode="json"))
-
-    return call_read, []
+    return call_read, [event_call_declined(payload.call_id, cmd.actor_user_id)]
 
 
 async def handle_call_hangup(
     cmd: CommandEnvelope,
     calls: CallRepository,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
-    """Участник завершает звонок. Если остался один — завершить весь звонок."""
     payload = CallHangupPayload.model_validate(cmd.payload)
     call = await calls.get_call(payload.call_id, cmd.company_id)
 
@@ -202,6 +197,10 @@ async def handle_call_hangup(
 
     participants = await calls.list_participants(payload.call_id)
     active_count = sum(1 for p in participants if p.status == "joined")
+
+    events: list[RealtimeEvent] = [
+        event_call_participant_left(payload.call_id, cmd.actor_user_id)
+    ]
 
     if active_count == 0:
         await calls.update_call_status(payload.call_id, "ended", ended_at=now)
@@ -217,19 +216,11 @@ async def handle_call_hangup(
             except Exception:
                 logger.exception("Не удалось удалить LiveKit комнату %s", call.livekit_room_name)
 
-    ended_call = await calls.get_call(payload.call_id, cmd.company_id)
-    final_participants = await calls.list_participants(payload.call_id)
-    call_read = _call_read_from_entities(ended_call, final_participants)
+        ended_call = await calls.get_call(payload.call_id, cmd.company_id)
+        final_participants = await calls.list_participants(payload.call_id)
+        call_read = _call_read_from_entities(ended_call, final_participants)
+        events.append(event_call_ended(call_read))
+    else:
+        call_read = _call_read_from_entities(call, participants)
 
-    left_event = event_call_participant_left(payload.call_id, cmd.actor_user_id)
-    for p in final_participants:
-        if p.user_id != cmd.actor_user_id and p.status in ("invited", "joined"):
-            await notification_manager.publish(p.user_id, left_event.model_dump(mode="json"))
-
-    if ended_call.status == "ended":
-        ended_event = event_call_ended(call_read)
-        for p in final_participants:
-            if p.user_id != cmd.actor_user_id:
-                await notification_manager.publish(p.user_id, ended_event.model_dump(mode="json"))
-
-    return call_read, []
+    return call_read, events

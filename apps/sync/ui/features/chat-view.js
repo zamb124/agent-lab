@@ -9,8 +9,6 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
-import './call-incoming.js';
-import './call-overlay.js';
 import './channel-picker.js';
 import './message-list.js';
 import './message-composer.js';
@@ -623,8 +621,12 @@ export class ChatView extends PlatformElement {
         if (!channelId) return;
         const ws = ServiceRegistry.get('syncWs');
         if (!ws) return;
-        ws.send({
-            id: crypto.randomUUID(),
+        const id = typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+                (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        ws.sendJson({
+            id,
             type: 'call.invite',
             payload: { channel_id: channelId, call_type: callType },
         });

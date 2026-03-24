@@ -12,11 +12,15 @@ import { lanePreviewFromMessagePayload } from '../utils/lane-preview.js';
 import { senderUserId } from '../utils/sender.js';
 import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/layout/platform-island.js';
+import '../features/call-overlay.js';
+import '../features/call-incoming.js';
 
 export class SyncApp extends PlatformApp {
     static properties = {
         _chat: { state: true },
         _ui: { state: true },
+        _activeCall: { state: true },
+        _incomingCall: { state: true },
     };
 
     static styles = [
@@ -178,7 +182,10 @@ export class SyncApp extends PlatformApp {
         }
         if (typeof msg.ok === 'boolean' && typeof msg.id === 'string') {
             if (msg.ok) {
-                if (msg.result) {
+                if (msg.result && msg.result.call_id) {
+                    // call.invite вернул CallRead — открываем оверлей у инициатора.
+                    this._openCallOverlay(msg.result);
+                } else if (msg.result) {
                     SyncStore.resolvePending(msg.id, msg.result);
                 }
             } else {
@@ -353,6 +360,51 @@ export class SyncApp extends PlatformApp {
             return;
         }
 
+        if (msg.type === 'call.incoming') {
+            const myId = ServiceRegistry.auth?.user?.id;
+            // Инициатор сам получает оверлей через WS-ack — баннер ему не нужен.
+            if (p.initiator_user_id && p.initiator_user_id === myId) return;
+            if (this._activeCall?.call_id === p.call_id) return;
+            const channel = SyncStore.state.channels.list.find(c => c.id === p.channel_id);
+            this._incomingCall = {
+                call_id: p.call_id,
+                call_type: p.call_type,
+                channel_id: p.channel_id,
+                caller_name: p.created_by_user_id,
+                channel_name: channel?.name ?? p.channel_id,
+            };
+            return;
+        }
+        if (msg.type === 'call.signal') {
+            const myId = ServiceRegistry.auth?.user?.id;
+            // Фильтруем: обрабатываем только сигналы предназначенные нам.
+            if (p.target_user_id && p.target_user_id !== myId) return;
+            window.dispatchEvent(new CustomEvent('call-signal', { detail: p }));
+            return;
+        }
+        if (msg.type === 'call.ended') {
+            if (this._activeCall?.call_id === p.call_id) {
+                this._activeCall = null;
+            }
+            if (this._incomingCall?.call_id === p.call_id) {
+                this._incomingCall = null;
+            }
+            return;
+        }
+        if (msg.type === 'call.accepted') {
+            const myId = ServiceRegistry.auth?.user?.id;
+            // Собеседник принял — открываем оверлей если ещё не открыт.
+            if (!this._activeCall && this._incomingCall?.call_id === p.call_id && p.user_id === myId) {
+                this._acceptCall(p.call_id);
+            }
+            return;
+        }
+        if (msg.type === 'call.declined'
+            || msg.type === 'call.participant_joined'
+            || msg.type === 'call.participant_left') {
+            return;
+        }
+
         const noop = new Set([
             'channel.created',
             'thread.created',
@@ -363,6 +415,51 @@ export class SyncApp extends PlatformApp {
         }
 
         throw new Error(`[sync-ws] неизвестное realtime-событие: ${msg.type}`);
+    }
+
+    async _openCallOverlay(callData) {
+        this._activeCall = callData;
+        this._incomingCall = null;
+        if (callData.mode === 'sfu') {
+            const syncApi = ServiceRegistry.get('syncApi');
+            const tokenData = await syncApi.get(`/calls/${callData.call_id}/token`);
+            this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
+        }
+    }
+
+    async _acceptCall(callId) {
+        this._incomingCall = null;
+        const ws = ServiceRegistry.get('syncWs');
+        const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+            (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        ws.sendJson({ id, type: 'call.accept', payload: { call_id: callId } });
+
+        const syncApi = ServiceRegistry.get('syncApi');
+        const callData = await syncApi.get(`/calls/${callId}`);
+        if (callData.mode === 'sfu') {
+            const tokenData = await syncApi.get(`/calls/${callId}/token`);
+            this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
+        } else {
+            this._activeCall = callData;
+        }
+    }
+
+    _declineCall(callId) {
+        this._incomingCall = null;
+        const ws = ServiceRegistry.get('syncWs');
+        if (!ws) return;
+        const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+            (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        ws.sendJson({ id, type: 'call.decline', payload: { call_id: callId } });
+    }
+
+    _hangupCall(callId) {
+        this._activeCall = null;
+        const ws = ServiceRegistry.get('syncWs');
+        if (!ws) return;
+        const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+            (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        ws.sendJson({ id, type: 'call.hangup', payload: { call_id: callId } });
     }
 
     async _refetchOnReconnect() {
@@ -437,6 +534,29 @@ export class SyncApp extends PlatformApp {
             </div>
 
             <space-settings-modal></space-settings-modal>
+
+            ${this._activeCall ? html`
+                <call-overlay
+                    call-id=${this._activeCall.call_id}
+                    mode=${this._activeCall.mode}
+                    call-type=${this._activeCall.call_type}
+                    livekit-url=${this._activeCall.livekit_url || ''}
+                    livekit-token=${this._activeCall.livekit_token || ''}
+                    @call-ended=${() => this._hangupCall(this._activeCall?.call_id)}
+                    @call-hangup-request=${(e) => this._hangupCall(e.detail.callId)}
+                ></call-overlay>
+            ` : ''}
+
+            ${this._incomingCall ? html`
+                <call-incoming
+                    call-id=${this._incomingCall.call_id}
+                    call-type=${this._incomingCall.call_type}
+                    channel-name=${this._incomingCall.channel_name}
+                    caller-name=${this._incomingCall.caller_name}
+                    @call-accept=${(e) => this._acceptCall(e.detail.callId)}
+                    @call-decline=${(e) => this._declineCall(e.detail.callId)}
+                ></call-incoming>
+            ` : ''}
         `;
     }
 }
