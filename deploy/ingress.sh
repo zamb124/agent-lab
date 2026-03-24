@@ -142,6 +142,8 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_hide_header Cache-Control;
+      add_header Cache-Control "no-cache, must-revalidate" always;
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
 spec:

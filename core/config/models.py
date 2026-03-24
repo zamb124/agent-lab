@@ -74,6 +74,7 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
+    deployment_version: Optional[str] = None
 
     # URL сервисов для межсервисного взаимодействия
     flows_service_url: Optional[str] = Field(

@@ -70,6 +70,8 @@ LiveKit требует отдельный поддомен с собственн
 
 `x-common-env` в `docker-compose-prod.yaml` задаёт `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, … на хост `postgres` и отдельные имена БД — они **перекрывают** URL из `conf.json` внутри контейнеров. Репозиторный `conf.json` с `localhost` на сервере не мешает, пока заданы переменные окружения compose.
 
+**Версия деплоя и кэш UI:** при деплое через GitHub Actions в SSH-сессию передаётся `DEPLOYMENT_VERSION=${{ github.sha }}` → в compose `SERVER__DEPLOYMENT_VERSION` → заголовок `X-Deployment-Version` на ответах HTTP-сервисов (`DeploymentHeadersMiddleware` в `create_service_app`). Локально без переменной можно задать `SERVER__DEPLOYMENT_VERSION` в `.env` или опустить. Ingress в `deploy/ingress.sh` для `humanitec-ingress` сбрасывает `Cache-Control` с бэкенда и выставляет `no-cache, must-revalidate` для клиента — после переконфигурации ingress перезапустить `bash deploy/ingress.sh`.
+
 Секреты — в GitHub Secrets (environment `production`).
 
 **Web Push (VAPID):** GitHub Secrets с теми же именами, что и env: `PUSH__ENABLED`, `PUSH__VAPID_PUBLIC_KEY`, `PUSH__VAPID_PRIVATE_KEY`, `PUSH__VAPID_EMAIL` (последний опционально — в workflow fallback `ops@humanitec.ru`). Workflow передаёт их в SSH-сессию, `docker-compose-prod.yaml` прокидывает в `x-common-env` и перекрывает `conf.json`. После добавления секретов — redeploy.

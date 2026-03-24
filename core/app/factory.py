@@ -39,6 +39,7 @@ from core.config.loader import load_merged_config
 from core.config import set_settings
 from core.logging import setup_logging
 from core.middleware.auth import AuthMiddleware
+from core.middleware.deployment_headers import DeploymentHeadersMiddleware
 from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository
 from core.websocket.manager import notification_manager
@@ -216,6 +217,8 @@ def create_service_app(
     if extra_middlewares:
         for middleware_class, kwargs in extra_middlewares:
             app.add_middleware(middleware_class, **kwargs)
+
+    app.add_middleware(DeploymentHeadersMiddleware)
     
     # API prefix
     # api_version="v1" → /flows/api/v1 (REST API)

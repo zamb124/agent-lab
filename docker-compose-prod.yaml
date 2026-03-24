@@ -16,6 +16,7 @@ x-common-env: &common-env
   DATABASE__AUTO_MIGRATE: "false"
   TASKS__BROKER_URL: redis://redis:6379/1
   SERVER__DEBUG: "false"
+  SERVER__DEPLOYMENT_VERSION: ${DEPLOYMENT_VERSION:-}
   SERVER__AGENTS_SERVICE_URL: http://agents:8001
   SERVER__FRONTEND_SERVICE_URL: http://frontend:8002
   SERVER__CRM_SERVICE_URL: http://crm:8003

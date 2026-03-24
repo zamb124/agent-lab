@@ -1,6 +1,7 @@
 {
   "server": {
     "env": "development",
+    "deployment_version": "1.0.0",
     "flows_service_url": "http://localhost:8001",
     "crm_service_url": "http://localhost:8003",
     "frontend_service_url": "http://localhost:8002",
