@@ -17,6 +17,7 @@ FROM base-with-core AS builder-all
 COPY pyproject.toml README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system \
+        . \
         --group core \
         --group agents \
         --group worker-base \
