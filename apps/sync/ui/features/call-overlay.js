@@ -169,6 +169,7 @@ class CallOverlay extends LitElement {
         this._micMuted = false;
         this._camOff = false;
         this._room = null;
+        this._connecting = false;
         this._localStream = null;
         this._peerConnections = new Map();
         this._durationInterval = null;
@@ -198,6 +199,9 @@ class CallOverlay extends LitElement {
         if (!this.livekitToken || !this.livekitUrl) {
             throw new Error('livekitToken и livekitUrl обязательны для SFU подключения.');
         }
+        // Предотвращаем двойной вызов (race condition в updated())
+        if (this._connecting) return;
+        this._connecting = true;
 
         const { Room, RoomEvent } = await import('@livekit/client');
         this._room = new Room();
@@ -213,6 +217,7 @@ class CallOverlay extends LitElement {
         await this._room.connect(this.livekitUrl, this.livekitToken);
         await this._room.localParticipant.enableCameraAndMicrophone();
         this._status = 'active';
+        this._connecting = false;
         this._syncParticipants();
     }
 
@@ -300,6 +305,7 @@ class CallOverlay extends LitElement {
     }
 
     _cleanup() {
+        this._connecting = false;
         if (this._room) { this._room.disconnect(); this._room = null; }
         if (this._localStream) {
             this._localStream.getTracks().forEach(t => t.stop());
@@ -385,11 +391,16 @@ class CallOverlay extends LitElement {
 
     updated(changedProps) {
         // SFU: подключаемся когда получили токен первый раз.
-        if ((this.mode === 'sfu' || !this.mode) && !this._room && this.livekitToken) {
-            this._connectSFU();
+        if ((this.mode === 'sfu' || !this.mode) && !this._room && !this._connecting && this.livekitToken) {
+            this._connectSFU().catch(err => {
+                this._connecting = false;
+                this._error = err.message;
+                this._status = 'error';
+            });
         }
-        // Привязываем LiveKit треки к video-элементам.
         if (!this._room) return;
+
+        // Привязываем видео-треки к video-элементам.
         const tiles = this.shadowRoot.querySelectorAll('.participant-tile');
         this._participants.forEach((p, i) => {
             const videoEl = tiles[i]?.querySelector('video');
@@ -407,6 +418,14 @@ class CallOverlay extends LitElement {
                 videoEl._lkTrack = p.videoTrack;
             }
         });
+
+        // Аудио: LiveKit создаёт <audio> элемент автоматически при вызове attach().
+        this._participants
+            .filter(p => !p.isLocal && p.audioTrack && !p.audioTrack._lkAttached)
+            .forEach(p => {
+                p.audioTrack.attach();
+                p.audioTrack._lkAttached = true;
+            });
     }
 }
 
