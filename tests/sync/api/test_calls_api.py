@@ -47,7 +47,7 @@ async def test_create_call_link_requires_auth(
 ) -> None:
     r = await sync_client.post(
         "/sync/api/v1/calls/links",
-        json={"channel_id": "fake", "call_type": "audio"},
+        json={"channel_id": "fake", "call_type": "video"},
     )
     assert r.status_code in (401, 403)
 

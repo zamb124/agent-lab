@@ -626,7 +626,7 @@ export class ChatView extends PlatformElement {
         return `_meet_${raw.slice(0, 20)}`;
     }
 
-    _startCallWithChannel(callType, channelId) {
+    _startCallWithChannel(channelId) {
         if (typeof channelId !== 'string' || channelId === '') return;
         const ws = ServiceRegistry.get('syncWs');
         if (!ws) return;
@@ -637,17 +637,17 @@ export class ChatView extends PlatformElement {
         ws.sendJson({
             id,
             type: 'call.invite',
-            payload: { channel_id: channelId, call_type: callType },
+            payload: { channel_id: channelId, call_type: 'video' },
         });
     }
 
-    _startCall(callType) {
+    _startCall() {
         const channelId = this._chat.selectedChannelId;
         if (!channelId) return;
-        this._startCallWithChannel(callType, channelId);
+        this._startCallWithChannel(channelId);
     }
 
-    async _startAdHocCall(callType) {
+    async _startAdHocCall() {
         const syncApi = ServiceRegistry.get('syncApi');
         if (!syncApi) return;
         let spaceId = this._chat.selectedSpaceId;
@@ -665,7 +665,7 @@ export class ChatView extends PlatformElement {
             await SyncStore.loadChannels(syncApi);
             SyncStore.sanitizeChatSelectionAfterLoad();
             await SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, created.id);
-            this._startCallWithChannel(callType, created.id);
+            this._startCallWithChannel(created.id);
         } catch (err) {
             const text = err instanceof Error ? err.message : String(err);
             this.error(text);
@@ -768,30 +768,14 @@ export class ChatView extends PlatformElement {
                         <span class="ws-badge ${this._wsState}">${this._wsState}</span>
 
                         ${selectedChannelId ? html`
-                            <button class="icon-btn" title="Аудиозвонок" @click=${() => this._startCall('audio')}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-                                    <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-                                    <line x1="12" y1="19" x2="12" y2="23"/>
-                                    <line x1="8" y1="23" x2="16" y2="23"/>
-                                </svg>
-                            </button>
-                            <button class="icon-btn" title="Видеозвонок" @click=${() => this._startCall('video')}>
+                            <button class="icon-btn" title="Звонок" @click=${this._startCall}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polygon points="23 7 16 12 23 17 23 7"/>
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                                 </svg>
                             </button>
                         ` : html`
-                            <button class="icon-btn" title="Аудиовстреча (новый канал)" @click=${() => this._startAdHocCall('audio')}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-                                    <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-                                    <line x1="12" y1="19" x2="12" y2="23"/>
-                                    <line x1="8" y1="23" x2="16" y2="23"/>
-                                </svg>
-                            </button>
-                            <button class="icon-btn" title="Видеовстреча (новый канал)" @click=${() => this._startAdHocCall('video')}>
+                            <button class="icon-btn" title="Встреча в новом канале" @click=${this._startAdHocCall}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polygon points="23 7 16 12 23 17 23 7"/>
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from apps.sync.models.calls import CallRead, CallType
 from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelUpdate
@@ -149,7 +149,14 @@ class MessagesPinPayload(BaseModel):
 
 class CallInvitePayload(BaseModel):
     channel_id: str
-    call_type: CallType
+    call_type: CallType = "video"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_audio_to_video(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("call_type") == "audio":
+            return {**data, "call_type": "video"}
+        return data
 
 
 class CallSignalPayload(BaseModel):

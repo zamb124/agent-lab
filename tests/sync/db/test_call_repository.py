@@ -23,7 +23,7 @@ def _make_call(channel_id: str, company_id: str, *, mode: str = "p2p") -> SyncCa
         company_id=company_id,
         channel_id=channel_id,
         mode=mode,
-        call_type="audio",
+        call_type="video",
         status="ringing",
         created_by_user_id="user1",
     )
@@ -305,7 +305,7 @@ async def test_expired_link_raises(
         link_token=uuid4().hex,
         channel_id=channel_id,
         company_id=company_id,
-        call_type="audio",
+        call_type="video",
         created_by_user_id="user1",
         expires_at=datetime.now(UTC) - timedelta(hours=1),
     )

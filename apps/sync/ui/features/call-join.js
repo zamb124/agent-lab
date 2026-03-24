@@ -165,7 +165,12 @@ class CallJoinPage extends LitElement {
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .call-icon { font-size: 28px; }
+        .call-icon {
+            display: flex;
+            align-items: center;
+            color: var(--accent-primary, #6366f1);
+            margin-bottom: 4px;
+        }
     `;
 
     constructor() {
@@ -278,18 +283,20 @@ class CallJoinPage extends LitElement {
         }
         if (!this._linkInfo) return html``;
 
-        const callTypeLabel = this._linkInfo.call_type === 'video' ? '📹 Видеозвонок' : '🎤 Аудиозвонок';
-
         return html`
             <div>
-                <div class="call-icon">${this._linkInfo.call_type === 'video' ? '📹' : '🎤'}</div>
+                <div class="call-icon" aria-hidden="true">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+                    </svg>
+                </div>
                 <h1>Приглашение на звонок</h1>
             </div>
 
             <div class="meta">
-                <span>📢 ${this._linkInfo.channel_name ?? 'Канал'}</span>
-                <span>👤 Организатор: ${this._linkInfo.creator_display_name}</span>
-                <span>${callTypeLabel}</span>
+                <span>Канал: ${this._linkInfo.channel_name ?? '—'}</span>
+                <span>Организатор: ${this._linkInfo.creator_display_name}</span>
+                <span>Звонок</span>
             </div>
 
             ${this._error ? html`<div class="error">${this._error}</div>` : ''}

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 CallStatus = Literal["ringing", "active", "ended"]
-CallType = Literal["audio", "video"]
+CallType = Literal["video"]
 CallMode = Literal["p2p", "sfu"]
 ParticipantStatus = Literal["invited", "joined", "declined", "left"]
 
@@ -42,6 +42,13 @@ class CallLinkCreate(BaseModel):
         default=None,
         description="Текущий звонок: та же LiveKit-комната, что у участников чата.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_audio_to_video(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("call_type") == "audio":
+            return {**data, "call_type": "video"}
+        return data
 
 
 class CallLinkRead(BaseModel):

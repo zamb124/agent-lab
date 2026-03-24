@@ -10,6 +10,26 @@
  */
 import { html, css, LitElement } from 'lit';
 
+const LS_CAMERA_KEY = 'humanitec.sync.call.camera_enabled';
+
+function _readCameraPref() {
+    try {
+        const v = localStorage.getItem(LS_CAMERA_KEY);
+        if (v === null) return true;
+        return v === 'true';
+    } catch {
+        return true;
+    }
+}
+
+function _writeCameraPref(on) {
+    try {
+        localStorage.setItem(LS_CAMERA_KEY, String(on));
+    } catch {
+        /* ignore */
+    }
+}
+
 class CallOverlay extends LitElement {
     static properties = {
         callId:      { type: String, attribute: 'call-id' },
@@ -26,6 +46,7 @@ class CallOverlay extends LitElement {
         _duration:    { state: true },
         _micMuted:    { state: true },
         _camOff:      { state: true },
+        _tiles:       { state: true },
     };
 
     static styles = css`
@@ -67,6 +88,11 @@ class CallOverlay extends LitElement {
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+
+        .participant-tile.screen video {
+            object-fit: contain;
+            background: #000;
         }
 
         .participant-name {
@@ -167,6 +193,7 @@ class CallOverlay extends LitElement {
         this._status = 'connecting';
         this._error = null;
         this._participants = [];
+        this._tiles = [];
         this._duration = 0;
         this._micMuted = false;
         this._camOff = false;
@@ -200,6 +227,19 @@ class CallOverlay extends LitElement {
         this._cleanup();
     }
 
+    _orderedVideoPubs(participant, isLocal) {
+        const Track = this._lk.Track;
+        const pubs = Array.from(participant.videoTrackPublications.values()).filter(
+            (p) => p.track && (isLocal || p.isSubscribed)
+        );
+        pubs.sort((a, b) => {
+            const sa = a.source === Track.Source.ScreenShare ? 0 : 1;
+            const sb = b.source === Track.Source.ScreenShare ? 0 : 1;
+            return sa - sb;
+        });
+        return pubs;
+    }
+
     async _connectSFU() {
         if (!this.livekitToken || !this.livekitUrl) {
             throw new Error('livekitToken и livekitUrl обязательны для SFU подключения.');
@@ -208,12 +248,15 @@ class CallOverlay extends LitElement {
         if (this._connecting) return;
         this._connecting = true;
 
-        const { Room, RoomEvent } = await import('@livekit/client');
+        this._lk = await import('@livekit/client');
+        const { Room, RoomEvent } = this._lk;
         this._room = new Room();
 
         this._room.on(RoomEvent.ParticipantConnected, () => this._syncParticipants());
         this._room.on(RoomEvent.ParticipantDisconnected, () => this._syncParticipants());
         this._room.on(RoomEvent.TrackSubscribed, () => this._syncParticipants());
+        this._room.on(RoomEvent.LocalTrackPublished, () => this._syncParticipants());
+        this._room.on(RoomEvent.LocalTrackUnpublished, () => this._syncParticipants());
         this._room.on(RoomEvent.Disconnected, () => {
             this._sfuSessionFinished = true;
             if (this._status === 'ended') return;
@@ -224,6 +267,9 @@ class CallOverlay extends LitElement {
 
         await this._room.connect(this.livekitUrl, this.livekitToken);
         await this._room.localParticipant.enableCameraAndMicrophone();
+        const camOn = _readCameraPref();
+        await this._room.localParticipant.setCameraEnabled(camOn);
+        this._camOff = !camOn;
         this._status = 'active';
         this._connecting = false;
         this._syncParticipants();
@@ -246,8 +292,13 @@ class CallOverlay extends LitElement {
 
         this._localStream = await navigator.mediaDevices.getUserMedia({
             audio: true,
-            video: this.callType !== 'audio',
+            video: true,
         });
+        const camOn = _readCameraPref();
+        this._localStream.getVideoTracks().forEach((t) => {
+            t.enabled = camOn;
+        });
+        this._camOff = !camOn;
 
         // P2P: подключение к WS обрабатывается sync-ws.service.js и SyncStore.
         // CallOverlay получает сигналы через событие call-signal на window.
@@ -264,19 +315,53 @@ class CallOverlay extends LitElement {
     }
 
     _syncParticipants() {
-        if (!this._room) return;
-        const remote = Array.from(this._room.remoteParticipants.values()).map(p => ({
-            identity: p.identity,
-            isLocal: false,
-            videoTrack: Array.from(p.videoTrackPublications.values()).find(t => t.isSubscribed)?.track,
-            audioTrack: Array.from(p.audioTrackPublications.values()).find(t => t.isSubscribed)?.track,
-        }));
-        const local = {
-            identity: this._room.localParticipant.identity,
-            isLocal: true,
-            videoTrack: Array.from(this._room.localParticipant.videoTrackPublications.values())[0]?.track,
-        };
-        this._participants = [local, ...remote];
+        if (!this._room || !this._lk) return;
+        const Track = this._lk.Track;
+        const tiles = [];
+        const local = this._room.localParticipant;
+        const localPubs = this._orderedVideoPubs(local, true);
+        if (localPubs.length === 0) {
+            tiles.push({
+                key: 'local-ph',
+                identity: local.identity,
+                isLocal: true,
+                track: null,
+                isScreen: false,
+            });
+        } else {
+            for (const pub of localPubs) {
+                tiles.push({
+                    key: `local-${pub.source}`,
+                    identity: local.identity,
+                    isLocal: true,
+                    track: pub.track,
+                    isScreen: pub.source === Track.Source.ScreenShare,
+                });
+            }
+        }
+        for (const remote of this._room.remoteParticipants.values()) {
+            const pubs = this._orderedVideoPubs(remote, false);
+            if (pubs.length === 0) {
+                tiles.push({
+                    key: `remote-${remote.identity}-ph`,
+                    identity: remote.identity,
+                    isLocal: false,
+                    track: null,
+                    isScreen: false,
+                });
+            } else {
+                for (const pub of pubs) {
+                    tiles.push({
+                        key: `remote-${remote.identity}-${pub.source}`,
+                        identity: remote.identity,
+                        isLocal: false,
+                        track: pub.track,
+                        isScreen: pub.source === Track.Source.ScreenShare,
+                    });
+                }
+            }
+        }
+        this._tiles = tiles;
         this.requestUpdate();
     }
 
@@ -293,8 +378,29 @@ class CallOverlay extends LitElement {
         this._camOff = !this._camOff;
         if (this._room) {
             await this._room.localParticipant.setCameraEnabled(!this._camOff);
+            _writeCameraPref(!this._camOff);
         } else if (this._localStream) {
-            this._localStream.getVideoTracks().forEach(t => t.enabled = !this._camOff);
+            this._localStream.getVideoTracks().forEach((t) => {
+                t.enabled = !this._camOff;
+            });
+            _writeCameraPref(!this._camOff);
+        }
+    }
+
+    _canScreenShare() {
+        return typeof navigator.mediaDevices?.getDisplayMedia === 'function';
+    }
+
+    async _toggleScreenShare() {
+        if (!this._room) return;
+        try {
+            const next = !this._room.localParticipant.isScreenShareEnabled;
+            await this._room.localParticipant.setScreenShareEnabled(next);
+            this.requestUpdate();
+        } catch (e) {
+            const name = e && typeof e === 'object' && 'name' in e ? e.name : '';
+            if (name === 'NotAllowedError' || name === 'AbortError') return;
+            this._error = e instanceof Error ? e.message : String(e);
         }
     }
 
@@ -306,7 +412,7 @@ class CallOverlay extends LitElement {
             credentials: 'include',
             body: JSON.stringify({
                 channel_id: this.channelId,
-                call_type: this.callType || 'video',
+                call_type: 'video',
                 call_id: this.callId,
             }),
         });
@@ -342,19 +448,19 @@ class CallOverlay extends LitElement {
             this._localStream = null;
         }
         window.removeEventListener('call-signal', this._onCallSignal);
+        this._lk = null;
+        this._tiles = [];
+    }
+
+    _sfuParticipantCount() {
+        if (!this._room) return 0;
+        return 1 + this._room.remoteParticipants.size;
     }
 
     _formatDuration(sec) {
         const m = Math.floor(sec / 60).toString().padStart(2, '0');
         const s = (sec % 60).toString().padStart(2, '0');
         return `${m}:${s}`;
-    }
-
-    _attachVideoToElement(el, track) {
-        if (!el || !track) return;
-        if (el._attachedTrack === track) return;
-        el._attachedTrack = track;
-        track.attach(el);
     }
 
     render() {
@@ -372,8 +478,11 @@ class CallOverlay extends LitElement {
             return html`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.5);font-size:18px;">Звонок завершён</div>`;
         }
 
-        const gridClass = this._participants.length === 1 ? 'one'
-            : this._participants.length === 2 ? 'two' : 'many';
+        const gridItems = this._room ? this._tiles : this._participants;
+        const gridCount = gridItems.length;
+        const gridClass = gridCount === 1 ? 'one' : gridCount === 2 ? 'two' : 'many';
+        const participantCount = this._room ? this._sfuParticipantCount() : this._participants.length;
+        const screenOn = this._room?.localParticipant?.isScreenShareEnabled === true;
 
         return html`
             <div class="header">
@@ -382,7 +491,7 @@ class CallOverlay extends LitElement {
                     ${this._status === 'connecting' ? 'Подключение…' : this._formatDuration(this._duration)}
                 </span>
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <span style="opacity:0.5">${this._participants.length} уч.</span>
+                    <span style="opacity:0.5">${participantCount} уч.</span>
                     ${this.callId ? html`
                         <button class="ctrl-btn" style="width:36px;height:36px;font-size:14px;" @click=${this._copyLink} title="Скопировать ссылку на звонок">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -395,7 +504,7 @@ class CallOverlay extends LitElement {
             </div>
 
             <div class="video-grid ${gridClass}">
-                ${this._participants.map((p, i) => this._renderTile(p, i))}
+                ${gridItems.map((p, i) => this._renderTile(p, i))}
             </div>
 
             <div class="controls">
@@ -405,12 +514,19 @@ class CallOverlay extends LitElement {
                         : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
                     }
                 </button>
-                ${this.callType !== 'audio' ? html`
-                    <button class="ctrl-btn ${this._camOff ? '' : 'active'}" @click=${this._toggleCam} title="${this._camOff ? 'Включить' : 'Выключить'} камеру">
-                        ${this._camOff
-                            ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
-                            : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
-                        }
+                <button class="ctrl-btn ${this._camOff ? '' : 'active'}" @click=${this._toggleCam} title="${this._camOff ? 'Включить' : 'Выключить'} камеру">
+                    ${this._camOff
+                        ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                        : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
+                    }
+                </button>
+                ${this._room && this._canScreenShare() ? html`
+                    <button class="ctrl-btn ${screenOn ? 'active' : ''}" @click=${this._toggleScreenShare} title="${screenOn ? 'Остановить экран' : 'Показать экран'}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                            <line x1="8" y1="21" x2="16" y2="21"/>
+                            <line x1="12" y1="17" x2="12" y2="21"/>
+                        </svg>
                     </button>
                 ` : ''}
                 <button class="ctrl-btn hangup" @click=${this._hangup} title="Завершить звонок">
@@ -433,16 +549,30 @@ class CallOverlay extends LitElement {
         return this.names?.[identity] || identity;
     }
 
-    _renderTile(participant, index) {
+    _renderTile(item, index) {
+        if (this._room) {
+            const label = item.isLocal ? 'Вы' : this._resolveDisplayName(item.identity);
+            const displayLabel = item.isScreen ? `${label} — экран` : label;
+            const hasVideo = item.track != null;
+            const tileClass = item.isScreen ? 'participant-tile screen' : 'participant-tile';
+            return html`
+                <div class="${tileClass}" data-idx=${index}>
+                    ${hasVideo
+                        ? html`<video autoplay playsinline ?muted=${item.isLocal}></video>`
+                        : html`<div class="avatar-placeholder">${displayLabel?.[0]?.toUpperCase() ?? '?'}</div>`
+                    }
+                    <span class="participant-name">${displayLabel}</span>
+                </div>
+            `;
+        }
+        const participant = item;
         const label = participant.isLocal ? 'Вы' : this._resolveDisplayName(participant.identity);
-        const hasVideo = participant.isLocal
-            ? Array.from(this._room?.localParticipant?.videoTrackPublications?.values() ?? [])[0]?.track != null
-            : participant.videoTrack != null;
-
+        const stream = participant.stream;
+        const hasVideo = stream?.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled);
         return html`
             <div class="participant-tile" data-idx=${index}>
                 ${hasVideo
-                    ? html`<video autoplay playsinline ?muted=${participant.isLocal}></video>`
+                    ? html`<video autoplay playsinline muted></video>`
                     : html`<div class="avatar-placeholder">${label?.[0]?.toUpperCase() ?? '?'}</div>`
                 }
                 <span class="participant-name">${label}</span>
@@ -467,34 +597,48 @@ class CallOverlay extends LitElement {
                 this._status = 'error';
             });
         }
-        if (!this._room) return;
-
-        // Привязываем видео-треки к video-элементам.
-        const tiles = this.shadowRoot.querySelectorAll('.participant-tile');
-        this._participants.forEach((p, i) => {
-            const videoEl = tiles[i]?.querySelector('video');
-            if (!videoEl) return;
-            if (p.isLocal) {
-                const localTrack = Array.from(
-                    this._room.localParticipant.videoTrackPublications.values()
-                )[0]?.track;
-                if (localTrack && videoEl._lkTrack !== localTrack) {
-                    localTrack.attach(videoEl);
-                    videoEl._lkTrack = localTrack;
+        if (!this._room) {
+            const domTiles = this.shadowRoot.querySelectorAll('.participant-tile');
+            const p = this._participants[0];
+            if (p?.stream) {
+                const videoEl = domTiles[0]?.querySelector('video');
+                if (videoEl && videoEl.srcObject !== p.stream) {
+                    videoEl.srcObject = p.stream;
                 }
-            } else if (p.videoTrack && videoEl._lkTrack !== p.videoTrack) {
-                p.videoTrack.attach(videoEl);
-                videoEl._lkTrack = p.videoTrack;
+            }
+            return;
+        }
+
+        const domTiles = this.shadowRoot.querySelectorAll('.participant-tile');
+        this._tiles.forEach((tile, i) => {
+            const videoEl = domTiles[i]?.querySelector('video');
+            if (!videoEl) return;
+            if (!tile.track) {
+                if (videoEl._lkTrack) {
+                    videoEl._lkTrack.detach(videoEl);
+                    videoEl._lkTrack = null;
+                }
+                return;
+            }
+            if (videoEl._lkTrack && videoEl._lkTrack !== tile.track) {
+                videoEl._lkTrack.detach(videoEl);
+            }
+            if (videoEl._lkTrack !== tile.track) {
+                tile.track.attach(videoEl);
+                videoEl._lkTrack = tile.track;
             }
         });
 
-        // Аудио: LiveKit создаёт <audio> элемент автоматически при вызове attach().
-        this._participants
-            .filter(p => !p.isLocal && p.audioTrack && !p.audioTrack._lkAttached)
-            .forEach(p => {
-                p.audioTrack.attach();
-                p.audioTrack._lkAttached = true;
-            });
+        this._room.remoteParticipants.forEach((p) => {
+            const audioPub = Array.from(p.audioTrackPublications.values()).find(
+                (t) => t.isSubscribed && t.track
+            );
+            const tr = audioPub?.track;
+            if (tr && !tr._lkAttached) {
+                tr.attach();
+                tr._lkAttached = true;
+            }
+        });
     }
 }
 

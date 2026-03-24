@@ -99,7 +99,7 @@ async def test_call_invite_sfu_two_members(
     )
 
     result = await execute_command(
-        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
+        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "video"}),
         **repos,
     )
     assert result.ok
@@ -110,6 +110,41 @@ async def test_call_invite_sfu_two_members(
     statuses = {p.user_id: p.status for p in result.result.participants}
     assert statuses["u1"] == "joined"
     assert statuses["member1"] == "invited"
+    assert result.result.call_type == "video"
+
+
+@pytest.mark.asyncio
+async def test_call_invite_legacy_audio_payload_yields_video_read(
+    call_repo: CallRepository,
+    channel_repo: ChannelRepository,
+    space_repo: SpaceRepository,
+    sync_db_clean: None,
+    company_id: str,
+    unique_id: str,
+) -> None:
+    """Старый клиент с call_type audio: ответ CallRead всегда с единым типом video."""
+    channel_id = await _setup_channel_with_members(
+        company_id=company_id,
+        space_repo=space_repo,
+        channel_repo=channel_repo,
+        call_repo=call_repo,
+        unique_id=f"{unique_id}-legacy-audio",
+        members=["u1", "member1"],
+    )
+    repos = dict(
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=ThreadRepository(db=call_repo._db),
+        messages=MessageRepository(db=call_repo._db),
+        git_refs=GitResourceRefRepository(db=call_repo._db),
+        calls=call_repo,
+    )
+    result = await execute_command(
+        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
+        **repos,
+    )
+    assert result.ok
+    assert result.result.call_type == "video"
 
 
 @pytest.mark.asyncio
@@ -178,7 +213,7 @@ async def test_call_invite_replaces_existing(
     )
 
     r1 = await execute_command(
-        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
+        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "video"}),
         **repos,
     )
     assert r1.ok
@@ -224,7 +259,7 @@ async def test_call_accept_and_hangup(
     )
 
     invite_res = await execute_command(
-        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
+        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "video"}),
         **repos,
     )
     call_id = invite_res.result.call_id
@@ -280,7 +315,7 @@ async def test_call_invite_no_access_raises(
 
     with pytest.raises(PermissionError):
         await execute_command(
-            _cmd("outsider", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
+            _cmd("outsider", company_id, "call.invite", {"channel_id": channel_id, "call_type": "video"}),
             **repos,
         )
 
@@ -314,7 +349,7 @@ async def test_call_decline(
     )
 
     invite_res = await execute_command(
-        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
+        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "video"}),
         **repos,
     )
     call_id = invite_res.result.call_id
@@ -363,7 +398,7 @@ async def test_call_hangup_ends_when_all_leave(
     )
 
     invite_res = await execute_command(
-        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
+        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "video"}),
         **repos,
     )
     call_id = invite_res.result.call_id

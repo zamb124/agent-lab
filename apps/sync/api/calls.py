@@ -37,7 +37,7 @@ def _build_call_read(call: "SyncCall", participants: list) -> CallRead:
         call_id=call.call_id,
         channel_id=call.channel_id,
         mode=call.mode,
-        call_type=call.call_type,
+        call_type="video",
         status=call.status,
         livekit_room_name=call.livekit_room_name,
         started_at=call.started_at,
@@ -133,7 +133,7 @@ async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRe
         channel_id=body.channel_id,
         company_id=company_id,
         call_id=attached_call_id,
-        call_type=body.call_type,
+        call_type="video",
         created_by_user_id=context.user.user_id,
         expires_at=expires_at,
     )
@@ -145,7 +145,7 @@ async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRe
     return CallLinkRead(
         link_token=link_token,
         channel_id=body.channel_id,
-        call_type=body.call_type,
+        call_type="video",
         expires_at=expires_at,
         join_url=join_url,
     )
@@ -228,7 +228,7 @@ async def get_link_info(link_token: str) -> CallLinkInfo:
         link_token=link_token,
         channel_name=channel_name,
         creator_display_name=creator_name,
-        call_type=link.call_type,
+        call_type="video",
         expires_at=link.expires_at,
     )
 
@@ -281,7 +281,7 @@ async def join_via_link(
             company_id=link.company_id,
             channel_id=link.channel_id,
             mode="sfu",
-            call_type=link.call_type,
+            call_type="video",
             status="active",
             livekit_room_name=livekit_room_name,
             started_at=datetime.now(UTC),

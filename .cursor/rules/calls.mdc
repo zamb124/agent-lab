@@ -11,6 +11,12 @@ alwaysApply: false
 
 # WebRTC Звонки (Sync)
 
+## Тип звонка и клиент
+
+- В API и БД один тип: **`call_type: "video"`**. Значение `audio` в старых клиентах (`call.invite`, `POST /calls/links`) нормализуется в `video` на сервере; миграция `sync_0008` приводит исторические строки в БД.
+- Камера по умолчанию и при переключении: **`localStorage`** ключ `humanitec.sync.call.camera_enabled` (boolean-строка). После `enableCameraAndMicrophone()` SFU выставляет `setCameraEnabled` из LS; в P2P — `getVideoTracks().enabled`.
+- Демонстрация экрана: LiveKit `localParticipant.setScreenShareEnabled`, кнопка только если есть `getDisplayMedia`. Сетка тайлов учитывает камеру и экран отдельно (screen share крупнее через класс `screen`, `object-fit: contain`).
+
 ## Архитектура
 
 | Участников | Режим | Медиа-путь |
@@ -83,6 +89,8 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (публично,
 ### CallOverlay SFU (переподключение)
 
 После hangup `livekit-token` остаётся в атрибутах; в `updated()` без флага `_sfuSessionFinished` снова вызывался бы `_connectSFU()`. Флаг выставляют hangup, `RoomEvent.Disconnected`, `disconnectedCallback`. В `sync-app`: `call-ended` только снимает оверлей; `call-hangup-request` — одна отправка WS `call.hangup` (не дублировать с `call-ended`).
+
+Видеосетка строится из `_tiles` (по публикациям камеры и screen share на участника). События `LocalTrackPublished` / `LocalTrackUnpublished` обновляют сетку.
 
 ## Конфигурация
 
