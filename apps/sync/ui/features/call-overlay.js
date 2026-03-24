@@ -175,6 +175,8 @@ class CallOverlay extends LitElement {
         this._localStream = null;
         this._peerConnections = new Map();
         this._durationInterval = null;
+        /** После hangup / Disconnect токен ещё в атрибутах — без флага updated() снова вызовет _connectSFU(). */
+        this._sfuSessionFinished = false;
     }
 
     async connectedCallback() {
@@ -193,6 +195,7 @@ class CallOverlay extends LitElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._sfuSessionFinished = true;
         clearInterval(this._durationInterval);
         this._cleanup();
     }
@@ -212,7 +215,10 @@ class CallOverlay extends LitElement {
         this._room.on(RoomEvent.ParticipantDisconnected, () => this._syncParticipants());
         this._room.on(RoomEvent.TrackSubscribed, () => this._syncParticipants());
         this._room.on(RoomEvent.Disconnected, () => {
+            this._sfuSessionFinished = true;
+            if (this._status === 'ended') return;
             this._status = 'ended';
+            // Только UI: hangup на сервер уже ушёл при клике «Завершить» или пришёл call.ended по WS.
             this.dispatchEvent(new CustomEvent('call-ended', { bubbles: true, composed: true }));
         });
 
@@ -316,11 +322,10 @@ class CallOverlay extends LitElement {
     }
 
     async _hangup() {
-        this._cleanup();
+        this._sfuSessionFinished = true;
         this._status = 'ended';
+        this._cleanup();
         this.dispatchEvent(new CustomEvent('call-ended', { bubbles: true, composed: true }));
-
-        // Отправляем WS-команду hang up (если есть callId, т.е. звонок внутри платформы)
         if (this.callId) {
             this.dispatchEvent(new CustomEvent('call-hangup-request', {
                 bubbles: true, composed: true,
@@ -446,10 +451,18 @@ class CallOverlay extends LitElement {
     }
 
     updated(changedProps) {
-        // SFU: подключаемся когда получили токен первый раз.
-        if ((this.mode === 'sfu' || !this.mode) && !this._room && !this._connecting && this.livekitToken) {
+        // SFU: один раз при появлении токена. После hangup токен не сбрасываем — без _sfuSessionFinished был бы reconnect.
+        if (
+            (this.mode === 'sfu' || !this.mode)
+            && !this._sfuSessionFinished
+            && !this._room
+            && !this._connecting
+            && this.livekitToken
+            && this._status !== 'error'
+        ) {
             this._connectSFU().catch(err => {
                 this._connecting = false;
+                this._sfuSessionFinished = true;
                 this._error = err.message;
                 this._status = 'error';
             });

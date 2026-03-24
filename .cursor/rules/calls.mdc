@@ -80,6 +80,10 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (публично,
 | `livekit_client.py` | `LiveKitClient` — create_room, delete_room, generate_token. `_api_url()` конвертирует `ws://` → `http://` для Twirp API |
 | `turn.py` | `generate_turn_credentials()` — HMAC-SHA1, алгоритм coturn REST |
 
+### CallOverlay SFU (переподключение)
+
+После hangup `livekit-token` остаётся в атрибутах; в `updated()` без флага `_sfuSessionFinished` снова вызывался бы `_connectSFU()`. Флаг выставляют hangup, `RoomEvent.Disconnected`, `disconnectedCallback`. В `sync-app`: `call-ended` только снимает оверлей; `call-hangup-request` — одна отправка WS `call.hangup` (не дублировать с `call-ended`).
+
 ## Конфигурация
 
 ```json

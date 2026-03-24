@@ -497,9 +497,8 @@ export class SyncApp extends PlatformApp {
         ws.sendJson({ id, type: 'call.decline', payload: { call_id: callId } });
     }
 
-    _hangupCall(callId) {
-        this._activeCall = null;
-        if (!callId) return;
+    _sendCallHangupWs(callId) {
+        if (typeof callId !== 'string' || callId === '') return;
         const ws = ServiceRegistry.get('syncWs');
         if (!ws) return;
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
@@ -592,8 +591,8 @@ export class SyncApp extends PlatformApp {
                     livekit-url=${this._activeCall.livekit_url || ''}
                     livekit-token=${this._activeCall.livekit_token || ''}
                     .names=${this._buildNamesMap()}
-                    @call-ended=${() => { const id = this._activeCall?.call_id; if (id) this._hangupCall(id); }}
-                    @call-hangup-request=${(e) => { if (e.detail.callId) this._hangupCall(e.detail.callId); }}
+                    @call-ended=${() => { this._activeCall = null; }}
+                    @call-hangup-request=${(e) => this._sendCallHangupWs(e.detail?.callId)}
                 ></call-overlay>
             ` : ''}
 
