@@ -70,7 +70,7 @@ humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
 
 Секреты — в GitHub Secrets (environment `production`).
 
-**Web Push (VAPID):** в репозитории задать `PUSH_VAPID_PUBLIC_KEY`, `PUSH_VAPID_PRIVATE_KEY`; опционально `PUSH_VAPID_EMAIL` (иначе в workflow подставляется `ops@humanitec.ru`). Workflow передаёт их в SSH-сессию как `PUSH__VAPID_*`, `docker-compose-prod.yaml` прокидывает в `x-common-env` и перекрывает плейсхолдеры из `conf.json`. После первого добавления секретов — redeploy.
+**Web Push (VAPID):** GitHub Secrets с теми же именами, что и env: `PUSH__ENABLED`, `PUSH__VAPID_PUBLIC_KEY`, `PUSH__VAPID_PRIVATE_KEY`, `PUSH__VAPID_EMAIL` (последний опционально — в workflow fallback `ops@humanitec.ru`). Workflow передаёт их в SSH-сессию, `docker-compose-prod.yaml` прокидывает в `x-common-env` и перекрывает `conf.json`. После добавления секретов — redeploy.
 
 **Существующий volume Postgres** со старой схемой (одна БД вместо `platform_*`) требует ручной миграции данных или нового volume — не автоматизировано в workflow.
 
