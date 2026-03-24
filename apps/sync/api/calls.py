@@ -64,6 +64,11 @@ def _livekit_client(settings) -> LiveKitClient:
     )
 
 
+def _livekit_public_url(settings) -> str:
+    """URL для браузера: livekit_public_url если задан, иначе livekit_url."""
+    return settings.calls.livekit_public_url or settings.calls.livekit_url
+
+
 # ─── Авторизованные эндпоинты ────────────────────────────────────────────────
 
 @router.get("/turn-credentials")
@@ -164,7 +169,7 @@ async def get_livekit_token(call_id: str) -> dict:
     token = _livekit_client(settings).generate_token(
         room_name=call.livekit_room_name, identity=user_id
     )
-    return {"token": token, "livekit_url": settings.calls.livekit_url}
+    return {"token": token, "livekit_url": _livekit_public_url(settings)}
 
 
 # ─── Публичные эндпоинты (без обязательного auth) ────────────────────────────
@@ -271,7 +276,7 @@ async def join_via_link(
     return JoinResponse(
         call_id=call.call_id,
         livekit_token=token,
-        livekit_url=settings.calls.livekit_url,
+        livekit_url=_livekit_public_url(settings),
         identity=identity,
         mode="sfu",
     )

@@ -381,9 +381,15 @@ class S3Config(BaseModel):
 
 
 class CallsConfig(BaseModel):
-    """Конфигурация WebRTC звонков: LiveKit SFU и coturn TURN."""
+    """Конфигурация WebRTC звонков: LiveKit SFU и coturn TURN.
+
+    livekit_url       — внутренний Docker URL для сервер-сервер API (ws:// или http://).
+    livekit_public_url — публичный URL для браузера (wss:// на продакшене).
+                         Если не задан — используется livekit_url.
+    """
 
     livekit_url: str = "ws://localhost:7880"
+    livekit_public_url: str = ""
     livekit_api_key: str = ""
     livekit_api_secret: str = ""
     turn_host: str = ""

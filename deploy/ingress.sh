@@ -161,8 +161,11 @@ ${PATHS}
 ${PATHS}
 EOF
 
-log "Certificate (Let's Encrypt HTTP-01, только apex ${DOMAIN})"
-${SSH} "microk8s kubectl apply -f -" <<EOF
+if ${SSH} "microk8s kubectl get secret ${TLS_SECRET} -n default >/dev/null 2>&1"; then
+  log "Certificate ${TLS_SECRET} уже существует — пропускаем"
+else
+  log "Certificate (Let's Encrypt HTTP-01, только apex ${DOMAIN})"
+  ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -176,9 +179,96 @@ spec:
   dnsNames:
   - ${DOMAIN}
 EOF
+  log "Ожидаем сертификат (~60 сек)"
+  sleep 60
+fi
 
-log "Ожидаем сертификат (~60 сек)"
-sleep 60
+# ─── LiveKit: отдельный Ingress на поддомене livekit.{domain} ──────────────────
+# Браузеры требуют WSS (wss://) — LiveKit должен быть доступен через HTTPS/WSS.
+# Отдельный поддомен позволяет получить Let's Encrypt сертификат через HTTP-01.
+LIVEKIT_SUBDOMAIN="livekit.${DOMAIN}"
+LIVEKIT_TLS_SECRET="$(echo "${LIVEKIT_SUBDOMAIN}" | tr '.' '-')-tls"
+LIVEKIT_PORT=7880
+
+log "Создаём Service и Endpoints для LiveKit (${LIVEKIT_SUBDOMAIN}:${LIVEKIT_PORT})"
+${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: livekit-svc
+  namespace: default
+spec:
+  ports:
+  - port: ${LIVEKIT_PORT}
+    targetPort: ${LIVEKIT_PORT}
+    protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: livekit-svc
+  namespace: default
+subsets:
+- addresses:
+  - ip: ${HOST_IP}
+  ports:
+  - port: ${LIVEKIT_PORT}
+EOF
+
+log "Создаём Ingress для ${LIVEKIT_SUBDOMAIN}"
+${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: livekit-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection "upgrade";
+spec:
+  ingressClassName: public
+  tls:
+  - hosts:
+    - ${LIVEKIT_SUBDOMAIN}
+    secretName: ${LIVEKIT_TLS_SECRET}
+  rules:
+  - host: ${LIVEKIT_SUBDOMAIN}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: livekit-svc
+            port:
+              number: ${LIVEKIT_PORT}
+EOF
+
+if ${SSH} "microk8s kubectl get secret ${LIVEKIT_TLS_SECRET} -n default >/dev/null 2>&1"; then
+  log "Certificate ${LIVEKIT_TLS_SECRET} уже существует — пропускаем"
+else
+  log "Certificate (Let's Encrypt HTTP-01) для ${LIVEKIT_SUBDOMAIN}"
+  ${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ${LIVEKIT_TLS_SECRET}
+  namespace: default
+spec:
+  secretName: ${LIVEKIT_TLS_SECRET}
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+  - ${LIVEKIT_SUBDOMAIN}
+EOF
+  log "Ожидаем сертификат LiveKit (~60 сек)"
+  sleep 60
+fi
 
 echo
 echo "======================================"

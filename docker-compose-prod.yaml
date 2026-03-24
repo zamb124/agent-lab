@@ -38,8 +38,10 @@ x-common-env: &common-env
   PUSH__VAPID_PRIVATE_KEY: ${PUSH__VAPID_PRIVATE_KEY:-}
   PUSH__VAPID_EMAIL: ${PUSH__VAPID_EMAIL:-ops@humanitec.ru}
   # WebRTC звонки: livekit доступен внутри Docker по имени сервиса.
+  # CALLS__LIVEKIT_PUBLIC_URL — публичный wss:// URL для браузеров (через nginx/ingress).
   # CALLS__TURN_HOST использует SERVER_HOST (тот же IP что и для SSH деплоя).
   CALLS__LIVEKIT_URL: ws://livekit:7880
+  CALLS__LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-wss://livekit.humanitec.ru}
   CALLS__LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
   CALLS__LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-change-me-in-production}
   CALLS__TURN_HOST: ${SERVER_HOST}
