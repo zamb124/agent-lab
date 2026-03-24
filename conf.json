@@ -202,9 +202,6 @@
       "mock": {
         "enabled": false
       },
-      "push": {
-        "enabled": false
-      },
       "tracing": {
         "enabled": true,
         "postgres_enabled": true,
