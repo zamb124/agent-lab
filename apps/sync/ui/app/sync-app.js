@@ -484,6 +484,12 @@ export class SyncApp extends PlatformApp {
 
     _declineCall(callId) {
         this._incomingCall = null;
+        // Убираем индикатор звонка в сайдбаре чтобы не было случайного повторного входа.
+        const next = { ...this._activeCallChannels };
+        for (const [chId, info] of Object.entries(next)) {
+            if (info.call_id === callId) { delete next[chId]; break; }
+        }
+        this._activeCallChannels = next;
         const ws = ServiceRegistry.get('syncWs');
         if (!ws) return;
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>

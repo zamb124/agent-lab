@@ -251,9 +251,10 @@ class CallJoinPage extends LitElement {
         if (this._joinData) {
             return html`
                 <call-overlay
-                    .livekit-url=${this._joinData.livekit_url}
-                    .livekit-token=${this._joinData.livekit_token}
-                    .call-id=${this._joinData.call_id}
+                    livekit-url=${this._joinData.livekit_url}
+                    livekit-token=${this._joinData.livekit_token}
+                    call-id=${this._joinData.call_id}
+                    mode="sfu"
                     .identity=${this._joinData.identity}
                 ></call-overlay>
             `;
