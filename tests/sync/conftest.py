@@ -24,12 +24,13 @@ import pytest_asyncio
 
 from apps.sync.db.base import SyncDatabase
 import apps.sync.db.models  # noqa: F401 — регистрация моделей в Base.metadata
-from apps.sync.db.repositories.space_repository import SpaceRepository
+from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
-from apps.sync.db.repositories.thread_repository import ThreadRepository
-from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.file_repository import SyncFileRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
+from apps.sync.db.repositories.message_repository import MessageRepository
+from apps.sync.db.repositories.space_repository import SpaceRepository
+from apps.sync.db.repositories.thread_repository import ThreadRepository
 
 from sqlalchemy import text
 
@@ -68,6 +69,9 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
 
 _SYNC_DELETE_ORDER = (
     # Дочерние таблицы первыми; без TRUNCATE — меньше AccessExclusiveLock и deadlock с xdist.
+    "sync_call_links",
+    "sync_call_participants",
+    "sync_calls",
     "sync_message_files",
     "sync_message_contents",
     "sync_messages",
@@ -135,6 +139,11 @@ def file_repo(sync_database: SyncDatabase) -> SyncFileRepository:
 @pytest.fixture()
 def git_ref_repo(sync_database: SyncDatabase) -> GitResourceRefRepository:
     return GitResourceRefRepository(db=sync_database)
+
+
+@pytest.fixture()
+def call_repo(sync_database: SyncDatabase) -> CallRepository:
+    return CallRepository(db=sync_database)
 
 
 @pytest.fixture()

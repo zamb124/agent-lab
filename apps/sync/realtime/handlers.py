@@ -56,6 +56,13 @@ from apps.sync.realtime.events import (
     event_space_created,
     event_thread_created,
 )
+from apps.sync.db.repositories.call_repository import CallRepository
+from apps.sync.realtime.call_handlers import (
+    handle_call_accept,
+    handle_call_decline,
+    handle_call_hangup,
+    handle_call_invite,
+)
 from core.db.repositories.user_repository import UserRepository
 
 
@@ -112,6 +119,7 @@ async def execute_command(
     messages: MessageRepository,
     git_refs: GitResourceRefRepository,
     user_repository: Optional[UserRepository] = None,
+    calls: Optional[CallRepository] = None,
 ) -> CommandExecutionResult:
     if cmd.type == "spaces.create":
         payload = SpacesCreatePayload.model_validate(cmd.payload)
@@ -282,6 +290,19 @@ async def execute_command(
         payload = GitResourcesUpsertPayload.model_validate(cmd.payload)
         ref = await _upsert_git_resource(payload.body, company_id=cmd.company_id, git_refs=git_refs)
         return CommandExecutionResult(ok=True, result=ref, events=[event_git_resource_upserted(ref)])
+
+    if cmd.type in ("call.invite", "call.accept", "call.decline", "call.hangup"):
+        if calls is None:
+            raise RuntimeError("CallRepository не передан в execute_command для call.* команд.")
+        if cmd.type == "call.invite":
+            out, evs = await handle_call_invite(cmd, calls=calls, channels=channels)
+        elif cmd.type == "call.accept":
+            out, evs = await handle_call_accept(cmd, calls=calls)
+        elif cmd.type == "call.decline":
+            out, evs = await handle_call_decline(cmd, calls=calls)
+        else:
+            out, evs = await handle_call_hangup(cmd, calls=calls)
+        return CommandExecutionResult(ok=True, result=out, events=evs)
 
     raise RuntimeError(f"Неизвестный тип команды: {cmd.type!r}.")
 

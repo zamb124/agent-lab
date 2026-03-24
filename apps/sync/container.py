@@ -64,6 +64,11 @@ class SyncContainer(BaseContainer):
         from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
         return GitResourceRefRepository(db=self.sync_db)
 
+    @lazy
+    def call_repository(self):
+        from apps.sync.db.repositories.call_repository import CallRepository
+        return CallRepository(db=self.sync_db)
+
 
 # === Глобальный контейнер ===
 

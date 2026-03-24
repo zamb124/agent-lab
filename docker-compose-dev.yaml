@@ -150,6 +150,37 @@ services:
   #   networks:
   #     - dev-net
 
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: agentlab_livekit_dev
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880"
+      - "7881:7881/udp"
+      - "7882:7882/tcp"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:7880"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - dev-net
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: agentlab_coturn_dev
+    network_mode: host
+    command:
+      - "-n"
+      - "--log-file=stdout"
+      - "--lt-cred-mech"
+      - "--realm=agentlab"
+      - "--use-auth-secret"
+      - "--static-auth-secret=${TURN_SECRET:-turnsecret}"
+      - "--min-port=49152"
+      - "--max-port=65535"
+
 volumes:
   postgres_dev_data:
     driver: local

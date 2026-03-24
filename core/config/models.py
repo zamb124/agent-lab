@@ -380,6 +380,18 @@ class S3Config(BaseModel):
     buckets: Dict[str, S3BucketConfig] = Field(default_factory=dict)
 
 
+class CallsConfig(BaseModel):
+    """Конфигурация WebRTC звонков: LiveKit SFU и coturn TURN."""
+
+    livekit_url: str = "ws://localhost:7880"
+    livekit_api_key: str = ""
+    livekit_api_secret: str = ""
+    turn_host: str = ""
+    turn_port: int = 3478
+    turn_secret: str = ""
+    turn_credential_ttl: int = 86400
+
+
 class PushConfig(BaseModel):
     """Конфигурация Web Push уведомлений"""
 

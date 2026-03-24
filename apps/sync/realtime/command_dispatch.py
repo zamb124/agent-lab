@@ -7,6 +7,7 @@ from typing import Any
 from core.config import get_settings
 from apps.sync.container import get_sync_container
 from apps.sync.db.base import SyncDatabase
+from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
@@ -40,6 +41,7 @@ async def dispatch_sync_command(command: CommandEnvelope) -> dict[str, Any]:
     threads = ThreadRepository(db)
     messages = MessageRepository(db)
     git_refs = GitResourceRefRepository(db)
+    calls = CallRepository(db)
 
     container = get_sync_container()
     user_repository = container.user_repository
@@ -51,6 +53,7 @@ async def dispatch_sync_command(command: CommandEnvelope) -> dict[str, Any]:
         threads=threads,
         messages=messages,
         git_refs=git_refs,
+        calls=calls,
         user_repository=user_repository,
     )
 

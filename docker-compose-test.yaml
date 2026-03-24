@@ -176,6 +176,8 @@ services:
         condition: service_started
       rag-worker-test:
         condition: service_started
+      livekit-test:
+        condition: service_healthy
     environment:
       - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
       - DATABASE__FLOWS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
@@ -193,11 +195,31 @@ services:
       - PYTEST_WORKERS=${PYTEST_WORKERS:-4}
       - S3__DEFAULT_BUCKET=test-bucket
       - S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://minio-test:9000
+      - CALLS__LIVEKIT_URL=ws://livekit-test:7880
+      - CALLS__LIVEKIT_API_KEY=devkey
+      - CALLS__LIVEKIT_API_SECRET=secret
     command: ["sh", "-c", "test -d /app/test-results || mkdir -p /app/test-results; test -d /app/htmlcov || mkdir -p /app/htmlcov; chmod -R 777 /app/test-results /app/htmlcov 2>/dev/null || true; python -m pytest tests/ -v -n ${PYTEST_WORKERS} --junitxml=/app/test-results/junit.xml --cov=apps --cov=core --cov-report=term-missing --cov-report=html"]
     restart: "no"
     volumes:
       - ./test-results:/app/test-results:rw
       - ./htmlcov:/app/htmlcov:rw
+    networks:
+      - test-net
+
+  livekit-test:
+    image: livekit/livekit-server:latest
+    container_name: agentlab_livekit_test
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7890:7880"
+      - "7891:7881/udp"
+      - "7892:7882/tcp"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:7880"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
     networks:
       - test-net
 

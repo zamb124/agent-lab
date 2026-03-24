@@ -69,12 +69,27 @@ if sync_ui_path.exists():
     logger.info(f"Sync UI смонтирован: {sync_ui_path}")
 
 
+@app.get("/sync/join/{token}")
+async def serve_call_join(token: str):
+    """Публичная страница входа в звонок по ссылке (без auth)."""
+    join_file = Path(__file__).parent / "ui" / "call-join.html"
+    if not join_file.exists():
+        raise HTTPException(status_code=404, detail="Call join page not found")
+    return FileResponse(join_file)
+
+
 @app.get("/sync")
 @app.get("/sync/")
 @app.get("/sync/{path:path}")
 async def serve_sync_ui(path: str = ""):
     """SPA fallback для Sync UI."""
-    if path.startswith("api/") or path.startswith("ui/static/") or path.startswith("ws") or path.startswith("assets/"):
+    if (
+        path.startswith("api/")
+        or path.startswith("ui/static/")
+        or path.startswith("ws")
+        or path.startswith("assets/")
+        or path.startswith("join/")
+    ):
         raise HTTPException(status_code=404, detail="Not found")
 
     ui_file = Path(__file__).parent / "ui" / "index.html"

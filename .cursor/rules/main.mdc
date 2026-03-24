@@ -212,6 +212,7 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | CRM: entities, graph, grants | `crm.mdc` |
 | RAG: документы, поиск, pgvector | `rag.mdc` |
 | Sync: чат, каналы, Git-интеграция | `sync.mdc` |
+| WebRTC звонки (Sync), LiveKit, сигналинг | `calls.mdc` |
 | Frontend: Lit 3, Zustand | `frontend.mdc` |
 | Тестирование, фикстуры | `testing.mdc` |
 | TaskIQ: воркеры, задачи | `taskiq.mdc` |

@@ -3,12 +3,12 @@
 WORKERS ?= 3
 
 test-up:
-	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test test-a2a-agent worker-test scheduler-test rag-worker-test
-	@echo "Ожидание готовности сервисов (postgres+pgvector, redis, minio, test-a2a-agent, worker, scheduler)..."
+	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test test-a2a-agent worker-test scheduler-test rag-worker-test livekit-test
+	@echo "Ожидание готовности сервисов (postgres, redis, minio, test-a2a-agent, worker, scheduler, livekit)..."
 	@sleep 7
 
 test-down:
-	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test test-a2a-agent worker-test scheduler-test rag-worker-test
+	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test test-a2a-agent worker-test scheduler-test rag-worker-test livekit-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up

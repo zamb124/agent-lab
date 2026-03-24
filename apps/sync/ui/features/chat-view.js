@@ -9,6 +9,8 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
+import './call-incoming.js';
+import './call-overlay.js';
 import './channel-picker.js';
 import './message-list.js';
 import './message-composer.js';
@@ -616,6 +618,18 @@ export class ChatView extends PlatformElement {
         await SyncStore.loadMessages(syncApi, fromId);
     }
 
+    _startCall(callType) {
+        const channelId = this._chat.selectedChannelId;
+        if (!channelId) return;
+        const ws = ServiceRegistry.get('syncWs');
+        if (!ws) return;
+        ws.send({
+            id: crypto.randomUUID(),
+            type: 'call.invite',
+            payload: { channel_id: channelId, call_type: callType },
+        });
+    }
+
     render() {
         const { selectedChannelId, focusedThreadId } = this._chat;
         const selectedChannel = this._selectedChannel();
@@ -705,6 +719,19 @@ export class ChatView extends PlatformElement {
                     </div>
                     <div class="header-actions">
                         <span class="ws-badge ${this._wsState}">${this._wsState}</span>
+
+                        ${selectedChannelId ? html`
+                            <button
+                                class="icon-btn"
+                                title="Аудиозвонок"
+                                @click=${() => this._startCall('audio')}
+                            >🎤</button>
+                            <button
+                                class="icon-btn"
+                                title="Видеозвонок"
+                                @click=${() => this._startCall('video')}
+                            >📹</button>
+                        ` : ''}
 
                         ${focusedThreadId ? html`
                         <button class="back-btn" @click=${() => SyncStore.setFocusedThread(null)}>

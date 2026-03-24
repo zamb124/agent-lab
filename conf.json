@@ -272,5 +272,14 @@
         "permissions_enabled": false
       }
     }
+  },
+  "calls": {
+    "livekit_url": "ws://localhost:7880",
+    "livekit_api_key": "devkey",
+    "livekit_api_secret": "secret",
+    "turn_host": "localhost",
+    "turn_port": 3478,
+    "turn_secret": "turnsecret",
+    "turn_credential_ttl": 86400
   }
 }

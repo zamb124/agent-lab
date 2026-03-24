@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 dependencies = [
     "cairosvg>=2.8.2",
     "greenlet",
+    "livekit-api>=1.1.0",
     "pywebpush>=2.1.2",
     "reportlab>=4.4.7",
     "svglib>=1.6.0",

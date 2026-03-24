@@ -37,6 +37,13 @@ x-common-env: &common-env
   PUSH__VAPID_PUBLIC_KEY: ${PUSH__VAPID_PUBLIC_KEY:-}
   PUSH__VAPID_PRIVATE_KEY: ${PUSH__VAPID_PRIVATE_KEY:-}
   PUSH__VAPID_EMAIL: ${PUSH__VAPID_EMAIL:-ops@humanitec.ru}
+  # WebRTC звонки: livekit доступен внутри Docker по имени сервиса.
+  # CALLS__TURN_HOST использует SERVER_HOST (тот же IP что и для SSH деплоя).
+  CALLS__LIVEKIT_URL: ws://livekit:7880
+  CALLS__LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+  CALLS__LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-change-me-in-production}
+  CALLS__TURN_HOST: ${SERVER_HOST}
+  CALLS__TURN_SECRET: ${TURN_SECRET:-change-me-in-production}
 
 x-healthcheck: &healthcheck
   interval: 30s
@@ -317,6 +324,42 @@ services:
     restart: unless-stopped
     networks:
       - agentlab-net
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: agentlab_livekit
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        keys:
+          ${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}
+        rtc:
+          tcp_port: 7882
+          udp_port: 7881
+          use_external_ip: true
+    ports:
+      - "7880:7880"
+      - "7881:7881/udp"
+      - "7882:7882/tcp"
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: agentlab_coturn
+    network_mode: host
+    command:
+      - "-n"
+      - "--log-file=stdout"
+      - "--lt-cred-mech"
+      - "--realm=${TURN_REALM:-agentlab}"
+      - "--use-auth-secret"
+      - "--static-auth-secret=${TURN_SECRET:-change-me-in-production}"
+      - "--min-port=49152"
+      - "--max-port=65535"
+      - "--no-multicast-peers"
+    restart: unless-stopped
 
 volumes:
   postgres_data:

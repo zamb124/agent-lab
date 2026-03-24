@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 from core.config.models import (
     AuthConfig,
+    CallsConfig,
     DatabaseConfig,
     ServerConfig,
     WorkerConfig,
@@ -68,6 +69,7 @@ class BaseSettings(PydanticBaseSettings):
     tracing: TracingConfig = Field(default_factory=TracingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     push: PushConfig = Field(default_factory=PushConfig)
+    calls: CallsConfig = Field(default_factory=CallsConfig)
 
     model_config = ConfigDict(
         env_file=[".env"],

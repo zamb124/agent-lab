@@ -2,12 +2,13 @@
 
 from fastapi import APIRouter
 
-from apps.sync.api.spaces import router as spaces_router
-from apps.sync.api.company import router as company_router
+from apps.sync.api.calls import router as calls_router
 from apps.sync.api.channels import router as channels_router
-from apps.sync.api.threads import router as threads_router
-from apps.sync.api.messages import router as messages_router
+from apps.sync.api.company import router as company_router
 from apps.sync.api.git import router as git_router
+from apps.sync.api.messages import router as messages_router
+from apps.sync.api.spaces import router as spaces_router
+from apps.sync.api.threads import router as threads_router
 
 
 def get_api_router() -> APIRouter:
@@ -19,4 +20,5 @@ def get_api_router() -> APIRouter:
     api.include_router(threads_router, prefix="/threads", tags=["threads"])
     api.include_router(messages_router, prefix="/channels", tags=["messages"])
     api.include_router(git_router, prefix="/git", tags=["git"])
+    api.include_router(calls_router, prefix="/calls", tags=["calls"])
     return api

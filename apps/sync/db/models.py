@@ -249,3 +249,100 @@ class SyncGitResourceRef(Base):
 
     def __repr__(self) -> str:
         return f"<SyncGitResourceRef(git_ref_id='{self.git_ref_id}', provider='{self.provider}', kind='{self.kind}')>"
+
+
+class SyncCall(Base):
+    """Звонок в канале (аудио/видео).
+
+    mode:   "p2p"  — браузер ↔ браузер (сигналинг через WS, без SFU);
+            "sfu"  — через LiveKit SFU (3+ участников).
+    status: "ringing" → "active" → "ended".
+    """
+
+    __tablename__ = "sync_calls"
+
+    call_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
+    )
+    mode: Mapped[str] = mapped_column(String(8), nullable=False)
+    call_type: Mapped[str] = mapped_column(String(8), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ringing")
+    livekit_room_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    created_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_sync_calls_company", "company_id"),
+        Index("ix_sync_calls_channel", "channel_id"),
+        Index("ix_sync_calls_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncCall(call_id='{self.call_id}', mode='{self.mode}', status='{self.status}')>"
+
+
+class SyncCallParticipant(Base):
+    """Участник звонка.
+
+    status: "invited" → "joined" / "declined" / "left".
+    """
+
+    __tablename__ = "sync_call_participants"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    call_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_calls.call_id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="invited")
+    joined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    left_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_sync_call_participants_call", "call_id"),
+        Index("ix_sync_call_participants_user", "user_id"),
+        UniqueConstraint("call_id", "user_id", name="uq_sync_call_participant"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncCallParticipant(call_id='{self.call_id}', user_id='{self.user_id}', status='{self.status}')>"
+
+
+class SyncCallLink(Base):
+    """Гостевая ссылка-приглашение на звонок.
+
+    Гость переходит по /sync/join/{link_token}, вводит имя и получает LiveKit токен.
+    Звонок всегда создаётся в режиме SFU — P2P для гостей не поддерживается.
+    """
+
+    __tablename__ = "sync_call_links"
+
+    link_token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    channel_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    call_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("sync_calls.call_id", ondelete="SET NULL"), nullable=True
+    )
+    call_type: Mapped[str] = mapped_column(String(8), nullable=False, default="video")
+    created_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        Index("ix_sync_call_links_channel", "channel_id"),
+        Index("ix_sync_call_links_company", "company_id"),
+        Index("ix_sync_call_links_expires", "expires_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncCallLink(token='{self.link_token}', channel='{self.channel_id}')>"

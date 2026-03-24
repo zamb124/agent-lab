@@ -6,11 +6,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from apps.sync.models.calls import CallRead, CallType
 from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelUpdate
 from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
 from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
 from apps.sync.models.spaces import SpaceCreate, SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadCreate, ThreadRead
+from core.calls.models import SignalType
 
 
 CommandType = Literal[
@@ -29,6 +31,11 @@ CommandType = Literal[
     "messages.react",
     "messages.pin",
     "git.resources.upsert",
+    "call.invite",
+    "call.signal",
+    "call.accept",
+    "call.decline",
+    "call.hangup",
 ]
 
 
@@ -59,7 +66,7 @@ class WsResultFrame(BaseModel):
 
     id: str
     ok: bool
-    result: SpaceRead | ChannelRead | ThreadRead | MessageRead | GitResourceRefRead | None = None
+    result: SpaceRead | ChannelRead | ThreadRead | MessageRead | GitResourceRefRead | CallRead | None = None
     error_code: str | None = None
     error_detail: str | None = None
 
@@ -138,3 +145,27 @@ class MessagesPinPayload(BaseModel):
     channel_id: str
     message_id: str
     action: Literal["add", "remove"]
+
+
+class CallInvitePayload(BaseModel):
+    channel_id: str
+    call_type: CallType
+
+
+class CallSignalPayload(BaseModel):
+    call_id: str
+    target_user_id: str
+    signal_type: SignalType
+    data: dict
+
+
+class CallAcceptPayload(BaseModel):
+    call_id: str
+
+
+class CallDeclinePayload(BaseModel):
+    call_id: str
+
+
+class CallHangupPayload(BaseModel):
+    call_id: str

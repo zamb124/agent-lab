@@ -7,12 +7,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from apps.sync.models.calls import CallRead
 from apps.sync.models.channels import ChannelRead
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.messages import MessageRead, MessageStatus
 from apps.sync.models.spaces import SpaceRead
 from apps.sync.models.threads import ThreadRead
+from core.calls.models import SignalType
 
 
 EventType = Literal[
@@ -29,6 +31,13 @@ EventType = Literal[
     "message.reaction_changed",
     "channel.pins_changed",
     "git_resource.upserted",
+    "call.incoming",
+    "call.signal",
+    "call.accepted",
+    "call.declined",
+    "call.ended",
+    "call.participant_joined",
+    "call.participant_left",
 ]
 
 
@@ -147,4 +156,60 @@ def event_channel_pins_changed(channel: ChannelRead) -> RealtimeEvent:
         type="channel.pins_changed",
         channel_id=channel.id,
         payload=channel.model_dump(mode="json"),
+    )
+
+
+def event_call_incoming(call: CallRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.incoming",
+        channel_id=call.channel_id,
+        payload=call.model_dump(mode="json"),
+    )
+
+
+def event_call_signal(call_id: str, signal_type: SignalType, data: dict) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.signal",
+        channel_id=None,
+        payload={"call_id": call_id, "signal_type": signal_type, "data": data},
+    )
+
+
+def event_call_accepted(call_id: str, user_id: str) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.accepted",
+        channel_id=None,
+        payload={"call_id": call_id, "user_id": user_id},
+    )
+
+
+def event_call_declined(call_id: str, user_id: str) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.declined",
+        channel_id=None,
+        payload={"call_id": call_id, "user_id": user_id},
+    )
+
+
+def event_call_ended(call: CallRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.ended",
+        channel_id=call.channel_id,
+        payload=call.model_dump(mode="json"),
+    )
+
+
+def event_call_participant_joined(call_id: str, user_id: str) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.participant_joined",
+        channel_id=None,
+        payload={"call_id": call_id, "user_id": user_id},
+    )
+
+
+def event_call_participant_left(call_id: str, user_id: str) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.participant_left",
+        channel_id=None,
+        payload={"call_id": call_id, "user_id": user_id},
     )

@@ -210,6 +210,8 @@ ROUTE_RULES: List[RouteRule] = [
     # Sync Service
     # Статика и SPA-оболочка — public; checkAuth() на стороне JS → redirectToAuth()
     RouteRule("/sync/ui/static/*", auth_required=False, context_type="anonymous"),
+    # Публичные эндпоинты звонков (join по ссылке — работает и для гостей без auth)
+    RouteRule("/sync/api/v1/calls/join/*", auth_required=False, context_type="anonymous"),
     # API и WS — защищены на сервере
     RouteRule("/sync/api/v1/*", context_type="api", auth_required=True),
     RouteRule("/sync/api/auth/*", context_type="api", auth_required=True),
