@@ -47,6 +47,7 @@ class CallOverlay extends LitElement {
         _micMuted:    { state: true },
         _camOff:      { state: true },
         _tiles:       { state: true },
+        _fullscreenTileKey: { state: true },
     };
 
     static styles = css`
@@ -93,6 +94,50 @@ class CallOverlay extends LitElement {
         .participant-tile.screen video {
             object-fit: contain;
             background: #000;
+        }
+
+        .participant-tile:fullscreen,
+        .participant-tile:-webkit-full-screen {
+            width: 100%;
+            height: 100%;
+            max-width: none;
+            max-height: none;
+            aspect-ratio: auto;
+            border-radius: 0;
+        }
+
+        .participant-tile:fullscreen video,
+        .participant-tile:-webkit-full-screen video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
+
+        .tile-fs-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.55);
+            color: #fff;
+            z-index: 2;
+            transition: background 0.15s;
+        }
+
+        .tile-fs-btn:hover {
+            background: rgba(0,0,0,0.75);
+        }
+
+        .tile-fs-btn.active {
+            background: rgba(99,102,241,0.85);
         }
 
         .participant-name {
@@ -204,10 +249,71 @@ class CallOverlay extends LitElement {
         this._durationInterval = null;
         /** После hangup / Disconnect токен ещё в атрибутах — без флага updated() снова вызовет _connectSFU(). */
         this._sfuSessionFinished = false;
+        this._fullscreenTileKey = null;
+        this._onFullscreenChange = this._onFullscreenChange.bind(this);
+    }
+
+    _onFullscreenChange() {
+        const el = document.fullscreenElement ?? document.webkitFullscreenElement;
+        if (!el || !this.shadowRoot?.contains(el)) {
+            this._fullscreenTileKey = null;
+        } else {
+            this._fullscreenTileKey = el.getAttribute('data-tile-key');
+        }
+        this.requestUpdate();
+    }
+
+    _exitTileFullscreenIfOurs() {
+        const el = document.fullscreenElement ?? document.webkitFullscreenElement;
+        if (el && this.shadowRoot?.contains(el)) {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            }
+        }
+    }
+
+    _onTileFullscreenClick(e) {
+        e.stopPropagation();
+        const tile = e.currentTarget.closest('.participant-tile');
+        if (!tile || !tile.querySelector('video')) return;
+        const doc = document;
+        const current = doc.fullscreenElement ?? doc.webkitFullscreenElement;
+        if (current === tile) {
+            if (doc.exitFullscreen) doc.exitFullscreen();
+            else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+            return;
+        }
+        if (tile.requestFullscreen) {
+            tile.requestFullscreen();
+        } else if (tile.webkitRequestFullscreen) {
+            tile.webkitRequestFullscreen();
+        }
+    }
+
+    _tileFullscreenButton(tileKey, hasVideo) {
+        if (!hasVideo) return html``;
+        const active = this._fullscreenTileKey === tileKey;
+        return html`
+            <button
+                type="button"
+                class="tile-fs-btn ${active ? 'active' : ''}"
+                title="${active ? 'Выйти из полного экрана' : 'На весь экран'}"
+                @click=${this._onTileFullscreenClick}
+            >
+                ${active
+                    ? html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>`
+                    : html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`
+                }
+            </button>
+        `;
     }
 
     async connectedCallback() {
         super.connectedCallback();
+        document.addEventListener('fullscreenchange', this._onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', this._onFullscreenChange);
         this._durationInterval = setInterval(() => this._duration++, 1000);
         if (this.mode !== 'sfu' && this.mode) {
             try {
@@ -222,6 +328,8 @@ class CallOverlay extends LitElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        document.removeEventListener('fullscreenchange', this._onFullscreenChange);
+        document.removeEventListener('webkitfullscreenchange', this._onFullscreenChange);
         this._sfuSessionFinished = true;
         clearInterval(this._durationInterval);
         this._cleanup();
@@ -441,6 +549,8 @@ class CallOverlay extends LitElement {
     }
 
     _cleanup() {
+        this._exitTileFullscreenIfOurs();
+        this._fullscreenTileKey = null;
         this._connecting = false;
         if (this._room) { this._room.disconnect(); this._room = null; }
         if (this._localStream) {
@@ -555,8 +665,10 @@ class CallOverlay extends LitElement {
             const displayLabel = item.isScreen ? `${label} — экран` : label;
             const hasVideo = item.track != null;
             const tileClass = item.isScreen ? 'participant-tile screen' : 'participant-tile';
+            const tileKey = item.key;
             return html`
-                <div class="${tileClass}" data-idx=${index}>
+                <div class="${tileClass}" data-idx=${index} data-tile-key=${tileKey}>
+                    ${this._tileFullscreenButton(tileKey, hasVideo)}
                     ${hasVideo
                         ? html`<video autoplay playsinline ?muted=${item.isLocal}></video>`
                         : html`<div class="avatar-placeholder">${displayLabel?.[0]?.toUpperCase() ?? '?'}</div>`
@@ -569,8 +681,10 @@ class CallOverlay extends LitElement {
         const label = participant.isLocal ? 'Вы' : this._resolveDisplayName(participant.identity);
         const stream = participant.stream;
         const hasVideo = stream?.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled);
+        const tileKey = `p2p-${index}`;
         return html`
-            <div class="participant-tile" data-idx=${index}>
+            <div class="participant-tile" data-idx=${index} data-tile-key=${tileKey}>
+                ${this._tileFullscreenButton(tileKey, hasVideo)}
                 ${hasVideo
                     ? html`<video autoplay playsinline muted></video>`
                     : html`<div class="avatar-placeholder">${label?.[0]?.toUpperCase() ?? '?'}</div>`
