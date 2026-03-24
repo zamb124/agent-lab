@@ -466,6 +466,9 @@ export class ChatView extends PlatformElement {
         if (!selectedChannelId) return 'Выбери канал';
         const ch = this._selectedChannel();
         if (!ch) return selectedChannelId;
+        if (SyncStore.isHiddenSyncChannelName(ch.name)) {
+            return 'Встреча';
+        }
         if (ch.type === 'direct' && ch.peer && typeof ch.peer.display_name === 'string') {
             return ch.peer.display_name;
         }
@@ -616,9 +619,15 @@ export class ChatView extends PlatformElement {
         await SyncStore.loadMessages(syncApi, fromId);
     }
 
-    _startCall(callType) {
-        const channelId = this._chat.selectedChannelId;
-        if (!channelId) return;
+    _newMeetChannelName() {
+        const raw = typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID().replace(/-/g, '')
+            : `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+        return `_meet_${raw.slice(0, 20)}`;
+    }
+
+    _startCallWithChannel(callType, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') return;
         const ws = ServiceRegistry.get('syncWs');
         if (!ws) return;
         const id = typeof crypto.randomUUID === 'function'
@@ -632,6 +641,37 @@ export class ChatView extends PlatformElement {
         });
     }
 
+    _startCall(callType) {
+        const channelId = this._chat.selectedChannelId;
+        if (!channelId) return;
+        this._startCallWithChannel(callType, channelId);
+    }
+
+    async _startAdHocCall(callType) {
+        const syncApi = ServiceRegistry.get('syncApi');
+        if (!syncApi) return;
+        let spaceId = this._chat.selectedSpaceId;
+        if (typeof spaceId !== 'string' || spaceId === '') {
+            const first = this._spaces.list[0];
+            if (!first?.id) {
+                this.error('Создайте пространство в сайдбаре, чтобы начать встречу.');
+                return;
+            }
+            spaceId = first.id;
+        }
+        const name = this._newMeetChannelName();
+        try {
+            const created = await syncApi.createChannel(spaceId, name);
+            await SyncStore.loadChannels(syncApi);
+            SyncStore.sanitizeChatSelectionAfterLoad();
+            await SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, created.id);
+            this._startCallWithChannel(callType, created.id);
+        } catch (err) {
+            const text = err instanceof Error ? err.message : String(err);
+            this.error(text);
+        }
+    }
+
     render() {
         const { selectedChannelId, focusedThreadId } = this._chat;
         const selectedChannel = this._selectedChannel();
@@ -640,10 +680,15 @@ export class ChatView extends PlatformElement {
         const selMode = this._ui.selectionMode;
         const selIds = this._ui.selectedMessageIds;
         const fwdOpen = this._ui.forwardModalOpen;
-        const otherChannels = this._channels.list.filter(c => c.id !== selectedChannelId);
+        const otherChannels = this._channels.list.filter(
+            c => c.id !== selectedChannelId && !SyncStore.isHiddenSyncChannelName(c.name),
+        );
 
         const showChannelSettings = Boolean(
-            selectedChannel && selectedChannel.type !== 'direct' && !focusedThreadId
+            selectedChannel
+            && selectedChannel.type !== 'direct'
+            && !focusedThreadId
+            && !SyncStore.isHiddenSyncChannelName(selectedChannel.name),
         );
 
         const channelSettingsCreate = this._ui.channelSettingsCreate;
@@ -737,7 +782,22 @@ export class ChatView extends PlatformElement {
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                                 </svg>
                             </button>
-                        ` : ''}
+                        ` : html`
+                            <button class="icon-btn" title="Аудиовстреча (новый канал)" @click=${() => this._startAdHocCall('audio')}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+                                    <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+                                    <line x1="12" y1="19" x2="12" y2="23"/>
+                                    <line x1="8" y1="23" x2="16" y2="23"/>
+                                </svg>
+                            </button>
+                            <button class="icon-btn" title="Видеовстреча (новый канал)" @click=${() => this._startAdHocCall('video')}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="23 7 16 12 23 17 23 7"/>
+                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                </svg>
+                            </button>
+                        `}
 
                         ${focusedThreadId ? html`
                         <button class="back-btn" @click=${() => SyncStore.setFocusedThread(null)}>

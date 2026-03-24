@@ -109,6 +109,8 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 **Realtime `channel.member_added`:** Redis `sync.realtime.events`, WS broadcast; UI `sync-app.js` — если `added_user_id` совпадает с текущим пользователем, перезагрузка списка каналов.
 
+**Скрытые каналы встреч (имя с префикса `_`):** в списке API канал остаётся, в UI сайдбар и channel-picker скрывают topic-каналы, у которых `name` начинается с `_` (`SyncStore.isHiddenSyncChannelName`, фильтр в `getChannelsForSpace`). Создание без выбранного канала: `chat-view.js` — канал `_meet_{случайная_строка}`, затем `call.invite`. Заголовок: «Встреча», кнопка настроек канала не показывается. Пересылка в другой канал — скрытые не в списке назначения.
+
 **Пространства (GET /spaces):** все пространства компании (`SpaceRepository.list_all`), не только созданные текущим пользователем. После `spaces.create` публикуется **`space.created`** — UI `sync-app.js` вызывает `loadSpaces` + `sanitizeChatSelectionAfterLoad`, иначе открытые вкладки других пользователей не подтягивают новое пространство без перезагрузки страницы.
 
 **Участники компании (GET /company/members):** список `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий пользователь исключён). Sync UI: секция «Личные» — поиск + открытие/создание DM по клику (`SyncStore.loadCompanyMembers`, `findDirectChannelForPeer`).

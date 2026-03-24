@@ -26,6 +26,11 @@ function normalizeSyncChannelId(channelId) {
     return channelId.trim().toLowerCase();
 }
 
+/** Каналы встреч: имя с префикса `_` не показываем в сайдбаре и в выборе канала. */
+function isHiddenSyncChannelName(name) {
+    return typeof name === 'string' && name.startsWith('_');
+}
+
 const baseStore = new BaseStore('sync', {
     spaces: {
         list: [],
@@ -93,6 +98,7 @@ const baseStore = new BaseStore('sync', {
 
 export const SyncStore = {
     normalizeSyncChannelId,
+    isHiddenSyncChannelName,
 
     get state() {
         return baseStore.state;
@@ -708,10 +714,11 @@ export const SyncStore = {
      */
     getChannelsForSpace(spaceId) {
         const all = baseStore.state.channels.list;
+        const visible = (c) => !isHiddenSyncChannelName(c.name);
         if (!spaceId) {
-            return all;
+            return all.filter(visible);
         }
-        return all.filter(c => c.space_id === spaceId && c.type !== 'direct');
+        return all.filter(c => c.space_id === spaceId && c.type !== 'direct' && visible(c));
     },
 
     getThreadIds() {
@@ -786,13 +793,22 @@ export const SyncStore = {
                 }
             }
 
-            const topicChannels = channels.filter(c => c.type !== 'direct' && c.space_id);
+            const topicChannels = channels.filter(
+                c => c.type !== 'direct' && c.space_id && !isHiddenSyncChannelName(c.name),
+            );
             if (topicChannels.length > 0) {
                 const inSelected = selectedSpaceId
                     ? topicChannels.filter(c => c.space_id === selectedSpaceId).length
                     : 0;
                 if (inSelected === 0) {
                     selectedSpaceId = topicChannels[0].space_id;
+                }
+            } else if (selectedChannelId) {
+                const chKeep = channels.find(c => c.id === selectedChannelId);
+                if (chKeep && chKeep.space_id && isHiddenSyncChannelName(chKeep.name)) {
+                    selectedSpaceId = chKeep.space_id;
+                } else {
+                    selectedSpaceId = null;
                 }
             } else {
                 selectedSpaceId = null;
