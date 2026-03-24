@@ -1,14 +1,22 @@
-# Упрощённый Dockerfile
-# Базовый образ zambas/agent-lab-base содержит:
-#   - Python 3.12
-#   - Core + worker-base зависимости
-#   - Torch CPU-only
-#   - Системные пакеты: curl, tesseract, poppler, libgl1, libglib2.0-0
+# Python 3.13 — единая версия для всех окружений (dev/test/prod).
 
 # ============================================
-# Stage 1: Базовый образ
+# Stage 1: Базовый образ Python 3.13
 # ============================================
-FROM zambas/agent-lab-base:latest AS base-with-core
+FROM python:3.13-slim AS base-with-core
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+    tesseract-ocr \
+    poppler-utils \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
 
 # ============================================
 # Stage 2: Builder - установка ВСЕХ зависимостей
@@ -17,7 +25,6 @@ FROM base-with-core AS builder-all
 COPY pyproject.toml README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system \
-        . \
         --group core \
         --group agents \
         --group worker-base \
@@ -29,7 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ============================================
 # Stage 3: Docs builder (для сборки документации)
 # ============================================
-FROM python:3.12-slim AS docs-builder
+FROM python:3.13-slim AS docs-builder
 RUN pip install uv
 WORKDIR /app
 
@@ -40,7 +47,7 @@ RUN uv pip install --system \
     "pymdown-extensions>=10.16.1"
 
 COPY mkdocs.yml ./
-COPY docs/ ./docs/ 
+COPY docs/ ./docs/
 COPY core/ ./core/
 COPY apps/ ./apps/
 

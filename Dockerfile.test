@@ -1,27 +1,35 @@
-# Test Dockerfile
-# Базовый образ zambas/agent-lab-base содержит:
-#   - Python 3.12 + uv
-#   - Core + worker-base зависимости
-#   - Torch CPU-only
-#   - Системные пакеты: curl, tesseract, poppler, libgl1, libglib2.0-0
+# Test Dockerfile — Python 3.13, единая версия для всех окружений.
 
-FROM zambas/agent-lab-base:latest AS base-test
+FROM python:3.13-slim AS base-test
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+    tesseract-ocr \
+    poppler-utils \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# build-essential для компиляции некоторых test-зависимостей
-RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
-
 COPY pyproject.toml README.md ./
 
-# dev зависимости (core + worker-base уже есть в базовом образе)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system --group dev
+    uv pip install --system \
+        --group core \
+        --group agents \
+        --group worker-base \
+        --group rag \
+        --group crm \
+        --group sync \
+        --group dev
 
 # RAG Worker stage для тестов (минимальный образ; сборка: --target rag-worker)
 FROM base-test AS rag-worker
 
-# rag-worker зависимости (системные пакеты уже в базовом образе)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --group rag-worker
 

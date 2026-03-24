@@ -184,7 +184,9 @@ export class SyncApp extends PlatformApp {
             if (msg.ok) {
                 if (msg.result && msg.result.call_id) {
                     // call.invite вернул CallRead — открываем оверлей у инициатора.
-                    this._openCallOverlay(msg.result);
+                    this._openCallOverlay(msg.result).catch(err => {
+                        console.error('[calls] _openCallOverlay failed:', err);
+                    });
                 } else if (msg.result) {
                     SyncStore.resolvePending(msg.id, msg.result);
                 }
@@ -392,11 +394,6 @@ export class SyncApp extends PlatformApp {
             return;
         }
         if (msg.type === 'call.accepted') {
-            const myId = ServiceRegistry.auth?.user?.id;
-            // Собеседник принял — открываем оверлей если ещё не открыт.
-            if (!this._activeCall && this._incomingCall?.call_id === p.call_id && p.user_id === myId) {
-                this._acceptCall(p.call_id);
-            }
             return;
         }
         if (msg.type === 'call.declined'
@@ -430,6 +427,7 @@ export class SyncApp extends PlatformApp {
     async _acceptCall(callId) {
         this._incomingCall = null;
         const ws = ServiceRegistry.get('syncWs');
+        if (!ws) throw new Error('syncWs не инициализирован при accept.');
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
         ws.sendJson({ id, type: 'call.accept', payload: { call_id: callId } });

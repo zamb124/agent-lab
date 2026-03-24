@@ -36,7 +36,10 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-P2P_MAX = 2
+# P2P сигналинг (RTCPeerConnection + offer/answer/ICE relay) не реализован на клиенте.
+# Все звонки используют SFU через LiveKit.
+# Когда P2P будет реализован — вернуть P2P_MAX = 2.
+P2P_MAX = 0
 
 
 def _call_read_from_entities(call: SyncCall, participants: list[SyncCallParticipant]) -> CallRead:

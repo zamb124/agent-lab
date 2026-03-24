@@ -71,7 +71,7 @@ async def _setup_channel_with_members(
 
 
 @pytest.mark.asyncio
-async def test_call_invite_p2p_two_members(
+async def test_call_invite_sfu_two_members(
     call_repo: CallRepository,
     channel_repo: ChannelRepository,
     space_repo: SpaceRepository,
@@ -79,7 +79,7 @@ async def test_call_invite_p2p_two_members(
     company_id: str,
     unique_id: str,
 ) -> None:
-    """Два участника → P2P режим."""
+    """Два участника → SFU (P2P_MAX=0, все звонки через LiveKit)."""
     channel_id = await _setup_channel_with_members(
         company_id=company_id,
         space_repo=space_repo,
@@ -103,7 +103,8 @@ async def test_call_invite_p2p_two_members(
         **repos,
     )
     assert result.ok
-    assert result.result.mode == "p2p"
+    assert result.result.mode == "sfu"
+    assert result.result.livekit_room_name is not None
     assert result.result.status == "ringing"
     assert len(result.result.participants) == 2
     statuses = {p.user_id: p.status for p in result.result.participants}
@@ -120,7 +121,7 @@ async def test_call_invite_sfu_three_members(
     company_id: str,
     unique_id: str,
 ) -> None:
-    """Три и более участников → SFU режим. LiveKit доступен из docker-compose-dev."""
+    """Три участника → SFU (как и все остальные, P2P_MAX=0)."""
     channel_id = await _setup_channel_with_members(
         company_id=company_id,
         space_repo=space_repo,
@@ -149,7 +150,7 @@ async def test_call_invite_sfu_three_members(
 
 
 @pytest.mark.asyncio
-async def test_call_invite_blocks_duplicate(
+async def test_call_invite_replaces_existing(
     call_repo: CallRepository,
     channel_repo: ChannelRepository,
     space_repo: SpaceRepository,
@@ -157,7 +158,7 @@ async def test_call_invite_blocks_duplicate(
     company_id: str,
     unique_id: str,
 ) -> None:
-    """Нельзя создать второй активный звонок в одном канале."""
+    """Повторный invite завершает существующий звонок и создаёт новый."""
     channel_id = await _setup_channel_with_members(
         company_id=company_id,
         space_repo=space_repo,
@@ -181,12 +182,17 @@ async def test_call_invite_blocks_duplicate(
         **repos,
     )
     assert r1.ok
+    first_call_id = r1.result.call_id
 
-    with pytest.raises(ValueError, match="активный звонок"):
-        await execute_command(
-            _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
-            **repos,
-        )
+    r2 = await execute_command(
+        _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "video"}),
+        **repos,
+    )
+    assert r2.ok
+    assert r2.result.call_id != first_call_id
+
+    old_call = await call_repo.get_call(first_call_id, company_id)
+    assert old_call.status == "ended"
 
 
 @pytest.mark.asyncio
