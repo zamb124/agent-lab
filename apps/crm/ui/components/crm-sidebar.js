@@ -182,12 +182,30 @@ export class CRMSidebar extends PlatformElement {
 
             .user-section {
                 display: flex;
-                align-items: center;
+                flex-direction: column;
+                align-items: stretch;
                 gap: var(--space-2);
+                width: 100%;
+                min-width: 0;
             }
 
-            .user-section platform-user {
+            .user-section-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                width: 100%;
+                min-width: 0;
+            }
+
+            .user-section-row platform-user {
                 flex: 1;
+                min-width: 0;
+            }
+
+            .user-section platform-deployment-version {
+                display: block;
+                width: 100%;
+                text-align: center;
             }
 
             /* Collapsed mode */
@@ -203,12 +221,12 @@ export class CRMSidebar extends PlatformElement {
                 padding: var(--space-3);
             }
 
-            :host([collapsed]) .user-section {
+            :host([collapsed]) .user-section-row {
                 flex-direction: column;
                 align-items: center;
             }
 
-            :host([collapsed]) .user-section platform-user {
+            :host([collapsed]) .user-section-row platform-user {
                 flex: 0 0 auto;
                 width: 100%;
                 min-width: 0;
@@ -401,9 +419,11 @@ export class CRMSidebar extends PlatformElement {
                 </div>
 
                 <div slot="footer" class="user-section">
-                    <platform-deployment-version base-url="/crm"></platform-deployment-version>
-                    <platform-user block></platform-user>
-                    <platform-notification-manager></platform-notification-manager>
+                    <div class="user-section-row">
+                        <platform-user block></platform-user>
+                        <platform-notification-manager></platform-notification-manager>
+                    </div>
+                    <platform-deployment-version base-url="/crm" footer></platform-deployment-version>
                 </div>
             </platform-sidebar>
         `;

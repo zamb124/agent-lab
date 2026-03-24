@@ -19,6 +19,7 @@ class CallOverlay extends LitElement {
         livekitUrl:  { type: String, attribute: 'livekit-url' },
         livekitToken: { type: String, attribute: 'livekit-token' },
         identity:    { type: String },
+        names:       { type: Object },
         _status:      { state: true },
         _error:       { state: true },
         _participants: { state: true },
@@ -412,8 +413,19 @@ class CallOverlay extends LitElement {
         `;
     }
 
+    _resolveDisplayName(identity) {
+        if (!identity) return '?';
+        // Гость: "guest:{uuid}:{name}"
+        if (identity.startsWith('guest:')) {
+            const parts = identity.split(':');
+            return parts.slice(2).join(':') || 'Гость';
+        }
+        // Зарегистрированный: смотрим в переданную карту имён
+        return this.names?.[identity] || identity;
+    }
+
     _renderTile(participant, index) {
-        const label = participant.isLocal ? 'Вы' : participant.identity;
+        const label = participant.isLocal ? 'Вы' : this._resolveDisplayName(participant.identity);
         const hasVideo = participant.isLocal
             ? Array.from(this._room?.localParticipant?.videoTrackPublications?.values() ?? [])[0]?.track != null
             : participant.videoTrack != null;

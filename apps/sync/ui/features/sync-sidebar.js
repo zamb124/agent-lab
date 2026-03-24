@@ -264,6 +264,16 @@ export class SyncSidebar extends PlatformElement {
 
             .sync-sidebar-footer {
                 display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 6px;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+
+            .sync-sidebar-footer-row {
+                display: flex;
                 flex-direction: row;
                 align-items: center;
                 gap: 6px;
@@ -272,22 +282,28 @@ export class SyncSidebar extends PlatformElement {
                 box-sizing: border-box;
             }
 
-            .sync-sidebar-footer platform-user {
+            .sync-sidebar-footer-row platform-user {
                 flex: 1;
                 min-width: 0;
             }
 
-            .sync-sidebar-footer platform-notification-manager {
+            .sync-sidebar-footer-row platform-notification-manager {
                 flex-shrink: 0;
             }
 
-            platform-sidebar[collapsed] .sync-sidebar-footer {
+            .sync-sidebar-footer platform-deployment-version {
+                display: block;
+                width: 100%;
+                text-align: center;
+            }
+
+            platform-sidebar[collapsed] .sync-sidebar-footer-row {
                 flex-direction: column;
                 gap: 8px;
                 align-items: center;
             }
 
-            platform-sidebar[collapsed] .sync-sidebar-footer platform-user {
+            platform-sidebar[collapsed] .sync-sidebar-footer-row platform-user {
                 flex: 0 0 auto;
                 width: 100%;
             }
@@ -876,9 +892,11 @@ export class SyncSidebar extends PlatformElement {
                 </div>
 
                 <div slot="footer" class="sync-sidebar-footer">
-                    <platform-deployment-version base-url="/sync"></platform-deployment-version>
-                    <platform-user block></platform-user>
-                    <platform-notification-manager></platform-notification-manager>
+                    <div class="sync-sidebar-footer-row">
+                        <platform-user block></platform-user>
+                        <platform-notification-manager></platform-notification-manager>
+                    </div>
+                    <platform-deployment-version base-url="/sync" footer></platform-deployment-version>
                 </div>
             </platform-sidebar>
         `;

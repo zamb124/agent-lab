@@ -424,6 +424,17 @@ export class SyncApp extends PlatformApp {
         throw new Error(`[sync-ws] неизвестное realtime-событие: ${msg.type}`);
     }
 
+    _buildNamesMap() {
+        const members = SyncStore.state.companyMembers?.list ?? [];
+        const map = {};
+        for (const m of members) {
+            if (m.user_id) map[m.user_id] = m.name || m.user_id;
+        }
+        const authUser = ServiceRegistry.auth?.user;
+        if (authUser?.id) map[authUser.id] = authUser.name || authUser.id;
+        return map;
+    }
+
     async _joinCallInChannel(channelId) {
         const callInfo = this._activeCallChannels[channelId];
         if (!callInfo) return;
@@ -574,6 +585,7 @@ export class SyncApp extends PlatformApp {
                     call-type=${this._activeCall.call_type}
                     livekit-url=${this._activeCall.livekit_url || ''}
                     livekit-token=${this._activeCall.livekit_token || ''}
+                    .names=${this._buildNamesMap()}
                     @call-ended=${() => { const id = this._activeCall?.call_id; if (id) this._hangupCall(id); }}
                     @call-hangup-request=${(e) => { if (e.detail.callId) this._hangupCall(e.detail.callId); }}
                 ></call-overlay>
