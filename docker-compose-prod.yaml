@@ -32,6 +32,11 @@ x-common-env: &common-env
   S3__DEFAULT_BUCKET: shvedzilla
   S3__BUCKETS__SHVEDZILLA__ACCESS_KEY_ID: ${SELECTEL_ACCESS_KEY}
   S3__BUCKETS__SHVEDZILLA__SECRET_ACCESS_KEY: ${SELECTEL_SECRET_KEY}
+  # Web Push (VAPID): переопределяют conf.json; задайте в GitHub Secrets и передайте в deploy (см. .github/workflows/deploy.yml).
+  PUSH__ENABLED: ${PUSH__ENABLED:-true}
+  PUSH__VAPID_PUBLIC_KEY: ${PUSH__VAPID_PUBLIC_KEY:-}
+  PUSH__VAPID_PRIVATE_KEY: ${PUSH__VAPID_PRIVATE_KEY:-}
+  PUSH__VAPID_EMAIL: ${PUSH__VAPID_EMAIL:-ops@humanitec.ru}
 
 x-healthcheck: &healthcheck
   interval: 30s
