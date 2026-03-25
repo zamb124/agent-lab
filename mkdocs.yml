@@ -50,7 +50,7 @@ theme:
   logo: logo.svg
   favicon: logo.svg
   font:
-    text: Fira Sans
+    text: Inter
     code: JetBrains Mono
 
 extra:
@@ -152,7 +152,7 @@ plugins:
             Пользовательские инструкции: User Scenarios
             Общее: General
             Пространства: Spaces
-            Сценарии (E2E, автогенерация): E2E scenarios (auto)
+            Пользовательские инструкции: User guides
             Пользовательские инструкции: User guides
 
 nav:

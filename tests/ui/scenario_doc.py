@@ -41,9 +41,17 @@ def _normalize_segment(name: str, field: str) -> str:
     return s
 
 
+def _strip_optional(s: object | None) -> str | None:
+    if s is None:
+        return None
+    t = str(s).strip()
+    return t or None
+
+
 @dataclass
 class _StepRecord:
     label: str
+    label_en: str | None
     image_rel: str | None
 
 
@@ -53,6 +61,8 @@ class ScenarioRecorder:
 
     title: str
     description: str
+    title_en: str | None
+    description_en: str | None
     service: str
     tag: str
     slug: str
@@ -86,6 +96,17 @@ class ScenarioRecorder:
             title = str(m.args[0]).strip() or None
         description = (m.kwargs.get("description") or "").strip()
 
+        title_en = _strip_optional(m.kwargs.get("title_en"))
+        description_en = _strip_optional(m.kwargs.get("description_en"))
+        if title_en is not None and description_en is None:
+            raise ValueError(
+                "pytest.mark.scenario: задан title_en — добавьте description_en (англ. описание сценария)"
+            )
+        if description_en is not None and title_en is None:
+            raise ValueError(
+                "pytest.mark.scenario: задан description_en — добавьте title_en (англ. заголовок сценария)"
+            )
+
         doc = inspect.getdoc(node.function)
         if doc:
             doc = doc.strip()
@@ -105,6 +126,8 @@ class ScenarioRecorder:
         return cls(
             title=title,
             description=description,
+            title_en=title_en,
+            description_en=description_en,
             service=service,
             tag=tag,
             slug=slug,
@@ -115,8 +138,15 @@ class ScenarioRecorder:
         v = os.environ.get(_ENV_DISABLE, "").strip().lower()
         return v in ("0", "false", "no", "off")
 
-    async def step(self, label: str, page: Page | None = None, *, full_page: bool = False) -> None:
-        """Фиксирует шаг; при переданном page делает скриншот текущего состояния."""
+    async def step(
+        self,
+        label: str,
+        page: Page | None = None,
+        *,
+        full_page: bool = False,
+        label_en: str | None = None,
+    ) -> None:
+        """Фиксирует шаг; при переданном page делает скриншот текущего состояния. label_en — подпись для README.en.md (MkDocs /en/)."""
         rel: str | None = None
         if page is not None:
             n = len(self.steps) + 1
@@ -125,7 +155,12 @@ class ScenarioRecorder:
             fname = f"{n:03d}.png"
             await page.screenshot(path=str(shot_dir / fname), full_page=full_page)
             rel = f"screenshots/{fname}"
-        self.steps.append(_StepRecord(label=label, image_rel=rel))
+        le = _strip_optional(label_en)
+        if self.title_en is not None and le is None:
+            raise ValueError(
+                f"scenario.step: для шага «{label}» задайте label_en=... (англ. подпись), раз включены title_en/description_en"
+            )
+        self.steps.append(_StepRecord(label=label, label_en=le, image_rel=rel))
 
     def finalize(self) -> None:
         if self.disabled():
@@ -145,3 +180,19 @@ class ScenarioRecorder:
                 lines.append("")
         readme = self.out_dir / "README.md"
         readme.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+        if self.title_en is not None:
+            en_lines: list[str] = [
+                f"# {self.title_en}",
+                "",
+            ]
+            if self.description_en:
+                en_lines.extend([self.description_en, ""])
+            for i, s in enumerate(self.steps, start=1):
+                step_label = s.label_en if s.label_en is not None else s.label
+                en_lines.append(f"## Step {i}. {step_label}")
+                en_lines.append("")
+                if s.image_rel:
+                    en_lines.append(f"![{step_label}]({s.image_rel})")
+                    en_lines.append("")
+            (self.out_dir / "README.en.md").write_text("\n".join(en_lines).rstrip() + "\n", encoding="utf-8")

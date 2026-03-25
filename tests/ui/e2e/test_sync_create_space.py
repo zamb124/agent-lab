@@ -17,6 +17,11 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "Пользователь открывает Sync, нажимает «+» у раздела «Пространства», "
         "вводит название и описание и подтверждает создание."
     ),
+    title_en="Sync: creating a space",
+    description_en=(
+        "The user opens Sync, clicks «+» next to «Spaces», "
+        "enters a name and description, and confirms creation."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -32,7 +37,11 @@ async def test_user_creates_space_with_name_and_description(
 
     await sync_ui.open(ui_page_system)
     await sync_ui.expect_shell(ui_page_system)
-    await scenario.step("Открыт Sync, видна оболочка", ui_page_system)
+    await scenario.step(
+        "Открыт Sync, видна оболочка",
+        ui_page_system,
+        label_en="Sync is open, shell is visible",
+    )
 
     await ui_page_system.get_by_role("button", name="Создать пространство").click()
     modal = ui_page_system.locator("space-settings-modal")
@@ -40,16 +49,28 @@ async def test_user_creates_space_with_name_and_description(
     await expect(
         ui_page_system.get_by_role("heading", name="Создать пространство")
     ).to_be_visible()
-    await scenario.step("Открыто модальное окно создания пространства", ui_page_system)
+    await scenario.step(
+        "Открыто модальное окно создания пространства",
+        ui_page_system,
+        label_en="Create space modal is open",
+    )
 
     text_inputs = modal.locator('input.input:not([type="file"])')
     await expect(text_inputs).to_have_count(2)
     await text_inputs.nth(0).fill(space_name)
     await text_inputs.nth(1).fill(space_description)
-    await scenario.step("Заполнены название и описание", ui_page_system)
+    await scenario.step(
+        "Заполнены название и описание",
+        ui_page_system,
+        label_en="Name and description filled in",
+    )
 
     await modal.get_by_role("button", name="Создать", exact=True).click()
     await expect(ui_page_system.get_by_role("button", name=space_name)).to_be_visible(
         timeout=30_000
     )
-    await scenario.step("Пространство появилось в списке", ui_page_system)
+    await scenario.step(
+        "Пространство появилось в списке",
+        ui_page_system,
+        label_en="Space appears in the list",
+    )
