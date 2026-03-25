@@ -106,26 +106,25 @@ export class ChatView extends PlatformElement {
             .chat-header--compact .header-channel-static .header-channel-text,
             .chat-header--compact .header-channel-hit .header-channel-text {
                 display: flex;
-                flex-direction: row;
-                align-items: center;
-                flex-wrap: nowrap;
-                gap: var(--space-2);
+                flex-direction: column;
+                align-items: stretch;
+                justify-content: center;
+                gap: 0;
                 min-width: 0;
             }
 
             .chat-header--compact .header-title {
-                flex: 1 1 auto;
                 min-width: 0;
-                max-width: none;
+                max-width: 100%;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
 
             .chat-header--compact .header-subtitle {
-                flex: 1 1 0;
                 min-width: 0;
-                margin-top: 0;
+                max-width: 100%;
+                margin-top: 1px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
