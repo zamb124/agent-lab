@@ -2,17 +2,14 @@
  * Настройки канала: участники, массовое добавление из компании.
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
-import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 
-export class ChannelSettingsModal extends PlatformElement {
+export class ChannelSettingsModal extends PlatformModal {
     static properties = {
-        open: { type: Boolean },
+        ...PlatformModal.properties,
         channel: { type: Object },
         createMode: { type: Boolean },
         _members: { state: true },
@@ -30,48 +27,13 @@ export class ChannelSettingsModal extends PlatformElement {
     };
 
     static styles = [
-        PlatformElement.styles,
-        glassStyles,
+        PlatformModal.styles,
         buttonStyles,
         formStyles,
-        modalShellStyles,
         css`
-            .backdrop {
-                position: fixed;
-                inset: 0;
-                z-index: 55;
-                background: rgba(0, 0, 0, 0.45);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: var(--space-6);
-            }
-
-            .modal {
-                width: 100%;
-                max-width: 480px;
-                max-height: min(85vh, 640px);
-                border-radius: var(--radius-2xl);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                backdrop-filter: blur(var(--glass-blur-strong));
-                padding: var(--space-5);
-                display: flex;
-                flex-direction: column;
-                min-height: 0;
-            }
-
-            .modal-title {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin-bottom: var(--space-4);
-            }
-
             .modal-meta {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
-                margin-top: calc(-1 * var(--space-3));
                 margin-bottom: var(--space-4);
             }
 
@@ -361,6 +323,7 @@ export class ChannelSettingsModal extends PlatformElement {
 
     constructor() {
         super();
+        this.size = 'lg';
         this.open = false;
         this.channel = null;
         this.createMode = false;
@@ -430,7 +393,7 @@ export class ChannelSettingsModal extends PlatformElement {
         this._loading = true;
         this._error = null;
         try {
-            const syncApi = ServiceRegistry.get('syncApi');
+            const syncApi = this.services.get('syncApi');
             const rows = await syncApi.getChannelMembers(channelId);
             if (!Array.isArray(rows)) {
                 throw new Error('Ожидался массив участников канала.');
@@ -443,13 +406,18 @@ export class ChannelSettingsModal extends PlatformElement {
         }
     }
 
-    _close() {
+    close() {
         this._pickOpen = false;
         this._selectedForAdd = {};
         this._search = '';
         this._error = null;
         this._savingProfile = false;
-        this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
+        super.close();
+        this.emit('close');
+    }
+
+    _close() {
+        this.close();
     }
 
     async _pickAvatarFile(e) {
@@ -458,7 +426,7 @@ export class ChannelSettingsModal extends PlatformElement {
         if (!files || files.length === 0) return;
         const file = files[0];
         input.value = '';
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const res = await syncApi.uploadFile(file);
         if (typeof res?.file_id !== 'string' || res.file_id === '' || typeof res?.url !== 'string' || res.url === '') {
             throw new Error('Некорректный ответ загрузки файла (нет file_id или url).');
@@ -482,7 +450,7 @@ export class ChannelSettingsModal extends PlatformElement {
         this._savingProfile = true;
         this._error = null;
         try {
-            const syncApi = ServiceRegistry.get('syncApi');
+            const syncApi = this.services.get('syncApi');
             const created = await syncApi.createChannel(spaceId, name);
             const url = this._editAvatarUrl.trim();
             if (url !== '') {
@@ -513,7 +481,7 @@ export class ChannelSettingsModal extends PlatformElement {
         this._savingMute = true;
         this._error = null;
         try {
-            const syncApi = ServiceRegistry.get('syncApi');
+            const syncApi = this.services.get('syncApi');
             const updated = await syncApi.patchChannelNotificationSettings(ch.id, {
                 notifications_muted: next,
             });
@@ -539,7 +507,7 @@ export class ChannelSettingsModal extends PlatformElement {
         this._savingProfile = true;
         this._error = null;
         try {
-            const syncApi = ServiceRegistry.get('syncApi');
+            const syncApi = this.services.get('syncApi');
             const url = this._editAvatarUrl.trim();
             await syncApi.updateChannel(ch.id, {
                 name,
@@ -631,7 +599,7 @@ export class ChannelSettingsModal extends PlatformElement {
         if (ids.length === 0) return;
         this._adding = true;
         this._error = null;
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         for (const userId of ids) {
             await syncApi.addChannelMember(channelId, userId, 'member');
         }
@@ -643,17 +611,22 @@ export class ChannelSettingsModal extends PlatformElement {
         this._adding = false;
     }
 
-    render() {
-        if (!this.open || !this.channel) return html``;
 
+    renderHeader() {
+        if (!this.channel) {
+            return '';
+        }
+        return this.createMode ? 'Создать канал' : 'Настройки канала';
+    }
+
+    renderBody() {
+        if (!this.open || !this.channel) {
+            return html``;
+        }
         const ch = this.channel;
         const createMode = this.createMode;
-        const title = createMode ? 'Создать канал' : 'Настройки канала';
         const candidates = this._candidatesForAdd();
         const pickCount = this._selectedCount();
-        const primaryLabel = createMode
-            ? (this._savingProfile ? 'Создаём…' : 'Создать')
-            : (this._savingProfile ? 'Сохранение…' : 'Сохранить');
 
         const metaLine = createMode
             ? (typeof ch.space_id === 'string' && ch.space_id !== ''
@@ -664,170 +637,185 @@ export class ChannelSettingsModal extends PlatformElement {
         const av = this._editAvatarUrl.trim();
 
         return html`
-            <div class="backdrop" @click=${(e) => { if (e.target === e.currentTarget) this._close(); }}>
-                <div class="modal" @click=${(e) => e.stopPropagation()}>
-                    <div class="modal-title">${title}</div>
-                    <div class="modal-meta">${metaLine}</div>
+            <div class="modal-meta">${metaLine}</div>
 
-                    ${this._error ? html`<div class="error">${this._error}</div>` : ''}
+            ${this._error ? html`<div class="error">${this._error}</div>` : ''}
 
-                    ${!createMode && typeof ch.id === 'string' && ch.id !== ''
-                        ? html`
-                            <div class="field">
-                                <label class="field-label">Уведомления</label>
-                                <label
-                                    style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);cursor:pointer;color:var(--text-primary);"
-                                >
-                                    <input
-                                        type="checkbox"
-                                        .checked=${Boolean(ch.notifications_muted)}
-                                        @change=${(e) => this._toggleMute(e)}
-                                        ?disabled=${this._savingMute}
-                                    />
-                                    Не беспокоить (без уведомлений о новых сообщениях)
-                                </label>
-                            </div>
-                        `
-                        : ''}
-
+            ${!createMode && typeof ch.id === 'string' && ch.id !== ''
+                ? html`
                     <div class="field">
-                        <label class="field-label">Название</label>
-                        <input
-                            type="text"
-                            class="field-input"
-                            placeholder="Название канала"
-                            .value=${this._editName}
-                            @input=${(e) => {
-                            this._editName = e.target.value;
-                        }}
-                        />
+                        <label class="field-label">Уведомления</label>
+                        <label
+                            style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);cursor:pointer;color:var(--text-primary);"
+                        >
+                            <input
+                                type="checkbox"
+                                .checked=${Boolean(ch.notifications_muted)}
+                                @change=${(e) => this._toggleMute(e)}
+                                ?disabled=${this._savingMute}
+                            />
+                            Не беспокоить (без уведомлений о новых сообщениях)
+                        </label>
                     </div>
+                `
+                : ''}
 
-                    <div class="field">
-                        <label class="field-label">Аватар</label>
-                        ${av
-        ? html`<img class="avatar-preview" src=${av} alt="" />`
-        : ''}
-                        <input
-                            type="file"
-                            class="file-input"
-                            id="ch-profile-avatar-file"
-                            accept="image/*"
-                            @change=${(e) => {
-            this._pickAvatarFile(e).catch((err) => {
-                this._error = err instanceof Error ? err.message : String(err);
-            });
-        }}
-                        />
-                        <button
-                            type="button"
-                            class="upload-img-btn"
-                            @click=${() => {
-            const el = this.shadowRoot?.getElementById('ch-profile-avatar-file');
-            if (el) el.click();
-        }}
-                        >Загрузить изображение</button>
-                    </div>
+            <div class="field">
+                <label class="field-label">Название</label>
+                <input
+                    type="text"
+                    class="field-input"
+                    placeholder="Название канала"
+                    .value=${this._editName}
+                    @input=${(e) => {
+                        this._editName = e.target.value;
+                    }}
+                />
+            </div>
 
-                    ${createMode ? '' : html`
-                    <div class="members-block">
-                    <div class="section-label">Участники</div>
-                    ${this._loading
-                        ? html`<div class="modal-meta">Загрузка…</div>`
-                        : html`
-                            <div class="scroll-list">
-                                ${this._members.map((r) => html`
-                                    <div class="member-row">
-                                        <div class="member-row-main">
-                                            <div class="user-avatar">
-                                                ${this._renderUserAvatar(r.user_id, this._displayName(r.user_id))}
-                                            </div>
-                                            <div>
-                                                <div class="member-name">${this._displayName(r.user_id)}</div>
-                                                <div class="member-sub">${r.user_id}</div>
-                                            </div>
-                                        </div>
-                                        <span class="role-pill">${r.role}</span>
+            <div class="field">
+                <label class="field-label">Аватар</label>
+                ${av
+                    ? html`<img class="avatar-preview" src=${av} alt="" />`
+                    : ''}
+                <input
+                    type="file"
+                    class="file-input"
+                    id="ch-profile-avatar-file"
+                    accept="image/*"
+                    @change=${(e) => {
+                        this._pickAvatarFile(e).catch((err) => {
+                            this._error = err instanceof Error ? err.message : String(err);
+                        });
+                    }}
+                />
+                <button
+                    type="button"
+                    class="upload-img-btn"
+                    @click=${() => {
+                        const el = this.shadowRoot?.getElementById('ch-profile-avatar-file');
+                        if (el) el.click();
+                    }}
+                >Загрузить изображение</button>
+            </div>
+
+            ${createMode ? '' : html`
+            <div class="members-block">
+            <div class="section-label">Участники</div>
+            ${this._loading
+                ? html`<div class="modal-meta">Загрузка…</div>`
+                : html`
+                    <div class="scroll-list">
+                        ${this._members.map((r) => html`
+                            <div class="member-row">
+                                <div class="member-row-main">
+                                    <div class="user-avatar">
+                                        ${this._renderUserAvatar(r.user_id, this._displayName(r.user_id))}
                                     </div>
-                                `)}
+                                    <div>
+                                        <div class="member-name">${this._displayName(r.user_id)}</div>
+                                        <div class="member-sub">${r.user_id}</div>
+                                    </div>
+                                </div>
+                                <span class="role-pill">${r.role}</span>
                             </div>
-                        `}
-
-                    <div class="toolbar">
-                        <button
-                            type="button"
-                            class="btn btn-primary"
-                            ?disabled=${this._adding}
-                            @click=${() => { this._pickOpen = !this._pickOpen; }}
-                        >${this._pickOpen ? 'Скрыть добавление' : 'Добавить участников'}</button>
+                        `)}
                     </div>
+                `}
 
-                    ${this._pickOpen ? html`
-                        <input
-                            type="search"
-                            class="search"
-                            placeholder="Поиск по имени или id…"
-                            .value=${this._search}
-                            @input=${(e) => { this._search = e.target.value; }}
-                        />
-                        <div class="pick-scroll">
-                            ${candidates.length === 0
-                                ? html`<div class="modal-meta" style="padding:var(--space-3)">Нет пользователей для добавления.</div>`
-                                : candidates.map((m) => html`
-                                    <label class="pick-row">
-                                        <input
-                                            type="checkbox"
-                                            .checked=${Boolean(this._selectedForAdd[m.user_id])}
-                                            @change=${() => this._togglePick(m.user_id)}
-                                        />
-                                        <div class="user-avatar">
-                                            ${this._renderUserAvatar(m.user_id, m.name ?? m.user_id)}
-                                        </div>
-                                        <span class="pick-row-text">
-                                            <div class="member-name">${m.name ?? m.user_id}</div>
-                                            <div class="member-sub">${m.user_id}</div>
-                                        </span>
-                                    </label>
-                                `)}
-                        </div>
-                        <div class="toolbar">
-                            <button
-                                type="button"
-                                class="btn btn-primary"
-                                ?disabled=${pickCount === 0 || this._adding}
-                                @click=${() => {
-            this._submitAdds().catch((err) => {
-                const text = err instanceof Error ? err.message : String(err);
-                this._error = text;
-                this._adding = false;
-            });
-        }}
-                            >Добавить выбранных (${pickCount})</button>
-                        </div>
-                    ` : ''}
-                    </div>
-                    `}
+            <div class="toolbar">
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    ?disabled=${this._adding}
+                    @click=${() => { this._pickOpen = !this._pickOpen; }}
+                >${this._pickOpen ? 'Скрыть добавление' : 'Добавить участников'}</button>
+            </div>
 
-                    <div class="actions">
-                        <button type="button" class="btn" @click=${this._close}>Отмена</button>
-                        <button
-                            type="button"
-                            class="btn btn-primary"
-                            ?disabled=${this._savingProfile}
-                            @click=${() => {
-            const run = createMode
-                ? this._createChannel()
-                : this._saveChannelProfile();
-            run.catch((err) => {
-                this._error = err instanceof Error ? err.message : String(err);
-                this._savingProfile = false;
-            });
-        }}
-                        >${primaryLabel}</button>
-                    </div>
+            ${this._pickOpen ? html`
+                <input
+                    type="search"
+                    class="search"
+                    placeholder="Поиск по имени или id…"
+                    .value=${this._search}
+                    @input=${(e) => { this._search = e.target.value; }}
+                />
+                <div class="pick-scroll">
+                    ${candidates.length === 0
+                        ? html`<div class="modal-meta" style="padding:var(--space-3)">Нет пользователей для добавления.</div>`
+                        : candidates.map((m) => html`
+                            <label class="pick-row">
+                                <input
+                                    type="checkbox"
+                                    .checked=${Boolean(this._selectedForAdd[m.user_id])}
+                                    @change=${() => this._togglePick(m.user_id)}
+                                />
+                                <div class="user-avatar">
+                                    ${this._renderUserAvatar(m.user_id, m.name ?? m.user_id)}
+                                </div>
+                                <span class="pick-row-text">
+                                    <div class="member-name">${m.name ?? m.user_id}</div>
+                                    <div class="member-sub">${m.user_id}</div>
+                                </span>
+                            </label>
+                        `)}
                 </div>
+                <div class="toolbar">
+                    <button
+                        type="button"
+                        class="btn btn-primary"
+                        ?disabled=${pickCount === 0 || this._adding}
+                        @click=${() => {
+                            this._submitAdds().catch((err) => {
+                                const text = err instanceof Error ? err.message : String(err);
+                                this._error = text;
+                                this._adding = false;
+                            });
+                        }}
+                    >Добавить выбранных (${pickCount})</button>
+                </div>
+            ` : ''}
+            </div>
+            `}
+        `;
+    }
+
+    renderFooter() {
+        if (!this.open || !this.channel) {
+            return html``;
+        }
+        const createMode = this.createMode;
+        const primaryLabel = createMode
+            ? (this._savingProfile ? 'Создаём…' : 'Создать')
+            : (this._savingProfile ? 'Сохранение…' : 'Сохранить');
+        return html`
+            <div class="actions">
+                <button type="button" class="btn" @click=${this._close}>Отмена</button>
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    ?disabled=${this._savingProfile}
+                    @click=${() => {
+                        const run = createMode
+                            ? this._createChannel()
+                            : this._saveChannelProfile();
+                        run.catch((err) => {
+                            this._error = err instanceof Error ? err.message : String(err);
+                            this._savingProfile = false;
+                        });
+                    }}
+                >
+                    ${primaryLabel}
+                </button>
             </div>
         `;
+    }
+
+    render() {
+        if (!this.open || !this.channel) {
+            return html``;
+        }
+        return super.render();
     }
 }
 

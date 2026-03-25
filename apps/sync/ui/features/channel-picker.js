@@ -6,7 +6,6 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class ChannelPicker extends PlatformElement {
@@ -103,7 +102,7 @@ export class ChannelPicker extends PlatformElement {
     }
 
     async _pick(channel) {
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
     }
 

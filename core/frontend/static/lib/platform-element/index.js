@@ -18,6 +18,10 @@ export class PlatformElement extends LitElement {
     get notify() { return ServiceRegistry.notify; }
     get icon() { return ServiceRegistry.icon; }
     get companies() { return ServiceRegistry.companies; }
+    get syncApi() { return ServiceRegistry.syncApi; }
+    get syncWs() { return ServiceRegistry.syncWs; }
+    get crmApi() { return ServiceRegistry.crmApi; }
+    get ragApi() { return ServiceRegistry.ragApi; }
 
     async loadStyles(path) {
         const sheet = await StyleCache.load(path);

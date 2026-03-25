@@ -6,7 +6,6 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
 import './sync-channel-row.js';
 import './sync-direct-member-row.js';
@@ -487,7 +486,7 @@ export class SyncSidebar extends PlatformElement {
     }
 
     async _selectChannel(channel) {
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
         if (window.innerWidth < 768) {
             SyncStore.setMobileSidebarOpen(false);
@@ -496,7 +495,7 @@ export class SyncSidebar extends PlatformElement {
 
     async _openDirectWithMember(member) {
         try {
-            const syncApi = ServiceRegistry.get('syncApi');
+            const syncApi = this.services.get('syncApi');
             const existing = SyncStore.findDirectChannelForPeer(member.user_id);
             if (existing) {
                 await this._selectChannel(existing);

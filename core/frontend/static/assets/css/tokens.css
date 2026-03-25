@@ -223,6 +223,8 @@
     --z-toast: 1100;
     --z-tooltip: 1200;
     --z-max: 9999;
+    /* Совпадает с дефолтом platform-notification-manager */
+    --z-notification-panel: 30000;
     
     /* ========== РАЗМЕРЫ КОМПОНЕНТОВ ========== */
     

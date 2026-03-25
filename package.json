@@ -2,8 +2,8 @@
   "name": "agent-lab",
   "private": true,
   "scripts": {
-    "test:ui": "web-test-runner --config web-test-runner.config.mjs",
-    "test:ui:watch": "web-test-runner --config web-test-runner.config.mjs --watch"
+    "test:ui-components": "web-test-runner --config web-test-runner.config.mjs",
+    "test:ui-components:watch": "web-test-runner --config web-test-runner.config.mjs --watch"
   },
   "devDependencies": {
     "@open-wc/testing": "^4.0.0",

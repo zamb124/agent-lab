@@ -1,16 +1,16 @@
 /**
  * Access Request Modal - Запрос доступа к чужой сущности
- * Использует GlassModal с fullscreen и drag поддержкой
+ * Использует PlatformModal с fullscreen и drag поддержкой
  */
 import { html, css } from 'lit';
-import { GlassModal } from '@platform/lib/components/glass-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
 
-export class AccessRequestModal extends GlassModal {
+export class AccessRequestModal extends PlatformModal {
     static properties = {
-        ...GlassModal.properties,
+        ...PlatformModal.properties,
         entityId: { type: String },
         entityName: { type: String },
         _message: { state: true },
@@ -20,7 +20,7 @@ export class AccessRequestModal extends GlassModal {
     };
 
     static styles = [
-        GlassModal.styles,
+        PlatformModal.styles,
         formStyles,
         buttonStyles,
         css`

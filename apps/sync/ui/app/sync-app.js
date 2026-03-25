@@ -4,7 +4,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncAPIService } from '../services/sync-api.service.js';
 import { SyncWsService } from '../services/sync-ws.service.js';
 import { SyncStore } from '../store/sync.store.js';
@@ -95,8 +94,8 @@ export class SyncApp extends PlatformApp {
 
     async initServices() {
         await super.initServices();
-        await ServiceRegistry.registerCore('/sync');
-        ServiceRegistry.register('syncApi', new SyncAPIService('/sync/api/v1'));
+        await this.services.registerCore('/sync');
+        this.services.register('syncApi', new SyncAPIService('/sync/api/v1'));
 
         this._unsubscribe = SyncStore.subscribe((state) => {
             this._chat = state.chat;
@@ -105,7 +104,7 @@ export class SyncApp extends PlatformApp {
     }
 
     async checkAuth() {
-        const auth = ServiceRegistry.auth;
+        const auth = this.auth;
         const isAuthenticated = await auth.validateToken();
         if (!isAuthenticated) {
             this.redirectToAuth();
@@ -119,7 +118,7 @@ export class SyncApp extends PlatformApp {
 
         if (!this._isAuthenticated) return;
 
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
 
         await Promise.all([
             SyncStore.loadSpaces(syncApi),
@@ -165,7 +164,7 @@ export class SyncApp extends PlatformApp {
             return;
         }
 
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
     }
 
@@ -211,7 +210,7 @@ export class SyncApp extends PlatformApp {
             const p = msg.payload;
             if (!p || typeof p.channel_id !== 'string' || p.channel_id === '') return;
             const uid = p.user?.user_id;
-            const myId = ServiceRegistry.auth?.user?.id;
+            const myId = this.auth?.user?.id;
             if (typeof myId === 'string' && myId !== '' && uid === myId) return;
             SyncStore.applyChannelTyping({
                 channel_id: p.channel_id,
@@ -225,7 +224,7 @@ export class SyncApp extends PlatformApp {
         if (msg.type === 'user.presence') {
             const p = msg.payload;
             if (!p || typeof p !== 'object') return;
-            const auth = ServiceRegistry.auth?.user;
+            const auth = this.auth?.user;
             const companyId = auth?.company_id;
             if (typeof companyId !== 'string' || companyId === '') {
                 throw new Error('user.presence: auth.user.company_id обязателен.');
@@ -241,7 +240,7 @@ export class SyncApp extends PlatformApp {
         }
 
         if (msg.type === 'channel.member_added') {
-            const authUser = ServiceRegistry.auth?.user;
+            const authUser = this.auth?.user;
             const myId = authUser?.id;
             const added = p.added_user_id;
             if (
@@ -250,14 +249,14 @@ export class SyncApp extends PlatformApp {
                 && typeof added === 'string'
                 && added === myId
             ) {
-                const syncApi = ServiceRegistry.get('syncApi');
+                const syncApi = this.services.get('syncApi');
                 SyncStore.loadChannels(syncApi);
             }
             return;
         }
 
         if (msg.type === 'space.created') {
-            const syncApi = ServiceRegistry.get('syncApi');
+            const syncApi = this.services.get('syncApi');
             void SyncStore.loadSpaces(syncApi).then(() => {
                 SyncStore.sanitizeChatSelectionAfterLoad();
             });
@@ -265,7 +264,7 @@ export class SyncApp extends PlatformApp {
         }
 
         if (msg.type === 'channel.read_updated') {
-            const authUser = ServiceRegistry.auth?.user;
+            const authUser = this.auth?.user;
             const myId = authUser?.id;
             if (typeof myId !== 'string' || myId === '') {
                 throw new Error('channel.read_updated: auth.user.id обязателен.');
@@ -285,7 +284,7 @@ export class SyncApp extends PlatformApp {
         if (msg.type === 'message.created' && selectedNorm && typeof p.channel_id === 'string') {
             const pChNorm = SyncStore.normalizeSyncChannelId(p.channel_id);
             if (pChNorm === selectedNorm) {
-                const authUser = ServiceRegistry.auth?.user;
+                const authUser = this.auth?.user;
                 const myId = authUser?.id;
                 if (typeof myId !== 'string' || myId === '') {
                     throw new Error('message.created: auth.user.id обязателен.');
@@ -308,7 +307,7 @@ export class SyncApp extends PlatformApp {
             if (!list.some((c) => SyncStore.normalizeSyncChannelId(c.id) === pChNorm)) {
                 return;
             }
-            const authUser = ServiceRegistry.auth?.user;
+            const authUser = this.auth?.user;
             const myId = authUser?.id;
             if (typeof myId !== 'string' || myId === '') {
                 throw new Error('Нет user id для синхронизации списка каналов.');
@@ -378,7 +377,7 @@ export class SyncApp extends PlatformApp {
         }
 
         if (msg.type === 'call.incoming') {
-            const myId = ServiceRegistry.auth?.user?.id;
+            const myId = this.auth?.user?.id;
             // Трекаем активный звонок ВСЕГДА — нужно для индикатора в сайдбаре у всех участников.
             this._activeCallChannels = { ...this._activeCallChannels, [p.channel_id]: { call_id: p.call_id, call_type: p.call_type } };
             // Инициатор уже открыл оверлей через WS-ack — баннер ему не нужен.
@@ -409,7 +408,7 @@ export class SyncApp extends PlatformApp {
             return;
         }
         if (msg.type === 'call.signal') {
-            const myId = ServiceRegistry.auth?.user?.id;
+            const myId = this.auth?.user?.id;
             // Фильтруем: обрабатываем только сигналы предназначенные нам.
             if (p.target_user_id && p.target_user_id !== myId) return;
             window.dispatchEvent(new CustomEvent('call-signal', { detail: p }));
@@ -457,7 +456,7 @@ export class SyncApp extends PlatformApp {
         for (const m of members) {
             if (m.user_id) map[m.user_id] = m.name || m.user_id;
         }
-        const authUser = ServiceRegistry.auth?.user;
+        const authUser = this.auth?.user;
         if (authUser?.id) map[authUser.id] = authUser.name || authUser.id;
         return map;
     }
@@ -465,12 +464,12 @@ export class SyncApp extends PlatformApp {
     async _joinCallInChannel(channelId) {
         const callInfo = this._activeCallChannels[channelId];
         if (!callInfo) return;
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const [callData, tokenData] = await Promise.all([
             syncApi.get(`/calls/${callInfo.call_id}`),
             syncApi.get(`/calls/${callInfo.call_id}/token`),
         ]);
-        const ws = ServiceRegistry.get('syncWs');
+        const ws = this.services.get('syncWs');
         if (ws) {
             const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
                 (c ^ (Math.random() * 16 >> c / 4)).toString(16));
@@ -483,7 +482,7 @@ export class SyncApp extends PlatformApp {
         this._activeCall = callData;
         this._incomingCall = null;
         if (callData.mode === 'sfu') {
-            const syncApi = ServiceRegistry.get('syncApi');
+            const syncApi = this.services.get('syncApi');
             const tokenData = await syncApi.get(`/calls/${callData.call_id}/token`);
             // Пока ждали токен — звонок мог завершиться. Не перезаписываем если уже null.
             if (!this._activeCall || this._activeCall.call_id !== callData.call_id) return;
@@ -493,13 +492,13 @@ export class SyncApp extends PlatformApp {
 
     async _acceptCall(callId) {
         this._incomingCall = null;
-        const ws = ServiceRegistry.get('syncWs');
+        const ws = this.services.get('syncWs');
         if (!ws) throw new Error('syncWs не инициализирован при accept.');
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
         ws.sendJson({ id, type: 'call.accept', payload: { call_id: callId } });
 
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const callData = await syncApi.get(`/calls/${callId}`);
         if (callData.mode === 'sfu') {
             const tokenData = await syncApi.get(`/calls/${callId}/token`);
@@ -517,7 +516,7 @@ export class SyncApp extends PlatformApp {
             if (info.call_id === callId) { delete next[chId]; break; }
         }
         this._activeCallChannels = next;
-        const ws = ServiceRegistry.get('syncWs');
+        const ws = this.services.get('syncWs');
         if (!ws) return;
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
@@ -526,7 +525,7 @@ export class SyncApp extends PlatformApp {
 
     _sendCallHangupWs(callId) {
         if (typeof callId !== 'string' || callId === '') return;
-        const ws = ServiceRegistry.get('syncWs');
+        const ws = this.services.get('syncWs');
         if (!ws) return;
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
@@ -534,7 +533,7 @@ export class SyncApp extends PlatformApp {
     }
 
     async _refetchOnReconnect() {
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         await SyncStore.loadChannels(syncApi);
         const { selectedChannelId } = SyncStore.state.chat;
         if (selectedChannelId) {
@@ -547,7 +546,7 @@ export class SyncApp extends PlatformApp {
 
         const ws = new SyncWsService();
         this._ws = ws;
-        ServiceRegistry.register('syncWs', ws);
+        this.services.register('syncWs', ws);
 
         ws.onOpen(() => {
             const isReconnect = this._wsEverConnected;

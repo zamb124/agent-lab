@@ -9,7 +9,6 @@ import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from '../constants/sync-limits.js';
 
 const EMOJIS = ['😀', '😅', '😉', '😍', '🤝', '🔥', '✅', '💡', '🧠', '🚀', '📌', '🧩', '⚠️', '❌', '👍', '👀'];
@@ -478,7 +477,7 @@ export class MessageComposer extends PlatformElement {
     }
 
     _emitTypingWs(typing, channelId, threadId) {
-        const ws = ServiceRegistry.get('syncWs');
+        const ws = this.services.get('syncWs');
         if (!ws || ws.state !== 'open') {
             if (!typing) {
                 this._lastTypingContext = null;
@@ -567,7 +566,7 @@ export class MessageComposer extends PlatformElement {
             return;
         }
 
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const edit = this._editMessage;
         if (edit?.id) {
             const contents = [{ type: 'text/plain', data: { body: text }, order: 0 }];
@@ -578,11 +577,11 @@ export class MessageComposer extends PlatformElement {
             return;
         }
 
-        const ws = ServiceRegistry.get('syncWs');
+        const ws = this.services.get('syncWs');
         if (!ws) throw new Error('WebSocket не подключен.');
 
         const commandId = randomUuidV4();
-        const auth = ServiceRegistry.auth;
+        const auth = this.auth;
         const userId = auth?.user?.id;
         if (!userId) throw new Error('Не удалось определить user_id.');
         const displayName =
@@ -629,7 +628,7 @@ export class MessageComposer extends PlatformElement {
         if (!this.channelId) throw new Error('Выбери канал.');
         this._uploading = true;
 
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const snapshot = this._pendingAttachments.slice();
 
         const uploads = await Promise.all(snapshot.map(a => syncApi.uploadFile(a.file)));
@@ -729,7 +728,7 @@ export class MessageComposer extends PlatformElement {
 
     _replyQuotedParentIsOwn() {
         const m = this._replyToMessage;
-        const myId = ServiceRegistry.auth?.user?.id;
+        const myId = this.auth?.user?.id;
         const sid = senderUserId(m?.sender);
         return typeof myId === 'string' && typeof sid === 'string' && myId === sid;
     }

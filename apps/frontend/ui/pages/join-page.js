@@ -8,10 +8,9 @@
  *  - Токен истёк / использован / поддельный: понятная ошибка
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '/static/core/lib/platform-element/index.js';
-import { ServiceRegistry } from '/static/core/lib/services/ServiceRegistry.js';
-import { AuthService } from '/static/core/services/auth.service.js';
-import '/static/core/lib/components/auth-modal.js';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { AuthService } from '@platform/services/auth.service.js';
+import '@platform/lib/components/auth-modal.js';
 
 export class JoinPage extends PlatformElement {
     static properties = {

@@ -3,7 +3,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { CompaniesService } from '@platform/services/companies.service.js';
 import { TeamService } from '../services/team.service.js';
 import { ApiKeysService } from '../services/api-keys.service.js';
@@ -129,13 +128,13 @@ export class FrontendApp extends PlatformApp {
         await super.initServices();
         
         const baseUrl = this.getBaseUrl();
-        ServiceRegistry.register('companies', new CompaniesService(baseUrl));
-        ServiceRegistry.register('team', new TeamService(baseUrl));
-        ServiceRegistry.register('apiKeys', new ApiKeysService(baseUrl));
-        ServiceRegistry.register('billing', new BillingService(baseUrl));
-        ServiceRegistry.register('settings', new SettingsService(baseUrl));
-        ServiceRegistry.register('servicesStatus', new ServicesStatusService(baseUrl));
-        ServiceRegistry.register('embed', new EmbedService(baseUrl));
+        this.services.register('companies', new CompaniesService(baseUrl));
+        this.services.register('team', new TeamService(baseUrl));
+        this.services.register('apiKeys', new ApiKeysService(baseUrl));
+        this.services.register('billing', new BillingService(baseUrl));
+        this.services.register('settings', new SettingsService(baseUrl));
+        this.services.register('servicesStatus', new ServicesStatusService(baseUrl));
+        this.services.register('embed', new EmbedService(baseUrl));
     }
 
     async checkAuth() {

@@ -7,7 +7,7 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default {
   rootDir,
-  files: 'tests/ui/**/*.test.js',
+  files: 'tests/ui_components/**/*.test.js',
   nodeResolve: true,
   plugins: [
     importMapsPlugin({

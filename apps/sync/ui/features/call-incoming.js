@@ -8,9 +8,11 @@
  *   call-accept  — пользователь принял
  *   call-decline — пользователь отклонил
  */
-import { html, css, LitElement } from 'lit';
+import { html, css } from 'lit';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 
-class CallIncoming extends LitElement {
+class CallIncoming extends PlatformElement {
     static properties = {
         callId:      { type: String, attribute: 'call-id' },
         callType:    { type: String, attribute: 'call-type' },
@@ -19,12 +21,14 @@ class CallIncoming extends LitElement {
         _ringing: { state: true },
     };
 
-    static styles = css`
+    static styles = [
+        PlatformElement.styles,
+        css`
         :host {
             position: fixed;
             top: 20px;
             right: 20px;
-            z-index: 10000;
+            z-index: var(--platform-modal-layer-z, var(--z-max, 9999));
         }
 
         .banner {
@@ -124,7 +128,8 @@ class CallIncoming extends LitElement {
             border: 1px solid rgba(255,255,255,0.12);
         }
         .btn-decline:hover { background: rgba(239,68,68,0.25); color: #fff; }
-    `;
+    `,
+    ];
 
     constructor() {
         super();
@@ -134,6 +139,10 @@ class CallIncoming extends LitElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this.style.setProperty(
+            '--platform-modal-layer-z',
+            String(nextModalLayerZIndex()),
+        );
         this._startRinging();
     }
 

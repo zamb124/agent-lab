@@ -2,15 +2,14 @@
  * Модальное окно для создания API ключа
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import '@platform/lib/components/glass-modal.js';
 import { FrontendStore } from '../store/frontend.store.js';
 
-export class CreateApiKeyModal extends PlatformElement {
+export class CreateApiKeyModal extends PlatformModal {
     static styles = [
-        PlatformElement.styles,
+        PlatformModal.styles,
         formStyles,
         buttonStyles,
         css`
@@ -95,17 +94,18 @@ export class CreateApiKeyModal extends PlatformElement {
                     color: rgba(255, 255, 255, 0.5);
                 }
             }
-        `
+        `,
     ];
 
     constructor() {
         super();
-        this._open = true;
+        this.size = 'md';
+        this.open = true;
         this._loading = false;
         this._name = '';
         this._scopes = [];
         this._createdKey = null;
-        
+
         this._availableScopes = [
             { id: 'agents:read', name: 'Чтение агентов', description: 'Просмотр списка и деталей агентов' },
             { id: 'agents:write', name: 'Управление агентами', description: 'Создание, редактирование и удаление агентов' },
@@ -138,13 +138,13 @@ export class CreateApiKeyModal extends PlatformElement {
 
         this._loading = true;
         this.requestUpdate();
-        
+
         const result = await this.services.get('apiKeys').create(this._name.trim(), this._scopes);
-        
+
         FrontendStore.setApiKeysLoading(true);
         const keys = await this.services.get('apiKeys').list();
         FrontendStore.setApiKeys(keys);
-        
+
         this._createdKey = result;
         this._loading = false;
         this.success('API ключ успешно создан');
@@ -156,34 +156,29 @@ export class CreateApiKeyModal extends PlatformElement {
         this.success('Ключ скопирован в буфер обмена');
     }
 
-    _handleClose() {
-        this._open = false;
+    close() {
+        this.open = false;
+        super.close();
         this.dispatchEvent(new CustomEvent('close'));
         if (this._createdKey) {
             this.dispatchEvent(new CustomEvent('created', { detail: this._createdKey }));
         }
     }
 
-    render() {
-        return html`
-            <glass-modal 
-                ?open=${this._open} 
-                @close=${this._handleClose}
-                size="md"
-            >
-                <span slot="title">
-                    ${this._createdKey ? 'Ключ создан' : 'Создать API ключ'}
-                </span>
-                
-                <div slot="content">
-                    ${this._createdKey ? this._renderSuccess() : this._renderForm()}
-                </div>
-                
-                <div slot="actions">
-                    ${this._createdKey ? this._renderSuccessActions() : this._renderFormActions()}
-                </div>
-            </glass-modal>
-        `;
+    _handleClose() {
+        this.close();
+    }
+
+    renderHeader() {
+        return this._createdKey ? 'Ключ создан' : 'Создать API ключ';
+    }
+
+    renderBody() {
+        return this._createdKey ? this._renderSuccess() : this._renderForm();
+    }
+
+    renderFooter() {
+        return this._createdKey ? this._renderSuccessActions() : this._renderFormActions();
     }
 
     _renderForm() {

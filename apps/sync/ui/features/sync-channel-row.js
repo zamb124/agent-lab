@@ -4,7 +4,6 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
 
@@ -237,7 +236,7 @@ export class SyncChannelRow extends PlatformElement {
     }
 
     _rowSecondary(ch, rowMeta) {
-        const myId = ServiceRegistry.auth?.user?.id;
+        const myId = this.auth?.user?.id;
         if (typeof myId === 'string' && myId !== '') {
             const typingLine = SyncStore.getTypingIndicatorLine(ch.id, null, myId);
             if (typingLine !== '') {

@@ -1,5 +1,5 @@
 import { html, css } from 'lit';
-import { PlatformElement } from '/static/core/lib/platform-element/index.js';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { Services } from '@platform/services/index.js';
 
 /**

@@ -7,7 +7,6 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
 import '../modals/user-info-modal.js';
@@ -848,7 +847,7 @@ export class MessageBubble extends PlatformElement {
     async _onMenuAction(e) {
         this._menuOpen = false;
         const { kind, emoji } = e.detail;
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const { msg, channelId } = this;
         if (!msg?.id) throw new Error('Нет сообщения.');
         if (!channelId) throw new Error('Нет channelId.');
@@ -932,7 +931,7 @@ export class MessageBubble extends PlatformElement {
         if (!pid) return null;
         const all = SyncStore.getDisplayMessages();
         const p = all.find(m => m.id === pid);
-        const myId = ServiceRegistry.auth?.user?.id;
+        const myId = this.auth?.user?.id;
         const parentIsOwn =
             typeof myId === 'string' &&
             p !== undefined &&

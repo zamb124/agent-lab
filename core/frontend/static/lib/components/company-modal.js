@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { Services } from '@platform/services/index.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 
 export class CompanyModal extends PlatformElement {
     static properties = {
@@ -25,7 +26,7 @@ export class CompanyModal extends PlatformElement {
                 left: 0;
                 width: 100%;
                 height: 100%;
-                z-index: 1000;
+                z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
             }
 
             :host([open]) {
@@ -218,6 +219,16 @@ export class CompanyModal extends PlatformElement {
         this.slugError = '';
         this.slugTouched = false;
         this._debounceTimer = null;
+    }
+
+    willUpdate(changedProperties) {
+        super.willUpdate(changedProperties);
+        if (changedProperties.has('open') && this.open) {
+            this.style.setProperty(
+                '--platform-modal-layer-z',
+                String(nextModalLayerZIndex()),
+            );
+        }
     }
 
     _slugify(text) {

@@ -1,70 +1,6 @@
 import { css } from 'lit';
 
-export const variableEditorModalStyles = css`
-    .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: var(--overlay-bg);
-        backdrop-filter: blur(4px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        padding: var(--space-4);
-    }
-
-    .modal-container {
-        background: var(--glass-solid);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-        width: 100%;
-        max-width: 600px;
-        max-height: 90vh;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .modal-header {
-        padding: var(--space-4);
-        border-bottom: 1px solid var(--border-subtle);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-
-    .modal-title {
-        font-size: var(--text-lg);
-        font-weight: 600;
-        color: var(--text-primary);
-    }
-
-    .modal-close {
-        background: none;
-        border: none;
-        color: var(--text-tertiary);
-        cursor: pointer;
-        padding: var(--space-1);
-        border-radius: var(--radius-sm);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .modal-close:hover {
-        background: var(--bg-hover);
-        color: var(--text-primary);
-    }
-
-    .modal-body {
-        padding: var(--space-4);
-        overflow-y: auto;
-        flex: 1;
-    }
-
+export const variableEditorFormStyles = css`
     .form-group {
         margin-bottom: var(--space-4);
     }
@@ -103,7 +39,7 @@ export const variableEditorModalStyles = css`
         background: var(--bg-elevated);
     }
 
-    .form-input[type="number"] {
+    .form-input[type='number'] {
         width: 120px;
     }
 
@@ -182,43 +118,6 @@ export const variableEditorModalStyles = css`
         border-color: var(--accent);
     }
 
-    .modal-footer {
-        padding: var(--space-4);
-        border-top: 1px solid var(--border-subtle);
-        display: flex;
-        gap: var(--space-2);
-        justify-content: flex-end;
-    }
-
-    .btn {
-        padding: var(--space-2) var(--space-4);
-        border-radius: var(--radius-md);
-        font-size: var(--text-sm);
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        border: none;
-    }
-
-    .btn-secondary {
-        background: var(--bg-subtle);
-        color: var(--text-secondary);
-    }
-
-    .btn-secondary:hover {
-        background: var(--bg-hover);
-        color: var(--text-primary);
-    }
-
-    .btn-primary {
-        background: var(--accent);
-        color: white;
-    }
-
-    .btn-primary:hover {
-        background: var(--accent-hover);
-    }
-
     .inherited-badge {
         display: inline-block;
         padding: var(--space-1) var(--space-2);
@@ -228,7 +127,13 @@ export const variableEditorModalStyles = css`
         font-size: var(--text-xs);
         color: var(--text-tertiary);
         margin-left: var(--space-2);
+        font-weight: var(--font-normal, 400);
+    }
+
+    .modal-actions-inner {
+        display: flex;
+        gap: var(--space-2);
+        justify-content: flex-end;
+        width: 100%;
     }
 `;
-
-

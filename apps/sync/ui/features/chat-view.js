@@ -6,7 +6,6 @@ import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
 import './channel-picker.js';
@@ -432,7 +431,7 @@ export class ChatView extends PlatformElement {
     _syncTypingSubtitleFromStore() {
         const state = SyncStore.state;
         const sel = state.chat.selectedChannelId;
-        const myId = ServiceRegistry.auth?.user?.id;
+        const myId = this.auth?.user?.id;
         if (!sel || typeof myId !== 'string' || myId === '') {
             this._typingSubtitle = '';
             return;
@@ -579,7 +578,7 @@ export class ChatView extends PlatformElement {
     }
 
     async _deleteSelected() {
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const channelId = this._chat.selectedChannelId;
         if (!channelId) throw new Error('Канал не выбран.');
         const ids = this._ui.selectedMessageIds;
@@ -592,7 +591,7 @@ export class ChatView extends PlatformElement {
     }
 
     async _forwardSelectedToChannel(toChannelId) {
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const fromId = this._chat.selectedChannelId;
         if (!fromId) throw new Error('Канал не выбран.');
         const ids = this._ui.selectedMessageIds;
@@ -614,7 +613,7 @@ export class ChatView extends PlatformElement {
     }
 
     async _forwardModalPick(toChannelId) {
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const fwd = this._ui.forwardMessage;
         const fromId = this._chat.selectedChannelId;
         if (!fwd?.id || !fromId) throw new Error('Нет сообщения для пересылки.');
@@ -632,7 +631,7 @@ export class ChatView extends PlatformElement {
 
     _startCallWithChannel(channelId) {
         if (typeof channelId !== 'string' || channelId === '') return;
-        const ws = ServiceRegistry.get('syncWs');
+        const ws = this.services.get('syncWs');
         if (!ws) return;
         const id = typeof crypto.randomUUID === 'function'
             ? crypto.randomUUID()
@@ -652,7 +651,7 @@ export class ChatView extends PlatformElement {
     }
 
     async _startAdHocCall() {
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         if (!syncApi) return;
         let spaceId = this._chat.selectedSpaceId;
         if (typeof spaceId !== 'string' || spaceId === '') {

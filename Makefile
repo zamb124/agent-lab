@@ -1,6 +1,6 @@
 .PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base
 .PHONY: dev-up dev-down dev-logs dev-minio-restart test test-down test-unit test-integration prod-up prod-down prod-logs
-.PHONY: test-frontend test-rag run-rag
+.PHONY: test-frontend test-rag run-rag check-ui-canon
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
@@ -73,6 +73,10 @@ test-logs:
 test-frontend:
 	@echo "🧪 Запуск всех frontend тестов..."
 	uv run pytest tests/frontend/api/ -v
+
+# Канон UI (apps: без LitElement, без /static/core/lib в импортах JS, без ServiceRegistry)
+check-ui-canon:
+	@./scripts/check_ui_canon.sh
 
 # RAG тесты (с pgvector и MinIO)
 test-rag:

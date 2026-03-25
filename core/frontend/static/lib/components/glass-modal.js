@@ -6,6 +6,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { modalStyles } from '../styles/shared/modal.styles.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import './platform-icon.js';
 import './platform-button.js';
 
@@ -38,7 +39,7 @@ export class GlassModal extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                z-index: var(--z-modal, 1000);
+                z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
                 opacity: 0;
                 visibility: hidden;
                 transition: opacity var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out),
@@ -440,6 +441,16 @@ export class GlassModal extends PlatformElement {
         this._isDragging = false;
         document.removeEventListener('mousemove', this._boundMouseMove);
         document.removeEventListener('mouseup', this._boundMouseUp);
+    }
+
+    willUpdate(changedProperties) {
+        super.willUpdate(changedProperties);
+        if (changedProperties.has('open') && this.open) {
+            this.style.setProperty(
+                '--platform-modal-layer-z',
+                String(nextModalLayerZIndex()),
+            );
+        }
     }
 
     connectedCallback() {

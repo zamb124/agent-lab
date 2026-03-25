@@ -2,14 +2,13 @@
  * Модалка с кодом для встраивания виджета
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import '@platform/lib/components/glass-modal.js';
 
-export class EmbedCodeModal extends PlatformElement {
+export class EmbedCodeModal extends PlatformModal {
     static styles = [
-        PlatformElement.styles,
+        PlatformModal.styles,
         formStyles,
         buttonStyles,
         css`
@@ -53,32 +52,38 @@ export class EmbedCodeModal extends PlatformElement {
                     color: rgba(255, 255, 255, 0.5);
                 }
             }
-        `
+        `,
     ];
 
     constructor() {
         super();
+        this.size = 'lg';
+        this.open = false;
         this._embedId = '';
         this._code = '';
-        this._open = false;
         this._loading = false;
     }
 
     async show(embedId) {
         this._embedId = embedId;
-        this._open = true;
+        this.open = true;
         this._loading = true;
         this.requestUpdate();
-        
+
         const data = await this.services.get('embed').getCode(embedId);
         this._code = data.html_code;
         this._loading = false;
         this.requestUpdate();
     }
 
-    _handleClose() {
-        this._open = false;
+    close() {
+        this.open = false;
+        super.close();
         this.dispatchEvent(new CustomEvent('close'));
+    }
+
+    _handleClose() {
+        this.close();
     }
 
     async _handleCopy() {
@@ -86,35 +91,36 @@ export class EmbedCodeModal extends PlatformElement {
         this.success('Код скопирован в буфер обмена');
     }
 
+    renderHeader() {
+        return 'Код для встраивания';
+    }
+
+    renderBody() {
+        return this._loading
+            ? html`<div class="loading-state">Загрузка...</div>`
+            : html`
+                <p class="modal-description">
+                    Вставьте этот код на свой сайт перед закрывающим тегом &lt;/body&gt;:
+                </p>
+                <div class="code-block">${this._code}</div>
+            `;
+    }
+
+    renderFooter() {
+        return this._loading
+            ? html``
+            : html`
+                <button class="btn btn-primary" style="width: 100%;" @click=${this._handleCopy}>
+                    Скопировать код
+                </button>
+            `;
+    }
+
     render() {
-        return html`
-            <glass-modal 
-                ?open=${this._open} 
-                @close=${this._handleClose}
-                size="lg"
-            >
-                <span slot="title">Код для встраивания</span>
-                
-                <div slot="content">
-                    ${this._loading ? html`
-                        <div class="loading-state">Загрузка...</div>
-                    ` : html`
-                        <p class="modal-description">
-                            Вставьте этот код на свой сайт перед закрывающим тегом &lt;/body&gt;:
-                        </p>
-                        <div class="code-block">${this._code}</div>
-                    `}
-                </div>
-                
-                <div slot="actions">
-                    ${this._loading ? html`` : html`
-                        <button class="btn btn-primary" style="width: 100%;" @click=${this._handleCopy}>
-                            Скопировать код
-                        </button>
-                    `}
-                </div>
-            </glass-modal>
-        `;
+        if (!this.open) {
+            return html``;
+        }
+        return super.render();
     }
 }
 

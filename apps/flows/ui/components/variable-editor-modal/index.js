@@ -1,30 +1,41 @@
 /**
- * VariableEditorModal - Modal для создания/редактирования переменных
- * Поддерживает все поля: value, public, title, description, order
- * Два режима: text и JSON для value
+ * VariableEditorModal — создание/редактирование переменных flow (value, public, title, description, order).
+ * Режимы значения: text и JSON.
  */
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { variableEditorModalStyles } from './styles.js';
-import { renderModal } from './templates.js';
+import { html, css } from 'lit';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { variableEditorFormStyles } from './styles.js';
 
-export class VariableEditorModal extends PlatformElement {
-    static styles = [PlatformElement.styles, variableEditorModalStyles];
+export class VariableEditorModal extends PlatformModal {
+    static styles = [
+        PlatformModal.styles,
+        buttonStyles,
+        variableEditorFormStyles,
+        css`
+            :host {
+                --modal-max-width: 600px;
+            }
+        `,
+    ];
 
     static properties = {
-        open: { type: Boolean },
+        ...PlatformModal.properties,
         variableName: { type: String },
         variableData: { type: Object },
         isInherited: { type: Boolean },
         valueMode: { type: String },
+        _formData: { state: true },
     };
 
     constructor() {
         super();
-        this.open = false;
         this.variableName = '';
         this.variableData = null;
         this.isInherited = false;
         this.valueMode = 'text';
+        this.size = 'lg';
+        this.title = '';
         this._formData = {
             name: '',
             value: '',
@@ -35,16 +46,12 @@ export class VariableEditorModal extends PlatformElement {
         };
     }
 
-    render() {
-        if (!this.open) return null;
-        return renderModal(this);
-    }
-
     showCreate() {
         this.variableName = '';
         this.variableData = null;
         this.isInherited = false;
         this.valueMode = 'text';
+        this.title = 'Новая переменная';
         this._formData = {
             name: '',
             value: '',
@@ -59,7 +66,7 @@ export class VariableEditorModal extends PlatformElement {
     showEdit(name, data, isInherited = false) {
         this.variableName = name;
         this.isInherited = isInherited;
-        
+
         let value = data;
         if (typeof data === 'object' && data !== null) {
             if ('value' in data) {
@@ -74,13 +81,148 @@ export class VariableEditorModal extends PlatformElement {
         this._formData = {
             name: name,
             value: valueStr,
-            public: data ? (data.public || false) : false,
-            title: data ? (data.title || null) : null,
-            description: data ? (data.description || null) : null,
+            public: data ? data.public || false : false,
+            title: data ? data.title || null : null,
+            description: data ? data.description || null : null,
             order: data && data.order !== undefined ? data.order : null,
         };
         this.variableData = data;
+        this.title = `Редактировать: ${name}`;
         this.open = true;
+    }
+
+    renderHeader() {
+        return html`
+            ${this.title}
+            ${this.isInherited
+                ? html`<span class="inherited-badge">from base</span>`
+                : ''}
+        `;
+    }
+
+    renderBody() {
+        const isEdit = !!this.variableName;
+        return html`
+            ${!isEdit
+                ? html`
+                      <div class="form-group">
+                          <label class="form-label form-label-required">Имя переменной</label>
+                          <input
+                              type="text"
+                              class="form-input"
+                              placeholder="my_variable"
+                              .value=${this._formData.name}
+                              @input=${(e) => this._updateFormData('name', e.target.value)}
+                              required
+                          />
+                      </div>
+                  `
+                : ''}
+            <div class="form-group">
+                <label class="form-label">Значение</label>
+                <div class="mode-toggle">
+                    <button
+                        type="button"
+                        class="mode-btn ${this.valueMode === 'text' ? 'active' : ''}"
+                        @click=${() => this._setValueMode('text')}
+                    >
+                        Text
+                    </button>
+                    <button
+                        type="button"
+                        class="mode-btn ${this.valueMode === 'json' ? 'active' : ''}"
+                        @click=${() => this._setValueMode('json')}
+                    >
+                        JSON
+                    </button>
+                </div>
+                <textarea
+                    class="form-textarea"
+                    placeholder=${this.valueMode === 'json'
+                        ? '{"key": "value"}'
+                        : 'Значение переменной'}
+                    .value=${this._formData.value}
+                    @input=${(e) => this._updateFormData('value', e.target.value)}
+                ></textarea>
+                <span class="form-hint">
+                    ${this.valueMode === 'json'
+                        ? 'JSON формат для сложных структур данных'
+                        : 'Простое текстовое значение'}
+                </span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Заголовок</label>
+                <input
+                    type="text"
+                    class="form-input"
+                    placeholder="Название компании"
+                    .value=${this._formData.title || ''}
+                    @input=${(e) => this._updateFormData('title', e.target.value)}
+                />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Описание</label>
+                <input
+                    type="text"
+                    class="form-input"
+                    placeholder="Для использования в ответах агента"
+                    .value=${this._formData.description || ''}
+                    @input=${(e) => this._updateFormData('description', e.target.value)}
+                />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Порядок</label>
+                <input
+                    type="number"
+                    class="form-input"
+                    placeholder="0"
+                    .value=${this._formData.order !== null && this._formData.order !== undefined
+                        ? this._formData.order
+                        : ''}
+                    @input=${(e) =>
+                        this._updateFormData(
+                            'order',
+                            e.target.value ? parseInt(e.target.value, 10) : null,
+                        )}
+                />
+                <span class="form-hint">Порядок отображения (необязательно)</span>
+            </div>
+            <div class="form-group">
+                <div class="form-checkbox-group">
+                    <input
+                        type="checkbox"
+                        class="form-checkbox"
+                        id="public-checkbox"
+                        .checked=${this._formData.public}
+                        @change=${(e) => this._updateFormData('public', e.target.checked)}
+                    />
+                    <label class="form-checkbox-label" for="public-checkbox">
+                        Публичная (видна в flow-card)
+                    </label>
+                </div>
+            </div>
+        `;
+    }
+
+    renderFooter() {
+        const isEdit = !!this.variableName;
+        return html`
+            <div class="modal-actions-inner">
+                <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
+                    Отмена
+                </button>
+                <button type="button" class="btn btn-primary" @click=${this._onSave}>
+                    ${isEdit ? 'Сохранить' : 'Создать'}
+                </button>
+            </div>
+        `;
+    }
+
+    render() {
+        if (!this.open) {
+            return html``;
+        }
+        return super.render();
     }
 
     _formatValue(value) {
@@ -96,8 +238,10 @@ export class VariableEditorModal extends PlatformElement {
     _isJsonValue(str) {
         if (!str || typeof str !== 'string') return false;
         const trimmed = str.trim();
-        return (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
-               (trimmed.startsWith('[') && trimmed.endsWith(']'));
+        return (
+            (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))
+        );
     }
 
     _setValueMode(mode) {
@@ -143,7 +287,7 @@ export class VariableEditorModal extends PlatformElement {
 
     _onSave() {
         const name = this._formData.name.trim();
-        
+
         if (!this.variableName && !name) {
             this.error('Имя переменной обязательно');
             return;
@@ -167,17 +311,8 @@ export class VariableEditorModal extends PlatformElement {
         };
 
         this.emit('variable-saved', data);
-        this.open = false;
-    }
-
-    _onClose() {
-        this.open = false;
-    }
-
-    _onOverlayClick() {
-        this.open = false;
+        this.close();
     }
 }
 
 customElements.define('variable-editor-modal', VariableEditorModal);
-

@@ -17,7 +17,7 @@ globs:
 - **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket
 - **Деплой**: в production-образе обязателен `uv pip install ... --group sync` (`websockets` в `pyproject.toml`). Иначе uvicorn не поднимает WebSocket (`No supported WebSocket library`), клиент получает 404 на `GET /sync/ws` из-за SPA-fallback в `main.py` для пути `ws`
 - **TaskIQ broker**: один инстанс в `apps/sync/realtime/broker.py` — и `handle_command.kiq()`, и `taskiq worker apps.sync_worker.worker:broker` (реэкспорт из того же модуля)
-- **UI**: Lit в `apps/sync/ui/`
+- **UI**: Lit в `apps/sync/ui/` — тот же канон, что у остальных SPA: **`main.mdc` (раздел про фронтенд)** и **`frontend.mdc`**; отступления без правки рулов запрещены. Проверка: **`make check-ui-canon`**.
 
 ## Вход с консоли (frontend)
 
@@ -130,13 +130,20 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 ## Frontend (Lit 3 + PlatformApp)
 
-UI живёт в `apps/sync/ui/`, следует единому платформенному стеку (Lit 3 / BaseStore / BaseService / PlatformApp), идентичному `rag`, `crm`, `flows`.
+UI живёт в `apps/sync/ui/`, следует единому платформенному стеку (Lit 3 / BaseStore / BaseService / PlatformApp), идентичному `rag`, `crm`, `flows`. Базовые классы и импорты — строго по **`frontend.mdc`**; **`ServiceRegistry` в компонентах, фичах и модалках не импортировать** — только `this.services` / `this.auth` / геттеры `PlatformElement` (регистрация `syncApi` / `syncWs` — только в `apps/sync/ui/app/sync-app.js` через `this.services.register`).
+
+### Модалки и сервисы в UI
+
+- Модалки канала, пространства, профиля: `PlatformModal` (`GlassModal`), `renderHeader` / `renderBody` / `renderFooter`; в компонентах — `this.services.get('syncApi')` или `this.syncApi` после регистрации в `sync-app.js`.
+- `thread-drawer`, `message-context-menu`, оверлеи в `chat-view` — не `GlassModal` (drawer / меню / панель); см. **`frontend.mdc`**.
+- Shell: `apps/sync/ui/index.html` и `apps/sync/ui/call-join.html` — viewport и import map как в каноне (в т.ч. `@platform/services/`, `@livekit/client` где нужно), ранний `app-loader`; без обхода import map через импорты из `/static/core/lib/...` в JS.
 
 ### Стек и структура
 
 ```
 apps/sync/ui/
-  index.html              # import map Lit, @platform/lib/, tokens.css
+  index.html              # import map, tokens.css, app-loader (см. frontend.mdc)
+  call-join.html          # отдельная страница гостя к звонку; та же дисциплина import map
   index.js                # импорт компонентов
   app/sync-app.js         # extends PlatformApp, checkAuth() через AuthService
   store/sync.store.js     # BaseStore: spaces, channels, companyMembers, peerPresenceByUserId, messages, ws, ui
@@ -166,7 +173,7 @@ apps/sync/ui/
 - Точка входа: `/sync` (требует auth, redirect → `/login` через `PlatformApp.redirectToAuth()`)
 - API: только `/sync/api/v1/*`
 - `POST /files/` (multipart): ответ — `core.files.models.FileResponse` (плоский JSON: `file_id`, `url`, `original_name`, …). Вложений `file.storage_url` нет; превью/аватары используют `url` (same-origin путь к `GET .../files/download/{file_id}`), вложения в сообщениях — ещё `file_id` в блоках контента.
-- Auth: только cookie-based через `ServiceRegistry.auth` (`/sync/api/auth/me`)
+- Auth: только cookie-based через `this.auth` после `registerCore` (`/sync/api/auth/me`)
 - WebSocket: только `/sync/ws` (cookie auth при upgrade, без token в query)
 - Статика: `/sync/ui/static/*` (public)
 - Без legacy `/api/*`, `/ws`, `/auth`, `/chat`, localStorage JWT

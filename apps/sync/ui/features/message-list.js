@@ -3,7 +3,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
@@ -315,7 +314,7 @@ export class MessageList extends PlatformElement {
     }
 
     _syncCurrentUserId() {
-        const id = ServiceRegistry.auth?.user?.id ?? null;
+        const id = this.auth?.user?.id ?? null;
         if (this._currentUserId !== id) {
             this._currentUserId = id;
         }

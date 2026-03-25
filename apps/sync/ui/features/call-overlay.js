@@ -8,7 +8,9 @@
  * Режим SFU (mode="sfu"):
  *   LiveKit Room SDK. Токен передаётся через атрибут livekit-token.
  */
-import { html, css, LitElement } from 'lit';
+import { html, css } from 'lit';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 
 const LS_CAMERA_KEY = 'humanitec.sync.call.camera_enabled';
 const LS_AUDIO_NS_KEY = 'humanitec.sync.call.audio_noise_suppression';
@@ -71,7 +73,7 @@ function _hasStoredAudioPrefs() {
     }
 }
 
-class CallOverlay extends LitElement {
+class CallOverlay extends PlatformElement {
     static properties = {
         callId:      { type: String, attribute: 'call-id' },
         channelId:   { type: String, attribute: 'channel-id' },
@@ -98,11 +100,13 @@ class CallOverlay extends LitElement {
         _mediaSettingsError: { state: true },
     };
 
-    static styles = css`
+    static styles = [
+        PlatformElement.styles,
+        css`
         :host {
             position: fixed;
             inset: 0;
-            z-index: 9999;
+            z-index: var(--platform-modal-layer-z, var(--z-max, 9999));
             background: #0a0a0f;
             display: flex;
             flex-direction: column;
@@ -613,7 +617,8 @@ class CallOverlay extends LitElement {
             color: #fff;
             font-weight: 700;
         }
-    `;
+    `,
+    ];
 
     constructor() {
         super();
@@ -946,6 +951,10 @@ class CallOverlay extends LitElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this.style.setProperty(
+            '--platform-modal-layer-z',
+            String(nextModalLayerZIndex()),
+        );
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
         document.addEventListener('webkitfullscreenchange', this._onFullscreenChange);
         document.addEventListener('mozfullscreenchange', this._onFullscreenChange);

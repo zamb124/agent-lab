@@ -8,12 +8,13 @@
  *
  * После входа открывает call-overlay с полученным LiveKit токеном.
  */
-import { html, css, LitElement } from 'lit';
+import { html, css } from 'lit';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
 const token = window.location.pathname.split('/').at(-1);
 const API_BASE = '/sync/api/v1/calls';
 
-class CallJoinPage extends LitElement {
+class CallJoinPage extends PlatformElement {
     static properties = {
         _linkInfo: { state: true },
         _currentUser: { state: true },
@@ -23,7 +24,9 @@ class CallJoinPage extends LitElement {
         _joinData: { state: true },
     };
 
-    static styles = css`
+    static styles = [
+        PlatformElement.styles,
+        css`
         :host {
             display: flex;
             align-items: center;
@@ -171,7 +174,8 @@ class CallJoinPage extends LitElement {
             color: var(--accent-primary, #6366f1);
             margin-bottom: 4px;
         }
-    `;
+    `,
+    ];
 
     constructor() {
         super();

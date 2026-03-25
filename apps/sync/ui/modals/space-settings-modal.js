@@ -2,16 +2,14 @@
  * Пространство: создание и редактирование (имя, описание, аватар).
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
-import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 import { SyncStore } from '../store/sync.store.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 
-export class SpaceSettingsModal extends PlatformElement {
+export class SpaceSettingsModal extends PlatformModal {
     static properties = {
+        ...PlatformModal.properties,
         _spaceId: { state: true },
         _name: { state: true },
         _description: { state: true },
@@ -20,40 +18,10 @@ export class SpaceSettingsModal extends PlatformElement {
     };
 
     static styles = [
-        PlatformElement.styles,
-        glassStyles,
+        PlatformModal.styles,
         buttonStyles,
         formStyles,
-        modalShellStyles,
         css`
-            .backdrop {
-                position: fixed;
-                inset: 0;
-                z-index: 55;
-                background: rgba(0, 0, 0, 0.4);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: var(--space-6);
-            }
-
-            .modal {
-                width: 100%;
-                max-width: 480px;
-                border-radius: var(--radius-2xl);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                backdrop-filter: blur(var(--glass-blur-strong));
-                padding: var(--space-5);
-            }
-
-            .modal-title {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin-bottom: var(--space-4);
-            }
-
             .field {
                 margin-bottom: var(--space-3);
             }
@@ -98,7 +66,6 @@ export class SpaceSettingsModal extends PlatformElement {
                 flex-wrap: wrap;
                 justify-content: flex-end;
                 gap: var(--space-2);
-                margin-top: var(--space-5);
             }
 
             .btn {
@@ -142,6 +109,7 @@ export class SpaceSettingsModal extends PlatformElement {
 
     constructor() {
         super();
+        this.size = 'md';
         this._spaceId = null;
         this._syncedForSpaceId = null;
         this._name = '';
@@ -149,6 +117,7 @@ export class SpaceSettingsModal extends PlatformElement {
         this._avatarUrl = '';
         this._saving = false;
         this._lastModalOpenTag = null;
+        this.open = false;
     }
 
     connectedCallback() {
@@ -187,7 +156,18 @@ export class SpaceSettingsModal extends PlatformElement {
                 this._lastModalOpenTag = openTag;
                 this.requestUpdate();
             }
+
+            const show = create || (typeof nextId === 'string' && nextId !== '');
+            if (this.open !== show) {
+                this.open = show;
+            }
         });
+        const ui0 = SyncStore.state.ui;
+        const show0 = ui0.spaceSettingsCreate
+            || (typeof ui0.spaceSettingsSpaceId === 'string' && ui0.spaceSettingsSpaceId !== '');
+        if (this.open !== show0) {
+            this.open = show0;
+        }
     }
 
     disconnectedCallback() {
@@ -195,8 +175,23 @@ export class SpaceSettingsModal extends PlatformElement {
         this._unsubscribe?.();
     }
 
-    _close() {
+    close() {
         SyncStore.closeSpaceSettings();
+        super.close();
+    }
+
+    render() {
+        const ui = SyncStore.state.ui;
+        const isCreate = ui.spaceSettingsCreate;
+        const id = this._spaceId;
+        if (!isCreate && (typeof id !== 'string' || id === '')) {
+            return html``;
+        }
+        return super.render();
+    }
+
+    _onCancel() {
+        this.close();
     }
 
     async _pickFile(e) {
@@ -205,7 +200,7 @@ export class SpaceSettingsModal extends PlatformElement {
         if (!files || files.length === 0) return;
         const file = files[0];
         input.value = '';
-        const syncApi = ServiceRegistry.get('syncApi');
+        const syncApi = this.services.get('syncApi');
         const res = await syncApi.uploadFile(file);
         if (typeof res?.file_id !== 'string' || res.file_id === '' || typeof res?.url !== 'string' || res.url === '') {
             throw new Error('Некорректный ответ загрузки файла (нет file_id или url).');
@@ -221,7 +216,7 @@ export class SpaceSettingsModal extends PlatformElement {
         }
         this._saving = true;
         try {
-            const syncApi = ServiceRegistry.get('syncApi');
+            const syncApi = this.services.get('syncApi');
             const url = this._avatarUrl.trim();
             const description = this._description.trim() || null;
             if (create) {
@@ -235,7 +230,7 @@ export class SpaceSettingsModal extends PlatformElement {
                 }
                 await SyncStore.loadSpaces(syncApi);
                 SyncStore.selectSpace(created.id);
-                this._close();
+                this.close();
                 return;
             }
             const id = this._spaceId;
@@ -248,102 +243,106 @@ export class SpaceSettingsModal extends PlatformElement {
                 avatar_url: url === '' ? null : url,
             });
             await SyncStore.loadSpaces(syncApi);
-            this._close();
+            this.close();
         } finally {
             this._saving = false;
         }
     }
 
-    render() {
+    renderHeader() {
+        const ui = SyncStore.state.ui;
+        return ui.spaceSettingsCreate ? 'Создать пространство' : 'Настройки пространства';
+    }
+
+    renderBody() {
         const ui = SyncStore.state.ui;
         const isCreate = ui.spaceSettingsCreate;
         const id = this._spaceId;
         if (!isCreate && (typeof id !== 'string' || id === '')) {
             return html``;
         }
+        const descLabel = isCreate ? 'Описание (опционально)' : 'Описание';
+        const av = this._avatarUrl.trim();
+        return html`
+            <div class="field">
+                <label class="label">Название</label>
+                <input
+                    class="input"
+                    .value=${this._name}
+                    @input=${(e) => {
+                        this._name = e.target.value;
+                    }}
+                />
+            </div>
 
-        const title = isCreate ? 'Создать пространство' : 'Настройки пространства';
+            <div class="field">
+                <label class="label">${descLabel}</label>
+                <input
+                    class="input"
+                    .value=${this._description}
+                    @input=${(e) => {
+                        this._description = e.target.value;
+                    }}
+                />
+            </div>
+
+            <div class="field">
+                <label class="label">Аватар</label>
+                ${av ? html`<img class="avatar-preview" src=${av} alt="" />` : ''}
+                <input
+                    type="file"
+                    class="file-input"
+                    id="space-avatar-file"
+                    accept="image/*"
+                    @change=${(e) => {
+                        this._pickFile(e).catch((err) => {
+                            const t = err instanceof Error ? err.message : String(err);
+                            this.error(t);
+                        });
+                    }}
+                />
+                <button
+                    type="button"
+                    class="btn"
+                    style="margin-top:var(--space-2)"
+                    @click=${() => {
+                        const el = this.shadowRoot?.getElementById('space-avatar-file');
+                        if (el) el.click();
+                    }}
+                >
+                    Загрузить изображение
+                </button>
+            </div>
+        `;
+    }
+
+    renderFooter() {
+        const ui = SyncStore.state.ui;
+        const isCreate = ui.spaceSettingsCreate;
+        const id = this._spaceId;
+        if (!isCreate && (typeof id !== 'string' || id === '')) {
+            return html``;
+        }
         const primaryLabel = isCreate
             ? (this._saving ? 'Создаём…' : 'Создать')
             : (this._saving ? 'Сохранение…' : 'Сохранить');
-        const descLabel = isCreate ? 'Описание (опционально)' : 'Описание';
-
-        const av = this._avatarUrl.trim();
         return html`
-            <div class="backdrop" @click=${this._close}>
-                <div class="modal" @click=${(e) => e.stopPropagation()}>
-                    <div class="modal-title">${title}</div>
-
-                    <div class="field">
-                        <label class="label">Название</label>
-                        <input
-                            class="input"
-                            .value=${this._name}
-                            @input=${(e) => {
-                                this._name = e.target.value;
-                            }}
-                        />
-                    </div>
-
-                    <div class="field">
-                        <label class="label">${descLabel}</label>
-                        <input
-                            class="input"
-                            .value=${this._description}
-                            @input=${(e) => {
-                                this._description = e.target.value;
-                            }}
-                        />
-                    </div>
-
-                    <div class="field">
-                        <label class="label">Аватар</label>
-                        ${av
-                            ? html`<img class="avatar-preview" src=${av} alt="" />`
-                            : ''}
-                        <input
-                            type="file"
-                            class="file-input"
-                            id="space-avatar-file"
-                            accept="image/*"
-                            @change=${(e) => {
-                                this._pickFile(e).catch((err) => {
-                                    const t = err instanceof Error ? err.message : String(err);
-                                    this.error(t);
-                                });
-                            }}
-                        />
-                        <button
-                            type="button"
-                            class="btn"
-                            style="margin-top:var(--space-2)"
-                            @click=${() => {
-                                const el = this.shadowRoot?.getElementById('space-avatar-file');
-                                if (el) el.click();
-                            }}
-                        >
-                            Загрузить изображение
-                        </button>
-                    </div>
-
-                    <div class="actions">
-                        <button type="button" class="btn" @click=${this._close}>Отмена</button>
-                        <button
-                            type="button"
-                            class="btn btn-primary"
-                            ?disabled=${this._saving}
-                            @click=${() => {
-                                this._submit().catch((err) => {
-                                    const t = err instanceof Error ? err.message : String(err);
-                                    this.error(t);
-                                    this._saving = false;
-                                });
-                            }}
-                        >
-                            ${primaryLabel}
-                        </button>
-                    </div>
-                </div>
+            <div class="actions">
+                <button type="button" class="btn" @click=${this._onCancel}>Отмена</button>
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    ?disabled=${this._saving}
+                    @click=${() => {
+                        this._submit().catch((err) => {
+                            const t = err instanceof Error ? err.message : String(err);
+                            this.error(t);
+                            this._saving = false;
+                        });
+                    }}
+                >
+                    ${primaryLabel}
+                </button>
             </div>
         `;
     }

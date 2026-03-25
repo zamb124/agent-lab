@@ -5,7 +5,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { CRMAPIService } from '../services/crm-api.service.js';
 import { CRMStore } from '../store/crm.store.js';
 import '../components/notes-list.js';
@@ -261,8 +260,8 @@ export class CRMApp extends PlatformApp {
     async initServices() {
         await super.initServices();
         
-        await ServiceRegistry.registerCore('/crm');
-        ServiceRegistry.register('crmApi', new CRMAPIService('/crm/api/v1'));
+        await this.services.registerCore('/crm');
+        this.services.register('crmApi', new CRMAPIService('/crm/api/v1'));
         
         CRMStore.initFromUrl();
         CRMStore.setupPopstateListener();

@@ -5,6 +5,7 @@
  */
 import { PlatformElement } from '../platform-element/index.js';
 import { AppEvents } from '../utils/types.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 
 let lightModalStylesInjected = false;
 
@@ -20,7 +21,7 @@ function injectLightModalStyles() {
             display: none;
             position: fixed;
             inset: 0;
-            z-index: var(--z-modal, 1000);
+            z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
         }
         
         platform-light-modal[open],
@@ -76,6 +77,16 @@ export class PlatformLightModal extends PlatformElement {
         super();
         this.open = false;
         this.modalTitle = '';
+    }
+
+    willUpdate(changedProperties) {
+        super.willUpdate(changedProperties);
+        if (changedProperties.has('open') && this.open) {
+            this.style.setProperty(
+                '--platform-modal-layer-z',
+                String(nextModalLayerZIndex()),
+            );
+        }
     }
 
     connectedCallback() {

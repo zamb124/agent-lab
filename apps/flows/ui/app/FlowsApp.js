@@ -3,7 +3,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { A2AService } from '../services/a2a.service.js';
 import { FlowsStore } from '../store/flows.store.js';
 import '../components/sidebar/flows-sidebar.js';
@@ -67,7 +66,7 @@ export class FlowsApp extends PlatformApp {
     async initServices() {
         await super.initServices();
         
-        ServiceRegistry.register('a2a', new A2AService('/flows'));
+        this.services.register('a2a', new A2AService('/flows'));
         
         this.state = this.use(s => {
             const currentFlow = s.flows.list.find(a => a.flow_id === s.flows.currentId);

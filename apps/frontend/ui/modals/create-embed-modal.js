@@ -2,15 +2,14 @@
  * Модальное окно для создания виджета
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import '@platform/lib/components/glass-modal.js';
 import { FrontendStore } from '../store/frontend.store.js';
 
-export class CreateEmbedModal extends PlatformElement {
+export class CreateEmbedModal extends PlatformModal {
     static styles = [
-        PlatformElement.styles,
+        PlatformModal.styles,
         formStyles,
         buttonStyles,
         css`
@@ -89,12 +88,13 @@ export class CreateEmbedModal extends PlatformElement {
                     color: rgba(255, 255, 255, 0.7);
                 }
             }
-        `
+        `,
     ];
 
     constructor() {
         super();
-        this._open = true;
+        this.size = 'md';
+        this.open = true;
         this._loading = false;
         this._name = '';
         this._agentId = '';
@@ -115,7 +115,7 @@ export class CreateEmbedModal extends PlatformElement {
 
         this._loading = true;
         this.requestUpdate();
-        
+
         await this.services.get('embed').create({
             name: this._name.trim(),
             flow_id: this._agentId.trim(),
@@ -123,107 +123,108 @@ export class CreateEmbedModal extends PlatformElement {
             theme: this._theme,
             status: 'active',
         });
-        
+
         FrontendStore.setEmbedLoading(true);
         const configs = await this.services.get('embed').list();
         FrontendStore.setEmbedConfigs(configs);
-        
+
         this.success('Виджет успешно создан');
         this._handleClose();
         this.dispatchEvent(new CustomEvent('created'));
     }
 
-    _handleClose() {
-        this._open = false;
+    close() {
+        this.open = false;
+        super.close();
         this.dispatchEvent(new CustomEvent('close'));
     }
 
-    render() {
+    _handleClose() {
+        this.close();
+    }
+
+    renderHeader() {
+        return 'Создать виджет';
+    }
+
+    renderBody() {
         return html`
-            <glass-modal 
-                ?open=${this._open} 
-                @close=${this._handleClose}
-                size="md"
-            >
-                <span slot="title">Создать виджет</span>
-                
-                <div slot="content">
-                    <div class="form-group">
-                        <label class="form-label">Название виджета</label>
-                        <input
-                            class="form-input"
-                            type="text"
-                            placeholder="Чат-поддержка"
-                            .value=${this._name}
-                            @input=${(e) => { this._name = e.target.value; this.requestUpdate(); }}
-                            ?disabled=${this._loading}
-                        />
-                        <div class="form-hint">Краткое описание виджета</div>
-                    </div>
+            <div class="form-group">
+                <label class="form-label">Название виджета</label>
+                <input
+                    class="form-input"
+                    type="text"
+                    placeholder="Чат-поддержка"
+                    .value=${this._name}
+                    @input=${(e) => { this._name = e.target.value; this.requestUpdate(); }}
+                    ?disabled=${this._loading}
+                />
+                <div class="form-hint">Краткое описание виджета</div>
+            </div>
 
-                    <div class="form-group">
-                        <label class="form-label">ID агента</label>
-                        <input
-                            class="form-input"
-                            type="text"
-                            placeholder="support-agent"
-                            .value=${this._agentId}
-                            @input=${(e) => { this._agentId = e.target.value; this.requestUpdate(); }}
-                            ?disabled=${this._loading}
-                        />
-                        <div class="form-hint">Агент, который будет обрабатывать запросы</div>
-                    </div>
+            <div class="form-group">
+                <label class="form-label">ID агента</label>
+                <input
+                    class="form-input"
+                    type="text"
+                    placeholder="support-agent"
+                    .value=${this._agentId}
+                    @input=${(e) => { this._agentId = e.target.value; this.requestUpdate(); }}
+                    ?disabled=${this._loading}
+                />
+                <div class="form-hint">Агент, который будет обрабатывать запросы</div>
+            </div>
 
-                    <div class="form-group">
-                        <label class="form-label">Позиция на странице</label>
-                        <div class="position-options">
-                            ${this._renderPositionOption('bottom-right', '↘', 'Справа внизу')}
-                            ${this._renderPositionOption('bottom-left', '↙', 'Слева внизу')}
-                            ${this._renderPositionOption('center', '◎', 'По центру')}
-                            ${this._renderPositionOption('fullscreen', '⛶', 'На весь экран')}
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Тема оформления</label>
-                        <select 
-                            class="form-select"
-                            .value=${this._theme}
-                            @change=${(e) => { this._theme = e.target.value; this.requestUpdate(); }}
-                            ?disabled=${this._loading}
-                        >
-                            <option value="dark">Темная</option>
-                            <option value="light">Светлая</option>
-                            <option value="auto">Автоматическая</option>
-                        </select>
-                    </div>
+            <div class="form-group">
+                <label class="form-label">Позиция на странице</label>
+                <div class="position-options">
+                    ${this._renderPositionOption('bottom-right', '↘', 'Справа внизу')}
+                    ${this._renderPositionOption('bottom-left', '↙', 'Слева внизу')}
+                    ${this._renderPositionOption('center', '◎', 'По центру')}
+                    ${this._renderPositionOption('fullscreen', '⛶', 'На весь экран')}
                 </div>
-                
-                <div slot="actions">
-                    <div class="actions-row">
-                        <button
-                            class="btn btn-secondary"
-                            @click=${this._handleClose}
-                            ?disabled=${this._loading}
-                        >
-                            Отмена
-                        </button>
-                        <button
-                            class="btn btn-primary"
-                            @click=${this._handleCreate}
-                            ?disabled=${this._loading}
-                        >
-                            ${this._loading ? 'Создание...' : 'Создать виджет'}
-                        </button>
-                    </div>
-                </div>
-            </glass-modal>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Тема оформления</label>
+                <select
+                    class="form-select"
+                    .value=${this._theme}
+                    @change=${(e) => { this._theme = e.target.value; this.requestUpdate(); }}
+                    ?disabled=${this._loading}
+                >
+                    <option value="dark">Темная</option>
+                    <option value="light">Светлая</option>
+                    <option value="auto">Автоматическая</option>
+                </select>
+            </div>
+        `;
+    }
+
+    renderFooter() {
+        return html`
+            <div class="actions-row">
+                <button
+                    class="btn btn-secondary"
+                    @click=${this._handleClose}
+                    ?disabled=${this._loading}
+                >
+                    Отмена
+                </button>
+                <button
+                    class="btn btn-primary"
+                    @click=${this._handleCreate}
+                    ?disabled=${this._loading}
+                >
+                    ${this._loading ? 'Создание...' : 'Создать виджет'}
+                </button>
+            </div>
         `;
     }
 
     _renderPositionOption(value, icon, label) {
         return html`
-            <div 
+            <div
                 class="position-option ${this._position === value ? 'selected' : ''}"
                 @click=${() => { if (!this._loading) { this._position = value; this.requestUpdate(); }}}
             >

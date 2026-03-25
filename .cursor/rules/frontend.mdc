@@ -9,7 +9,7 @@ description: "Фронтенд frontend javascript frontend arch LIT html css st
 
 ### ЗАПРЕЩЕНО:
 
-1. **Импортировать `ServiceRegistry` в компонентах** — используй `this.services`, `this.a2a`, `this.notify`
+1. **Импортировать `ServiceRegistry` в компонентах** — используй `this.services`, `this.auth`, `this.a2a`, `this.syncApi`, `this.syncWs`, `this.notify` (регистрация сервисов — только в `*App.js` через `this.services.register` после `registerCore`)
 2. **Дублировать методы** — если метод есть в базовом классе, используй его
 3. **Создавать fallback'и** — если ошибка, бросай исключение
 4. **Импортировать `LitElement` напрямую** — наследуйся от `PlatformElement` или `GlassModal`
@@ -22,11 +22,20 @@ LitElement (Lit)
     └── PlatformElement (сервисы, notify, emit, use)
             ├── Обычные компоненты
             ├── PlatformApp (корневой компонент)
-            └── GlassModal (модальные окна)
+            └── GlassModal (модальные окна; тот же класс экспортируется как `PlatformModal` из `glass-modal.js`)
                     └── GlassFormModal (формы в модалках)
+                    └── PlatformLightModal (`glass-light-modal.js`) — light DOM (Drawflow и т.п.)
 ```
 
-**ВСЕ компоненты и модалки ОБЯЗАНЫ наследоваться от `PlatformElement` или его потомков!**
+**Все компоненты — от `PlatformElement`; модальные окна — от `GlassModal` / `PlatformModal` или `PlatformFormModal`, либо `PlatformLightModal` когда нужен light DOM.** Drawer и контекстное меню (не полноценное модальное окно) остаются на `PlatformElement` со shared-стилями.
+
+**Import map (SPA):** минимум `lit`, `@platform/lib/`, `@platform/services/`; сервисные специфичные записи (например `@livekit/client` в Sync, дополнительные `lit/directives/*` по факту импортов) добавляются точечно в `apps/<service>/ui/index.html`. Viewport `content` — как в `core/frontend/viewport.py`.
+
+**Общий блок import map (crm / rag / sync и отдельные shell вроде `call-join.html`):** `lit`, `lit/decorators.js`, `lit/directives/class-map.js`, `lit/directives/repeat.js`, `lit/directives/unsafe-html.js`, `lit/directives/when.js`, `@platform/lib/`, `@platform/services/`; у Sync дополнительно `@livekit/client`. Flows: добавить префикс `lit/` при необходимости поддерева; frontend — точечные директивы (например `unsafe-svg`) по импортам. Ранний `app-loader` в `<head>` (как в `apps/frontend/ui/index.html` и `apps/flows/ui/index.html`) желателен для единого старта; crm/rag/sync подключают тот же модуль через `import '/static/core/lib/components/app-loader.js'`.
+
+**Регрессия канона:** локально **`make check-ui-canon`** ([`scripts/check_ui_canon.sh`](../../scripts/check_ui_canon.sh)) — нет `extends LitElement`, нет импортов `from '/static/core/lib/...'` в `apps/**/*.js`, нет `ServiceRegistry` в `apps/**/*.js`.
+
+**Новый SPA или новый HTML-shell:** одна строка `viewport` как в [`core/frontend/viewport.py`](../../core/frontend/viewport.py); минимальный import map (см. выше) + точечные ключи под реальные импорты; ранний `app-loader`; корневой `*App extends PlatformApp` с `this.services.register` / `registerCore` в `initServices`, без импорта `ServiceRegistry` в компонентах.
 
 ---
 
@@ -50,6 +59,8 @@ core/frontend/static/
 **Версия деплоя в сайдбаре:** `platform-deployment-version` (`lib/components/platform-deployment-version.js`) запрашивает `GET {base-url}/health`, читает `deployment_version` из ответа (поле выставляет бэкенд из `SERVER__DEPLOYMENT_VERSION`). Атрибут `base-url` как у `getBaseUrl()` (`/frontend`, `/flows`, …). В футере под блоком пользователя — атрибут `footer` (узкая строка по центру, не в одном ряду с `platform-user`).
 
 **Панель уведомлений:** `platform-notification-manager` — список открывается `position: fixed` с координатами от кнопки (`getBoundingClientRect`), `z-index: var(--z-notification-panel, 30000)`, чтобы не уходить под соседний `platform-island` (flex + порядок DOM). Клик вне компонента закрывает панель.
+
+**Стек z-index для модалок и полноэкранных слоёв:** `core/frontend/static/lib/utils/modal-z-stack.js` — `nextModalLayerZIndex()` даёт монотонно растущее значение выше `--z-notification-panel` / `--z-modal` и т.д. При **каждом** открытии модалки выставлять на хосте `--platform-modal-layer-z` (делают `GlassModal`, `PlatformLightModal`, `auth-modal`, `company-modal`). Полноэкранные оверлеи вне этого набора (например `call-overlay`, `call-incoming` в Sync) при монтировании тоже вызывают `nextModalLayerZIndex()` и ту же CSS-переменную. Токен `--z-notification-panel` задан в `tokens.css`.
 
 apps/{service}/ui/
 ├── app/{Service}App.js          # extends PlatformApp
@@ -122,6 +133,8 @@ class MyModal extends GlassModal {
 - `this.notify` — NotifyService
 - `this.icon` — IconService
 - `this.companies` — CompaniesService
+- `this.syncApi` / `this.syncWs` — после регистрации в Sync (`syncApi`, `syncWs`), иначе `null`
+- `this.crmApi` / `this.ragApi` — после регистрации в CRM / RAG, иначе `null`
 
 ## IconService и `platform-icon`
 

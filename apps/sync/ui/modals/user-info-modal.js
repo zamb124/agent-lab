@@ -2,74 +2,19 @@
  * UserInfoModal — модалка с профилем отправителя
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { modalShellStyles } from '@platform/lib/platform-element/styles.js';
 
-export class UserInfoModal extends PlatformElement {
+export class UserInfoModal extends PlatformModal {
     static properties = {
-        open: { type: Boolean },
+        ...PlatformModal.properties,
         sender: { type: Object },
     };
 
     static styles = [
-        PlatformElement.styles,
-        glassStyles,
+        PlatformModal.styles,
         buttonStyles,
-        modalShellStyles,
         css`
-            .backdrop {
-                position: fixed;
-                inset: 0;
-                z-index: 50;
-                background: rgba(0, 0, 0, 0.4);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: var(--space-6);
-            }
-
-            .modal {
-                width: 100%;
-                max-width: 480px;
-                border-radius: var(--radius-2xl);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                backdrop-filter: blur(var(--glass-blur-strong));
-                padding: var(--space-5);
-            }
-
-            .modal-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-                margin-bottom: var(--space-4);
-            }
-
-            .modal-title {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-            }
-
-            .close-btn {
-                background: transparent;
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                color: var(--text-secondary);
-                cursor: pointer;
-                font-size: var(--text-xs);
-                padding: 4px 10px;
-                transition: all var(--duration-fast);
-            }
-
-            .close-btn:hover {
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-            }
-
             .fields {
                 display: flex;
                 flex-direction: column;
@@ -87,48 +32,61 @@ export class UserInfoModal extends PlatformElement {
                 color: var(--text-primary);
                 word-break: break-all;
             }
-        `
+        `,
     ];
 
     constructor() {
         super();
-        this.open = false;
+        this.title = 'Профиль';
+        this.size = 'md';
         this.sender = null;
     }
 
-    _close() {
+    close() {
+        super.close();
         this.emit('close');
     }
 
-    render() {
-        if (!this.open || !this.sender) return html``;
+    renderHeader() {
+        return 'Профиль';
+    }
 
+    renderBody() {
+        if (!this.sender) {
+            return html``;
+        }
+        const s = this.sender;
         return html`
-            <div class="backdrop" @click=${this._close}>
-                <div class="modal" @click=${(e) => e.stopPropagation()}>
-                    <div class="modal-header">
-                        <span class="modal-title">Профиль</span>
-                        <button class="close-btn" @click=${this._close}>Закрыть</button>
-                    </div>
-                    <div class="fields">
-                        <div>
-                            <div class="field-label">display_name</div>
-                            <div class="field-value">${this.sender.display_name}</div>
-                        </div>
-                        <div>
-                            <div class="field-label">user_id</div>
-                            <div class="field-value">${this.sender.user_id}</div>
-                        </div>
-                        ${this.sender.avatar_url ? html`
-                            <div>
-                                <div class="field-label">avatar_url</div>
-                                <div class="field-value">${this.sender.avatar_url}</div>
-                            </div>
-                        ` : ''}
-                    </div>
+            <div class="fields">
+                <div>
+                    <div class="field-label">display_name</div>
+                    <div class="field-value">${s.display_name}</div>
                 </div>
+                <div>
+                    <div class="field-label">user_id</div>
+                    <div class="field-value">${s.user_id}</div>
+                </div>
+                ${s.avatar_url
+                    ? html`
+                        <div>
+                            <div class="field-label">avatar_url</div>
+                            <div class="field-value">${s.avatar_url}</div>
+                        </div>
+                    `
+                    : ''}
             </div>
         `;
+    }
+
+    renderFooter() {
+        return html``;
+    }
+
+    render() {
+        if (!this.open || !this.sender) {
+            return html``;
+        }
+        return super.render();
     }
 }
 

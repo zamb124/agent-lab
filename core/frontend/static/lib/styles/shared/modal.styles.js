@@ -10,7 +10,7 @@ export const modalStyles = css`
         display: none;
         position: fixed;
         inset: 0;
-        z-index: var(--z-modal, 1000);
+        z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
     }
     
     :host([open]) {

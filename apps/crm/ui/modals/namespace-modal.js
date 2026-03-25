@@ -2,21 +2,21 @@
  * Namespace Modal - Создание нового пространства (namespace)
  */
 import { html, css } from 'lit';
-import { GlassModal } from '@platform/lib/components/glass-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
 
-export class NamespaceModal extends GlassModal {
+export class NamespaceModal extends PlatformModal {
     static properties = {
-        ...GlassModal.properties,
+        ...PlatformModal.properties,
         _name: { state: true },
         _description: { state: true },
         _saving: { state: true },
     };
 
     static styles = [
-        GlassModal.styles,
+        PlatformModal.styles,
         formStyles,
         buttonStyles,
         css`

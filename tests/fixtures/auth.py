@@ -1,11 +1,15 @@
 """
-Фикстуры для авторизации в тестах CRM.
+Фикстуры для авторизации в тестах CRM и E2E UI.
 
-Создает 4 типа пользователей:
-1. auth_headers_system - пользователь системной компании (основной)
-2. auth_headers_system_user2 - другой пользователь из системной компании
-3. auth_headers_company2 - пользователь из другой компании (company2)
-4. auth_headers_company2_user2 - второй пользователь из другой компании (company2)
+Две компании (`system`, `company2`), четыре пользователя с ролями owner/admin и member.
+Для браузера (pytest Playwright): см. tests/ui/conftest.py — `ui_page_system`, `ui_page_system_member`,
+`ui_page_company2`, `ui_page_company2_member`, `page` / `ui_page_anonymous` без cookie.
+
+Токены:
+1. auth_token_system / auth_headers_system — system, owner+admin
+2. auth_token_system_user2 / auth_headers_system_user2 — system, member
+3. auth_token_company2 / auth_headers_company2 — company2, owner+admin
+4. auth_token_company2_user2 / auth_headers_company2_user2 — company2, member
 """
 
 import pytest

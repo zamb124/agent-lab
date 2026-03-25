@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { ServiceRegistry } from '../services/ServiceRegistry.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 
 export class AuthModal extends PlatformElement {
     static properties = {
@@ -19,7 +20,7 @@ export class AuthModal extends PlatformElement {
                 left: 0;
                 width: 100%;
                 height: 100%;
-                z-index: 1000;
+                z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
                 background: rgba(0, 0, 0, 0.7);
                 backdrop-filter: blur(10px);
             }
@@ -138,6 +139,16 @@ export class AuthModal extends PlatformElement {
         this.open = false;
         this.loading = false;
         this.error = '';
+    }
+
+    willUpdate(changedProperties) {
+        super.willUpdate(changedProperties);
+        if (changedProperties.has('open') && this.open) {
+            this.style.setProperty(
+                '--platform-modal-layer-z',
+                String(nextModalLayerZIndex()),
+            );
+        }
     }
 
     async handleProviderClick(provider) {

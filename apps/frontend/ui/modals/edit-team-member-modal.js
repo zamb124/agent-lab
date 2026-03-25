@@ -2,10 +2,9 @@
  * Модальное окно редактирования ролей участника команды
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import '@platform/lib/components/glass-modal.js';
 
 const ALL_ROLES = ['owner', 'admin', 'developer', 'viewer'];
 
@@ -16,9 +15,9 @@ const ROLE_LABELS = {
     viewer: 'Наблюдатель',
 };
 
-export class EditTeamMemberModal extends PlatformElement {
+export class EditTeamMemberModal extends PlatformModal {
     static styles = [
-        PlatformElement.styles,
+        PlatformModal.styles,
         formStyles,
         buttonStyles,
         css`
@@ -80,7 +79,8 @@ export class EditTeamMemberModal extends PlatformElement {
 
     constructor() {
         super();
-        this._open = false;
+        this.size = 'md';
+        this.open = false;
         this._member = null;
         this._selectedRoles = [];
         this._ownerUserId = null;
@@ -102,7 +102,7 @@ export class EditTeamMemberModal extends PlatformElement {
             this._selectedRoles = [];
         }
         this._ownerUserId = null;
-        this._open = true;
+        this.open = true;
         this._loadingSettings = true;
         this.requestUpdate();
 
@@ -175,48 +175,57 @@ export class EditTeamMemberModal extends PlatformElement {
         }
     }
 
-    _handleClose() {
-        this._open = false;
+    close() {
+        this.open = false;
+        super.close();
         this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
     }
 
-    render() {
+    _handleClose() {
+        this.close();
+    }
+
+    renderHeader() {
         const name = this._member?.name ?? '';
+        return `Участник: ${name}`;
+    }
+
+    renderBody() {
         const isCompanyOwner =
             this._ownerUserId && this._member && this._member.user_id === this._ownerUserId;
+        return this._loadingSettings
+            ? html`<div class="loading-inline">Загрузка...</div>`
+            : this._renderRoles(isCompanyOwner);
+    }
 
-        return html`
-            <glass-modal ?open=${this._open} @close=${this._handleClose} size="md">
-                <span slot="title">Участник: ${name}</span>
-                <div slot="content">
-                    ${this._loadingSettings
-                        ? html`<div class="loading-inline">Загрузка...</div>`
-                        : this._renderRoles(isCompanyOwner)}
+    renderFooter() {
+        return this._loadingSettings
+            ? html``
+            : html`
+                <div class="actions-row">
+                    <button
+                        class="btn btn-secondary"
+                        @click=${this._handleClose}
+                        ?disabled=${this._saving}
+                    >
+                        Отмена
+                    </button>
+                    <button
+                        class="btn btn-primary"
+                        @click=${this._handleSave}
+                        ?disabled=${this._saving}
+                    >
+                        ${this._saving ? 'Сохранение...' : 'Сохранить'}
+                    </button>
                 </div>
-                <div slot="actions">
-                    ${this._loadingSettings
-                        ? ''
-                        : html`
-                              <div class="actions-row">
-                                  <button
-                                      class="btn btn-secondary"
-                                      @click=${this._handleClose}
-                                      ?disabled=${this._saving}
-                                  >
-                                      Отмена
-                                  </button>
-                                  <button
-                                      class="btn btn-primary"
-                                      @click=${this._handleSave}
-                                      ?disabled=${this._saving}
-                                  >
-                                      ${this._saving ? 'Сохранение...' : 'Сохранить'}
-                                  </button>
-                              </div>
-                          `}
-                </div>
-            </glass-modal>
-        `;
+            `;
+    }
+
+    render() {
+        if (!this.open) {
+            return html``;
+        }
+        return super.render();
     }
 
     _renderRoles(isCompanyOwner) {

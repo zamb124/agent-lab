@@ -278,6 +278,8 @@ def pytest_collection_modifyitems(items: list) -> None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
         elif item.nodeid.startswith("tests/sync/"):
             item.add_marker(pytest.mark.xdist_group("sync_db"))
+        elif item.nodeid.startswith("tests/ui/"):
+            item.add_marker(pytest.mark.xdist_group("ui_e2e"))
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)

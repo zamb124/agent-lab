@@ -25,20 +25,22 @@ alwaysApply: false
 
 **PytestCollectionWarning** (`cannot collect test class ... because it has a __init__`): доменные классы с префиксом `Test*` (например `TestRunner`, `TestCaseConfig`) не должны собираться как тесты — на классе задаётся **`__test__ = False`** (для Pydantic-моделей: **`__test__: ClassVar[bool] = False`**).
 
-Каталог **`tests/frontend/browser/`** — **E2E в браузере** через **pytest** (будущий Playwright): полное приложение, сервисы, сессии. `mk/test.mk` вызывает `pytest tests/frontend/browser`. Не смешивать с компонентными JS-тестами.
+**E2E UI (продукт):** сценарии **`tests/ui/e2e/`**, фикстуры и реестр — **`tests/ui/`** (pytest + Playwright, `tests/fixtures/services.py`, cookie `auth_token`, `ui_page_*`). Запуск: **`make test-ui`**. Не смешивать с компонентными JS-тестами.
 
 ### Компонентные UI-тесты (Lit)
 
 | | |
 |---|---|
 | Раннер | **@web/test-runner** + **@web/test-runner-playwright** (Chromium), конфиг **[`web-test-runner.config.mjs`](../../web-test-runner.config.mjs)** |
-| Файлы | **`tests/ui/**/*.test.js`**, хелперы — **`tests/ui/helpers/`** (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture` / `html` / `expect` из `@open-wc/testing`) |
+| Файлы | **`tests/ui_components/**/*.test.js`**, хелперы — **`tests/ui_components/helpers/`** (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture` / `html` / `expect` из `@open-wc/testing`) |
 | Импорты | Как в приложении: `lit` через **node-resolve**, префиксы **`@platform/lib/`** и **`@platform/services/`** — через import map в конфиге (пути к `core/frontend/static/...`) |
-| Запуск | **`npm ci`** (первый раз / в CI), затем **`npm run test:ui`** или **`make test-ui`** (цель в [`mk/test.mk`](../../mk/test.mk)). В **`make test`** / **`docker-compose` tests-runner** **не входит** — нужны Node.js и зависимости из [`package.json`](../../package.json). |
+| Запуск | **`npm ci`**, затем **`npm run test:ui-components`** или **`make test-ui-components`**. В **`make test`** / **`docker-compose` tests-runner** **не входит** — нужны Node.js и зависимости из [`package.json`](../../package.json). |
 | Изоляция сервисов | После тестов вызывать **`teardownPlatformServices()`** — сброс [`ServiceRegistry.resetForUiTests()`](../../core/frontend/static/lib/services/ServiceRegistry.js). Не использовать в прод-коде. |
 | Логи | При `setupPlatformServices` возможны предупреждения PWA (404 для `sw.js` в тестовом origin) — ожидаемо без отдачи `sw.js` раннером. |
 
-**Граница:** `tests/ui` — изолированные компоненты и платформенные импорты; **`tests/frontend/browser`** — сценарии уровня продукта через pytest/Playwright.
+**Граница:** `tests/ui_components` — изолированные Lit-компоненты (WTR); **`tests/ui/e2e`** — E2E с бэкендом; **`tests/ui`** — только движок (conftest, `AppUI`, реестр).
+
+**Регрессия архитектуры UI:** после правок в `apps/*/ui/index.html`, import map, базовых классах (`PlatformElement`, `PlatformModal`, `*App`) или массовой замене импортов — **`npm run test:ui-components`**; при затронутых shell или маршрутах SPA — **`pytest tests/ui/`** (Playwright), для чего нужен поднятый стек сервисов (см. [`tests/ui/harness.py`](../../tests/ui/harness.py)). Быстрый статический контроль канона в `apps/**/*.js`: **`make check-ui-canon`**.
 
 ---
 
@@ -145,9 +147,22 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 ---
 
-## UI тесты (Playwright)
+## E2E UI (единый движок)
 
-Все UI компоненты тестируются через `/{service}/test` — пустая HTML страница, доступна при `TESTING=true`.
+- **Инфраструктура:** `make test-ui` = `test-up` + `pytest tests/ui/e2e`; браузер: `uv run playwright install chromium`.
+- **Реестр SPA:** `tests/ui/apps.py` (`AppUI`, порты 9001–9005); обёртка: `tests/ui/harness.py`.
+- **Персоны (те же сущности, что `tests/fixtures/auth.py`):** сессионно создаются четыре пользователя (две компании). В тесте подключаешь нужную страницу:
+  - `ui_page_system` — system, owner/admin
+  - `ui_page_system_member` — system, member
+  - `ui_page_company2` — company2, owner/admin
+  - `ui_page_company2_member` — company2, member
+  - `page` или `ui_page_anonymous` — без `auth_token` (редирект на логин для защищённых SPA)
+- **Метаданные для assert:** `ui_user_system`, `ui_user_system_member`, `ui_user_company2`, `ui_user_company2_member`, `ui_user_anonymous` (`UiTestUser` из `tests/ui/personas.py`).
+- **Инструкции для пользователей (Markdown + скриншоты):** фикстура `scenario` (`tests/ui/scenario_doc.py`). Заголовок и текст — маркер `@pytest.mark.scenario(title="...", description="...")` или первая строка/остаток docstring теста. Опционально `@pytest.mark.scenario_tag("sync")` → вывод в `docs/scenarios/<тег>/<slug>/`. Шаги: `await scenario.step("Подпись шага", page)` (скриншот) или без `page` — только текст. Итог: `README.md` и `screenshots/*.png`. Отключить запись: `UI_SCENARIO_DOCS=0`.
+
+## UI компоненты и страница `/{service}/test`
+
+Изолированные компоненты и страница `/{service}/test` — пустая HTML при `TESTING=true`.
 
 ```python
 @pytest_asyncio.fixture
@@ -312,7 +327,7 @@ uv run pytest tests/flows/api/test_a2a.py::TestA2A::test_message_send -v -s
 
 ## Внешние зависимости тестового окружения
 
-- **Компонентные UI-тесты (`npm run test:ui`):** образ **[`Dockerfile.test`](../../Dockerfile.test)** и контейнер **tests-runner** содержат только Python/uv. Прогон `tests/ui` в CI делается **отдельным job** с Node.js (`npm ci`, `npm run test:ui`). При ошибке запуска Chromium установить браузеры Playwright: `npx playwright install chromium` (на чистом Linux могут понадобиться системные пакеты из документации Playwright).
+- **Компонентные UI-тесты (`npm run test:ui-components`):** образ **[`Dockerfile.test`](../../Dockerfile.test)** и контейнер **tests-runner** содержат только Python/uv. Прогон WTR — **отдельным job** с Node.js. **E2E `tests/ui/e2e`** — pytest + Playwright из uv (`uv run playwright install chromium`).
 - Фикстура `test_a2a_sample` — URL тестового A2A sample; в `docker-compose-test.yaml` сервис `test-a2a-agent` проброшен на порт **18052**.
 - `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push тестов.
 - Реальные вызовы LLM API в `test_llm_providers.py` пропускаются (`skip`) при 401/403 от внешнего API в CI.

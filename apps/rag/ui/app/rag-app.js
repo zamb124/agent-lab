@@ -3,7 +3,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { RAGAPIService } from '../services/rag-api.service.js';
 import { RagStore } from '../store/rag.store.js';
 import '@platform/lib/components/layout/platform-island.js';
@@ -71,8 +70,8 @@ export class RagApp extends PlatformApp {
     async initServices() {
         await super.initServices();
         
-        await ServiceRegistry.registerCore('/rag');
-        ServiceRegistry.register('ragApi', new RAGAPIService('/rag/api/v1'));
+        await this.services.registerCore('/rag');
+        this.services.register('ragApi', new RAGAPIService('/rag/api/v1'));
         
         this._unsubscribe = RagStore.subscribe((state) => {
             this._currentView = state.ui.currentView;
