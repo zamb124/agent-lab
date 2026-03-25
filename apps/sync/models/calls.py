@@ -79,3 +79,7 @@ class JoinResponse(BaseModel):
     livekit_url: str
     identity: str
     mode: CallMode
+    participant_names: dict[str, str] = Field(
+        default_factory=dict,
+        description="LiveKit identity -> отображаемое имя (для гостя без карты участников компании).",
+    )

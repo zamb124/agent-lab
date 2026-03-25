@@ -69,6 +69,30 @@ def _livekit_public_url(settings) -> str:
     return settings.calls.livekit_public_url or settings.calls.livekit_url
 
 
+async def _participant_names_for_call(container, call: SyncCall) -> dict[str, str]:
+    """Соответствие LiveKit identity (user_id / guest:...) -> имя для оверлея (в т.ч. у гостя по ссылке)."""
+    out: dict[str, str] = {}
+    member_ids = await container.channel_repository.list_member_user_ids(
+        call.channel_id, company_id=call.company_id
+    )
+    for uid in member_ids:
+        user = await container.user_repository.get(uid)
+        out[uid] = user.name if user is not None else uid
+
+    for p in await container.call_repository.list_participants(call.call_id):
+        uid = p.user_id
+        if uid in out:
+            continue
+        if uid.startswith("guest:"):
+            parts = uid.split(":", 2)
+            out[uid] = parts[2] if len(parts) >= 3 else "Гость"
+        else:
+            user = await container.user_repository.get(uid)
+            out[uid] = user.name if user is not None else uid
+
+    return out
+
+
 # ─── Авторизованные эндпоинты ────────────────────────────────────────────────
 
 @router.get("/turn-credentials")
@@ -307,10 +331,13 @@ async def join_via_link(
         identity=identity,
     )
 
+    participant_names = await _participant_names_for_call(container, call)
+
     return JoinResponse(
         call_id=call.call_id,
         livekit_token=token,
         livekit_url=_livekit_public_url(settings),
         identity=identity,
         mode="sfu",
+        participant_names=participant_names,
     )

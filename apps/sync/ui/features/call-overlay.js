@@ -106,28 +106,56 @@ class CallOverlay extends LitElement {
             background: #0a0a0f;
             display: flex;
             flex-direction: column;
+            box-sizing: border-box;
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+            padding-left: env(safe-area-inset-left, 0px);
         }
 
         .video-grid {
             flex: 1;
+            min-height: 0;
             display: grid;
-            place-items: center;
+            align-content: start;
+            justify-items: stretch;
+            align-items: start;
             padding: 16px;
-            gap: 8px;
-            overflow: hidden;
+            gap: 12px;
+            overflow-x: hidden;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .video-grid.one   { grid-template-columns: 1fr; }
         .video-grid.two   { grid-template-columns: 1fr 1fr; }
         .video-grid.many  { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 
+        @media (max-width: 640px) {
+            .video-grid {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                justify-content: flex-start;
+                gap: 12px;
+                padding: 12px;
+            }
+            .video-grid.two {
+                grid-template-columns: unset;
+                flex-direction: column;
+            }
+        }
+
         .participant-tile {
             background: rgba(255,255,255,0.05);
             border-radius: 16px;
             overflow: hidden;
             width: 100%;
+            max-width: 100%;
+            flex-shrink: 0;
             aspect-ratio: 16 / 9;
             position: relative;
+            z-index: 0;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -171,6 +199,8 @@ class CallOverlay extends LitElement {
             border-radius: 10px;
             border: none;
             cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -249,17 +279,33 @@ class CallOverlay extends LitElement {
 
         .call-menu {
             position: absolute;
-            bottom: calc(100% + 10px);
-            min-width: 220px;
-            max-width: min(320px, 92vw);
-            padding: 8px 0;
-            background: rgba(22, 22, 30, 0.98);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 12px;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+            bottom: calc(100% + 12px);
+            min-width: 240px;
+            max-width: min(340px, 92vw);
+            padding: var(--space-3) 0;
+            font-family: var(--font-sans);
+            font-size: var(--text-sm);
+            line-height: var(--leading-normal);
+            color: var(--text-primary);
+            background: var(--glass-solid-medium);
+            backdrop-filter: blur(var(--glass-blur-medium)) saturate(1.35);
+            -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(1.35);
+            border: 1px solid var(--glass-border-medium);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-subtle);
             z-index: 10010;
-            color: rgba(255,255,255,0.9);
-            font-size: 13px;
+            animation: call-menu-in var(--duration-fast) var(--easing-smooth) both;
+        }
+
+        @keyframes call-menu-in {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .call-menu--left {
@@ -272,42 +318,78 @@ class CallOverlay extends LitElement {
 
         .call-menu label {
             display: block;
-            padding: 4px 12px 2px;
-            font-size: 11px;
+            padding: var(--space-2) var(--space-4) var(--space-1);
+            font-size: var(--text-xs);
+            font-weight: var(--font-semibold);
+            letter-spacing: var(--tracking-wide);
             text-transform: uppercase;
-            letter-spacing: 0.04em;
-            color: rgba(255,255,255,0.45);
+            color: var(--text-tertiary);
         }
 
         .call-menu select {
             display: block;
-            width: calc(100% - 24px);
-            margin: 0 12px 10px;
-            padding: 8px 10px;
-            border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.14);
-            background: rgba(0,0,0,0.35);
-            color: #fff;
-            font-size: 13px;
+            width: calc(100% - 2 * var(--space-4));
+            margin: 0 var(--space-4) var(--space-3);
+            padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+            appearance: none;
+            -webkit-appearance: none;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border-medium);
+            background: var(--glass-tint-medium);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.45)' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: var(--text-sm);
+            cursor: pointer;
+            transition: border-color var(--duration-fast) var(--easing-default),
+                background var(--duration-fast) var(--easing-default),
+                box-shadow var(--duration-fast) var(--easing-default);
+        }
+
+        .call-menu select:hover:not(:disabled) {
+            border-color: var(--glass-border-strong);
+            background: var(--glass-tint-strong);
+        }
+
+        .call-menu select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-subtle);
+        }
+
+        .call-menu select:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
 
         .call-menu-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 8px;
-            padding: 10px 12px;
+            gap: var(--space-3);
+            margin: 0 var(--space-2);
+            padding: var(--space-3) var(--space-3);
             cursor: pointer;
             border: none;
-            width: 100%;
+            width: calc(100% - 2 * var(--space-2));
+            border-radius: var(--radius-md);
             background: transparent;
-            color: inherit;
+            color: var(--text-primary);
             font: inherit;
+            font-weight: var(--font-medium);
             text-align: left;
+            transition: background var(--duration-fast) var(--easing-default);
         }
 
         .call-menu-item:hover {
-            background: rgba(255,255,255,0.06);
+            background: var(--glass-tint-medium);
+        }
+
+        .call-menu-item:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 2px var(--accent-subtle);
         }
 
         .call-menu-item--sub {
@@ -317,41 +399,105 @@ class CallOverlay extends LitElement {
         }
 
         .call-menu-item--sub > button.call-menu-item {
-            width: 100%;
+            width: calc(100% - 2 * var(--space-2));
+        }
+
+        .call-menu-chevron {
+            flex-shrink: 0;
+            opacity: 0.45;
         }
 
         .call-menu-flyout {
             position: absolute;
-            right: calc(100% + 4px);
+            right: calc(100% + 8px);
             left: auto;
-            top: auto;
-            bottom: 0;
-            min-width: 240px;
-            padding: 8px 0;
-            background: rgba(22, 22, 30, 0.98);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 12px;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+            top: 0;
+            bottom: auto;
+            min-width: 260px;
+            padding: var(--space-2) 0;
+            font-family: var(--font-sans);
+            background: var(--glass-solid-medium);
+            backdrop-filter: blur(var(--glass-blur-medium)) saturate(1.35);
+            -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(1.35);
+            border: 1px solid var(--glass-border-medium);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-subtle);
             z-index: 10011;
+            animation: call-menu-in var(--duration-fast) var(--easing-smooth) both;
         }
 
-        .call-menu-row {
+        .call-menu-toggle {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
-            padding: 8px 14px;
-            font-size: 13px;
-        }
-
-        .call-menu-row span {
-            flex: 1;
-        }
-
-        .call-switch {
-            width: 40px;
-            height: 22px;
+            gap: var(--space-4);
+            margin: 2px var(--space-2);
+            padding: var(--space-3) var(--space-3);
+            border-radius: var(--radius-md);
             cursor: pointer;
+            font-size: var(--text-sm);
+            font-weight: var(--font-medium);
+            color: var(--text-primary);
+            transition: background var(--duration-fast) var(--easing-default);
+        }
+
+        .call-menu-toggle:hover {
+            background: var(--glass-tint-medium);
+        }
+
+        .call-menu-toggle-label {
+            flex: 1;
+            line-height: var(--leading-tight);
+        }
+
+        .call-switch-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .call-switch-visual {
+            position: relative;
+            flex-shrink: 0;
+            width: 46px;
+            height: 28px;
+            border-radius: var(--radius-full);
+            background: rgba(255, 255, 255, 0.14);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+            transition: background var(--duration-fast) var(--easing-default);
+        }
+
+        .call-switch-visual::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 4px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            transition: transform var(--duration-fast) var(--easing-default);
+        }
+
+        .call-menu-toggle:has(.call-switch-input:checked) .call-switch-visual {
+            background: var(--accent);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), var(--accent-glow);
+        }
+
+        .call-menu-toggle:has(.call-switch-input:checked) .call-switch-visual::after {
+            transform: translateX(16px);
+        }
+
+        .call-menu-toggle:has(.call-switch-input:focus-visible) .call-switch-visual {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
         }
 
         .ctrl-btn[disabled] {
@@ -645,10 +791,18 @@ class CallOverlay extends LitElement {
         }
     }
 
+    _isIosLikeTouchSafari() {
+        if (typeof navigator === 'undefined') return false;
+        if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return true;
+        return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    }
+
     _onTileFullscreenClick(e) {
         e.stopPropagation();
         const tile = e.currentTarget.closest('.participant-tile');
-        if (!tile || !tile.querySelector('video')) return;
+        const video = tile?.querySelector('video');
+        if (!tile || !video) return;
+        const tileKey = tile.getAttribute('data-tile-key');
         const doc = document;
         const current = this._getFullscreenElement();
         if (current && (current === tile || tile.contains(current))) {
@@ -658,9 +812,47 @@ class CallOverlay extends LitElement {
             else if (doc.msExitFullscreen) doc.msExitFullscreen();
             return;
         }
-        if (tile.requestFullscreen) {
-            tile.requestFullscreen();
-        } else if (tile.webkitRequestFullscreen) {
+        const preferVideoNativeFs =
+            typeof video.webkitEnterFullscreen === 'function'
+            && (
+                doc.fullscreenEnabled === false
+                || doc.fullscreenEnabled === undefined
+                || this._isIosLikeTouchSafari()
+            );
+        if (preferVideoNativeFs) {
+            if (!video._callOverlayWebkitFsEnd) {
+                video._callOverlayWebkitFsEnd = () => {
+                    this._fullscreenTileKey = null;
+                    this.requestUpdate();
+                };
+                video.addEventListener('webkitendfullscreen', video._callOverlayWebkitFsEnd);
+            }
+            video.webkitEnterFullscreen();
+            this._fullscreenTileKey = tileKey;
+            this.requestUpdate();
+            return;
+        }
+        const req = tile.requestFullscreen?.bind(tile);
+        if (req) {
+            const p = req();
+            if (p && typeof p.catch === 'function') {
+                p.catch(() => {
+                    if (typeof video.webkitEnterFullscreen === 'function') {
+                        video.webkitEnterFullscreen();
+                        this._fullscreenTileKey = tileKey;
+                        this.requestUpdate();
+                    }
+                });
+            }
+            return;
+        }
+        if (typeof video.webkitEnterFullscreen === 'function') {
+            video.webkitEnterFullscreen();
+            this._fullscreenTileKey = tileKey;
+            this.requestUpdate();
+            return;
+        }
+        if (tile.webkitRequestFullscreen) {
             tile.webkitRequestFullscreen();
         } else if (tile.mozRequestFullScreen) {
             tile.mozRequestFullScreen();
@@ -1200,37 +1392,42 @@ class CallOverlay extends LitElement {
                                 <div class="call-menu-item--sub">
                                     <button type="button" class="call-menu-item" @click=${this._toggleAudioQualitySub}>
                                         Качество звука
-                                        <span style="opacity:0.5">›</span>
+                                        <svg class="call-menu-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M9 18l6-6-6-6"/>
+                                        </svg>
                                     </button>
                                     ${this._audioQualitySubOpen ? html`
                                         <div class="call-menu-flyout" @click=${(e) => e.stopPropagation()}>
-                                            <div class="call-menu-row">
-                                                <span>Подавление шума</span>
+                                            <label class="call-menu-toggle">
+                                                <span class="call-menu-toggle-label">Подавление шума</span>
                                                 <input
-                                                    class="call-switch"
                                                     type="checkbox"
+                                                    class="call-switch-input"
                                                     .checked=${this._audioPrefs.noiseSuppression}
                                                     @change=${(e) => this._setAudioPref('noiseSuppression', e.target.checked)}
                                                 />
-                                            </div>
-                                            <div class="call-menu-row">
-                                                <span>Эхоподавление</span>
+                                                <span class="call-switch-visual" aria-hidden="true"></span>
+                                            </label>
+                                            <label class="call-menu-toggle">
+                                                <span class="call-menu-toggle-label">Эхоподавление</span>
                                                 <input
-                                                    class="call-switch"
                                                     type="checkbox"
+                                                    class="call-switch-input"
                                                     .checked=${this._audioPrefs.echoCancellation}
                                                     @change=${(e) => this._setAudioPref('echoCancellation', e.target.checked)}
                                                 />
-                                            </div>
-                                            <div class="call-menu-row">
-                                                <span>Автогромкость</span>
+                                                <span class="call-switch-visual" aria-hidden="true"></span>
+                                            </label>
+                                            <label class="call-menu-toggle">
+                                                <span class="call-menu-toggle-label">Автогромкость</span>
                                                 <input
-                                                    class="call-switch"
                                                     type="checkbox"
+                                                    class="call-switch-input"
                                                     .checked=${this._audioPrefs.autoGainControl}
                                                     @change=${(e) => this._setAudioPref('autoGainControl', e.target.checked)}
                                                 />
-                                            </div>
+                                                <span class="call-switch-visual" aria-hidden="true"></span>
+                                            </label>
                                         </div>
                                     ` : ''}
                                 </div>

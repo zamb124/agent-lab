@@ -261,6 +261,7 @@ class CallJoinPage extends LitElement {
                     call-id=${this._joinData.call_id}
                     mode="sfu"
                     .identity=${this._joinData.identity}
+                    .names=${this._joinData.participant_names ?? {}}
                 ></call-overlay>
             `;
         }
