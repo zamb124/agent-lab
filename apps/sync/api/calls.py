@@ -241,10 +241,12 @@ async def get_link_info(link_token: str) -> CallLinkInfo:
     channel_name = channel.name if channel else None
 
     creator_name = link.created_by_user_id
+    creator_avatar_url: str | None = None
     try:
         user = await container.user_repository.get(link.created_by_user_id)
         if user:
             creator_name = user.name
+            creator_avatar_url = user.avatar_url
     except Exception:
         pass
 
@@ -252,6 +254,7 @@ async def get_link_info(link_token: str) -> CallLinkInfo:
         link_token=link_token,
         channel_name=channel_name,
         creator_display_name=creator_name,
+        creator_avatar_url=creator_avatar_url,
         call_type="video",
         expires_at=link.expires_at,
     )

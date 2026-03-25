@@ -10,6 +10,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { hueFromString } from '../utils/sync-hue.js';
 
 const token = window.location.pathname.split('/').at(-1);
 const API_BASE = '/sync/api/v1/calls';
@@ -81,7 +82,59 @@ class CallJoinPage extends PlatformElement {
             gap: 4px;
         }
 
-        .meta span { display: flex; align-items: center; gap: 6px; }
+        .meta > span { display: flex; align-items: center; gap: 6px; }
+
+        .organizer-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .organizer-avatar {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            overflow: hidden;
+        }
+
+        .organizer-avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .organizer-avatar-initials {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .organizer-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .organizer-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary, #fff);
+            line-height: 1.3;
+            word-break: break-word;
+        }
+
+        .organizer-label {
+            font-size: 13px;
+            color: var(--text-secondary, rgba(255,255,255,0.6));
+        }
 
         input {
             width: 100%;
@@ -287,6 +340,19 @@ class CallJoinPage extends PlatformElement {
         return this._guestName.trim().length >= 1;
     }
 
+    _renderOrganizerAvatar(info) {
+        const name = info.creator_display_name;
+        const url = info.creator_avatar_url;
+        if (typeof url === 'string' && url.trim() !== '') {
+            return html`<img class="organizer-avatar-img" src=${url.trim()} alt="" />`;
+        }
+        const initial = (name.trim().slice(0, 1) || '?').toUpperCase();
+        const hue = hueFromString(name);
+        return html`
+            <span class="organizer-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+        `;
+    }
+
     render() {
         if (this._joinData) {
             return html`
@@ -334,7 +400,13 @@ class CallJoinPage extends PlatformElement {
 
             <div class="meta">
                 ${channelLabel ? html`<span>Канал: ${channelLabel}</span>` : ''}
-                <span>Организатор: ${this._linkInfo.creator_display_name}</span>
+                <div class="organizer-row">
+                    <div class="organizer-avatar">${this._renderOrganizerAvatar(this._linkInfo)}</div>
+                    <div class="organizer-text">
+                        <div class="organizer-name">${this._linkInfo.creator_display_name}</div>
+                        <div class="organizer-label">Организатор</div>
+                    </div>
+                </div>
             </div>
 
             ${this._error ? html`<div class="error">${this._error}</div>` : ''}

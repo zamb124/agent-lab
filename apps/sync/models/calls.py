@@ -64,6 +64,10 @@ class CallLinkInfo(BaseModel):
     link_token: str
     channel_name: Optional[str]
     creator_display_name: str
+    creator_avatar_url: Optional[str] = Field(
+        default=None,
+        description="URL аватара создателя ссылки (если задан в профиле).",
+    )
     call_type: CallType
     expires_at: datetime
 

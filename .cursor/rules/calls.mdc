@@ -81,7 +81,7 @@ GET  /sync/api/v1/calls/turn-credentials     → TurnCredentials (HMAC-SHA1, sta
 POST /sync/api/v1/calls/links                → CallLinkRead (auth required, создаёт гостевую ссылку)
 GET  /sync/api/v1/calls/{call_id}            → CallRead
 GET  /sync/api/v1/calls/{call_id}/token      → {token, livekit_url} (только SFU)
-GET  /sync/api/v1/calls/join/{token}         → CallLinkInfo (публично, без auth)
+GET  /sync/api/v1/calls/join/{token}         → CallLinkInfo (публично, без auth; `creator_avatar_url` при наличии аватара в профиле)
 POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_names`: identity → имя для оверлея у гостя)
 ```
 
