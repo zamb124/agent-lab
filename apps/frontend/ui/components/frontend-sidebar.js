@@ -256,6 +256,14 @@ export class FrontendSidebar extends PlatformElement {
                 </nav>
 
                 <div class="services-section" data-hide-collapsed>
+                    <div class="section-title">Документация</div>
+                    <a class="service-link" href="/documentation">
+                        <span class="nav-icon">D</span>
+                        <span>Humanitec Docs</span>
+                    </a>
+                </div>
+
+                <div class="services-section" data-hide-collapsed>
                     <div class="section-title">Сервисы</div>
 
                     <button class="service-link" @click=${() => this._openExternalService('/flows')}>

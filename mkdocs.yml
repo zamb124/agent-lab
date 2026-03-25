@@ -4,6 +4,9 @@ site_url: http://localhost:8001
 
 docs_dir: docs
 
+hooks:
+  - mkdocs_hooks.py
+
 theme:
   name: material
   language: ru
@@ -12,8 +15,6 @@ theme:
       primary: custom
       accent: custom
   features:
-    - navigation.instant
-    - navigation.instant.progress
     - navigation.tracking
     - navigation.tabs
     - navigation.tabs.sticky
@@ -137,18 +138,8 @@ plugins:
             Платежи: Payments
             Интернационализация: Internationalization
             Переменные: Variables
+            Сценарии (E2E, автогенерация): E2E scenarios (auto)
 
 nav:
   - Главная: index.md
-
-  - Пользовательские сценарии:
-      - Обзор: user_docs/user_scenarios/index.md
-      - Создание переменных: user_docs/user_scenarios/variables_setup/index.md
-      - Настройка бота: user_docs/user_scenarios/bot_settings/index.md
-      - Настройка MCP: user_docs/user_scenarios/mcp_setup/index.md
-
-  - API:
-      - Обзор: api/index.md
-      - Flows API: api/flows.md
-      - Variables API: api/variables.md
 

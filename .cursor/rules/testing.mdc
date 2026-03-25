@@ -159,6 +159,7 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
   - `page` или `ui_page_anonymous` — без `auth_token` (редирект на логин для защищённых SPA)
 - **Метаданные для assert:** `ui_user_system`, `ui_user_system_member`, `ui_user_company2`, `ui_user_company2_member`, `ui_user_anonymous` (`UiTestUser` из `tests/ui/personas.py`).
 - **Инструкции для пользователей (Markdown + скриншоты):** фикстура `scenario` (`tests/ui/scenario_doc.py`). Заголовок и текст — маркер `@pytest.mark.scenario(title="...", description="...")` или первая строка/остаток docstring теста. Опционально `@pytest.mark.scenario_tag("sync")` → вывод в `docs/scenarios/<тег>/<slug>/`. Шаги: `await scenario.step("Подпись шага", page)` (скриншот) или без `page` — только текст. Итог: `README.md` и `screenshots/*.png`. Отключить запись: `UI_SCENARIO_DOCS=0`.
+- **MkDocs:** раздел навигации «Сценарии (E2E, автогенерация)» подставляется хуком `mkdocs_hooks.py` при сборке (`mkdocs build`, `make doc`) из всех `docs/scenarios/**/README.md`; в `mkdocs.yml` сценарии не перечисляются.
 
 ## UI компоненты и страница `/{service}/test`
 

@@ -68,6 +68,25 @@ if ui_path.exists():
     )
     logger.info(f"✅ Frontend UI: {ui_path}")
 
+_mkdocs_site = Path(__file__).resolve().parent.parent.parent / "site"
+if _mkdocs_site.is_dir():
+    app.mount(
+        "/documentation",
+        StaticFiles(directory=str(_mkdocs_site), html=True),
+        name="mkdocs-documentation",
+    )
+    app.mount(
+        "/frontend/documentation",
+        StaticFiles(directory=str(_mkdocs_site), html=True),
+        name="mkdocs-documentation-frontend-prefix",
+    )
+    logger.info(f"Документация MkDocs: GET /documentation -> {_mkdocs_site}")
+else:
+    logger.warning(
+        "Каталог site/ не найден (выполните `make doc` или `uv run mkdocs build`), "
+        "URL /documentation недоступен"
+    )
+
 # Удаляем дефолтный root endpoint от фабрики - ПОСЛЕ монтирования статики
 # (он возвращает {"service": "core", "version": "1.0.0", "status": "running"})
 # Заменим его на SPA fallback ниже
@@ -197,8 +216,10 @@ async def serve_spa(full_path: str = ""):
     # Исключаем API, статику, WebSocket и PWA файлы
     # full_path может начинаться с frontend/ из-за префикса сервиса
     excluded = (
-        "api/", "static/", "ws/", 
+        "api/", "static/", "ws/",
+        "documentation/", "documentation",
         "frontend/api/", "frontend/static/", "frontend/ws/",
+        "frontend/documentation/", "frontend/documentation",
         "manifest.json", "sw.js", "offline.html"
     )
     if full_path.startswith(excluded) or full_path in ("manifest.json", "sw.js", "offline.html"):

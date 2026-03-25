@@ -71,6 +71,8 @@ ROUTE_RULES: List[RouteRule] = [
     
     # Документация
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),
+    RouteRule("/documentation*", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/documentation*", auth_required=False, context_type="anonymous"),
     RouteRule("/redoc", auth_required=False, context_type="anonymous"),
     RouteRule("/openapi.json", auth_required=False, context_type="anonymous"),
 

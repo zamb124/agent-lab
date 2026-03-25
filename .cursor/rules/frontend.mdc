@@ -73,6 +73,8 @@ apps/{service}/ui/
 
 **Статика (vendor, same-origin):** Fira Sans / Fira Sans Condensed — `assets/fonts/fira-sans.css`, `fira-sans-condensed.css` и каталоги `assets/fonts/fira-sans/files/`, `fira-sans-condensed/files/` (лендинг `apps/frontend/ui/index.html`). LiveKit SDK — `assets/js/livekit/` (`@livekit/client` в Sync). Mermaid — `assets/js/mermaid/mermaid.min.js` (HTML схем flow в `apps/flows/src/api/registry.py`); для MkDocs дублируется в `docs/javascripts/mermaid.min.js`.
 
+**Документация MkDocs в UI:** после `mkdocs build` (или `make doc`) каталог `site/` монтируется в `apps/frontend/main.py` на пути `/documentation` и `/frontend/documentation` (статика, публичный доступ в `route_config`). Ссылки в лендинге и сайдбарах ведут на `/documentation`. Для путей с `context_type=anonymous` неизвестный субдомен в `Host` не даёт 404: `CompanyResolver` возвращает контекст без компании (`core/middleware/auth/company_resolver.py`), чтобы документация открывалась и на `*.lvh.me`, если slug ещё не в БД.
+
 ---
 
 ## Компоненты: Иерархия Классов

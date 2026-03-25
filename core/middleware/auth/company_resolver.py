@@ -145,9 +145,13 @@ class CompanyResolver:
                 if company:
                     logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
                     return company
+            if context_type == "anonymous":
+                logger.debug(
+                    "Anonymous: в Host есть субдомен, но компания не найдена — публичная страница без компании"
+                )
+                return None
             raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
-        
-        # Для anonymous (публичные страницы) - компания не требуется
+
         if context_type == "anonymous":
             logger.debug("Anonymous контекст - компания не требуется, возвращаем None")
             return None

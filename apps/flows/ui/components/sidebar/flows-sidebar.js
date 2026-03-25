@@ -350,7 +350,7 @@ export class FlowsSidebar extends PlatformElement {
 
                 <div slot="footer">
                     <div class="footer-links">
-                        <a class="footer-link" href="/docs" target="_blank">
+                        <a class="footer-link" href="/documentation" target="_blank">
                             <platform-icon name="file" size="16"></platform-icon>
                             <span>Docs</span>
                         </a>

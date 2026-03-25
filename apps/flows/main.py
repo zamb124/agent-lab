@@ -227,13 +227,13 @@ async def ui_flow(request: Request, flow_id: str = "example_react"):
     ui_templates = Jinja2Templates(directory=ui_path)
     base_url = f"{request.base_url.scheme}://{request.base_url.netloc}"
     return ui_templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "flow_id": flow_id,
             "flow_name": flow_id,
             "base_url": base_url,
-        }
+        },
     )
 
 

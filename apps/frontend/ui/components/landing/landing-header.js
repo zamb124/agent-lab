@@ -585,7 +585,7 @@ export class LandingHeader extends PlatformElement {
                             </a>
                         </div>
                     </div>
-                    <a href="/docs" class="nav-link">Документация</a>
+                    <a href="/documentation" class="nav-link">Документация</a>
                 </nav>
                 
                 <div class="header-actions">
@@ -644,7 +644,7 @@ export class LandingHeader extends PlatformElement {
                     </a>
                 </div>
                 
-                <a href="/docs" class="nav-link" @click=${this._handleNavClick}>Документация</a>
+                <a href="/documentation" class="nav-link" @click=${this._handleNavClick}>Документация</a>
                 ${this.isAuthenticated
                     ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._closeMobileMenu}>Dashboard</a>`
                     : html`<button class="login-btn" @click=${() => { this._closeMobileMenu(); this._handleLoginClick(); }}>Войти</button>`
