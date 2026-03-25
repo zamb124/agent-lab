@@ -889,7 +889,6 @@ export class MessageBubble extends PlatformElement {
                     el.releasePointerCapture(pid);
                 }
             } catch {
-                /* pointer уже снят */
             }
         }
     }

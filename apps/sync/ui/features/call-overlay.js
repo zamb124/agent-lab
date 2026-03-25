@@ -115,6 +115,8 @@ class CallOverlay extends PlatformElement {
             padding-right: env(safe-area-inset-right, 0px);
             padding-bottom: env(safe-area-inset-bottom, 0px);
             padding-left: env(safe-area-inset-left, 0px);
+            pointer-events: auto;
+            touch-action: manipulation;
         }
 
         .video-grid {

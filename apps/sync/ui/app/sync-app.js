@@ -35,6 +35,20 @@ export class SyncApp extends PlatformApp {
                 background: var(--bg-gradient);
             }
 
+            /*
+             * Активный звонок: iOS WebKit иначе может оставить hit-testing на .main (flex на весь экран)
+             * под полноэкранным call-overlay — кнопки оверлея не получают касания.
+             * inert снимает интерактив с подложки; overflow: visible снимает обрезку fixed-детей.
+             */
+            :host([data-call-active]) {
+                overflow: visible;
+            }
+
+            :host([data-call-active]) .sidebar,
+            :host([data-call-active]) .main {
+                pointer-events: none;
+            }
+
             .sidebar {
                 height: var(--app-vh, 100vh);
                 flex-shrink: 0;
@@ -599,15 +613,17 @@ export class SyncApp extends PlatformApp {
             return html`<app-loader></app-loader>`;
         }
 
+        const callUiLocked = this._activeCall != null;
+
         return html`
-            <div class="sidebar">
+            <div class="sidebar" ?inert=${callUiLocked}>
                 <sync-sidebar
                     .activeCallChannels=${this._activeCallChannels}
                     @join-call-channel=${(e) => this._joinCallInChannel(e.detail.channelId)}
                 ></sync-sidebar>
             </div>
 
-            <div class="main">
+            <div class="main" ?inert=${callUiLocked}>
                 <platform-island>
                     <chat-view></chat-view>
                 </platform-island>
@@ -640,6 +656,13 @@ export class SyncApp extends PlatformApp {
                 ></call-incoming>
             ` : ''}
         `;
+    }
+
+    updated(changedProps) {
+        super.updated(changedProps);
+        if (changedProps.has('_activeCall')) {
+            this.toggleAttribute('data-call-active', this._activeCall != null);
+        }
     }
 }
 
