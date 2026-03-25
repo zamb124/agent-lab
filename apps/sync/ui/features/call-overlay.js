@@ -322,8 +322,10 @@ class CallOverlay extends LitElement {
 
         .call-menu-flyout {
             position: absolute;
-            left: calc(100% + 4px);
-            top: 0;
+            right: calc(100% + 4px);
+            left: auto;
+            top: auto;
+            bottom: 0;
             min-width: 240px;
             padding: 8px 0;
             background: rgba(22, 22, 30, 0.98);
@@ -456,6 +458,8 @@ class CallOverlay extends LitElement {
         this._onDocumentPointerDown = (e) => this._onDocumentPointerDown(e);
         this._onDocumentKeydown = (e) => this._onDocumentKeydown(e);
         this._mediaSettingsError = null;
+        this._cameraEnabledBeforeScreenShare = true;
+        this._cameraSuspendedForScreenShare = false;
     }
 
     _sfuMediaUiAvailable() {
@@ -729,6 +733,19 @@ class CallOverlay extends LitElement {
         return pubs;
     }
 
+    /**
+     * При активном screen share одна видеотрансляция: только плитка экрана (локально и у remote).
+     */
+    _videoPubsForGrid(participant) {
+        const pubs = this._orderedVideoPubs(participant, participant.isLocal);
+        const Track = this._lk.Track;
+        const hasScreen = pubs.some((p) => p.source === Track.Source.ScreenShare);
+        if (hasScreen) {
+            return pubs.filter((p) => p.source === Track.Source.ScreenShare);
+        }
+        return pubs;
+    }
+
     async _connectSFU() {
         if (!this.livekitToken || !this.livekitUrl) {
             throw new Error('livekitToken и livekitUrl обязательны для SFU подключения.');
@@ -738,8 +755,12 @@ class CallOverlay extends LitElement {
         this._connecting = true;
 
         this._lk = await import('@livekit/client');
-        const { Room, RoomEvent } = this._lk;
-        this._room = new Room();
+        const { Room, RoomEvent, ScreenSharePresets } = this._lk;
+        this._room = new Room({
+            publishDefaults: {
+                screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
+            },
+        });
 
         this._room.on(RoomEvent.ParticipantConnected, () => this._syncParticipants());
         this._room.on(RoomEvent.ParticipantDisconnected, () => this._syncParticipants());
@@ -823,7 +844,7 @@ class CallOverlay extends LitElement {
         const Track = this._lk.Track;
         const tiles = [];
         const local = this._room.localParticipant;
-        const localPubs = this._orderedVideoPubs(local, true);
+        const localPubs = this._videoPubsForGrid(local);
         if (localPubs.length === 0) {
             tiles.push({
                 key: 'local-ph',
@@ -844,7 +865,7 @@ class CallOverlay extends LitElement {
             }
         }
         for (const remote of this._room.remoteParticipants.values()) {
-            const pubs = this._orderedVideoPubs(remote, false);
+            const pubs = this._videoPubsForGrid(remote);
             if (pubs.length === 0) {
                 tiles.push({
                     key: `remote-${remote.identity}-ph`,
@@ -867,6 +888,23 @@ class CallOverlay extends LitElement {
         }
         this._tiles = tiles;
         this.requestUpdate();
+        void this._restoreCameraIfScreenShareEnded();
+    }
+
+    async _restoreCameraAfterScreenShare() {
+        if (!this._room || !this._cameraSuspendedForScreenShare) return;
+        this._cameraSuspendedForScreenShare = false;
+        const want = this._cameraEnabledBeforeScreenShare;
+        await this._room.localParticipant.setCameraEnabled(want);
+        this._camOff = !want;
+        _writeCameraPref(want);
+        this.requestUpdate();
+    }
+
+    async _restoreCameraIfScreenShareEnded() {
+        if (!this._room || !this._cameraSuspendedForScreenShare) return;
+        if (this._room.localParticipant.isScreenShareEnabled) return;
+        await this._restoreCameraAfterScreenShare();
     }
 
     async _toggleMic() {
@@ -879,6 +917,10 @@ class CallOverlay extends LitElement {
     }
 
     async _toggleCam() {
+        if (this._room?.localParticipant?.isScreenShareEnabled) {
+            this._mediaSettingsError = 'Сначала остановите демонстрацию экрана, чтобы переключить камеру.';
+            return;
+        }
         this._camOff = !this._camOff;
         if (this._room) {
             await this._room.localParticipant.setCameraEnabled(!this._camOff);
@@ -897,11 +939,24 @@ class CallOverlay extends LitElement {
 
     async _toggleScreenShare() {
         if (!this._room) return;
+        const lp = this._room.localParticipant;
         try {
-            const next = !this._room.localParticipant.isScreenShareEnabled;
-            await this._room.localParticipant.setScreenShareEnabled(next);
+            const next = !lp.isScreenShareEnabled;
+            if (next) {
+                this._cameraEnabledBeforeScreenShare = lp.isCameraEnabled;
+                this._cameraSuspendedForScreenShare = true;
+                await lp.setCameraEnabled(false);
+                this._camOff = true;
+                await lp.setScreenShareEnabled(true);
+            } else {
+                await lp.setScreenShareEnabled(false);
+                await this._restoreCameraAfterScreenShare();
+            }
             this.requestUpdate();
         } catch (e) {
+            if (this._cameraSuspendedForScreenShare && !lp.isScreenShareEnabled) {
+                await this._restoreCameraAfterScreenShare();
+            }
             const name = e && typeof e === 'object' && 'name' in e ? e.name : '';
             if (name === 'NotAllowedError' || name === 'AbortError') return;
             this._error = e instanceof Error ? e.message : String(e);
@@ -957,6 +1012,7 @@ class CallOverlay extends LitElement {
         this._lk = null;
         this._tiles = [];
         this._mediaSettingsError = null;
+        this._cameraSuspendedForScreenShare = false;
         this._closeMenus();
     }
 
@@ -1098,7 +1154,12 @@ class CallOverlay extends LitElement {
                             : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
                         }
                     </button>
-                    <button class="ctrl-btn ${this._camOff ? '' : 'active'}" @click=${this._toggleCam} title="${this._camOff ? 'Включить' : 'Выключить'} камеру">
+                    <button
+                        class="ctrl-btn ${this._camOff ? '' : 'active'}"
+                        ?disabled=${screenOn}
+                        @click=${this._toggleCam}
+                        title="${screenOn ? 'Сначала остановите демонстрацию экрана' : (this._camOff ? 'Включить' : 'Выключить') + ' камеру'}"
+                    >
                         ${this._camOff
                             ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
                             : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
@@ -1201,12 +1262,12 @@ class CallOverlay extends LitElement {
             const tileKey = item.key;
             return html`
                 <div class="${tileClass}" data-idx=${index} data-tile-key=${tileKey}>
-                    ${this._tileFullscreenButton(tileKey, hasVideo)}
                     ${hasVideo
                         ? html`<video autoplay playsinline ?muted=${item.isLocal}></video>`
                         : html`<div class="avatar-placeholder">${displayLabel?.[0]?.toUpperCase() ?? '?'}</div>`
                     }
                     <span class="participant-name">${displayLabel}</span>
+                    ${this._tileFullscreenButton(tileKey, hasVideo)}
                 </div>
             `;
         }
