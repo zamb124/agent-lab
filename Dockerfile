@@ -47,6 +47,7 @@ RUN uv pip install --system \
     "pymdown-extensions>=10.16.1"
 
 COPY mkdocs.yml ./
+COPY mkdocs_hooks.py ./
 COPY docs/ ./docs/
 COPY core/ ./core/
 COPY apps/ ./apps/
