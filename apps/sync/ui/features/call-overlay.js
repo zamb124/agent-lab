@@ -670,8 +670,8 @@ class CallOverlay extends PlatformElement {
             && 'setSinkId' in HTMLMediaElement.prototype;
         this._audioPrefs = _readAudioCapturePrefs();
         this._onCallSignalHandler = (e) => this._onCallSignal(e);
-        this._onDocumentPointerDown = (e) => this._onDocumentPointerDown(e);
-        this._onDocumentKeydown = (e) => this._onDocumentKeydown(e);
+        this._onDocumentPointerDown = this._onDocumentPointerDown.bind(this);
+        this._onDocumentKeydown = this._onDocumentKeydown.bind(this);
         this._mediaSettingsError = null;
         this._cameraEnabledBeforeScreenShare = true;
         this._cameraSuspendedForScreenShare = false;

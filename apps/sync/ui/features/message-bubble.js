@@ -809,8 +809,8 @@ export class MessageBubble extends PlatformElement {
         this._longPressTimer = null;
         /** @type {number | null} */
         this._pressPointerId = null;
-        /** @type {HTMLElement | null} */
-        this._pressCaptureEl = null;
+        /** @type {AbortController | null} */
+        this._abortLongPress = null;
         this._pressStartX = 0;
         this._pressStartY = 0;
         this._lastPointerX = 0;
@@ -820,9 +820,7 @@ export class MessageBubble extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        this._clearLongPressTimer();
-        this._releasePressPointerCapture();
-        this._pressHoldVisual = false;
+        this._endLongPressGesture();
     }
 
     _focusThread() {
@@ -878,24 +876,13 @@ export class MessageBubble extends PlatformElement {
         }
     }
 
-    _releasePressPointerCapture() {
-        const el = this._pressCaptureEl;
-        const pid = this._pressPointerId;
-        this._pressCaptureEl = null;
-        this._pressPointerId = null;
-        if (el !== null && pid !== null) {
-            try {
-                if (el.hasPointerCapture(pid)) {
-                    el.releasePointerCapture(pid);
-                }
-            } catch {
-            }
-        }
-    }
-
     _endLongPressGesture() {
         this._clearLongPressTimer();
-        this._releasePressPointerCapture();
+        if (this._abortLongPress !== null) {
+            this._abortLongPress.abort();
+            this._abortLongPress = null;
+        }
+        this._pressPointerId = null;
         this._pressHoldVisual = false;
     }
 
@@ -912,17 +899,35 @@ export class MessageBubble extends PlatformElement {
         this._endLongPressGesture();
 
         this._pressPointerId = e.pointerId;
-        this._pressCaptureEl = /** @type {HTMLElement} */ (e.currentTarget);
         this._pressStartX = e.clientX;
         this._pressStartY = e.clientY;
         this._lastPointerX = e.clientX;
         this._lastPointerY = e.clientY;
         this._pressHoldVisual = true;
 
-        try {
-            this._pressCaptureEl.setPointerCapture(e.pointerId);
-        } catch {
-        }
+        this._abortLongPress = new AbortController();
+        const signal = this._abortLongPress.signal;
+        const opts = { signal, capture: true };
+
+        const onMove = (ev) => {
+            if (ev.pointerId !== this._pressPointerId) return;
+            this._lastPointerX = ev.clientX;
+            this._lastPointerY = ev.clientY;
+            const dx = ev.clientX - this._pressStartX;
+            const dy = ev.clientY - this._pressStartY;
+            if (dx * dx + dy * dy > LONG_PRESS_MOVE_CANCEL_PX * LONG_PRESS_MOVE_CANCEL_PX) {
+                this._endLongPressGesture();
+            }
+        };
+
+        const onEnd = (ev) => {
+            if (ev.pointerId !== this._pressPointerId) return;
+            this._endLongPressGesture();
+        };
+
+        document.addEventListener('pointermove', onMove, opts);
+        document.addEventListener('pointerup', onEnd, opts);
+        document.addEventListener('pointercancel', onEnd, opts);
 
         this._longPressTimer = window.setTimeout(() => {
             this._longPressTimer = null;
@@ -932,27 +937,6 @@ export class MessageBubble extends PlatformElement {
             this._endLongPressGesture();
             this._openMessageMenuAt(x, y);
         }, LONG_PRESS_MS);
-    }
-
-    _onBubblePointerMove(e) {
-        if (e.pointerId !== this._pressPointerId) return;
-        this._lastPointerX = e.clientX;
-        this._lastPointerY = e.clientY;
-        const dx = e.clientX - this._pressStartX;
-        const dy = e.clientY - this._pressStartY;
-        if (dx * dx + dy * dy > LONG_PRESS_MOVE_CANCEL_PX * LONG_PRESS_MOVE_CANCEL_PX) {
-            this._endLongPressGesture();
-        }
-    }
-
-    _onBubblePointerUp(e) {
-        if (e.pointerId !== this._pressPointerId) return;
-        this._endLongPressGesture();
-    }
-
-    _onBubblePointerCancel(e) {
-        if (e.pointerId !== this._pressPointerId) return;
-        this._endLongPressGesture();
     }
 
     _onContextMenu(e) {
@@ -1139,9 +1123,6 @@ export class MessageBubble extends PlatformElement {
                 data-message-id=${msg.id}
                 @contextmenu=${this._onContextMenu}
                 @pointerdown=${this._onBubblePointerDown}
-                @pointermove=${this._onBubblePointerMove}
-                @pointerup=${this._onBubblePointerUp}
-                @pointercancel=${this._onBubblePointerCancel}
             >
                 ${this.selectionMode ? html`
                     <div class="select-wrap">
