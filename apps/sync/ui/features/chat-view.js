@@ -507,6 +507,7 @@ export class ChatView extends PlatformElement {
         };
         this._boundDocPointerHeaderMore = this._onDocPointerDownHeaderMore.bind(this);
         this._boundWindowResize = () => this._checkMobileViewport();
+        this._boundWindowAdhoc = () => void this._startAdHocCall();
     }
 
     connectedCallback() {
@@ -517,6 +518,7 @@ export class ChatView extends PlatformElement {
         this._resizeObserver = new ResizeObserver(() => this._checkMobileViewport());
         this._resizeObserver.observe(document.body);
         window.addEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
+        window.addEventListener('sync-request-adhoc-call', this._boundWindowAdhoc);
         this._unsubscribe = SyncStore.subscribe(state => {
             this._chat = state.chat;
             this._channels = state.channels;
@@ -536,6 +538,7 @@ export class ChatView extends PlatformElement {
         document.removeEventListener('pointerdown', this._boundDocPointerHeaderMore, true);
         window.removeEventListener('resize', this._boundWindowResize);
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
+        window.removeEventListener('sync-request-adhoc-call', this._boundWindowAdhoc);
         this._resizeObserver?.disconnect();
         this._resizeObserver = null;
         this._unsubscribe?.();
@@ -951,22 +954,7 @@ export class ChatView extends PlatformElement {
                                                 </svg>
                                                 <span>Звонок</span>
                                             </button>
-                                        ` : html`
-                                            <button
-                                                type="button"
-                                                class="header-more-item"
-                                                @click=${async () => {
-        this._closeHeaderMoreMenu();
-        await this._startAdHocCall();
-    }}
-                                            >
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                                </svg>
-                                                <span>Встреча в новом канале</span>
-                                            </button>
-                                        `}
+                                        ` : ''}
                                         ${focusedThreadId ? html`
                                             <button
                                                 type="button"
@@ -1000,20 +988,13 @@ export class ChatView extends PlatformElement {
                             <span class="ws-badge ${this._wsState}">${this._wsState}</span>
 
                             ${selectedChannelId ? html`
-                            <button type="button" class="icon-btn" title="Звонок" @click=${this._startCall}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <button type="button" class="icon-btn" title="Звонок в этом канале" aria-label="Звонок в этом канале" @click=${this._startCall}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polygon points="23 7 16 12 23 17 23 7"/>
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                                 </svg>
                             </button>
-                        ` : html`
-                            <button type="button" class="icon-btn" title="Встреча в новом канале" @click=${this._startAdHocCall}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                </svg>
-                            </button>
-                        `}
+                        ` : ''}
 
                             ${focusedThreadId ? html`
                             <button type="button" class="back-btn" @click=${() => SyncStore.setFocusedThread(null)}>
@@ -1038,7 +1019,7 @@ export class ChatView extends PlatformElement {
 
             <div class="content">
                 ${!selectedChannelId ? html`
-                    <channel-picker></channel-picker>
+                    <channel-picker @sync-request-adhoc-call=${() => void this._startAdHocCall()}></channel-picker>
                 ` : html`
                     ${pinCount > 0 && !focusedThreadId ? html`
                         <div class="pin-strip" @click=${this._onPinStripClick} title="Перейти к закреплённому">

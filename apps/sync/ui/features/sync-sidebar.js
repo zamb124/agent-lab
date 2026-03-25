@@ -249,6 +249,47 @@ export class SyncSidebar extends PlatformElement {
                 padding: var(--space-2) var(--space-3);
             }
 
+            .sidebar-adhoc-row {
+                padding: 0 var(--space-3) var(--space-3);
+            }
+
+            .sidebar-adhoc-btn {
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                gap: var(--space-2);
+                width: 100%;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                cursor: pointer;
+                transition: background var(--duration-fast), border-color var(--duration-fast);
+            }
+
+            .sidebar-adhoc-btn:hover {
+                background: var(--glass-solid-medium);
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            .sidebar-adhoc-btn svg {
+                flex-shrink: 0;
+                color: var(--accent);
+            }
+
+            :host([collapsed]) .sidebar-adhoc-label {
+                display: none;
+            }
+
+            :host([collapsed]) .sidebar-adhoc-btn {
+                justify-content: center;
+                padding: var(--space-2);
+            }
+
             .channels-section {
                 border-top: 1px solid var(--glass-border-subtle);
                 padding-top: var(--space-3);
@@ -485,6 +526,13 @@ export class SyncSidebar extends PlatformElement {
         }
     }
 
+    _requestAdhocCall() {
+        window.dispatchEvent(new CustomEvent('sync-request-adhoc-call', { bubbles: true }));
+        if (window.innerWidth < 768) {
+            SyncStore.setMobileSidebarOpen(false);
+        }
+    }
+
     async _selectChannel(channel) {
         const syncApi = this.services.get('syncApi');
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
@@ -555,6 +603,20 @@ export class SyncSidebar extends PlatformElement {
                 }}
             >
                 <div class="sync-sidebar-inner">
+                    <div class="sidebar-adhoc-row">
+                        <button
+                            type="button"
+                            class="sidebar-adhoc-btn"
+                            title="Создать Sync: служебный канал и звонок"
+                            @click=${this._requestAdhocCall}
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polygon points="23 7 16 12 23 17 23 7"/>
+                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                            </svg>
+                            <span class="sidebar-adhoc-label">Создать Sync</span>
+                        </button>
+                    </div>
                     <div class="channels-section">
                         <div
                             class="section-header section-header--toggle"

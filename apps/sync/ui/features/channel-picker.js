@@ -6,7 +6,6 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
-import '@platform/lib/components/platform-icon.js';
 
 export class ChannelPicker extends PlatformElement {
     static styles = [
@@ -24,6 +23,46 @@ export class ChannelPicker extends PlatformElement {
                 font-size: var(--text-sm);
                 color: var(--text-tertiary);
                 margin-bottom: var(--space-4);
+            }
+
+            .adhoc-row {
+                margin-bottom: var(--space-6);
+            }
+
+            .adhoc-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-3) var(--space-4);
+                border-radius: var(--radius-xl);
+                border: 1px solid var(--accent);
+                background: var(--accent-subtle);
+                color: var(--accent);
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+                transition: background var(--duration-fast), color var(--duration-fast);
+            }
+
+            .adhoc-btn:hover {
+                background: var(--accent);
+                color: white;
+            }
+
+            .adhoc-btn svg {
+                flex-shrink: 0;
+                color: var(--accent);
+            }
+
+            .adhoc-btn:hover svg {
+                color: white;
+            }
+
+            .adhoc-hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                margin-top: var(--space-2);
+                max-width: 36rem;
             }
 
             .grid {
@@ -106,6 +145,10 @@ export class ChannelPicker extends PlatformElement {
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
     }
 
+    _emitAdhocRequest() {
+        this.emit('sync-request-adhoc-call');
+    }
+
     render() {
         const channels = SyncStore.getChannelsForPickerList();
         const loading = this._channels.loading;
@@ -113,6 +156,18 @@ export class ChannelPicker extends PlatformElement {
 
         return html`
             <div class="hint">Выбери канал</div>
+            <div class="adhoc-row">
+                <button type="button" class="adhoc-btn" @click=${this._emitAdhocRequest}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="23 7 16 12 23 17 23 7"/>
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                    </svg>
+                    Создать Sync
+                </button>
+                <div class="adhoc-hint">
+                    Создаётся служебный канал встречи и сразу запускается видеозвонок. Канал скрыт в списках.
+                </div>
+            </div>
             ${loading ? html`<div class="hint">Загрузка...</div>` : ''}
             <div class="grid">
                 ${channels.length === 0 && !loading
