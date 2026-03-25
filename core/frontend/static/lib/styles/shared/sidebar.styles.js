@@ -68,6 +68,8 @@ export const sidebarHostStyles = css`
             top: 0;
             bottom: 0;
             height: auto;
+            min-height: var(--app-vh, 100vh);
+            min-height: -webkit-fill-available;
             z-index: var(--z-modal, 1000);
             width: 75%;
             min-width: 0;
@@ -93,7 +95,6 @@ export const sidebarHostStyles = css`
             width: 100vw;
             width: var(--app-vw, 100vw);
             height: auto;
-            min-height: 100vh;
             min-height: var(--app-vh, 100vh);
             min-height: -webkit-fill-available;
             background: rgba(0, 0, 0, 0.5);

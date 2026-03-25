@@ -3,7 +3,7 @@
  *
  * Сценарии:
  * - Зарегистрированный пользователь: auth cookie есть → кнопка "Войти как {name}".
- * - Гость: нет cookie → поле имени + кнопка "Присоединиться".
+ * - Гость: нет cookie → поле имени + кнопка "Как гость".
  * - Гость может нажать "Войти" → redirect на /login?next=текущий_url.
  *
  * После входа открывает call-overlay с полученным LiveKit токеном.
@@ -168,11 +168,42 @@ class CallJoinPage extends PlatformElement {
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .call-icon {
+        .title-row {
             display: flex;
             align-items: center;
+            gap: 12px;
+        }
+
+        .title-row .call-icon {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
             color: var(--accent-primary, #6366f1);
-            margin-bottom: 4px;
+        }
+
+        .title-row h1 {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .guest-join-row {
+            display: flex;
+            align-items: stretch;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .guest-join-row input {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .guest-join-row .btn-primary {
+            width: auto;
+            flex-shrink: 0;
+            white-space: nowrap;
+            padding-left: 18px;
+            padding-right: 18px;
         }
     `,
     ];
@@ -288,8 +319,11 @@ class CallJoinPage extends PlatformElement {
         }
         if (!this._linkInfo) return html``;
 
+        const cn = this._linkInfo.channel_name;
+        const channelLabel = typeof cn === 'string' && cn.trim() ? cn.trim() : '';
+
         return html`
-            <div>
+            <div class="title-row">
                 <div class="call-icon" aria-hidden="true">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
@@ -299,9 +333,8 @@ class CallJoinPage extends PlatformElement {
             </div>
 
             <div class="meta">
-                <span>Канал: ${this._linkInfo.channel_name ?? '—'}</span>
+                ${channelLabel ? html`<span>Канал: ${channelLabel}</span>` : ''}
                 <span>Организатор: ${this._linkInfo.creator_display_name}</span>
-                <span>Звонок</span>
             </div>
 
             ${this._error ? html`<div class="error">${this._error}</div>` : ''}
@@ -317,22 +350,24 @@ class CallJoinPage extends PlatformElement {
                     </button>
                 `
                 : html`
-                    <input
-                        type="text"
-                        placeholder="Ваше имя"
-                        maxlength="64"
-                        .value=${this._guestName}
-                        @input=${e => this._guestName = e.target.value}
-                        @keydown=${e => e.key === 'Enter' && this._canJoin() && this._join()}
-                        autocomplete="nickname"
-                    >
-                    <button
-                        class="btn btn-primary"
-                        ?disabled=${!this._canJoin() || this._loading}
-                        @click=${this._join}
-                    >
-                        ${this._loading ? html`<div class="spinner"></div>` : 'Присоединиться'}
-                    </button>
+                    <div class="guest-join-row">
+                        <input
+                            type="text"
+                            placeholder="Ваше имя"
+                            maxlength="64"
+                            .value=${this._guestName}
+                            @input=${e => this._guestName = e.target.value}
+                            @keydown=${e => e.key === 'Enter' && this._canJoin() && this._join()}
+                            autocomplete="nickname"
+                        >
+                        <button
+                            class="btn btn-primary"
+                            ?disabled=${!this._canJoin() || this._loading}
+                            @click=${this._join}
+                        >
+                            ${this._loading ? html`<div class="spinner"></div>` : 'Как гость'}
+                        </button>
+                    </div>
 
                     <div class="divider">или</div>
 

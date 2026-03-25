@@ -21,6 +21,7 @@ export class SyncApp extends PlatformApp {
         _activeCall: { state: true },
         _incomingCall: { state: true },
         _activeCallChannels: { state: true },
+        _mobileShell: { state: true },
     };
 
     static styles = [
@@ -33,6 +34,13 @@ export class SyncApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
+            }
+
+            @media (max-width: 767px) {
+                :host {
+                    overflow-x: hidden;
+                    overflow-y: visible;
+                }
             }
 
             /*
@@ -61,6 +69,7 @@ export class SyncApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 display: flex;
+                min-height: 0;
                 padding: var(--space-4);
             }
 
@@ -83,9 +92,24 @@ export class SyncApp extends PlatformApp {
                 .main {
                     padding: 0;
                 }
+
+                platform-island {
+                    min-height: 0;
+                }
             }
         `
     ];
+
+    /** @type {MediaQueryList | null} */
+    _mqMobileShell = null;
+
+    /** @type {(() => void) | null} */
+    _syncViewportToVisual = null;
+
+    /** @type {((e: MediaQueryListEvent) => void) | null} */
+    _onMobileShellChange = null;
+
+    _shellLayoutBound = false;
 
     constructor() {
         super();
@@ -98,6 +122,8 @@ export class SyncApp extends PlatformApp {
         this._activeCallChannels = {};
         /** id WS-команд call.hangup — ack тоже содержит CallRead с call_id, без фильтра открыл бы оверлей снова */
         this._callHangupRequestIds = new Set();
+        this._mqMobileShell = window.matchMedia('(max-width: 767px)');
+        this._mobileShell = this._mqMobileShell.matches;
     }
 
     setupStore() {
@@ -132,6 +158,33 @@ export class SyncApp extends PlatformApp {
     async connectedCallback() {
         await super.connectedCallback();
 
+        if (!this._shellLayoutBound) {
+            this._shellLayoutBound = true;
+            this._syncViewportToVisual = () => {
+                if (!this._mqMobileShell || !this._mqMobileShell.matches) {
+                    document.documentElement.style.removeProperty('--app-vh');
+                    return;
+                }
+                const vv = window.visualViewport;
+                if (!vv || typeof vv.height !== 'number') {
+                    document.documentElement.style.removeProperty('--app-vh');
+                    return;
+                }
+                document.documentElement.style.setProperty('--app-vh', `${Math.round(vv.height)}px`);
+            };
+            this._onMobileShellChange = (e) => {
+                this._mobileShell = e.matches;
+                this._syncViewportToVisual?.();
+                this.requestUpdate();
+            };
+            this._mqMobileShell.addEventListener('change', this._onMobileShellChange);
+            this._syncViewportToVisual();
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', this._syncViewportToVisual);
+                window.visualViewport.addEventListener('scroll', this._syncViewportToVisual);
+            }
+        }
+
         if (!this._isAuthenticated) return;
 
         const syncApi = this.services.get('syncApi');
@@ -160,6 +213,15 @@ export class SyncApp extends PlatformApp {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        if (this._shellLayoutBound) {
+            this._shellLayoutBound = false;
+            this._mqMobileShell?.removeEventListener('change', this._onMobileShellChange);
+            if (window.visualViewport && this._syncViewportToVisual) {
+                window.visualViewport.removeEventListener('resize', this._syncViewportToVisual);
+                window.visualViewport.removeEventListener('scroll', this._syncViewportToVisual);
+            }
+            document.documentElement.style.removeProperty('--app-vh');
+        }
         if (this._typingPruneTimer != null) {
             clearInterval(this._typingPruneTimer);
             this._typingPruneTimer = null;
@@ -624,7 +686,7 @@ export class SyncApp extends PlatformApp {
             </div>
 
             <div class="main" ?inert=${callUiLocked}>
-                <platform-island>
+                <platform-island padding=${this._mobileShell ? 'none' : 'md'}>
                     <chat-view></chat-view>
                 </platform-island>
             </div>

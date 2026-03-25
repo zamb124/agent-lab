@@ -80,6 +80,12 @@ export class MessageComposer extends PlatformElement {
                 padding: var(--space-3);
             }
 
+            @media (max-width: 767px) {
+                .composer {
+                    padding: var(--space-2) var(--space-2) max(var(--space-2), env(safe-area-inset-bottom, 0px));
+                }
+            }
+
             .row {
                 display: flex;
                 align-items: center;

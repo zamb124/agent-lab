@@ -98,6 +98,8 @@ class CallOverlay extends PlatformElement {
         _audioOutputSupported: { state: true },
         _audioPrefs: { state: true },
         _mediaSettingsError: { state: true },
+        /** Краткая галочка после успешного копирования ссылки (2 с), без правки innerHTML — переживает requestUpdate. */
+        _copyLinkFeedback: { state: true },
     };
 
     static styles = [
@@ -675,6 +677,9 @@ class CallOverlay extends PlatformElement {
         this._mediaSettingsError = null;
         this._cameraEnabledBeforeScreenShare = true;
         this._cameraSuspendedForScreenShare = false;
+        this._copyLinkFeedback = false;
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        this._copyLinkFeedbackTimerId = null;
     }
 
     _sfuMediaUiAvailable() {
@@ -1255,6 +1260,13 @@ class CallOverlay extends PlatformElement {
         }
     }
 
+    _clearCopyLinkFeedbackTimer() {
+        if (this._copyLinkFeedbackTimerId != null) {
+            clearTimeout(this._copyLinkFeedbackTimerId);
+            this._copyLinkFeedbackTimerId = null;
+        }
+    }
+
     async _copyLink() {
         if (!this.callId) return;
         const res = await fetch('/sync/api/v1/calls/links', {
@@ -1276,12 +1288,14 @@ class CallOverlay extends PlatformElement {
             this.requestUpdate();
             return;
         }
-        const btn = this.shadowRoot.querySelector('[title="Скопировать ссылку на звонок"]');
-        if (btn) {
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
-            setTimeout(() => { btn.innerHTML = orig; }, 2000);
-        }
+        this._clearCopyLinkFeedbackTimer();
+        this._copyLinkFeedback = true;
+        this.requestUpdate();
+        this._copyLinkFeedbackTimerId = window.setTimeout(() => {
+            this._copyLinkFeedbackTimerId = null;
+            this._copyLinkFeedback = false;
+            this.requestUpdate();
+        }, 2000);
     }
 
     async _hangup() {
@@ -1298,6 +1312,8 @@ class CallOverlay extends PlatformElement {
     }
 
     _cleanup() {
+        this._clearCopyLinkFeedbackTimer();
+        this._copyLinkFeedback = false;
         this._exitTileFullscreenIfOurs();
         this._fullscreenTileKey = null;
         this._connecting = false;
@@ -1367,10 +1383,13 @@ class CallOverlay extends PlatformElement {
                     <span style="opacity:0.5">${participantCount} уч.</span>
                     ${this.callId ? html`
                         <button class="ctrl-btn" style="width:36px;height:36px;font-size:14px;" @click=${this._copyLink} title="Скопировать ссылку на звонок">
+                            ${this._copyLinkFeedback
+                                ? html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`
+                                : html`
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
                                 <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
-                            </svg>
+                            </svg>`}
                         </button>
                     ` : ''}
                 </div>

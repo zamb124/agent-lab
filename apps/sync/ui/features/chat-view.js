@@ -34,6 +34,13 @@ export class ChatView extends PlatformElement {
                 box-sizing: border-box;
             }
 
+            @media (max-width: 767px) {
+                :host {
+                    padding-left: var(--space-4);
+                    padding-right: var(--space-4);
+                }
+            }
+
             .chat-header {
                 display: flex;
                 flex-direction: column;
