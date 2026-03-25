@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from apps.sync.realtime.broker import broker
 from apps.sync.container import get_sync_container
+from apps.sync.realtime.broker import broker
 from apps.sync.ws_presence import is_user_sync_ws_online
 from core.config import get_settings
 from core.logging import get_logger
@@ -60,6 +60,57 @@ async def deliver_channel_message_notification(
             message=line,
             service="sync",
             priority="normal",
+            action_url=action_url,
+            data={
+                "channel_id": channel_id,
+                "message_id": message_id,
+            },
+        ),
+    )
+
+
+@broker.task
+async def deliver_sync_mention_notification(
+    recipient_user_id: str,
+    channel_id: str,
+    company_id: str,
+    message_id: str,
+    sender_display_name: str,
+    notification_title: str,
+    body_preview: str,
+) -> None:
+    """Упоминание: доставляется даже при открытом /sync/ws (без проверки sync presence)."""
+    settings = get_settings()
+    if not settings.database.redis_url:
+        raise ValueError("database.redis_url не задан")
+
+    container = get_sync_container()
+    muted = await container.channel_repository.get_member_notifications_muted(
+        channel_id,
+        recipient_user_id,
+        company_id=company_id,
+    )
+    if muted:
+        logger.debug(
+            "sync mention notify skipped: muted: user=%s channel=%s",
+            recipient_user_id,
+            channel_id,
+        )
+        return
+
+    line = f"{sender_display_name}: {body_preview}".strip()
+    if len(line) > 500:
+        line = line[:499] + "…"
+
+    action_url = f"/sync?channel={channel_id}"
+    await notify_user(
+        recipient_user_id,
+        Notification(
+            type=NotificationType.MENTION,
+            title=notification_title,
+            message=line,
+            service="sync",
+            priority="high",
             action_url=action_url,
             data={
                 "channel_id": channel_id,

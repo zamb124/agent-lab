@@ -223,6 +223,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
     )
     summ = batch["ch_lane"]
     assert summ.unread_count == 1
+    assert summ.mention_unread_count == 0
     assert summ.last_message_preview == "hello lane"
     assert summ.last_message_at is not None
 
@@ -238,3 +239,50 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
         viewer_user_id="u_viewer",
     )
     assert batch2["ch_lane"].unread_count == 0
+    assert batch2["ch_lane"].mention_unread_count == 0
+
+
+@pytest.mark.asyncio
+async def test_channel_lane_summaries_batch_mention_unread_count(
+    channel_repo: ChannelRepository,
+    message_repo: MessageRepository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    ch = SyncChannel(
+        channel_id="ch_men",
+        company_id=company_id,
+        type="topic",
+        name="mentions",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id="u_viewer",
+    )
+    await channel_repo.create(ch)
+    await channel_repo.upsert_member("ch_men", "u_viewer", "owner", company_id=company_id)
+    await channel_repo.upsert_member("ch_men", "u_other", "member", company_id=company_id)
+    t_msg = datetime(2026, 3, 2, 12, 0, 0, tzinfo=UTC)
+    await message_repo.create_message(
+        message_id="m_men",
+        company_id=company_id,
+        channel_id="ch_men",
+        thread_id=None,
+        parent_message_id=None,
+        sender_user_id="u_other",
+        status="sent",
+        sent_at=t_msg,
+        contents=[
+            MessageContentModel(
+                type=MessageContentType.TEXT_PLAIN,
+                data=TextPlainContent(body="hi you", mentions=["u_viewer"]),
+                order=0,
+            ),
+        ],
+    )
+    batch = await message_repo.channel_lane_summaries_batch(
+        company_id=company_id,
+        channel_ids=["ch_men"],
+        viewer_user_id="u_viewer",
+    )
+    assert batch["ch_men"].unread_count == 1
+    assert batch["ch_men"].mention_unread_count == 1

@@ -137,6 +137,53 @@ export class FrontendApp extends PlatformApp {
         this.services.register('embed', new EmbedService(baseUrl));
     }
 
+    _isKnownRoute(path) {
+        const exact = new Set([
+            '/',
+            '/login',
+            '/select-company',
+            '/join',
+            '/products/agents',
+            '/products/rag',
+            '/products/crm',
+            '/dashboard',
+            '/team',
+            '/api-keys',
+            '/billing',
+            '/embed-configs',
+        ]);
+        if (exact.has(path)) {
+            return true;
+        }
+        if (path === '/settings' || path.startsWith('/settings/')) {
+            return true;
+        }
+        return false;
+    }
+
+    async _preAuthCheck() {
+        const path = window.location.pathname;
+        if (!this._isKnownRoute(path)) {
+            let homeHref = path.startsWith('/products/') ? '/' : '/';
+            try {
+                if (await this.auth.validateToken()) {
+                    homeHref = '/dashboard';
+                }
+            } catch (e) {
+                if (e.code === 'AUTH_SERVER_ERROR') {
+                    throw e;
+                }
+            }
+            return {
+                skip: true,
+                authenticated: false,
+                _routeNotFound: true,
+                _notFoundHomeHref: homeHref,
+            };
+        }
+        return null;
+    }
+
     async checkAuth() {
         const path = window.location.pathname;
         
@@ -150,8 +197,7 @@ export class FrontendApp extends PlatformApp {
         if (path === '/select-company') {
             this._isLanding = true;
             this._productPage = null;
-            const response = await this.auth.validateToken();
-            return response !== null;
+            return await this.auth.validateToken();
         }
 
         // Страница принятия инвайта — публичная, компонент сам проверяет auth
@@ -163,8 +209,7 @@ export class FrontendApp extends PlatformApp {
         
         this._isLanding = false;
         this._productPage = null;
-        const response = await this.auth.validateToken();
-        return response !== null;
+        return await this.auth.validateToken();
     }
     
     _renderContent() {
@@ -189,11 +234,25 @@ export class FrontendApp extends PlatformApp {
     }
 
     render() {
+        const shell = this._renderShellPages();
+        if (shell !== null) {
+            return shell;
+        }
+
         if (!this._servicesInitialized || !this._authChecked) {
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
                     <div class="loading-text">Загрузка Frontend...</div>
+                </div>
+            `;
+        }
+
+        if (!this._isAuthenticated) {
+            return html`
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Перенаправление на вход...</div>
                 </div>
             `;
         }

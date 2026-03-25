@@ -49,6 +49,15 @@ export class SyncChannelRow extends PlatformElement {
                 font-weight: var(--font-semibold);
             }
 
+            button.nav-item.nav-item--mention:not(.active) {
+                border-color: rgba(234, 179, 8, 0.45);
+                background: rgba(234, 179, 8, 0.12);
+            }
+
+            :host([in-nav-wrap]) button.nav-item.nav-item--mention:not(.active) {
+                box-shadow: inset 3px 0 0 rgba(234, 179, 8, 0.85);
+            }
+
             /* Внутри .nav-row-wrap сайдбара фон и рамка только у обёртки, не у кнопки */
             :host([in-nav-wrap]) button.nav-item {
                 border: none;
@@ -255,9 +264,12 @@ export class SyncChannelRow extends PlatformElement {
         const rowMeta = this._rowMeta(ch);
         const sec = this._rowSecondary(ch, rowMeta);
         const title = SyncStore.channelDisplayTitle(ch);
+        const mentionUnread =
+            typeof ch.mention_unread_count === 'number' ? ch.mention_unread_count : 0;
         const btnClass = classMap({
             'nav-item': true,
             active: this.active,
+            'nav-item--mention': mentionUnread > 0,
         });
         return html`
             <button type="button" class=${btnClass}>

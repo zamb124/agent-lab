@@ -35,6 +35,7 @@ async def channel_read_from_entity(
         unread_count=0,
         last_message_preview=None,
         last_message_at=None,
+        mention_unread_count=0,
     )
     pids = entity.pinned_message_ids if isinstance(entity.pinned_message_ids, list) else []
     peer: UserBrief | None = None
@@ -69,6 +70,7 @@ async def channel_read_from_entity(
         peer=peer,
         avatar_url=entity.avatar_url,
         unread_count=summ.unread_count,
+        mention_unread_count=summ.mention_unread_count,
         last_message_preview=summ.last_message_preview,
         last_message_at=summ.last_message_at,
         peer_last_read_at=peer_last_read_at,
@@ -91,6 +93,7 @@ def channel_read_entity_minimal(entity: SyncChannel) -> ChannelRead:
         peer=None,
         avatar_url=entity.avatar_url,
         unread_count=0,
+        mention_unread_count=0,
         last_message_preview=None,
         last_message_at=None,
         peer_last_read_at=None,

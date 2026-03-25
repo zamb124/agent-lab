@@ -84,6 +84,17 @@ export class SyncAPIService extends BaseService {
         return this.get('/company/members');
     }
 
+    /**
+     * Каналы, где есть и текущий пользователь, и указанный участник компании.
+     * @param {string} userId
+     */
+    async getSharedChannelsWithMember(userId) {
+        if (typeof userId !== 'string' || userId === '') {
+            throw new Error('userId обязателен.');
+        }
+        return this.get(`/company/members/${encodeURIComponent(userId)}/shared-channels`);
+    }
+
     async createChannel(spaceId, name) {
         return this.post('/channels/', {
             space_id: spaceId,

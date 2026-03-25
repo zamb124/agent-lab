@@ -1,7 +1,7 @@
 """Тесты маршрутизации AuthMiddleware для Sync."""
 
 import pytest
-from core.middleware.auth.route_config import RouteMatcher
+from core.middleware.auth.route_config import RouteMatcher, path_allows_spa_fallback
 
 
 def test_login_page_is_public() -> None:
@@ -51,6 +51,17 @@ def test_sync_ui_static_is_public() -> None:
     assert rule is not None
     assert rule.context_type == "anonymous"
     assert rule.auth_required is False
+
+
+def test_spa_fallback_path_allows_unknown_browser_path() -> None:
+    assert path_allows_spa_fallback("/d3423") is True
+    assert path_allows_spa_fallback("/some-page") is True
+
+
+def test_spa_fallback_path_excludes_api_and_services() -> None:
+    assert path_allows_spa_fallback("/api/foo") is False
+    assert path_allows_spa_fallback("/flows/v1/x") is False
+    assert path_allows_spa_fallback("/sync/api/v1/spaces") is False
 
 
 def test_no_legacy_auth_routes() -> None:

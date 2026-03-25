@@ -6,11 +6,14 @@ import { ThemeService } from '../../services/theme.service.js';
 import { NotifyService } from '../../services/notify.service.js';
 import { IconService } from '../../services/icon.service.js';
 import { getPWAService } from '../../services/pwa.service.js';
+import { AppEvents } from '../utils/types.js';
+import { redirectToLogin } from '../utils/auth-redirect.js';
 
 class ServiceRegistryClass {
     constructor() {
         this.services = new Map();
         this._initialized = false;
+        this._auth401ListenerRegistered = false;
     }
 
     register(name, service) {
@@ -37,6 +40,14 @@ class ServiceRegistryClass {
         this.register('icon', new IconService('/static/core/assets/icons'));
         this.register('pwa', getPWAService(baseUrl));
 
+        if (!this._auth401ListenerRegistered) {
+            this._auth401ListenerRegistered = true;
+            window.addEventListener(AppEvents.AUTH_UNAUTHORIZED, () => {
+                this.auth.clearAuth();
+                redirectToLogin();
+            });
+        }
+
         for (const [, service] of this.services) {
             if (service && typeof service.init === 'function') {
                 await service.init();
@@ -57,6 +68,7 @@ class ServiceRegistryClass {
     resetForUiTests() {
         this.services.clear();
         this._initialized = false;
+        this._auth401ListenerRegistered = false;
     }
 
     get auth() { return this.get('auth'); }

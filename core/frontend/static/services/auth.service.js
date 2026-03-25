@@ -11,8 +11,6 @@ export class AuthService extends BaseService {
         super(baseUrl);
         this.user = null;
         this._validationPromise = null;
-        this._lastValidationTime = null;
-        this._validationCacheTime = 5000;
     }
 
     /**
@@ -21,24 +19,16 @@ export class AuthService extends BaseService {
      * Результат кэшируется на короткое время, чтобы избежать множественных запросов
      */
     async validateToken() {
-        const now = Date.now();
-        
         if (this._validationPromise) {
             return this._validationPromise;
         }
-        
-        if (this._lastValidationTime && (now - this._lastValidationTime) < this._validationCacheTime) {
-            return this.isAuthenticated;
-        }
-        
+
         this._validationPromise = this._doValidateToken();
-        
+
         try {
-            const result = await this._validationPromise;
-            return result;
+            return await this._validationPromise;
         } finally {
             this._validationPromise = null;
-            this._lastValidationTime = now;
         }
     }
     
@@ -57,6 +47,14 @@ export class AuthService extends BaseService {
             this._dispatchAuthChange();
             return true;
         } catch (error) {
+            const msg = error.message || '';
+            if (msg.includes('HTTP 500')) {
+                this.user = null;
+                this._dispatchAuthChange();
+                const fatal = new Error(msg);
+                fatal.code = 'AUTH_SERVER_ERROR';
+                throw fatal;
+            }
             console.log('❌ Ошибка при проверке авторизации:', error.message);
             this.user = null;
             this._dispatchAuthChange();
@@ -71,7 +69,6 @@ export class AuthService extends BaseService {
     clearAuth() {
         this.user = null;
         this._validationPromise = null;
-        this._lastValidationTime = null;
         this._dispatchAuthChange();
     }
 

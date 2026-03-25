@@ -9,6 +9,7 @@ from uuid import uuid4
 from apps.sync.channel_lane_preview import lane_preview_from_content_row
 from apps.sync.channel_read_helpers import channel_read_entity_minimal
 from apps.sync.db.models import SyncChannel, SyncGitResourceRef, SyncMessage, SyncSpace, SyncThread
+from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
@@ -16,16 +17,29 @@ from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.channels import ChannelRead, ChannelType, ChannelUpdate
-from apps.sync.realtime.notification_tasks import deliver_channel_message_notification
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
-from apps.sync.models.messages import MessageContentModel, MessageCreate, MessageRead, MessageStatus
+from apps.sync.models.messages import (
+    MessageContentModel,
+    MessageContentType,
+    MessageCreate,
+    MessageRead,
+    MessageStatus,
+    TextPlainContent,
+)
 from apps.sync.models.spaces import SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadRead
+from apps.sync.realtime.call_handlers import (
+    handle_call_accept,
+    handle_call_decline,
+    handle_call_hangup,
+    handle_call_invite,
+)
 from apps.sync.realtime.commands import (
     ChannelsCreatePayload,
     ChannelsMarkReadPayload,
     ChannelsTypingPayload,
+    ChannelsUpdatePayload,
     CommandEnvelope,
     GitResourcesUpsertPayload,
     MessagesDeletePayload,
@@ -37,7 +51,6 @@ from apps.sync.realtime.commands import (
     MessagesSendPayload,
     SpacesCreatePayload,
     SpacesUpdatePayload,
-    ChannelsUpdatePayload,
     ThreadsCreatePayload,
 )
 from apps.sync.realtime.events import (
@@ -56,12 +69,9 @@ from apps.sync.realtime.events import (
     event_space_created,
     event_thread_created,
 )
-from apps.sync.db.repositories.call_repository import CallRepository
-from apps.sync.realtime.call_handlers import (
-    handle_call_accept,
-    handle_call_decline,
-    handle_call_hangup,
-    handle_call_invite,
+from apps.sync.realtime.notification_tasks import (
+    deliver_channel_message_notification,
+    deliver_sync_mention_notification,
 )
 from core.db.repositories.user_repository import UserRepository
 
@@ -73,6 +83,17 @@ class CommandExecutionResult:
         self.events = events
 
 
+def _notification_preview_from_message(message: MessageRead) -> str:
+    ordered = sorted(message.contents, key=lambda c: c.order)
+    for c in ordered:
+        if c.type == MessageContentType.TEXT_PLAIN:
+            return lane_preview_from_content_row(c.type.value, c.data.model_dump())
+    if message.contents:
+        c0 = sorted(message.contents, key=lambda c: c.order)[0]
+        return lane_preview_from_content_row(c0.type.value, c0.data.model_dump())
+    return "Новое сообщение"
+
+
 async def _enqueue_channel_message_notifications(
     *,
     payload: MessagesSendPayload,
@@ -81,33 +102,149 @@ async def _enqueue_channel_message_notifications(
     actor_user_id: str,
     channels: ChannelRepository,
 ) -> None:
-    if payload.body.thread_id:
-        return
     entity = await channels.get(payload.channel_id)
     if entity is None:
         raise ValueError(f"Канал {payload.channel_id} не найден.")
-    if message.contents:
-        c0 = message.contents[0]
-        preview = lane_preview_from_content_row(c0.type.value, c0.data.model_dump())
-    else:
-        preview = "Новое сообщение"
+    preview = _notification_preview_from_message(message)
     if entity.type == ChannelType.DIRECT.value:
         title = message.sender.display_name
     else:
         title = entity.name or "Канал"
     member_ids = await channels.list_member_user_ids(payload.channel_id, company_id=company_id)
+    mentioned: set[str] = set(message.mentioned_user_ids or [])
+    is_root_lane = payload.body.thread_id is None
+
     for uid in member_ids:
         if uid == actor_user_id:
             continue
-        await deliver_channel_message_notification.kiq(
-            recipient_user_id=uid,
-            channel_id=payload.channel_id,
-            company_id=company_id,
-            message_id=message.id,
-            sender_display_name=message.sender.display_name,
-            notification_title=title,
-            body_preview=preview,
+        if uid in mentioned:
+            await deliver_sync_mention_notification.kiq(
+                recipient_user_id=uid,
+                channel_id=payload.channel_id,
+                company_id=company_id,
+                message_id=message.id,
+                sender_display_name=message.sender.display_name,
+                notification_title=title,
+                body_preview=preview,
+            )
+        elif is_root_lane:
+            await deliver_channel_message_notification.kiq(
+                recipient_user_id=uid,
+                channel_id=payload.channel_id,
+                company_id=company_id,
+                message_id=message.id,
+                sender_display_name=message.sender.display_name,
+                notification_title=title,
+                body_preview=preview,
+            )
+
+
+async def _normalize_message_create_mentions(
+    body: MessageCreate,
+    *,
+    channel_id: str,
+    company_id: str,
+    actor_user_id: str,
+    channels: ChannelRepository,
+) -> MessageCreate:
+    member_ids = set(
+        await channels.list_member_user_ids(channel_id, company_id=company_id)
+    )
+
+    def validate_mention_ids(raw: list[str]) -> list[str]:
+        ordered = list(dict.fromkeys(raw))
+        for uid in ordered:
+            if uid not in member_ids:
+                raise ValueError(f"Упоминание: пользователь {uid} не участник канала.")
+            if uid == actor_user_id:
+                raise ValueError("Нельзя упоминать себя.")
+        return ordered
+
+    sorted_items = sorted(enumerate(body.contents), key=lambda t: t[1].order)
+    first_text_idx: int | None = None
+    for orig_idx, c in sorted_items:
+        if c.type == MessageContentType.TEXT_PLAIN:
+            first_text_idx = orig_idx
+            break
+
+    raw_mentions = body.mentioned_user_ids
+    if raw_mentions is not None and len(raw_mentions) == 0:
+        if first_text_idx is None:
+            return MessageCreate(
+                thread_id=body.thread_id,
+                parent_message_id=body.parent_message_id,
+                contents=body.contents,
+                mentioned_user_ids=None,
+            )
+        c = body.contents[first_text_idx]
+        if c.type != MessageContentType.TEXT_PLAIN:
+            return MessageCreate(
+                thread_id=body.thread_id,
+                parent_message_id=body.parent_message_id,
+                contents=body.contents,
+                mentioned_user_ids=None,
+            )
+        d = c.data
+        if not isinstance(d, TextPlainContent):
+            raise ValueError("text/plain: ожидается TextPlainContent.")
+        new_tp = TextPlainContent(body=d.body, mentions=None)
+        new_contents: list[MessageContentModel] = []
+        for i, x in enumerate(body.contents):
+            if i == first_text_idx:
+                new_contents.append(MessageContentModel(type=x.type, data=new_tp, order=x.order))
+            else:
+                new_contents.append(x)
+        return MessageCreate(
+            thread_id=body.thread_id,
+            parent_message_id=body.parent_message_id,
+            contents=new_contents,
+            mentioned_user_ids=None,
         )
+
+    if raw_mentions is None:
+        if first_text_idx is None:
+            return body
+        c = body.contents[first_text_idx]
+        d = c.data
+        if not isinstance(d, TextPlainContent):
+            raise ValueError("text/plain: ожидается TextPlainContent.")
+        if d.mentions is None or len(d.mentions) == 0:
+            return body
+        mids = validate_mention_ids(list(d.mentions))
+        new_tp = TextPlainContent(body=d.body, mentions=mids)
+        new_contents = []
+        for i, x in enumerate(body.contents):
+            if i == first_text_idx:
+                new_contents.append(MessageContentModel(type=x.type, data=new_tp, order=x.order))
+            else:
+                new_contents.append(x)
+        return MessageCreate(
+            thread_id=body.thread_id,
+            parent_message_id=body.parent_message_id,
+            contents=new_contents,
+            mentioned_user_ids=None,
+        )
+
+    if first_text_idx is None:
+        raise ValueError("Упоминания требуют текстовый блок text/plain.")
+    mids = validate_mention_ids(list(raw_mentions))
+    c = body.contents[first_text_idx]
+    d = c.data
+    if not isinstance(d, TextPlainContent):
+        raise ValueError("text/plain: ожидается TextPlainContent.")
+    new_tp = TextPlainContent(body=d.body, mentions=mids)
+    new_contents = []
+    for i, x in enumerate(body.contents):
+        if i == first_text_idx:
+            new_contents.append(MessageContentModel(type=x.type, data=new_tp, order=x.order))
+        else:
+            new_contents.append(x)
+    return MessageCreate(
+        thread_id=body.thread_id,
+        parent_message_id=body.parent_message_id,
+        contents=new_contents,
+        mentioned_user_ids=None,
+    )
 
 
 async def execute_command(
@@ -226,16 +363,28 @@ async def execute_command(
 
     if cmd.type == "messages.send":
         payload = MessagesSendPayload.model_validate(cmd.payload)
+        if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+            raise PermissionError(
+                f"Пользователь не состоит в канале {payload.channel_id}."
+            )
+        normalized_body = await _normalize_message_create_mentions(
+            payload.body,
+            channel_id=payload.channel_id,
+            company_id=cmd.company_id,
+            actor_user_id=cmd.actor_user_id,
+            channels=channels,
+        )
+        send_payload = MessagesSendPayload(channel_id=payload.channel_id, body=normalized_body)
         message = await _send_message(
             payload.channel_id,
-            payload.body,
+            normalized_body,
             actor_user_id=cmd.actor_user_id,
             company_id=cmd.company_id,
             messages=messages,
             user_repository=user_repository,
         )
         await _enqueue_channel_message_notifications(
-            payload=payload,
+            payload=send_payload,
             message=message,
             company_id=cmd.company_id,
             actor_user_id=cmd.actor_user_id,

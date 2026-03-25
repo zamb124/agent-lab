@@ -1,3 +1,5 @@
+import { AppEvents } from '../utils/types.js';
+
 /**
  * BaseService - Базовый класс для API сервисов
  */
@@ -117,6 +119,9 @@ export class BaseService {
         const response = await fetch(url, config);
         
         if (!response.ok) {
+            if (response.status === 401) {
+                window.dispatchEvent(new CustomEvent(AppEvents.AUTH_UNAUTHORIZED, { bubbles: true }));
+            }
             const errorData = await response.json().catch(() => null);
             throw new Error(this._formatError(errorData, response.status));
         }

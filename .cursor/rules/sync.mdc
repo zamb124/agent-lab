@@ -71,7 +71,8 @@ WebSocket /sync/ws        ────┘
 
 ## Платформенные уведомления о сообщениях
 
-- После **`messages.send`** (только корневая лента, без `thread_id`) для каждого участника кроме отправителя ставится TaskIQ-задача **`deliver_channel_message_notification`** (`apps/sync/realtime/notification_tasks.py`). Внутри: если в Redis есть presence **`sync:ws:presence:{user_id}`** (активный `/sync/ws`) — выход без `notify_user`; иначе проверка **`notifications_muted`**; иначе **`notify_user`** (`NotificationType.SYNC_NEW_MESSAGE`, `action_url` `/sync?channel=...`).
+- После **`messages.send`** (только корневая лента, без `thread_id`) для каждого участника кроме отправителя, **если его нет в `mentioned_user_ids`**, ставится TaskIQ-задача **`deliver_channel_message_notification`** (`apps/sync/realtime/notification_tasks.py`). Внутри: если в Redis есть presence **`sync:ws:presence:{user_id}`** (активный `/sync/ws`) — выход без `notify_user`; иначе проверка **`notifications_muted`**; иначе **`notify_user`** (`NotificationType.SYNC_NEW_MESSAGE`, `action_url` `/sync?channel=...`).
+- Упоминания: в **`MessageCreate`** опционально **`mentioned_user_ids`**; сервер валидирует участников канала и пишет в первый блок **`text/plain`** поле **`mentions`** в JSON контента. Для каждого упомянутого участника (кроме отправителя) — **`deliver_sync_mention_notification`** (`NotificationType.MENTION`, приоритет high), **без** пропуска по sync presence; учитывается **`notifications_muted`**. В тредах обычное уведомление о канале не шлётся; упоминания в треде доставляются только через **`deliver_sync_mention_notification`**.
 - Presence пишется в **`apps/sync/ws.py`** при connect, на каждый кадр от клиента и **фоновым циклом** (интервал ~45 с), пока WebSocket открыт — иначе TTL 120 с истек бы при простое. Ключ снимается только при закрытии **последнего** сокета пользователя (несколько вкладок). **`sync:last_seen:{user_id}`** — ISO-время ухода в офлайн (запись при последнем disconnect).
 - UI: **`platform-notification-manager`** в `apps/sync/ui/index.html`; мьют — настройки канала (`channel-settings-modal`), API см. выше. Deep link: query **`?channel=`** на старте `sync-app.js`.
 
@@ -101,7 +102,7 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 Дополнительные команды сообщений и канала: `messages.edit`, `messages.delete`, `messages.forward`, `messages.react`, `messages.pin`, **`channels.mark_read`** (обновляет `sync_channel_members.last_read_at` до `max(sent_at)` корневой ленты или «сейчас», если сообщений нет), **`channels.typing`** (эфемерно, без записи в БД: участник канала сигнализирует `typing`/`thread_id`; событие **`channel.typing`** в Redis Pub/Sub). События: `message.updated`, `message.deleted`, `message.reaction_changed`, `channel.pins_changed`, **`channel.read_updated`** (`channel_id`, `reader_user_id`, `read_at` ISO) — другие вкладки клиента могут сбросить локальный бейдж.
 
-**Сводка канала в списке (GET /channels):** в `ChannelRead` поля `unread_count` (только корневая лента, чужие сообщения после `last_read_at`; `last_read_at IS NULL` — все такие сообщения считаются непрочитанными), `last_message_preview`, `last_message_at`. Счётчик и превью считаются в `MessageRepository.channel_lane_summaries_batch`. После открытия ленты клиент вызывает **`POST /channels/{channel_id}/read`** (`dispatch_sync_command`, та же бизнес-логика, что у команды `channels.mark_read`) — см. `SyncStore.loadMessages` + `markChannelRead`. Realtime: для чужих каналов `message.created` без `thread_id` обновляет превью в `sync-app.js`; непрочитанные — только если отправитель не текущий пользователь.
+**Сводка канала в списке (GET /channels):** в `ChannelRead` поля `unread_count` (только корневая лента, чужие сообщения после `last_read_at`; `last_read_at IS NULL` — все такие сообщения считаются непрочитанными), **`mention_unread_count`** (корневая лента: непрочитанные сообщения, где в `text/plain` в `data.mentions` есть текущий пользователь), `last_message_preview`, `last_message_at`. Счётчики и превью считаются в `MessageRepository.channel_lane_summaries_batch`. После открытия ленты клиент вызывает **`POST /channels/{channel_id}/read`** (`dispatch_sync_command`, та же бизнес-логика, что у команды `channels.mark_read`) — см. `SyncStore.loadMessages` + `markChannelRead`. Realtime: для чужих каналов `message.created` без `thread_id` обновляет превью в `sync-app.js`; непрочитанные — только если отправитель не текущий пользователь.
 
 **Лента канала (GET /messages, `list_by_channel`):** `thread_id IS NULL`, `deleted_at IS NULL`; ответы на сообщения в основной полосе **включены** (`parent_message_id` может быть задан при `thread_id IS NULL`).
 
@@ -115,6 +116,8 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 **Участники компании (GET /company/members):** список `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий пользователь исключён); поля **`is_online`**, **`last_seen_at`** (Redis: presence + last_seen). Sync UI: секция «Личные» — поиск + открытие/создание DM по клику (`SyncStore.loadCompanyMembers`, `findDirectChannelForPeer`); **`peerPresenceByUserId`** в store; realtime **`user.presence`** (фильтр по `company_id` в `sync-app.js`). В сайдбаре вторая строка чата: **печать (основная лента)** > превью сообщения; для «Личные» при отсутствии превью — подпись онлайн/last seen; зелёная точка на аватаре при онлайн.
 
+**Общие каналы с участником (GET /company/members/{user_id}/shared-channels):** каналы, где есть и текущий пользователь, и указанный участник компании (пересечение `sync_channel_members`); если `user_id` совпадает с текущим — список всех каналов пользователя как в GET `/channels`. Ответ — как у списка каналов (`ChannelRead`). Для карточки профиля в UI: `SyncAPIService.getSharedChannelsWithMember`, сетка каналов в `user-info-modal.js`.
+
 ### WebSocket протокол
 
 **Клиент -> сервер:** `{ id, type, payload }` (WsCommandFrame)
@@ -127,6 +130,7 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 - Текстовый блок `text/plain`: не длиннее **4096** символов (как одно сообщение в Telegram). Константа `SYNC_MESSAGE_TEXT_MAX_CHARS` в `apps/sync/models/messages.py`; на клиенте — `apps/sync/ui/constants/sync-limits.js` (`SYNC_MESSAGE_TEXT_MAX_CHARS`), ввод в `message-composer.js`.
 - Длинные строки без пробелов в пузырьке не должны вылезать за ширину: `overflow-wrap` на тексте в `message-bubble.js`.
+- Упоминания в тексте (`@…`): токен после `@` — UUID **или** platform id (`user_…`, `test_user_…`). Разбор и извлечение `mentioned_user_ids` — `apps/sync/ui/utils/sync-mention-text.js`; в ленте подпись — **`name` из GET /company/members** (`SyncStore.companyMembers`), не сырой id; пузырёк по ширине — `width: fit-content`, блок с текстом не растягивается за счёт `flex: 1` у колонки времени.
 
 ## Frontend (Lit 3 + PlatformApp)
 
@@ -155,7 +159,7 @@ apps/sync/ui/
     sync-direct-member-row.js  # участник компании — открытие DM (аватар, онлайн, превью/presence/печатает)
     sync-channel-row.js   # канал (аватар, название, метка `channelRowMetaLabel`, превью/печатает): сайдбар и модалка пересылки; `SyncStore.channelDisplayTitle`
     utils/sync-hue.js     # `hueFromString` для инициалов аватаров в строках sync
-    chat-view.js          # header (аватар/иконка: direct peer, канал, space или folder) + channel-picker | message-list + composer; channel-settings-modal (createMode); пересылка — `getForwardDestinationChannels` + sync-channel-row
+    chat-view.js          # header: direct — клик по аватару → `user-info-modal`; topic — только `channel.avatar_url` (без подстановки аватара space), иначе инициалы как в `sync-channel-row`; channel-picker | message-list + composer; channel-settings-modal (createMode); пересылка — `getForwardDestinationChannels` + sync-channel-row
     channel-picker.js     # сетка каналов: `getChannelsForPickerList` (личные + topic с тем же фильтром, что сайдбар)
     message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
     message-bubble.js     # контент, меню сообщения: ПКМ на десктопе, long-press (touch/pen) с подсветкой «вдавливания» пузырька; реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation; `file/image` и `mock/image` — кнопка скачивания поверх превью (правый верхний угол), `file/document` — карточка со ссылкой скачивания

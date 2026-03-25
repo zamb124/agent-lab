@@ -158,5 +158,6 @@ async def test_owner_opens_peer_profile_from_message_bubble(
     user_modal = ui_page_system.locator("user-info-modal")
     await expect(user_modal).to_be_visible()
     await expect(user_modal.get_by_role("heading", name="Профиль")).to_be_visible()
-    await expect(user_modal.get_by_text(system_user2_id, exact=False)).to_be_visible()
+    await expect(user_modal.get_by_text("System User 2", exact=False)).to_be_visible()
+    await expect(user_modal.get_by_text("Каналы вместе")).to_be_visible()
     await scenario.step("Открыта модалка профиля отправителя", ui_page_system)

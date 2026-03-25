@@ -15,7 +15,12 @@ from core.models.identity_models import User, Company
 from core.models.context_models import Context, Language
 from core.utils.tokens import get_token_service, TokenData
 
-from .route_config import RouteMatcher, RouteRule
+from .route_config import (
+    RouteMatcher,
+    RouteRule,
+    browser_request_allows_spa_fallback,
+    path_allows_spa_fallback,
+)
 from .company_resolver import CompanyResolver
 from .context_factory import ContextFactory
 from .platform_handlers import get_platform_handler
@@ -71,9 +76,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         rule = self.route_matcher.match(path)
         if not rule:
-            logger.error(f"❌ Неизвестный путь: {path}, метод={request.method}, host={request.headers.get('host')}, trace_id={trace_id}")
-            logger.error(f"❌ Доступные правила: {[r.pattern for r in self.route_matcher.rules[:10]]}")
-            raise HTTPException(status_code=404, detail="Not Found")
+            if path_allows_spa_fallback(path) and browser_request_allows_spa_fallback(request):
+                rule = RouteRule(
+                    pattern="/*",
+                    auth_required=False,
+                    context_type="anonymous",
+                )
+                logger.info(
+                    f"SPA fallback (anonymous): path={path}, trace_id={trace_id}"
+                )
+            else:
+                logger.debug(
+                    f"Маршрут не найден (не SPA): path={path}, method={request.method}, trace_id={trace_id}"
+                )
+                return JSONResponse(status_code=404, content={"detail": "Not Found"})
         
         # Не логировать для публичных путей
         if not path.startswith(("/openapi", "/docs", "/static")):

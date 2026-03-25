@@ -10,6 +10,7 @@ import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from '../constants/sync-limits.js';
+import { extractMentionedUserIdsFromPlainText } from '../utils/sync-mention-text.js';
 
 const EMOJIS = ['😀', '😅', '😉', '😍', '🤝', '🔥', '✅', '💡', '🧠', '🚀', '📌', '🧩', '⚠️', '❌', '👍', '👀'];
 
@@ -384,6 +385,49 @@ export class MessageComposer extends PlatformElement {
                 color: var(--text-tertiary);
                 padding: var(--space-1) 0;
             }
+
+            .mention-popup {
+                position: absolute;
+                bottom: calc(100% + 8px);
+                left: 44px;
+                right: 88px;
+                max-height: 220px;
+                overflow-y: auto;
+                border-radius: var(--radius-xl);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-strong);
+                backdrop-filter: blur(var(--glass-blur-strong));
+                padding: var(--space-1);
+                box-shadow: var(--glass-shadow-strong);
+                z-index: 55;
+            }
+
+            .mention-item {
+                display: block;
+                width: 100%;
+                padding: var(--space-2) var(--space-3);
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                font-family: inherit;
+                text-align: left;
+                cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .mention-item:hover,
+            .mention-item.is-active {
+                background: var(--glass-solid-medium);
+            }
+
+            .mention-item-id {
+                display: block;
+                font-size: 10px;
+                color: var(--text-tertiary);
+                margin-top: 2px;
+            }
         `
     ];
 
@@ -401,6 +445,16 @@ export class MessageComposer extends PlatformElement {
         this._editSourceId = null;
         this._typingDebounceTimer = null;
         this._lastTypingContext = null;
+        this._mentionOpen = false;
+        this._mentionFilter = '';
+        this._mentionAnchor = 0;
+        this._mentionCaret = 0;
+        this._mentionIndex = 0;
+        this._channelMembers = null;
+        this._membersChannelId = null;
+        this._mentionLoading = false;
+        /** user_id выбранные из попапа (не обязательно в формате UUID в тексте). */
+        this._mentionPickUserIds = [];
     }
 
     connectedCallback() {
@@ -435,6 +489,12 @@ export class MessageComposer extends PlatformElement {
 
     updated(changedProperties) {
         super.updated(changedProperties);
+        if (changedProperties.has('channelId')) {
+            this._membersChannelId = null;
+            this._channelMembers = null;
+            this._mentionOpen = false;
+            this._mentionPickUserIds = [];
+        }
         if (changedProperties.has('channelId') || changedProperties.has('_focusedThreadId')) {
             const ctx = this._lastTypingContext;
             if (ctx) {
@@ -461,8 +521,122 @@ export class MessageComposer extends PlatformElement {
         }
     }
 
+    _companyMemberName(userId) {
+        if (typeof userId !== 'string' || userId === '') return userId;
+        const list = SyncStore.state.companyMembers?.list;
+        if (!Array.isArray(list)) return userId;
+        const cm = list.find(c => c.user_id === userId);
+        if (typeof cm?.name === 'string' && cm.name.trim() !== '') return cm.name.trim();
+        return userId;
+    }
+
+    async _ensureChannelMembers() {
+        if (!this.channelId) return;
+        if (this._membersChannelId === this.channelId && Array.isArray(this._channelMembers)) return;
+        const syncApi = this.services.get('syncApi');
+        if (!syncApi) throw new Error('syncApi не зарегистрирован.');
+        this._mentionLoading = true;
+        this.requestUpdate();
+        const list = await syncApi.getChannelMembers(this.channelId);
+        if (!Array.isArray(list)) {
+            throw new Error('getChannelMembers: ожидается массив.');
+        }
+        this._channelMembers = list;
+        this._membersChannelId = this.channelId;
+        this._mentionLoading = false;
+        this.requestUpdate();
+    }
+
+    _mentionRowsFiltered() {
+        const myId = this.auth?.user?.id;
+        const raw = this._channelMembers;
+        if (!Array.isArray(raw)) return [];
+        let rows = raw
+            .filter(m => m && typeof m.user_id === 'string' && m.user_id !== '' && m.user_id !== myId)
+            .map(m => ({
+                user_id: m.user_id,
+                label: this._companyMemberName(m.user_id),
+            }));
+        const q = (this._mentionFilter || '').trim().toLowerCase();
+        if (q !== '') {
+            rows = rows.filter(
+                r =>
+                    r.label.toLowerCase().includes(q) ||
+                    r.user_id.toLowerCase().includes(q)
+            );
+        }
+        return rows;
+    }
+
+    _syncMentionUiFromCaret(text, caret) {
+        const before = text.slice(0, caret);
+        const at = before.lastIndexOf('@');
+        if (at < 0) {
+            this._mentionOpen = false;
+            return;
+        }
+        const afterAt = before.slice(at + 1);
+        if (/[\s\n]/.test(afterAt)) {
+            this._mentionOpen = false;
+            return;
+        }
+        this._mentionOpen = true;
+        this._mentionAnchor = at;
+        this._mentionCaret = caret;
+        this._mentionFilter = afterAt;
+        this._mentionIndex = 0;
+        this._emojiOpen = false;
+        this._attachMenuOpen = false;
+        void this._ensureChannelMembers();
+    }
+
+    _pickMention(userId) {
+        if (typeof userId !== 'string' || userId === '') {
+            throw new Error('pickMention: userId обязателен.');
+        }
+        const text = this._text;
+        const anchor = this._mentionAnchor;
+        const caret = this._mentionCaret;
+        const before = text.slice(0, anchor);
+        const after = text.slice(caret);
+        const insert = `@${userId} `;
+        let next = before + insert + after;
+        if (next.length > SYNC_MESSAGE_TEXT_MAX_CHARS) {
+            window.dispatchEvent(
+                new CustomEvent(AppEvents.TOAST_SHOW, {
+                    detail: {
+                        type: 'warning',
+                        message: `Не больше ${SYNC_MESSAGE_TEXT_MAX_CHARS} символов в сообщении (как в Telegram).`,
+                        duration: 4000,
+                    },
+                })
+            );
+            next = next.slice(0, SYNC_MESSAGE_TEXT_MAX_CHARS);
+        }
+        this._text = next;
+        if (!this._mentionPickUserIds.includes(userId)) {
+            this._mentionPickUserIds.push(userId);
+        }
+        this._mentionOpen = false;
+        this._scheduleTypingPing();
+        this.requestUpdate();
+        const pos = Math.min(before.length + insert.length, next.length);
+        queueMicrotask(() => {
+            const ta = this.shadowRoot?.querySelector('textarea.textarea');
+            if (!ta) return;
+            ta.focus();
+            try {
+                ta.setSelectionRange(pos, pos);
+            } catch {
+                /* ignore */
+            }
+        });
+    }
+
     _onTextInput(e) {
         const raw = e.target.value;
+        const caret =
+            typeof e.target.selectionStart === 'number' ? e.target.selectionStart : raw.length;
         if (raw.length > SYNC_MESSAGE_TEXT_MAX_CHARS) {
             const clipped = raw.slice(0, SYNC_MESSAGE_TEXT_MAX_CHARS);
             e.target.value = clipped;
@@ -476,9 +650,11 @@ export class MessageComposer extends PlatformElement {
                     },
                 })
             );
+            this._syncMentionUiFromCaret(clipped, clipped.length);
             return;
         }
         this._text = raw;
+        this._syncMentionUiFromCaret(raw, caret);
         this._scheduleTypingPing();
     }
 
@@ -596,10 +772,14 @@ export class MessageComposer extends PlatformElement {
                 : 'Вы';
 
         const parentId = this._replyToMessage?.id ?? null;
+        const fromUuid = extractMentionedUserIdsFromPlainText(text);
+        const fromPicks = this._mentionPickUserIds.filter(uid => text.includes(`@${uid}`));
+        const mentionedUserIds = [...new Set([...fromUuid, ...fromPicks])];
         const messageCreate = {
             thread_id: this._focusedThreadId,
             parent_message_id: parentId,
             contents: [{ type: 'text/plain', data: { body: text }, order: 0 }],
+            ...(mentionedUserIds.length > 0 ? { mentioned_user_ids: mentionedUserIds } : {}),
         };
 
         const pending = {
@@ -628,6 +808,7 @@ export class MessageComposer extends PlatformElement {
             SyncStore.failPending(commandId);
             throw e;
         }
+        this._mentionPickUserIds = [];
     }
 
     async _sendWithAttachments(text) {
@@ -663,10 +844,14 @@ export class MessageComposer extends PlatformElement {
         contents.push(...fileBlocks);
 
         const parentId = this._replyToMessage?.id ?? null;
+        const fromUuid = extractMentionedUserIdsFromPlainText(text);
+        const fromPicks = this._mentionPickUserIds.filter(uid => text.includes(`@${uid}`));
+        const mentionedUserIds = [...new Set([...fromUuid, ...fromPicks])];
         const messageCreate = {
             thread_id: this._focusedThreadId,
             parent_message_id: parentId,
             contents,
+            ...(mentionedUserIds.length > 0 ? { mentioned_user_ids: mentionedUserIds } : {}),
         };
 
         this._text = '';
@@ -674,6 +859,7 @@ export class MessageComposer extends PlatformElement {
         this._uploading = false;
         SyncStore.clearReplyToMessage();
         await syncApi.sendMessage(this.channelId, messageCreate);
+        this._mentionPickUserIds = [];
         await SyncStore.loadMessages(syncApi, this.channelId);
     }
 
@@ -719,6 +905,35 @@ export class MessageComposer extends PlatformElement {
     }
 
     _onKeyDown(e) {
+        const rows = this._mentionRowsFiltered();
+        if (this._mentionOpen) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                this._mentionOpen = false;
+                this.requestUpdate();
+                return;
+            }
+            if (rows.length > 0) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this._mentionIndex = Math.min(this._mentionIndex + 1, rows.length - 1);
+                    this.requestUpdate();
+                    return;
+                }
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this._mentionIndex = Math.max(this._mentionIndex - 1, 0);
+                    this.requestUpdate();
+                    return;
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const row = rows[this._mentionIndex];
+                    if (row) this._pickMention(row.user_id);
+                    return;
+                }
+            }
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             this._sendText();
@@ -770,6 +985,7 @@ export class MessageComposer extends PlatformElement {
     }
 
     render() {
+        const mentionRows = this._mentionOpen ? this._mentionRowsFiltered() : [];
         return html`
             <div class="composer">
                 ${this._editMessage ? html`
@@ -852,6 +1068,29 @@ export class MessageComposer extends PlatformElement {
                                     <button class="emoji-btn" @click=${() => this._insertEmoji(em)}>${em}</button>
                                 `)}
                             </div>
+                        </div>
+                    ` : ''}
+                    ${this._mentionOpen ? html`
+                        <div class="mention-popup" role="listbox">
+                            ${this._mentionLoading
+                                ? html`<div class="mention-item" tabindex="-1">Загрузка…</div>`
+                                : ''}
+                            ${!this._mentionLoading && mentionRows.length === 0
+                                ? html`<div class="mention-item" tabindex="-1">Нет совпадений</div>`
+                                : ''}
+                            ${mentionRows.map(
+                                (r, i) => html`
+                                    <button
+                                        type="button"
+                                        class="mention-item ${i === this._mentionIndex ? 'is-active' : ''}"
+                                        role="option"
+                                        @click=${() => this._pickMention(r.user_id)}
+                                    >
+                                        ${r.label}
+                                        <span class="mention-item-id">${r.user_id}</span>
+                                    </button>
+                                `
+                            )}
                         </div>
                     ` : ''}
                 </div>

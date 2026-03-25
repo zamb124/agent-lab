@@ -98,6 +98,11 @@ export class FlowsApp extends PlatformApp {
     }
 
     render() {
+        const shell = this._renderShellPages();
+        if (shell !== null) {
+            return shell;
+        }
+
         if (!this._servicesInitialized || !this._authChecked) {
             return html`
                 <div class="loading-container">

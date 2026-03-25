@@ -113,6 +113,7 @@ async def test_channel_read_topic_no_peer_lane_summary(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
+    await channel_repo.upsert_member("ch_top", "u1", "owner", company_id=company_id)
     summ = ChannelLaneSummary(
         unread_count=3,
         last_message_preview="hi",
@@ -159,3 +160,31 @@ def test_message_read_from_entity_builds_read() -> None:
     assert len(out.contents) == 1
     assert len(out.reactions) == 1
     assert out.reactions[0].emoji == "ok"
+    assert out.mentioned_user_ids is None
+
+
+def test_message_read_mentions_surface() -> None:
+    from apps.sync.db.models import SyncMessage
+
+    m = SyncMessage(
+        message_id="m2",
+        company_id="c1",
+        channel_id="ch1",
+        thread_id=None,
+        parent_message_id=None,
+        sender_user_id="sender1",
+        status="sent",
+        sent_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+        reactions=[],
+    )
+    uid = "00000000-0000-4000-8000-000000000099"
+    contents = [
+        MessageContentModel(
+            type=MessageContentType.TEXT_PLAIN,
+            data=TextPlainContent(body=f"@{uid}", mentions=[uid]),
+            order=0,
+        ),
+    ]
+    sender = UserBrief(user_id="sender1", display_name="Sender", avatar_url=None)
+    out: MessageRead = message_read_from_entity(m=m, contents=contents, sender=sender)
+    assert out.mentioned_user_ids == [uid]

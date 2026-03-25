@@ -41,6 +41,21 @@ async def sync_api_channel_id_by_name(origin: str, auth_token: str, channel_name
     raise AssertionError(f"Канал с именем {channel_name!r} не найден в API.")
 
 
+async def sync_api_add_channel_member(
+    origin: str,
+    auth_token: str,
+    channel_id: str,
+    user_id: str,
+    role: str = "member",
+) -> None:
+    async with _sync_client(origin, auth_token) as client:
+        r = await client.post(
+            f"/sync/api/v1/channels/{channel_id}/members",
+            json={"user_id": user_id, "role": role},
+        )
+        r.raise_for_status()
+
+
 async def sync_api_post_plain_message(
     origin: str,
     auth_token: str,

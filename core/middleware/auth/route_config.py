@@ -6,6 +6,59 @@ import fnmatch
 from dataclasses import dataclass
 from typing import Optional, List
 
+from starlette.requests import Request
+
+# Префиксы, для которых нельзя подменять ответ SPA (API и служебные пути)
+SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
+    "/api/",
+    "/flows/",
+    "/crm/",
+    "/rag/",
+    "/sync/",
+    "/frontend/",
+    "/static/",
+    "/assets/",
+    "/src/",
+    "/media/",
+    "/debug/",
+    "/.well-known/",
+)
+
+SPA_FALLBACK_EXCLUDED_EXACT: frozenset[str] = frozenset(
+    {
+        "/health",
+        "/openapi.json",
+        "/redoc",
+        "/documentation",
+        "/favicon.ico",
+    }
+)
+
+
+def path_allows_spa_fallback(path: str) -> bool:
+    """Путь без явного правила: можно отдать HTML SPA, если это не API/служебный префикс."""
+    if path in SPA_FALLBACK_EXCLUDED_EXACT:
+        return False
+    for prefix in SPA_FALLBACK_EXCLUDED_PREFIXES:
+        if path.startswith(prefix):
+            return False
+    return True
+
+
+def browser_request_allows_spa_fallback(request: Request) -> bool:
+    """
+    Браузерная навигация (document) или явный Accept: text/html.
+    Исключает типичные API-клиенты с Accept: application/json.
+    """
+    if request.method not in ("GET", "HEAD"):
+        return False
+    if request.headers.get("sec-fetch-dest") == "document":
+        return True
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept.lower():
+        return True
+    return False
+
 
 @dataclass
 class RouteRule:

@@ -444,6 +444,11 @@ export class CRMApp extends PlatformApp {
     }
 
     render() {
+        const shell = this._renderShellPages();
+        if (shell !== null) {
+            return shell;
+        }
+
         if (!this._servicesInitialized || !this._authChecked) {
             return html`<app-loader></app-loader>`;
         }

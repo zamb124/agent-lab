@@ -8,6 +8,9 @@ import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { SyncStore } from '../store/sync.store.js';
+import { hueFromString } from '../utils/sync-hue.js';
+import { mentionDisplayLabel } from '../utils/sync-mention-text.js';
+import '../modals/user-info-modal.js';
 import './channel-picker.js';
 import './message-list.js';
 import './message-composer.js';
@@ -104,7 +107,7 @@ export class ChatView extends PlatformElement {
 
                 .header-entity-img,
                 .header-entity-initials,
-                .header-icon-fallback {
+                .header-peer-hit {
                     width: 32px;
                     height: 32px;
                 }
@@ -172,17 +175,22 @@ export class ChatView extends PlatformElement {
                 color: #fff;
             }
 
-            .header-icon-fallback {
-                width: 40px;
-                height: 40px;
-                border-radius: var(--radius-lg);
-                flex-shrink: 0;
+            .header-peer-hit {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: var(--glass-solid-medium);
-                color: var(--accent);
-                border: 1px solid var(--glass-border-subtle);
+                padding: 0;
+                margin: 0;
+                border: none;
+                background: transparent;
+                cursor: pointer;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+
+            .header-peer-hit:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
             }
 
             .header-channel-hit {
@@ -485,6 +493,8 @@ export class ChatView extends PlatformElement {
         _peerPresenceByUserId: { state: true },
         _typingPeersByChannel: { state: true },
         _headerMoreOpen: { state: true },
+        _headerProfileOpen: { state: true },
+        _headerProfileUser: { state: true },
     };
 
     constructor() {
@@ -498,6 +508,8 @@ export class ChatView extends PlatformElement {
         this._ui = SyncStore.state.ui;
         this._isMobile = false;
         this._headerMoreOpen = false;
+        this._headerProfileOpen = false;
+        this._headerProfileUser = null;
         this._resizeObserver = null;
         this._typingSubtitle = '';
         this._peerPresenceByUserId = s.peerPresenceByUserId ?? {};
@@ -638,25 +650,8 @@ export class ChatView extends PlatformElement {
         return ch.type ?? '';
     }
 
-    _hueFromString(value) {
-        const s = typeof value === 'string' ? value : String(value ?? '');
-        let h = 0;
-        for (let i = 0; i < s.length; i++) {
-            h = (h * 31 + s.charCodeAt(i)) >>> 0;
-        }
-        return h % 360;
-    }
-
-    _resolvedSpace(channel) {
-        if (!channel?.space_id) {
-            return null;
-        }
-        const sid = channel.space_id;
-        return this._spaces.list.find(sp => sp.id === sid) ?? null;
-    }
-
     /**
-     * Слева в шапке: собеседник (direct), аватар канала/пространства или запасная иконка.
+     * Слева в шапке: как в sync-channel-row — только аватар канала (или peer в DM), иначе инициалы.
      */
     _headerLeadingGraphic(channel) {
         if (!channel) {
@@ -664,14 +659,27 @@ export class ChatView extends PlatformElement {
         }
         if (channel.type === 'direct' && channel.peer) {
             const p = channel.peer;
-            if (typeof p.avatar_url === 'string' && p.avatar_url !== '') {
-                return html`<img class="header-entity-img" src=${p.avatar_url} alt="" />`;
-            }
-            const label = typeof p.display_name === 'string' ? p.display_name : p.user_id;
+            const label = SyncStore.channelDisplayTitle(channel);
             const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-            const hue = this._hueFromString(p.user_id);
+            const hue = hueFromString(p.user_id);
+            const inner = typeof p.avatar_url === 'string' && p.avatar_url !== ''
+                ? html`<img class="header-entity-img" src=${p.avatar_url} alt="" />`
+                : html`
+                    <span class="header-entity-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+                `;
             return html`
-                <span class="header-entity-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
+                <button
+                    type="button"
+                    class="header-peer-hit"
+                    title="Профиль"
+                    aria-label="Открыть профиль собеседника"
+                    @click=${(e) => {
+                        e.stopPropagation();
+                        this._openHeaderPeerProfile(p);
+                    }}
+                >
+                    ${inner}
+                </button>
             `;
         }
         const chUrl = typeof channel.avatar_url === 'string' && channel.avatar_url !== ''
@@ -680,26 +688,37 @@ export class ChatView extends PlatformElement {
         if (chUrl) {
             return html`<img class="header-entity-img" src=${chUrl} alt="" />`;
         }
-        const space = this._resolvedSpace(channel);
-        const spaceUrl = space && typeof space.avatar_url === 'string' && space.avatar_url !== ''
-            ? space.avatar_url
-            : null;
-        if (spaceUrl) {
-            return html`<img class="header-entity-img" src=${spaceUrl} alt="" />`;
-        }
-        if (channel.space_id && space) {
-            return html`
-                <div class="header-icon-fallback" aria-hidden="true">
-                    <platform-icon name="folder" size="22"></platform-icon>
-                </div>
-            `;
-        }
-        const label = typeof channel.name === 'string' ? channel.name : channel.id;
-        const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-        const hue = this._hueFromString(channel.id);
+        const title = SyncStore.channelDisplayTitle(channel);
+        const initial = (title.trim().slice(0, 1) || '?').toUpperCase();
+        const hue = hueFromString(channel.id);
         return html`
             <span class="header-entity-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
         `;
+    }
+
+    _openHeaderPeerProfile(peer) {
+        if (!peer || typeof peer.user_id !== 'string' || peer.user_id === '') {
+            throw new Error('peer.user_id обязателен для профиля в шапке.');
+        }
+        const members = SyncStore.state.companyMembers?.list ?? [];
+        const cm = members.find(m => m.user_id === peer.user_id);
+        this._headerProfileUser = {
+            user_id: peer.user_id,
+            display_name: typeof cm?.name === 'string' && cm.name.trim() !== ''
+                ? cm.name.trim()
+                : (typeof peer.display_name === 'string' && peer.display_name.trim() !== ''
+                    ? peer.display_name.trim()
+                    : mentionDisplayLabel(peer.user_id, members)),
+            avatar_url: typeof cm?.avatar_url === 'string' && cm.avatar_url !== ''
+                ? cm.avatar_url
+                : (typeof peer.avatar_url === 'string' && peer.avatar_url !== '' ? peer.avatar_url : null),
+        };
+        this._headerProfileOpen = true;
+    }
+
+    _onHeaderProfileClose() {
+        this._headerProfileOpen = false;
+        this._headerProfileUser = null;
     }
 
     _messageListEl() {
@@ -1084,6 +1103,16 @@ export class ChatView extends PlatformElement {
             ` : ''}
 
             <thread-drawer></thread-drawer>
+
+            ${this._headerProfileOpen && this._headerProfileUser
+                ? html`
+                <user-info-modal
+                    .open=${true}
+                    .profileUser=${this._headerProfileUser}
+                    @close=${this._onHeaderProfileClose}
+                ></user-info-modal>
+            `
+                : ''}
 
             <channel-settings-modal
                 .open=${channelModalOpen}

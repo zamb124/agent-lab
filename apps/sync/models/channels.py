@@ -59,6 +59,10 @@ class ChannelRead(BaseModel):
         default=0,
         description="Число непрочитанных сообщений в основной ленте (не треды).",
     )
+    mention_unread_count: int = Field(
+        default=0,
+        description="Непрочитанные сообщения основной ленты, где текущего пользователя упомянули.",
+    )
     last_message_preview: str | None = Field(
         default=None,
         description="Краткий текст последнего сообщения основной ленты.",

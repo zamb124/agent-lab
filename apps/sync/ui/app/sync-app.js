@@ -356,7 +356,10 @@ export class SyncApp extends PlatformApp {
                 throw new Error('channel.read_updated: auth.user.id обязателен.');
             }
             if (p.reader_user_id === myId && typeof p.channel_id === 'string') {
-                SyncStore.patchChannelFields(p.channel_id, { unread_count: 0 });
+                SyncStore.patchChannelFields(p.channel_id, {
+                    unread_count: 0,
+                    mention_unread_count: 0,
+                });
             } else if (
                 p.reader_user_id !== myId
                 && typeof p.channel_id === 'string'
@@ -407,6 +410,11 @@ export class SyncApp extends PlatformApp {
                 const cur = list.find((c) => SyncStore.normalizeSyncChannelId(c.id) === pChNorm);
                 const n = (typeof cur?.unread_count === 'number' ? cur.unread_count : 0) + 1;
                 patch.unread_count = n;
+                const mids = p.mentioned_user_ids;
+                if (Array.isArray(mids) && mids.some((id) => id === myId)) {
+                    const mn = (typeof cur?.mention_unread_count === 'number' ? cur.mention_unread_count : 0) + 1;
+                    patch.mention_unread_count = mn;
+                }
             }
             SyncStore.patchChannelFields(p.channel_id, patch);
             return;
@@ -672,6 +680,11 @@ export class SyncApp extends PlatformApp {
     }
 
     render() {
+        const shell = this._renderShellPages();
+        if (shell !== null) {
+            return shell;
+        }
+
         if (!this._servicesInitialized || !this._authChecked) {
             return html`<app-loader></app-loader>`;
         }

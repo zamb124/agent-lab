@@ -9,6 +9,11 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
+import {
+    SYNC_MENTION_IN_TEXT_RE,
+    mentionDisplayLabel,
+    plainTextSnippetWithMentionLabels,
+} from '../utils/sync-mention-text.js';
 import '../modals/user-info-modal.js';
 import './message-context-menu.js';
 import '@platform/lib/components/platform-icon.js';
@@ -65,6 +70,58 @@ function extractPlainText(msg) {
     return parts.join('\n').trim();
 }
 
+/**
+ * @param {string} body
+ * @param {{ _openMentionProfile: (id: string) => void }} host
+ */
+function renderPlainTextMessage(body, host) {
+    if (typeof body !== 'string') throw new Error('Некорректный text/plain контент.');
+    const re = new RegExp(SYNC_MENTION_IN_TEXT_RE.source, SYNC_MENTION_IN_TEXT_RE.flags);
+    const membersList = SyncStore.state.companyMembers?.list;
+    const chunks = [];
+    let last = 0;
+    let m;
+    while ((m = re.exec(body)) !== null) {
+        if (m.index > last) {
+            chunks.push({ kind: 'text', value: body.slice(last, m.index) });
+        }
+        chunks.push({ kind: 'mention', userId: m[1] });
+        last = m.index + m[0].length;
+    }
+    if (last < body.length) {
+        chunks.push({ kind: 'text', value: body.slice(last) });
+    }
+    if (chunks.length === 0) {
+        return html`<div class="msg-text">${body}</div>`;
+    }
+    return html`
+        <div class="msg-text">
+            ${chunks.map(ch =>
+                ch.kind === 'text'
+                    ? ch.value
+                    : html`<span
+                          class="msg-mention msg-mention--interactive"
+                          role="button"
+                          tabindex="0"
+                          title="Профиль"
+                          @pointerdown=${(e) => e.stopPropagation()}
+                          @click=${(e) => {
+                              e.stopPropagation();
+                              host._openMentionProfile(ch.userId);
+                          }}
+                          @keydown=${(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  host._openMentionProfile(ch.userId);
+                              }
+                          }}
+                      >@${mentionDisplayLabel(ch.userId, membersList)}</span>`
+            )}
+        </div>
+    `;
+}
+
 function _formatFileSize(bytes) {
     if (bytes < 1024) return `${bytes} Б`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
@@ -78,11 +135,15 @@ const _svgImageDownload = html`
         <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </svg>`;
 
-function renderContent(content) {
+/**
+ * @param {object} content
+ * @param {{ _openMentionProfile: (id: string) => void }} host
+ */
+function renderContent(content, host) {
     if (content.type === 'text/plain') {
         const body = content.data?.body;
         if (typeof body !== 'string') throw new Error('Некорректный text/plain контент.');
-        return html`<div class="msg-text">${body}</div>`;
+        return renderPlainTextMessage(body, host);
     }
     if (content.type === 'code/block') {
         const { language, source } = content.data ?? {};
@@ -206,6 +267,7 @@ export class MessageBubble extends PlatformElement {
         peerReadAt: { type: String },
         channelType: { type: String },
         _profileOpen: { state: true },
+        _profileUser: { state: true },
         _menuOpen: { state: true },
         _menuX: { state: true },
         _menuY: { state: true },
@@ -357,6 +419,7 @@ export class MessageBubble extends PlatformElement {
             .bubble {
                 position: relative;
                 min-width: 0;
+                width: fit-content;
                 max-width: min(720px, 90%);
                 border-radius: var(--radius-2xl);
                 padding: var(--space-2) var(--space-3);
@@ -432,7 +495,7 @@ export class MessageBubble extends PlatformElement {
             }
 
             .bubble-contents {
-                flex: 1 1 auto;
+                flex: 0 1 auto;
                 min-width: 0;
             }
 
@@ -496,10 +559,25 @@ export class MessageBubble extends PlatformElement {
             .msg-text {
                 font-size: var(--text-base);
                 color: var(--text-primary);
-                white-space: pre-wrap;
+                /* pre-wrap в колонке flex раздувает блок по высоте; pre-line сохраняет \n из текста */
+                white-space: pre-line;
                 overflow-wrap: anywhere;
                 word-break: normal;
                 line-height: 1.45;
+            }
+
+            .msg-text .msg-mention {
+                color: var(--accent);
+                font-weight: var(--font-semibold);
+            }
+
+            .msg-text .msg-mention--interactive {
+                cursor: pointer;
+            }
+
+            .msg-text .msg-mention--interactive:hover {
+                text-decoration: underline;
+                text-underline-offset: 3px;
             }
 
             .code-block {
@@ -801,6 +879,7 @@ export class MessageBubble extends PlatformElement {
         this.peerReadAt = null;
         this.channelType = null;
         this._profileOpen = false;
+        this._profileUser = null;
         this._menuOpen = false;
         this._menuX = 0;
         this._menuY = 0;
@@ -816,10 +895,28 @@ export class MessageBubble extends PlatformElement {
         this._lastPointerX = 0;
         this._lastPointerY = 0;
         this._suppressNextContextMenu = false;
+        /** @type {(() => void) | null} */
+        this._unsubCompanyMembers = null;
+        /** @type {unknown} */
+        this._companyMembersListRef = null;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._companyMembersListRef = SyncStore.state.companyMembers?.list;
+        this._unsubCompanyMembers = SyncStore.subscribe(() => {
+            const next = SyncStore.state.companyMembers?.list;
+            if (next !== this._companyMembersListRef) {
+                this._companyMembersListRef = next;
+                this.requestUpdate();
+            }
+        });
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._unsubCompanyMembers?.();
+        this._unsubCompanyMembers = null;
         this._endLongPressGesture();
     }
 
@@ -862,7 +959,14 @@ export class MessageBubble extends PlatformElement {
 
         return html`
             <div class="avatar-slot">
-                <button type="button" @click=${() => { this._profileOpen = true; }} aria-label=${`Профиль: ${shortName}`}>
+                <button
+                    type="button"
+                    @click=${() => {
+                        this._profileUser = sender;
+                        this._profileOpen = true;
+                    }}
+                    aria-label=${`Профиль: ${shortName}`}
+                >
                     ${face}
                 </button>
             </div>
@@ -884,6 +988,27 @@ export class MessageBubble extends PlatformElement {
         }
         this._pressPointerId = null;
         this._pressHoldVisual = false;
+    }
+
+    _openMentionProfile(userId) {
+        if (typeof userId !== 'string' || userId === '') {
+            throw new Error('userId обязателен для профиля по упоминанию.');
+        }
+        const members = SyncStore.state.companyMembers?.list ?? [];
+        const cm = members.find(m => m.user_id === userId);
+        this._profileUser = {
+            user_id: userId,
+            display_name: typeof cm?.name === 'string' && cm.name.trim() !== ''
+                ? cm.name.trim()
+                : mentionDisplayLabel(userId, members),
+            avatar_url: typeof cm?.avatar_url === 'string' && cm.avatar_url !== '' ? cm.avatar_url : null,
+        };
+        this._profileOpen = true;
+    }
+
+    _onProfileClose() {
+        this._profileOpen = false;
+        this._profileUser = null;
     }
 
     _openMessageMenuAt(clientX, clientY) {
@@ -1046,7 +1171,10 @@ export class MessageBubble extends PlatformElement {
               ? 'reply-quote--parent-own'
               : 'reply-quote--parent-other';
         const who = p ? toShortUsername(p.sender?.display_name ?? '') : 'Сообщение';
-        const snippetRaw = p ? extractPlainText(p).slice(0, 160) : '';
+        const membersList = SyncStore.state.companyMembers?.list;
+        const snippetRaw = p
+            ? plainTextSnippetWithMentionLabels(extractPlainText(p), membersList, 160)
+            : '';
         const snippet = snippetRaw !== '' ? snippetRaw : 'Сообщение';
 
         return html`
@@ -1147,7 +1275,10 @@ export class MessageBubble extends PlatformElement {
                                 ${!isOwn ? html`
                                     <button
                                         class="sender-btn"
-                                        @click=${() => { this._profileOpen = true; }}
+                                        @click=${() => {
+                                            this._profileUser = msg.sender;
+                                            this._profileOpen = true;
+                                        }}
                                     >
                                         ${toShortUsername(msg.sender?.display_name ?? '')}
                                     </button>
@@ -1172,7 +1303,7 @@ export class MessageBubble extends PlatformElement {
                     <div class="bubble-body">
                         <div class="bubble-contents">
                             <div class="contents-inner">
-                                ${sorted.map(c => renderContent(c))}
+                                ${sorted.map(c => renderContent(c, this))}
                             </div>
                         </div>
                         ${this._renderTimeMeta()}
@@ -1193,13 +1324,15 @@ export class MessageBubble extends PlatformElement {
                 ></message-context-menu>
             ` : ''}
 
-            ${!isOwn ? html`
+            ${this._profileOpen && this._profileUser
+                ? html`
                 <user-info-modal
-                    .open=${this._profileOpen}
-                    .sender=${msg.sender}
-                    @close=${() => { this._profileOpen = false; }}
+                    .open=${true}
+                    .profileUser=${this._profileUser}
+                    @close=${this._onProfileClose}
                 ></user-info-modal>
-            ` : ''}
+            `
+                : ''}
         `;
     }
 }

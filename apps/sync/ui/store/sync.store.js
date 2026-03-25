@@ -1080,13 +1080,13 @@ export const SyncStore = {
         const items = await syncApi.getMessages(channelId);
         this.setMessages(items);
         await syncApi.markChannelRead(channelId);
-        this.patchChannelFields(channelId, { unread_count: 0 });
+        this.patchChannelFields(channelId, { unread_count: 0, mention_unread_count: 0 });
         return items;
     },
 
     async selectChannelAndLoadMessages(syncApi, spaceId, channelId) {
         this.selectChannel(spaceId, channelId);
-        this.patchChannelFields(channelId, { unread_count: 0 });
+        this.patchChannelFields(channelId, { unread_count: 0, mention_unread_count: 0 });
         await this.loadMessages(syncApi, channelId);
     },
 };

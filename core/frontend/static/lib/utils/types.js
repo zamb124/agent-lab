@@ -65,6 +65,7 @@ export const AppEvents = {
     MESSAGE_RECEIVED: 'message-received',
     TASK_UPDATE: 'task-update',
     AUTH_CHANGE: 'auth-change',
+    AUTH_UNAUTHORIZED: 'auth-unauthorized',
     THEME_CHANGE: 'theme-change',
     TOAST_SHOW: 'toast-show',
     MODAL_OPEN: 'modal-open',

@@ -79,6 +79,8 @@ apps/{service}/ui/
 
 **Документация MkDocs в UI:** после `mkdocs build` каталог `site/` монтируется на `/documentation/` и `/frontend/documentation/`; редиректы 307 без завершающего слеша. Путь вида `/scenarios/sync/` в статике соответствует `docs/scenarios/sync/README.md` (обзор сервиса); только вложенные сценарии без `README` уровня сервиса давали 404 на `/scenarios/sync/`. Публичный доступ в `route_config`.
 
+**404 / 500 в SPA:** неизвестные пути браузера (без правила в `route_config`) обрабатываются **SPA fallback** в `AuthMiddleware`: для GET с `Sec-Fetch-Dest: document` или `Accept: text/html` создаётся анонимный контекст и запрос доходит до `serve_spa` → `index.html`. Префиксы API/сервисов (`/api/`, `/flows/`, …) в fallback не попадают — ответ 404 JSON. Общая glass-страница: `core/frontend/static/lib/components/platform-shell-page.js` (`kind="not-found"` | `server-error`). `PlatformApp` рендерит её при `_routeNotFound` / `_fatalShell`; список допустимых путей приложения задаётся в наследнике (`FrontendApp._isKnownRoute` + `_preAuthCheck`). Рендеры `*App`, переопределяющие `render()`, в начале вызывают `this._renderShellPages()`.
+
 ---
 
 ## Компоненты: Иерархия Классов

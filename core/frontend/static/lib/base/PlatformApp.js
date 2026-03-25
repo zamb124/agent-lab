@@ -5,10 +5,12 @@ import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { ServiceRegistry } from '../services/ServiceRegistry.js';
 import { AppEvents } from '../utils/types.js';
+import { redirectToLogin } from '../utils/auth-redirect.js';
 
 // PWA Install Banner для iOS/Android
 import '../components/pwa-install-banner.js';
 import '../components/glass-toast.js';
+import '../components/platform-shell-page.js';
 
 export class PlatformApp extends PlatformElement {
     static styles = [
@@ -48,6 +50,9 @@ export class PlatformApp extends PlatformElement {
         _servicesInitialized: { state: true },
         _authChecked: { state: true },
         _isAuthenticated: { state: true },
+        _routeNotFound: { state: true },
+        _notFoundHomeHref: { state: true },
+        _fatalShell: { state: true },
     };
 
     constructor() {
@@ -56,6 +61,9 @@ export class PlatformApp extends PlatformElement {
         this._servicesInitialized = false;
         this._authChecked = false;
         this._isAuthenticated = false;
+        this._routeNotFound = false;
+        this._notFoundHomeHref = '/';
+        this._fatalShell = null;
         this._handleToast = this._handleToast.bind(this);
     }
 
@@ -109,28 +117,48 @@ export class PlatformApp extends PlatformElement {
     }
 
     /**
+     * До checkAuth: можно пропустить стандартный вход (например, показать 404 без редиректа).
+     * Возвращает null или объект { skip, authenticated, _routeNotFound?, _notFoundHomeHref?, _fatalShell? }.
+     */
+    async _preAuthCheck() {
+        return null;
+    }
+
+    _isFatalServerError(err) {
+        if (!err) {
+            return false;
+        }
+        if (err.code === 'AUTH_SERVER_ERROR') {
+            return true;
+        }
+        const msg = String(err.message || '');
+        return msg.includes('HTTP 500');
+    }
+
+    /**
      * Редирект на страницу авторизации
      */
     redirectToAuth() {
-        const currentUrl = window.location.href;
-        const currentHost = window.location.host;
-        const protocol = window.location.protocol;
+        redirectToLogin();
+    }
 
-        const parts = currentHost.split('.');
-        const lastSegment = parts[parts.length - 1];
-        let loginHost;
-
-        if (lastSegment.includes(':')) {
-            const [hostOnly, _port] = lastSegment.split(':');
-            parts[parts.length - 1] = hostOnly;
-            const baseDomain = parts.slice(-2).join('.');
-            loginHost = `${baseDomain}:8002`;
-        } else {
-            loginHost = currentHost;
+    _renderShellPages() {
+        if (this._fatalShell === 'server-error') {
+            return html`
+                <platform-shell-page kind="server-error"></platform-shell-page>
+                <pwa-install-banner></pwa-install-banner>
+            `;
         }
-
-        const loginUrl = `${protocol}//${loginHost}/login?redirect_uri=${encodeURIComponent(currentUrl)}`;
-        window.location.href = loginUrl;
+        if (this._routeNotFound) {
+            return html`
+                <platform-shell-page
+                    kind="not-found"
+                    .homeHref=${this._notFoundHomeHref}
+                ></platform-shell-page>
+                <pwa-install-banner></pwa-install-banner>
+            `;
+        }
+        return null;
     }
 
     async connectedCallback() {
@@ -145,7 +173,30 @@ export class PlatformApp extends PlatformElement {
             window.addEventListener(AppEvents.TOAST_SHOW, this._handleToast);
 
             if (!this._authChecked) {
-                this._isAuthenticated = await this.checkAuth();
+                const pre = await this._preAuthCheck();
+                if (pre && pre.skip) {
+                    this._routeNotFound = !!pre._routeNotFound;
+                    this._notFoundHomeHref = pre._notFoundHomeHref || '/';
+                    if (pre._fatalShell) {
+                        this._fatalShell = pre._fatalShell;
+                    }
+                    this._isAuthenticated = pre.authenticated === true;
+                    this._authChecked = true;
+                    return;
+                }
+
+                try {
+                    this._isAuthenticated = await this.checkAuth();
+                } catch (authErr) {
+                    if (this._isFatalServerError(authErr)) {
+                        this._fatalShell = 'server-error';
+                        this._isAuthenticated = false;
+                        this._authChecked = true;
+                        return;
+                    }
+                    throw authErr;
+                }
+
                 this._authChecked = true;
 
                 if (!this._isAuthenticated) {
@@ -162,6 +213,13 @@ export class PlatformApp extends PlatformElement {
             }
         } catch (err) {
             console.error('[PlatformApp] Ошибка инициализации:', err);
+            if (this._isFatalServerError(err)) {
+                this._fatalShell = 'server-error';
+                this._servicesInitialized = true;
+                this._authChecked = true;
+                this._isAuthenticated = false;
+                return;
+            }
             this.redirectToAuth();
         }
     }
@@ -175,6 +233,11 @@ export class PlatformApp extends PlatformElement {
     }
 
     render() {
+        const shell = this._renderShellPages();
+        if (shell !== null) {
+            return shell;
+        }
+
         if (!this._servicesInitialized || !this._authChecked) {
             return html`<div>Loading...</div>`;
         }

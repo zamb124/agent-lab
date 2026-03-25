@@ -43,6 +43,10 @@ class TextPlainContent(BaseModel):
         max_length=SYNC_MESSAGE_TEXT_MAX_CHARS,
         description="Текст сообщения в формате совместимом с Markdown.",
     )
+    mentions: list[str] | None = Field(
+        default=None,
+        description="Идентификаторы упомянутых участников канала (user_id).",
+    )
 
 
 class CodeBlockContent(BaseModel):
@@ -157,6 +161,10 @@ class MessageRead(BaseModel):
         default=None,
         description="Если сообщение переслано из другого канала.",
     )
+    mentioned_user_ids: list[str] | None = Field(
+        default=None,
+        description="Дублирует mentions из первого блока text/plain для клиента.",
+    )
 
 
 class MessageCreate(BaseModel):
@@ -172,6 +180,10 @@ class MessageCreate(BaseModel):
     )
     contents: list[MessageContentModel] = Field(
         description="Блоки контента нового сообщения.",
+    )
+    mentioned_user_ids: list[str] | None = Field(
+        default=None,
+        description="Упоминания участников канала; сервер записывает в data первого text/plain.",
     )
 
 

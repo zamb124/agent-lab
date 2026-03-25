@@ -483,6 +483,68 @@ async def test_messages_send_and_mark_read(
 
 
 @pytest.mark.asyncio
+async def test_messages_send_saves_mentions_in_content(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    sync_user_repository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    ch = SyncChannel(
+        channel_id="ch_ment",
+        company_id=company_id,
+        space_id=None,
+        type=ChannelType.GROUP.value,
+        name="Team",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id="u1",
+    )
+    await channel_repo.create(ch)
+    await channel_repo.upsert_member("ch_ment", "u1", "owner", company_id=company_id)
+    bob = "00000000-0000-4000-8000-0000000000b2"
+    await channel_repo.upsert_member("ch_ment", bob, "member", company_id=company_id)
+    text_body = f"hey @{bob} check this"
+    body = MessageCreate(
+        thread_id=None,
+        parent_message_id=None,
+        contents=[
+            MessageContentModel(
+                type=MessageContentType.TEXT_PLAIN,
+                data=TextPlainContent(body=text_body),
+                order=0,
+            ),
+        ],
+        mentioned_user_ids=[bob],
+    )
+    res = await execute_command(
+        _cmd(
+            actor="u1",
+            company_id=company_id,
+            typ="messages.send",
+            payload={"channel_id": "ch_ment", "body": body.model_dump()},
+        ),
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        user_repository=sync_user_repository,
+    )
+    assert res.ok
+    msg_read = res.result
+    assert msg_read.mentioned_user_ids == [bob]
+    rows = await message_repo.list_contents(msg_read.id)
+    assert len(rows) >= 1
+    data = rows[0].data
+    assert isinstance(data, dict)
+    assert data.get("mentions") == [bob]
+
+
+@pytest.mark.asyncio
 async def test_messages_edit_delete_react_pin_forward(
     space_repo,
     channel_repo,

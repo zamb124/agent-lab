@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Optional, Type
 
 from sqlalchemy import exists, nullslast, select, update
+from sqlalchemy.orm import aliased
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannel, SyncChannelMember
@@ -74,6 +75,41 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
                 stmt = stmt.where(SyncChannel.space_id == space_id)
             stmt = (
                 stmt.order_by(
+                    SyncChannel.type.asc(),
+                    nullslast(SyncChannel.name.asc()),
+                )
+                .limit(limit)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def list_channels_where_both_members(
+        self,
+        user_id_a: str,
+        user_id_b: str,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+        company_id: Optional[str] = None,
+    ) -> List[SyncChannel]:
+        """Каналы, в которых состоят оба пользователя (пересечение членства)."""
+        cid = company_id or self._get_company_id()
+        mv = aliased(SyncChannelMember)
+        mp = aliased(SyncChannelMember)
+        async with self._db.session() as session:
+            stmt = (
+                select(SyncChannel)
+                .join(mv, SyncChannel.channel_id == mv.channel_id)
+                .join(mp, SyncChannel.channel_id == mp.channel_id)
+                .where(
+                    SyncChannel.company_id == cid,
+                    mv.company_id == cid,
+                    mp.company_id == cid,
+                    mv.user_id == user_id_a,
+                    mp.user_id == user_id_b,
+                )
+                .order_by(
                     SyncChannel.type.asc(),
                     nullslast(SyncChannel.name.asc()),
                 )

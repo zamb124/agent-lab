@@ -1,10 +1,12 @@
 """Репозиторий для работы с сообщениями (SQLAlchemy)."""
 
+import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, List, Optional, Type
 
-from sqlalchemy import and_, delete as sql_delete, func, or_, select, text, update
+from sqlalchemy import and_, func, or_, select, text, update
+from sqlalchemy import delete as sql_delete
 
 from apps.sync.channel_lane_preview import ChannelLaneSummary, lane_preview_from_content_row
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
@@ -241,7 +243,12 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         if not channel_ids:
             return {}
         base: Dict[str, ChannelLaneSummary] = {
-            cid: ChannelLaneSummary(unread_count=0, last_message_preview=None, last_message_at=None)
+            cid: ChannelLaneSummary(
+                unread_count=0,
+                last_message_preview=None,
+                last_message_at=None,
+                mention_unread_count=0,
+            )
             for cid in channel_ids
         }
 
@@ -279,6 +286,55 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                     unread_count=cnt,
                     last_message_preview=prev.last_message_preview,
                     last_message_at=prev.last_message_at,
+                    mention_unread_count=prev.mention_unread_count,
+                )
+
+            mention_json = json.dumps([viewer_user_id])
+            mention_stmt = (
+                select(SyncMessage.channel_id, func.count().label("mcnt"))
+                .select_from(SyncMessage)
+                .join(
+                    SyncChannelMember,
+                    and_(
+                        SyncChannelMember.channel_id == SyncMessage.channel_id,
+                        SyncChannelMember.user_id == viewer_user_id,
+                        SyncChannelMember.company_id == company_id,
+                    ),
+                )
+                .where(
+                    SyncMessage.company_id == company_id,
+                    SyncMessage.channel_id.in_(channel_ids),
+                    SyncMessage.thread_id.is_(None),
+                    SyncMessage.deleted_at.is_(None),
+                    SyncMessage.sender_user_id != viewer_user_id,
+                    or_(
+                        SyncChannelMember.last_read_at.is_(None),
+                        SyncMessage.sent_at > SyncChannelMember.last_read_at,
+                    ),
+                    text(
+                        """
+                        EXISTS (
+                            SELECT 1 FROM sync_message_contents smc
+                            WHERE smc.message_id = sync_messages.message_id
+                            AND smc.type = 'text/plain'
+                            AND smc.data->'mentions' IS NOT NULL
+                            AND smc.data->'mentions' @> CAST(:mj AS jsonb)
+                        )
+                        """
+                    ).bindparams(mj=mention_json),
+                )
+                .group_by(SyncMessage.channel_id)
+            )
+            mention_res = await session.execute(mention_stmt)
+            for row in mention_res.all():
+                cid = row.channel_id
+                mcnt = int(row.mcnt)
+                prev = base[cid]
+                base[cid] = ChannelLaneSummary(
+                    unread_count=prev.unread_count,
+                    last_message_preview=prev.last_message_preview,
+                    last_message_at=prev.last_message_at,
+                    mention_unread_count=mcnt,
                 )
 
             msg_rn = func.row_number().over(
@@ -365,6 +421,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                     unread_count=prev.unread_count,
                     last_message_preview=preview,
                     last_message_at=row.sent_at,
+                    mention_unread_count=prev.mention_unread_count,
                 )
 
         return base
