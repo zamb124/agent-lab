@@ -168,10 +168,20 @@ class CallOverlay extends PlatformElement {
             justify-content: center;
         }
 
+        /*
+         * iOS WebKit: слой декодированного видео часто перехватывает hit-testing поверх z-index.
+         * pointer-events: none на <video> оставляет клики оверлею; кнопки/подписи — pointer-events: auto.
+         */
         .participant-tile video {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            pointer-events: none;
+        }
+
+        .participant-tile .participant-name,
+        .participant-tile .tile-fs-btn {
+            pointer-events: auto;
         }
 
         .participant-tile.screen video {
@@ -195,6 +205,7 @@ class CallOverlay extends PlatformElement {
             height: 100%;
             object-fit: contain;
             background: #000;
+            pointer-events: auto;
         }
 
         .tile-fs-btn {
@@ -250,8 +261,10 @@ class CallOverlay extends PlatformElement {
         .local-preview video { width: 100%; height: 100%; object-fit: cover; }
 
         .controls-bar {
+            flex-shrink: 0;
             position: relative;
-            z-index: 40;
+            z-index: 100;
+            transform: translateZ(0);
             isolation: isolate;
             display: flex;
             align-items: center;
@@ -260,6 +273,7 @@ class CallOverlay extends PlatformElement {
             padding: 20px 24px;
             background: rgba(0,0,0,0.4);
             backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             touch-action: manipulation;
         }
 
@@ -571,6 +585,8 @@ class CallOverlay extends PlatformElement {
             transition: all 0.15s;
             background: rgba(255,255,255,0.12);
             color: #fff;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .ctrl-btn:hover { background: rgba(255,255,255,0.2); }
@@ -587,14 +603,20 @@ class CallOverlay extends PlatformElement {
         .ctrl-btn.hangup:hover { background: #dc2626; }
 
         .header {
+            flex-shrink: 0;
             position: relative;
-            z-index: 30;
+            z-index: 100;
+            transform: translateZ(0);
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 16px 20px 8px;
             color: rgba(255,255,255,0.6);
             font-size: 13px;
+        }
+
+        .header .ctrl-btn {
+            pointer-events: auto;
         }
 
         .status-dot {
@@ -680,7 +702,7 @@ class CallOverlay extends PlatformElement {
         const testEl = (el) => {
             if (!(el instanceof Element)) return false;
             if (el.closest?.('.call-menu') || el.closest?.('.call-menu-flyout')) return true;
-            if (el.closest?.('.controls-slot--left button') || el.closest?.('.controls-slot--right button')) {
+            if (el.closest?.('.controls-bar') || el.closest?.('.header') || el.closest?.('.settings-error')) {
                 return true;
             }
             return false;
@@ -1245,7 +1267,13 @@ class CallOverlay extends PlatformElement {
         });
         if (!res.ok) return;
         const { join_url } = await res.json();
-        await navigator.clipboard.writeText(join_url).catch(() => {});
+        try {
+            await navigator.clipboard.writeText(join_url);
+        } catch (err) {
+            this._mediaSettingsError = err instanceof Error ? err.message : String(err);
+            this.requestUpdate();
+            return;
+        }
         const btn = this.shadowRoot.querySelector('[title="Скопировать ссылку на звонок"]');
         if (btn) {
             const orig = btn.innerHTML;

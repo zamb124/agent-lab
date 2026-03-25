@@ -43,6 +43,9 @@ function initialsForAvatar(displayName) {
     return w.slice(0, 2).toUpperCase();
 }
 
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_MOVE_CANCEL_PX = 12;
+
 function hueFromUserId(userId) {
     let h = 0;
     for (let i = 0; i < userId.length; i++) {
@@ -206,6 +209,7 @@ export class MessageBubble extends PlatformElement {
         _menuOpen: { state: true },
         _menuX: { state: true },
         _menuY: { state: true },
+        _pressHoldVisual: { state: true },
     };
 
     static styles = [
@@ -229,6 +233,16 @@ export class MessageBubble extends PlatformElement {
 
             .bubble-row.other {
                 justify-content: flex-start;
+            }
+
+            .bubble-row.bubble-row--press-hold {
+                -webkit-user-select: none;
+                user-select: none;
+            }
+
+            .bubble-row.bubble-row--press-hold .bubble {
+                transform: scale(0.97);
+                box-shadow: inset 0 3px 10px rgba(0, 0, 0, 0.14);
             }
 
             .bubble-row.flash-target .bubble {
@@ -347,6 +361,7 @@ export class MessageBubble extends PlatformElement {
                 border-radius: var(--radius-2xl);
                 padding: var(--space-2) var(--space-3);
                 border: 1px solid;
+                transition: transform 0.14s ease-out, box-shadow 0.14s ease-out;
             }
 
             .bubble--forwarded .bubble-header {
@@ -789,6 +804,25 @@ export class MessageBubble extends PlatformElement {
         this._menuOpen = false;
         this._menuX = 0;
         this._menuY = 0;
+        this._pressHoldVisual = false;
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        this._longPressTimer = null;
+        /** @type {number | null} */
+        this._pressPointerId = null;
+        /** @type {HTMLElement | null} */
+        this._pressCaptureEl = null;
+        this._pressStartX = 0;
+        this._pressStartY = 0;
+        this._lastPointerX = 0;
+        this._lastPointerY = 0;
+        this._suppressNextContextMenu = false;
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._clearLongPressTimer();
+        this._releasePressPointerCapture();
+        this._pressHoldVisual = false;
     }
 
     _focusThread() {
@@ -837,11 +871,98 @@ export class MessageBubble extends PlatformElement {
         `;
     }
 
+    _clearLongPressTimer() {
+        if (this._longPressTimer !== null) {
+            clearTimeout(this._longPressTimer);
+            this._longPressTimer = null;
+        }
+    }
+
+    _releasePressPointerCapture() {
+        const el = this._pressCaptureEl;
+        const pid = this._pressPointerId;
+        this._pressCaptureEl = null;
+        this._pressPointerId = null;
+        if (el !== null && pid !== null) {
+            try {
+                if (el.hasPointerCapture(pid)) {
+                    el.releasePointerCapture(pid);
+                }
+            } catch {
+                /* pointer уже снят */
+            }
+        }
+    }
+
+    _endLongPressGesture() {
+        this._clearLongPressTimer();
+        this._releasePressPointerCapture();
+        this._pressHoldVisual = false;
+    }
+
+    _openMessageMenuAt(clientX, clientY) {
+        this._menuX = clientX;
+        this._menuY = clientY;
+        this._menuOpen = true;
+    }
+
+    _onBubblePointerDown(e) {
+        if (this.selectionMode || this.deleting) return;
+        if (e.pointerType === 'mouse') return;
+
+        this._endLongPressGesture();
+
+        this._pressPointerId = e.pointerId;
+        this._pressCaptureEl = /** @type {HTMLElement} */ (e.currentTarget);
+        this._pressStartX = e.clientX;
+        this._pressStartY = e.clientY;
+        this._lastPointerX = e.clientX;
+        this._lastPointerY = e.clientY;
+        this._pressHoldVisual = true;
+
+        try {
+            this._pressCaptureEl.setPointerCapture(e.pointerId);
+        } catch {
+        }
+
+        this._longPressTimer = window.setTimeout(() => {
+            this._longPressTimer = null;
+            this._suppressNextContextMenu = true;
+            const x = this._lastPointerX;
+            const y = this._lastPointerY;
+            this._endLongPressGesture();
+            this._openMessageMenuAt(x, y);
+        }, LONG_PRESS_MS);
+    }
+
+    _onBubblePointerMove(e) {
+        if (e.pointerId !== this._pressPointerId) return;
+        this._lastPointerX = e.clientX;
+        this._lastPointerY = e.clientY;
+        const dx = e.clientX - this._pressStartX;
+        const dy = e.clientY - this._pressStartY;
+        if (dx * dx + dy * dy > LONG_PRESS_MOVE_CANCEL_PX * LONG_PRESS_MOVE_CANCEL_PX) {
+            this._endLongPressGesture();
+        }
+    }
+
+    _onBubblePointerUp(e) {
+        if (e.pointerId !== this._pressPointerId) return;
+        this._endLongPressGesture();
+    }
+
+    _onBubblePointerCancel(e) {
+        if (e.pointerId !== this._pressPointerId) return;
+        this._endLongPressGesture();
+    }
+
     _onContextMenu(e) {
         e.preventDefault();
-        this._menuX = e.clientX;
-        this._menuY = e.clientY;
-        this._menuOpen = true;
+        if (this._suppressNextContextMenu) {
+            this._suppressNextContextMenu = false;
+            return;
+        }
+        this._openMessageMenuAt(e.clientX, e.clientY);
     }
 
     async _onMenuAction(e) {
@@ -1015,9 +1136,13 @@ export class MessageBubble extends PlatformElement {
 
         return html`
             <div
-                class="bubble-row ${isOwn ? 'own' : 'other'} ${flashActive ? 'flash-target' : ''} ${deleting ? 'bubble-row--destroying' : ''}"
+                class="bubble-row ${isOwn ? 'own' : 'other'} ${flashActive ? 'flash-target' : ''} ${deleting ? 'bubble-row--destroying' : ''} ${this._pressHoldVisual ? 'bubble-row--press-hold' : ''}"
                 data-message-id=${msg.id}
                 @contextmenu=${this._onContextMenu}
+                @pointerdown=${this._onBubblePointerDown}
+                @pointermove=${this._onBubblePointerMove}
+                @pointerup=${this._onBubblePointerUp}
+                @pointercancel=${this._onBubblePointerCancel}
             >
                 ${this.selectionMode ? html`
                     <div class="select-wrap">

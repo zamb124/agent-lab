@@ -158,7 +158,7 @@ apps/sync/ui/
     chat-view.js          # header (аватар/иконка: direct peer, канал, space или folder) + channel-picker | message-list + composer; channel-settings-modal (createMode); пересылка — `getForwardDestinationChannels` + sync-channel-row
     channel-picker.js     # сетка каналов: `getChannelsForPickerList` (личные + topic с тем же фильтром, что сайдбар)
     message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
-    message-bubble.js     # контент, ПКМ-меню, реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation; `file/image` и `mock/image` — кнопка скачивания поверх превью (правый верхний угол), `file/document` — карточка со ссылкой скачивания
+    message-bubble.js     # контент, меню сообщения: ПКМ на десктопе, long-press (touch/pen) с подсветкой «вдавливания» пузырька; реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation; `file/image` и `mock/image` — кнопка скачивания поверх превью (правый верхний угол), `file/document` — карточка со ссылкой скачивания
     message-context-menu.js
     message-composer.js   # текст + Enter, emoji, image, reply и редактирование через store
     thread-drawer.js      # drawer со списком тредов
