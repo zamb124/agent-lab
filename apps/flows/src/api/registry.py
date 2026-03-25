@@ -12,6 +12,7 @@ from apps.flows.src.container import get_container
 from core.logging import get_logger
 from apps.flows.src.models import FlowConfig, SkillConfig
 from apps.flows.src.services.flows_loader import get_all_flows
+from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 
 logger = get_logger(__name__)
 
@@ -378,7 +379,7 @@ def _generate_html(schema: Dict[str, Any]) -> str:
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="{PLATFORM_MOBILE_VIEWPORT_CONTENT}">
     <title>{flow_title} - Schema</title>
     <script src="/static/core/assets/js/mermaid/mermaid.min.js"></script>
     <style>

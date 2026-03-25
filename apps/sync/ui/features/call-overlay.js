@@ -114,6 +114,8 @@ class CallOverlay extends LitElement {
         }
 
         .video-grid {
+            position: relative;
+            z-index: 0;
             flex: 1;
             min-height: 0;
             display: grid;
@@ -156,6 +158,7 @@ class CallOverlay extends LitElement {
             aspect-ratio: 16 / 9;
             position: relative;
             z-index: 0;
+            isolation: isolate;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -244,6 +247,8 @@ class CallOverlay extends LitElement {
 
         .controls-bar {
             position: relative;
+            z-index: 40;
+            isolation: isolate;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -251,6 +256,7 @@ class CallOverlay extends LitElement {
             padding: 20px 24px;
             background: rgba(0,0,0,0.4);
             backdrop-filter: blur(16px);
+            touch-action: manipulation;
         }
 
         .controls-slot {
@@ -294,6 +300,9 @@ class CallOverlay extends LitElement {
             border-radius: var(--radius-xl);
             box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-subtle);
             z-index: 10010;
+            pointer-events: auto;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
             animation: call-menu-in var(--duration-fast) var(--easing-smooth) both;
         }
 
@@ -423,14 +432,38 @@ class CallOverlay extends LitElement {
             border-radius: var(--radius-xl);
             box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-subtle);
             z-index: 10011;
+            pointer-events: auto;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
             animation: call-menu-in var(--duration-fast) var(--easing-smooth) both;
         }
 
+        @media (max-width: 640px) {
+            .call-menu-item--sub {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .call-menu-flyout {
+                position: relative;
+                right: auto;
+                left: auto;
+                top: auto;
+                bottom: auto;
+                transform: none;
+                width: 100%;
+                min-width: 0;
+                margin-top: var(--space-2);
+                max-height: min(50vh, 360px);
+                overflow-y: auto;
+            }
+        }
+
         .call-menu-toggle {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr auto;
             align-items: center;
-            justify-content: space-between;
-            gap: var(--space-4);
+            column-gap: var(--space-4);
             margin: 2px var(--space-2);
             padding: var(--space-3) var(--space-3);
             border-radius: var(--radius-md);
@@ -439,6 +472,9 @@ class CallOverlay extends LitElement {
             font-weight: var(--font-medium);
             color: var(--text-primary);
             transition: background var(--duration-fast) var(--easing-default);
+            min-height: 44px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .call-menu-toggle:hover {
@@ -446,8 +482,8 @@ class CallOverlay extends LitElement {
         }
 
         .call-menu-toggle-label {
-            flex: 1;
             line-height: var(--leading-tight);
+            min-width: 0;
         }
 
         .call-switch-input {
@@ -471,6 +507,8 @@ class CallOverlay extends LitElement {
             background: rgba(255, 255, 255, 0.14);
             box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
             transition: background var(--duration-fast) var(--easing-default);
+            justify-self: end;
+            align-self: center;
         }
 
         .call-switch-visual::after {
@@ -545,6 +583,8 @@ class CallOverlay extends LitElement {
         .ctrl-btn.hangup:hover { background: #dc2626; }
 
         .header {
+            position: relative;
+            z-index: 30;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -618,14 +658,39 @@ class CallOverlay extends LitElement {
         this._audioQualitySubOpen = false;
     }
 
+    _pointerClientXY(e) {
+        if (e.clientX != null && e.clientY != null) {
+            return { x: e.clientX, y: e.clientY };
+        }
+        const t = e.touches?.[0] ?? e.changedTouches?.[0];
+        if (t) return { x: t.clientX, y: t.clientY };
+        return { x: 0, y: 0 };
+    }
+
+    /**
+     * Закрывать меню только при касании вне панелей и вне кнопок-открывалок (шестерёнка / ⋯).
+     * Весь оверлей (видео) считается «снаружи» меню — иначе меню никогда не закрыть тапом по сетке.
+     */
+    _pointerTargetsMenuChrome(e) {
+        const testEl = (el) => {
+            if (!(el instanceof Element)) return false;
+            if (el.closest?.('.call-menu') || el.closest?.('.call-menu-flyout')) return true;
+            if (el.closest?.('.controls-slot--left button') || el.closest?.('.controls-slot--right button')) {
+                return true;
+            }
+            return false;
+        };
+        const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        if (path.some((n) => testEl(n))) return true;
+        const { x, y } = this._pointerClientXY(e);
+        if (x === 0 && y === 0 && !e.touches?.length && !e.changedTouches?.length) return false;
+        const hit = document.elementFromPoint(x, y);
+        return testEl(hit);
+    }
+
     _onDocumentPointerDown(e) {
         if (!this._devicesMenuOpen && !this._moreMenuOpen) return;
-        const path = e.composedPath();
-        const inside = path.some((n) => {
-            if (n === this || n === this.shadowRoot) return true;
-            return n instanceof Node && this.shadowRoot?.contains(n);
-        });
-        if (inside) return;
+        if (this._pointerTargetsMenuChrome(e)) return;
         this._closeMenus();
     }
 
@@ -885,7 +950,8 @@ class CallOverlay extends LitElement {
         document.addEventListener('webkitfullscreenchange', this._onFullscreenChange);
         document.addEventListener('mozfullscreenchange', this._onFullscreenChange);
         document.addEventListener('MSFullscreenChange', this._onFullscreenChange);
-        document.addEventListener('pointerdown', this._onDocumentPointerDown, true);
+        document.addEventListener('pointerdown', this._onDocumentPointerDown, false);
+        document.addEventListener('touchstart', this._onDocumentPointerDown, false);
         document.addEventListener('keydown', this._onDocumentKeydown, true);
         this._durationInterval = setInterval(() => this._duration++, 1000);
         if (this.mode !== 'sfu' && this.mode) {
@@ -905,7 +971,8 @@ class CallOverlay extends LitElement {
         document.removeEventListener('webkitfullscreenchange', this._onFullscreenChange);
         document.removeEventListener('mozfullscreenchange', this._onFullscreenChange);
         document.removeEventListener('MSFullscreenChange', this._onFullscreenChange);
-        document.removeEventListener('pointerdown', this._onDocumentPointerDown, true);
+        document.removeEventListener('pointerdown', this._onDocumentPointerDown, false);
+        document.removeEventListener('touchstart', this._onDocumentPointerDown, false);
         document.removeEventListener('keydown', this._onDocumentKeydown, true);
         this._sfuSessionFinished = true;
         clearInterval(this._durationInterval);

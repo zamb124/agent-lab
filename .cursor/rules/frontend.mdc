@@ -30,6 +30,10 @@ LitElement (Lit)
 
 ---
 
+## Viewport (мобильные)
+
+Одна строка для всех SPA: `meta name="viewport"` с фиксированным масштабом (`maximum-scale=1`, `minimum-scale=1`, `user-scalable=no`) и `viewport-fit=cover`. Каноническое значение — `PLATFORM_MOBILE_VIEWPORT_CONTENT` в `core/frontend/viewport.py`; статические `apps/*/ui/index.html` дублируют тот же `content` (без генерации из Python). HTML, собираемый в Python (`flows` chat embed, registry schema), подставляет константу из `core.frontend.viewport`.
+
 ## Архитектура
 
 ```

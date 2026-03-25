@@ -13,6 +13,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.container import get_container
 from core.context import get_context
+from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
 from apps.flows.src.models.flow_config import FlowConfig
 
@@ -118,7 +119,7 @@ def _get_embedded_template(flow_id: str, base_url: str, skills: List[dict]) -> s
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="{PLATFORM_MOBILE_VIEWPORT_CONTENT}">
     <title>Chat - {flow_id}</title>
     <style>
         /* CSS будет встроен в chat.html */
