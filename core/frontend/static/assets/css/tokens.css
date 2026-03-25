@@ -202,9 +202,11 @@
     --duration-slower: 600ms;
 
     /* Модальные окна: overlay + панель (glass-modal, modal.styles, кастомные .backdrop/.modal) */
-    --modal-overlay-duration: 320ms;
-    --modal-panel-duration: 450ms;
+    --modal-overlay-duration: 400ms;
+    --modal-panel-duration: 560ms;
     --modal-panel-easing: var(--easing-smooth);
+    /* Появление панели: мягкое замедление в конце */
+    --modal-enter-easing: cubic-bezier(0.22, 1, 0.36, 1);
     --modal-popover-duration: 180ms;
     
     --easing-default: cubic-bezier(0.4, 0, 0.2, 1);

@@ -22,11 +22,36 @@ export class GlassModal extends PlatformElement {
         _isFullscreen: { type: Boolean, state: true },
         _isDragging: { type: Boolean, state: true },
         _position: { type: Object, state: true },
+        _panelEnterActive: { type: Boolean, state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
+            /*
+             * Вход через @keyframes + both (как modalShellStyles у thread-drawer): transition
+             * с open + порталом в body часто не рисует «до», панель появляется мгновенно.
+             */
+            @keyframes glassModalBackdropIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+
+            @keyframes glassModalPanelIn {
+                from {
+                    opacity: 0;
+                    transform: translate(-50%, calc(-50% + 12px)) scale(0.97);
+                }
+                to {
+                    opacity: 1;
+                    transform: translate(-50%, -50%) scale(1);
+                }
+            }
+
             :host {
                 display: none;
                 box-sizing: border-box;
@@ -56,9 +81,6 @@ export class GlassModal extends PlatformElement {
             .modal-overlay {
                 position: absolute;
                 inset: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
                 padding: max(var(--space-3), env(safe-area-inset-top, 0px))
                     max(var(--space-3), env(safe-area-inset-right, 0px))
                     max(var(--space-3), env(safe-area-inset-bottom, 0px))
@@ -66,13 +88,11 @@ export class GlassModal extends PlatformElement {
                 box-sizing: border-box;
                 opacity: 0;
                 visibility: hidden;
-                transition: opacity var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out),
-                    visibility var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out);
             }
 
             :host([open]) .modal-overlay {
-                opacity: 1;
                 visibility: visible;
+                animation: glassModalBackdropIn var(--modal-overlay-duration, var(--duration-normal)) var(--modal-enter-easing, var(--easing-smooth)) both;
             }
 
             .modal-scrim {
@@ -84,8 +104,14 @@ export class GlassModal extends PlatformElement {
                 -webkit-backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
             }
 
+            /*
+             * Центр панели: left/top 50% + translate(-50%,-50%). Тогда анимация width/height
+             * идёт симметрично от центра (не из левого верхнего угла как у flex-центровки).
+             */
             .modal {
-                position: relative;
+                position: absolute;
+                left: 50%;
+                top: 50%;
                 z-index: 1;
                 width: 90%;
                 max-width: min(500px, 100%);
@@ -106,23 +132,39 @@ export class GlassModal extends PlatformElement {
                     0 16px 48px rgba(0, 0, 0, 0.4),
                     0 4px 16px rgba(0, 0, 0, 0.25));
 
-                transform: translateY(16px) scale(0.96);
+                transform: translate(-50%, calc(-50% + 12px)) scale(0.97);
                 opacity: 0;
-                transition: transform var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth)),
-                    opacity var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out),
-                    width var(--duration-normal, 0.3s) ease,
-                    height var(--duration-normal, 0.3s) ease,
-                    max-width var(--duration-normal, 0.3s) ease,
-                    max-height var(--duration-normal, 0.3s) ease;
+                transition: width var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
+                    max-width var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
+                    height var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
+                    max-height var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
+                    border-radius var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth));
             }
 
-            :host([open]) .modal {
-                transform: translateY(0) scale(1);
+            /*
+             * Вход только пока висит .panel-enter-active; после animationend класс снимаем,
+             * иначе при снятии .dragging анимация снова запускается с начала.
+             */
+            :host([open]) .modal.panel-enter-active {
+                animation: glassModalPanelIn var(--modal-panel-duration, var(--duration-slow)) var(--modal-enter-easing, var(--modal-panel-easing, var(--easing-smooth))) both;
+            }
+
+            :host([open]) .modal:not(.panel-enter-active) {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            :host([open]) .modal.dragging {
+                animation: none !important;
                 opacity: 1;
             }
 
             .modal.dragging {
-                transition: none;
+                transition: width var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
+                    max-width var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
+                    height var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
+                    max-height var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
+                    border-radius var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth));
                 user-select: none;
             }
 
@@ -175,6 +217,9 @@ export class GlassModal extends PlatformElement {
                 height: min(94vh, 100dvh - 1.5rem) !important;
                 max-height: min(94vh, 100dvh - 1.5rem) !important;
                 border-radius: var(--radius-lg, 16px);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
             }
 
             .modal-header {
@@ -255,12 +300,6 @@ export class GlassModal extends PlatformElement {
                 min-height: 0;
                 height: auto;
                 max-height: none;
-            }
-
-            .modal.fullscreen {
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
             }
 
             .modal-actions {
@@ -382,8 +421,12 @@ export class GlassModal extends PlatformElement {
             }
 
             @media (prefers-reduced-motion: reduce) {
-                .modal-overlay {
-                    transition-duration: 1ms !important;
+                :host([open]) .modal-overlay {
+                    animation-duration: 1ms !important;
+                }
+
+                :host([open]) .modal.panel-enter-active {
+                    animation-duration: 1ms !important;
                 }
 
                 .modal {
@@ -409,6 +452,7 @@ export class GlassModal extends PlatformElement {
         this.title = '';
         this._isFullscreen = false;
         this._isDragging = false;
+        this._panelEnterActive = false;
         this._position = { x: null, y: null };
         this._dragStart = { x: 0, y: 0 };
         this._boundMouseMove = this._handleMouseMove.bind(this);
@@ -499,8 +543,25 @@ export class GlassModal extends PlatformElement {
         document.removeEventListener('mouseup', this._boundMouseUp);
     }
 
+    _handlePanelEnterAnimationEnd(e) {
+        if (e.animationName !== 'glassModalPanelIn') {
+            return;
+        }
+        if (!this.open) {
+            return;
+        }
+        this._panelEnterActive = false;
+    }
+
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
+        if (changedProperties.has('open')) {
+            if (this.open) {
+                this._panelEnterActive = true;
+            } else {
+                this._panelEnterActive = false;
+            }
+        }
         if (changedProperties.has('open') && this.open) {
             this._clearPortalCloseHooks();
             this.style.setProperty(
@@ -547,32 +608,17 @@ export class GlassModal extends PlatformElement {
 
     _schedulePortalRestoreAfterCloseAnimation() {
         this._clearPortalCloseHooks();
-        const overlay = this.shadowRoot?.querySelector('.modal-overlay');
-        if (!overlay) {
-            this._restorePortalToOriginalParent();
-            return;
-        }
-        const onTransitionEnd = (e) => {
-            if (e.target !== overlay) {
-                return;
-            }
-            if (e.propertyName !== 'opacity' && e.propertyName !== 'visibility') {
-                return;
-            }
-            overlay.removeEventListener('transitionend', onTransitionEnd);
-            this._portalTransitionCleanup = null;
-            this._restorePortalToOriginalParent();
-        };
-        overlay.addEventListener('transitionend', onTransitionEnd);
-        this._portalTransitionCleanup = () => {
-            overlay.removeEventListener('transitionend', onTransitionEnd);
-        };
-        this._portalRestoreFallbackTimer = setTimeout(() => {
-            this._portalRestoreFallbackTimer = null;
-            this._clearPortalCloseHooks();
+        const restore = () => {
             if (!this.open && this.parentNode === document.body) {
                 this._restorePortalToOriginalParent();
             }
+        };
+        requestAnimationFrame(() => {
+            requestAnimationFrame(restore);
+        });
+        this._portalRestoreFallbackTimer = setTimeout(() => {
+            this._portalRestoreFallbackTimer = null;
+            restore();
         }, 500);
     }
 
@@ -649,6 +695,7 @@ export class GlassModal extends PlatformElement {
             this.size,
             this._isFullscreen ? 'fullscreen' : '',
             this._isDragging ? 'dragging' : '',
+            this.open && this._panelEnterActive ? 'panel-enter-active' : '',
         ].filter(Boolean).join(' ');
 
         return html`
@@ -677,7 +724,12 @@ export class GlassModal extends PlatformElement {
 
             <div class="modal-overlay" @click=${this._handleOverlayClick}>
                 <div class="modal-scrim" aria-hidden="true" @click=${() => this.close()}></div>
-                <div class="${modalClasses}" style="${this._getModalStyle()}" @click=${(e) => e.stopPropagation()}>
+                <div
+                    class="${modalClasses}"
+                    style="${this._getModalStyle()}"
+                    @animationend=${this._handlePanelEnterAnimationEnd}
+                    @click=${(e) => e.stopPropagation()}
+                >
                     <div class="modal-header" @mousedown=${this._handleMouseDown}>
                         <h2 class="modal-title">${this.renderHeader()}</h2>
                         <div class="header-buttons">

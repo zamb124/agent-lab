@@ -85,6 +85,50 @@ export class ChatView extends PlatformElement {
                 .mobile-menu-btn.hidden {
                     display: none;
                 }
+
+                .chat-header {
+                    padding: var(--space-1) var(--space-2);
+                }
+
+                .header-channel-hit,
+                .header-channel-static {
+                    padding: var(--space-1) var(--space-2);
+                }
+
+                .header-entity-img,
+                .header-entity-initials,
+                .header-icon-fallback {
+                    width: 32px;
+                    height: 32px;
+                }
+            }
+
+            .chat-header--compact .header-channel-static .header-channel-text,
+            .chat-header--compact .header-channel-hit .header-channel-text {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                flex-wrap: nowrap;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+
+            .chat-header--compact .header-title {
+                flex: 1 1 auto;
+                min-width: 0;
+                max-width: none;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .chat-header--compact .header-subtitle {
+                flex: 1 1 0;
+                min-width: 0;
+                margin-top: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             .header-channel-wrap {
@@ -219,6 +263,61 @@ export class ChatView extends PlatformElement {
                 align-items: center;
                 gap: var(--space-2);
                 flex-shrink: 0;
+            }
+
+            .header-more-wrap {
+                position: relative;
+            }
+
+            .header-more-menu {
+                position: absolute;
+                top: calc(100% + var(--space-1));
+                right: 0;
+                min-width: 200px;
+                padding: var(--space-2);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-strong);
+                backdrop-filter: blur(var(--glass-blur-medium));
+                box-shadow: var(--glass-shadow-subtle);
+                z-index: 80;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+
+            .header-more-menu-status {
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                padding: 0 var(--space-1);
+            }
+
+            .header-more-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                width: 100%;
+                margin: 0;
+                padding: var(--space-2) var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                font: inherit;
+                font-size: var(--text-xs);
+                cursor: pointer;
+                text-align: left;
+                transition: background var(--duration-fast);
+            }
+
+            .header-more-item:hover:not(:disabled) {
+                background: var(--glass-solid-medium);
+            }
+
+            .header-more-item:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
             }
 
             .icon-btn {
@@ -379,6 +478,7 @@ export class ChatView extends PlatformElement {
         _typingSubtitle: { state: true },
         _peerPresenceByUserId: { state: true },
         _typingPeersByChannel: { state: true },
+        _headerMoreOpen: { state: true },
     };
 
     constructor() {
@@ -391,6 +491,7 @@ export class ChatView extends PlatformElement {
         this._threadIds = [];
         this._ui = SyncStore.state.ui;
         this._isMobile = false;
+        this._headerMoreOpen = false;
         this._resizeObserver = null;
         this._typingSubtitle = '';
         this._peerPresenceByUserId = s.peerPresenceByUserId ?? {};
@@ -398,10 +499,14 @@ export class ChatView extends PlatformElement {
         this._boundAuthChange = () => {
             this._syncTypingSubtitleFromStore();
         };
+        this._boundDocPointerHeaderMore = this._onDocPointerDownHeaderMore.bind(this);
+        this._boundWindowResize = () => this._checkMobileViewport();
     }
 
     connectedCallback() {
         super.connectedCallback();
+        document.addEventListener('pointerdown', this._boundDocPointerHeaderMore, true);
+        window.addEventListener('resize', this._boundWindowResize);
         this._checkMobileViewport();
         this._resizeObserver = new ResizeObserver(() => this._checkMobileViewport());
         this._resizeObserver.observe(document.body);
@@ -422,6 +527,8 @@ export class ChatView extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        document.removeEventListener('pointerdown', this._boundDocPointerHeaderMore, true);
+        window.removeEventListener('resize', this._boundWindowResize);
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
         this._resizeObserver?.disconnect();
         this._resizeObserver = null;
@@ -445,6 +552,39 @@ export class ChatView extends PlatformElement {
 
     _checkMobileViewport() {
         this._isMobile = window.innerWidth <= 767;
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (changedProperties.has('_isMobile') && !this._isMobile && this._headerMoreOpen) {
+            this._headerMoreOpen = false;
+        }
+    }
+
+    /**
+     * @param {PointerEvent} e
+     */
+    _onDocPointerDownHeaderMore(e) {
+        if (!this._headerMoreOpen) {
+            return;
+        }
+        const wrap = this.renderRoot?.querySelector('.header-more-wrap');
+        if (wrap && e.composedPath().includes(wrap)) {
+            return;
+        }
+        this._headerMoreOpen = false;
+    }
+
+    /**
+     * @param {Event} e
+     */
+    _toggleHeaderMoreMenu(e) {
+        e.stopPropagation();
+        this._headerMoreOpen = !this._headerMoreOpen;
+    }
+
+    _closeHeaderMoreMenu() {
+        this._headerMoreOpen = false;
     }
 
     _openMobileSidebar() {
@@ -753,7 +893,7 @@ export class ChatView extends PlatformElement {
                 `;
 
         return html`
-            <div class="chat-header">
+            <div class=${classMap({ 'chat-header': true, 'chat-header--compact': this._isMobile })}>
                 <div class="header-body">
                     <button
                         type="button"
@@ -768,17 +908,100 @@ export class ChatView extends PlatformElement {
                         ${channelBlock}
                     </div>
                     <div class="header-actions">
-                        <span class="ws-badge ${this._wsState}">${this._wsState}</span>
+                        ${this._isMobile ? html`
+                            <div class="header-more-wrap">
+                                <button
+                                    type="button"
+                                    class="icon-btn header-more-trigger"
+                                    title="Ещё"
+                                    aria-label="Дополнительные действия"
+                                    aria-expanded=${this._headerMoreOpen ? 'true' : 'false'}
+                                    aria-haspopup="true"
+                                    @click=${this._toggleHeaderMoreMenu}
+                                >
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                        <circle cx="5" cy="12" r="2"/>
+                                        <circle cx="12" cy="12" r="2"/>
+                                        <circle cx="19" cy="12" r="2"/>
+                                    </svg>
+                                </button>
+                                ${this._headerMoreOpen ? html`
+                                    <div class="header-more-menu" @pointerdown=${(e) => e.stopPropagation()}>
+                                        <div class="header-more-menu-status">
+                                            <span class="ws-badge ${this._wsState}">${this._wsState}</span>
+                                        </div>
+                                        ${selectedChannelId ? html`
+                                            <button
+                                                type="button"
+                                                class="header-more-item"
+                                                @click=${() => {
+        this._closeHeaderMoreMenu();
+        this._startCall();
+    }}
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <polygon points="23 7 16 12 23 17 23 7"/>
+                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                                </svg>
+                                                <span>Звонок</span>
+                                            </button>
+                                        ` : html`
+                                            <button
+                                                type="button"
+                                                class="header-more-item"
+                                                @click=${async () => {
+        this._closeHeaderMoreMenu();
+        await this._startAdHocCall();
+    }}
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <polygon points="23 7 16 12 23 17 23 7"/>
+                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                                </svg>
+                                                <span>Встреча в новом канале</span>
+                                            </button>
+                                        `}
+                                        ${focusedThreadId ? html`
+                                            <button
+                                                type="button"
+                                                class="header-more-item"
+                                                @click=${() => {
+        this._closeHeaderMoreMenu();
+        SyncStore.setFocusedThread(null);
+    }}
+                                            >
+                                                <platform-icon name="chevron-left" size="16"></platform-icon>
+                                                <span>Назад</span>
+                                            </button>
+                                        ` : html`
+                                            <button
+                                                type="button"
+                                                class="header-more-item"
+                                                ?disabled=${!selectedChannelId}
+                                                @click=${() => {
+        this._closeHeaderMoreMenu();
+        SyncStore.setThreadDrawerOpen(true);
+    }}
+                                            >
+                                                <platform-icon name="list" size="16"></platform-icon>
+                                                <span>Треды</span>
+                                            </button>
+                                        `}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : html`
+                            <span class="ws-badge ${this._wsState}">${this._wsState}</span>
 
-                        ${selectedChannelId ? html`
-                            <button class="icon-btn" title="Звонок" @click=${this._startCall}>
+                            ${selectedChannelId ? html`
+                            <button type="button" class="icon-btn" title="Звонок" @click=${this._startCall}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polygon points="23 7 16 12 23 17 23 7"/>
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                                 </svg>
                             </button>
                         ` : html`
-                            <button class="icon-btn" title="Встреча в новом канале" @click=${this._startAdHocCall}>
+                            <button type="button" class="icon-btn" title="Встреча в новом канале" @click=${this._startAdHocCall}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polygon points="23 7 16 12 23 17 23 7"/>
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
@@ -786,21 +1009,23 @@ export class ChatView extends PlatformElement {
                             </button>
                         `}
 
-                        ${focusedThreadId ? html`
-                        <button class="back-btn" @click=${() => SyncStore.setFocusedThread(null)}>
-                            <platform-icon name="chevron-left" size="14"></platform-icon>
-                            Назад
-                        </button>
-                    ` : html`
-                        <button
-                            class="icon-btn"
-                            title="Треды"
-                            ?disabled=${!selectedChannelId}
-                            @click=${() => SyncStore.setThreadDrawerOpen(true)}
-                        >
-                            <platform-icon name="list" size="16"></platform-icon>
-                        </button>
-                    `}
+                            ${focusedThreadId ? html`
+                            <button type="button" class="back-btn" @click=${() => SyncStore.setFocusedThread(null)}>
+                                <platform-icon name="chevron-left" size="14"></platform-icon>
+                                Назад
+                            </button>
+                        ` : html`
+                            <button
+                                type="button"
+                                class="icon-btn"
+                                title="Треды"
+                                ?disabled=${!selectedChannelId}
+                                @click=${() => SyncStore.setThreadDrawerOpen(true)}
+                            >
+                                <platform-icon name="list" size="16"></platform-icon>
+                            </button>
+                        `}
+                        `}
                     </div>
                 </div>
             </div>
