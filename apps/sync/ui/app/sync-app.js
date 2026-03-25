@@ -222,6 +222,19 @@ export class SyncApp extends PlatformApp {
             return;
         }
 
+        if (msg.type === 'user.presence') {
+            const p = msg.payload;
+            if (!p || typeof p !== 'object') return;
+            const auth = ServiceRegistry.auth?.user;
+            const companyId = auth?.company_id;
+            if (typeof companyId !== 'string' || companyId === '') {
+                throw new Error('user.presence: auth.user.company_id обязателен.');
+            }
+            if (p.company_id !== companyId) return;
+            SyncStore.applyUserPresence(p);
+            return;
+        }
+
         const p = msg.payload;
         if (!p || typeof p !== 'object') {
             throw new Error(`${msg.type}: payload обязателен.`);

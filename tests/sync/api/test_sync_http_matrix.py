@@ -91,7 +91,12 @@ async def test_http_company_members_ok(
 ) -> None:
     r = await sync_client.get("/sync/api/v1/company/members", headers=auth_headers_system)
     assert r.status_code == 200
-    assert isinstance(r.json(), list)
+    data = r.json()
+    assert isinstance(data, list)
+    for row in data:
+        assert "is_online" in row
+        assert isinstance(row["is_online"], bool)
+        assert "last_seen_at" in row
 
 
 @pytest.mark.asyncio

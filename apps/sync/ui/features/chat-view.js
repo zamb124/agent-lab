@@ -13,6 +13,7 @@ import './channel-picker.js';
 import './message-list.js';
 import './message-composer.js';
 import './thread-drawer.js';
+import './sync-channel-row.js';
 import '../modals/channel-settings-modal.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/platform-icon.js';
@@ -356,20 +357,14 @@ export class ChatView extends PlatformElement {
                 margin-bottom: var(--space-3);
             }
 
-            .channel-pick {
-                width: 100%;
-                text-align: left;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                cursor: pointer;
+            .forward-channel-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                max-height: min(48vh, 360px);
+                overflow-y: auto;
+                padding-right: var(--space-1);
                 margin-bottom: var(--space-2);
-                font-size: var(--text-sm);
-            }
-
-            .channel-pick:hover {
-                background: var(--glass-solid-medium);
             }
         `
     ];
@@ -383,6 +378,8 @@ export class ChatView extends PlatformElement {
         _ui: { state: true },
         _isMobile: { state: true },
         _typingSubtitle: { state: true },
+        _peerPresenceByUserId: { state: true },
+        _typingPeersByChannel: { state: true },
     };
 
     constructor() {
@@ -397,6 +394,8 @@ export class ChatView extends PlatformElement {
         this._isMobile = false;
         this._resizeObserver = null;
         this._typingSubtitle = '';
+        this._peerPresenceByUserId = s.peerPresenceByUserId ?? {};
+        this._typingPeersByChannel = s.typingPeersByChannel ?? {};
         this._boundAuthChange = () => {
             this._syncTypingSubtitleFromStore();
         };
@@ -415,6 +414,8 @@ export class ChatView extends PlatformElement {
             this._wsState = state.ws.state;
             this._threadIds = SyncStore.getThreadIds();
             this._ui = state.ui;
+            this._peerPresenceByUserId = state.peerPresenceByUserId ?? {};
+            this._typingPeersByChannel = state.typingPeersByChannel ?? {};
             this._syncTypingSubtitleFromStore();
         });
         this._syncTypingSubtitleFromStore();
@@ -483,6 +484,9 @@ export class ChatView extends PlatformElement {
             ? ch.peer.display_name
             : (ch.name ?? ch.id);
         if (focusedThreadId) return `Канал: ${chLabel} • thread_id: ${focusedThreadId}`;
+        if (ch.type === 'direct' && ch.peer && typeof ch.peer.user_id === 'string' && ch.peer.user_id !== '') {
+            return SyncStore.getPeerPresenceSubtitle(ch.peer.user_id);
+        }
         return ch.type ?? '';
     }
 
@@ -680,9 +684,9 @@ export class ChatView extends PlatformElement {
         const selMode = this._ui.selectionMode;
         const selIds = this._ui.selectedMessageIds;
         const fwdOpen = this._ui.forwardModalOpen;
-        const otherChannels = this._channels.list.filter(
-            c => c.id !== selectedChannelId && !SyncStore.isHiddenSyncChannelName(c.name),
-        );
+        const forwardDestinations = typeof selectedChannelId === 'string' && selectedChannelId !== ''
+            ? SyncStore.getForwardDestinationChannels(selectedChannelId)
+            : [];
 
         const showChannelSettings = Boolean(
             selectedChannel
@@ -845,11 +849,11 @@ export class ChatView extends PlatformElement {
     }}>
                     <div class="modal-box" @click=${(e) => e.stopPropagation()}>
                         <div class="modal-title">Куда переслать</div>
-                        ${otherChannels.length === 0 ? html`<p class="header-subtitle">Нет других каналов.</p>` : ''}
-                        ${otherChannels.map(c => html`
-                            <button
-                                type="button"
-                                class="channel-pick"
+                        ${forwardDestinations.length === 0 ? html`<p class="header-subtitle">Нет других каналов.</p>` : ''}
+                        <div class="forward-channel-list">
+                            ${forwardDestinations.map(c => html`
+                            <sync-channel-row
+                                .channel=${c}
                                 @click=${() => {
         const one = this._ui.forwardMessage;
         if (one?.id) {
@@ -860,8 +864,9 @@ export class ChatView extends PlatformElement {
             SyncStore.setForwardModal(false, null);
         }
     }}
-                            >${c.name ?? c.id}</button>
+                            ></sync-channel-row>
                         `)}
+                        </div>
                         <button type="button" class="back-btn" style="margin-top:var(--space-3)" @click=${() => SyncStore.setForwardModal(false, null)}>Закрыть</button>
                     </div>
                 </div>

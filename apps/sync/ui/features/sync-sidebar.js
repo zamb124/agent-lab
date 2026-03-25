@@ -4,10 +4,13 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
+import { sidebarStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
+import './sync-channel-row.js';
+import './sync-space-row.js';
+import './sync-direct-member-row.js';
 import '@platform/lib/components/layout/platform-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -17,7 +20,6 @@ export class SyncSidebar extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         sidebarStyles,
-        sidebarNavItemStyles,
         buttonStyles,
         css`
             :host {
@@ -92,11 +94,6 @@ export class SyncSidebar extends PlatformElement {
                 border-color: var(--accent);
             }
 
-            .nav-row-wrap.active .nav-item--in-wrap {
-                color: var(--accent);
-                font-weight: var(--font-semibold);
-            }
-
             .nav-row-wrap.active .row-gear {
                 color: var(--accent);
             }
@@ -111,119 +108,15 @@ export class SyncSidebar extends PlatformElement {
                 margin-right: var(--space-1);
             }
 
-            .nav-row-wrap > .nav-item--in-wrap {
+            .nav-row-wrap > sync-channel-row,
+            .nav-row-wrap > sync-space-row {
                 flex: 1;
                 min-width: 0;
             }
 
-            .nav-item--in-wrap {
-                border: none;
-                background: transparent;
-                margin-bottom: 0;
-            }
-
-            .nav-item--in-wrap:hover {
-                background: transparent;
-                border-color: transparent;
-                color: inherit;
-            }
-
-            .nav-row-wrap:hover:not(.active) .nav-item--in-wrap {
-                color: var(--text-primary);
-            }
-
-            .nav-item {
-                position: relative;
-                box-sizing: border-box;
-                display: flex;
-                align-items: flex-start;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                cursor: pointer;
-                background: transparent;
-                border: 1px solid transparent;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                width: 100%;
-                text-align: left;
-                transition: all var(--duration-fast);
-                margin-bottom: 0;
-            }
-
-            .nav-item:hover {
-                background: var(--glass-solid-subtle);
-                border-color: var(--glass-border-subtle);
-                color: var(--text-primary);
-            }
-
-            .nav-item.active {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
-                font-weight: var(--font-semibold);
-            }
-
-            .nav-item-label {
-                flex: 1;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                min-width: 0;
-            }
-
-            .nav-item-type {
-                font-size: 10px;
-                color: var(--text-tertiary);
-                flex-shrink: 0;
-            }
-
-            .nav-item-inner {
-                flex: 1;
-                min-width: 0;
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
-            }
-
-            .nav-item-title-row {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                min-width: 0;
-            }
-
-            .nav-item-preview {
-                font-size: 11px;
-                color: var(--text-tertiary);
-                line-height: 1.3;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-
-            .nav-item-unread {
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                color: #fff;
-                background: var(--accent);
-                border-radius: var(--radius-full);
-                min-width: 18px;
-                padding: 1px 6px;
-                text-align: center;
-                flex-shrink: 0;
-                margin-left: auto;
-                align-self: flex-start;
-            }
-
-            .nav-item-count {
-                font-size: 11px;
-                color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border-radius: var(--radius-full);
-                padding: 1px 6px;
-                flex-shrink: 0;
-                margin-left: auto;
+            .nav-row-wrap > sync-channel-row[icon-only],
+            .nav-row-wrap > sync-space-row[icon-only] {
+                flex: 0 0 auto;
             }
 
             .section-scroll {
@@ -302,27 +195,6 @@ export class SyncSidebar extends PlatformElement {
                 width: 100%;
             }
 
-            .peer-avatar {
-                width: 28px;
-                height: 28px;
-                border-radius: 50%;
-                flex-shrink: 0;
-                object-fit: cover;
-            }
-
-            .peer-avatar-initials {
-                width: 28px;
-                height: 28px;
-                border-radius: 50%;
-                flex-shrink: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                color: #fff;
-            }
-
             .section-empty {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
@@ -349,35 +221,6 @@ export class SyncSidebar extends PlatformElement {
 
             .direct-search::placeholder {
                 color: var(--text-tertiary);
-            }
-
-            .entity-avatar {
-                width: 28px;
-                height: 28px;
-                border-radius: 50%;
-                flex-shrink: 0;
-                object-fit: cover;
-            }
-
-            .entity-avatar-initials {
-                width: 28px;
-                height: 28px;
-                border-radius: 50%;
-                flex-shrink: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                color: #fff;
-            }
-
-            .nav-item-main {
-                flex: 1;
-                min-width: 0;
-                display: flex;
-                align-items: flex-start;
-                gap: var(--space-2);
             }
 
             .row-gear {
@@ -416,45 +259,13 @@ export class SyncSidebar extends PlatformElement {
                 padding-right: var(--space-2);
             }
 
-            :host([collapsed]) .sync-sidebar-inner .nav-item-inner,
-            :host([collapsed]) .sync-sidebar-inner .nav-item-label,
-            :host([collapsed]) .sync-sidebar-inner .nav-item-preview,
-            :host([collapsed]) .sync-sidebar-inner .nav-item-type {
-                display: none !important;
-            }
-
             :host([collapsed]) .sync-sidebar-inner .nav-row-wrap {
                 justify-content: center;
                 margin-bottom: var(--space-1);
             }
 
-            :host([collapsed]) .sync-sidebar-inner .nav-item {
-                justify-content: center;
-                align-items: center;
-                padding: var(--space-2) var(--space-1);
-            }
-
-            :host([collapsed]) .sync-sidebar-inner .nav-item-main {
-                flex: 0 0 auto;
-                min-width: 0;
-            }
-
             :host([collapsed]) .sync-sidebar-inner .row-gear {
                 display: none !important;
-            }
-
-            :host([collapsed]) .sync-sidebar-inner .nav-item-unread {
-                position: absolute;
-                top: 4px;
-                right: 4px;
-                min-width: 8px;
-                min-height: 8px;
-                width: 8px;
-                height: 8px;
-                padding: 0;
-                font-size: 0;
-                border-radius: 50%;
-                margin: 0;
             }
 
             :host([collapsed]) .sync-sidebar-inner .channels-section {
@@ -506,6 +317,7 @@ export class SyncSidebar extends PlatformElement {
         _chat: { state: true },
         _sectionOpen: { state: true },
         _directSearch: { state: true },
+        _typingPeersByChannel: { state: true },
     };
 
     constructor() {
@@ -518,6 +330,7 @@ export class SyncSidebar extends PlatformElement {
         this._chat = s.chat;
         this._sectionOpen = s.ui.sidebarSectionOpen;
         this._directSearch = '';
+        this._typingPeersByChannel = s.typingPeersByChannel ?? {};
     }
 
     connectedCallback() {
@@ -528,6 +341,7 @@ export class SyncSidebar extends PlatformElement {
             this._companyMembers = state.companyMembers;
             this._chat = state.chat;
             this._sectionOpen = state.ui.sidebarSectionOpen;
+            this._typingPeersByChannel = state.typingPeersByChannel ?? {};
         });
     }
 
@@ -569,65 +383,6 @@ export class SyncSidebar extends PlatformElement {
         }
     }
 
-    _hueFromString(value) {
-        const s = typeof value === 'string' ? value : String(value ?? '');
-        let h = 0;
-        for (let i = 0; i < s.length; i++) {
-            h = (h * 31 + s.charCodeAt(i)) >>> 0;
-        }
-        return h % 360;
-    }
-
-    _memberAvatar(member) {
-        if (member.avatar_url) {
-            return html`<img class="peer-avatar" src=${member.avatar_url} alt="" />`;
-        }
-        const label = typeof member.name === 'string' ? member.name : member.user_id;
-        const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-        const hue = this._hueFromString(member.user_id);
-        return html`
-            <span class="peer-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
-        `;
-    }
-
-    _spaceAvatar(space) {
-        const url = space.avatar_url;
-        if (typeof url === 'string' && url !== '') {
-            return html`<img class="entity-avatar" src=${url} alt="" />`;
-        }
-        const label = typeof space.name === 'string' ? space.name : space.id;
-        const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-        const hue = this._hueFromString(space.id);
-        return html`
-            <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
-        `;
-    }
-
-    _channelAvatar(channel) {
-        if (channel.type === 'direct' && channel.peer) {
-            const p = channel.peer;
-            if (typeof p.avatar_url === 'string' && p.avatar_url !== '') {
-                return html`<img class="entity-avatar" src=${p.avatar_url} alt="" />`;
-            }
-            const label = typeof p.display_name === 'string' ? p.display_name : p.user_id;
-            const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-            const hue = this._hueFromString(p.user_id);
-            return html`
-                <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
-            `;
-        }
-        const url = channel.avatar_url;
-        if (typeof url === 'string' && url !== '') {
-            return html`<img class="entity-avatar" src=${url} alt="" />`;
-        }
-        const label = typeof channel.name === 'string' ? channel.name : channel.id;
-        const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-        const hue = this._hueFromString(channel.id);
-        return html`
-            <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
-        `;
-    }
-
     _filteredCompanyMembers() {
         const list = this._companyMembers.list;
         const q = this._directSearch.trim().toLowerCase();
@@ -644,15 +399,6 @@ export class SyncSidebar extends PlatformElement {
     _isDirectRowActive(member, selectedChannelId) {
         const ch = SyncStore.findDirectChannelForPeer(member.user_id);
         return ch !== null && ch.id === selectedChannelId;
-    }
-
-    _channelRowMeta(channel) {
-        if (!channel) {
-            return { preview: '', unread: 0 };
-        }
-        const preview = typeof channel.last_message_preview === 'string' ? channel.last_message_preview : '';
-        const unread = typeof channel.unread_count === 'number' ? channel.unread_count : 0;
-        return { preview, unread };
     }
 
     render() {
@@ -705,32 +451,14 @@ export class SyncSidebar extends PlatformElement {
                                 ${!this._companyMembers.loading && memberRows.length === 0
                                     ? html`<div class="section-empty">Нет совпадений или других участников</div>`
                                     : ''}
-                                ${memberRows.map((member) => {
-                                    const dmCh = SyncStore.findDirectChannelForPeer(member.user_id);
-                                    const rowMeta = this._channelRowMeta(dmCh);
-                                    return html`
-                                    <button
-                                        type="button"
-                                        class="nav-item ${this._isDirectRowActive(member, selectedChannelId) ? 'active' : ''}"
+                                ${memberRows.map((member) => html`
+                                    <sync-direct-member-row
+                                        .member=${member}
+                                        .active=${this._isDirectRowActive(member, selectedChannelId)}
+                                        .iconOnly=${this.collapsed}
                                         @click=${() => this._openDirectWithMember(member)}
-                                    >
-                                        <div class="nav-item-main">
-                                            ${this._memberAvatar(member)}
-                                            <div class="nav-item-inner">
-                                                <div class="nav-item-title-row">
-                                                    <span class="nav-item-label">${member.name}</span>
-                                                </div>
-                                                ${rowMeta.preview
-                                                    ? html`<span class="nav-item-preview">${rowMeta.preview}</span>`
-                                                    : ''}
-                                            </div>
-                                        </div>
-                                        ${rowMeta.unread > 0
-                                            ? html`<span class="nav-item-unread">${rowMeta.unread}</span>`
-                                            : ''}
-                                    </button>
-                                `;
-                                })}
+                                    ></sync-direct-member-row>
+                                `)}
                             </div>
                         ` : ''}
                     </div>
@@ -763,16 +491,12 @@ export class SyncSidebar extends PlatformElement {
                                     <div
                                         class="nav-row-wrap ${space.id === selectedSpaceId ? 'active' : ''}"
                                     >
-                                        <button
-                                            type="button"
-                                            class="nav-item nav-item--in-wrap"
+                                        <sync-space-row
+                                            .space=${space}
+                                            .active=${space.id === selectedSpaceId}
+                                            .iconOnly=${this.collapsed}
                                             @click=${() => this._selectSpace(space.id)}
-                                        >
-                                            <div class="nav-item-main">
-                                                ${this._spaceAvatar(space)}
-                                                <span class="nav-item-label">${space.name}</span>
-                                            </div>
-                                        </button>
+                                        ></sync-space-row>
                                         <button
                                             type="button"
                                             class="row-gear"
@@ -801,6 +525,8 @@ export class SyncSidebar extends PlatformElement {
                             </span>
                             <platform-icon name="chat" size="16"></platform-icon>
                             <span class="section-title">Каналы</span>
+                            ${typeof selectedSpaceId === 'string' && selectedSpaceId !== ''
+        ? html`
                             <button
                                 type="button"
                                 class="add-btn"
@@ -811,41 +537,28 @@ export class SyncSidebar extends PlatformElement {
                                     SyncStore.openChannelSettingsCreate();
                                 }}
                             >+</button>
+                            `
+        : ''}
                         </div>
                         ${sec.channels ? html`
                             <div class="section-scroll">
                                 ${this._channels.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
                                 ${!selectedSpaceId && !this._channels.loading
-                                    ? html`<div class="section-empty">Выбери пространство</div>`
+                                    ? html`<div class="section-empty">Сначала выбери пространство в списке выше.</div>`
                                     : ''}
                                 ${channelsForSpace.map((channel) => {
-                                    const rowMeta = this._channelRowMeta(channel);
                                     const showGear = channel.type !== 'direct';
                                     return html`
                                     <div
                                         class="nav-row-wrap ${channel.id === selectedChannelId ? 'active' : ''}"
                                     >
-                                        <button
-                                            type="button"
-                                            class="nav-item nav-item--in-wrap"
+                                        <sync-channel-row
+                                            in-nav-wrap
+                                            .channel=${channel}
+                                            .active=${channel.id === selectedChannelId}
+                                            .iconOnly=${this.collapsed}
                                             @click=${() => this._selectChannel(channel)}
-                                        >
-                                            <div class="nav-item-main">
-                                                ${this._channelAvatar(channel)}
-                                                <div class="nav-item-inner">
-                                                    <div class="nav-item-title-row">
-                                                        <span class="nav-item-label">${channel.name ?? channel.id}</span>
-                                                        <span class="nav-item-type">${channel.type}</span>
-                                                    </div>
-                                                    ${rowMeta.preview
-                                                        ? html`<span class="nav-item-preview">${rowMeta.preview}</span>`
-                                                        : ''}
-                                                </div>
-                                            </div>
-                                            ${rowMeta.unread > 0
-                                                ? html`<span class="nav-item-unread">${rowMeta.unread}</span>`
-                                                : ''}
-                                        </button>
+                                        ></sync-channel-row>
                                         ${this.activeCallChannels?.[channel.id] ? html`
                                             <button
                                                 type="button"

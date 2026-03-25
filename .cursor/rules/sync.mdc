@@ -38,7 +38,7 @@ apps/sync/
   models/           # Pydantic API-модели (Read/Create/Update)
   api/              # REST роутеры
   realtime/         # Command-Event (broker, commands, events, handlers, command_dispatch, tasks, notification_tasks)
-  ws_presence.py    # Redis-ключи онлайна по /sync/ws (для TaskIQ deliver без дубля с чат-WS)
+  ws_presence.py    # Redis: presence, last_seen, batch для GET /company/members
 
 apps/sync_worker/   # TaskIQ worker (queue: sync)
 ```
@@ -72,7 +72,7 @@ WebSocket /sync/ws        ────┘
 ## Платформенные уведомления о сообщениях
 
 - После **`messages.send`** (только корневая лента, без `thread_id`) для каждого участника кроме отправителя ставится TaskIQ-задача **`deliver_channel_message_notification`** (`apps/sync/realtime/notification_tasks.py`). Внутри: если в Redis есть presence **`sync:ws:presence:{user_id}`** (активный `/sync/ws`) — выход без `notify_user`; иначе проверка **`notifications_muted`**; иначе **`notify_user`** (`NotificationType.SYNC_NEW_MESSAGE`, `action_url` `/sync?channel=...`).
-- Presence пишется в **`apps/sync/ws.py`** при connect/каждом кадре от клиента и снимается в `finally` при отключении (TTL ключа).
+- Presence пишется в **`apps/sync/ws.py`** при connect, на каждый кадр от клиента и **фоновым циклом** (интервал ~45 с), пока WebSocket открыт — иначе TTL 120 с истек бы при простое. Ключ снимается только при закрытии **последнего** сокета пользователя (несколько вкладок). **`sync:last_seen:{user_id}`** — ISO-время ухода в офлайн (запись при последнем disconnect).
 - UI: **`platform-notification-manager`** в `apps/sync/ui/index.html`; мьют — настройки канала (`channel-settings-modal`), API см. выше. Deep link: query **`?channel=`** на старте `sync-app.js`.
 
 ### Правила
@@ -80,7 +80,7 @@ WebSocket /sync/ws        ────┘
 - **Мутации** — через команды: `CommandEnvelope` -> `execute_command()` в `handlers.py`; доставка — обычно `handle_command.kiq()` -> worker, для `channels.mark_read` из REST — `dispatch_sync_command()` (`apps/sync/realtime/command_dispatch.py`)
 - **Чтение** — напрямую из репозитория (GET-эндпоинты)
 - **Бизнес-логика** — только в `handlers.py` (`execute_command()`)
-- **События** — только из `handlers.py` (`CommandExecutionResult.events`). TaskIQ task публикует в Redis канал `sync.realtime.events`
+- **События домена** — из `handlers.py` (`CommandExecutionResult.events`). TaskIQ task публикует в Redis канал `sync.realtime.events`. Исключение: инфраструктурные кадры из **`ws.py`** (`call.signal`, **`user.presence`**) — публикация через `publish_realtime_events` без TaskIQ.
 - **company_id** — передаётся в `CommandEnvelope` из `get_context()`
 
 ### Запрещено
@@ -113,7 +113,7 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 **Пространства (GET /spaces):** все пространства компании (`SpaceRepository.list_all`), не только созданные текущим пользователем. После `spaces.create` публикуется **`space.created`** — UI `sync-app.js` вызывает `loadSpaces` + `sanitizeChatSelectionAfterLoad`, иначе открытые вкладки других пользователей не подтягивают новое пространство без перезагрузки страницы.
 
-**Участники компании (GET /company/members):** список `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий пользователь исключён). Sync UI: секция «Личные» — поиск + открытие/создание DM по клику (`SyncStore.loadCompanyMembers`, `findDirectChannelForPeer`).
+**Участники компании (GET /company/members):** список `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий пользователь исключён); поля **`is_online`**, **`last_seen_at`** (Redis: presence + last_seen). Sync UI: секция «Личные» — поиск + открытие/создание DM по клику (`SyncStore.loadCompanyMembers`, `findDirectChannelForPeer`); **`peerPresenceByUserId`** в store; realtime **`user.presence`** (фильтр по `company_id` в `sync-app.js`). В сайдбаре вторая строка чата: **печать (основная лента)** > превью сообщения; для «Личные» при отсутствии превью — подпись онлайн/last seen; зелёная точка на аватаре при онлайн.
 
 ### WebSocket протокол
 
@@ -121,7 +121,7 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 **Сервер -> клиент:**
 - Результат команды: `{ id, ok, result, error_code, error_detail }` (WsResultFrame)
-- Realtime-событие: `{ type, payload }` (RealtimeEvent, broadcast всем)
+- Realtime-событие: `{ type, payload }` (RealtimeEvent, broadcast всем), в т.ч. **`user.presence`**: `company_id`, `user_id`, `online`, `last_seen_at`
 
 ## Сообщения: длина и отображение
 
@@ -139,13 +139,17 @@ apps/sync/ui/
   index.html              # import map Lit, @platform/lib/, tokens.css
   index.js                # импорт компонентов
   app/sync-app.js         # extends PlatformApp, checkAuth() через AuthService
-  store/sync.store.js     # BaseStore: spaces, channels, companyMembers, messages, ws, ui
+  store/sync.store.js     # BaseStore: spaces, channels, companyMembers, peerPresenceByUserId, messages, ws, ui
   services/
     sync-api.service.js   # extends BaseService, /sync/api/v1/*
     sync-ws.service.js    # WebSocket к /sync/ws, cookie auth, reconnect/backoff
   features/
-    sync-sidebar.js       # platform-sidebar: Личные — участники компании (GET /company/members), поиск, DM по клику; Пространства + Каналы; аккордеоны, «Свернуть всё» / «Развернуть всё»
-    chat-view.js          # header (аватар/иконка: direct peer, канал, space или folder) + channel-picker | message-list + composer; channel-settings-modal (createMode)
+    sync-sidebar.js       # platform-sidebar: секции Личные / Пространства / Каналы; импортирует строки ниже
+    sync-direct-member-row.js  # участник компании — открытие DM (аватар, онлайн, превью/presence/печатает)
+    sync-space-row.js     # пространство в списке (аватар, имя; пара с row-gear)
+    sync-channel-row.js   # канал (аватар, название, тип, превью/печатает): сайдбар и модалка пересылки; `SyncStore.channelDisplayTitle`
+    utils/sync-hue.js     # `hueFromString` для инициалов аватаров в строках sync
+    chat-view.js          # header (аватар/иконка: direct peer, канал, space или folder) + channel-picker | message-list + composer; channel-settings-modal (createMode); пересылка — `getForwardDestinationChannels` + sync-channel-row
     channel-picker.js     # сетка каналов
     message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
     message-bubble.js     # контент, ПКМ-меню, реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation; `file/image` и `mock/image` — кнопка скачивания поверх превью (правый верхний угол), `file/document` — карточка со ссылкой скачивания
@@ -172,6 +176,7 @@ apps/sync/ui/
 
 - Mobile (`max-width: 767px`): в `chat-view.js` кнопка меню слева в шапке открывает сайдбар через событие `platform-sidebar-open` (как `page-header`); `sync-sidebar` на `@mobile-change` у `platform-sidebar` обновляет `ui.mobileSidebarOpen`. Панель тредов: иконка `list`, доступна при выбранном канале (в т.ч. когда тредов ещё нет).
 - Индикатор «печатает»: клиент шлёт `channels.typing`, сервер — `channel.typing`; в `sync-app.js` сначала кадры с `msg.type`, затем ack (`ok` + `id`); ключи `typingPeersByChannel` — `normalizeSyncChannelId`; своё событие не кладём в store; в `getTypingIndicatorLine` при открытом треде (`focusedThreadId`) учитываются и строки с `thread_id: null` (основной ввод), и строки этого треда — иначе подзаголовок оставался бы «direct» при открытой панели тредов. Ack с `ok: true` без `result` не вызывает `failPending`.
+- Подзаголовок шапки DM: печать или `getPeerPresenceSubtitle` (не сырой `direct`). Сайдбар списка каналов/личных: та же логика печати vs превью (см. выше).
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
 - Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
 - Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`; для direct `spaceId` — `null`, иначе список сообщений не подгрузится

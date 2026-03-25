@@ -4,6 +4,8 @@
  */
 import { BaseStore } from '@platform/lib/store/BaseStore.js';
 
+import { formatPeerPresenceLine } from '../utils/presence-format.js';
+
 let _flashMessageTimer = null;
 
 /** Таймеры удаления сообщения после анимации разрушения (message.deleted). */
@@ -42,6 +44,7 @@ const baseStore = new BaseStore('sync', {
     },
     peerReadAtByChannel: {},
     typingPeersByChannel: {},
+    peerPresenceByUserId: {},
     companyMembers: {
         list: [],
         loading: false,
@@ -99,6 +102,49 @@ const baseStore = new BaseStore('sync', {
 export const SyncStore = {
     normalizeSyncChannelId,
     isHiddenSyncChannelName,
+
+    /**
+     * Заголовок канала в списках: DM — peer, иначе имя или id.
+     * @param {object} channel
+     * @returns {string}
+     */
+    channelDisplayTitle(channel) {
+        if (!channel || typeof channel !== 'object') {
+            throw new Error('channelDisplayTitle: channel обязателен.');
+        }
+        if (channel.type === 'direct' && channel.peer) {
+            const p = channel.peer;
+            if (typeof p.display_name === 'string' && p.display_name.trim() !== '') {
+                return p.display_name;
+            }
+            if (typeof p.user_id === 'string' && p.user_id !== '') {
+                return p.user_id;
+            }
+        }
+        if (typeof channel.name === 'string' && channel.name !== '') {
+            return channel.name;
+        }
+        if (typeof channel.id === 'string' && channel.id !== '') {
+            return channel.id;
+        }
+        throw new Error('channelDisplayTitle: нет данных для отображения.');
+    },
+
+    /**
+     * Каналы, куда можно переслать (без текущего и без служебных `_...`).
+     * @param {string} excludeChannelId
+     * @returns {object[]}
+     */
+    getForwardDestinationChannels(excludeChannelId) {
+        if (typeof excludeChannelId !== 'string' || excludeChannelId === '') {
+            throw new Error('getForwardDestinationChannels: excludeChannelId обязателен.');
+        }
+        const all = baseStore.state.channels.list;
+        return all.filter((c) => {
+            if (c.id === excludeChannelId) return false;
+            return !isHiddenSyncChannelName(c.name);
+        });
+    },
 
     get state() {
         return baseStore.state;
@@ -261,7 +307,8 @@ export const SyncStore = {
     mergeChannel(channel) {
         baseStore.setState(s => {
             const list = s.channels.list;
-            const idx = list.findIndex(c => c.id === channel.id);
+            const norm = normalizeSyncChannelId(channel.id);
+            const idx = list.findIndex(c => normalizeSyncChannelId(c.id) === norm);
             const next = idx === -1
                 ? [...list, channel]
                 : list.map((c, i) => i === idx ? channel : c);
@@ -281,10 +328,13 @@ export const SyncStore = {
         if (!fields || typeof fields !== 'object') {
             throw new Error('fields обязателен.');
         }
+        const norm = normalizeSyncChannelId(channelId);
         baseStore.setState(s => ({
             channels: {
                 ...s.channels,
-                list: s.channels.list.map(c => (c.id === channelId ? { ...c, ...fields } : c)),
+                list: s.channels.list.map(c => (
+                    normalizeSyncChannelId(c.id) === norm ? { ...c, ...fields } : c
+                )),
             },
         }));
     },
@@ -318,6 +368,10 @@ export const SyncStore = {
     },
 
     openChannelSettingsCreate() {
+        const spaceId = baseStore.state.chat.selectedSpaceId;
+        if (typeof spaceId !== 'string' || spaceId === '') {
+            throw new Error('Сначала выбери пространство в списке слева.');
+        }
         baseStore.setState(s => ({
             ui: { ...s.ui, channelSettingsChannelId: null, channelSettingsCreate: true },
         }));
@@ -639,6 +693,45 @@ export const SyncStore = {
         return `${others[0].display_name}, ${others[1].display_name} и ещё ${rest}…`;
     },
 
+    /**
+     * @param {{ company_id: string, user_id: string, online: boolean, last_seen_at: string | null }} payload
+     */
+    applyUserPresence(payload) {
+        const uid = payload.user_id;
+        if (typeof uid !== 'string' || uid === '') {
+            throw new Error('user.presence: user_id обязателен.');
+        }
+        const online = !!payload.online;
+        const rawLast = payload.last_seen_at;
+        const last_seen_at = rawLast === undefined || rawLast === null || rawLast === ''
+            ? null
+            : String(rawLast);
+        baseStore.setState(s => ({
+            peerPresenceByUserId: {
+                ...s.peerPresenceByUserId,
+                [uid]: {
+                    online,
+                    last_seen_at: online ? null : last_seen_at,
+                },
+            },
+        }));
+    },
+
+    /**
+     * @param {string} userId
+     * @returns {string}
+     */
+    getPeerPresenceSubtitle(userId) {
+        if (typeof userId !== 'string' || userId === '') {
+            throw new Error('getPeerPresenceSubtitle: userId обязателен.');
+        }
+        const row = (baseStore.state.peerPresenceByUserId ?? {})[userId];
+        if (!row) {
+            return '';
+        }
+        return formatPeerPresenceLine(row.online, row.last_seen_at);
+    },
+
     setFocusedThread(threadId) {
         baseStore.setState(s => ({
             chat: { ...s.chat, focusedThreadId: threadId },
@@ -758,9 +851,25 @@ export const SyncStore = {
         baseStore.setState(s => ({ companyMembers: { ...s.companyMembers, loading: true } }));
         try {
             const items = await syncApi.getCompanyMembers();
-            baseStore.setState(s => ({
-                companyMembers: { list: items, loading: false },
-            }));
+            baseStore.setState(s => {
+                const nextPresence = { ...s.peerPresenceByUserId };
+                for (const m of items) {
+                    if (typeof m.user_id !== 'string' || m.user_id === '') {
+                        throw new Error('company/members: у элемента нет user_id.');
+                    }
+                    const ls = m.last_seen_at;
+                    nextPresence[m.user_id] = {
+                        online: !!m.is_online,
+                        last_seen_at: ls === undefined || ls === null || ls === ''
+                            ? null
+                            : String(ls),
+                    };
+                }
+                return {
+                    companyMembers: { list: items, loading: false },
+                    peerPresenceByUserId: nextPresence,
+                };
+            });
             return items;
         } catch (e) {
             baseStore.setState(s => ({ companyMembers: { ...s.companyMembers, loading: false } }));
@@ -854,6 +963,7 @@ export const SyncStore = {
 
     async selectChannelAndLoadMessages(syncApi, spaceId, channelId) {
         this.selectChannel(spaceId, channelId);
+        this.patchChannelFields(channelId, { unread_count: 0 });
         await this.loadMessages(syncApi, channelId);
     },
 };

@@ -11,10 +11,14 @@ from taskiq.exceptions import TaskiqResultTimeoutError
 
 from core.config import get_settings
 from apps.sync.realtime.commands import CallSignalPayload, CommandEnvelope, WsCommandFrame, WsResultFrame
-from apps.sync.realtime.events import event_call_signal
+from apps.sync.realtime.events import event_call_signal, event_user_presence
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.tasks import handle_command
-from apps.sync.ws_presence import clear_sync_ws_presence, refresh_sync_ws_presence
+from apps.sync.ws_presence import (
+    clear_sync_ws_presence,
+    refresh_sync_ws_presence,
+    set_last_seen_now,
+)
 from core.websocket.auth import get_user_from_websocket
 from core.logging import get_logger
 
@@ -65,8 +69,14 @@ class ConnectionManager:
             if not ws_set:
                 self._by_user.pop(user_id, None)
 
+    def connection_count(self, user_id: str) -> int:
+        ws_set = self._by_user.get(user_id)
+        return len(ws_set) if ws_set else 0
+
 
 manager = ConnectionManager()
+
+PRESENCE_HEARTBEAT_INTERVAL_SEC = 45
 
 
 class PubSubFanout:
@@ -135,13 +145,34 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     user_id = user.user_id
     company_id = user.active_company_id
+    if not company_id or not isinstance(company_id, str):
+        raise ValueError("active_company_id обязателен для Sync WebSocket.")
     settings = get_settings()
     redis_url = settings.database.redis_url
     if not redis_url:
         raise ValueError("database.redis_url не задан для sync WebSocket presence.")
 
+    had_no_connections = manager.connection_count(user_id) == 0
     await manager.connect(user_id, websocket)
     await refresh_sync_ws_presence(redis_url, user_id)
+    if had_no_connections:
+        await publish_realtime_events(
+            [
+                event_user_presence(
+                    company_id=company_id,
+                    user_id=user_id,
+                    online=True,
+                    last_seen_at=None,
+                ),
+            ],
+        )
+
+    async def presence_heartbeat() -> None:
+        while True:
+            await asyncio.sleep(PRESENCE_HEARTBEAT_INTERVAL_SEC)
+            await refresh_sync_ws_presence(redis_url, user_id)
+
+    heartbeat_task = asyncio.create_task(presence_heartbeat())
     try:
         while True:
             raw = await websocket.receive_text()
@@ -200,5 +231,23 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+        connections_before = manager.connection_count(user_id)
         manager.disconnect(user_id, websocket)
-        await clear_sync_ws_presence(redis_url, user_id)
+        if connections_before == 1:
+            await clear_sync_ws_presence(redis_url, user_id)
+            last_seen_iso = await set_last_seen_now(redis_url, user_id)
+            await publish_realtime_events(
+                [
+                    event_user_presence(
+                        company_id=company_id,
+                        user_id=user_id,
+                        online=False,
+                        last_seen_at=last_seen_iso,
+                    ),
+                ],
+            )

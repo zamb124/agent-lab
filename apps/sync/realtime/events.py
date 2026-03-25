@@ -38,6 +38,7 @@ EventType = Literal[
     "call.ended",
     "call.participant_joined",
     "call.participant_left",
+    "user.presence",
 ]
 
 
@@ -212,4 +213,23 @@ def event_call_participant_left(call_id: str, user_id: str) -> RealtimeEvent:
         type="call.participant_left",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
+    )
+
+
+def event_user_presence(
+    *,
+    company_id: str,
+    user_id: str,
+    online: bool,
+    last_seen_at: str | None,
+) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="user.presence",
+        channel_id=None,
+        payload={
+            "company_id": company_id,
+            "user_id": user_id,
+            "online": online,
+            "last_seen_at": last_seen_at,
+        },
     )
