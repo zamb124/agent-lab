@@ -50,6 +50,15 @@ class ServiceRegistryClass {
         return this._initialized;
     }
 
+    /**
+     * Полный сброс реестра для изоляции компонентных UI-тестов (tests/ui).
+     * Не использовать вне тестового окружения.
+     */
+    resetForUiTests() {
+        this.services.clear();
+        this._initialized = false;
+    }
+
     get auth() { return this.get('auth'); }
     get theme() { return this.get('theme'); }
     get notify() { return this.get('notify'); }

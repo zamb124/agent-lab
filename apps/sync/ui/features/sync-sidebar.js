@@ -9,7 +9,6 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { SyncStore } from '../store/sync.store.js';
 import './sync-channel-row.js';
-import './sync-space-row.js';
 import './sync-direct-member-row.js';
 import '@platform/lib/components/layout/platform-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
@@ -70,6 +69,128 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--text-secondary);
             }
 
+            .space-filters-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                padding: 0 var(--space-3);
+                margin-bottom: var(--space-2);
+                min-width: 0;
+            }
+
+            .space-filters-header .section-title {
+                margin-bottom: 0;
+            }
+
+            .space-tags-scroll {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                align-items: center;
+                gap: var(--space-2);
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding: 0 var(--space-3) var(--space-3);
+                margin: 0 0 var(--space-1);
+                scrollbar-width: thin;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .space-tags-scroll::-webkit-scrollbar {
+                height: 6px;
+            }
+
+            .space-tags-scroll::-webkit-scrollbar-thumb {
+                background: var(--glass-border-medium);
+                border-radius: 3px;
+            }
+
+            .space-tags-empty {
+                padding-left: var(--space-3);
+                flex-shrink: 0;
+            }
+
+            .space-chip {
+                display: inline-flex;
+                flex-direction: row;
+                align-items: center;
+                flex-shrink: 0;
+                max-width: min(200px, 85vw);
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                transition: border-color var(--duration-fast), background var(--duration-fast);
+            }
+
+            .space-chip.active {
+                border-color: var(--accent);
+                background: var(--accent-subtle);
+            }
+
+            .space-chip-main {
+                flex: 1;
+                min-width: 0;
+                padding: 6px 4px 6px 10px;
+                border: none;
+                background: transparent;
+                cursor: pointer;
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                color: var(--text-primary);
+                text-align: left;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .space-chip-gear {
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 22px;
+                height: 22px;
+                margin: 2px 4px 2px 0;
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                transition: color var(--duration-fast), background var(--duration-fast);
+            }
+
+            .space-chip-gear:hover {
+                background: var(--glass-solid-medium);
+                color: var(--accent);
+            }
+
+            .space-chip.active .space-chip-gear {
+                color: var(--accent);
+            }
+
+            .section-header--static {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 0 var(--space-3);
+                margin-bottom: var(--space-2);
+                cursor: default;
+                user-select: none;
+                box-sizing: border-box;
+                width: 100%;
+            }
+
+            .section-header--static .section-title {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .section-scroll--channels {
+                max-height: min(52vh, 480px);
+            }
+
             .nav-row-wrap {
                 display: flex;
                 align-items: stretch;
@@ -108,14 +229,12 @@ export class SyncSidebar extends PlatformElement {
                 margin-right: var(--space-1);
             }
 
-            .nav-row-wrap > sync-channel-row,
-            .nav-row-wrap > sync-space-row {
+            .nav-row-wrap > sync-channel-row {
                 flex: 1;
                 min-width: 0;
             }
 
-            .nav-row-wrap > sync-channel-row[icon-only],
-            .nav-row-wrap > sync-space-row[icon-only] {
+            .nav-row-wrap > sync-channel-row[icon-only] {
                 flex: 0 0 auto;
             }
 
@@ -259,6 +378,11 @@ export class SyncSidebar extends PlatformElement {
                 padding-right: var(--space-2);
             }
 
+            :host([collapsed]) .sync-sidebar-inner .space-filters-header,
+            :host([collapsed]) .sync-sidebar-inner .space-tags-scroll {
+                display: none !important;
+            }
+
             :host([collapsed]) .sync-sidebar-inner .nav-row-wrap {
                 justify-content: center;
                 margin-bottom: var(--space-1);
@@ -318,6 +442,7 @@ export class SyncSidebar extends PlatformElement {
         _sectionOpen: { state: true },
         _directSearch: { state: true },
         _typingPeersByChannel: { state: true },
+        _sidebarSpaceFilterIds: { state: true },
     };
 
     constructor() {
@@ -331,6 +456,7 @@ export class SyncSidebar extends PlatformElement {
         this._sectionOpen = s.ui.sidebarSectionOpen;
         this._directSearch = '';
         this._typingPeersByChannel = s.typingPeersByChannel ?? {};
+        this._sidebarSpaceFilterIds = s.ui.sidebarSpaceFilterIds ?? [];
     }
 
     connectedCallback() {
@@ -342,6 +468,7 @@ export class SyncSidebar extends PlatformElement {
             this._chat = state.chat;
             this._sectionOpen = state.ui.sidebarSectionOpen;
             this._typingPeersByChannel = state.typingPeersByChannel ?? {};
+            this._sidebarSpaceFilterIds = state.ui.sidebarSpaceFilterIds ?? [];
         });
     }
 
@@ -350,8 +477,13 @@ export class SyncSidebar extends PlatformElement {
         this._unsubscribe?.();
     }
 
-    _selectSpace(spaceId) {
-        SyncStore.selectSpace(spaceId);
+    _openChannelCreate() {
+        try {
+            SyncStore.openChannelSettingsCreate();
+        } catch (err) {
+            const text = err instanceof Error ? err.message : String(err);
+            this.error(text);
+        }
     }
 
     async _selectChannel(channel) {
@@ -402,12 +534,13 @@ export class SyncSidebar extends PlatformElement {
     }
 
     render() {
-        const { selectedSpaceId, selectedChannelId } = this._chat;
+        const { selectedChannelId } = this._chat;
         const sec = this._sectionOpen || { direct: true, spaces: true, channels: true };
-        const channelsForSpace = selectedSpaceId
-            ? SyncStore.getChannelsForSpace(selectedSpaceId)
-            : [];
+        const sidebarChannels = SyncStore.getChannelsForSidebarList();
+        const filterIds = this._sidebarSpaceFilterIds;
+        const hasActiveFilter = Array.isArray(filterIds) && filterIds.length > 0;
         const memberRows = this._filteredCompanyMembers();
+        const spaceList = this._spaces.list;
 
         return html`
             <platform-sidebar
@@ -464,89 +597,75 @@ export class SyncSidebar extends PlatformElement {
                     </div>
 
                     <div class="channels-section">
-                        <div
-                            class="section-header section-header--toggle"
-                            @click=${() => SyncStore.setSidebarSectionOpen('spaces', !sec.spaces)}
-                        >
-                            <span class="chevron-rot ${sec.spaces ? '' : 'is-closed'}">
-                                <platform-icon name="chevron-down" size="14"></platform-icon>
-                            </span>
-                            <platform-icon name="folder" size="16"></platform-icon>
+                        <div class="space-filters-header">
                             <span class="section-title">Пространства</span>
                             <button
                                 type="button"
                                 class="add-btn"
                                 title="Создать пространство"
                                 aria-label="Создать пространство"
-                                @click=${(e) => {
-                                    e.stopPropagation();
-                                    SyncStore.openSpaceSettingsCreate();
-                                }}
+                                @click=${() => SyncStore.openSpaceSettingsCreate()}
                             >+</button>
                         </div>
-                        ${sec.spaces ? html`
-                            <div class="section-scroll">
-                                ${this._spaces.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
-                                ${this._spaces.list.map(space => html`
-                                    <div
-                                        class="nav-row-wrap ${space.id === selectedSpaceId ? 'active' : ''}"
+                        <div class="space-tags-scroll">
+                            ${this._spaces.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
+                            ${!this._spaces.loading && spaceList.length === 0
+                                ? html`<div class="section-empty space-tags-empty">Нет пространств. Нажми +.</div>`
+                                : ''}
+                            ${spaceList.map((space) => html`
+                                <div
+                                    class="space-chip ${filterIds.includes(space.id) ? 'active' : ''}"
+                                >
+                                    <button
+                                        type="button"
+                                        class="space-chip-main"
+                                        @click=${() => SyncStore.toggleSidebarSpaceFilter(space.id)}
+                                    >${space.name}</button>
+                                    <button
+                                        type="button"
+                                        class="space-chip-gear"
+                                        title="Настройки пространства"
+                                        aria-label="Настройки пространства"
+                                        @click=${(e) => {
+                                            e.stopPropagation();
+                                            SyncStore.openSpaceSettings(space.id);
+                                        }}
                                     >
-                                        <sync-space-row
-                                            .space=${space}
-                                            .active=${space.id === selectedSpaceId}
-                                            .iconOnly=${this.collapsed}
-                                            @click=${() => this._selectSpace(space.id)}
-                                        ></sync-space-row>
-                                        <button
-                                            type="button"
-                                            class="row-gear"
-                                            title="Настройки пространства"
-                                            aria-label="Настройки пространства"
-                                            @click=${(e) => {
-                                                e.stopPropagation();
-                                                SyncStore.openSpaceSettings(space.id);
-                                            }}
-                                        >
-                                            <platform-icon name="settings" size="16"></platform-icon>
-                                        </button>
-                                    </div>
-                                `)}
-                            </div>
-                        ` : ''}
+                                        <platform-icon name="settings" size="12"></platform-icon>
+                                    </button>
+                                </div>
+                            `)}
+                        </div>
                     </div>
 
                     <div class="channels-section">
-                        <div
-                            class="section-header section-header--toggle"
-                            @click=${() => SyncStore.setSidebarSectionOpen('channels', !sec.channels)}
-                        >
-                            <span class="chevron-rot ${sec.channels ? '' : 'is-closed'}">
-                                <platform-icon name="chevron-down" size="14"></platform-icon>
-                            </span>
+                        <div class="section-header section-header--static">
                             <platform-icon name="chat" size="16"></platform-icon>
                             <span class="section-title">Каналы</span>
-                            ${typeof selectedSpaceId === 'string' && selectedSpaceId !== ''
+                            ${spaceList.length > 0
         ? html`
                             <button
                                 type="button"
                                 class="add-btn"
                                 title="Создать канал"
                                 aria-label="Создать канал"
-                                @click=${(e) => {
-                                    e.stopPropagation();
-                                    SyncStore.openChannelSettingsCreate();
-                                }}
+                                style="margin-left:auto"
+                                @click=${() => this._openChannelCreate()}
                             >+</button>
                             `
         : ''}
                         </div>
-                        ${sec.channels ? html`
-                            <div class="section-scroll">
-                                ${this._channels.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
-                                ${!selectedSpaceId && !this._channels.loading
-                                    ? html`<div class="section-empty">Сначала выбери пространство в списке выше.</div>`
-                                    : ''}
-                                ${channelsForSpace.map((channel) => {
+                        <div class="section-scroll section-scroll--channels">
+                            ${this._channels.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
+                            ${!this._channels.loading && spaceList.length === 0
+                                ? html`<div class="section-empty">Сначала создай пространство.</div>`
+                                : ''}
+                            ${!this._channels.loading && spaceList.length > 0 && sidebarChannels.length === 0
+                                ? html`<div class="section-empty">${hasActiveFilter
+                                    ? 'Нет каналов в выбранных пространствах.'
+                                    : 'Каналов пока нет.'}</div>`
+                                : ''}
+                            ${sidebarChannels.map((channel) => {
                                     const showGear = channel.type !== 'direct';
                                     return html`
                                     <div
@@ -593,8 +712,7 @@ export class SyncSidebar extends PlatformElement {
                                     </div>
                                 `;
                                 })}
-                            </div>
-                        ` : ''}
+                        </div>
                     </div>
                 </div>
 

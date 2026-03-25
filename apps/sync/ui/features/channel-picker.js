@@ -77,6 +77,7 @@ export class ChannelPicker extends PlatformElement {
     static properties = {
         _channels: { state: true },
         _chat: { state: true },
+        _sidebarSpaceFilterIds: { state: true },
     };
 
     constructor() {
@@ -84,6 +85,7 @@ export class ChannelPicker extends PlatformElement {
         const s = SyncStore.state;
         this._channels = s.channels;
         this._chat = s.chat;
+        this._sidebarSpaceFilterIds = s.ui.sidebarSpaceFilterIds ?? [];
     }
 
     connectedCallback() {
@@ -91,6 +93,7 @@ export class ChannelPicker extends PlatformElement {
         this._unsubscribe = SyncStore.subscribe(state => {
             this._channels = state.channels;
             this._chat = state.chat;
+            this._sidebarSpaceFilterIds = state.ui.sidebarSpaceFilterIds ?? [];
         });
     }
 
@@ -105,14 +108,19 @@ export class ChannelPicker extends PlatformElement {
     }
 
     render() {
-        const channels = SyncStore.getChannelsForSpace(this._chat.selectedSpaceId);
+        const channels = SyncStore.getChannelsForPickerList();
         const loading = this._channels.loading;
+        const hasFilter = Array.isArray(this._sidebarSpaceFilterIds) && this._sidebarSpaceFilterIds.length > 0;
 
         return html`
             <div class="hint">Выбери канал</div>
             ${loading ? html`<div class="hint">Загрузка...</div>` : ''}
             <div class="grid">
-                ${channels.length === 0 && !loading ? html`<div class="empty">Каналов пока нет.</div>` : ''}
+                ${channels.length === 0 && !loading
+                    ? html`<div class="empty">${hasFilter
+                        ? 'Нет каналов в выбранных пространствах.'
+                        : 'Каналов пока нет.'}</div>`
+                    : ''}
                 ${channels.map((ch) => {
                     const title = ch.type === 'direct' && ch.peer?.display_name
                         ? ch.peer.display_name
@@ -120,7 +128,7 @@ export class ChannelPicker extends PlatformElement {
                     return html`
                         <button class="channel-card" @click=${() => this._pick(ch)}>
                             <span class="channel-name">${title}</span>
-                            <span class="channel-type">${ch.type}</span>
+                            <span class="channel-type">${SyncStore.channelRowMetaLabel(ch)}</span>
                         </button>
                     `;
                 })}

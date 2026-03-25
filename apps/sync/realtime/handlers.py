@@ -295,7 +295,9 @@ async def execute_command(
         if calls is None:
             raise RuntimeError("CallRepository не передан в execute_command для call.* команд.")
         if cmd.type == "call.invite":
-            out, evs = await handle_call_invite(cmd, calls=calls, channels=channels)
+            out, evs = await handle_call_invite(
+                cmd, calls=calls, channels=channels, user_repository=user_repository
+            )
         elif cmd.type == "call.accept":
             out, evs = await handle_call_accept(cmd, calls=calls)
         elif cmd.type == "call.decline":

@@ -1,0 +1,15 @@
+{
+  "name": "agent-lab",
+  "private": true,
+  "scripts": {
+    "test:ui": "web-test-runner --config web-test-runner.config.mjs",
+    "test:ui:watch": "web-test-runner --config web-test-runner.config.mjs --watch"
+  },
+  "devDependencies": {
+    "@open-wc/testing": "^4.0.0",
+    "@web/dev-server-import-maps": "^0.2.1",
+    "@web/test-runner": "^0.20.2",
+    "@web/test-runner-playwright": "^0.11.0",
+    "lit": "^3.2.1"
+  }
+}

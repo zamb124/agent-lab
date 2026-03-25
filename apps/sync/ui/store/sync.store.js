@@ -83,7 +83,11 @@ const baseStore = new BaseStore('sync', {
         flashMessageSeq: 0,
         deletingMessageIds: [],
         channelSettingsChannelId: null,
+        /** space_id при открытии модалки создания канала (зафиксирован при open). */
+        channelSettingsCreateSpaceId: null,
         spaceSettingsSpaceId: null,
+        /** Пустой массив = показать все topic-каналы; иначе только каналы выбранных пространств (ИЛИ). */
+        sidebarSpaceFilterIds: [],
     },
 }, {
     persist: true,
@@ -95,6 +99,7 @@ const baseStore = new BaseStore('sync', {
         },
         ui: {
             sidebarSectionOpen: state.ui.sidebarSectionOpen,
+            sidebarSpaceFilterIds: state.ui.sidebarSpaceFilterIds ?? [],
         },
     }),
 });
@@ -363,23 +368,141 @@ export const SyncStore = {
             throw new Error('channelId обязателен.');
         }
         baseStore.setState(s => ({
-            ui: { ...s.ui, channelSettingsChannelId: channelId, channelSettingsCreate: false },
+            ui: {
+                ...s.ui,
+                channelSettingsChannelId: channelId,
+                channelSettingsCreate: false,
+                channelSettingsCreateSpaceId: null,
+            },
         }));
     },
 
-    openChannelSettingsCreate() {
-        const spaceId = baseStore.state.chat.selectedSpaceId;
-        if (typeof spaceId !== 'string' || spaceId === '') {
-            throw new Error('Сначала выбери пространство в списке слева.');
+    /**
+     * space_id для создания канала: одно выделенное в фильтре, иначе selectedSpaceId, иначе первое пространство.
+     * @returns {string}
+     */
+    resolveSpaceIdForNewChannel() {
+        const s = baseStore.state;
+        const filters = s.ui.sidebarSpaceFilterIds ?? [];
+        const valid = new Set(s.spaces.list.map(x => x.id));
+        if (filters.length === 1) {
+            const only = filters[0];
+            if (typeof only === 'string' && only !== '' && valid.has(only)) {
+                return only;
+            }
         }
+        if (filters.length > 1) {
+            throw new Error(
+                'Чтобы создать канал, оставь в фильтре одно пространство или сбрось фильтр (покажи все каналы).',
+            );
+        }
+        const sel = s.chat.selectedSpaceId;
+        if (typeof sel === 'string' && sel !== '' && valid.has(sel)) {
+            return sel;
+        }
+        const first = s.spaces.list[0];
+        if (first && typeof first.id === 'string' && first.id !== '') {
+            return first.id;
+        }
+        throw new Error('Сначала создай пространство.');
+    },
+
+    openChannelSettingsCreate() {
+        const spaceId = this.resolveSpaceIdForNewChannel();
         baseStore.setState(s => ({
-            ui: { ...s.ui, channelSettingsChannelId: null, channelSettingsCreate: true },
+            ui: {
+                ...s.ui,
+                channelSettingsChannelId: null,
+                channelSettingsCreate: true,
+                channelSettingsCreateSpaceId: spaceId,
+            },
         }));
+    },
+
+    /**
+     * Переключить пространство в фильтре сайдбара (мультивыбор). Пустой фильтр = все каналы.
+     * @param {string} spaceId
+     */
+    toggleSidebarSpaceFilter(spaceId) {
+        if (typeof spaceId !== 'string' || spaceId === '') {
+            throw new Error('toggleSidebarSpaceFilter: spaceId обязателен.');
+        }
+        baseStore.setState(s => {
+            const prev = [...(s.ui.sidebarSpaceFilterIds ?? [])];
+            const i = prev.indexOf(spaceId);
+            if (i >= 0) {
+                prev.splice(i, 1);
+            } else {
+                prev.push(spaceId);
+            }
+            return { ui: { ...s.ui, sidebarSpaceFilterIds: prev } };
+        });
+    },
+
+    /**
+     * Подпись справа от названия канала в строке: имя пространства или «Личный» для DM.
+     * @param {object} channel
+     * @returns {string}
+     */
+    channelRowMetaLabel(channel) {
+        if (!channel || typeof channel !== 'object') {
+            throw new Error('channelRowMetaLabel: channel обязателен.');
+        }
+        if (channel.type === 'direct') {
+            return 'Личный';
+        }
+        const sid = channel.space_id;
+        if (typeof sid !== 'string' || sid === '') {
+            throw new Error('channelRowMetaLabel: у канала нет space_id.');
+        }
+        const sp = baseStore.state.spaces.list.find(x => x.id === sid);
+        if (!sp) {
+            throw new Error(`channelRowMetaLabel: пространство ${sid} не найдено.`);
+        }
+        if (typeof sp.name === 'string' && sp.name !== '') {
+            return sp.name;
+        }
+        throw new Error('channelRowMetaLabel: у пространства нет имени.');
+    },
+
+    /**
+     * Topic-каналы для сайдбара: по умолчанию все; при непустом sidebarSpaceFilterIds — только выбранные пространства (ИЛИ).
+     * @returns {object[]}
+     */
+    getChannelsForSidebarList() {
+        const all = baseStore.state.channels.list;
+        const visible = (c) => !isHiddenSyncChannelName(c.name);
+        const topicInSpaces = all.filter(
+            c => c.type !== 'direct' && c.space_id && visible(c),
+        );
+        const filters = baseStore.state.ui.sidebarSpaceFilterIds ?? [];
+        if (!Array.isArray(filters) || filters.length === 0) {
+            return topicInSpaces;
+        }
+        const set = new Set(filters);
+        return topicInSpaces.filter(c => c.space_id && set.has(c.space_id));
+    },
+
+    /**
+     * Личные + topic-каналы с учётом фильтра сайдбара (для сетки выбора канала).
+     * @returns {object[]}
+     */
+    getChannelsForPickerList() {
+        const all = baseStore.state.channels.list;
+        const visible = (c) => !isHiddenSyncChannelName(c.name);
+        const direct = all.filter(c => c.type === 'direct' && visible(c));
+        const topic = this.getChannelsForSidebarList();
+        return [...direct, ...topic];
     },
 
     closeChannelSettings() {
         baseStore.setState(s => ({
-            ui: { ...s.ui, channelSettingsChannelId: null, channelSettingsCreate: false },
+            ui: {
+                ...s.ui,
+                channelSettingsChannelId: null,
+                channelSettingsCreate: false,
+                channelSettingsCreateSpaceId: null,
+            },
         }));
     },
 

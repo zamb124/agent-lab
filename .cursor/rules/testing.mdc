@@ -1,5 +1,5 @@
 ---
-description: "Правила тестирования flows и фикстуры, Playwright UI"
+description: "Правила тестирования flows, фикстуры, UI Lit (Web Test Runner), Playwright E2E"
 alwaysApply: false
 ---
 # Правила тестирования
@@ -25,7 +25,20 @@ alwaysApply: false
 
 **PytestCollectionWarning** (`cannot collect test class ... because it has a __init__`): доменные классы с префиксом `Test*` (например `TestRunner`, `TestCaseConfig`) не должны собираться как тесты — на классе задаётся **`__test__ = False`** (для Pydantic-моделей: **`__test__: ClassVar[bool] = False`**).
 
-Каталог **`tests/frontend/browser/`** существует как пакет под будущие Playwright-тесты; `mk/test.mk` вызывает `pytest tests/frontend/browser` — без каталога была ошибка «file or directory not found».
+Каталог **`tests/frontend/browser/`** — **E2E в браузере** через **pytest** (будущий Playwright): полное приложение, сервисы, сессии. `mk/test.mk` вызывает `pytest tests/frontend/browser`. Не смешивать с компонентными JS-тестами.
+
+### Компонентные UI-тесты (Lit)
+
+| | |
+|---|---|
+| Раннер | **@web/test-runner** + **@web/test-runner-playwright** (Chromium), конфиг **[`web-test-runner.config.mjs`](../../web-test-runner.config.mjs)** |
+| Файлы | **`tests/ui/**/*.test.js`**, хелперы — **`tests/ui/helpers/`** (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture` / `html` / `expect` из `@open-wc/testing`) |
+| Импорты | Как в приложении: `lit` через **node-resolve**, префиксы **`@platform/lib/`** и **`@platform/services/`** — через import map в конфиге (пути к `core/frontend/static/...`) |
+| Запуск | **`npm ci`** (первый раз / в CI), затем **`npm run test:ui`** или **`make test-ui`** (цель в [`mk/test.mk`](../../mk/test.mk)). В **`make test`** / **`docker-compose` tests-runner** **не входит** — нужны Node.js и зависимости из [`package.json`](../../package.json). |
+| Изоляция сервисов | После тестов вызывать **`teardownPlatformServices()`** — сброс [`ServiceRegistry.resetForUiTests()`](../../core/frontend/static/lib/services/ServiceRegistry.js). Не использовать в прод-коде. |
+| Логи | При `setupPlatformServices` возможны предупреждения PWA (404 для `sw.js` в тестовом origin) — ожидаемо без отдачи `sw.js` раннером. |
+
+**Граница:** `tests/ui` — изолированные компоненты и платформенные импорты; **`tests/frontend/browser`** — сценарии уровня продукта через pytest/Playwright.
 
 ---
 
@@ -299,6 +312,7 @@ uv run pytest tests/flows/api/test_a2a.py::TestA2A::test_message_send -v -s
 
 ## Внешние зависимости тестового окружения
 
+- **Компонентные UI-тесты (`npm run test:ui`):** образ **[`Dockerfile.test`](../../Dockerfile.test)** и контейнер **tests-runner** содержат только Python/uv. Прогон `tests/ui` в CI делается **отдельным job** с Node.js (`npm ci`, `npm run test:ui`). При ошибке запуска Chromium установить браузеры Playwright: `npx playwright install chromium` (на чистом Linux могут понадобиться системные пакеты из документации Playwright).
 - Фикстура `test_a2a_sample` — URL тестового A2A sample; в `docker-compose-test.yaml` сервис `test-a2a-agent` проброшен на порт **18052**.
 - `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push тестов.
 - Реальные вызовы LLM API в `test_llm_providers.py` пропускаются (`skip`) при 401/403 от внешнего API в CI.

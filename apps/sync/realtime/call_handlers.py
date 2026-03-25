@@ -14,6 +14,7 @@ from apps.sync.db.models import SyncCall, SyncCallParticipant
 from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.models.calls import CallParticipantRead, CallRead
+from apps.sync.models.channels import ChannelType
 from apps.sync.realtime.commands import (
     CallAcceptPayload,
     CallDeclinePayload,
@@ -32,6 +33,7 @@ from apps.sync.realtime.events import (
 )
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
+from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -70,6 +72,7 @@ async def handle_call_invite(
     cmd: CommandEnvelope,
     calls: CallRepository,
     channels: ChannelRepository,
+    user_repository: UserRepository | None = None,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
     """Создаёт звонок.
 
@@ -132,6 +135,22 @@ async def handle_call_invite(
     # Payload содержит initiator_user_id — клиент не показывает баннер инициатору.
     incoming = event_call_incoming(call_read)
     incoming.payload["initiator_user_id"] = cmd.actor_user_id
+
+    ch_entity = await channels.get(payload.channel_id)
+    if ch_entity is None:
+        raise ValueError(f"Канал {payload.channel_id} не найден.")
+
+    caller_display_name = cmd.actor_user_id
+    if user_repository is not None:
+        creator = await user_repository.get(cmd.actor_user_id)
+        if creator is not None:
+            caller_display_name = creator.name
+    incoming.payload["caller_display_name"] = caller_display_name
+    incoming.payload["incoming_channel_kind"] = ch_entity.type
+    if ch_entity.type != ChannelType.DIRECT.value:
+        raw_name = ch_entity.name
+        if isinstance(raw_name, str) and raw_name.strip() != "":
+            incoming.payload["channel_display_name"] = raw_name
 
     return call_read, [incoming]
 

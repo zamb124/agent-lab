@@ -65,6 +65,8 @@ P2P relay (call.signal):
 
 `call.incoming`, `call.accepted`, `call.declined`, `call.ended`, `call.signal`, `call.participant_joined`, `call.participant_left`
 
+К телу `call.incoming` (после `CallRead`) сервер добавляет: `initiator_user_id`, `caller_display_name` (имя из `UserRepository`), `incoming_channel_kind` (`direct` / `group` / `topic`), для не-direct при непустом имени — `channel_display_name`. Клиент баннера: заголовок через `SyncStore.channelDisplayTitle` если канал уже в store, иначе подсказки с сервера.
+
 Все события доставляются через `notification_manager.publish(user_id, ...)` → `platform:notifications` Redis → `/ws/notifications`.
 
 ## REST API

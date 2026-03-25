@@ -700,13 +700,13 @@ export class ChatView extends PlatformElement {
         const settingsChannel = typeof settingsChannelId === 'string' && settingsChannelId !== ''
             ? this._channels.list.find(c => c.id === settingsChannelId) ?? null
             : null;
-        const selectedSpaceId = this._chat.selectedSpaceId;
+        const createSpaceId = this._ui.channelSettingsCreateSpaceId;
         const channelCreateDraft = channelSettingsCreate
             ? {
                 id: null,
                 type: 'topic',
-                space_id: typeof selectedSpaceId === 'string' && selectedSpaceId !== ''
-                    ? selectedSpaceId
+                space_id: typeof createSpaceId === 'string' && createSpaceId !== ''
+                    ? createSpaceId
                     : null,
                 name: '',
                 avatar_url: null,

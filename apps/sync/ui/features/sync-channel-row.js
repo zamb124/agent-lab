@@ -267,7 +267,7 @@ export class SyncChannelRow extends PlatformElement {
                     <div class="nav-item-inner">
                         <div class="nav-item-title-row">
                             <span class="nav-item-label">${title}</span>
-                            <span class="nav-item-type">${ch.type}</span>
+                            <span class="nav-item-type">${SyncStore.channelRowMetaLabel(ch)}</span>
                         </div>
                         ${sec.text
                             ? html`<span class="nav-item-preview ${sec.isTyping ? 'is-typing' : ''}">${sec.text}</span>`

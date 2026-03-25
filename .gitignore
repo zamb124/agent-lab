@@ -4,6 +4,7 @@
 artifacts/*
 .env
 .venv
+node_modules/
 
 # SGR Deep Research
 sgr-service/.venv/

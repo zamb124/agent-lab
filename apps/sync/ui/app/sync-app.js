@@ -385,12 +385,26 @@ export class SyncApp extends PlatformApp {
             if (p.initiator_user_id && p.initiator_user_id === myId) return;
             if (this._activeCall?.call_id === p.call_id) return;
             const channel = SyncStore.state.channels.list.find(c => c.id === p.channel_id);
+            const names = this._buildNamesMap();
+            let channelName;
+            if (channel) {
+                channelName = SyncStore.channelDisplayTitle(channel);
+            } else if (typeof p.channel_display_name === 'string' && p.channel_display_name.trim() !== '') {
+                channelName = p.channel_display_name;
+            } else if (p.incoming_channel_kind === 'direct' && typeof p.caller_display_name === 'string') {
+                channelName = p.caller_display_name;
+            } else {
+                channelName = p.channel_id;
+            }
+            const callerName = (typeof p.caller_display_name === 'string' && p.caller_display_name !== '')
+                ? p.caller_display_name
+                : (names[p.created_by_user_id] ?? p.created_by_user_id);
             this._incomingCall = {
                 call_id: p.call_id,
                 call_type: p.call_type,
                 channel_id: p.channel_id,
-                caller_name: p.created_by_user_id,
-                channel_name: channel?.name ?? p.channel_id,
+                caller_name: callerName,
+                channel_name: channelName,
             };
             return;
         }

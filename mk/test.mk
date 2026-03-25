@@ -1,4 +1,4 @@
-.PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit
+.PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit test-ui
 
 WORKERS ?= 3
 
@@ -21,6 +21,12 @@ test-unit: test-up
 test-browser: test-up
 	@echo "Запуск browser тестов (последовательно)..."
 	uv run pytest tests/frontend/browser -v --timeout=180
+
+# Компонентные UI-тесты (Lit, Web Test Runner; Node, без Docker-стека pytest)
+test-ui:
+	@echo "Запуск компонентных UI-тестов (npm run test:ui)..."
+	npm ci
+	npm run test:ui
 
 # Полный запуск: unit параллельно -> retry упавших -> browser
 test: test-up

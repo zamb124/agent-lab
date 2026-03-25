@@ -109,7 +109,7 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 
 **Realtime `channel.member_added`:** Redis `sync.realtime.events`, WS broadcast; UI `sync-app.js` — если `added_user_id` совпадает с текущим пользователем, перезагрузка списка каналов.
 
-**Скрытые каналы встреч (имя с префикса `_`):** в списке API канал остаётся, в UI сайдбар и channel-picker скрывают topic-каналы, у которых `name` начинается с `_` (`SyncStore.isHiddenSyncChannelName`, фильтр в `getChannelsForSpace`). Создание без выбранного канала: `chat-view.js` — канал `_meet_{случайная_строка}`, затем `call.invite`. Заголовок: «Встреча», кнопка настроек канала не показывается. Пересылка в другой канал — скрытые не в списке назначения.
+**Скрытые каналы встреч (имя с префикса `_`):** в списке API канал остаётся, в UI сайдбар и channel-picker скрывают topic-каналы, у которых `name` начинается с `_` (`SyncStore.isHiddenSyncChannelName`, те же списки что `getChannelsForSidebarList` / `getChannelsForPickerList`). Создание без выбранного канала: `chat-view.js` — канал `_meet_{случайная_строка}`, затем `call.invite`. Заголовок: «Встреча», кнопка настроек канала не показывается. Пересылка в другой канал — скрытые не в списке назначения.
 
 **Пространства (GET /spaces):** все пространства компании (`SpaceRepository.list_all`), не только созданные текущим пользователем. После `spaces.create` публикуется **`space.created`** — UI `sync-app.js` вызывает `loadSpaces` + `sanitizeChatSelectionAfterLoad`, иначе открытые вкладки других пользователей не подтягивают новое пространство без перезагрузки страницы.
 
@@ -144,13 +144,12 @@ apps/sync/ui/
     sync-api.service.js   # extends BaseService, /sync/api/v1/*
     sync-ws.service.js    # WebSocket к /sync/ws, cookie auth, reconnect/backoff
   features/
-    sync-sidebar.js       # platform-sidebar: секции Личные / Пространства / Каналы; импортирует строки ниже
+    sync-sidebar.js       # Личные (аккордеон); пространства — горизонтальные теги (мультифильтр `toggleSidebarSpaceFilter`, пустой = все topic) + `.add-btn`; каналы — `getChannelsForSidebarList` + тот же `.add-btn`
     sync-direct-member-row.js  # участник компании — открытие DM (аватар, онлайн, превью/presence/печатает)
-    sync-space-row.js     # пространство в списке (аватар, имя; пара с row-gear)
-    sync-channel-row.js   # канал (аватар, название, тип, превью/печатает): сайдбар и модалка пересылки; `SyncStore.channelDisplayTitle`
+    sync-channel-row.js   # канал (аватар, название, метка `channelRowMetaLabel`, превью/печатает): сайдбар и модалка пересылки; `SyncStore.channelDisplayTitle`
     utils/sync-hue.js     # `hueFromString` для инициалов аватаров в строках sync
     chat-view.js          # header (аватар/иконка: direct peer, канал, space или folder) + channel-picker | message-list + composer; channel-settings-modal (createMode); пересылка — `getForwardDestinationChannels` + sync-channel-row
-    channel-picker.js     # сетка каналов
+    channel-picker.js     # сетка каналов: `getChannelsForPickerList` (личные + topic с тем же фильтром, что сайдбар)
     message-list.js       # список сообщений, автоскролл, фильтр по треду, scrollToMessageId; превью ответа и закрепы — переход к сообщению + SyncStore.flashMessageHighlight
     message-bubble.js     # контент, ПКМ-меню, реакции, reply/edit/delete/forward/pin/select; удаление — анимация разрушения, затем scheduleMessageRemovalAfterDeleteAnimation; `file/image` и `mock/image` — кнопка скачивания поверх превью (правый верхний угол), `file/document` — карточка со ссылкой скачивания
     message-context-menu.js
@@ -179,6 +178,7 @@ apps/sync/ui/
 - Подзаголовок шапки DM: печать или `getPeerPresenceSubtitle` (не сырой `direct`). Сайдбар списка каналов/личных: та же логика печати vs превью (см. выше).
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
 - Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
+- Сайдбар «Каналы» и сетка `channel-picker`: `ui.sidebarSpaceFilterIds` (persist) — мультивыбор пространств; пустой массив = все topic-каналы; иначе фильтр **ИЛИ**. Метка справа в строке — `channelRowMetaLabel` (имя пространства или «Личный»). Создание канала: `openChannelSettingsCreate` фиксирует `channelSettingsCreateSpaceId` через `resolveSpaceIdForNewChannel` (одно пространство в фильтре, иначе `selectedSpaceId` / первое пространство; при нескольких выбранных тегах — `Error` до открытия модалки).
 - Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`; для direct `spaceId` — `null`, иначе список сообщений не подгрузится
 - После `loadSpaces` + `loadChannels` вызывать `SyncStore.sanitizeChatSelectionAfterLoad()`: в persist хранится `selectedSpaceId` без привязки к пользователю — если у текущего юзера нет topic-каналов в выбранном пространстве, список «Каналы» пустой; санитайз переключает пространство на первое, где есть каналы пользователя (или сбрасывает, если только direct)
 - `loadSpaces` / `loadChannels` / `loadCompanyMembers`: при ошибке запроса сбрасывать `loading: false`, иначе вечный «Загрузка…»
