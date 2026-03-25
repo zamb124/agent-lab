@@ -10,13 +10,14 @@ from tests.ui.scenario_doc import ScenarioRecorder
 
 
 @pytest.mark.scenario(
+    service="sync",
+    tag="spaces",
     title="Sync: создание пространства",
     description=(
         "Пользователь открывает Sync, нажимает «+» у раздела «Пространства», "
         "вводит название и описание и подтверждает создание."
     ),
 )
-@pytest.mark.scenario_tag("sync")
 @pytest.mark.asyncio
 @pytest.mark.e2e
 @pytest.mark.timeout(120)

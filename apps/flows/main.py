@@ -171,6 +171,7 @@ app = create_service_app(
     title="Humanitec Flows",
     description="Сервис flows: конфигурации, runtime и A2A",
     version="2.0.0",
+    mount_repo_mkdocs=False,
 )
 
 # Документация (статические файлы mkdocs)

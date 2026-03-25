@@ -11,9 +11,20 @@ theme:
   name: material
   language: ru
   palette:
-    - scheme: slate
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
       primary: custom
       accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Переключить на тёмную тему
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Переключить на светлую тему
   features:
     - navigation.tracking
     - navigation.tabs
@@ -138,7 +149,11 @@ plugins:
             Платежи: Payments
             Интернационализация: Internationalization
             Переменные: Variables
+            Пользовательские инструкции: User Scenarios
+            Общее: General
+            Пространства: Spaces
             Сценарии (E2E, автогенерация): E2E scenarios (auto)
+            Пользовательские инструкции: User guides
 
 nav:
   - Главная: index.md

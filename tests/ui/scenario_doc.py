@@ -14,15 +14,31 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOCS_SCENARIOS = _REPO_ROOT / "docs" / "scenarios"
 _ENV_DISABLE = "UI_SCENARIO_DOCS"
 
+# Папка по умолчанию при отсутствии tag: docs/scenarios/<service>/general/<slug>/
+DEFAULT_SCENARIO_TAG = "general"
+
+_SEGMENT_RE = re.compile(r"^[a-z][a-z0-9_\-]{0,63}$")
+
 
 def _slug_from_node(node_id: str) -> str:
-    """Уникальная папка: файл + имя теста (без коллизий)."""
+    """Уникальная папка теста: файл + имя теста (без коллизий)."""
     if "::" in node_id:
         file_part, name = node_id.split("::", 1)
         stem = Path(file_part).stem
         safe = re.sub(r"[^\w\-]+", "_", f"{stem}__{name}", flags=re.UNICODE)
         return safe.strip("_")
     return re.sub(r"[^\w\-]+", "_", node_id, flags=re.UNICODE).strip("_")
+
+
+def _normalize_segment(name: str, field: str) -> str:
+    s = (name or "").strip().lower()
+    if not s:
+        raise ValueError(f"pytest.mark.scenario: пустой {field}")
+    if not _SEGMENT_RE.match(s):
+        raise ValueError(
+            f"pytest.mark.scenario: {field}={name!r} — допустимы латиница, цифры, _, - (сегмент пути MkDocs)"
+        )
+    return s
 
 
 @dataclass
@@ -33,11 +49,12 @@ class _StepRecord:
 
 @dataclass
 class ScenarioRecorder:
-    """Накапливает шаги и скриншоты, в finalize пишет README.md под docs/scenarios."""
+    """Накапливает шаги и скриншоты; в finalize пишет README под docs/scenarios/<service>/<tag>/<slug>/."""
 
     title: str
     description: str
-    tag: str | None
+    service: str
+    tag: str
     slug: str
     out_dir: Path
     steps: list[_StepRecord] = field(default_factory=list)
@@ -45,13 +62,29 @@ class ScenarioRecorder:
     @classmethod
     def from_pytest_node(cls, node) -> ScenarioRecorder:
         m = node.get_closest_marker("scenario")
-        title: str | None = None
-        description = ""
-        if m is not None:
-            title = m.kwargs.get("title")
-            if title is None and m.args:
-                title = str(m.args[0])
-            description = (m.kwargs.get("description") or "").strip()
+        if m is None:
+            raise ValueError("ScenarioRecorder требует @pytest.mark.scenario(...) на тесте")
+
+        raw_service = m.kwargs.get("service")
+        if raw_service is None:
+            raise ValueError(
+                'Укажите сервис: @pytest.mark.scenario(service="sync", ...) '
+                "(sync | flows | crm | rag | frontend — сегмент пути и группа в MkDocs)"
+            )
+        service = _normalize_segment(str(raw_service), "service")
+
+        raw_tag = m.kwargs.get("tag")
+        if raw_tag is None or not str(raw_tag).strip():
+            tag = DEFAULT_SCENARIO_TAG
+        else:
+            tag = _normalize_segment(str(raw_tag), "tag")
+
+        title: str | None = m.kwargs.get("title")
+        if title is not None:
+            title = str(title).strip() or None
+        if title is None and m.args:
+            title = str(m.args[0]).strip() or None
+        description = (m.kwargs.get("description") or "").strip()
 
         doc = inspect.getdoc(node.function)
         if doc:
@@ -66,25 +99,13 @@ class ScenarioRecorder:
         if not title:
             title = node.name.replace("test_", "").replace("_", " ").strip().title() or node.name
 
-        tag_m = node.get_closest_marker("scenario_tag")
-        tag: str | None = None
-        if tag_m is not None:
-            if tag_m.args:
-                tag = str(tag_m.args[0])
-            else:
-                tag = tag_m.kwargs.get("tag")
-                if tag is not None:
-                    tag = str(tag)
-
         slug = _slug_from_node(node.nodeid)
-        base = _DOCS_SCENARIOS
-        if tag:
-            base = base / tag
-        out_dir = base / slug
+        out_dir = _DOCS_SCENARIOS / service / tag / slug
 
         return cls(
             title=title,
             description=description,
+            service=service,
             tag=tag,
             slug=slug,
             out_dir=out_dir,

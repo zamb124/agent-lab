@@ -10,13 +10,13 @@ from tests.ui.scenario_doc import ScenarioRecorder
 
 
 @pytest.mark.scenario(
+    service="sync",
     title="Sync: загрузка оболочки чата",
     description=(
         "После входа под системным пользователем открывается SPA Sync; "
         "на экране отображается корневой элемент приложения (sync-app)."
     ),
 )
-@pytest.mark.scenario_tag("sync")
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_sync_chat_shell(

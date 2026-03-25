@@ -93,6 +93,8 @@ def create_service_app(
     openapi_url: str = "/openapi.json",
     include_auth_middleware: bool = True,
     include_crud_routers: bool = True,
+    mount_repo_mkdocs: bool = True,
+    mkdocs_gateway_prefix: Optional[str] = None,
 ) -> FastAPI:
     """
     Создает FastAPI приложение для сервиса.
@@ -113,6 +115,8 @@ def create_service_app(
         docs_url, redoc_url, openapi_url: Пути для документации
         include_auth_middleware: Включать ли AuthMiddleware
         include_crud_routers: Включать ли автоматические CRUD роутеры
+        mount_repo_mkdocs: Смонтировать MkDocs из корня репозитория ``site/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
+        mkdocs_gateway_prefix: Если задан (например ``frontend``), дублировать документацию на ``/{prefix}/documentation/`` за ingress.
         
     Returns:
         Настроенное FastAPI приложение
@@ -291,7 +295,16 @@ def create_service_app(
         for mount_path, directory, name in static_mounts:
             if Path(directory).exists():
                 app.mount(mount_path, StaticFiles(directory=directory), name=name)
-    
+
+    if mount_repo_mkdocs:
+        from core.frontend.mkdocs_mount import mount_mkdocs_documentation
+
+        mount_mkdocs_documentation(
+            app,
+            project_root,
+            gateway_prefix=mkdocs_gateway_prefix,
+        )
+
     # Health endpoints
     @app.get("/health")
     @app.get(f"/{service_name}/health")

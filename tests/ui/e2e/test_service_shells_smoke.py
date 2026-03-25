@@ -10,10 +10,10 @@ from tests.ui.scenario_doc import ScenarioRecorder
 
 
 @pytest.mark.scenario(
+    service="flows",
     title="Flows: оболочка example_react",
     description="Проверка отображения flows-app на демо-маршруте после авторизации.",
 )
-@pytest.mark.scenario_tag("flows")
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_flows_shell_loads(
@@ -28,10 +28,10 @@ async def test_flows_shell_loads(
 
 
 @pytest.mark.scenario(
+    service="rag",
     title="RAG: оболочка сервиса",
     description="Доступ к RAG UI на system.localhost после входа и маппинга субдомена.",
 )
-@pytest.mark.scenario_tag("rag")
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_rag_shell_loads(
@@ -46,10 +46,10 @@ async def test_rag_shell_loads(
 
 
 @pytest.mark.scenario(
+    service="crm",
     title="CRM: оболочка записной книжки",
     description="Доступ к CRM UI на system.localhost после входа.",
 )
-@pytest.mark.scenario_tag("crm")
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_crm_shell_loads(
@@ -64,10 +64,10 @@ async def test_crm_shell_loads(
 
 
 @pytest.mark.scenario(
+    service="frontend",
     title="Frontend: корневая оболочка платформы",
     description="Главная оболочка Humanitec на порту frontend-сервиса.",
 )
-@pytest.mark.scenario_tag("frontend")
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_frontend_shell_loads(

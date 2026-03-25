@@ -46,6 +46,7 @@ app = create_service_app(
     version="1.0.0",
     api_version=None,
     include_crud_routers=False,
+    mkdocs_gateway_prefix="frontend",
 )
 
 # Монтирование core/frontend (общая библиотека) - СНАЧАЛА монтируем статику!
@@ -67,25 +68,6 @@ if ui_path.exists():
         name="frontend-ui"
     )
     logger.info(f"✅ Frontend UI: {ui_path}")
-
-_mkdocs_site = Path(__file__).resolve().parent.parent.parent / "site"
-if _mkdocs_site.is_dir():
-    app.mount(
-        "/documentation",
-        StaticFiles(directory=str(_mkdocs_site), html=True),
-        name="mkdocs-documentation",
-    )
-    app.mount(
-        "/frontend/documentation",
-        StaticFiles(directory=str(_mkdocs_site), html=True),
-        name="mkdocs-documentation-frontend-prefix",
-    )
-    logger.info(f"Документация MkDocs: GET /documentation -> {_mkdocs_site}")
-else:
-    logger.warning(
-        "Каталог site/ не найден (выполните `make doc` или `uv run mkdocs build`), "
-        "URL /documentation недоступен"
-    )
 
 # Удаляем дефолтный root endpoint от фабрики - ПОСЛЕ монтирования статики
 # (он возвращает {"service": "core", "version": "1.0.0", "status": "running"})

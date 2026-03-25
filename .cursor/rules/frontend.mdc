@@ -58,6 +58,8 @@ core/frontend/static/
 
 **Версия деплоя в сайдбаре:** `platform-deployment-version` (`lib/components/platform-deployment-version.js`) запрашивает `GET {base-url}/health`, читает `deployment_version` из ответа (поле выставляет бэкенд из `SERVER__DEPLOYMENT_VERSION`). Атрибут `base-url` как у `getBaseUrl()` (`/frontend`, `/flows`, …). В футере под блоком пользователя — атрибут `footer` (узкая строка по центру, не в одном ряду с `platform-user`).
 
+**Меню пользователя (`platform-user.js`):** пункт «Документация» (иконка `book-open`) открывает в новой вкладке `GET /documentation/` на том же origin. Сборка MkDocs из корня репо (`site/`) подключается в **`create_service_app`** (`mount_repo_mkdocs=True` по умолчанию, `mkdocs_gateway_prefix` только у frontend = `"frontend"` для `/frontend/documentation/`). У **flows** задано `mount_repo_mkdocs=False`, локальный сайт — `apps/flows/site` в `flows/main.py`.
+
 **Панель уведомлений:** `platform-notification-manager` — список открывается `position: fixed` с координатами от кнопки (`getBoundingClientRect`), `z-index: var(--z-notification-panel, 30000)`, чтобы не уходить под соседний `platform-island` (flex + порядок DOM). Клик вне компонента закрывает панель.
 
 **Стек z-index для модалок и полноэкранных слоёв:** `core/frontend/static/lib/utils/modal-z-stack.js` — `nextModalLayerZIndex()` даёт монотонно растущее значение выше `--z-notification-panel` / `--z-modal` и т.д. При **каждом** открытии модалки выставлять на хосте `--platform-modal-layer-z` (делают `GlassModal`, `PlatformLightModal`, `auth-modal`, `company-modal`). Полноэкранные оверлеи вне этого набора (например `call-overlay`, `call-incoming` в Sync) при монтировании тоже вызывают `nextModalLayerZIndex()` и ту же CSS-переменную. Токен `--z-notification-panel` задан в `tokens.css`.
@@ -73,7 +75,7 @@ apps/{service}/ui/
 
 **Статика (vendor, same-origin):** Fira Sans / Fira Sans Condensed — `assets/fonts/fira-sans.css`, `fira-sans-condensed.css` и каталоги `assets/fonts/fira-sans/files/`, `fira-sans-condensed/files/` (лендинг `apps/frontend/ui/index.html`). LiveKit SDK — `assets/js/livekit/` (`@livekit/client` в Sync). Mermaid — `assets/js/mermaid/mermaid.min.js` (HTML схем flow в `apps/flows/src/api/registry.py`); для MkDocs дублируется в `docs/javascripts/mermaid.min.js`.
 
-**Документация MkDocs в UI:** после `mkdocs build` (или `make doc`) каталог `site/` монтируется в `apps/frontend/main.py` на пути `/documentation` и `/frontend/documentation` (статика, публичный доступ в `route_config`). Ссылки в лендинге и сайдбарах ведут на `/documentation`. Для путей с `context_type=anonymous` неизвестный субдомен в `Host` не даёт 404: `CompanyResolver` возвращает контекст без компании (`core/middleware/auth/company_resolver.py`), чтобы документация открывалась и на `*.lvh.me`, если slug ещё не в БД.
+**Документация MkDocs в UI:** после `mkdocs build` (или `make doc`) каталог `site/` монтируется в `apps/frontend/main.py` на `/documentation/` и `/frontend/documentation/`; без завершающего `/` отдаются редиректы 307 на URL со слешем (иначе `StaticFiles` на точном пути mount возвращал 404). Публичный доступ в `route_config`. Для `context_type=anonymous` неизвестный субдомен в `Host` не даёт 404: `CompanyResolver` (`core/middleware/auth/company_resolver.py`).
 
 ---
 

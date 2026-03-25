@@ -282,6 +282,12 @@ export class PlatformUser extends PlatformElement {
         window.location.href = `/${service}/settings`;
     }
 
+    _openDocumentation() {
+        this._menuOpen = false;
+        const url = new URL('/documentation/', window.location.origin).href;
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
     _toggleTheme() {
         this.theme?.toggle();
     }
@@ -362,6 +368,11 @@ export class PlatformUser extends PlatformElement {
                         <button class="menu-item" @click=${this._openSettings}>
                             <platform-icon name="settings" size="18" class="menu-icon"></platform-icon>
                             <span>Настройки</span>
+                        </button>
+                        
+                        <button class="menu-item" @click=${this._openDocumentation}>
+                            <platform-icon name="book-open" size="18" class="menu-icon"></platform-icon>
+                            <span>Документация</span>
                         </button>
                         
                         <button class="menu-item" @click=${this._toggleTheme}>

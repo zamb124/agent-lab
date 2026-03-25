@@ -56,6 +56,7 @@ if crm_ui_path.exists():
     app.mount("/crm/ui/static", StaticFiles(directory=crm_ui_path, html=True), name="crm_ui")
     logger.info(f"CRM UI смонтирован: {crm_ui_path}")
 
+
 @app.get("/crm")
 @app.get("/crm/")
 @app.get("/crm/{path:path}")

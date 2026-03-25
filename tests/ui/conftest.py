@@ -8,6 +8,7 @@ from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from tests.ui.apps import SERVICE_UI_REGISTRY
 from tests.ui.browser_auth import add_auth_token_cookie
+from tests.ui.click_highlight import install_click_highlight_on_context
 from tests.ui.harness import AppUI
 from tests.ui.personas import ANONYMOUS_UI_USER, UiPersona, UiTestUser, ui_test_user_from_token
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -16,7 +17,7 @@ from tests.ui.subdomain_setup import ensure_ui_subdomain_mappings
 
 @pytest_asyncio.fixture
 async def scenario(request: pytest.FixtureRequest) -> ScenarioRecorder:
-    """Собирает шаги и скриншоты; по завершении теста пишет `docs/scenarios/.../README.md`."""
+    """Собирает шаги и скриншоты; пишет `docs/scenarios/<service>/<tag>/<slug>/README.md` (см. `@pytest.mark.scenario`)."""
     rec = ScenarioRecorder.from_pytest_node(request.node)
     yield rec
     rec.finalize()
@@ -54,6 +55,7 @@ async def _ui_subdomain_mappings(
 async def page(_browser_session: Browser) -> Page:
     """Браузер без cookie — редирект на логин для защищённых SPA."""
     context: BrowserContext = await _browser_session.new_context()
+    await install_click_highlight_on_context(context)
     p = await context.new_page()
     yield p
     await context.close()
@@ -67,6 +69,7 @@ async def ui_page_anonymous(page: Page) -> Page:
 
 async def _authenticated_page(browser: Browser, token: str) -> tuple[Page, BrowserContext]:
     context = await browser.new_context()
+    await install_click_highlight_on_context(context)
     await add_auth_token_cookie(context, token)
     page = await context.new_page()
     return page, context

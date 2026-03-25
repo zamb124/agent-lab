@@ -25,7 +25,7 @@ alwaysApply: false
 
 **PytestCollectionWarning** (`cannot collect test class ... because it has a __init__`): доменные классы с префиксом `Test*` (например `TestRunner`, `TestCaseConfig`) не должны собираться как тесты — на классе задаётся **`__test__ = False`** (для Pydantic-моделей: **`__test__: ClassVar[bool] = False`**).
 
-**E2E UI (продукт):** сценарии **`tests/ui/e2e/`**, фикстуры и реестр — **`tests/ui/`** (pytest + Playwright, `tests/fixtures/services.py`, cookie `auth_token`, `ui_page_*`). Запуск: **`make test-ui`**. Не смешивать с компонентными JS-тестами.
+**E2E UI (продукт):** сценарии **`tests/ui/e2e/`**, фикстуры и реестр — **`tests/ui/`** (pytest + Playwright, `tests/fixtures/services.py`, cookie `auth_token`, `ui_page_*`). Запуск: **`make test-ui`**. Не смешивать с компонентными JS-тестами. На всех контекстах из `tests/ui/conftest.py` вешается **`install_click_highlight_on_context`**: при каждом клике цель получает зелёную рамку (`outline`), чтобы на скриншотах `scenario.step` было видно, куда кликнули (см. **`tests/ui/click_highlight.py`**).
 
 ### Компонентные UI-тесты (Lit)
 
@@ -158,8 +158,8 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
   - `ui_page_company2_member` — company2, member
   - `page` или `ui_page_anonymous` — без `auth_token` (редирект на логин для защищённых SPA)
 - **Метаданные для assert:** `ui_user_system`, `ui_user_system_member`, `ui_user_company2`, `ui_user_company2_member`, `ui_user_anonymous` (`UiTestUser` из `tests/ui/personas.py`).
-- **Инструкции для пользователей (Markdown + скриншоты):** фикстура `scenario` (`tests/ui/scenario_doc.py`). Заголовок и текст — маркер `@pytest.mark.scenario(title="...", description="...")` или первая строка/остаток docstring теста. Опционально `@pytest.mark.scenario_tag("sync")` → вывод в `docs/scenarios/<тег>/<slug>/`. Шаги: `await scenario.step("Подпись шага", page)` (скриншот) или без `page` — только текст. Итог: `README.md` и `screenshots/*.png`. Отключить запись: `UI_SCENARIO_DOCS=0`.
-- **MkDocs:** раздел навигации «Сценарии (E2E, автогенерация)» подставляется хуком `mkdocs_hooks.py` при сборке (`mkdocs build`, `make doc`) из всех `docs/scenarios/**/README.md`; в `mkdocs.yml` сценарии не перечисляются.
+- **Инструкции для пользователей (Markdown + скриншоты):** фикстура `scenario` (`tests/ui/scenario_doc.py`). Обязательно `@pytest.mark.scenario(service="sync"|"flows"|...)`; опционально `tag="..."` (по умолчанию `general`). Путь: `docs/scenarios/<service>/<tag>/<slug>/`. Заголовок — `title`/`description` в маркере или docstring теста. Шаги: `await scenario.step("Подпись", page)` (скриншот) или без `page`. Отключить запись: `UI_SCENARIO_DOCS=0`.
+- **MkDocs:** хук `mkdocs_hooks.py` — навигация **Сервис → Тег → сценарии** из `docs/scenarios/<service>/<tag>/**/README.md`; в `mkdocs.yml` сценарии не перечисляются.
 
 ## UI компоненты и страница `/{service}/test`
 

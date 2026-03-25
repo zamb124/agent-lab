@@ -1,1 +1,1 @@
-"""E2E UI: движок (`AppUI`, фикстуры, реестр), генерация инструкций `scenario_doc`. Сценарии — `tests.ui.e2e`."""
+"""E2E UI: движок (`AppUI`, фикстуры, реестр), `scenario_doc` → docs/scenarios/<service>/<tag>/<slug>/. Сценарии — tests.ui.e2e."""

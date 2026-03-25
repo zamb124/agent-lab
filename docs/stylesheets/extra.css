@@ -1,0 +1,31 @@
+/* Кастомные primary/accent для светлой и тёмной схемы (переключатель в шапке). */
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"] {
+  --md-primary-fg-color: hsl(230, 58%, 38%);
+  --md-primary-fg-color--light: hsl(230, 52%, 48%);
+  --md-primary-fg-color--dark: hsl(230, 60%, 30%);
+  --md-primary-bg-color: hsla(230, 22%, 96%, 1);
+  --md-primary-bg-color--light: hsla(230, 22%, 96%, 0.68);
+  --md-primary-bg-color--lighter: hsla(230, 22%, 96%, 0.28);
+}
+
+[data-md-color-scheme="slate"][data-md-color-primary="custom"] {
+  --md-primary-fg-color: hsl(230, 52%, 72%);
+  --md-primary-fg-color--light: hsl(230, 48%, 78%);
+  --md-primary-fg-color--dark: hsl(230, 55%, 64%);
+  --md-primary-bg-color: hsla(230, 24%, 18%, 1);
+  --md-primary-bg-color--light: hsla(230, 24%, 18%, 0.54);
+  --md-primary-bg-color--lighter: hsla(230, 24%, 18%, 0.22);
+}
+
+[data-md-color-scheme="default"][data-md-color-accent="custom"] {
+  --md-accent-fg-color: hsl(175, 55%, 38%);
+  --md-accent-bg-color: hsla(175, 100%, 94%, 1);
+  --md-accent-bg-color--light: hsla(175, 100%, 94%, 0.62);
+}
+
+[data-md-color-scheme="slate"][data-md-color-accent="custom"] {
+  --md-accent-fg-color: hsl(175, 48%, 58%);
+  --md-accent-bg-color: hsla(175, 35%, 18%, 1);
+  --md-accent-bg-color--light: hsla(175, 35%, 18%, 0.54);
+}
