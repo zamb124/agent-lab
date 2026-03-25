@@ -12,6 +12,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { AppEvents } from '../utils/types.js';
+import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import './platform-icon.js';
 
 export class PlatformUser extends PlatformElement {
@@ -22,6 +23,8 @@ export class PlatformUser extends PlatformElement {
         _menuOpen: { type: Boolean },
         _companySelectorOpen: { type: Boolean },
         _avatarBroken: { type: Boolean, state: true },
+        /** Необязательный тег сценария (docs/scenarios/<service>/<tag>/), если UI привязан к процессу */
+        documentationTag: { type: String },
     };
 
     constructor() {
@@ -32,6 +35,7 @@ export class PlatformUser extends PlatformElement {
         this._menuOpen = false;
         this._companySelectorOpen = false;
         this._avatarBroken = false;
+        this.documentationTag = null;
         this._boundRepositionMenu = this._syncCollapsedMenuPosition.bind(this);
         this._boundDocumentClick = (e) => this._handleDocumentClick(e);
     }
@@ -284,7 +288,11 @@ export class PlatformUser extends PlatformElement {
 
     _openDocumentation() {
         this._menuOpen = false;
-        const url = new URL('/documentation/', window.location.origin).href;
+        const tag =
+            typeof this.documentationTag === 'string' && this.documentationTag.trim()
+                ? this.documentationTag.trim()
+                : null;
+        const url = buildScenarioDocumentationUrl({ tag });
         window.open(url, '_blank', 'noopener,noreferrer');
     }
 

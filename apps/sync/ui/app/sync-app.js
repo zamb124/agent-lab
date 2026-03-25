@@ -82,6 +82,8 @@ export class SyncApp extends PlatformApp {
         this._typingPruneTimer = null;
         this._wsEverConnected = false;
         this._activeCallChannels = {};
+        /** id WS-команд call.hangup — ack тоже содержит CallRead с call_id, без фильтра открыл бы оверлей снова */
+        this._callHangupRequestIds = new Set();
     }
 
     setupStore() {
@@ -182,9 +184,13 @@ export class SyncApp extends PlatformApp {
             return;
         }
         if (typeof msg.ok === 'boolean' && typeof msg.id === 'string') {
+            if (this._callHangupRequestIds.delete(msg.id)) {
+                return;
+            }
             if (msg.ok) {
                 if (msg.result && msg.result.call_id) {
                     // call.invite вернул CallRead — открываем оверлей у инициатора.
+                    // call.hangup тоже возвращает call_id; такие ack снимаются выше по id (_callHangupRequestIds).
                     this._openCallOverlay(msg.result).catch(err => {
                         console.error('[calls] _openCallOverlay failed:', err);
                     });
@@ -529,6 +535,7 @@ export class SyncApp extends PlatformApp {
         if (!ws) return;
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        this._callHangupRequestIds.add(id);
         ws.sendJson({ id, type: 'call.hangup', payload: { call_id: callId } });
     }
 

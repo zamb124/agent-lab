@@ -100,7 +100,7 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 
 ### CallOverlay SFU (переподключение)
 
-После hangup `livekit-token` остаётся в атрибутах; в `updated()` без флага `_sfuSessionFinished` снова вызывался бы `_connectSFU()`. Флаг выставляют hangup, `RoomEvent.Disconnected`, `disconnectedCallback`. В `sync-app`: `call-ended` только снимает оверлей; `call-hangup-request` — одна отправка WS `call.hangup` (не дублировать с `call-ended`).
+После hangup `livekit-token` остаётся в атрибутах; в `updated()` без флага `_sfuSessionFinished` снова вызывался бы `_connectSFU()`. Флаг выставляют hangup, `RoomEvent.Disconnected`, `disconnectedCallback`. В `sync-app`: `call-ended` только снимает оверлей; `call-hangup-request` — одна отправка WS `call.hangup` (не дублировать с `call-ended`). Ack на `call.hangup` возвращает `CallRead` с `call_id` (как и `call.invite`); обработчик WS-ответов не должен снова вызывать `_openCallOverlay` для этого ack — иначе оверлей закрывается по `call-ended` и тут же открывается. Решение: помечать `id` исходящей команды `call.hangup` (`_callHangupRequestIds`) и при ack с этим `id` не открывать оверлей.
 
 Видеосетка строится из `_tiles` (по публикациям камеры и screen share на участника). События `LocalTrackPublished` / `LocalTrackUnpublished` обновляют сетку.
 

@@ -354,6 +354,7 @@ export class ChannelSettingsModal extends PlatformModal {
     }
 
     updated(changed) {
+        super.updated(changed);
         const ch = this.channel;
         const hasChannel = Boolean(
             ch && (this.createMode || (typeof ch.id === 'string' && ch.id !== '')),

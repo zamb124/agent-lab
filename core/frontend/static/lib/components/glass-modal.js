@@ -2,10 +2,13 @@
  * GlassModal - Базовый компонент модального окна
  * Apple Liquid Glass Design
  * Поддержка темной и светлой темы
+ *
+ * При открытии хост переносится в document.body: иначе предки с backdrop-filter
+ * ломают position:fixed, модалка встаёт в поток и двигает вёрстку.
+ * Общий modal.styles.js сюда не подмешиваем — там :host ломает разметку (flex + svg + оверлей).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import { modalStyles } from '../styles/shared/modal.styles.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import './platform-icon.js';
 import './platform-button.js';
@@ -23,23 +26,44 @@ export class GlassModal extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
-        modalStyles,
         css`
             :host {
-                display: contents;
+                display: none;
+                box-sizing: border-box;
             }
 
-            /* Overlay */
-            .modal-overlay {
+            :host([open]) {
+                display: block;
                 position: fixed;
                 inset: 0;
-                background: rgba(0, 0, 0, 0.3);
-                backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
-                -webkit-backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
+                width: 100%;
+                max-width: none;
+                height: 100%;
+                max-height: none;
+                margin: 0;
+                padding: 0;
+                border: none;
+                z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
+            }
+
+            :host([data-portal]) {
+                left: 0;
+                top: 0;
+                right: 0;
+                bottom: 0;
+            }
+
+            .modal-overlay {
+                position: absolute;
+                inset: 0;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
+                padding: max(var(--space-3), env(safe-area-inset-top, 0px))
+                    max(var(--space-3), env(safe-area-inset-right, 0px))
+                    max(var(--space-3), env(safe-area-inset-bottom, 0px))
+                    max(var(--space-3), env(safe-area-inset-left, 0px));
+                box-sizing: border-box;
                 opacity: 0;
                 visibility: hidden;
                 transition: opacity var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out),
@@ -51,34 +75,45 @@ export class GlassModal extends PlatformElement {
                 visibility: visible;
             }
 
-            /* LIQUID GLASS Modal */
-            .modal {
+            .modal-scrim {
                 position: absolute;
+                inset: 0;
+                z-index: 0;
+                background: rgba(0, 0, 0, 0.3);
+                backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
+                -webkit-backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
+            }
+
+            .modal {
+                position: relative;
+                z-index: 1;
                 width: 90%;
-                max-height: 90vh;
+                max-width: min(500px, 100%);
+                max-height: min(90vh, 100dvh);
                 overflow-y: auto;
                 overflow-x: hidden;
                 border-radius: var(--radius-3xl, 28px);
                 padding: 0;
-                
-                background: var(--glass-solid-strong, rgba(40, 40, 64, 0.92));
+                box-sizing: border-box;
+
+                background: var(--glass-solid-strong, rgba(40, 40, 40, 0.92));
                 border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
-                
+
                 backdrop-filter: blur(var(--glass-blur-medium, 40px)) saturate(180%);
                 -webkit-backdrop-filter: blur(var(--glass-blur-medium, 40px)) saturate(180%);
-                
-                box-shadow: var(--glass-shadow-strong, 
+
+                box-shadow: var(--glass-shadow-strong,
                     0 16px 48px rgba(0, 0, 0, 0.4),
                     0 4px 16px rgba(0, 0, 0, 0.25));
-                
+
                 transform: translateY(16px) scale(0.96);
                 opacity: 0;
                 transition: transform var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth)),
-                            opacity var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out),
-                            width var(--duration-normal, 0.3s) ease,
-                            height var(--duration-normal, 0.3s) ease,
-                            max-width var(--duration-normal, 0.3s) ease,
-                            max-height var(--duration-normal, 0.3s) ease;
+                    opacity var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out),
+                    width var(--duration-normal, 0.3s) ease,
+                    height var(--duration-normal, 0.3s) ease,
+                    max-width var(--duration-normal, 0.3s) ease,
+                    max-height var(--duration-normal, 0.3s) ease;
             }
 
             :host([open]) .modal {
@@ -91,7 +126,6 @@ export class GlassModal extends PlatformElement {
                 user-select: none;
             }
 
-            /* Световой блик сверху */
             .modal::before {
                 content: '';
                 position: absolute;
@@ -109,7 +143,6 @@ export class GlassModal extends PlatformElement {
                 z-index: 1;
             }
 
-            /* Gradient shine overlay */
             .modal::after {
                 content: '';
                 position: absolute;
@@ -125,24 +158,22 @@ export class GlassModal extends PlatformElement {
                 z-index: 0;
             }
 
-            /* Sizes */
-            .modal.sm { max-width: 400px; }
-            .modal.md { max-width: 500px; }
-            .modal.lg { max-width: 640px; }
-            .modal.xl { max-width: 900px; }
-            .modal.full { 
-                max-width: 95vw; 
-                width: 95vw;
-                max-height: 95vh;
-                height: 90vh;
+            .modal.sm { max-width: min(400px, 100%); }
+            .modal.md { max-width: min(500px, 100%); }
+            .modal.lg { max-width: min(640px, 100%); }
+            .modal.xl { max-width: min(900px, 100%); }
+            .modal.full {
+                width: min(95vw, 100% - 2rem);
+                max-width: min(95vw, 100% - 2rem);
+                height: min(90vh, 100dvh - 2rem);
+                max-height: min(95vh, 100dvh - 2rem);
             }
 
-            /* Fullscreen mode */
             .modal.fullscreen {
-                max-width: 96vw !important;
-                width: 96vw !important;
-                max-height: 94vh !important;
-                height: 94vh !important;
+                width: min(96vw, 100vw - 1.5rem) !important;
+                max-width: min(96vw, 100vw - 1.5rem) !important;
+                height: min(94vh, 100dvh - 1.5rem) !important;
+                max-height: min(94vh, 100dvh - 1.5rem) !important;
                 border-radius: var(--radius-lg, 16px);
             }
 
@@ -156,6 +187,7 @@ export class GlassModal extends PlatformElement {
                 z-index: 2;
                 cursor: grab;
                 user-select: none;
+                flex-shrink: 0;
             }
 
             .modal-header:active {
@@ -212,13 +244,23 @@ export class GlassModal extends PlatformElement {
                 color: var(--text-primary, rgba(255, 255, 255, 0.95));
                 z-index: 2;
                 flex: 1;
+                min-height: 0;
                 overflow-y: auto;
                 padding: var(--space-4, 16px);
             }
 
             .modal.fullscreen .modal-content,
             .modal.full .modal-content {
-                height: calc(100% - 120px);
+                flex: 1;
+                min-height: 0;
+                height: auto;
+                max-height: none;
+            }
+
+            .modal.fullscreen {
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
             }
 
             .modal-actions {
@@ -228,6 +270,7 @@ export class GlassModal extends PlatformElement {
                 padding: var(--space-4, 16px);
                 padding-top: 0;
                 z-index: 2;
+                flex-shrink: 0;
             }
 
             .modal-actions:empty {
@@ -240,33 +283,31 @@ export class GlassModal extends PlatformElement {
                 width: 100%;
             }
 
-            /* Responsive - Tablet */
             @media (max-width: 768px) {
                 .modal {
                     width: 95%;
                     border-radius: var(--radius-2xl, 24px);
                 }
-                
+
                 .modal::before {
                     left: var(--space-3, 12px);
                     right: var(--space-3, 12px);
                 }
-                
+
                 .modal-header {
                     padding: var(--space-3, 12px) var(--space-3, 12px) 0 var(--space-3, 12px);
                 }
-                
+
                 .modal-content {
                     padding: var(--space-3, 12px);
                 }
-                
+
                 .modal-actions {
                     padding: var(--space-3, 12px);
                     padding-top: 0;
                 }
             }
 
-            /* Responsive - Mobile */
             @media (max-width: 480px) {
                 .modal {
                     border-radius: var(--radius-xl, 20px);
@@ -275,11 +316,11 @@ export class GlassModal extends PlatformElement {
                 .modal-header {
                     padding: var(--space-2, 8px) var(--space-2, 8px) 0 var(--space-2, 8px);
                 }
-                
+
                 .modal-content {
                     padding: var(--space-2, 8px);
                 }
-                
+
                 .modal-actions {
                     padding: var(--space-2, 8px);
                     padding-top: 0;
@@ -291,8 +332,7 @@ export class GlassModal extends PlatformElement {
                 }
             }
 
-            /* Light Theme */
-            :host-context([data-theme="light"]) .modal-overlay {
+            :host-context([data-theme="light"]) .modal-scrim {
                 background: rgba(100, 100, 120, 0.25);
                 backdrop-filter: blur(20px) saturate(120%);
                 -webkit-backdrop-filter: blur(20px) saturate(120%);
@@ -305,7 +345,7 @@ export class GlassModal extends PlatformElement {
                     rgba(248, 250, 252, 0.98) 100%
                 );
                 border: 1px solid rgba(0, 0, 0, 0.06);
-                box-shadow: 
+                box-shadow:
                     0 25px 60px rgba(0, 0, 0, 0.15),
                     0 10px 25px rgba(0, 0, 0, 0.08),
                     inset 0 1px 0 rgba(255, 255, 255, 1),
@@ -350,7 +390,16 @@ export class GlassModal extends PlatformElement {
                     transition-duration: 1ms !important;
                 }
             }
-        `
+
+            .modal-svg-hidden {
+                position: absolute;
+                width: 0;
+                height: 0;
+                overflow: hidden;
+                pointer-events: none;
+                visibility: hidden;
+            }
+        `,
     ];
 
     constructor() {
@@ -362,9 +411,17 @@ export class GlassModal extends PlatformElement {
         this._isDragging = false;
         this._position = { x: null, y: null };
         this._dragStart = { x: 0, y: 0 };
-        this._boundKeyHandler = this._handleKeyDown.bind(this);
         this._boundMouseMove = this._handleMouseMove.bind(this);
         this._boundMouseUp = this._handleMouseUp.bind(this);
+        this._boundEscape = this._handleEscape.bind(this);
+        /** @type {ParentNode | null} */
+        this._portalRestoreParent = null;
+        /** @type {ChildNode | null} */
+        this._portalRestoreNext = null;
+        /** @type {(() => void) | null} */
+        this._portalTransitionCleanup = null;
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        this._portalRestoreFallbackTimer = null;
     }
 
     showModal() {
@@ -376,7 +433,6 @@ export class GlassModal extends PlatformElement {
         this.open = false;
         this._isFullscreen = false;
         this._position = { x: null, y: null };
-        // Используем событие без всплытия чтобы не конфликтовать с другими обработчиками
         this.dispatchEvent(new CustomEvent('modal-closed', {
             bubbles: false,
             composed: true,
@@ -390,37 +446,37 @@ export class GlassModal extends PlatformElement {
         }
     }
 
+    _handleEscape(e) {
+        if (e.key === 'Escape' && this.open) {
+            this.close();
+        }
+    }
+
     _handleOverlayClick(e) {
         if (e.target === e.currentTarget) {
             this.close();
         }
     }
 
-    _handleKeyDown(e) {
-        if (e.key === 'Escape' && this.open) {
-            this.close();
-        }
-    }
-
     _handleMouseDown(e) {
         if (this._isFullscreen) return;
-        
-        const modal = this.shadowRoot.querySelector('.modal');
+
+        const modal = this.shadowRoot?.querySelector('.modal');
         if (!modal) return;
 
         this._isDragging = true;
         const rect = modal.getBoundingClientRect();
-        
+
         if (this._position.x === null) {
             this._position = {
                 x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2
+                y: rect.top + rect.height / 2,
             };
         }
-        
+
         this._dragStart = {
             x: e.clientX - this._position.x,
-            y: e.clientY - this._position.y
+            y: e.clientY - this._position.y,
         };
 
         document.addEventListener('mousemove', this._boundMouseMove);
@@ -429,10 +485,10 @@ export class GlassModal extends PlatformElement {
 
     _handleMouseMove(e) {
         if (!this._isDragging) return;
-        
+
         this._position = {
             x: e.clientX - this._dragStart.x,
-            y: e.clientY - this._dragStart.y
+            y: e.clientY - this._dragStart.y,
         };
         this.requestUpdate();
     }
@@ -446,23 +502,122 @@ export class GlassModal extends PlatformElement {
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
         if (changedProperties.has('open') && this.open) {
+            this._clearPortalCloseHooks();
             this.style.setProperty(
                 '--platform-modal-layer-z',
                 String(nextModalLayerZIndex()),
             );
+            this._attachPortalToBody();
         }
+    }
+
+    async getUpdateComplete() {
+        const complete = await super.getUpdateComplete();
+        if (this.open) {
+            this._attachPortalToBody();
+        } else if (this.parentNode === document.body) {
+            this._schedulePortalRestoreAfterCloseAnimation();
+        }
+        return complete;
+    }
+
+    _clearPortalCloseHooks() {
+        if (typeof this._portalTransitionCleanup === 'function') {
+            this._portalTransitionCleanup();
+            this._portalTransitionCleanup = null;
+        }
+        if (this._portalRestoreFallbackTimer !== null) {
+            clearTimeout(this._portalRestoreFallbackTimer);
+            this._portalRestoreFallbackTimer = null;
+        }
+    }
+
+    _attachPortalToBody() {
+        if (!this.open || this.parentNode === document.body) {
+            if (this.parentNode === document.body) {
+                this.setAttribute('data-portal', '');
+            }
+            return;
+        }
+        this._portalRestoreParent = this.parentNode;
+        this._portalRestoreNext = this.nextSibling;
+        document.body.appendChild(this);
+        this.setAttribute('data-portal', '');
+    }
+
+    _schedulePortalRestoreAfterCloseAnimation() {
+        this._clearPortalCloseHooks();
+        const overlay = this.shadowRoot?.querySelector('.modal-overlay');
+        if (!overlay) {
+            this._restorePortalToOriginalParent();
+            return;
+        }
+        const onTransitionEnd = (e) => {
+            if (e.target !== overlay) {
+                return;
+            }
+            if (e.propertyName !== 'opacity' && e.propertyName !== 'visibility') {
+                return;
+            }
+            overlay.removeEventListener('transitionend', onTransitionEnd);
+            this._portalTransitionCleanup = null;
+            this._restorePortalToOriginalParent();
+        };
+        overlay.addEventListener('transitionend', onTransitionEnd);
+        this._portalTransitionCleanup = () => {
+            overlay.removeEventListener('transitionend', onTransitionEnd);
+        };
+        this._portalRestoreFallbackTimer = setTimeout(() => {
+            this._portalRestoreFallbackTimer = null;
+            this._clearPortalCloseHooks();
+            if (!this.open && this.parentNode === document.body) {
+                this._restorePortalToOriginalParent();
+            }
+        }, 500);
+    }
+
+    _restorePortalToOriginalParent() {
+        if (this.open) {
+            return;
+        }
+        if (this.parentNode !== document.body) {
+            this._portalRestoreParent = null;
+            this._portalRestoreNext = null;
+            this.removeAttribute('data-portal');
+            return;
+        }
+        const parent = this._portalRestoreParent;
+        if (!parent || !parent.isConnected) {
+            this._portalRestoreParent = null;
+            this._portalRestoreNext = null;
+            this.removeAttribute('data-portal');
+            return;
+        }
+        const next = this._portalRestoreNext;
+        if (next && next.parentNode === parent) {
+            parent.insertBefore(this, next);
+        } else {
+            parent.appendChild(this);
+        }
+        this._portalRestoreParent = null;
+        this._portalRestoreNext = null;
+        this.removeAttribute('data-portal');
     }
 
     connectedCallback() {
         super.connectedCallback();
-        document.addEventListener('keydown', this._boundKeyHandler);
+        document.addEventListener('keydown', this._boundEscape);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        document.removeEventListener('keydown', this._boundKeyHandler);
+        this._clearPortalCloseHooks();
+        document.removeEventListener('keydown', this._boundEscape);
         document.removeEventListener('mousemove', this._boundMouseMove);
         document.removeEventListener('mouseup', this._boundMouseUp);
+        if (this.parentNode === document.body && this._portalRestoreParent?.isConnected) {
+            this._restorePortalToOriginalParent();
+        }
     }
 
     renderHeader() {
@@ -483,7 +638,7 @@ export class GlassModal extends PlatformElement {
 
     _getModalStyle() {
         if (this._position.x !== null && this._position.y !== null && !this._isFullscreen) {
-            return `left: ${this._position.x}px; top: ${this._position.y}px; transform: translate(-50%, -50%) ${this.open ? 'scale(1)' : 'scale(0.95)'};`;
+            return `position: fixed; left: ${this._position.x}px; top: ${this._position.y}px; z-index: 2; transform: translate(-50%, -50%) ${this.open ? 'scale(1)' : 'scale(0.95)'};`;
         }
         return '';
     }
@@ -493,49 +648,52 @@ export class GlassModal extends PlatformElement {
             'modal',
             this.size,
             this._isFullscreen ? 'fullscreen' : '',
-            this._isDragging ? 'dragging' : ''
+            this._isDragging ? 'dragging' : '',
         ].filter(Boolean).join(' ');
 
         return html`
-            <svg style="position: absolute; width: 0; height: 0; overflow: hidden;">
-                <defs>
-                    <filter id="liquidGlassFilter" x="-10%" y="-10%" width="120%" height="120%">
-                        <feTurbulence 
-                            type="fractalNoise" 
-                            baseFrequency="0.012 0.012" 
-                            numOctaves="3" 
-                            seed="15"
-                            result="noise"
-                        />
-                        <feDisplacementMap 
-                            in="SourceGraphic" 
-                            in2="noise" 
-                            scale="6" 
-                            xChannelSelector="R" 
-                            yChannelSelector="G"
-                        />
-                    </filter>
-                </defs>
-            </svg>
+            <div class="modal-svg-hidden" aria-hidden="true">
+                <svg width="0" height="0">
+                    <defs>
+                        <filter id="liquidGlassFilter" x="-10%" y="-10%" width="120%" height="120%">
+                            <feTurbulence
+                                type="fractalNoise"
+                                baseFrequency="0.012 0.012"
+                                numOctaves="3"
+                                seed="15"
+                                result="noise"
+                            />
+                            <feDisplacementMap
+                                in="SourceGraphic"
+                                in2="noise"
+                                scale="6"
+                                xChannelSelector="R"
+                                yChannelSelector="G"
+                            />
+                        </filter>
+                    </defs>
+                </svg>
+            </div>
 
             <div class="modal-overlay" @click=${this._handleOverlayClick}>
-                <div class="${modalClasses}" style="${this._getModalStyle()}">
+                <div class="modal-scrim" aria-hidden="true" @click=${() => this.close()}></div>
+                <div class="${modalClasses}" style="${this._getModalStyle()}" @click=${(e) => e.stopPropagation()}>
                     <div class="modal-header" @mousedown=${this._handleMouseDown}>
                         <h2 class="modal-title">${this.renderHeader()}</h2>
                         <div class="header-buttons">
                             ${this.renderHeaderActions()}
-                            <button 
-                                class="header-btn fullscreen-btn" 
+                            <button
+                                class="header-btn fullscreen-btn"
                                 @click=${this.toggleFullscreen}
                                 title="${this._isFullscreen ? 'Свернуть' : 'На весь экран'}"
                             >
-                                <platform-icon 
-                                    name="${this._isFullscreen ? 'minimize' : 'maximize'}" 
+                                <platform-icon
+                                    name="${this._isFullscreen ? 'minimize' : 'maximize'}"
                                     size="16"
                                 ></platform-icon>
                             </button>
-                            <button 
-                                class="header-btn" 
+                            <button
+                                class="header-btn"
                                 @click=${() => this.close()}
                                 title="Закрыть"
                             >
@@ -543,11 +701,11 @@ export class GlassModal extends PlatformElement {
                             </button>
                         </div>
                     </div>
-                    
+
                     <div class="modal-content">
                         ${this.renderBody()}
                     </div>
-                    
+
                     <div class="modal-actions">
                         ${this.renderFooter()}
                     </div>
