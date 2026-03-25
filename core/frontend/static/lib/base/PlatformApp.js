@@ -115,55 +115,54 @@ export class PlatformApp extends PlatformElement {
         const currentUrl = window.location.href;
         const currentHost = window.location.host;
         const protocol = window.location.protocol;
-        
-        // Определяем базовый домен без subdomain
+
         const parts = currentHost.split('.');
-        let baseDomain;
-        
-        if (parts[parts.length - 1].includes(':')) {
-            // Локальная разработка с портом (lvh.me:8001)
-            const [lastPart, port] = parts[parts.length - 1].split(':');
-            parts[parts.length - 1] = lastPart;
-            const frontendPort = ':8002'; // Frontend всегда на 8002
-            baseDomain = parts.slice(-2).join('.') + frontendPort;
+        const lastSegment = parts[parts.length - 1];
+        let loginHost;
+
+        if (lastSegment.includes(':')) {
+            const [hostOnly, _port] = lastSegment.split(':');
+            parts[parts.length - 1] = hostOnly;
+            const baseDomain = parts.slice(-2).join('.');
+            loginHost = `${baseDomain}:8002`;
         } else {
-            // Продакшн без порта (humanitec.ru)
-            baseDomain = parts.slice(-2).join('.');
+            loginHost = currentHost;
         }
-        
-        const loginUrl = `${protocol}//${baseDomain}/login?redirect_uri=${encodeURIComponent(currentUrl)}`;
+
+        const loginUrl = `${protocol}//${loginHost}/login?redirect_uri=${encodeURIComponent(currentUrl)}`;
         window.location.href = loginUrl;
     }
 
     async connectedCallback() {
-        // Инициализация сервисов ДО super.connectedCallback()
-        // чтобы Store был доступен для StoreController.hostConnected()
-        if (!this._servicesInitialized) {
-            await this.initServices();
-            this._servicesInitialized = true;
-        }
-        
-        super.connectedCallback();
-
-        window.addEventListener(AppEvents.TOAST_SHOW, this._handleToast);
-
-        // Проверка авторизации
-        if (!this._authChecked) {
-            this._isAuthenticated = await this.checkAuth();
-            this._authChecked = true;
-            
-            if (!this._isAuthenticated) {
-                this.redirectToAuth();
-                return;
+        try {
+            if (!this._servicesInitialized) {
+                await this.initServices();
+                this._servicesInitialized = true;
             }
-        }
 
-        // Настройка роутинга
-        const routes = this.setupRoutes();
-        if (Object.keys(routes).length > 0) {
-            const { Router } = await import('../router/Router.js');
-            this.router = new Router(this, routes);
-            this.router.start();
+            super.connectedCallback();
+
+            window.addEventListener(AppEvents.TOAST_SHOW, this._handleToast);
+
+            if (!this._authChecked) {
+                this._isAuthenticated = await this.checkAuth();
+                this._authChecked = true;
+
+                if (!this._isAuthenticated) {
+                    this.redirectToAuth();
+                    return;
+                }
+            }
+
+            const routes = this.setupRoutes();
+            if (Object.keys(routes).length > 0) {
+                const { Router } = await import('../router/Router.js');
+                this.router = new Router(this, routes);
+                this.router.start();
+            }
+        } catch (err) {
+            console.error('[PlatformApp] Ошибка инициализации:', err);
+            this.redirectToAuth();
         }
     }
 

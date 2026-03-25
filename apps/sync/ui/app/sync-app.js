@@ -149,66 +149,70 @@ export class SyncApp extends PlatformApp {
         const auth = this.auth;
         const isAuthenticated = await auth.validateToken();
         if (!isAuthenticated) {
-            this.redirectToAuth();
             return false;
         }
         return true;
     }
 
     async connectedCallback() {
-        await super.connectedCallback();
+        try {
+            await super.connectedCallback();
 
-        if (!this._shellLayoutBound) {
-            this._shellLayoutBound = true;
-            this._syncViewportToVisual = () => {
-                if (!this._mqMobileShell || !this._mqMobileShell.matches) {
-                    document.documentElement.style.removeProperty('--app-vh');
-                    return;
+            if (!this._shellLayoutBound) {
+                this._shellLayoutBound = true;
+                this._syncViewportToVisual = () => {
+                    if (!this._mqMobileShell || !this._mqMobileShell.matches) {
+                        document.documentElement.style.removeProperty('--app-vh');
+                        return;
+                    }
+                    const vv = window.visualViewport;
+                    if (!vv || typeof vv.height !== 'number') {
+                        document.documentElement.style.removeProperty('--app-vh');
+                        return;
+                    }
+                    document.documentElement.style.setProperty('--app-vh', `${Math.round(vv.height)}px`);
+                };
+                this._onMobileShellChange = (e) => {
+                    this._mobileShell = e.matches;
+                    this._syncViewportToVisual?.();
+                    this.requestUpdate();
+                };
+                this._mqMobileShell.addEventListener('change', this._onMobileShellChange);
+                this._syncViewportToVisual();
+                if (window.visualViewport) {
+                    window.visualViewport.addEventListener('resize', this._syncViewportToVisual);
+                    window.visualViewport.addEventListener('scroll', this._syncViewportToVisual);
                 }
-                const vv = window.visualViewport;
-                if (!vv || typeof vv.height !== 'number') {
-                    document.documentElement.style.removeProperty('--app-vh');
-                    return;
-                }
-                document.documentElement.style.setProperty('--app-vh', `${Math.round(vv.height)}px`);
-            };
-            this._onMobileShellChange = (e) => {
-                this._mobileShell = e.matches;
-                this._syncViewportToVisual?.();
-                this.requestUpdate();
-            };
-            this._mqMobileShell.addEventListener('change', this._onMobileShellChange);
-            this._syncViewportToVisual();
-            if (window.visualViewport) {
-                window.visualViewport.addEventListener('resize', this._syncViewportToVisual);
-                window.visualViewport.addEventListener('scroll', this._syncViewportToVisual);
             }
-        }
 
-        if (!this._isAuthenticated) return;
+            if (!this._isAuthenticated) return;
 
-        const syncApi = this.services.get('syncApi');
+            const syncApi = this.services.get('syncApi');
 
-        await Promise.all([
-            SyncStore.loadSpaces(syncApi),
-            SyncStore.loadChannels(syncApi),
-            SyncStore.loadCompanyMembers(syncApi),
-        ]);
+            await Promise.all([
+                SyncStore.loadSpaces(syncApi),
+                SyncStore.loadChannels(syncApi),
+                SyncStore.loadCompanyMembers(syncApi),
+            ]);
 
-        SyncStore.sanitizeChatSelectionAfterLoad();
-        const params = new URLSearchParams(window.location.search);
-        const channelFromUrl = params.get('channel');
-        if (typeof channelFromUrl === 'string' && channelFromUrl !== '') {
-            const ch = SyncStore.state.channels.list.find((c) => c.id === channelFromUrl);
-            if (ch) {
-                await SyncStore.selectChannelAndLoadMessages(syncApi, ch.space_id, ch.id);
+            SyncStore.sanitizeChatSelectionAfterLoad();
+            const params = new URLSearchParams(window.location.search);
+            const channelFromUrl = params.get('channel');
+            if (typeof channelFromUrl === 'string' && channelFromUrl !== '') {
+                const ch = SyncStore.state.channels.list.find((c) => c.id === channelFromUrl);
+                if (ch) {
+                    await SyncStore.selectChannelAndLoadMessages(syncApi, ch.space_id, ch.id);
+                } else {
+                    await this._restoreLastSelection();
+                }
             } else {
                 await this._restoreLastSelection();
             }
-        } else {
-            await this._restoreLastSelection();
+            this._connectWs();
+        } catch (err) {
+            console.error('[SyncApp] Ошибка инициализации:', err);
+            this.redirectToAuth();
         }
-        this._connectWs();
     }
 
     disconnectedCallback() {
