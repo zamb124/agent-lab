@@ -379,17 +379,18 @@ export const SyncStore = {
 
     /**
      * space_id для создания канала: одно выделенное в фильтре, иначе selectedSpaceId, иначе первое пространство.
+     * Учитываются только id из текущего списка пространств (устаревшие из persist отбрасываются).
      * @returns {string}
      */
     resolveSpaceIdForNewChannel() {
         const s = baseStore.state;
-        const filters = s.ui.sidebarSpaceFilterIds ?? [];
+        const filtersRaw = s.ui.sidebarSpaceFilterIds ?? [];
         const valid = new Set(s.spaces.list.map(x => x.id));
+        const filters = filtersRaw.filter(
+            id => typeof id === 'string' && id !== '' && valid.has(id),
+        );
         if (filters.length === 1) {
-            const only = filters[0];
-            if (typeof only === 'string' && only !== '' && valid.has(only)) {
-                return only;
-            }
+            return filters[0];
         }
         if (filters.length > 1) {
             throw new Error(
@@ -951,6 +952,20 @@ export const SyncStore = {
         try {
             const items = await syncApi.getSpaces();
             this.setSpaces(items);
+            const validSpaceIds = new Set(items.map(x => x.id));
+            baseStore.setState(s => {
+                const prev = s.ui.sidebarSpaceFilterIds ?? [];
+                const pruned = prev.filter(
+                    id => typeof id === 'string' && id !== '' && validSpaceIds.has(id),
+                );
+                const same =
+                    pruned.length === prev.length
+                    && pruned.every((v, i) => v === prev[i]);
+                if (same) {
+                    return s;
+                }
+                return { ui: { ...s.ui, sidebarSpaceFilterIds: pruned } };
+            });
             return items;
         } catch (e) {
             baseStore.setState(s => ({ spaces: { ...s.spaces, loading: false } }));

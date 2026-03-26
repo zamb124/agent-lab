@@ -14,6 +14,7 @@ export class ChannelSettingsModal extends PlatformModal {
         createMode: { type: Boolean },
         _members: { state: true },
         _companyMembers: { state: true },
+        _spacesList: { state: true },
         _search: { state: true },
         _pickOpen: { state: true },
         _selectedForAdd: { state: true },
@@ -329,6 +330,7 @@ export class ChannelSettingsModal extends PlatformModal {
         this.createMode = false;
         this._members = [];
         this._companyMembers = { list: [], loading: false };
+        this._spacesList = SyncStore.state.spaces.list;
         this._search = '';
         this._pickOpen = false;
         this._selectedForAdd = {};
@@ -345,6 +347,7 @@ export class ChannelSettingsModal extends PlatformModal {
         super.connectedCallback();
         this._unsub = SyncStore.subscribe((state) => {
             this._companyMembers = state.companyMembers;
+            this._spacesList = state.spaces.list;
         });
     }
 
@@ -620,6 +623,25 @@ export class ChannelSettingsModal extends PlatformModal {
         return this.createMode ? 'Создать канал' : 'Настройки канала';
     }
 
+    /**
+     * Имя пространства для подписи в шапке (список приходит из SyncStore).
+     * @param {string} spaceId
+     * @returns {string}
+     */
+    _spaceNameForMeta(spaceId) {
+        if (typeof spaceId !== 'string' || spaceId === '') {
+            throw new Error('spaceId обязателен.');
+        }
+        const sp = this._spacesList.find(x => x.id === spaceId);
+        if (!sp) {
+            throw new Error('Пространство не найдено в списке. Обнови страницу.');
+        }
+        if (typeof sp.name !== 'string' || sp.name.trim() === '') {
+            throw new Error('У пространства нет имени.');
+        }
+        return sp.name.trim();
+    }
+
     renderBody() {
         if (!this.open || !this.channel) {
             return html``;
@@ -631,9 +653,9 @@ export class ChannelSettingsModal extends PlatformModal {
 
         const metaLine = createMode
             ? (typeof ch.space_id === 'string' && ch.space_id !== ''
-                ? `Пространство: ${ch.space_id.slice(0, 8)}…`
+                ? `Пространство: ${this._spaceNameForMeta(ch.space_id)}`
                 : 'Выбери пространство в списке слева.')
-            : `${typeof ch.name === 'string' && ch.name.trim() !== '' ? ch.name : ch.id} · ${ch.type}${ch.space_id ? ` · пространство ${ch.space_id.slice(0, 8)}…` : ''}`;
+            : `${typeof ch.name === 'string' && ch.name.trim() !== '' ? ch.name : ch.id} · ${ch.type}${ch.space_id ? ` · ${this._spaceNameForMeta(ch.space_id)}` : ''}`;
 
         const av = this._editAvatarUrl.trim();
 
