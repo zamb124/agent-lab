@@ -82,9 +82,12 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             upstream = f"{upstream}?{query}"
 
         parsed = urlparse(base)
-        host_header = parsed.netloc
-        if not host_header:
+        if not parsed.netloc:
             raise RuntimeError(f"Некорректный URL сервиса {target}: {base!r}")
+
+        # Исходный Host от браузера (qqq.lvh.me:8002), иначе CompanyResolver на flows/crm/rag
+        # получает localhost:8001 и теряет субдомен — редирект на select-company.
+        upstream_host = (request.headers.get("host") or "").strip() or parsed.netloc
 
         forward_headers: list[tuple[str, str]] = []
         for key, value in request.headers.items():
@@ -94,7 +97,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             if lk == "host":
                 continue
             forward_headers.append((key, value))
-        forward_headers.append(("host", host_header))
+        forward_headers.append(("host", upstream_host))
 
         body = await request.body()
 

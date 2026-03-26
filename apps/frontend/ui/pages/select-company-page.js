@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { Services } from '@platform/services/index.js';
+import { buildCompanySubdomainUrl, formatCompanySubdomainLabel } from '@platform/lib/utils/tenant-url.js';
 import '@platform/lib/components/company-modal.js';
 
 /**
@@ -202,16 +203,7 @@ export class SelectCompanyPage extends PlatformElement {
     }
 
     handleCompanySelect(company) {
-        const env = window.location.hostname === 'localhost' ? 'development' : 'production';
-        const url = this._buildSubdomainUrl(company.subdomain, '/dashboard', env);
-        window.location.href = url;
-    }
-
-    _buildSubdomainUrl(subdomain, path = '/', env = 'production') {
-        if (env === 'development') {
-            return `http://${subdomain}.localhost:8002${path}`;
-        }
-        return `https://${subdomain}.humanitec.ru${path}`;
+        window.location.href = buildCompanySubdomainUrl(company.subdomain, '/dashboard');
     }
 
     handleCreateCompany() {
@@ -255,7 +247,7 @@ export class SelectCompanyPage extends PlatformElement {
                                 @click=${() => this.handleCompanySelect(company)}
                             >
                                 <h3 class="company-name">${company.name}</h3>
-                                <p class="company-subdomain">${company.subdomain}.humanitec.ru</p>
+                                <p class="company-subdomain">${formatCompanySubdomainLabel(company.subdomain)}</p>
                                 <span class="company-role">${this._getRoleLabel(company.role)}</span>
                             </div>
                         `)}

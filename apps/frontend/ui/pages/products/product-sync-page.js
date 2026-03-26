@@ -1,12 +1,9 @@
 /**
  * Product Sync Page - Страница продукта Sync
  */
-import { html, css, unsafeCSS } from 'lit';
+import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/auth-modal.js';
-
-const SYNC_ACCENT = '#8B5CF6';
-const SYNC_ACCENT_SOFT = '#6366F1';
 
 export class ProductSyncPage extends PlatformElement {
     static styles = [
@@ -40,7 +37,7 @@ export class ProductSyncPage extends PlatformElement {
                 border-radius: 100px;
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 14px;
-                color: ${unsafeCSS(SYNC_ACCENT)};
+                color: #8b5cf6;
                 margin-bottom: 24px;
             }
             
@@ -82,7 +79,7 @@ export class ProductSyncPage extends PlatformElement {
                 align-items: center;
                 gap: 8px;
                 padding: 16px 32px;
-                background: linear-gradient(135deg, ${unsafeCSS(SYNC_ACCENT_SOFT)} 0%, ${unsafeCSS(SYNC_ACCENT)} 100%);
+                background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
                 border: none;
                 border-radius: 100px;
                 color: #FFFFFF;
@@ -186,12 +183,12 @@ export class ProductSyncPage extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 background: rgba(139, 92, 246, 0.2);
-                border: 2px solid ${unsafeCSS(SYNC_ACCENT)};
+                border: 2px solid #8b5cf6;
                 border-radius: 50%;
                 font-family: 'Fira Sans Condensed', sans-serif;
                 font-size: 20px;
                 font-weight: 600;
-                color: ${unsafeCSS(SYNC_ACCENT)};
+                color: #8b5cf6;
             }
             
             .step-content h3 {
@@ -301,7 +298,7 @@ export class ProductSyncPage extends PlatformElement {
             }
             
             .back-link:hover {
-                color: ${unsafeCSS(SYNC_ACCENT)};
+                color: #8b5cf6;
             }
             
             @media (min-width: 768px) {

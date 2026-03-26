@@ -2,6 +2,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { Services } from '@platform/services/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+import { formatCompanySubdomainLabel } from '../utils/tenant-url.js';
 
 export class CompanyModal extends PlatformElement {
     static properties = {
@@ -398,7 +399,7 @@ export class CompanyModal extends PlatformElement {
                         </div>
                         ${this.companySlug && !this.slugError ? html`
                             <div class="slug-preview">
-                                ${this.companySlug}.humanitec.ru
+                                ${formatCompanySubdomainLabel(this.companySlug)}
                             </div>
                         ` : ''}
                         ${this.slugError ? html`

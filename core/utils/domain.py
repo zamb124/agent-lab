@@ -3,14 +3,55 @@
 Поддержка нескольких доменов (humanitec.ru, agents-lab.ru) и localhost.
 """
 
+from __future__ import annotations
+
+import ipaddress
+from typing import Optional
+
 PRIMARY_DOMAIN = "humanitec.ru"
 SUPPORTED_DOMAINS = ["humanitec.ru", "agents-lab.ru"]
+
+
+def split_host_port(host: str) -> tuple[str, Optional[str]]:
+    """
+    Разбор Host header: имя и опциональный порт.
+
+    Не использовать host.split(':')[0]: для 127.0.0.1:8002 это даёт «127».
+    """
+    host = host.strip()
+    if not host:
+        return "", None
+    if host.startswith("["):
+        end = host.find("]")
+        if end <= 0:
+            return host.lower(), None
+        inner = host[1:end].lower()
+        after = host[end + 1 :]
+        if after.startswith(":") and after[1:].isdigit():
+            return inner, after[1:]
+        return inner, None
+    if ":" in host:
+        name, tail = host.rsplit(":", 1)
+        if tail.isdigit():
+            return name.lower(), tail
+    return host.lower(), None
+
+
+def _ip_dev_base(hostname: str) -> Optional[str]:
+    """Loopback / private / link-local IP для локальной разработки и LAN."""
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return None
+    if ip.is_loopback or ip.is_private or ip.is_link_local:
+        return str(ip)
+    return None
 
 
 def extract_base_domain(host: str) -> str:
     """
     Извлекает базовый домен из Host header.
-    
+
     Примеры:
         humanitec.ru → humanitec.ru
         www.humanitec.ru → humanitec.ru
@@ -21,28 +62,34 @@ def extract_base_domain(host: str) -> str:
         company.localhost:8002 → localhost
         lvh.me:8002 → lvh.me
         company.lvh.me:8002 → lvh.me
+        127.0.0.1:8002 → 127.0.0.1
+        192.168.1.10:8002 → 192.168.1.10
     """
-    host_without_port = host.split(":")[0].lower()
-    
-    # localhost обрабатываем отдельно
-    if host_without_port == "localhost" or host_without_port.endswith(".localhost"):
+    hostname, _ = split_host_port(host)
+    if not hostname:
+        return PRIMARY_DOMAIN
+
+    ip_base = _ip_dev_base(hostname)
+    if ip_base is not None:
+        return ip_base
+
+    if hostname == "localhost" or hostname.endswith(".localhost"):
         return "localhost"
-    
-    # lvh.me (магический домен для dev с субдоменами, резолвится в 127.0.0.1)
-    if host_without_port == "lvh.me" or host_without_port.endswith(".lvh.me"):
+
+    if hostname == "lvh.me" or hostname.endswith(".lvh.me"):
         return "lvh.me"
-    
+
     for domain in SUPPORTED_DOMAINS:
-        if host_without_port == domain or host_without_port.endswith(f".{domain}"):
+        if hostname == domain or hostname.endswith(f".{domain}"):
             return domain
-    
+
     return PRIMARY_DOMAIN
 
 
 def extract_subdomain(host: str) -> str | None:
     """
     Извлекает subdomain из Host header.
-    
+
     Примеры:
         humanitec.ru → None
         www.humanitec.ru → None
@@ -52,102 +99,108 @@ def extract_subdomain(host: str) -> str | None:
         company.localhost:8002 → company
     """
     base = extract_base_domain(host)
-    host_without_port = host.split(":")[0].lower()
-    
-    if host_without_port == base or host_without_port == f"www.{base}":
+    hostname, _ = split_host_port(host)
+
+    if hostname == base or hostname == f"www.{base}":
         return None
-    
-    if host_without_port.endswith(f".{base}"):
-        return host_without_port.removesuffix(f".{base}")
-    
+
+    if hostname.endswith(f".{base}"):
+        return hostname.removesuffix(f".{base}")
+
     return None
 
 
 def is_local(host: str) -> bool:
-    """Проверяет, является ли host локальным (localhost или lvh.me)."""
+    """Локальная разработка: localhost, lvh.me, loopback/private/link-local IP."""
     base = extract_base_domain(host)
-    return base == "localhost" or base == "lvh.me"
+    if base == "localhost" or base == "lvh.me":
+        return True
+    if _ip_dev_base(base) is not None:
+        return True
+    return False
 
 
 def is_supported_domain(host: str) -> bool:
-    """Проверяет, является ли host одним из поддерживаемых доменов, localhost или lvh.me."""
+    """Поддерживаемый прод-домен, localhost, lvh.me или dev IP."""
     base = extract_base_domain(host)
-    return base == "localhost" or base == "lvh.me" or base in SUPPORTED_DOMAINS
+    if base == "localhost" or base == "lvh.me" or base in SUPPORTED_DOMAINS:
+        return True
+    if _ip_dev_base(base) is not None:
+        return True
+    return False
 
 
 def get_protocol(host: str) -> str:
-    """Возвращает протокол: http для localhost, https для production."""
+    """Протокол: http для локальной разработки, https для остального."""
     return "http" if is_local(host) else "https"
 
 
 def get_host_with_port(host: str) -> str:
     """
-    Возвращает базовый домен с портом для localhost и lvh.me.
-    
+    Базовый хост с портом для локальных origin (OAuth redirect_uri, ссылки).
+
     Примеры:
         localhost:8002 → localhost:8002
         company.localhost:8002 → localhost:8002
         lvh.me:8002 → lvh.me:8002
         company.lvh.me:8002 → lvh.me:8002
+        127.0.0.1:8002 → 127.0.0.1:8002
         humanitec.ru → humanitec.ru
         company.humanitec.ru → humanitec.ru
     """
     base = extract_base_domain(host)
-    
+    _, port_part = split_host_port(host)
+    port = port_part if port_part else "8002"
+
     if base == "localhost" or base == "lvh.me":
-        # Сохраняем порт для localhost и lvh.me
-        port = host.split(":")[-1] if ":" in host else "8002"
         return f"{base}:{port}"
-    
+    if _ip_dev_base(base) is not None:
+        return f"{base}:{port}"
+
     return base
 
 
 def get_cookie_domain(host: str) -> str | None:
     """
-    Возвращает домен для установки cookie (с точкой в начале для работы на субдоменах)
-    
+    Домен для cookie (с точкой в начале для субдоменов на проде).
+
     Примеры:
-        localhost:8002 → None (куки на localhost не поддерживают субдомены)
+        localhost:8002 → None
         company.localhost:8002 → None
-        lvh.me:8002 → .lvh.me (работает корректно!)
+        lvh.me:8002 → .lvh.me
         company.lvh.me:8002 → .lvh.me
         humanitec.ru → .humanitec.ru
         company.humanitec.ru → .humanitec.ru
-    
-    Returns:
-        Домен для cookie с точкой в начале, или None для localhost
-    
+
     Note:
-        Для localhost возвращаем None, так как браузеры не поддерживают
-        куки на .localhost с субдоменами. Для dev используйте lvh.me - это магический
-        домен, который резолвится в 127.0.0.1 и корректно работает с куками на субдоменах.
+        Для localhost и IP не задаём domain — ограничения браузеров и same-origin.
     """
     base = extract_base_domain(host)
-    
-    # Для localhost не устанавливаем domain - браузеры не поддерживают .localhost
+
     if base == "localhost":
         return None
-    
+    if _ip_dev_base(base) is not None:
+        return None
+
     return f".{base}"
 
 
 def build_url(host: str, path: str = "", subdomain: str | None = None) -> str:
     """
-    Строит полный URL с учетом текущего домена.
-    
+    Полный URL с учётом текущего домена.
+
     Args:
         host: Host header из запроса
         path: Путь (начинается с /)
         subdomain: Поддомен (опционально)
-    
+
     Returns:
-        Полный URL (http для localhost, https для production)
+        Полный URL (http для локальной разработки, https для production)
     """
     protocol = get_protocol(host)
     base = get_host_with_port(host)
-    
+
     if subdomain:
         return f"{protocol}://{subdomain}.{base}{path}"
-    
-    return f"{protocol}://{base}{path}"
 
+    return f"{protocol}://{base}{path}"

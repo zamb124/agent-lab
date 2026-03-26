@@ -1,0 +1,62 @@
+"""Тесты разбора Host и локальных IP (OAuth, DevInterServiceProxy)."""
+
+import pytest
+
+from core.utils.domain import (
+    extract_base_domain,
+    extract_subdomain,
+    get_cookie_domain,
+    get_host_with_port,
+    get_protocol,
+    is_local,
+    split_host_port,
+)
+
+
+@pytest.mark.parametrize(
+    "host,hostname,port",
+    [
+        ("localhost:8002", "localhost", "8002"),
+        ("127.0.0.1:8002", "127.0.0.1", "8002"),
+        ("192.168.0.1:9000", "192.168.0.1", "9000"),
+        ("humanitec.ru", "humanitec.ru", None),
+        ("[::1]:8002", "::1", "8002"),
+    ],
+)
+def test_split_host_port(host: str, hostname: str, port: str | None) -> None:
+    h, p = split_host_port(host)
+    assert h == hostname
+    assert p == port
+
+
+def test_extract_base_domain_ipv4_loopback() -> None:
+    assert extract_base_domain("127.0.0.1:8002") == "127.0.0.1"
+
+
+def test_extract_base_domain_private_ipv4() -> None:
+    assert extract_base_domain("192.168.1.50:8002") == "192.168.1.50"
+
+
+def test_get_host_with_port_ipv4() -> None:
+    assert get_host_with_port("127.0.0.1:8002") == "127.0.0.1:8002"
+
+
+def test_is_local_ipv4() -> None:
+    assert is_local("127.0.0.1:8002") is True
+    assert is_local("192.168.1.1:8002") is True
+
+
+def test_get_protocol_local_ip() -> None:
+    assert get_protocol("127.0.0.1:8002") == "http"
+
+
+def test_get_cookie_domain_ip_is_none() -> None:
+    assert get_cookie_domain("127.0.0.1:8002") is None
+
+
+def test_extract_subdomain_on_ip() -> None:
+    assert extract_subdomain("127.0.0.1:8002") is None
+
+
+def test_unknown_hostname_still_primary_domain() -> None:
+    assert extract_base_domain("custom.internal:8002") == "humanitec.ru"

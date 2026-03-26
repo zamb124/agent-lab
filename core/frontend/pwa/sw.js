@@ -59,6 +59,10 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+function swOrigin() {
+  return self.location.origin;
+}
+
 // Fetch: стратегии кэширования
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -76,6 +80,11 @@ self.addEventListener('fetch', (event) => {
 
   // Пропускаем chrome-extension и другие схемы
   if (!url.protocol.startsWith('http')) {
+    return;
+  }
+
+  // Только свой origin — иначе fetch из SW падает (CORS / чужой хост) и даёт Uncaught в promise
+  if (url.origin !== swOrigin()) {
     return;
   }
 
@@ -121,7 +130,7 @@ async function cacheFirst(request) {
     return response;
   } catch (error) {
     console.error('[SW] Cache first failed:', error);
-    throw error;
+    return new Response('', { status: 504, statusText: 'Gateway Timeout' });
   }
 }
 
@@ -142,7 +151,8 @@ async function networkFirst(request) {
     if (cached) {
       return cached;
     }
-    throw error;
+    console.warn('[SW] networkFirst: сеть недоступна, кэша нет', request.url);
+    return new Response('', { status: 503, statusText: 'Service Unavailable' });
   }
 }
 
@@ -168,8 +178,9 @@ async function networkFirstWithOffline(request) {
     if (offlinePage) {
       return offlinePage;
     }
-    
-    throw error;
+
+    console.warn('[SW] networkFirstWithOffline: нет сети и offline.html', request.url);
+    return new Response('', { status: 503, statusText: 'Service Unavailable' });
   }
 }
 

@@ -68,7 +68,7 @@
       "site_name": "Humanitec"
     },
     "bothub": {
-      "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImExMGNjMTJhLTc3NDUtNGM4MS05Mzc0LTdlNzJmNTk3YjEyMyIsImlzRGV2ZWxvcGVyIjp0cnVlLCJpYXQiOjE3NjIwMDQ2NzYsImV4cCI6MjA3NzU4MDY3Nn0._VOKGW2u_lmN9DvRQwYWWE7rbHRs9h5wbftz_W1Xjlg",
+      "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQ2MDlhMGUzLTRlZWMtNDNkYS05MTVmLTBmODIwYmMzYzA2OCIsImlzRGV2ZWxvcGVyIjp0cnVlLCJpYXQiOjE3NjUyODMyNzksImV4cCI6MjA4MDg1OTI3OX0.VhTw2NjuStn_LjhrxNOoDOP00XQNSjAMU6jkiK8mjjQ",
       "base_url": "https://bothub.chat/api/v2/openai/v1"
     },
     "default_model": "x-ai/grok-code-fast-1",

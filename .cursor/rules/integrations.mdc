@@ -81,7 +81,7 @@ response = await client.post("crm", "/crm/api/v1/entities/", json=data)
 
 **Сервисы:** `flows`, `crm`, `frontend`
 
-**Браузер и тот же origin (shell на :8002, API flows на :8001):** без ingress в `development` / `test` при Host `localhost` или `*.lvh.me` срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`: путь `/flows/...`, `/crm/...` и т.д. пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В production с внешним доменом прокси не включается.
+**Браузер и тот же origin (shell на :8002, API flows на :8001):** без ingress в `development` / `test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`: путь `/flows/...`, `/crm/...` и т.д. пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), а не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании; `/sync` часто в `anonymous` и ведёт себя иначе. Локальный Host определяется через `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.
 
 **Преимущества:**
 - Автоматическая передача trace_id, авторизации
