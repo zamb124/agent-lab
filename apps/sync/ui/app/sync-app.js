@@ -16,6 +16,7 @@ import '../features/call-incoming.js';
 
 export class SyncApp extends PlatformApp {
     static properties = {
+        ...PlatformApp.properties,
         _chat: { state: true },
         _ui: { state: true },
         _activeCall: { state: true },
@@ -680,7 +681,7 @@ export class SyncApp extends PlatformApp {
     }
 
     render() {
-        const shell = this._renderShellPages();
+        const shell = PlatformApp.prototype._renderShellPages.call(this);
         if (shell !== null) {
             return shell;
         }
