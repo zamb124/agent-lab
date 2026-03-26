@@ -2,7 +2,7 @@
  * FrontendApp - Главное приложение фронтенд сервиса
  */
 import { html, css } from 'lit';
-import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { CompaniesService } from '@platform/services/companies.service.js';
 import { TeamService } from '../services/team.service.js';
 import { ApiKeysService } from '../services/api-keys.service.js';
@@ -10,6 +10,7 @@ import { BillingService } from '../services/billing.service.js';
 import { SettingsService } from '../services/settings.service.js';
 import { ServicesStatusService } from '../services/services-status.service.js';
 import { EmbedService } from '../services/embed.service.js';
+import { FlowsCatalogService } from '../services/flows-catalog.service.js';
 import { FrontendStore } from '../store/frontend.store.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/auth-modal.js';
@@ -37,7 +38,8 @@ export class FrontendApp extends PlatformApp {
             select-company-page,
             product-agents-page,
             product-rag-page,
-            product-crm-page {
+            product-crm-page,
+            product-sync-page {
                 display: block;
                 width: 100%;
                 min-height: var(--app-vh, 100vh);
@@ -143,6 +145,7 @@ export class FrontendApp extends PlatformApp {
         this.services.register('settings', new SettingsService(baseUrl));
         this.services.register('servicesStatus', new ServicesStatusService(baseUrl));
         this.services.register('embed', new EmbedService(baseUrl));
+        this.services.register('flowsCatalog', new FlowsCatalogService());
     }
 
     _isKnownRoute(path) {
@@ -155,6 +158,7 @@ export class FrontendApp extends PlatformApp {
             '/products/agents',
             '/products/rag',
             '/products/crm',
+            '/products/sync',
             '/dashboard',
             '/team',
             '/api-keys',
@@ -266,7 +270,7 @@ export class FrontendApp extends PlatformApp {
     }
 
     render() {
-        const shell = this._renderShellPages();
+        const shell = renderPlatformAppShell(this);
         if (shell !== null) {
             return shell;
         }
@@ -320,6 +324,10 @@ export class FrontendApp extends PlatformApp {
             
             if (path === '/products/crm') {
                 return html`<product-crm-page></product-crm-page>`;
+            }
+            
+            if (path === '/products/sync') {
+                return html`<product-sync-page></product-sync-page>`;
             }
             
             return html`<landing-page></landing-page>`;

@@ -66,7 +66,7 @@ def remove_env_overridden_values(config: Dict[str, Any], prefix: str = "") -> Di
     for key, value in config.items():
         env_key = f"{prefix}__{key}".upper() if prefix else key.upper()
 
-        if os.getenv(env_key) is not None:
+        if os.getenv(env_key):
             logger.debug(f"Пропускаем {key} из JSON, используется env переменная {env_key}")
             continue
 

@@ -47,6 +47,9 @@ x-common-env: &common-env
   CALLS__LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-change-me-in-production}
   CALLS__TURN_HOST: ${SERVER_HOST}
   CALLS__TURN_SECRET: ${TURN_SECRET:-change-me-in-production}
+  # LLM: переопределяют conf.json; задайте в GitHub Secrets и передайте в deploy (см. .github/workflows/deploy.yml).
+  LLM__BOTHUB__API_KEY: ${LLM_BOTHUB_API_KEY:-}
+  LLM__OPENROUTER__API_KEY: ${LLM_OPENROUTER_API_KEY:-}
 
 x-healthcheck: &healthcheck
   interval: 30s

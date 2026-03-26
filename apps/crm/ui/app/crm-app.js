@@ -4,7 +4,7 @@
  * 3-колоночный layout при наличии AI suggestions
  */
 import { html, css } from 'lit';
-import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { CRMAPIService } from '../services/crm-api.service.js';
 import { CRMStore } from '../store/crm.store.js';
 import '../components/notes-list.js';
@@ -19,6 +19,7 @@ import '@platform/lib/components/platform-icon.js';
 
 export class CRMApp extends PlatformApp {
     static properties = {
+        ...PlatformApp.properties,
         _isMobile: { state: true },
         _currentNoteId: { state: true },
         _hasSuggestions: { state: true },
@@ -444,7 +445,7 @@ export class CRMApp extends PlatformApp {
     }
 
     render() {
-        const shell = this._renderShellPages();
+        const shell = renderPlatformAppShell(this);
         if (shell !== null) {
             return shell;
         }

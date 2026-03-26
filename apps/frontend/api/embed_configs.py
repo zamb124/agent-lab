@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from core.models.embed_models import EmbedConfig, EmbedStatus, EmbedMapping
 from apps.frontend.dependencies import ContainerDep
+from apps.flows.src.models import FlowType
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class CreateEmbedConfigRequest(BaseModel):
     """Запрос на создание конфигурации виджета"""
     name: str = Field(description="Название виджета")
     flow_id: str = Field(description="ID агента")
+    skill_id: str = Field(default="default", description="Skill flow (LOCAL); для EXTERNAL не используется")
     allowed_origins: List[str] = Field(default_factory=list, description="Разрешенные домены")
     theme: str = Field(default="dark", description="Тема оформления")
     position: str = Field(default="bottom-right", description="Позиция на странице")
@@ -36,6 +38,7 @@ class UpdateEmbedConfigRequest(BaseModel):
     """Запрос на обновление конфигурации виджета"""
     name: Optional[str] = None
     flow_id: Optional[str] = None
+    skill_id: Optional[str] = None
     allowed_origins: Optional[List[str]] = None
     status: Optional[EmbedStatus] = None
     theme: Optional[str] = None
@@ -53,6 +56,7 @@ class EmbedConfigResponse(BaseModel):
     embed_id: str
     name: str
     flow_id: str
+    skill_id: str
     allowed_origins: List[str]
     status: EmbedStatus
     theme: str
@@ -109,6 +113,20 @@ async def create_embed_config(
     
     if not agent:
         raise HTTPException(status_code=404, detail=f"Агент {request_data.flow_id} не найден")
+
+    skill_id = request_data.skill_id
+    if agent.type == FlowType.EXTERNAL:
+        skill_id = "default"
+    else:
+        skills = agent.skills or {}
+        if skills:
+            if skill_id not in skills:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Skill '{skill_id}' не найден у flow {request_data.flow_id}",
+                )
+        else:
+            skill_id = "default"
     
     # Генерируем уникальный embed_id
     embed_id = f"embed_{uuid.uuid4().hex[:16]}"
@@ -118,6 +136,7 @@ async def create_embed_config(
         embed_id=embed_id,
         name=request_data.name,
         flow_id=request_data.flow_id,
+        skill_id=skill_id,
         allowed_origins=request_data.allowed_origins,
         status=EmbedStatus.ACTIVE,
         theme=request_data.theme,
@@ -145,6 +164,7 @@ async def create_embed_config(
         embed_id=config.embed_id,
         name=config.name,
         flow_id=config.flow_id,
+        skill_id=config.skill_id,
         allowed_origins=config.allowed_origins,
         status=config.status,
         theme=config.theme,
@@ -192,6 +212,7 @@ async def list_embed_configs(
             embed_id=c.embed_id,
             name=c.name,
             flow_id=c.flow_id,
+            skill_id=c.skill_id,
             allowed_origins=c.allowed_origins,
             status=c.status,
             theme=c.theme,
@@ -232,6 +253,7 @@ async def get_embed_config(
         embed_id=config.embed_id,
         name=config.name,
         flow_id=config.flow_id,
+        skill_id=config.skill_id,
         allowed_origins=config.allowed_origins,
         status=config.status,
         theme=config.theme,
@@ -283,6 +305,7 @@ async def update_embed_config(
         embed_id=config.embed_id,
         name=config.name,
         flow_id=config.flow_id,
+        skill_id=config.skill_id,
         allowed_origins=config.allowed_origins,
         status=config.status,
         theme=config.theme,

@@ -2,7 +2,7 @@
  * FlowsApp - главное приложение Flows Builder
  */
 import { html, css } from 'lit';
-import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { A2AService } from '../services/a2a.service.js';
 import { FlowsStore } from '../store/flows.store.js';
 import '../components/sidebar/flows-sidebar.js';
@@ -98,7 +98,7 @@ export class FlowsApp extends PlatformApp {
     }
 
     render() {
-        const shell = this._renderShellPages();
+        const shell = renderPlatformAppShell(this);
         if (shell !== null) {
             return shell;
         }

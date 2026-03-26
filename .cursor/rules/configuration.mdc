@@ -61,6 +61,8 @@ settings.server.get_service_url("flows")
 
 Секреты — в **ENV** / секрет-хранилище, не в коммитимом `conf.json`.
 
+Продакшен (GitHub Actions → `docker-compose-prod`): ключи `LLM_BOTHUB_API_KEY` и `LLM_OPENROUTER_API_KEY` задаются в GitHub Secrets и пробрасываются в контейнеры как `LLM__BOTHUB__API_KEY` / `LLM__OPENROUTER__API_KEY` (см. `.github/workflows/deploy.yml`, `.github/workflows/README.md`). Пустое значение в ENV не перетирает `conf.json` (`env_ignore_empty` и правило в `remove_env_overridden_values`).
+
 ## Миграции БД
 
 Схемы БД — деревья **`migrations/<сервис>/`**, манифест **`migrations/services.json`**. Это не блок `migration` в `conf.json`.

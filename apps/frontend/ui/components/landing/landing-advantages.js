@@ -92,7 +92,7 @@ export class LandingAdvantages extends PlatformElement {
                 padding: 24px 40px;
             }
             
-            .advantage-badge:nth-child(3) {
+            .advantage-badge--featured {
                 animation-delay: 1.6s;
                 font-size: 20px;
                 padding: 28px 48px;
@@ -105,6 +105,10 @@ export class LandingAdvantages extends PlatformElement {
             
             .advantage-badge:nth-child(5) {
                 animation-delay: 3.2s;
+            }
+            
+            .advantage-badge:nth-child(6) {
+                animation-delay: 4s;
                 font-size: 18px;
                 padding: 24px 40px;
             }
@@ -168,7 +172,7 @@ export class LandingAdvantages extends PlatformElement {
                     transform: translateY(40px);
                 }
                 
-                .advantage-badge:nth-child(3) {
+                .advantage-badge--featured {
                     font-size: 24px;
                     padding: 32px 52px;
                     grid-column: span 2;
@@ -176,7 +180,7 @@ export class LandingAdvantages extends PlatformElement {
                     max-width: 500px;
                 }
                 
-                .advantage-badge:nth-child(5) {
+                .advantage-badge:nth-child(6) {
                     font-size: 20px;
                     padding: 28px 44px;
                     transform: translateY(40px);
@@ -208,13 +212,13 @@ export class LandingAdvantages extends PlatformElement {
                     padding: 32px 48px;
                 }
                 
-                .advantage-badge:nth-child(3) {
+                .advantage-badge--featured {
                     font-size: 28px;
                     padding: 36px 56px;
                     max-width: 600px;
                 }
                 
-                .advantage-badge:nth-child(5) {
+                .advantage-badge:nth-child(6) {
                     font-size: 22px;
                     padding: 32px 48px;
                 }
@@ -241,8 +245,12 @@ export class LandingAdvantages extends PlatformElement {
                         Knowledge Base — умный поиск по документам
                     </a>
                     
-                    <a href="/products/crm" class="advantage-badge advantage-link">
+                    <a href="/products/crm" class="advantage-badge advantage-badge--featured advantage-link">
                         NetWorkle — граф связей вашего бизнеса
+                    </a>
+                    
+                    <a href="/products/sync" class="advantage-badge advantage-link">
+                        Sync — чат и видеозвонки для команды
                     </a>
                     
                     <div class="advantage-badge">

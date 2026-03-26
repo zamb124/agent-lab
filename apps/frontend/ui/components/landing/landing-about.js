@@ -249,8 +249,8 @@ export class LandingAbout extends PlatformElement {
                         Humanitec — ваша команда AI-сотрудников
                     </h2>
                     <p class="about-description">
-                        Платформа с инструментами для автоматизации бизнеса: AI-агенты, умная база знаний 
-                        и система управления контактами. Освобождаем время для роста.
+                        Платформа с инструментами для автоматизации и командной работы: AI-агенты, база знаний,
+                        граф контактов и Sync — чат с видеозвонками и контекстом Git. Освобождаем время для роста.
                     </p>
                 </div>
                 
@@ -288,6 +288,7 @@ export class LandingAbout extends PlatformElement {
                         <span class="integration-badge">REST API</span>
                         <span class="integration-badge highlight">PDF & Word</span>
                         <a href="/products/crm" class="integration-badge product">NetWorkle</a>
+                        <a href="/products/sync" class="integration-badge product">Sync</a>
                         <span class="integration-badge">Email</span>
                         <span class="integration-badge highlight">Граф связей</span>
                         <span class="integration-badge">amoCRM</span>

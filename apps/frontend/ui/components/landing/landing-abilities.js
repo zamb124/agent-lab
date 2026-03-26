@@ -173,8 +173,8 @@ export class LandingAbilities extends PlatformElement {
                     <div class="ability-content">
                         <h3 class="ability-name">Запуск за часы, а не месяцы</h3>
                         <p class="ability-description">
-                            Не тратьте время и деньги на разработку с нуля. Используйте готовые 
-                            сервисы: создавайте AI-агентов, управляйте контактами в NetWorkle, 
+                            Не тратьте время и деньги на разработку с нуля. Используйте готовые
+                            сервисы: создавайте AI-агентов, общайтесь в Sync, управляйте контактами в NetWorkle,
                             храните документы в Knowledge Base. Всё уже настроено и работает.
                         </p>
                         <ul class="ability-features">

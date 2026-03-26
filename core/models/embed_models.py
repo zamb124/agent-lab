@@ -40,6 +40,11 @@ class EmbedConfig(BaseModel):
         title="ID агента",
         description="Агент, который будет отвечать в этом виджете",
     )
+    skill_id: str = Field(
+        default="default",
+        title="Skill",
+        description="Точка входа skill flow (metadata.skill в A2A); для внешних агентов обычно default",
+    )
     allowed_origins: List[str] = Field(
         default_factory=list,
         title="Разрешенные домены",

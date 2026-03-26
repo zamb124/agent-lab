@@ -148,6 +148,7 @@ async def test_embed_settings_endpoint(
     # Проверяем что возвращены только публичные настройки
     assert settings["embed_id"] == embed_id
     assert settings["flow_id"] == test_agent_id
+    assert settings["skill_id"] == "default"
     assert settings["theme"] == "dark"
     assert settings["position"] == "bottom-right"
     assert settings["show_reasoning"] is True

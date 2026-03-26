@@ -71,6 +71,7 @@ async def get_embed_settings(embed_id: str, request: Request):
     return {
         "embed_id": config.embed_id,
         "flow_id": config.flow_id,
+        "skill_id": config.skill_id,
         "theme": config.theme,
         "position": config.position,
         "show_reasoning": config.show_reasoning,
@@ -175,6 +176,7 @@ async def embed_chat_stream(
     # Параметры сообщения
     params = MessageSendParams(
         message=a2a_message,
+        metadata={"skill": config.skill_id},
     )
     
     # SSE генератор

@@ -19,6 +19,43 @@ export class CreateApiKeyModal extends PlatformModal {
                 gap: 10px;
             }
 
+            .scope-label {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3, 14px);
+                margin: 0;
+                cursor: pointer;
+                text-align: left;
+            }
+
+            .scope-label:focus-within {
+                outline: none;
+            }
+
+            .scope-label:focus-visible .form-item {
+                box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+            }
+
+            .scope-checkbox {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                white-space: nowrap;
+                border: 0;
+            }
+
+            .form-item .form-item-title {
+                color: var(--text-primary);
+            }
+
+            .form-item .form-item-description {
+                color: var(--text-tertiary);
+            }
+
             .success-message {
                 text-align: center;
                 padding: 16px 0;
@@ -115,10 +152,14 @@ export class CreateApiKeyModal extends PlatformModal {
         ];
     }
 
-    _toggleScope(scopeId) {
-        const index = this._scopes.indexOf(scopeId);
-        if (index === -1) {
-            this._scopes = [...this._scopes, scopeId];
+    _onScopeChange(scopeId, checked) {
+        if (this._loading) {
+            return;
+        }
+        if (checked) {
+            if (!this._scopes.includes(scopeId)) {
+                this._scopes = [...this._scopes, scopeId];
+            }
         } else {
             this._scopes = this._scopes.filter((s) => s !== scopeId);
         }
@@ -199,18 +240,26 @@ export class CreateApiKeyModal extends PlatformModal {
                 <label class="form-label">Области доступа</label>
                 <div class="scopes-list">
                     ${this._availableScopes.map((scope) => html`
-                        <div
-                            class="form-item ${this._scopes.includes(scope.id) ? 'selected' : ''}"
-                            @click=${() => !this._loading && this._toggleScope(scope.id)}
-                        >
-                            <div class="form-checkbox">
-                                ${this._scopes.includes(scope.id) ? '✓' : ''}
+                        <label class="scope-label">
+                            <input
+                                class="scope-checkbox"
+                                type="checkbox"
+                                .checked=${this._scopes.includes(scope.id)}
+                                @change=${(e) => this._onScopeChange(scope.id, e.target.checked)}
+                                ?disabled=${this._loading}
+                            />
+                            <div
+                                class="form-item ${this._scopes.includes(scope.id) ? 'selected' : ''}"
+                            >
+                                <div class="form-checkbox" aria-hidden="true">
+                                    ${this._scopes.includes(scope.id) ? '✓' : ''}
+                                </div>
+                                <div class="form-item-content">
+                                    <div class="form-item-title">${scope.name}</div>
+                                    <div class="form-item-description">${scope.description}</div>
+                                </div>
                             </div>
-                            <div class="form-item-content">
-                                <div class="form-item-title">${scope.name}</div>
-                                <div class="form-item-description">${scope.description}</div>
-                            </div>
-                        </div>
+                        </label>
                     `)}
                 </div>
             </div>

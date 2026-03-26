@@ -3,6 +3,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { FrontendStore } from '../store/frontend.store.js';
 import '@platform/lib/components/company-modal.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class DashboardPage extends PlatformElement {
     static styles = [
@@ -107,8 +108,22 @@ export class DashboardPage extends PlatformElement {
             }
 
             .action-icon {
-                font-size: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
                 min-width: 40px;
+                width: 40px;
+                height: 40px;
+                flex-shrink: 0;
+                color: var(--text-primary);
+            }
+
+            .action-icon platform-icon {
+                color: var(--accent);
+            }
+
+            .action-card:hover .action-icon platform-icon {
+                color: var(--accent-hover, var(--accent));
             }
 
             .action-content {
@@ -328,25 +343,25 @@ export class DashboardPage extends PlatformElement {
     _renderQuickActions() {
         const actions = [
             {
-                icon: 'T',
+                iconName: 'share',
                 title: 'Пригласить участника',
                 description: 'Добавить нового члена команды',
                 action: () => FrontendStore.setCurrentView('team'),
             },
             {
-                icon: 'K',
+                iconName: 'key',
                 title: 'Создать API ключ',
                 description: 'Новый ключ для интеграций',
                 action: () => FrontendStore.setCurrentView('api-keys'),
             },
             {
-                icon: 'E',
+                iconName: 'chat',
                 title: 'Добавить Embed виджет',
                 description: 'Создать новый чат-виджет',
                 action: () => FrontendStore.setCurrentView('embed-configs'),
             },
             {
-                icon: 'B',
+                iconName: 'clipboard',
                 title: 'Пополнить баланс',
                 description: 'Управление биллингом',
                 action: () => FrontendStore.setCurrentView('billing'),
@@ -359,7 +374,9 @@ export class DashboardPage extends PlatformElement {
                 <div class="quick-actions">
                     ${actions.map((action) => html`
                         <div class="action-card" @click=${action.action}>
-                            <span class="action-icon">${action.icon}</span>
+                            <span class="action-icon">
+                                <platform-icon name="${action.iconName}" size="28"></platform-icon>
+                            </span>
                             <div class="action-content">
                                 <h3 class="action-title">${action.title}</h3>
                                 <p class="action-description">${action.description}</p>

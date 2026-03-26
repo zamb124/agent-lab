@@ -583,6 +583,15 @@ export class LandingHeader extends PlatformElement {
                                     <span class="nav-dropdown-item-desc">Умная записная книжка</span>
                                 </div>
                             </a>
+                            <a href="/products/sync" class="nav-dropdown-item" @click=${this._handleNavClick}>
+                                <div class="nav-dropdown-item-icon">
+                                    <img src="/static/core/assets/service_logos/sync_logo.svg" alt="Sync" />
+                                </div>
+                                <div class="nav-dropdown-item-content">
+                                    <span class="nav-dropdown-item-title">Sync</span>
+                                    <span class="nav-dropdown-item-desc">Чат и видеозвонки</span>
+                                </div>
+                            </a>
                         </div>
                     </div>
                     <a href="/documentation" class="nav-link">Документация</a>
@@ -641,6 +650,12 @@ export class LandingHeader extends PlatformElement {
                             <img src="/static/core/assets/service_logos/crm_logo.svg" alt="NetWorkle" />
                         </div>
                         NetWorkle
+                    </a>
+                    <a href="/products/sync" class="mobile-product-link" @click=${this._handleNavClick}>
+                        <div class="mobile-product-icon">
+                            <img src="/static/core/assets/service_logos/sync_logo.svg" alt="Sync" />
+                        </div>
+                        Sync
                     </a>
                 </div>
                 

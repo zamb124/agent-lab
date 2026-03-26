@@ -3,7 +3,7 @@
  * Наследует PlatformApp, подключает единый платформенный auth.
  */
 import { html, css } from 'lit';
-import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { SyncAPIService } from '../services/sync-api.service.js';
 import { SyncWsService } from '../services/sync-ws.service.js';
 import { SyncStore } from '../store/sync.store.js';
@@ -655,7 +655,7 @@ export class SyncApp extends PlatformApp {
     }
 
     render() {
-        const shell = PlatformApp.prototype._renderShellPages.call(this);
+        const shell = renderPlatformAppShell(this);
         if (shell !== null) {
             return shell;
         }

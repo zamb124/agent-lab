@@ -12,6 +12,30 @@ import '../components/pwa-install-banner.js';
 import '../components/glass-toast.js';
 import '../components/platform-shell-page.js';
 
+/**
+ * Общий рендер 404 / 500 shell для любого наследника PlatformApp.
+ * Вынесен в функцию, чтобы подклассы не полагались на lookup this._renderShellPages
+ * (в части окружений имя может пересекаться с полями Lit).
+ */
+export function renderPlatformAppShell(app) {
+    if (app._fatalShell === 'server-error') {
+        return html`
+            <platform-shell-page kind="server-error"></platform-shell-page>
+            <pwa-install-banner></pwa-install-banner>
+        `;
+    }
+    if (app._routeNotFound) {
+        return html`
+            <platform-shell-page
+                kind="not-found"
+                .homeHref=${app._notFoundHomeHref}
+            ></platform-shell-page>
+            <pwa-install-banner></pwa-install-banner>
+        `;
+    }
+    return null;
+}
+
 export class PlatformApp extends PlatformElement {
     static styles = [
         PlatformElement.styles,
@@ -143,22 +167,7 @@ export class PlatformApp extends PlatformElement {
     }
 
     _renderShellPages() {
-        if (this._fatalShell === 'server-error') {
-            return html`
-                <platform-shell-page kind="server-error"></platform-shell-page>
-                <pwa-install-banner></pwa-install-banner>
-            `;
-        }
-        if (this._routeNotFound) {
-            return html`
-                <platform-shell-page
-                    kind="not-found"
-                    .homeHref=${this._notFoundHomeHref}
-                ></platform-shell-page>
-                <pwa-install-banner></pwa-install-banner>
-            `;
-        }
-        return null;
+        return renderPlatformAppShell(this);
     }
 
     async connectedCallback() {
@@ -233,7 +242,7 @@ export class PlatformApp extends PlatformElement {
     }
 
     render() {
-        const shell = this._renderShellPages();
+        const shell = renderPlatformAppShell(this);
         if (shell !== null) {
             return shell;
         }

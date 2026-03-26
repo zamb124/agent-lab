@@ -2,13 +2,14 @@
  * RagApp - Главное приложение RAG Service
  */
 import { html, css } from 'lit';
-import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { RAGAPIService } from '../services/rag-api.service.js';
 import { RagStore } from '../store/rag.store.js';
 import '@platform/lib/components/layout/platform-island.js';
 
 export class RagApp extends PlatformApp {
     static properties = {
+        ...PlatformApp.properties,
         _currentView: { state: true },
     };
 
@@ -106,7 +107,7 @@ export class RagApp extends PlatformApp {
     }
 
     render() {
-        const shell = this._renderShellPages();
+        const shell = renderPlatformAppShell(this);
         if (shell !== null) {
             return shell;
         }

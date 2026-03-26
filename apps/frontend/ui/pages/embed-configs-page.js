@@ -222,7 +222,8 @@ export class EmbedConfigsPage extends PlatformElement {
                     <thead>
                         <tr>
                             <th>Название</th>
-                            <th>Агент</th>
+                            <th>Flow</th>
+                            <th>Skill</th>
                             <th>Статус</th>
                             <th>Использований</th>
                             <th>Действия</th>
@@ -233,6 +234,7 @@ export class EmbedConfigsPage extends PlatformElement {
                             <tr>
                                 <td>${config.name}</td>
                                 <td>${config.flow_id}</td>
+                                <td>${config.skill_id}</td>
                                 <td>
                                     <span class="status-badge ${config.status}">
                                         ${config.status}

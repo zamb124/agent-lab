@@ -61,11 +61,19 @@ export class FrontendSidebar extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 14px;
-                font-weight: var(--font-bold);
                 flex-shrink: 0;
                 border-radius: var(--radius-md);
                 background: var(--glass-solid-medium);
+                color: var(--text-secondary);
+            }
+
+            .nav-item.active .nav-icon,
+            .nav-item:hover .nav-icon {
+                color: inherit;
+            }
+
+            .nav-icon platform-icon {
+                display: flex;
             }
 
             .nav-icon img {
@@ -210,7 +218,9 @@ export class FrontendSidebar extends PlatformElement {
                         class="nav-item ${currentView === 'dashboard' ? 'active' : ''}"
                         @click=${() => this._navigate('dashboard')}
                     >
-                        <span class="nav-icon">D</span>
+                        <span class="nav-icon">
+                            <platform-icon name="chart" size="18"></platform-icon>
+                        </span>
                         <span class="nav-label">Dashboard</span>
                     </button>
 
@@ -218,7 +228,9 @@ export class FrontendSidebar extends PlatformElement {
                         class="nav-item ${currentView === 'team' ? 'active' : ''}"
                         @click=${() => this._navigate('team')}
                     >
-                        <span class="nav-icon">T</span>
+                        <span class="nav-icon">
+                            <platform-icon name="user" size="18"></platform-icon>
+                        </span>
                         <span class="nav-label">Команда</span>
                     </button>
 
@@ -226,7 +238,9 @@ export class FrontendSidebar extends PlatformElement {
                         class="nav-item ${currentView === 'api-keys' ? 'active' : ''}"
                         @click=${() => this._navigate('api-keys')}
                     >
-                        <span class="nav-icon">K</span>
+                        <span class="nav-icon">
+                            <platform-icon name="key" size="18"></platform-icon>
+                        </span>
                         <span class="nav-label">API Ключи</span>
                     </button>
 
@@ -234,7 +248,9 @@ export class FrontendSidebar extends PlatformElement {
                         class="nav-item ${currentView === 'billing' ? 'active' : ''}"
                         @click=${() => this._navigate('billing')}
                     >
-                        <span class="nav-icon">B</span>
+                        <span class="nav-icon">
+                            <platform-icon name="clipboard" size="18"></platform-icon>
+                        </span>
                         <span class="nav-label">Биллинг</span>
                     </button>
 
@@ -242,7 +258,9 @@ export class FrontendSidebar extends PlatformElement {
                         class="nav-item ${currentView === 'embed-configs' ? 'active' : ''}"
                         @click=${() => this._navigate('embed-configs')}
                     >
-                        <span class="nav-icon">E</span>
+                        <span class="nav-icon">
+                            <platform-icon name="chat" size="18"></platform-icon>
+                        </span>
                         <span class="nav-label">Embed Виджеты</span>
                     </button>
 
@@ -250,7 +268,9 @@ export class FrontendSidebar extends PlatformElement {
                         class="nav-item ${currentView === 'settings' ? 'active' : ''}"
                         @click=${() => this._navigate('settings')}
                     >
-                        <span class="nav-icon">S</span>
+                        <span class="nav-icon">
+                            <platform-icon name="settings" size="18"></platform-icon>
+                        </span>
                         <span class="nav-label">Настройки</span>
                     </button>
                 </nav>
@@ -258,7 +278,9 @@ export class FrontendSidebar extends PlatformElement {
                 <div class="services-section" data-hide-collapsed>
                     <div class="section-title">Документация</div>
                     <a class="service-link" href="/documentation">
-                        <span class="nav-icon">D</span>
+                        <span class="nav-icon">
+                            <platform-icon name="book-open" size="18"></platform-icon>
+                        </span>
                         <span>Humanitec Docs</span>
                     </a>
                 </div>

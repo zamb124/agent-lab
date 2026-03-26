@@ -246,6 +246,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
     assert "embed_id" in data
     assert data["name"] == "Test Widget"
     assert data["flow_id"] == "test_agent"
+    assert data["skill_id"] == "default"
     assert data["allowed_origins"] == ["https://example.com", "https://test.com"]
     assert data["status"] == "active"
     assert data["theme"] == "dark"

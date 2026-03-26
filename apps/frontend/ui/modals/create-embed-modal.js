@@ -64,6 +64,12 @@ export class CreateEmbedModal extends PlatformModal {
                 flex: 1;
             }
 
+            .flows-hint {
+                font-size: var(--text-xs, 12px);
+                color: var(--text-tertiary);
+                margin-top: var(--space-2);
+            }
+
             @media (prefers-color-scheme: dark) {
                 .position-option {
                     background: rgba(255, 255, 255, 0.03);
@@ -97,9 +103,68 @@ export class CreateEmbedModal extends PlatformModal {
         this.open = true;
         this._loading = false;
         this._name = '';
-        this._agentId = '';
+        this._flowId = '';
+        this._skillId = 'default';
+        this._flows = [];
+        this._flowsLoading = true;
         this._position = 'bottom-right';
         this._theme = 'dark';
+    }
+
+    async connectedCallback() {
+        super.connectedCallback();
+        await this._loadFlows();
+    }
+
+    async _loadFlows() {
+        this._flowsLoading = true;
+        this.requestUpdate();
+        try {
+            this._flows = await this.services.get('flowsCatalog').listFlows();
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(msg);
+            this._flows = [];
+        }
+        this._flowsLoading = false;
+        this.requestUpdate();
+    }
+
+    _selectedFlow() {
+        return this._flows.find((f) => f.flow_id === this._flowId) ?? null;
+    }
+
+    _skillChoices() {
+        const flow = this._selectedFlow();
+        if (!flow || flow.type !== 'local' || !flow.skills) {
+            return [];
+        }
+        return Object.entries(flow.skills);
+    }
+
+    _onFlowChange(e) {
+        this._flowId = e.target.value;
+        const flow = this._selectedFlow();
+        if (!flow || flow.type !== 'local') {
+            this._skillId = 'default';
+            this.requestUpdate();
+            return;
+        }
+        const entries = flow.skills ? Object.keys(flow.skills) : [];
+        if (entries.length === 0) {
+            this._skillId = 'default';
+            this.requestUpdate();
+            return;
+        }
+        if (!entries.includes(this._skillId)) {
+            this._skillId = entries.includes('default') ? 'default' : entries[0];
+        }
+        this.requestUpdate();
+    }
+
+    _onSkillChange(e) {
+        this._skillId = e.target.value;
+        this.requestUpdate();
     }
 
     async _handleCreate() {
@@ -108,29 +173,49 @@ export class CreateEmbedModal extends PlatformModal {
             return;
         }
 
-        if (!this._agentId.trim()) {
-            this.error('Введите ID агента');
+        if (!this._flowId.trim()) {
+            this.error('Выберите flow');
             return;
+        }
+
+        const flow = this._selectedFlow();
+        if (!flow) {
+            this.error('Выберите корректный flow');
+            return;
+        }
+
+        let skillId = 'default';
+        if (flow.type === 'local' && flow.skills && Object.keys(flow.skills).length > 0) {
+            skillId = this._skillId;
         }
 
         this._loading = true;
         this.requestUpdate();
 
-        await this.services.get('embed').create({
-            name: this._name.trim(),
-            flow_id: this._agentId.trim(),
-            position: this._position,
-            theme: this._theme,
-            status: 'active',
-        });
+        try {
+            await this.services.get('embed').create({
+                name: this._name.trim(),
+                flow_id: this._flowId.trim(),
+                skill_id: skillId,
+                position: this._position,
+                theme: this._theme,
+                status: 'active',
+            });
 
-        FrontendStore.setEmbedLoading(true);
-        const configs = await this.services.get('embed').list();
-        FrontendStore.setEmbedConfigs(configs);
+            FrontendStore.setEmbedLoading(true);
+            const configs = await this.services.get('embed').list();
+            FrontendStore.setEmbedConfigs(configs);
 
-        this.success('Виджет успешно создан');
-        this._handleClose();
-        this.dispatchEvent(new CustomEvent('created'));
+            this.success('Виджет успешно создан');
+            this._handleClose();
+            this.dispatchEvent(new CustomEvent('created'));
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(msg);
+        } finally {
+            this._loading = false;
+            this.requestUpdate();
+        }
     }
 
     close() {
@@ -148,6 +233,13 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     renderBody() {
+        if (this._flowsLoading) {
+            return html`<div class="loading-hint">Загрузка списка flows...</div>`;
+        }
+
+        const skillEntries = this._skillChoices();
+        const showSkill = skillEntries.length > 0;
+
         return html`
             <div class="form-group">
                 <label class="form-label">Название виджета</label>
@@ -163,17 +255,51 @@ export class CreateEmbedModal extends PlatformModal {
             </div>
 
             <div class="form-group">
-                <label class="form-label">ID агента</label>
-                <input
-                    class="form-input"
-                    type="text"
-                    placeholder="support-agent"
-                    .value=${this._agentId}
-                    @input=${(e) => { this._agentId = e.target.value; this.requestUpdate(); }}
+                <label class="form-label">Flow (агент)</label>
+                <select
+                    class="form-select"
+                    .value=${this._flowId}
+                    @change=${(e) => this._onFlowChange(e)}
                     ?disabled=${this._loading}
-                />
-                <div class="form-hint">Агент, который будет обрабатывать запросы</div>
+                >
+                    <option value="">Выберите flow</option>
+                    ${this._flows.map(
+                        (f) => html`
+                            <option value=${f.flow_id}>${f.name} (${f.flow_id})</option>
+                        `,
+                    )}
+                </select>
+                <div class="form-hint">Список из сервиса flows для текущей компании</div>
             </div>
+
+            ${showSkill
+                ? html`
+                      <div class="form-group">
+                          <label class="form-label">Skill</label>
+                          <select
+                              class="form-select"
+                              .value=${this._skillId}
+                              @change=${(e) => this._onSkillChange(e)}
+                              ?disabled=${this._loading}
+                          >
+                              ${skillEntries.map(
+                                  ([skillId, skill]) => html`
+                                      <option value=${skillId}>
+                                          ${skill.name ? `${skill.name} (${skillId})` : skillId}
+                                      </option>
+                                  `,
+                              )}
+                          </select>
+                          <div class="form-hint">Точка входа внутри flow</div>
+                      </div>
+                  `
+                : this._flowId
+                  ? html`
+                        <div class="form-group flows-hint">
+                            Skill: default (внешний flow или нет skills в конфиге).
+                        </div>
+                    `
+                  : ''}
 
             <div class="form-group">
                 <label class="form-label">Позиция на странице</label>
@@ -214,7 +340,7 @@ export class CreateEmbedModal extends PlatformModal {
                 <button
                     class="btn btn-primary"
                     @click=${this._handleCreate}
-                    ?disabled=${this._loading}
+                    ?disabled=${this._loading || this._flowsLoading}
                 >
                     ${this._loading ? 'Создание...' : 'Создать виджет'}
                 </button>
