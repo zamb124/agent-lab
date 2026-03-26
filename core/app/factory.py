@@ -47,6 +47,7 @@ from core.websocket.router import router as ws_router
 from core.api.auth import router as core_auth_router
 from core.push.router import router as push_router
 from core.push.service import init_web_push_service
+from core.app.pwa_routes import register_platform_pwa_routes
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,7 @@ def create_service_app(
     include_crud_routers: bool = True,
     mount_repo_mkdocs: bool = True,
     mkdocs_gateway_prefix: Optional[str] = None,
+    include_platform_pwa: Optional[bool] = None,
 ) -> FastAPI:
     """
     Создает FastAPI приложение для сервиса.
@@ -117,6 +119,7 @@ def create_service_app(
         include_crud_routers: Включать ли автоматические CRUD роутеры
         mount_repo_mkdocs: Смонтировать MkDocs из корня репозитория ``site/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
         mkdocs_gateway_prefix: Если задан (например ``frontend``), дублировать документацию на ``/{prefix}/documentation/`` за ingress.
+        include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         
     Returns:
         Настроенное FastAPI приложение
@@ -304,6 +307,13 @@ def create_service_app(
             project_root,
             gateway_prefix=mkdocs_gateway_prefix,
         )
+
+    if include_platform_pwa is None:
+        include_platform_pwa = os.getenv("TESTING", "false").lower() != "true"
+
+    if include_platform_pwa:
+        register_platform_pwa_routes(app, project_root)
+        logger.info("PWA: /manifest.json, /sw.js, /offline.html")
 
     # Health endpoints
     @app.get("/health")

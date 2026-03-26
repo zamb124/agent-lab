@@ -3,11 +3,10 @@
  * Обеспечивает офлайн-работу, кэширование и push-уведомления
  */
 
-const CACHE_NAME = 'humanitec-v1';
-const STATIC_CACHE_NAME = 'humanitec-static-v1';
-const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v1';
+const STATIC_CACHE_NAME = 'humanitec-static-v2';
+const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v2';
 
-// Статические ресурсы для предварительного кэширования
+// Статические ресурсы для предварительного кэширования (только пути, доступные на любом сервисе с /static/core)
 const STATIC_ASSETS = [
   '/',
   '/offline.html',
@@ -17,7 +16,6 @@ const STATIC_ASSETS = [
   '/static/core/assets/js/zustand-bundle.js',
   '/static/core/pwa/icons/icon-192x192.png',
   '/static/core/pwa/icons/icon-512x512.png',
-  '/static/frontend/styles/landing.css'
 ];
 
 // Install: кэшируем статику

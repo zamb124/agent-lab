@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 import os
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import RedirectResponse, FileResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -235,25 +235,6 @@ async def ui_flow(request: Request, flow_id: str = "example_react"):
             "flow_name": flow_id,
             "base_url": base_url,
         },
-    )
-
-
-@app.get("/manifest.json")
-async def manifest():
-    """PWA Web App Manifest"""
-    return FileResponse(
-        Path(__file__).parent / "static" / "manifest.json",
-        media_type="application/manifest+json"
-    )
-
-
-@app.get("/sw.js")
-async def service_worker():
-    """Service Worker - должен быть в корне для правильного scope"""
-    return FileResponse(
-        Path(__file__).parent / "static" / "sw.js",
-        media_type="application/javascript",
-        headers={"Service-Worker-Allowed": "/"}
     )
 
 

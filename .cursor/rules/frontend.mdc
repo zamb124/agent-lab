@@ -43,6 +43,10 @@ LitElement (Lit)
 
 Одна строка для всех SPA: `meta name="viewport"` с фиксированным масштабом (`maximum-scale=1`, `minimum-scale=1`, `user-scalable=no`) и `viewport-fit=cover`. Каноническое значение — `PLATFORM_MOBILE_VIEWPORT_CONTENT` в `core/frontend/viewport.py`; статические `apps/*/ui/index.html` дублируют тот же `content` (без генерации из Python). HTML, собираемый в Python (`flows` chat embed, registry schema), подставляет константу из `core.frontend.viewport`.
 
+## PWA
+
+Единый Web App Manifest, Service Worker и offline-страница: каталог **`core/frontend/pwa/`** (`manifest.json`, `sw.js`, `offline.html`). Маршруты **`GET /manifest.json`**, **`GET /sw.js`**, **`GET /offline.html`** подключает **`create_service_app`** через **`core/app/pwa_routes.py`** (`register_platform_pwa_routes`). Параметр фабрики **`include_platform_pwa`**: по умолчанию **`None`** — при **`TESTING=true`** PWA-маршруты не регистрируются, иначе регистрируются. Клиент: **`core/frontend/static/services/pwa.service.js`** (`navigator.serviceWorker.register('/sw.js', { scope: '/' })`). В каждом SPA-shell: **`<link rel="manifest" href="/manifest.json">`**. Push API остаётся на префиксе сервиса: **`/{service}/api/push/*`** (см. `getBaseUrl()`).
+
 ## Архитектура
 
 ```

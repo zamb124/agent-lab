@@ -156,41 +156,6 @@ async def get_translations(locale: str) -> JSONResponse:
     return JSONResponse(content=translations)
 
 
-# PWA файлы должны быть доступны из корня
-@app.get("/manifest.json")
-async def serve_manifest():
-    """PWA Web App Manifest"""
-    manifest_path = ui_path / "manifest.json"
-    if manifest_path.exists():
-        return FileResponse(
-            manifest_path,
-            media_type="application/manifest+json"
-        )
-    raise HTTPException(status_code=404, detail="Manifest not found")
-
-
-@app.get("/sw.js")
-async def serve_service_worker():
-    """Service Worker - должен отдаваться из корня для правильного scope"""
-    sw_path = ui_path / "sw.js"
-    if sw_path.exists():
-        return FileResponse(
-            sw_path,
-            media_type="application/javascript",
-            headers={"Service-Worker-Allowed": "/"}
-        )
-    raise HTTPException(status_code=404, detail="Service Worker not found")
-
-
-@app.get("/offline.html")
-async def serve_offline():
-    """Offline страница для PWA"""
-    offline_path = ui_path / "offline.html"
-    if offline_path.exists():
-        return FileResponse(offline_path)
-    raise HTTPException(status_code=404, detail="Offline page not found")
-
-
 # SPA fallback (все неизвестные пути → index.html)
 @app.get("/")
 @app.get("/{full_path:path}")
