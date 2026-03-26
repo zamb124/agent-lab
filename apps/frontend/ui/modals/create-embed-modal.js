@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { FrontendStore } from '../store/frontend.store.js';
@@ -13,6 +14,26 @@ export class CreateEmbedModal extends PlatformModal {
         formStyles,
         buttonStyles,
         css`
+            .flow-skill-row {
+                display: grid;
+                gap: var(--space-4, 16px);
+                margin-bottom: var(--space-5, 20px);
+            }
+
+            .flow-skill-row .form-group {
+                margin-bottom: 0;
+            }
+
+            .flow-skill-row--split {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            @media (max-width: 520px) {
+                .flow-skill-row--split {
+                    grid-template-columns: 1fr;
+                }
+            }
+
             .position-options {
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
@@ -21,38 +42,43 @@ export class CreateEmbedModal extends PlatformModal {
 
             .position-option {
                 padding: 16px;
-                background: rgba(0, 0, 0, 0.02);
-                border: 2px solid rgba(0, 0, 0, 0.06);
+                background: var(--glass-tint-subtle);
+                border: 2px solid var(--border-subtle);
                 border-radius: 14px;
                 cursor: pointer;
-                transition: all 0.2s ease;
+                transition: background 0.2s ease, border-color 0.2s ease;
                 text-align: center;
             }
 
             .position-option:hover {
-                background: rgba(0, 0, 0, 0.04);
-                border-color: rgba(0, 0, 0, 0.1);
+                background: var(--glass-tint-medium);
+                border-color: var(--border-default);
             }
 
             .position-option.selected {
-                background: rgba(16, 185, 129, 0.08);
+                background: var(--accent-subtle);
                 border-color: rgba(16, 185, 129, 0.4);
             }
 
             .position-icon {
                 font-size: 24px;
                 margin-bottom: 8px;
-                color: rgba(0, 0, 0, 0.6);
+                color: var(--text-secondary);
+                line-height: 1.2;
             }
 
             .position-option.selected .position-icon {
-                color: #10b981;
+                color: var(--accent);
             }
 
             .position-label {
                 font-size: 13px;
                 font-weight: 500;
-                color: rgba(0, 0, 0, 0.7);
+                color: var(--text-primary);
+            }
+
+            .position-option.selected .position-label {
+                color: var(--text-primary);
             }
 
             .actions-row {
@@ -70,29 +96,63 @@ export class CreateEmbedModal extends PlatformModal {
                 margin-top: var(--space-2);
             }
 
-            @media (prefers-color-scheme: dark) {
-                .position-option {
-                    background: rgba(255, 255, 255, 0.03);
-                    border-color: rgba(255, 255, 255, 0.08);
-                }
+            .theme-label-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3, 12px);
+                flex-wrap: wrap;
+            }
 
-                .position-option:hover {
-                    background: rgba(255, 255, 255, 0.06);
-                    border-color: rgba(255, 255, 255, 0.12);
-                }
+            .theme-label-row .form-label {
+                margin-bottom: 0;
+            }
 
-                .position-option.selected {
-                    background: rgba(16, 185, 129, 0.12);
-                    border-color: rgba(16, 185, 129, 0.4);
-                }
+            .theme-chips {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                flex-shrink: 0;
+            }
 
-                .position-icon {
-                    color: rgba(255, 255, 255, 0.6);
-                }
+            .theme-chip {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 44px;
+                height: 40px;
+                padding: 0 12px;
+                box-sizing: border-box;
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md, 12px);
+                background: var(--glass-tint-subtle);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition:
+                    border-color 0.15s ease,
+                    background 0.15s ease,
+                    color 0.15s ease;
+            }
 
-                .position-label {
-                    color: rgba(255, 255, 255, 0.7);
-                }
+            .theme-chip:hover:not(:disabled) {
+                border-color: var(--border-strong);
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+            }
+
+            .theme-chip.selected {
+                border-color: var(--accent);
+                background: var(--accent-subtle);
+                color: var(--accent);
+            }
+
+            .theme-chip:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .theme-chip platform-icon {
+                display: block;
             }
         `,
     ];
@@ -120,7 +180,8 @@ export class CreateEmbedModal extends PlatformModal {
         this._flowsLoading = true;
         this.requestUpdate();
         try {
-            this._flows = await this.services.get('flowsCatalog').listFlows();
+            const list = await this.services.get('flowsCatalog').listFlows();
+            this._flows = Array.isArray(list) ? list : [];
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.error(msg);
@@ -130,8 +191,12 @@ export class CreateEmbedModal extends PlatformModal {
         this.requestUpdate();
     }
 
+    _flowsList() {
+        return Array.isArray(this._flows) ? this._flows : [];
+    }
+
     _selectedFlow() {
-        return this._flows.find((f) => f.flow_id === this._flowId) ?? null;
+        return this._flowsList().find((f) => f.flow_id === this._flowId) ?? null;
     }
 
     _skillChoices() {
@@ -254,52 +319,54 @@ export class CreateEmbedModal extends PlatformModal {
                 <div class="form-hint">Краткое описание виджета</div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Flow (агент)</label>
-                <select
-                    class="form-select"
-                    .value=${this._flowId}
-                    @change=${(e) => this._onFlowChange(e)}
-                    ?disabled=${this._loading}
-                >
-                    <option value="">Выберите flow</option>
-                    ${this._flows.map(
-                        (f) => html`
-                            <option value=${f.flow_id}>${f.name} (${f.flow_id})</option>
-                        `,
-                    )}
-                </select>
-                <div class="form-hint">Список из сервиса flows для текущей компании</div>
-            </div>
+            <div class="flow-skill-row ${showSkill ? 'flow-skill-row--split' : ''}">
+                <div class="form-group">
+                    <label class="form-label">Flow (агент)</label>
+                    <select
+                        class="form-select"
+                        .value=${this._flowId}
+                        @change=${(e) => this._onFlowChange(e)}
+                        ?disabled=${this._loading}
+                    >
+                        <option value="">Выберите flow</option>
+                        ${this._flowsList().map(
+                            (f) => html`
+                                <option value=${f.flow_id}>${f.name} (${f.flow_id})</option>
+                            `,
+                        )}
+                    </select>
+                    <div class="form-hint">Список из сервиса flows для текущей компании</div>
+                </div>
 
-            ${showSkill
-                ? html`
-                      <div class="form-group">
-                          <label class="form-label">Skill</label>
-                          <select
-                              class="form-select"
-                              .value=${this._skillId}
-                              @change=${(e) => this._onSkillChange(e)}
-                              ?disabled=${this._loading}
-                          >
-                              ${skillEntries.map(
-                                  ([skillId, skill]) => html`
-                                      <option value=${skillId}>
-                                          ${skill.name ? `${skill.name} (${skillId})` : skillId}
-                                      </option>
-                                  `,
-                              )}
-                          </select>
-                          <div class="form-hint">Точка входа внутри flow</div>
-                      </div>
-                  `
-                : this._flowId
-                  ? html`
-                        <div class="form-group flows-hint">
-                            Skill: default (внешний flow или нет skills в конфиге).
-                        </div>
-                    `
-                  : ''}
+                ${showSkill
+                    ? html`
+                          <div class="form-group">
+                              <label class="form-label">Skill</label>
+                              <select
+                                  class="form-select"
+                                  .value=${this._skillId}
+                                  @change=${(e) => this._onSkillChange(e)}
+                                  ?disabled=${this._loading}
+                              >
+                                  ${skillEntries.map(
+                                      ([skillId, skill]) => html`
+                                          <option value=${skillId}>
+                                              ${skill.name ? `${skill.name} (${skillId})` : skillId}
+                                          </option>
+                                      `,
+                                  )}
+                              </select>
+                              <div class="form-hint">Точка входа внутри flow</div>
+                          </div>
+                      `
+                    : this._flowId
+                      ? html`
+                            <div class="form-group flows-hint">
+                                Skill: default (внешний flow или нет skills в конфиге).
+                            </div>
+                        `
+                      : html``}
+            </div>
 
             <div class="form-group">
                 <label class="form-label">Позиция на странице</label>
@@ -312,17 +379,14 @@ export class CreateEmbedModal extends PlatformModal {
             </div>
 
             <div class="form-group">
-                <label class="form-label">Тема оформления</label>
-                <select
-                    class="form-select"
-                    .value=${this._theme}
-                    @change=${(e) => { this._theme = e.target.value; this.requestUpdate(); }}
-                    ?disabled=${this._loading}
-                >
-                    <option value="dark">Темная</option>
-                    <option value="light">Светлая</option>
-                    <option value="auto">Автоматическая</option>
-                </select>
+                <div class="theme-label-row">
+                    <span class="form-label">Тема оформления</span>
+                    <div class="theme-chips" role="group" aria-label="Тема оформления виджета">
+                        ${this._renderThemeChip('light', 'sun', 'Светлая')}
+                        ${this._renderThemeChip('dark', 'moon', 'Тёмная')}
+                        ${this._renderThemeChip('auto', 'theme-auto', 'Как в системе')}
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -357,6 +421,29 @@ export class CreateEmbedModal extends PlatformModal {
                 <div class="position-icon">${icon}</div>
                 <div class="position-label">${label}</div>
             </div>
+        `;
+    }
+
+    _renderThemeChip(value, iconName, title) {
+        const selected = this._theme === value;
+        return html`
+            <button
+                type="button"
+                class="theme-chip ${selected ? 'selected' : ''}"
+                title=${title}
+                aria-label=${title}
+                aria-pressed=${selected ? 'true' : 'false'}
+                ?disabled=${this._loading}
+                @click=${() => {
+                    if (this._loading) {
+                        return;
+                    }
+                    this._theme = value;
+                    this.requestUpdate();
+                }}
+            >
+                <platform-icon name=${iconName} size="20"></platform-icon>
+            </button>
         `;
     }
 }

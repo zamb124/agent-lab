@@ -3,9 +3,22 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { FrontendStore } from '../store/frontend.store.js';
+
+const ALLOWED_API_KEY_SCOPES = [
+    'agents:read',
+    'agents:write',
+    'crm:read',
+    'crm:write',
+    'rag:read',
+    'rag:write',
+    'billing:read',
+];
+
+const ALLOWED_SCOPE_SET = new Set(ALLOWED_API_KEY_SCOPES);
 
 export class CreateApiKeyModal extends PlatformModal {
     static styles = [
@@ -17,35 +30,53 @@ export class CreateApiKeyModal extends PlatformModal {
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
+                width: 100%;
+                min-width: 0;
             }
 
             .scope-label {
+                position: relative;
                 display: flex;
-                align-items: center;
+                align-items: stretch;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
                 gap: var(--space-3, 14px);
                 margin: 0;
                 cursor: pointer;
                 text-align: left;
             }
 
+            .scope-label .form-item {
+                flex: 1 1 auto;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+                user-select: none;
+            }
+
             .scope-label:focus-within {
                 outline: none;
             }
 
-            .scope-label:focus-visible .form-item {
+            .scope-label:has(.scope-checkbox:focus-visible) .form-item {
                 box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
             }
 
             .scope-checkbox {
                 position: absolute;
-                width: 1px;
-                height: 1px;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                margin: 0;
                 padding: 0;
-                margin: -1px;
-                overflow: hidden;
-                clip: rect(0, 0, 0, 0);
-                white-space: nowrap;
-                border: 0;
+                opacity: 0;
+                cursor: pointer;
+                z-index: 2;
+                appearance: none;
+                -webkit-appearance: none;
+                border: none;
+                background: transparent;
             }
 
             .form-item .form-item-title {
@@ -78,26 +109,72 @@ export class CreateApiKeyModal extends PlatformModal {
             .success-title {
                 font-size: 20px;
                 font-weight: 600;
-                color: rgba(0, 0, 0, 0.85);
+                color: var(--text-primary);
                 margin: 0 0 8px 0;
             }
 
-            .key-display {
-                background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.12) 100%);
-                border: 1px solid rgba(16, 185, 129, 0.2);
-                border-radius: 12px;
-                padding: 16px;
+            .key-row {
+                display: flex;
+                align-items: stretch;
+                gap: var(--space-2, 8px);
                 margin: 20px 0;
+                min-width: 0;
+            }
+
+            .key-display {
+                flex: 1;
+                min-width: 0;
+                margin: 0;
+                background: var(--accent-subtle);
+                border: 1px solid var(--border-default);
+                border-radius: 12px;
+                padding: 12px 14px;
                 word-break: break-all;
                 font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
                 font-size: 13px;
-                color: #059669;
+                color: var(--accent);
                 text-align: left;
+                display: flex;
+                align-items: center;
+            }
+
+            .copy-key-btn {
+                flex-shrink: 0;
+                width: 44px;
+                min-height: 44px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md, 12px);
+                background: var(--glass-tint-subtle);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition:
+                    background 0.15s ease,
+                    border-color 0.15s ease,
+                    color 0.15s ease;
+            }
+
+            .copy-key-btn:hover:not(:disabled) {
+                background: var(--glass-tint-medium);
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            .copy-key-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .copy-key-btn platform-icon {
+                display: block;
             }
 
             .warning-text {
                 font-size: 13px;
-                color: rgba(0, 0, 0, 0.5);
+                color: var(--text-tertiary);
                 text-align: center;
                 margin-top: 16px;
                 line-height: 1.5;
@@ -116,21 +193,6 @@ export class CreateApiKeyModal extends PlatformModal {
                 flex: 1;
             }
 
-            @media (prefers-color-scheme: dark) {
-                .success-title {
-                    color: rgba(255, 255, 255, 0.95);
-                }
-
-                .key-display {
-                    background: rgba(16, 185, 129, 0.12);
-                    border-color: rgba(16, 185, 129, 0.25);
-                    color: #34d399;
-                }
-
-                .warning-text {
-                    color: rgba(255, 255, 255, 0.5);
-                }
-            }
         `,
     ];
 
@@ -144,11 +206,13 @@ export class CreateApiKeyModal extends PlatformModal {
         this._createdKey = null;
 
         this._availableScopes = [
-            { id: 'agents:read', name: 'Чтение агентов', description: 'Просмотр списка и деталей агентов' },
-            { id: 'agents:write', name: 'Управление агентами', description: 'Создание, редактирование и удаление агентов' },
-            { id: 'agents:execute', name: 'Запуск агентов', description: 'Выполнение агентов и получение результатов' },
-            { id: 'api:read', name: 'Чтение API', description: 'Доступ к чтению через API' },
-            { id: 'api:write', name: 'Запись API', description: 'Доступ к изменению через API' },
+            { id: 'agents:read', name: 'Чтение агентов (Flows)', description: 'Просмотр flows и связанных данных' },
+            { id: 'agents:write', name: 'Запись агентов (Flows)', description: 'Создание и изменение flows' },
+            { id: 'crm:read', name: 'Чтение CRM', description: 'Просмотр сущностей и графа' },
+            { id: 'crm:write', name: 'Запись CRM', description: 'Создание и изменение данных CRM' },
+            { id: 'rag:read', name: 'Чтение RAG', description: 'Просмотр документов и поиск' },
+            { id: 'rag:write', name: 'Запись RAG', description: 'Загрузка и изменение коллекций' },
+            { id: 'billing:read', name: 'Чтение биллинга', description: 'Просмотр баланса и тарифа' },
         ];
     }
 
@@ -172,7 +236,8 @@ export class CreateApiKeyModal extends PlatformModal {
             return;
         }
 
-        if (this._scopes.length === 0) {
+        const scopes = this._scopes.filter((s) => ALLOWED_SCOPE_SET.has(s));
+        if (scopes.length === 0) {
             this.error('Выберите хотя бы одну область доступа');
             return;
         }
@@ -180,21 +245,87 @@ export class CreateApiKeyModal extends PlatformModal {
         this._loading = true;
         this.requestUpdate();
 
-        const result = await this.services.get('apiKeys').create(this._name.trim(), this._scopes);
+        try {
+            const result = await this.services.get('apiKeys').create(this._name.trim(), scopes);
 
-        FrontendStore.setApiKeysLoading(true);
-        const keys = await this.services.get('apiKeys').list();
-        FrontendStore.setApiKeys(keys);
+            const secret = result.secret;
+            if (!secret) {
+                throw new Error('Сервер не вернул секрет ключа');
+            }
 
-        this._createdKey = result;
-        this._loading = false;
-        this.success('API ключ успешно создан');
-        this.requestUpdate();
+            this._createdKey = { ...result, key: secret };
+
+            const prefix = secret.length >= 12 ? secret.slice(0, 12) : secret;
+            const createdAt = new Date().toISOString();
+            const listRow = {
+                key_id: result.key_id,
+                name: result.name,
+                key_prefix: prefix,
+                scopes: result.scopes,
+                created_at: createdAt,
+                last_used: null,
+                company_id: '',
+                created_by: '',
+            };
+            const prev = FrontendStore.state.entities.apiKeys.keys;
+            FrontendStore.setApiKeys([
+                listRow,
+                ...prev.filter((k) => k.key_id !== result.key_id),
+            ]);
+
+            this.success('API ключ успешно создан');
+            this.requestUpdate();
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(msg);
+            this.requestUpdate();
+        } finally {
+            this._loading = false;
+            this.requestUpdate();
+        }
+    }
+
+    async _copyToClipboard(text) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return;
+            } catch {
+                // Secure Context может отказать — пробуем execCommand
+            }
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+            const ok = document.execCommand('copy');
+            if (!ok) {
+                throw new Error('Команда копирования не выполнена');
+            }
+        } finally {
+            document.body.removeChild(ta);
+        }
     }
 
     async _handleCopy() {
-        await navigator.clipboard.writeText(this._createdKey.key);
-        this.success('Ключ скопирован в буфер обмена');
+        const text = this._createdKey?.key;
+        if (!text) {
+            this.error('Нет данных ключа для копирования');
+            return;
+        }
+        try {
+            await this._copyToClipboard(text);
+            this.success('Ключ скопирован в буфер обмена');
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(
+                `Не удалось скопировать: ${msg}. Откройте сайт по HTTPS или скопируйте ключ вручную.`,
+            );
+        }
     }
 
     close() {
@@ -219,7 +350,7 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     renderFooter() {
-        return this._createdKey ? this._renderSuccessActions() : this._renderFormActions();
+        return this._createdKey ? html`` : this._renderFormActions();
     }
 
     _renderForm() {
@@ -241,13 +372,6 @@ export class CreateApiKeyModal extends PlatformModal {
                 <div class="scopes-list">
                     ${this._availableScopes.map((scope) => html`
                         <label class="scope-label">
-                            <input
-                                class="scope-checkbox"
-                                type="checkbox"
-                                .checked=${this._scopes.includes(scope.id)}
-                                @change=${(e) => this._onScopeChange(scope.id, e.target.checked)}
-                                ?disabled=${this._loading}
-                            />
                             <div
                                 class="form-item ${this._scopes.includes(scope.id) ? 'selected' : ''}"
                             >
@@ -259,6 +383,13 @@ export class CreateApiKeyModal extends PlatformModal {
                                     <div class="form-item-description">${scope.description}</div>
                                 </div>
                             </div>
+                            <input
+                                class="scope-checkbox"
+                                type="checkbox"
+                                .checked=${this._scopes.includes(scope.id)}
+                                @change=${(e) => this._onScopeChange(scope.id, e.target.checked)}
+                                ?disabled=${this._loading}
+                            />
                         </label>
                     `)}
                 </div>
@@ -293,11 +424,18 @@ export class CreateApiKeyModal extends PlatformModal {
                 <div class="success-icon">✓</div>
                 <h3 class="success-title">API ключ создан!</h3>
 
-                <div class="key-display">${this._createdKey.key}</div>
-
-                <button class="btn btn-primary" style="width: 100%;" @click=${this._handleCopy}>
-                    Скопировать ключ
-                </button>
+                <div class="key-row">
+                    <div class="key-display">${this._createdKey.key}</div>
+                    <button
+                        type="button"
+                        class="copy-key-btn"
+                        title="Скопировать ключ"
+                        aria-label="Скопировать ключ"
+                        @click=${this._handleCopy}
+                    >
+                        <platform-icon name="copy" size="20"></platform-icon>
+                    </button>
+                </div>
 
                 <p class="warning-text">
                     <strong>Важно:</strong> Сохраните этот ключ в безопасном месте.<br/>
@@ -307,13 +445,6 @@ export class CreateApiKeyModal extends PlatformModal {
         `;
     }
 
-    _renderSuccessActions() {
-        return html`
-            <button class="btn btn-primary" style="width: 100%;" @click=${this._handleClose}>
-                Готово
-            </button>
-        `;
-    }
 }
 
 customElements.define('create-api-key-modal', CreateApiKeyModal);

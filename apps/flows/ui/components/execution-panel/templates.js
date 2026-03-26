@@ -18,6 +18,7 @@ export function renderPanel(component) {
                 <div class="execution-panel-actions">
                     ${showState ? html`
                         <button 
+                            type="button"
                             class="action-btn"
                             ?disabled=${!component.hasExecutionData}
                             @click=${component._handleStateClick}
@@ -28,6 +29,7 @@ export function renderPanel(component) {
                     ` : ''}
                     ${showTracing ? html`
                         <button 
+                            type="button"
                             class="action-btn"
                             ?disabled=${!component.hasExecutionData}
                             @click=${component._handleTracingClick}
@@ -38,6 +40,7 @@ export function renderPanel(component) {
                     ` : ''}
                     ${showMocks ? html`
                         <button 
+                            type="button"
                             class="action-btn"
                             @click=${component._toggleMocks}
                             title="Настроить моки"
@@ -46,6 +49,7 @@ export function renderPanel(component) {
                         </button>
                     ` : ''}
                     <button 
+                        type="button"
                         class="close-btn"
                         @click=${component._handleClose}
                         title="Закрыть панель"
@@ -62,17 +66,30 @@ export function renderPanel(component) {
                         <span>${component.inputQuestion}</span>
                     </div>
                 ` : ''}
-                <div class="input-wrapper">
-                    <label class="file-attach-btn" title="Прикрепить файлы">
-                        <input 
-                            type="file" 
-                            class="file-input" 
-                            multiple 
-                            hidden
-                            @change=${component._handleFileSelect}
-                        >
-                        <platform-icon name="file" size="20"></platform-icon>
-                    </label>
+                <div class="input-row">
+                    <div class="input-tools-column">
+                        <label class="file-attach-btn" title="Прикрепить файлы">
+                            <input 
+                                type="file" 
+                                class="file-input" 
+                                multiple 
+                                hidden
+                                @change=${component._handleFileSelect}
+                            >
+                            <platform-icon name="file" size="20"></platform-icon>
+                        </label>
+                        ${!component.isBreakpoint && !component.isRunning ? html`
+                            <button
+                                type="button"
+                                class="btn-run-icon ${hasError ? 'btn-retry-icon' : ''}"
+                                @click=${component._handleRun}
+                                ?disabled=${!component.message.trim()}
+                                title=${hasError ? 'Запустить заново' : 'Запустить'}
+                            >
+                                <platform-icon name="play" size="20"></platform-icon>
+                            </button>
+                        ` : ''}
+                    </div>
                     <textarea
                         class="input-text"
                         placeholder=${component.inputQuestion ? 'Введите ваш ответ...' : (component.placeholder || 'Введите сообщение для агента...')}
@@ -89,6 +106,7 @@ export function renderPanel(component) {
                             <div class="file-item">
                                 <span class="file-name">${file.name}</span>
                                 <button 
+                                    type="button"
                                     class="file-remove"
                                     @click=${() => component._removeFile(index)}
                                 >
@@ -103,6 +121,7 @@ export function renderPanel(component) {
             <div class="execution-panel-footer">
                 ${component.isBreakpoint ? html`
                     <button 
+                        type="button"
                         class="btn btn-resume"
                         @click=${component._handleResume}
                         ?disabled=${component.inputQuestion && !component.message.trim()}
@@ -112,22 +131,14 @@ export function renderPanel(component) {
                     </button>
                 ` : component.isRunning ? html`
                     <button 
+                        type="button"
                         class="btn btn-stop"
                         @click=${component._handleStop}
                     >
                         <platform-icon name="stop" size="14"></platform-icon>
                         Остановить
                     </button>
-                ` : html`
-                    <button 
-                        class="btn btn-run ${hasError ? 'btn-retry' : ''}"
-                        @click=${component._handleRun}
-                        ?disabled=${!component.message.trim()}
-                    >
-                        <platform-icon name="play" size="14"></platform-icon>
-                        ${hasError ? 'Запустить заново' : 'Запустить'}
-                    </button>
-                `}
+                ` : ''}
             </div>
 
             ${hasError ? html`
@@ -136,6 +147,7 @@ export function renderPanel(component) {
                         <platform-icon name="x" size="16" style="color: var(--error, #ef4444);"></platform-icon>
                         <span>Ошибка</span>
                         <button 
+                            type="button"
                             class="error-clear"
                             @click=${() => { component.errorMessage = null; }}
                             title="Закрыть"
@@ -148,6 +160,7 @@ export function renderPanel(component) {
                     </div>
                     <div class="error-actions">
                         <button 
+                            type="button"
                             class="error-copy-btn"
                             @click=${() => {
                                 navigator.clipboard.writeText(component.errorMessage).then(() => {
@@ -172,6 +185,7 @@ export function renderPanel(component) {
                     <div class="result-header">
                         <span>Результат</span>
                         <button 
+                            type="button"
                             class="result-clear"
                             @click=${component._clearResult}
                             title="Очистить"
@@ -190,6 +204,7 @@ export function renderPanel(component) {
                     <div class="mocks-header">
                         <span>Настройка моков</span>
                         <button 
+                            type="button"
                             class="mocks-close"
                             @click=${component._toggleMocks}
                         >
@@ -199,6 +214,7 @@ export function renderPanel(component) {
                     <div class="mocks-body">
                         <llm-mocks-editor
                             .mocks=${component.mockResponses}
+                            .flowNodes=${component.flowNodes || {}}
                             @change=${component._handleMocksChange}
                         ></llm-mocks-editor>
                     </div>

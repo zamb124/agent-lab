@@ -8,16 +8,20 @@ export const executionPanelStyles = css`
     :host {
         display: block;
         width: 360px;
+        max-height: min(85vh, 720px);
     }
 
     .execution-panel-container {
         background: var(--glass-solid-strong, rgba(40, 40, 64, 0.95));
         border: 1px solid var(--border-default, rgba(255,255,255,0.1));
-        border-radius: var(--radius-lg, 12px);
+        border-radius: 20px;
         box-shadow: var(--glass-shadow-strong, 0 16px 48px rgba(0,0,0,0.4));
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
         display: flex;
         flex-direction: column;
+        max-height: inherit;
+        min-height: 0;
     }
 
     .execution-panel-header {
@@ -91,6 +95,69 @@ export const executionPanelStyles = css`
         display: flex;
         flex-direction: column;
         gap: 12px;
+        flex-shrink: 0;
+        min-width: 0;
+    }
+
+    .input-row {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .input-tools-column {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+        padding-top: 2px;
+    }
+
+    .input-row .input-text {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .btn-run-icon {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    }
+
+    .btn-run-icon:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary, rgba(255, 255, 255, 0.95));
+        border-color: var(--accent, #6366f1);
+    }
+
+    .btn-run-icon:active:not(:disabled) {
+        transform: scale(0.96);
+    }
+
+    .btn-run-icon:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+
+    .btn-run-icon.btn-retry-icon:hover:not(:disabled) {
+        border-color: var(--warning, #f59e0b);
+    }
+
+    .btn-run-icon platform-icon {
+        color: inherit;
     }
 
     .input-question {
@@ -116,12 +183,6 @@ export const executionPanelStyles = css`
         flex: 1;
     }
 
-    .input-wrapper {
-        display: flex;
-        gap: 8px;
-        align-items: flex-start;
-    }
-
     .file-attach-btn {
         width: 36px;
         height: 36px;
@@ -130,7 +191,7 @@ export const executionPanelStyles = css`
         justify-content: center;
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
+        border-radius: 10px;
         cursor: pointer;
         transition: all 0.2s ease;
         color: var(--text-secondary, rgba(255,255,255,0.7));
@@ -151,15 +212,18 @@ export const executionPanelStyles = css`
         color: var(--text-primary, rgba(255,255,255,0.95));
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
+        border-radius: 12px;
         outline: none;
         resize: vertical;
-        transition: all 0.2s ease;
+        transition: background 0.15s ease, border-color 0.15s ease;
     }
 
-    .input-text:focus {
-        background: rgba(255, 255, 255, 0.05);
-        border-color: var(--accent, #6366f1);
+    .input-text:focus,
+    .input-text:focus-visible {
+        background: rgba(255, 255, 255, 0.045);
+        border-color: rgba(255, 255, 255, 0.14);
+        outline: none;
+        box-shadow: none;
     }
 
     .input-text:disabled {
@@ -221,6 +285,14 @@ export const executionPanelStyles = css`
     .execution-panel-footer {
         padding: 12px 16px;
         border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+        flex-shrink: 0;
+        min-width: 0;
+    }
+
+    .execution-panel-footer:empty {
+        display: none;
+        padding: 0;
+        border-top: none;
     }
 
     .btn {
@@ -330,6 +402,8 @@ export const executionPanelStyles = css`
 
     .mocks-section {
         border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+        flex-shrink: 0;
+        min-width: 0;
     }
 
     .mocks-header {
@@ -367,6 +441,8 @@ export const executionPanelStyles = css`
 
     .mocks-body {
         padding: 12px 16px;
+        min-width: 0;
+        overflow-x: hidden;
     }
 
     .error-section {

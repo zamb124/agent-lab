@@ -95,14 +95,6 @@ export class MCPNodeModal extends BaseNodeModal {
         this._loadServerTools(e.target.value);
     }
 
-    _buildDefaultState() {
-        return {
-            content: 'Текст запроса',
-            messages: [],
-            variables: this.flowVariables || {},
-        };
-    }
-
     _buildConfig() {
         const name = this.shadowRoot.querySelector('[name="name"]')?.value?.trim() || '';
         const serverId = this.shadowRoot.querySelector('[name="server_id"]')?.value?.trim() || '';
@@ -273,7 +265,9 @@ export class MCPNodeModal extends BaseNodeModal {
                     </div>
                     
                     <test-panel
+                        .flowId=${this.flowId || ''}
                         .inputState=${this._buildDefaultState()}
+                        .defaultInputState=${this._buildDefaultState()}
                         @validate=${this._onValidate}
                         @execute=${this._onExecute}
                     ></test-panel>

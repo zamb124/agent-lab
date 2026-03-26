@@ -230,6 +230,14 @@ export const formStyles = css`
         gap: var(--space-6, 24px);
         min-height: 400px;
     }
+
+    .form-layout:has(code-editor.fullscreen) {
+        grid-template-columns: 1fr;
+    }
+
+    .form-layout:has(code-editor.fullscreen) .form-sidebar {
+        display: none;
+    }
     
     /* Responsive - Tablet */
     @media (max-width: 900px) {
@@ -267,49 +275,5 @@ export const formStyles = css`
         padding-top: var(--space-5, 20px);
         border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
         margin-top: var(--space-5, 20px);
-    }
-
-    /* Light Theme */
-    :host-context([data-theme="light"]) .form-input,
-    :host-context([data-theme="light"]) .form-select,
-    :host-context([data-theme="light"]) .form-textarea {
-        background: rgba(255, 255, 255, 0.8);
-        border-color: rgba(15, 23, 42, 0.1);
-    }
-
-    :host-context([data-theme="light"]) .form-input:focus,
-    :host-context([data-theme="light"]) .form-select:focus,
-    :host-context([data-theme="light"]) .form-textarea:focus {
-        background: rgba(255, 255, 255, 0.95);
-        border-color: var(--accent, #059669);
-        box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
-    }
-
-    :host-context([data-theme="light"]) .form-item {
-        background: rgba(255, 255, 255, 0.6);
-        border-color: rgba(15, 23, 42, 0.08);
-    }
-
-    :host-context([data-theme="light"]) .form-item:hover {
-        background: rgba(255, 255, 255, 0.8);
-        border-color: rgba(15, 23, 42, 0.12);
-    }
-
-    :host-context([data-theme="light"]) .form-section {
-        background: rgba(255, 255, 255, 0.6);
-        border-color: rgba(15, 23, 42, 0.08);
-    }
-
-    :host-context([data-theme="light"]) .toggle-switch {
-        background: rgba(15, 23, 42, 0.1);
-    }
-
-    :host-context([data-theme="light"]) .form-checkbox {
-        background: rgba(255, 255, 255, 0.8);
-        border-color: rgba(15, 23, 42, 0.15);
-    }
-
-    :host-context([data-theme="light"]) .form-actions {
-        border-top-color: rgba(15, 23, 42, 0.08);
     }
 `;

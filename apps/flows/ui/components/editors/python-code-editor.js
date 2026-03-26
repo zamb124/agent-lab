@@ -4,6 +4,8 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 
 const DEFAULT_CODE = `async def run(state):
     """
@@ -260,6 +262,14 @@ export class PythonCodeEditor extends PlatformElement {
                 { key: 'Tab', run: cm.indentMore },
                 { key: 'Shift-Tab', run: cm.indentLess }
             ]),
+            cm.EditorView.domEventHandlers({
+                copy: (_event, view) => {
+                    if (this.readonly) return false;
+                    if (view.state.selection.main.empty) return false;
+                    requestAnimationFrame(() => this._notifyCopied());
+                    return false;
+                },
+            }),
             cm.EditorView.updateListener.of((update) => {
                 if (update.docChanged) {
                     this.value = update.state.doc.toString();
@@ -409,9 +419,31 @@ export class PythonCodeEditor extends PlatformElement {
         this.validationMessage = '';
     }
 
-    _copyCode() {
-        navigator.clipboard.writeText(this.getValue());
-        this.success('Код скопирован');
+    _notifyCopied() {
+        const message = 'Код скопирован';
+        try {
+            ServiceRegistry.notify.success(message);
+        } catch {
+            window.dispatchEvent(
+                new CustomEvent(AppEvents.TOAST_SHOW, {
+                    detail: {
+                        id: `toast-copy-${Date.now()}`,
+                        type: 'success',
+                        message,
+                        duration: 3000,
+                    },
+                })
+            );
+        }
+    }
+
+    async _copyCode() {
+        try {
+            await navigator.clipboard.writeText(this.getValue());
+            this._notifyCopied();
+        } catch {
+            this.error('Не удалось скопировать');
+        }
     }
 
     _onFallbackInput(e) {

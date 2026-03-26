@@ -5,7 +5,6 @@
 import { html } from 'lit';
 import { BaseNodeEditor } from './base-node-editor.js';
 import '../editors/code-editor.js';
-import '../editors/test-panel.js';
 import '../../modals/code-docs-modal.js';
 
 export class CodeNodeEditor extends BaseNodeEditor {
@@ -59,13 +58,7 @@ export class CodeNodeEditor extends BaseNodeEditor {
                 
                 ${this.renderMappingSection()}
                 
-                <test-panel
-                    .inputState=${this._buildDefaultState()}
-                    ?expanded=${this.expanded}
-                    ?hide-input-state=${this.expanded}
-                    @validate=${this._onValidate}
-                    @execute=${this._onExecute}
-                ></test-panel>
+                ${this._renderTestPanel()}
         `;
     }
 }

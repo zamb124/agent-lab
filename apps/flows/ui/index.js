@@ -7,6 +7,9 @@ console.log('Flows Builder загружается...');
 // Импортируем главное приложение - оно автоматически инициализирует все сервисы
 import './app/FlowsApp.js';
 
+// Редактор кода (platform chat / flow editor); не только через ленивые импорты нод
+import './components/editors/code-editor.js';
+
 // Импортируем компоненты из core/frontend
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-form-modal.js';

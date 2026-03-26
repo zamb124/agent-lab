@@ -88,11 +88,19 @@ export class PlatformApp extends PlatformElement {
         this._routeNotFound = false;
         this._notFoundHomeHref = '/';
         this._fatalShell = null;
+        /** @private Слушатель window toast-show: один раз на экземпляр, до await initServices */
+        this._toastListenerAttached = false;
         this._handleToast = this._handleToast.bind(this);
     }
 
     _handleToast(e) {
-        const { type, message, duration } = e.detail;
+        const detail = e.detail || {};
+        const type = detail.type ?? 'info';
+        const message = detail.message ?? '';
+        const duration = detail.duration ?? 3000;
+        if (!message) {
+            return;
+        }
         const toast = document.createElement('glass-toast');
         toast.type = type;
         toast.message = message;
@@ -172,14 +180,17 @@ export class PlatformApp extends PlatformElement {
 
     async connectedCallback() {
         try {
+            if (!this._toastListenerAttached) {
+                window.addEventListener(AppEvents.TOAST_SHOW, this._handleToast);
+                this._toastListenerAttached = true;
+            }
+
             if (!this._servicesInitialized) {
                 await this.initServices();
                 this._servicesInitialized = true;
             }
 
             super.connectedCallback();
-
-            window.addEventListener(AppEvents.TOAST_SHOW, this._handleToast);
 
             if (!this._authChecked) {
                 const pre = await this._preAuthCheck();
@@ -234,7 +245,10 @@ export class PlatformApp extends PlatformElement {
     }
 
     disconnectedCallback() {
-        window.removeEventListener(AppEvents.TOAST_SHOW, this._handleToast);
+        if (this._toastListenerAttached) {
+            window.removeEventListener(AppEvents.TOAST_SHOW, this._handleToast);
+            this._toastListenerAttached = false;
+        }
         super.disconnectedCallback();
         if (this.router) {
             this.router.stop();

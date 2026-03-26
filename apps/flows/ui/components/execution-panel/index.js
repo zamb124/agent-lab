@@ -33,6 +33,7 @@ export class ExecutionPanel extends PlatformElement {
         taskId: { type: String },
         showMocksSection: { type: Boolean },
         mockResponses: { type: Array },
+        flowNodes: { type: Object },
     };
 
     constructor() {
@@ -55,6 +56,7 @@ export class ExecutionPanel extends PlatformElement {
         this.taskId = null;
         this.showMocksSection = false;
         this.mockResponses = [];
+        this.flowNodes = {};
     }
 
     render() {

@@ -4,6 +4,8 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 
 const DEFAULT_PYTHON = `def execute(args, state):
     """
@@ -231,8 +233,8 @@ export class CodeEditor extends PlatformElement {
                 background: var(--error-bg);
             }
             
-            /* Fullscreen mode */
-            :host(.fullscreen) {
+            /* Fullscreen: отдельное окно поверх страницы */
+            :host(.fullscreen:not(.fullscreen-embedded)) {
                 position: fixed;
                 top: 0;
                 left: 0;
@@ -241,6 +243,27 @@ export class CodeEditor extends PlatformElement {
                 z-index: 9999;
                 background: var(--bg-base);
                 padding: var(--space-4);
+            }
+
+            /* Внутри модалки / панели: непрозрачный слой и z-index выше сайдбара формы */
+            :host(.fullscreen.fullscreen-embedded) {
+                position: absolute;
+                inset: 0;
+                z-index: 100;
+                margin: 0;
+                background: var(--glass-solid-strong);
+                padding: var(--space-4);
+                box-sizing: border-box;
+                isolation: isolate;
+            }
+
+            :host(.fullscreen.fullscreen-embedded) .editor-wrapper {
+                background: var(--glass-solid-strong);
+            }
+
+            :host(.fullscreen.fullscreen-embedded) .editor-header {
+                background: var(--glass-solid-medium);
+                border-bottom: 1px solid var(--border-default);
             }
             
             :host(.fullscreen) .editor-wrapper {
@@ -298,6 +321,8 @@ export class CodeEditor extends PlatformElement {
         this._templatesOpen = false;
         this._templates = [];
         this._fullscreen = false;
+        /** @type {HTMLElement | null} */
+        this._fullscreenEmbedRoot = null;
         this._cmReady = false;
         this._editorView = null;
         this._cmModules = null;
@@ -320,9 +345,10 @@ export class CodeEditor extends PlatformElement {
         super.disconnectedCallback();
         document.removeEventListener('click', this._handleClickOutside.bind(this));
         document.removeEventListener('keydown', this._handleKeydown.bind(this));
-        if (this._fullscreen) {
+        if (this._fullscreen && !this._fullscreenEmbedRoot) {
             document.body.style.overflow = '';
         }
+        this._fullscreenEmbedRoot = null;
         if (this._editorView) {
             this._editorView.destroy();
             this._editorView = null;
@@ -490,6 +516,14 @@ export class CodeEditor extends PlatformElement {
                 { key: 'Tab', run: cm.indentMore },
                 { key: 'Shift-Tab', run: cm.indentLess }
             ]),
+            cm.EditorView.domEventHandlers({
+                copy: (_event, view) => {
+                    if (this.readonly) return false;
+                    if (view.state.selection.main.empty) return false;
+                    requestAnimationFrame(() => this._notifyCopied());
+                    return false;
+                },
+            }),
             cm.EditorView.updateListener.of((update) => {
                 if (update.docChanged) {
                     this.value = update.state.doc.toString();
@@ -687,13 +721,30 @@ export class CodeEditor extends PlatformElement {
         });
     }
 
+    _notifyCopied() {
+        const message = 'Код скопирован';
+        try {
+            ServiceRegistry.notify.success(message);
+        } catch {
+            window.dispatchEvent(
+                new CustomEvent(AppEvents.TOAST_SHOW, {
+                    detail: {
+                        id: `toast-copy-${Date.now()}`,
+                        type: 'success',
+                        message,
+                        duration: 3000,
+                    },
+                })
+            );
+        }
+    }
+
     async _copyCode() {
         const text = this.getValue();
         try {
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 await navigator.clipboard.writeText(text);
             } else {
-                // Fallback для HTTP
                 const textarea = document.createElement('textarea');
                 textarea.value = text;
                 textarea.style.position = 'fixed';
@@ -703,20 +754,59 @@ export class CodeEditor extends PlatformElement {
                 document.execCommand('copy');
                 document.body.removeChild(textarea);
             }
-            this.success('Код скопирован');
+            this._notifyCopied();
         } catch (e) {
             console.warn('Copy failed:', e);
             this.error('Не удалось скопировать');
         }
     }
 
+    /**
+     * Контейнер для вложенного полноэкрана: glass-modal (.modal-content) или
+     * развёрнутая панель ноды в редакторе flow (.floating-panel-body).
+     */
+    _getFullscreenEmbedRoot() {
+        let el = this;
+        for (let depth = 0; depth < 64 && el; depth++) {
+            if (el.nodeType === Node.ELEMENT_NODE && el.classList) {
+                if (el.classList.contains('floating-panel-body')) {
+                    return el;
+                }
+                if (el.classList.contains('modal-content')) {
+                    return el;
+                }
+            }
+            const parent = el.parentElement;
+            if (parent) {
+                el = parent;
+                continue;
+            }
+            const root = el.getRootNode();
+            if (root instanceof ShadowRoot && root.host) {
+                el = root.host;
+                continue;
+            }
+            break;
+        }
+        return null;
+    }
+
     _toggleFullscreen() {
         this._fullscreen = !this._fullscreen;
         if (this._fullscreen) {
             this.classList.add('fullscreen');
-            document.body.style.overflow = 'hidden';
+            const embedRoot = this._getFullscreenEmbedRoot();
+            if (embedRoot) {
+                this.classList.add('fullscreen-embedded');
+                this._fullscreenEmbedRoot = embedRoot;
+            } else {
+                this._fullscreenEmbedRoot = null;
+                document.body.style.overflow = 'hidden';
+            }
         } else {
             this.classList.remove('fullscreen');
+            this.classList.remove('fullscreen-embedded');
+            this._fullscreenEmbedRoot = null;
             document.body.style.overflow = '';
         }
     }

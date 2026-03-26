@@ -62,6 +62,7 @@ export class InlineToolModal extends PlatformModal {
         flowVariables: { type: Object },
         flowId: { type: String },
         skillId: { type: String },
+        previewExecutionState: { type: Object },
     };
 
     constructor() {
@@ -72,6 +73,7 @@ export class InlineToolModal extends PlatformModal {
         this.flowVariables = {};
         this.flowId = '';
         this.skillId = 'base';
+        this.previewExecutionState = null;
         this._updateModalTitle();
     }
 
@@ -163,6 +165,7 @@ export class InlineToolModal extends PlatformModal {
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
+                        .previewExecutionState=${this.previewExecutionState}
                         @config-change=${this._onConfigChanged}
                     ></tool-node-editor>
                 `;
@@ -176,6 +179,7 @@ export class InlineToolModal extends PlatformModal {
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
+                        .previewExecutionState=${this.previewExecutionState}
                         @config-change=${this._onConfigChanged}
                     ></llm-node-editor>
                 `;
@@ -188,6 +192,7 @@ export class InlineToolModal extends PlatformModal {
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
+                        .previewExecutionState=${this.previewExecutionState}
                         @config-change=${this._onConfigChanged}
                     ></function-node-editor>
                 `;
@@ -200,6 +205,7 @@ export class InlineToolModal extends PlatformModal {
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
+                        .previewExecutionState=${this.previewExecutionState}
                         @config-change=${this._onConfigChanged}
                     ></external-api-editor>
                 `;
@@ -212,6 +218,7 @@ export class InlineToolModal extends PlatformModal {
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
+                        .previewExecutionState=${this.previewExecutionState}
                         @config-change=${this._onConfigChanged}
                     ></remote-flow-editor>
                 `;
@@ -224,6 +231,7 @@ export class InlineToolModal extends PlatformModal {
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
+                        .previewExecutionState=${this.previewExecutionState}
                         @config-change=${this._onConfigChanged}
                     ></mcp-node-editor>
                 `;

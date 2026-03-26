@@ -23,11 +23,13 @@ from core.docs.models import (
     StateField,
     CodeTemplate,
 )
+from core.context import get_context
 from core.errors import SafeEvalError
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.api.v1.flows import _inline_tools_list
 from apps.flows.src.container import get_container
 from apps.flows.src.runners import PythonCodeRunner
+from apps.flows.src.state import create_initial_state
 
 router = APIRouter(tags=["code"])
 logger = get_logger(__name__)
@@ -127,6 +129,47 @@ async def get_code_templates(
     
     response = service.query(query)
     return TemplatesResponse(templates=response.templates)
+
+
+@router.get("/editor-state")
+async def get_editor_state(
+    flow_id: str,
+    skill_id: str = "default",
+) -> Dict[str, Any]:
+    """
+    Стартовый ExecutionState как при реальном запуске flow: резолвнутые variables,
+    flow_config и формат session_id. Для редактора нод и TestPanel.
+    """
+    context = get_context()
+    if not context or not context.user:
+        raise HTTPException(
+            status_code=401,
+            detail="Требуется контекст пользователя",
+        )
+    user_id = context.user.user_id
+
+    container = get_container()
+    runtime_flow = await container.flow_factory.get_flow(flow_id, skill_id)
+    if runtime_flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    task_id = str(uuid.uuid4())
+    context_id = str(uuid.uuid4())
+    session_id = f"{flow_id}:{context_id}"
+
+    state = create_initial_state(
+        task_id=task_id,
+        context_id=context_id,
+        user_id=user_id,
+        session_id=session_id,
+        content="",
+        skill_id=skill_id,
+    )
+    state.variables = {**state.variables, **runtime_flow.variables}
+    state.flow_config = runtime_flow.config
+    state.current_nodes = [runtime_flow.entry]
+
+    return state.model_dump(mode="json")
 
 
 class SourceResponse(BaseModel):

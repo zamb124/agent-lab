@@ -144,6 +144,45 @@ flow-canvas #drawflow-area {
     stroke: #10b981 !important;
 }
 
+/* Виртуальный END: внутри ноды, двигается с ней при перетаскивании */
+.drawflow .drawflow-node .virtual-end-bundle {
+    position: absolute !important;
+    left: calc(100% - 14px) !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    pointer-events: none !important;
+    z-index: 4 !important;
+}
+
+.drawflow .drawflow-node .virtual-end-line {
+    width: 28px !important;
+    height: 2px !important;
+    flex-shrink: 0 !important;
+    background: rgba(255, 255, 255, 0.25) !important;
+    border-radius: 1px !important;
+}
+
+.drawflow .drawflow-node .virtual-end-marker {
+    width: 30px !important;
+    height: 30px !important;
+    flex-shrink: 0 !important;
+    margin-left: 2px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 8px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    color: rgba(255, 255, 255, 0.45) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    box-sizing: border-box !important;
+}
+
 .drawflow .drawflow-delete {
     display: none !important;
 }
@@ -523,6 +562,16 @@ flow-canvas .context-menu-separator {
 
 [data-theme="light"] .drawflow .connection .main-path:hover {
     stroke: #10b981 !important;
+}
+
+[data-theme="light"] .drawflow .drawflow-node .virtual-end-line {
+    background: rgba(15, 23, 42, 0.2) !important;
+}
+
+[data-theme="light"] .drawflow .drawflow-node .virtual-end-marker {
+    color: rgba(15, 23, 42, 0.45) !important;
+    border-color: rgba(15, 23, 42, 0.18) !important;
+    background: rgba(15, 23, 42, 0.04) !important;
 }
 
 /* Edge Labels */

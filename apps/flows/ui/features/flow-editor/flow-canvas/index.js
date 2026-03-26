@@ -48,6 +48,23 @@ const RESOURCE_TYPE_COLORS = {
     'cache': '#14b8a6',
 };
 
+/** Иконки бейджа channel-ноды (правый нижний угол), имена из ICON_MAP. Email — doc-detail, т.к. mail/email дают тот же svg что send. */
+const CHANNEL_NODE_BADGE_ICONS = {
+    telegram: 'send',
+    email: 'doc-detail',
+    whatsapp: 'chat',
+    sms: 'server',
+    webhook: 'globe',
+};
+
+const CHANNEL_NODE_BADGE_TITLES = {
+    telegram: 'Telegram',
+    email: 'Email',
+    whatsapp: 'WhatsApp',
+    sms: 'SMS',
+    webhook: 'Webhook',
+};
+
 export class FlowCanvas extends PlatformElement {
     createRenderRoot() {
         return this;
@@ -60,7 +77,6 @@ export class FlowCanvas extends PlatformElement {
         contextMenu: { type: Object },
         connectionContextMenu: { type: Object },
         edgeConditions: { type: Object },
-        endNodeEls: { type: Array },
     };
 
     constructor() {
@@ -79,8 +95,6 @@ export class FlowCanvas extends PlatformElement {
         this.edgeConditions = new Map();
         this._pendingConnection = null;
         this._isImporting = false;
-        this.endNodeEls = [];
-        this._virtualConnectionsSvg = null;
         this._resourceElements = new Map();
         
         this._handleClickOutside = this._handleClickOutside.bind(this);
@@ -798,7 +812,7 @@ export class FlowCanvas extends PlatformElement {
         return this._createNodeHtmlSync(nodeId, nodeType, isEntry, isInherited);
     }
 
-    _createNodeHtmlSync(nodeId, nodeType, isEntry = false, isInherited = false, language = null) {
+    _createNodeHtmlSync(nodeId, nodeType, isEntry = false, isInherited = false, language = null, channelId = null) {
         const bgColor = nodeType.color + '20';
         const entryBadge = isEntry 
             ? '<div class="agent-node-entry-badge">▶</div>' 
@@ -812,6 +826,13 @@ export class FlowCanvas extends PlatformElement {
         if (nodeType.type === 'code' && language) {
             const langIcon = language === 'javascript' ? 'javascript' : 'python';
             languageBadge = `<div class="agent-node-lang-badge" data-lang="${language}" title="${language}"><platform-icon name="${langIcon}" size="14" colored></platform-icon></div>`;
+        }
+
+        let channelBadge = '';
+        if (nodeType.type === 'channel' && channelId) {
+            const chIcon = CHANNEL_NODE_BADGE_ICONS[channelId] || 'send';
+            const chTitle = CHANNEL_NODE_BADGE_TITLES[channelId] || channelId;
+            channelBadge = `<div class="agent-node-lang-badge agent-node-channel-badge" data-channel="${channelId}" title="${chTitle}"><platform-icon name="${chIcon}" size="14"></platform-icon></div>`;
         }
         
         const iconName = NODE_TYPE_ICON_NAMES[nodeType.type];
@@ -834,20 +855,22 @@ export class FlowCanvas extends PlatformElement {
                     <div class="agent-node-type">${nodeType.name || nodeType.type}</div>
                 </div>
                 ${languageBadge}
+                ${channelBadge}
             </div>
         `;
     }
 
     async _preloadIcons(nodes) {
-        const iconNames = [...new Set(
-            Object.values(nodes).map(n => {
-                const iconName = NODE_TYPE_ICON_NAMES[n.type];
-                if (!iconName) throw new Error(`No icon mapping for type: ${n.type}`);
-                return iconName;
-            })
-        )];
-        
-        await this.icon.preload(iconNames);
+        const iconNames = new Set();
+        for (const n of Object.values(nodes)) {
+            const iconName = NODE_TYPE_ICON_NAMES[n.type];
+            if (!iconName) throw new Error(`No icon mapping for type: ${n.type}`);
+            iconNames.add(iconName);
+        }
+        for (const ic of Object.values(CHANNEL_NODE_BADGE_ICONS)) {
+            iconNames.add(ic);
+        }
+        await this.icon.preload([...iconNames]);
     }
 
     _setEntryNode(drawflowId) {
@@ -892,16 +915,13 @@ export class FlowCanvas extends PlatformElement {
         }
 
         const homeData = exported.drawflow.Home.data;
-        
-        this.endNodeEls.forEach(el => el.remove());
-        this.endNodeEls = [];
-        
-        this._ensureVirtualConnectionsSvg();
-        
-        if (this._virtualConnectionsSvg) {
-            this._virtualConnectionsSvg.innerHTML = '';
+
+        this.querySelectorAll('.virtual-end-bundle').forEach((el) => el.remove());
+        const legacySvg = this.querySelector('.virtual-connections-svg');
+        if (legacySvg) {
+            legacySvg.remove();
         }
-        
+
         if (Object.keys(homeData).length === 0) {
             return;
         }
@@ -922,105 +942,31 @@ export class FlowCanvas extends PlatformElement {
             }
         }
         
-        endNodeIds.forEach((drawflowId, index) => {
+        endNodeIds.forEach((drawflowId) => {
             const nodeData = homeData[drawflowId];
             if (!nodeData) return;
-            
-            const endNodeEl = this._createEndNode(index);
-            if (!endNodeEl) return;
-            
-            this.endNodeEls.push(endNodeEl);
-            
+
             const nodeEl = this.querySelector(`#node-${drawflowId}`);
-            if (nodeEl) {
-                const nodeWidth = nodeEl.offsetWidth || 180;
-                const endX = nodeData.pos_x + nodeWidth + 60;
-                const endY = nodeData.pos_y + 10;
-                
-                endNodeEl.style.left = `${endX}px`;
-                endNodeEl.style.top = `${endY}px`;
-                
-                const nodeRight = nodeData.pos_x + nodeWidth;
-                const nodeCenterY = nodeData.pos_y + 35;
-                const endLeft = endX;
-                const endCenterY = endY + 16;
-                
-                this._drawVirtualConnection(nodeRight, nodeCenterY, endLeft, endCenterY);
-            }
+            if (!nodeEl) return;
+
+            nodeEl.appendChild(this._createVirtualEndBundle());
         });
     }
 
-    _ensureVirtualConnectionsSvg() {
-        const drawflowArea = this.querySelector('#drawflow-area');
-        if (!drawflowArea) return;
-        
-        const drawflowEl = drawflowArea.querySelector('.drawflow');
-        if (!drawflowEl) return;
-        
-        if (!this._virtualConnectionsSvg) {
-            this._virtualConnectionsSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            this._virtualConnectionsSvg.setAttribute('class', 'virtual-connections-svg');
-            this._virtualConnectionsSvg.style.cssText = `
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 10000px;
-                height: 10000px;
-                pointer-events: none;
-                z-index: 1;
-                overflow: visible;
-            `;
-            drawflowEl.appendChild(this._virtualConnectionsSvg);
-        }
-    }
+    _createVirtualEndBundle() {
+        const bundle = document.createElement('div');
+        bundle.className = 'virtual-end-bundle';
+        bundle.setAttribute('aria-hidden', 'true');
 
-    _createEndNode(index) {
-        const drawflowArea = this.querySelector('#drawflow-area');
-        if (!drawflowArea) return null;
-        
-        const drawflowEl = drawflowArea.querySelector('.drawflow');
-        if (!drawflowEl) return null;
-        
-        const endNode = document.createElement('div');
-        endNode.className = 'virtual-end-node';
-        endNode.style.cssText = `
-            position: absolute;
-            width: 80px;
-            height: 32px;
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.25) 100%);
-            border: 2px solid rgba(16, 185, 129, 0.4);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 600;
-            color: rgba(16, 185, 129, 0.9);
-            pointer-events: none;
-            z-index: 3;
-        `;
-        endNode.textContent = 'END';
-        
-        drawflowEl.appendChild(endNode);
-        return endNode;
-    }
+        const segment = document.createElement('div');
+        segment.className = 'virtual-end-line';
 
-    _drawVirtualConnection(x1, y1, x2, y2) {
-        if (!this._virtualConnectionsSvg) return;
-        
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        
-        const midX = (x1 + x2) / 2;
-        const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
-        
-        path.setAttribute('d', d);
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', 'rgba(16, 185, 129, 0.5)');
-        path.setAttribute('stroke-width', '2');
-        path.setAttribute('stroke-dasharray', '6 4');
-        path.setAttribute('stroke-linecap', 'round');
-        
-        this._virtualConnectionsSvg.appendChild(path);
+        const marker = document.createElement('div');
+        marker.className = 'virtual-end-marker';
+        marker.textContent = 'END';
+
+        bundle.append(segment, marker);
+        return bundle;
     }
 
     _getNodeColor(type) {
@@ -1141,12 +1087,16 @@ export class FlowCanvas extends PlatformElement {
             if (nodeConfig.nodeId === nodeId) {
                 console.log('[FlowCanvas] Found node, old config:', nodeConfig.config);
                 const oldLanguage = nodeConfig.config?.language;
+                const oldChannel = nodeConfig.config?.channel;
                 nodeConfig.config = config;
                 console.log('[FlowCanvas] Updated config:', nodeConfig.config);
                 
                 // Обновляем language badge если язык изменился
                 if (nodeConfig.type === 'code' && config.language !== oldLanguage) {
                     this._updateLanguageBadge(drawflowId, config.language);
+                }
+                if (nodeConfig.type === 'channel' && config.channel !== oldChannel) {
+                    this._updateChannelBadge(drawflowId, config.channel);
                 }
                 break;
             }
@@ -1179,6 +1129,44 @@ export class FlowCanvas extends PlatformElement {
             badge.innerHTML = `<platform-icon name="${langIcon}" size="14" colored></platform-icon>`;
             agentNode.appendChild(badge);
         }
+    }
+
+    _updateChannelBadge(drawflowId, channelId) {
+        const nodeEl = this.querySelector(`#node-${drawflowId}`);
+        if (!nodeEl) return;
+
+        let badge = nodeEl.querySelector('.agent-node-channel-badge');
+        const agentNode = nodeEl.querySelector('.agent-node');
+
+        if (!channelId) {
+            if (badge) badge.remove();
+            return;
+        }
+
+        const iconName = CHANNEL_NODE_BADGE_ICONS[channelId] || 'send';
+        const title = CHANNEL_NODE_BADGE_TITLES[channelId] || channelId;
+
+        void this.icon.load(iconName).then(() => {
+            const el = this.querySelector(`#node-${drawflowId}`);
+            if (!el) return;
+            const ag = el.querySelector('.agent-node');
+            if (!ag) return;
+
+            let b = el.querySelector('.agent-node-channel-badge');
+            const inner = `<platform-icon name="${iconName}" size="14"></platform-icon>`;
+            if (b) {
+                b.setAttribute('data-channel', channelId);
+                b.setAttribute('title', title);
+                b.innerHTML = inner;
+            } else {
+                b = document.createElement('div');
+                b.className = 'agent-node-lang-badge agent-node-channel-badge';
+                b.setAttribute('data-channel', channelId);
+                b.setAttribute('title', title);
+                b.innerHTML = inner;
+                ag.appendChild(b);
+            }
+        });
     }
 
     /**
@@ -1534,7 +1522,7 @@ export class FlowCanvas extends PlatformElement {
         if (this._edgeLabelsManager) {
             this._edgeLabelsManager._setupContainer();
         }
-        this._virtualConnectionsSvg = null;
+        this.querySelector('.virtual-connections-svg')?.remove();
 
         const { nodes, edges = [], entry, resources = {} } = data;
         const nodePositions = new Map();
@@ -1557,7 +1545,16 @@ export class FlowCanvas extends PlatformElement {
             const posY = nodeConfig.position ? nodeConfig.position.y : 80 + Math.floor(index / 2) * 120;
             
             const language = nodeConfig.type === 'code' ? (nodeConfig.language || 'python') : null;
-            const nodeHtml = this._createNodeHtmlSync(nodeId, nodeType, isEntry, isInherited, language);
+            const channelId =
+                nodeConfig.type === 'channel' ? (nodeConfig.channel || 'telegram') : null;
+            const nodeHtml = this._createNodeHtmlSync(
+                nodeId,
+                nodeType,
+                isEntry,
+                isInherited,
+                language,
+                channelId
+            );
             
             console.log('[FlowCanvas] Adding node:', {
                 nodeId,

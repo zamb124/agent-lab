@@ -1,9 +1,34 @@
 /**
- * LLMMocksEditor - редактор мок-ответов для нод агента
- * Позволяет настраивать мок-ответы для любых нод (LLM, tools, API и т.д.)
+ * LLMMocksEditor — мок-ответы для нод flow (metadata.mock).
+ * Контролируемый компонент: источник правды — props.mocks, изменения через @change.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+
+const LLM_NODE = 'llm_node';
+const TOOL_NONE = '';
+
+/**
+ * Стабильный уникальный id строки. randomUUID есть только в secure context (HTTPS / localhost).
+ */
+function createRowId() {
+    const c = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+    if (c && typeof c.randomUUID === 'function') {
+        return c.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    if (c && typeof c.getRandomValues === 'function') {
+        c.getRandomValues(bytes);
+    } else {
+        for (let i = 0; i < 16; i++) {
+            bytes[i] = Math.floor(Math.random() * 256);
+        }
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export class LLMMocksEditor extends PlatformElement {
     static styles = [
@@ -11,14 +36,15 @@ export class LLMMocksEditor extends PlatformElement {
         css`
             :host {
                 display: block;
+                min-width: 0;
             }
-            
+
             .mocks-container {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
             }
-            
+
             .mock-item {
                 display: flex;
                 flex-direction: column;
@@ -27,73 +53,84 @@ export class LLMMocksEditor extends PlatformElement {
                 background: var(--glass-tint-subtle);
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
+                min-width: 0;
             }
-            
-            .mock-header {
+
+            .mock-toolbar {
                 display: flex;
-                align-items: center;
-                justify-content: space-between;
+                flex-wrap: wrap;
+                align-items: flex-start;
                 gap: var(--space-2);
+                min-width: 0;
             }
-            
+
+            .mock-toolbar-main {
+                display: flex;
+                flex-wrap: wrap;
+                flex: 1;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+
             .mock-number {
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
                 color: var(--text-secondary);
+                flex-shrink: 0;
+                line-height: 32px;
             }
-            
-            .mock-actions {
-                display: flex;
-                gap: var(--space-2);
-            }
-            
-            .node-input {
-                flex: 1;
-                padding: 4px 8px;
-                font-size: var(--text-xs);
-                color: var(--text-primary);
-                background: var(--bg-primary);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-sm);
-                outline: none;
-            }
-            
-            .node-input:focus {
-                border-color: var(--accent);
-            }
-            
-            .node-input::placeholder {
-                color: var(--text-tertiary);
-            }
-            
+
+            .node-select,
+            .tool-select,
             .mock-type-select {
-                padding: 4px 8px;
+                padding: 6px 8px;
                 font-size: var(--text-xs);
                 color: var(--text-primary);
                 background: var(--glass-bg-subtle);
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-sm);
                 cursor: pointer;
+                min-width: 0;
+                max-width: 100%;
             }
-            
-            .remove-btn {
-                padding: 4px 8px;
-                font-size: var(--text-xs);
-                color: var(--error);
-                background: transparent;
-                border: 1px solid var(--error);
+
+            .node-select {
+                flex: 1 1 140px;
+            }
+
+            .tool-select {
+                flex: 1 1 120px;
+            }
+
+            .mock-type-select {
+                flex: 0 1 110px;
+            }
+
+            .remove-icon-btn {
+                flex-shrink: 0;
+                width: 32px;
+                height: 32px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-sm);
+                background: transparent;
+                color: var(--text-tertiary);
                 cursor: pointer;
-                transition: all 0.2s ease;
+                transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
             }
-            
-            .remove-btn:hover {
-                background: var(--error);
-                color: white;
+
+            .remove-icon-btn:hover {
+                color: var(--error);
+                border-color: var(--error);
+                background: rgba(239, 68, 68, 0.08);
             }
-            
+
             .mock-textarea {
                 width: 100%;
+                box-sizing: border-box;
                 min-height: 80px;
                 padding: var(--space-2);
                 font-size: var(--text-sm);
@@ -104,22 +141,24 @@ export class LLMMocksEditor extends PlatformElement {
                 border-radius: var(--radius-md);
                 resize: vertical;
                 outline: none;
+                min-width: 0;
             }
-            
+
             .mock-textarea:focus {
                 border-color: var(--accent);
             }
-            
+
             .mock-textarea::placeholder {
                 color: var(--text-tertiary);
             }
-            
+
             .tool-fields {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
+                min-width: 0;
             }
-            
+
             .tool-input {
                 padding: var(--space-2);
                 font-size: var(--text-sm);
@@ -128,12 +167,14 @@ export class LLMMocksEditor extends PlatformElement {
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
                 outline: none;
+                width: 100%;
+                box-sizing: border-box;
             }
-            
+
             .tool-input:focus {
                 border-color: var(--accent);
             }
-            
+
             .add-btn {
                 display: flex;
                 align-items: center;
@@ -149,158 +190,165 @@ export class LLMMocksEditor extends PlatformElement {
                 cursor: pointer;
                 transition: all 0.2s ease;
             }
-            
+
             .add-btn:hover {
                 background: var(--accent-bg);
             }
-            
+
             .empty-state {
                 padding: var(--space-6) var(--space-4);
                 text-align: center;
                 font-size: var(--text-sm);
                 color: var(--text-tertiary);
             }
-            
+
             .hint {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin-top: var(--space-2);
             }
-            
+
             .mock-label {
                 font-size: var(--text-xs);
                 font-weight: var(--font-medium);
                 color: var(--text-secondary);
                 margin-bottom: var(--space-1);
             }
-        `
+        `,
     ];
 
     static properties = {
         mocks: { type: Array },
+        flowNodes: { type: Object },
     };
 
     constructor() {
         super();
         this.mocks = [];
-        this._mocksList = [];
+        this.flowNodes = {};
     }
 
     updated(changed) {
+        super.updated(changed);
         if (changed.has('mocks')) {
-            this._mocksList = (this.mocks || []).map((m, i) => ({
-                id: `mock-${i}-${Date.now()}`,
-                ...m
-            }));
+            this._ensureRowIds();
         }
     }
 
+    /**
+     * Старые сохранённые моки без row_id — добавляем id, чтобы удаление и ключи работали стабильно.
+     */
+    _ensureRowIds() {
+        const rows = this._rows();
+        if (rows.length === 0 || !rows.some((r) => !r.row_id)) {
+            return;
+        }
+        const next = rows.map((r) => ({
+            ...r,
+            row_id: r.row_id || createRowId(),
+        }));
+        this._emitRows(next);
+    }
+
+    _rows() {
+        return Array.isArray(this.mocks) ? this.mocks : [];
+    }
+
+    _emitRows(next) {
+        this.emit('change', { value: next });
+    }
+
+    _nodeIds() {
+        const g = this.flowNodes && typeof this.flowNodes === 'object' ? this.flowNodes : {};
+        return Object.keys(g).sort();
+    }
+
+    _nodeType(nodeId) {
+        const n = this.flowNodes?.[nodeId];
+        return n && typeof n.type === 'string' ? n.type : '';
+    }
+
+    _toolOptions(nodeId) {
+        const n = this.flowNodes?.[nodeId];
+        const list = n && Array.isArray(n.tools) ? n.tools : [];
+        return list
+            .map((t) => (t && typeof t.tool_id === 'string' ? t.tool_id : ''))
+            .filter(Boolean);
+    }
+
+    _patchRow(rowId, patch) {
+        const next = this._rows().map((r) =>
+            r.row_id === rowId ? { ...r, ...patch } : r
+        );
+        this._emitRows(next);
+    }
+
     _addMock() {
-        this._mocksList = [
-            ...this._mocksList,
-            {
-                id: `mock-${Date.now()}`,
-                node_id: '',
-                type: 'text',
-                content: ''
-            }
-        ];
-        this._emitChange();
+        const row = {
+            row_id: createRowId(),
+            node_id: '',
+            tool_id: TOOL_NONE,
+            type: 'text',
+            content: '',
+            tool: '',
+            args: '{}',
+            response: '{}',
+        };
+        this._emitRows([...this._rows(), row]);
     }
 
-    _removeMock(id) {
-        this._mocksList = this._mocksList.filter(m => m.id !== id);
-        this._emitChange();
+    _removeMock(rowId) {
+        this._emitRows(this._rows().filter((r) => r.row_id !== rowId));
     }
 
-    _updateNodeId(id, nodeId) {
-        this._mocksList = this._mocksList.map(m => 
-            m.id === id ? { ...m, node_id: nodeId } : m
-        );
-        this._emitChange();
+    _onNodeChange(rowId, nodeId) {
+        const nextNode = nodeId || '';
+        const t = this._nodeType(nextNode);
+        const patch = { node_id: nextNode };
+        if (t !== LLM_NODE) {
+            patch.tool_id = TOOL_NONE;
+        }
+        this._patchRow(rowId, patch);
     }
 
-    _updateMockType(id, type) {
-        this._mocksList = this._mocksList.map(m => {
-            if (m.id === id) {
-                if (type === 'text') {
-                    return { 
-                        id: m.id,
-                        node_id: m.node_id || '',
-                        type, 
-                        content: m.content || '' 
-                    };
-                } else if (type === 'tool_call') {
-                    return { 
-                        id: m.id,
-                        node_id: m.node_id || '',
-                        type, 
-                        tool: m.tool || '', 
-                        args: m.args || '{}' 
-                    };
-                } else {
-                    return {
-                        id: m.id,
-                        node_id: m.node_id || '',
-                        type,
-                        response: m.response || '{}'
-                    };
-                }
-            }
-            return m;
-        });
-        this._emitChange();
+    _onToolChange(rowId, toolId) {
+        this._patchRow(rowId, { tool_id: toolId || TOOL_NONE });
     }
 
-    _updateMockContent(id, content) {
-        this._mocksList = this._mocksList.map(m => 
-            m.id === id ? { ...m, content } : m
-        );
-        this._emitChange();
-    }
-
-    _updateMockResponse(id, response) {
-        this._mocksList = this._mocksList.map(m => 
-            m.id === id ? { ...m, response } : m
-        );
-        this._emitChange();
-    }
-
-    _updateMockTool(id, tool) {
-        this._mocksList = this._mocksList.map(m => 
-            m.id === id ? { ...m, tool } : m
-        );
-        this._emitChange();
-    }
-
-    _updateMockArgs(id, args) {
-        this._mocksList = this._mocksList.map(m => 
-            m.id === id ? { ...m, args } : m
-        );
-        this._emitChange();
-    }
-
-    _emitChange() {
-        const value = this._mocksList.map(({ id, ...rest }) => rest);
-        this.emit('change', { value });
-    }
-
-    getValue() {
-        return this._mocksList.map(({ id, ...rest }) => rest);
+    _onTypeChange(rowId, type) {
+        const row = this._rows().find((r) => r.row_id === rowId);
+        if (!row) {
+            return;
+        }
+        if (type === 'text') {
+            this._patchRow(rowId, { type, content: row.content ?? '' });
+        } else if (type === 'tool_call') {
+            this._patchRow(rowId, {
+                type,
+                tool: row.tool ?? '',
+                args: row.args ?? '{}',
+            });
+        } else {
+            this._patchRow(rowId, { type, response: row.response ?? '{}' });
+        }
     }
 
     render() {
-        if (this._mocksList.length === 0) {
+        const rows = this._rows();
+        const nodeIds = this._nodeIds();
+
+        if (rows.length === 0) {
             return html`
                 <div class="mocks-container">
                     <div class="empty-state">
                         Нет мок-ответов. Добавьте для тестирования без реальных вызовов нод.
                     </div>
-                    <button class="add-btn" @click=${this._addMock}>
+                    <button type="button" class="add-btn" @click=${this._addMock}>
                         + Добавить мок-ответ
                     </button>
                     <div class="hint">
-                        Укажите node_id ноды и её мок-ответ. Поддерживаются LLM, tools, API и другие ноды.
+                        Выберите ноду на графе. Для агента (llm_node) можно задать мок ответа LLM или
+                        выбрать инструмент и подставить результат тула.
                     </div>
                 </div>
             `;
@@ -308,90 +356,129 @@ export class LLMMocksEditor extends PlatformElement {
 
         return html`
             <div class="mocks-container">
-                ${this._mocksList.map((mock, index) => html`
-                    <div class="mock-item">
-                        <div class="mock-header">
-                            <span class="mock-number">Ответ ${index + 1}</span>
-                            <input
-                                class="node-input"
-                                type="text"
-                                placeholder="node_id (например: llm_node_1)"
-                                .value=${mock.node_id || ''}
-                                @input=${(e) => this._updateNodeId(mock.id, e.target.value)}
-                            />
-                            <div class="mock-actions">
-                                <select 
-                                    class="mock-type-select"
-                                    .value=${mock.type}
-                                    @change=${(e) => this._updateMockType(mock.id, e.target.value)}
+                ${rows.map((mock, index) => {
+                    const nid = mock.node_id || '';
+                    const nType = this._nodeType(nid);
+                    const showTools = nType === LLM_NODE && this._toolOptions(nid).length > 0;
+                    return html`
+                        <div class="mock-item">
+                            <div class="mock-toolbar">
+                                <span class="mock-number">Ответ ${index + 1}</span>
+                                <div class="mock-toolbar-main">
+                                    <select
+                                        class="node-select"
+                                        .value=${nid}
+                                        @change=${(e) => this._onNodeChange(mock.row_id, e.target.value)}
+                                    >
+                                        ${nodeIds.length === 0
+                                            ? html`<option value="" disabled>Нет нод на графе</option>`
+                                            : html`
+                                                  <option value="" disabled>Нода…</option>
+                                                  ${nodeIds.map(
+                                                      (id) => html`<option value=${id}>${id}</option>`
+                                                  )}
+                                              `}
+                                    </select>
+                                    ${showTools
+                                        ? html`
+                                              <select
+                                                  class="tool-select"
+                                                  .value=${mock.tool_id || TOOL_NONE}
+                                                  @change=${(e) =>
+                                                      this._onToolChange(mock.row_id, e.target.value)}
+                                              >
+                                                  <option value=${TOOL_NONE}>Только LLM (очередь ответов)</option>
+                                                  ${this._toolOptions(nid).map(
+                                                      (tid) => html`<option value=${tid}>${tid}</option>`
+                                                  )}
+                                              </select>
+                                          `
+                                        : ''}
+                                    <select
+                                        class="mock-type-select"
+                                        .value=${mock.type}
+                                        @change=${(e) => this._onTypeChange(mock.row_id, e.target.value)}
+                                    >
+                                        <option value="text">Text</option>
+                                        <option value="tool_call">Tool Call</option>
+                                        <option value="json">JSON</option>
+                                    </select>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="remove-icon-btn"
+                                    title="Удалить"
+                                    @click=${() => this._removeMock(mock.row_id)}
                                 >
-                                    <option value="text">Text</option>
-                                    <option value="tool_call">Tool Call</option>
-                                    <option value="json">JSON</option>
-                                </select>
-                                <button 
-                                    class="remove-btn"
-                                    @click=${() => this._removeMock(mock.id)}
-                                >
-                                    Удалить
+                                    <platform-icon name="trash" size="18"></platform-icon>
                                 </button>
                             </div>
+                            ${mock.type === 'text'
+                                ? html`
+                                      <div>
+                                          <div class="mock-label">Текстовый ответ</div>
+                                          <textarea
+                                              class="mock-textarea"
+                                              placeholder="Текст ответа от ноды или тула..."
+                                              .value=${mock.content || ''}
+                                              @input=${(e) =>
+                                                  this._patchRow(mock.row_id, {
+                                                      content: e.target.value,
+                                                  })}
+                                          ></textarea>
+                                      </div>
+                                  `
+                                : mock.type === 'tool_call'
+                                  ? html`
+                                        <div class="tool-fields">
+                                            <div>
+                                                <div class="mock-label">Имя инструмента</div>
+                                                <input
+                                                    class="tool-input"
+                                                    type="text"
+                                                    placeholder="calculator"
+                                                    .value=${mock.tool || ''}
+                                                    @input=${(e) =>
+                                                        this._patchRow(mock.row_id, {
+                                                            tool: e.target.value,
+                                                        })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <div class="mock-label">Аргументы (JSON)</div>
+                                                <textarea
+                                                    class="mock-textarea"
+                                                    placeholder='{"x": 1, "y": 2}'
+                                                    .value=${mock.args || '{}'}
+                                                    @input=${(e) =>
+                                                        this._patchRow(mock.row_id, {
+                                                            args: e.target.value,
+                                                        })}
+                                                ></textarea>
+                                            </div>
+                                        </div>
+                                    `
+                                  : html`
+                                        <div>
+                                            <div class="mock-label">JSON ответ ноды</div>
+                                            <textarea
+                                                class="mock-textarea"
+                                                placeholder='{"result": "mock_value", "status": "success"}'
+                                                .value=${mock.response || '{}'}
+                                                @input=${(e) =>
+                                                    this._patchRow(mock.row_id, {
+                                                        response: e.target.value,
+                                                    })}
+                                            ></textarea>
+                                        </div>
+                                    `}
                         </div>
-                        
-                        ${mock.type === 'text' ? html`
-                            <div>
-                                <div class="mock-label">Текстовый ответ</div>
-                                <textarea
-                                    class="mock-textarea"
-                                    placeholder="Текст ответа от ноды..."
-                                    .value=${mock.content || ''}
-                                    @input=${(e) => this._updateMockContent(mock.id, e.target.value)}
-                                ></textarea>
-                            </div>
-                        ` : mock.type === 'tool_call' ? html`
-                            <div class="tool-fields">
-                                <div>
-                                    <div class="mock-label">Имя инструмента</div>
-                                    <input
-                                        class="tool-input"
-                                        type="text"
-                                        placeholder="calculator"
-                                        .value=${mock.tool || ''}
-                                        @input=${(e) => this._updateMockTool(mock.id, e.target.value)}
-                                    />
-                                </div>
-                                <div>
-                                    <div class="mock-label">Аргументы (JSON)</div>
-                                    <textarea
-                                        class="mock-textarea"
-                                        placeholder='{"x": 1, "y": 2}'
-                                        .value=${mock.args || '{}'}
-                                        @input=${(e) => this._updateMockArgs(mock.id, e.target.value)}
-                                    ></textarea>
-                                </div>
-                            </div>
-                        ` : html`
-                            <div>
-                                <div class="mock-label">JSON ответ ноды</div>
-                                <textarea
-                                    class="mock-textarea"
-                                    placeholder='{"result": "mock_value", "status": "success"}'
-                                    .value=${mock.response || '{}'}
-                                    @input=${(e) => this._updateMockResponse(mock.id, e.target.value)}
-                                ></textarea>
-                            </div>
-                        `}
-                    </div>
-                `)}
-                
-                <button class="add-btn" @click=${this._addMock}>
-                    + Добавить еще
-                </button>
+                    `;
+                })}
+                <button type="button" class="add-btn" @click=${this._addMock}>+ Добавить еще</button>
             </div>
         `;
     }
 }
 
 customElements.define('llm-mocks-editor', LLMMocksEditor);
-
-

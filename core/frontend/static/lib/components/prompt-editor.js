@@ -87,8 +87,15 @@ export class PromptEditor extends PlatformElement {
                 cursor: wait;
             }
             
+            /*
+             * Растягиваем .cm-editor на всю минимальную высоту контейнера: иначе клики
+             * ниже последней строки попадают в «пустоту» и курсор не ставится (только зона у текста).
+             */
             #codemirror-container {
+                box-sizing: border-box;
                 min-height: var(--editor-min-height, 150px);
+                display: flex;
+                flex-direction: column;
             }
             
             #codemirror-container.hidden {
@@ -96,13 +103,16 @@ export class PromptEditor extends PlatformElement {
             }
             
             #codemirror-container .cm-editor {
+                flex: 1 1 auto;
+                align-self: stretch;
                 min-height: var(--editor-min-height, 150px);
                 font-size: 14px;
                 line-height: 1.6;
             }
             
             #codemirror-container .cm-scroller {
-                min-height: var(--editor-min-height, 150px);
+                flex: 1 1 auto;
+                min-height: 0;
                 padding: var(--space-3);
             }
             

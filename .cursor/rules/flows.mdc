@@ -305,6 +305,11 @@ Flow (конфиг) → Skill → Node (каждый уровень переоп
         "kb": {"resource_id": "shared_rag", "override_config": {"namespace": "my_ns"}}
     }
 
+## REST: state для редактора и Execute (TestPanel)
+
+- `GET /api/v1/code/editor-state?flow_id=...&skill_id=default` — стартовый `ExecutionState` как при запуске через `FlowFactory.get_flow` и `create_initial_state`: резолвнутые variables, `flow_config`, формат `session_id`. UI подставляет в TestPanel через `FlowsStore.previewExecutionState`. Требуется аутентифицированный пользователь в контексте (401 без user).
+- `GET /api/v1/tasks/state?session_id=...` (или `context_id` + `flow_id`) — сохранённый state сессии; в UI — выбор сессии в TestPanel и «Подставить state».
+
 ## Файлы
 
 - apps/flows/src/runtime/nodes.py - все ноды (включая ChannelNode)

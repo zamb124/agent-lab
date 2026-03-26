@@ -31,15 +31,6 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
         return 'Remote A2A flow';
     }
 
-    _buildDefaultState() {
-        return {
-            content: 'Текст запроса пользователя',
-            messages: [],
-            variables: this.flowVariables || {},
-            user_query: 'Пример значения',
-        };
-    }
-
     _buildConfig() {
         const name = this.shadowRoot.querySelector('[name="name"]')?.value?.trim() || '';
         const url = this.shadowRoot.querySelector('[name="url"]')?.value?.trim() || '';
@@ -160,7 +151,9 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
                     </div>
                     
                     <test-panel
+                        .flowId=${this.flowId || ''}
                         .inputState=${this._buildDefaultState()}
+                        .defaultInputState=${this._buildDefaultState()}
                         @validate=${this._onValidate}
                         @execute=${this._onExecute}
                     ></test-panel>

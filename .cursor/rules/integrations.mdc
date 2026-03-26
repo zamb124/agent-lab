@@ -81,6 +81,8 @@ response = await client.post("crm", "/crm/api/v1/entities/", json=data)
 
 **Сервисы:** `flows`, `crm`, `frontend`
 
+**Браузер и тот же origin (shell на :8002, API flows на :8001):** без ingress в `development` / `test` при Host `localhost` или `*.lvh.me` срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`: путь `/flows/...`, `/crm/...` и т.д. пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В production с внешним доменом прокси не включается.
+
 **Преимущества:**
 - Автоматическая передача trace_id, авторизации
 - Валидация по OpenAPI
@@ -131,6 +133,12 @@ external_flow = await container.flow_discovery.register_agent(
 **Требования к внешнему endpoint (A2A):**
 - `GET /.well-known/agent-card.json`
 - `POST /tasks/send` (JSON-RPC 2.0)
+
+### A2A `message/stream`: metadata.mock (моки)
+
+В `params.metadata` для отладки передаётся **`mock`** — объект в формате **MockConfig** (`enabled`, `llm`, `tools`, `nodes`, `flows`), см. `apps/flows/src/mock/config.py` и `resolve_mock_config` в `apps/flows/src/channels/base.py`. Ключ **`mocks` не используется** бэкендом.
+
+Сборка из UI редактора execution-panel: `apps/flows/ui/utils/build-mock-config.js`, отправка через `a2a.service` (`metadata.mock`).
 
 ## External API
 

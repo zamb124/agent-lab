@@ -81,15 +81,6 @@ export class FlowNodeModal extends BaseNodeModal {
         this._loadSkills(this.selectedFlowId);
     }
 
-    _buildDefaultState() {
-        return {
-            content: 'Текст запроса пользователя',
-            messages: [],
-            variables: this.flowVariables || {},
-            user_query: 'Пример значения',
-        };
-    }
-
     _buildConfig() {
         const name = this.shadowRoot.querySelector('[name="name"]')?.value?.trim() || '';
         const flowId = this.shadowRoot.querySelector('[name="flow_id"]')?.value?.trim() || '';
@@ -203,7 +194,9 @@ export class FlowNodeModal extends BaseNodeModal {
                     </div>
                     
                     <test-panel
+                        .flowId=${this.flowId || ''}
                         .inputState=${this._buildDefaultState()}
+                        .defaultInputState=${this._buildDefaultState()}
                         @validate=${this._onValidate}
                         @execute=${this._onExecute}
                     ></test-panel>

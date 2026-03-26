@@ -122,6 +122,7 @@ export class ToolEditorModal extends PlatformModal {
         toolConfig: { type: Object },
         mode: { type: String },
         flowVariables: { type: Object },
+        previewExecutionState: { type: Object },
         name: { type: String },
         description: { type: String },
         toolType: { type: String },
@@ -135,6 +136,7 @@ export class ToolEditorModal extends PlatformModal {
         this.toolConfig = {};
         this.mode = 'create';
         this.flowVariables = {};
+        this.previewExecutionState = null;
         this.title = 'Создать Inline Tool';
         this.name = '';
         this.description = '';
@@ -174,16 +176,10 @@ export class ToolEditorModal extends PlatformModal {
     }
 
     _buildDefaultState() {
-        const state = {
-            content: "Текст запроса пользователя",
-            messages: [],
-        };
-        
-        for (const [key, varData] of Object.entries(this.flowVariables || {})) {
-            state[key] = varData.value || '';
+        if (this.previewExecutionState && typeof this.previewExecutionState === 'object') {
+            return structuredClone(this.previewExecutionState);
         }
-        
-        return state;
+        return { content: '', messages: [], variables: {} };
     }
 
     _onValidate = async (e) => {
@@ -411,6 +407,7 @@ export class ToolEditorModal extends PlatformModal {
                 
                 <test-panel
                     .inputState=${this._buildDefaultState()}
+                    .defaultInputState=${this._buildDefaultState()}
                     @validate=${this._onValidate}
                     @execute=${this._onExecute}
                 ></test-panel>

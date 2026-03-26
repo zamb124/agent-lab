@@ -5,7 +5,6 @@
 import { html, css } from 'lit';
 import { BaseNodeEditor } from './base-node-editor.js';
 import '../editors/json-field-editor.js';
-import '../editors/test-panel.js';
 import '../editors/variable-input.js';
 
 const CHANNEL_TYPES = [
@@ -315,13 +314,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
             
             ${this.renderMappingSection()}
             
-            <test-panel
-                .inputState=${this._buildDefaultState()}
-                ?expanded=${this.expanded}
-                ?hide-input-state=${this.expanded}
-                @validate=${this._onValidate}
-                @execute=${this._onExecute}
-            ></test-panel>
+            ${this._renderTestPanel()}
         `;
     }
 }

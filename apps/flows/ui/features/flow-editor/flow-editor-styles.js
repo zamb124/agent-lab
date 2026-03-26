@@ -188,7 +188,9 @@ flow-editor-page .floating-panel-btn.expand-btn:hover {
 }
 
 flow-editor-page .floating-panel-body {
+    position: relative;
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: var(--space-4, 16px);
 }

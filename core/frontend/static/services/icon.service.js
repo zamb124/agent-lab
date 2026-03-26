@@ -27,6 +27,7 @@ const ICON_MAP = {
     'stop': 'stop',
     'sun': 'sun',
     'moon': 'moon',
+    'theme-auto': 'theme-auto',
     'logout': 'logout',
     'login': 'login',
     'user': 'user',

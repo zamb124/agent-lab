@@ -7,7 +7,6 @@ import { BaseNodeEditor } from './base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
 import '../editors/llm-config-editor.js';
 import '../editors/tag-input.js';
-import '../editors/test-panel.js';
 import '../../modals/inline-tool-modal.js';
 import '../../modals/tool-picker-modal.js';
 import '../editors/json-field-editor.js';
@@ -355,31 +354,6 @@ export class LlmNodeEditor extends BaseNodeEditor {
         this._updateConfig(field, value);
     }
     
-    _buildDefaultState() {
-        const defaultState = {
-            'route': 'default',
-            'status': 'success',
-            'category': 'default',
-            'result': 'default',
-            'type': 'default',
-        };
-        
-        if (this.flowVariables && typeof this.flowVariables === 'object') {
-            for (const key in this.flowVariables) {
-                if (Object.prototype.hasOwnProperty.call(this.flowVariables, key)) {
-                    const varData = this.flowVariables[key];
-                    if (typeof varData === 'object' && varData !== null && 'value' in varData) {
-                        defaultState[key] = varData.value;
-                    } else {
-                        defaultState[key] = varData;
-                    }
-                }
-            }
-        }
-        
-        return defaultState;
-    }
-    
     _onLoopModeChange(e) {
         this.loopMode = e.target.value;
         this._updateReactConfig();
@@ -516,6 +490,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
         modal.flowVariables = this.flowVariables;
         modal.flowId = this.flowId;
         modal.skillId = this.skillId;
+        modal.previewExecutionState = this.previewExecutionState;
         
         modal.addEventListener('tool-saved', (e) => {
             const { toolId, config: toolConfig } = e.detail;
@@ -562,6 +537,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
             modal.flowVariables = this.flowVariables;
             modal.flowId = this.flowId;
             modal.skillId = this.skillId;
+            modal.previewExecutionState = this.previewExecutionState;
             
             modal.addEventListener('tool-saved', (e) => {
                 const { toolId: savedToolId, config: savedConfig } = e.detail;
@@ -595,6 +571,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
         modal.flowVariables = this.flowVariables;
         modal.flowId = this.flowId;
         modal.skillId = this.skillId;
+        modal.previewExecutionState = this.previewExecutionState;
         
         modal.addEventListener('tool-saved', (e) => {
             const { toolId: savedToolId, config: savedConfig } = e.detail;
@@ -962,13 +939,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 
                 ${this.renderMappingSection()}
                 
-                <test-panel
-                    .inputState=${this._buildDefaultState()}
-                    ?expanded=${this.expanded}
-                    ?hide-input-state=${this.expanded}
-                    @validate=${this._onValidate}
-                    @execute=${this._onExecute}
-                ></test-panel>
+                ${this._renderTestPanel()}
         `;
     }
 }

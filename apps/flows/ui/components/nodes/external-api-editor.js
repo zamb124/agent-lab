@@ -5,7 +5,6 @@
 import { html } from 'lit';
 import { BaseNodeEditor } from './base-node-editor.js';
 import '../editors/json-field-editor.js';
-import '../editors/test-panel.js';
 
 export class ExternalApiEditor extends BaseNodeEditor {
     constructor() {
@@ -99,13 +98,7 @@ export class ExternalApiEditor extends BaseNodeEditor {
             
             ${this.renderMappingSection({ showInput: false })}
             
-            <test-panel
-                .inputState=${this._buildDefaultState()}
-                ?expanded=${this.expanded}
-                ?hide-input-state=${this.expanded}
-                @validate=${this._onValidate}
-                @execute=${this._onExecute}
-            ></test-panel>
+            ${this._renderTestPanel()}
         `;
     }
 }

@@ -352,10 +352,6 @@ export class ApiKeysPage extends PlatformElement {
         const modal = document.createElement('create-api-key-modal');
         document.body.appendChild(modal);
         modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('created', async () => {
-            await this._reloadKeys();
-            this.success('API ключ создан');
-        });
     }
 
     _onCopyKey(key) {

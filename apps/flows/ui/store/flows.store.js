@@ -42,6 +42,7 @@ const baseStore = new BaseStore('flows', {
         isDirty: false,
         isSaving: false,
         loading: false,
+        previewExecutionState: null,
     },
     
     chat: {
@@ -294,9 +295,24 @@ export const FlowsStore = {
         }));
     },
     
+    _skillIdForEditorStateApi(skillId) {
+        if (skillId == null || skillId === '' || skillId === 'base') {
+            return 'default';
+        }
+        return skillId;
+    },
+
+    async refreshPreviewExecutionState(flowId, a2aService, skillId) {
+        const apiSkill = this._skillIdForEditorStateApi(skillId);
+        const preview = await a2aService.getEditorState(flowId, apiSkill);
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, previewExecutionState: preview },
+        }));
+    },
+
     async loadFlow(flowId, a2aService, skillId = null) {
         baseStore.setState((s) => ({
-            editor: { ...s.editor, loading: true, flowId }
+            editor: { ...s.editor, loading: true, flowId, previewExecutionState: null }
         }));
         
         try {
@@ -314,6 +330,9 @@ export const FlowsStore = {
             if (!flow.flow_id) {
                 throw new Error('Response is missing flow_id');
             }
+
+            const apiSkill = this._skillIdForEditorStateApi(skillId ?? 'base');
+            const previewExecutionState = await a2aService.getEditorState(flowId, apiSkill);
             
             const skillsData = {
                 nodes: flow.nodes ?? {},
@@ -329,7 +348,8 @@ export const FlowsStore = {
                     flowConfig: flow,
                     skillsData,
                     currentSkillId: skillId,
-                    loading: false
+                    loading: false,
+                    previewExecutionState,
                 },
                 app: {
                     ...s.app,
@@ -343,7 +363,7 @@ export const FlowsStore = {
         } catch (error) {
             console.error('[Store] Failed to load flow:', error);
             baseStore.setState((s) => ({
-                editor: { ...s.editor, loading: false }
+                editor: { ...s.editor, loading: false, previewExecutionState: null }
             }));
             throw error;
         }

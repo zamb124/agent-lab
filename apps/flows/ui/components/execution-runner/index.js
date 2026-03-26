@@ -8,12 +8,14 @@
  * - Events: execution-started, node-status, execution-completed, execution-error, input-required, breakpoint-hit
  */
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { buildMockConfigFromEditorRows } from '../../utils/build-mock-config.js';
 
 export class ExecutionRunner extends PlatformElement {
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
         skillId: { type: String, attribute: 'skill-id' },
         breakpoints: { type: Object },
+        flowNodes: { type: Object },
     };
 
     constructor() {
@@ -21,6 +23,7 @@ export class ExecutionRunner extends PlatformElement {
         this.flowId = '';
         this.skillId = 'default';
         this.breakpoints = {};
+        this.flowNodes = {};
         this._isRunning = false;
         this._contextId = null;
         this._taskId = null;
@@ -36,9 +39,10 @@ export class ExecutionRunner extends PlatformElement {
      * @param {string} message - сообщение пользователя
      * @param {File[]} files - файлы для отправки
      * @param {Object} breakpoints - объект breakpoints для отладки
-     * @param {Array} mocks - массив мок-ответов для LLM
+     * @param {Array} mocks - строки редактора моков
+     * @param {Record<string, object>} flowNodes - ноды текущего графа (nodeId -> конфиг)
      */
-    async run(message, files = [], breakpoints = {}, mocks = []) {
+    async run(message, files = [], breakpoints = {}, mocks = [], flowNodes = null) {
         if (this._isRunning) {
             console.warn('[ExecutionRunner] Уже выполняется');
             return;
@@ -46,6 +50,16 @@ export class ExecutionRunner extends PlatformElement {
 
         if (!this.flowId) {
             this.error('flow-id не указан');
+            return;
+        }
+
+        const nodesMap = flowNodes != null && typeof flowNodes === 'object' ? flowNodes : this.flowNodes || {};
+        let mockPayload = null;
+        try {
+            mockPayload = buildMockConfigFromEditorRows(mocks, nodesMap);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.emit('execution-error', { error: msg });
             return;
         }
 
@@ -73,7 +87,7 @@ export class ExecutionRunner extends PlatformElement {
             }
 
             console.log('[ExecutionRunner] Отправка breakpoints:', breakpoints);
-            console.log('[ExecutionRunner] Отправка mocks:', mocks);
+            console.log('[ExecutionRunner] Отправка metadata.mock:', mockPayload);
 
             // Используем a2a.service вместо прямого fetch
             await this.a2a.streamMessage(
@@ -83,7 +97,7 @@ export class ExecutionRunner extends PlatformElement {
                     contextId: this._contextId,
                     skillId: this.skillId !== 'base' ? this.skillId : null,
                     breakpoints,
-                    mocks
+                    mock: mockPayload
                 },
                 (event) => this._handleEvent(event)
             );

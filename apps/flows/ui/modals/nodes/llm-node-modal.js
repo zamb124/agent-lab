@@ -353,15 +353,6 @@ export class LlmNodeModal extends BaseNodeModal {
         return this._applyStateSettings(config);
     }
 
-    _buildDefaultState() {
-        return {
-            content: 'Текст запроса пользователя',
-            messages: [],
-            variables: this.flowVariables || {},
-            user_query: 'Пример значения',
-        };
-    }
-
     renderBody() {
         const config = this.nodeConfig;
         const react = config.react || {};
@@ -590,7 +581,9 @@ export class LlmNodeModal extends BaseNodeModal {
                     </div>
                     
                     <test-panel
+                        .flowId=${this.flowId || ''}
                         .inputState=${this._buildDefaultState()}
+                        .defaultInputState=${this._buildDefaultState()}
                         @validate=${this._onValidate}
                         @execute=${this._onExecute}
                     ></test-panel>

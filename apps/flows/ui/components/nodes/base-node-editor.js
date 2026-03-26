@@ -9,6 +9,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '../editors/tag-input.js';
 import '../editors/json-field-editor.js';
 import '../editors/state-mapping-editor.js';
+import '../editors/test-panel.js';
 
 export class BaseNodeEditor extends PlatformElement {
     static styles = [
@@ -53,6 +54,14 @@ export class BaseNodeEditor extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-4);
+            }
+
+            :host([expanded]:has(code-editor.fullscreen)) .panel-sidebar {
+                display: none;
+            }
+
+            :host([expanded]:has(code-editor.fullscreen)) .panel-layout {
+                gap: 0;
             }
             
             .sidebar-section {
@@ -109,6 +118,7 @@ export class BaseNodeEditor extends PlatformElement {
         flowId: { type: String },
         skillId: { type: String },
         flowVariables: { type: Object },
+        previewExecutionState: { type: Object },
         expanded: { type: Boolean },
     };
 
@@ -119,7 +129,27 @@ export class BaseNodeEditor extends PlatformElement {
         this.flowId = '';
         this.skillId = '';
         this.flowVariables = {};
+        this.previewExecutionState = null;
         this.expanded = false;
+        this._testStateSnapshot = { content: '', messages: [], variables: {} };
+    }
+
+    _getStateKeys() {
+        return Object.keys(this._testStateSnapshot || {});
+    }
+
+    _renderTestPanel() {
+        return html`
+            <test-panel
+                .flowId=${this.flowId || ''}
+                .inputState=${this._testStateSnapshot}
+                .defaultInputState=${this._testStateSnapshot}
+                ?expanded=${this.expanded}
+                ?hide-input-state=${this.expanded}
+                @validate=${this._onValidate}
+                @execute=${this._onExecute}
+            ></test-panel>
+        `;
     }
 
     _updateConfig(field, value) {
@@ -142,35 +172,6 @@ export class BaseNodeEditor extends PlatformElement {
 
     _onInputChange(field, value) {
         this._updateConfig(field, value);
-    }
-
-    _buildDefaultState() {
-        const defaultState = {
-            'route': 'default',
-            'status': 'success',
-            'category': 'default',
-            'result': 'default',
-            'type': 'default',
-            'variables': {},
-        };
-        
-        // flowVariables кладём в state.variables, извлекая только value
-        if (this.flowVariables) {
-            if (Array.isArray(this.flowVariables)) {
-                for (const varObj of this.flowVariables) {
-                    if (varObj && varObj.key) {
-                        const val = varObj.value;
-                        defaultState.variables[varObj.key] = (val && typeof val === 'object' && 'value' in val) ? val.value : val;
-                    }
-                }
-            } else if (typeof this.flowVariables === 'object') {
-                for (const [key, val] of Object.entries(this.flowVariables)) {
-                    defaultState.variables[key] = (val && typeof val === 'object' && 'value' in val) ? val.value : val;
-                }
-            }
-        }
-        
-        return defaultState;
     }
 
     async _onValidate(e) {
@@ -382,7 +383,7 @@ export class BaseNodeEditor extends PlatformElement {
                 <div class="form-group">
                     <json-field-editor
                         id="sidebar-input-state"
-                        .value=${JSON.stringify(this._buildDefaultState(), null, 2)}
+                        .value=${JSON.stringify(this._testStateSnapshot, null, 2)}
                         min-height="150"
                         placeholder='{"content": "", "messages": []}'
                         @change=${this._onInputStateChange}
@@ -408,12 +409,12 @@ export class BaseNodeEditor extends PlatformElement {
     _onResetInputState() {
         const editor = this.shadowRoot?.querySelector('#sidebar-input-state');
         const testPanel = this.shadowRoot?.querySelector('test-panel');
-        const defaultState = this._buildDefaultState();
+        const snapshot = structuredClone(this._testStateSnapshot);
         if (editor) {
-            editor.setValue(defaultState);
+            editor.setValue(snapshot);
         }
         if (testPanel) {
-            testPanel.resetInputState();
+            testPanel.resetInputState(snapshot);
         }
     }
 
@@ -436,7 +437,7 @@ export class BaseNodeEditor extends PlatformElement {
                         mode="both"
                         .inputMappings=${config.input_mapping || {}}
                         .outputMappings=${config.output_mapping || {}}
-                        .stateVariables=${Object.keys(this._buildDefaultState())}
+                        .stateVariables=${this._getStateKeys()}
                         @input-change=${(e) => this._onInputChange('input_mapping', e.detail.value)}
                         @output-change=${(e) => this._onInputChange('output_mapping', e.detail.value)}
                     ></state-mapping-editor>
@@ -450,7 +451,7 @@ export class BaseNodeEditor extends PlatformElement {
                     <state-mapping-editor
                         mode="input"
                         .mappings=${config.input_mapping || {}}
-                        .stateVariables=${Object.keys(this._buildDefaultState())}
+                        .stateVariables=${this._getStateKeys()}
                         @change=${(e) => this._onInputChange('input_mapping', e.detail.value)}
                     ></state-mapping-editor>
                 </div>
@@ -567,8 +568,22 @@ export class BaseNodeEditor extends PlatformElement {
         this._updateConfig('resources', updated);
     }
 
+    firstUpdated(changedProperties) {
+        super.firstUpdated(changedProperties);
+        if (this.previewExecutionState) {
+            this._testStateSnapshot = structuredClone(this.previewExecutionState);
+        }
+    }
+
     updated(changedProperties) {
         super.updated?.(changedProperties);
+        if (changedProperties.has('previewExecutionState')) {
+            if (this.previewExecutionState) {
+                this._testStateSnapshot = structuredClone(this.previewExecutionState);
+            } else {
+                this._testStateSnapshot = { content: '', messages: [], variables: {} };
+            }
+        }
         if (changedProperties.has('expanded')) {
             if (this.expanded) {
                 this.setAttribute('expanded', '');

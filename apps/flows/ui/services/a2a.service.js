@@ -65,6 +65,14 @@ export class A2AService extends BaseService {
         return this.get(`/api/v1/tasks/state?session_id=${encodeURIComponent(sessionId)}`);
     }
 
+    async getEditorState(flowId, skillId = 'default') {
+        const params = new URLSearchParams({
+            flow_id: flowId,
+            skill_id: skillId || 'default',
+        });
+        return this.get(`/api/v1/code/editor-state?${params}`);
+    }
+
     async getSkills() {
         return this.get('/api/v1/skills');
     }
@@ -137,8 +145,8 @@ export class A2AService extends BaseService {
      * @param {string} options.contextId - ID контекста (опционально)
      * @param {string} options.skillId - ID skill (опционально)
      * @param {Object} options.variables - Переменные для выполнения (опционально)
-     * @param {Array} options.breakpoints - Breakpoints для отладки (опционально)
-     * @param {Object} options.mocks - Моки для тестирования (опционально)
+     * @param {Object|Array} options.breakpoints - Breakpoints для отладки (объект nodeId -> true или массив)
+     * @param {Object|null} options.mock - MockConfig для metadata.mock (опционально)
      * @param {Function} onEvent - Callback для SSE событий
      */
     async streamMessage(flowId, message, options = {}, onEvent) {
@@ -147,8 +155,8 @@ export class A2AService extends BaseService {
             contextId = null, 
             skillId = null,
             variables = null,
-            breakpoints = [], 
-            mocks = {} 
+            breakpoints = null, 
+            mock = null 
         } = options;
         
         const url = `${this.baseUrl}/api/v1/${flowId}`;
@@ -177,7 +185,7 @@ export class A2AService extends BaseService {
             }
         };
         
-        // Добавляем metadata для skill, variables, breakpoints и mocks
+        // Добавляем metadata для skill, variables, breakpoints и mock (MockConfig)
         const metadata = {};
         if (skillId) {
             metadata.skill = skillId;
@@ -185,11 +193,16 @@ export class A2AService extends BaseService {
         if (variables) {
             metadata.variables = variables;
         }
-        if (breakpoints && breakpoints.length > 0) {
+        const hasBreakpoints =
+            breakpoints != null &&
+            (Array.isArray(breakpoints)
+                ? breakpoints.length > 0
+                : typeof breakpoints === 'object' && Object.keys(breakpoints).length > 0);
+        if (hasBreakpoints) {
             metadata.breakpoints = breakpoints;
         }
-        if (mocks && Object.keys(mocks).length > 0) {
-            metadata.mocks = mocks;
+        if (mock != null && typeof mock === 'object' && Object.keys(mock).length > 0) {
+            metadata.mock = mock;
         }
         
         if (Object.keys(metadata).length > 0) {

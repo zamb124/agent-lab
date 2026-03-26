@@ -24,6 +24,7 @@ export class PropertyPanel extends PlatformElement {
         skillId: { type: String, attribute: 'skill-id' },
         flowConfig: { type: Object },
         flowVariables: { type: Object },
+        previewExecutionState: { type: Object },
         expanded: { type: Boolean },
         config: { type: Object },
     };
@@ -35,6 +36,7 @@ export class PropertyPanel extends PlatformElement {
         this.skillId = 'base';
         this.flowConfig = null;
         this.flowVariables = {};
+        this.previewExecutionState = null;
         this.expanded = false;
         this.config = null;
     }
@@ -156,6 +158,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
@@ -168,6 +171,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
@@ -180,6 +184,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
@@ -192,6 +197,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
@@ -204,6 +210,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
@@ -216,6 +223,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
@@ -228,6 +236,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
@@ -240,6 +249,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
@@ -252,6 +262,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}

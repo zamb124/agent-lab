@@ -5,7 +5,6 @@
 import { html } from 'lit';
 import { BaseNodeEditor } from './base-node-editor.js';
 import '../editors/json-field-editor.js';
-import '../editors/test-panel.js';
 
 export class RemoteFlowEditor extends BaseNodeEditor {
     constructor() {
@@ -78,13 +77,7 @@ export class RemoteFlowEditor extends BaseNodeEditor {
             
             ${this.renderMappingSection()}
             
-            <test-panel
-                .inputState=${this._buildDefaultState()}
-                ?expanded=${this.expanded}
-                ?hide-input-state=${this.expanded}
-                @validate=${this._onValidate}
-                @execute=${this._onExecute}
-            ></test-panel>
+            ${this._renderTestPanel()}
         `;
     }
 }

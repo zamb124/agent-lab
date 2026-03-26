@@ -12,6 +12,12 @@ export class FlowsCatalogService extends BaseService {
      * Список flows компании (как в flows UI).
      */
     async listFlows() {
-        return this.get('/flows/api/v1/flows/');
+        const data = await this.get('/flows/api/v1/flows/');
+        if (!Array.isArray(data)) {
+            throw new Error(
+                `Ожидался массив flows от GET /flows/api/v1/flows/, получен ${typeof data}`,
+            );
+        }
+        return data;
     }
 }

@@ -45,6 +45,7 @@ export class FlowEditorPage extends PlatformElement {
             isDirty: s.editor.isDirty,
             isSaving: s.editor.isSaving,
             loading: s.editor.loading,
+            previewExecutionState: s.editor.previewExecutionState,
         }));
         
         this._panelEntering = false;
@@ -248,7 +249,7 @@ export class FlowEditorPage extends PlatformElement {
         }
     }
 
-    _onSkillSwitched(e) {
+    async _onSkillSwitched(e) {
         const { skillId, data, inherited } = e.detail;
         FlowsStore.setCurrentSkill(skillId);
         FlowsStore.updateSkillsData(data, inherited);
@@ -259,6 +260,10 @@ export class FlowEditorPage extends PlatformElement {
         });
         
         this._updateCanvasDirectly(data, inherited);
+
+        if (this.flowId) {
+            await FlowsStore.refreshPreviewExecutionState(this.flowId, this.a2a, skillId);
+        }
         
         this.success(`Переключено на ${skillId === 'base' ? 'базовый флоу' : 'skill: ' + skillId}`);
     }
@@ -290,11 +295,22 @@ export class FlowEditorPage extends PlatformElement {
         const { message, files, mocks } = e.detail;
         const executionRunner = this.querySelector('execution-runner');
         const breakpointManager = this.querySelector('breakpoint-manager');
-        
-        if (executionRunner && breakpointManager) {
-            const breakpoints = breakpointManager.getBreakpointsObject();
-            executionRunner.run(message, files, breakpoints, mocks);
+        const canvas = this.querySelector('flow-canvas');
+
+        if (!executionRunner || !breakpointManager) {
+            return;
         }
+
+        let flowNodes = this.state.value.skillsData?.nodes || {};
+        if (canvas && typeof canvas.getData === 'function') {
+            const canvasData = canvas.getData();
+            if (canvasData && canvasData.nodes && typeof canvasData.nodes === 'object') {
+                flowNodes = canvasData.nodes;
+            }
+        }
+
+        const breakpoints = breakpointManager.getBreakpointsObject();
+        executionRunner.run(message, files, breakpoints, mocks, flowNodes);
     }
 
     _onStopAgent() {
@@ -902,7 +918,7 @@ export class FlowEditorPage extends PlatformElement {
     }
 
     _renderFloatingPanel() {
-        const { panelOpen, panelExpanded, selectedNodeId, selectedResourceId, flowConfig, currentSkillId, skillsData } = this.state.value;
+        const { panelOpen, panelExpanded, selectedNodeId, selectedResourceId, flowConfig, currentSkillId, skillsData, previewExecutionState } = this.state.value;
         
         console.log('[FlowEditorPage] _renderFloatingPanel:', {
             panelOpen,
@@ -977,6 +993,7 @@ export class FlowEditorPage extends PlatformElement {
                         .skillId=${currentSkillId}
                         .flowConfig=${flowConfig}
                         .flowVariables=${flowConfig?.variables || {}}
+                        .previewExecutionState=${previewExecutionState}
                         ?expanded=${panelExpanded}
                         @node-updated=${this._onNodeUpdated}
                         @node-deleted=${this._onNodeDeleted}
@@ -1144,6 +1161,7 @@ export class FlowEditorPage extends PlatformElement {
                 <execution-panel
                     .flowId=${this.flowId}
                     .skillId=${this.state.value.currentSkillId}
+                    .flowNodes=${this.state.value.skillsData?.nodes || {}}
                     show-state
                     show-tracing
                     show-mocks
@@ -1281,6 +1299,7 @@ export class FlowEditorPage extends PlatformElement {
                 style="display: none;"
                 .flowId=${this.flowId}
                 .skillId=${this.state.value.currentSkillId}
+                .flowNodes=${this.state.value.skillsData?.nodes || {}}
                 @node-status=${this._onNodeStatusUpdate}
                 @node-error-details=${this._onNodeErrorDetails}
                 @breakpoint-hit=${this._onBreakpointHit}

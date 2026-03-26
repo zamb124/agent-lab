@@ -135,7 +135,12 @@ export class BaseService {
         if (!raw || raw.trim() === '') {
             return {};
         }
+        const trimmed = raw.trim();
+        const looksJson = trimmed.startsWith('{') || trimmed.startsWith('[');
         if (contentType && contentType.includes('application/json')) {
+            return JSON.parse(raw);
+        }
+        if (looksJson) {
             return JSON.parse(raw);
         }
 

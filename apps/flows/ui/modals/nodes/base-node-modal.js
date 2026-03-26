@@ -60,6 +60,7 @@ export class BaseNodeModal extends PlatformFormModal {
         flowId: { type: String, attribute: 'flow-id' },
         skillId: { type: String, attribute: 'skill-id' },
         flowVariables: { type: Object },
+        previewExecutionState: { type: Object },
         localConfig: { type: Object },
         saveToMessages: { type: Boolean },
         messageField: { type: String },
@@ -74,6 +75,7 @@ export class BaseNodeModal extends PlatformFormModal {
         this.flowId = '';
         this.skillId = '';
         this.flowVariables = {};
+        this.previewExecutionState = null;
         this.localConfig = {};
         this.saveToMessages = false;
         this.messageField = '';
@@ -126,6 +128,13 @@ export class BaseNodeModal extends PlatformFormModal {
         this.isDirty = true;
     }
     
+    _buildDefaultState() {
+        if (this.previewExecutionState && typeof this.previewExecutionState === 'object') {
+            return structuredClone(this.previewExecutionState);
+        }
+        return { content: '', messages: [], variables: {} };
+    }
+
     _applyStateSettings(config) {
         if (this.outputKey) {
             config.output_key = this.outputKey;
