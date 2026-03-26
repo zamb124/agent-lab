@@ -258,7 +258,7 @@ export class PlatformChat extends PlatformIsland {
                 }
 
                 .chat-header {
-                    padding: var(--space-3) var(--space-4);
+                    padding: max(var(--space-3), env(safe-area-inset-top, 0px)) var(--space-4) var(--space-3);
                 }
 
                 .menu-btn {

@@ -129,7 +129,7 @@ export class CRMApp extends PlatformApp {
                 
                 .mobile-tabs {
                     display: flex;
-                    padding: var(--space-2);
+                    padding: max(var(--space-2), env(safe-area-inset-top, 0px)) var(--space-2) var(--space-2);
                     gap: var(--space-2);
                     background: var(--glass-solid-subtle);
                     border-bottom: 1px solid var(--glass-border-subtle);

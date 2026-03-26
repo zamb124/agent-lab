@@ -7,7 +7,9 @@ export class AuthModal extends PlatformElement {
     static properties = {
         open: { type: Boolean, reflect: true },
         loading: { type: Boolean },
-        error: { type: String }
+        error: { type: String },
+        /** Путь на том же origin (например /sync или /dashboard) для редиректа после OAuth */
+        returnPath: { type: String, attribute: 'return-path' },
     };
 
     static styles = [
@@ -139,6 +141,7 @@ export class AuthModal extends PlatformElement {
         this.open = false;
         this.loading = false;
         this.error = '';
+        this.returnPath = '';
     }
 
     willUpdate(changedProperties) {
@@ -158,7 +161,8 @@ export class AuthModal extends PlatformElement {
         this.error = '';
 
         try {
-            const authUrl = await this.auth.startOAuth(provider);
+            const rp = typeof this.returnPath === 'string' && this.returnPath !== '' ? this.returnPath : null;
+            const authUrl = await this.auth.startOAuth(provider, rp);
             window.location.href = authUrl;
         } catch (error) {
             this.error = error.message || 'Ошибка при запуске авторизации';

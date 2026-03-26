@@ -91,7 +91,7 @@ export class DashboardHeader extends PlatformElement {
 
             @media (max-width: 768px) {
                 .header {
-                    padding: 12px 16px;
+                    padding: max(12px, env(safe-area-inset-top, 0px)) 16px 12px;
                     flex-wrap: wrap;
                 }
 

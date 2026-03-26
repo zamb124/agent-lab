@@ -104,13 +104,10 @@ export class SyncApp extends PlatformApp {
     /** @type {MediaQueryList | null} */
     _mqMobileShell = null;
 
-    /** @type {(() => void) | null} */
-    _syncViewportToVisual = null;
-
     /** @type {((e: MediaQueryListEvent) => void) | null} */
     _onMobileShellChange = null;
 
-    _shellLayoutBound = false;
+    _mobileShellMqBound = false;
 
     constructor() {
         super();
@@ -159,31 +156,13 @@ export class SyncApp extends PlatformApp {
         try {
             await super.connectedCallback();
 
-            if (!this._shellLayoutBound) {
-                this._shellLayoutBound = true;
-                this._syncViewportToVisual = () => {
-                    if (!this._mqMobileShell || !this._mqMobileShell.matches) {
-                        document.documentElement.style.removeProperty('--app-vh');
-                        return;
-                    }
-                    const vv = window.visualViewport;
-                    if (!vv || typeof vv.height !== 'number') {
-                        document.documentElement.style.removeProperty('--app-vh');
-                        return;
-                    }
-                    document.documentElement.style.setProperty('--app-vh', `${Math.round(vv.height)}px`);
-                };
+            if (!this._mobileShellMqBound) {
+                this._mobileShellMqBound = true;
                 this._onMobileShellChange = (e) => {
                     this._mobileShell = e.matches;
-                    this._syncViewportToVisual?.();
                     this.requestUpdate();
                 };
                 this._mqMobileShell.addEventListener('change', this._onMobileShellChange);
-                this._syncViewportToVisual();
-                if (window.visualViewport) {
-                    window.visualViewport.addEventListener('resize', this._syncViewportToVisual);
-                    window.visualViewport.addEventListener('scroll', this._syncViewportToVisual);
-                }
             }
 
             if (!this._isAuthenticated) return;
@@ -218,14 +197,9 @@ export class SyncApp extends PlatformApp {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
-        if (this._shellLayoutBound) {
-            this._shellLayoutBound = false;
+        if (this._mobileShellMqBound) {
+            this._mobileShellMqBound = false;
             this._mqMobileShell?.removeEventListener('change', this._onMobileShellChange);
-            if (window.visualViewport && this._syncViewportToVisual) {
-                window.visualViewport.removeEventListener('resize', this._syncViewportToVisual);
-                window.visualViewport.removeEventListener('scroll', this._syncViewportToVisual);
-            }
-            document.documentElement.style.removeProperty('--app-vh');
         }
         if (this._typingPruneTimer != null) {
             clearInterval(this._typingPruneTimer);

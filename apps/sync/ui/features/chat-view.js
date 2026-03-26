@@ -97,7 +97,8 @@ export class ChatView extends PlatformElement {
                 }
 
                 .chat-header {
-                    padding: var(--space-1) var(--space-2);
+                    padding: max(var(--space-1), env(safe-area-inset-top, 0px)) var(--space-2)
+                        var(--space-1);
                 }
 
                 .header-channel-hit,

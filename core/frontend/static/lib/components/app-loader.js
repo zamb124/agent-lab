@@ -2,6 +2,7 @@
  * App Loader Component
  * Универсальный loader с AI-мозгом для полноэкранной и inline загрузки
  */
+import '../utils/viewport-app-vh.js';
 import { html, css, svg } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 

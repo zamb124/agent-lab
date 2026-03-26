@@ -11,6 +11,7 @@
 }
 
 :root {
+    /* На мобильной ширине app-loader подключает viewport-app-vh.js и может задать px с visualViewport */
     --app-vh: 100vh;
     --app-vw: 100vw;
 }

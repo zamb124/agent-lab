@@ -338,9 +338,13 @@ export class MyForm extends PlatformElement {
 
 ## Высота вьюпорта (iOS Safari, мобильные браузеры)
 
-Глобально в `core/frontend/static/assets/css/reset.css`: `--app-vh` / `--app-vw` (fallback `100vh`/`100vw`, при поддержке — `100dvh`/`100dvw`). Для полноэкранных layout’ов и `min-height` страниц использовать **`var(--app-vh, 100vh)`**, не сырой `100vh`. Мобильный drawer `platform-sidebar` в `sidebar.styles.js`: `position: fixed` с **`top` + `bottom`**, **`min-height: var(--app-vh)`** и **`-webkit-fill-available`**, плюс `env(safe-area-inset-*)` на панели.
+Глобально в `core/frontend/static/assets/css/reset.css`: `--app-vh` / `--app-vw` (fallback `100vh`/`100vw`, при поддержке — `100dvh`/`100dvw`). Для полноэкранных layout’ов и `min-height` страниц использовать **`var(--app-vh, 100vh)`**, не сырой `100vh`.
 
-**Sync Chat (`apps/sync/ui/app/sync-app.js`):** на узком экране у `:host` **`overflow-x: hidden`**, **`overflow-y: visible`**, чтобы `position: fixed` у мобильного сайдбара не обрезался предком с `overflow: hidden`. Обрезка скролла остаётся на **`.main`**. На мобилке **`visualViewport`** (resize/scroll) выставляет **`document.documentElement`** инлайн **`--app-vh`** в пикселях по `visualViewport.height` (снятие инлайна при выходе из мобильной ширины или `disconnect`). Контент чата: **`platform-island`** с **`padding="none"`**, горизонтальные отступы на **`chat-view`**, нижняя зона ввода — **`message-composer`** с **`max(..., env(safe-area-inset-bottom))`**.
+**Инициализация `visualViewport` (все SPA):** модуль `core/frontend/static/lib/utils/viewport-app-vh.js` подключается из `app-loader.js` и один раз на страницу при `max-width: 767px` выставляет на `document.documentElement` инлайн **`--app-vh`** и **`--app-vw`** в пикселях по `visualViewport` (события `resize`/`scroll` + `matchMedia` change); при ширине больше брейкпоинта инлайн снимается. Так совпадает видимая область с фиксированными shell’ами на iOS Safari при съезжающих панелях.
+
+**Safe area (notch, home indicator, PWA):** при `viewport-fit=cover` и полупрозрачном статус-баре (`apple-mobile-web-app-status-bar-style: black-translucent`) контент может заходить под системные полосы. Интерактивные верхние/нижние полосы (шапки чата, мобильные табы, sticky header) дополнять отступами вида **`max(var(--space-*), env(safe-area-inset-top|bottom, 0px))`**. Мобильный drawer `platform-sidebar` в `sidebar.styles.js`: `position: fixed` с **`top` + `bottom`**, **`min-height: var(--app-vh)`** и **`-webkit-fill-available`**, плюс `env(safe-area-inset-*)` на панели. Модалки — см. `glass-modal.js`.
+
+**Sync Chat (`apps/sync/ui/app/sync-app.js`):** на узком экране у `:host` **`overflow-x: hidden`**, **`overflow-y: visible`**, чтобы `position: fixed` у мобильного сайдбара не обрезался предком с `overflow: hidden`. Обрезка скролла остаётся на **`.main`**. Контент чата: **`platform-island`** с **`padding="none"`**, горизонтальные отступы на **`chat-view`**, шапка — **`chat-view`** с учётом **`env(safe-area-inset-top)`** на мобилке, нижняя зона ввода — **`message-composer`** с **`max(..., env(safe-area-inset-bottom))`**.
 
 ---
 

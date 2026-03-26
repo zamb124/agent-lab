@@ -20,7 +20,10 @@ export class PlatformShellPage extends PlatformElement {
                 justify-content: center;
                 min-height: var(--app-vh, 100vh);
                 width: 100%;
-                padding: var(--space-6, 24px);
+                padding: max(var(--space-6, 24px), env(safe-area-inset-top, 0px))
+                    max(var(--space-6, 24px), env(safe-area-inset-right, 0px))
+                    max(var(--space-6, 24px), env(safe-area-inset-bottom, 0px))
+                    max(var(--space-6, 24px), env(safe-area-inset-left, 0px));
                 box-sizing: border-box;
                 background: var(--bg-gradient, linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%));
             }

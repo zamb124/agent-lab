@@ -94,13 +94,17 @@ export class AuthService extends BaseService {
      * Начать OAuth авторизацию через провайдера
      * @param {string} provider - yandex, google или github
      */
-    async startOAuth(provider) {
-        const response = await this.get(`/api/auth/login/${provider}`);
-        
+    async startOAuth(provider, returnPath = null) {
+        let path = `/api/auth/login/${provider}`;
+        if (typeof returnPath === 'string' && returnPath !== '') {
+            path += `?return_path=${encodeURIComponent(returnPath)}`;
+        }
+        const response = await this.get(path);
+
         if (response.auth_url) {
             return response.auth_url;
         }
-        
+
         throw new Error('Не удалось получить ссылку авторизации');
     }
 

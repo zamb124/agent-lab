@@ -12,6 +12,7 @@ import { ServicesStatusService } from '../services/services-status.service.js';
 import { EmbedService } from '../services/embed.service.js';
 import { FrontendStore } from '../store/frontend.store.js';
 import '@platform/lib/components/layout/platform-island.js';
+import '@platform/lib/components/auth-modal.js';
 
 export class FrontendApp extends PlatformApp {
 
@@ -104,6 +105,13 @@ export class FrontendApp extends PlatformApp {
                 font-size: var(--text-base);
                 color: var(--text-secondary);
             }
+
+            .login-shell {
+                display: block;
+                width: 100%;
+                min-height: var(--app-vh, 100vh);
+                background: var(--bg-gradient);
+            }
         `
     ];
 
@@ -141,6 +149,7 @@ export class FrontendApp extends PlatformApp {
         const exact = new Set([
             '/',
             '/login',
+            '/frontend/login',
             '/select-company',
             '/join',
             '/products/agents',
@@ -184,6 +193,23 @@ export class FrontendApp extends PlatformApp {
         return null;
     }
 
+    _loginReturnPathFromQuery() {
+        const raw = new URLSearchParams(window.location.search).get('redirect_uri');
+        if (!raw) {
+            return '/dashboard';
+        }
+        let parsed;
+        try {
+            parsed = new URL(raw);
+        } catch (e) {
+            throw new Error('Некорректный redirect_uri в запросе входа.');
+        }
+        if (parsed.origin !== window.location.origin) {
+            throw new Error('redirect_uri должен указывать на текущий домен.');
+        }
+        return `${parsed.pathname}${parsed.search}`;
+    }
+
     async checkAuth() {
         const path = window.location.pathname;
         
@@ -191,6 +217,12 @@ export class FrontendApp extends PlatformApp {
         if (path === '/' || path.startsWith('/products/')) {
             this._isLanding = true;
             this._productPage = path.startsWith('/products/') ? path : null;
+            return true;
+        }
+
+        if (path === '/login' || path === '/frontend/login') {
+            this._isLanding = true;
+            this._productPage = null;
             return true;
         }
         
@@ -267,6 +299,15 @@ export class FrontendApp extends PlatformApp {
 
             if (path === '/join') {
                 return html`<join-page></join-page>`;
+            }
+
+            if (path === '/login' || path === '/frontend/login') {
+                const returnPath = this._loginReturnPathFromQuery();
+                return html`
+                    <div class="login-shell">
+                        <auth-modal .open=${true} .returnPath=${returnPath}></auth-modal>
+                    </div>
+                `;
             }
 
             if (path === '/products/agents') {
