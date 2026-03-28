@@ -4,6 +4,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 
@@ -233,57 +234,73 @@ export class CodeEditor extends PlatformElement {
                 background: var(--error-bg);
             }
             
-            /* Fullscreen: отдельное окно поверх страницы */
-            :host(.fullscreen:not(.fullscreen-embedded)) {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                z-index: 9999;
-                background: var(--bg-base);
-                padding: var(--space-4);
-            }
-
-            /* Внутри модалки / панели: непрозрачный слой и z-index выше сайдбара формы */
             :host(.fullscreen.fullscreen-embedded) {
                 position: absolute;
                 inset: 0;
-                z-index: 100;
+                z-index: 30;
+                box-sizing: border-box;
                 margin: 0;
                 background: var(--glass-solid-strong);
                 padding: var(--space-4);
-                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                min-height: 0;
                 isolation: isolate;
             }
 
-            :host(.fullscreen.fullscreen-embedded) .editor-wrapper {
+            :host(.fullscreen:not(.fullscreen-embedded)) {
+                position: fixed;
+                inset: 0;
+                z-index: var(--platform-modal-layer-z, 30050);
+                box-sizing: border-box;
+                margin: 0;
+                background: var(--bg-base);
+                padding: var(--space-4);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                min-height: 0;
+            }
+
+            :host(.fullscreen) .editor-wrapper {
+                flex: 1 1 0%;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
                 background: var(--glass-solid-strong);
             }
 
-            :host(.fullscreen.fullscreen-embedded) .editor-header {
+            :host(.fullscreen) .editor-header {
+                flex-shrink: 0;
                 background: var(--glass-solid-medium);
                 border-bottom: 1px solid var(--border-default);
             }
-            
-            :host(.fullscreen) .editor-wrapper {
-                height: 100%;
-                display: flex;
-                flex-direction: column;
+
+            :host(.fullscreen) .validation-status.visible {
+                flex-shrink: 0;
             }
             
             :host(.fullscreen) #codemirror-container {
-                flex: 1;
-                min-height: unset !important;
+                flex: 1 1 0%;
+                min-height: 0;
+                overflow: hidden;
+                position: relative;
             }
             
             :host(.fullscreen) #codemirror-container .cm-editor {
-                height: 100%;
-                min-height: unset !important;
+                height: 100% !important;
+                max-height: 100%;
+                min-height: 0 !important;
+                overflow: hidden !important;
+                display: flex !important;
+                flex-direction: column !important;
             }
             
             :host(.fullscreen) #codemirror-container .cm-scroller {
-                min-height: unset !important;
+                flex: 1 1 0% !important;
+                min-height: 0 !important;
+                overflow: auto !important;
             }
         `
     ];
@@ -321,8 +338,17 @@ export class CodeEditor extends PlatformElement {
         this._templatesOpen = false;
         this._templates = [];
         this._fullscreen = false;
+        /** @type {ParentNode | null} */
+        this._fsPortalParent = null;
+        /** @type {ChildNode | null} */
+        this._fsPortalNext = null;
+        /** @type {HTMLElement[]} */
+        this._editorFullscreenHosts = [];
         /** @type {HTMLElement | null} */
         this._fullscreenEmbedRoot = null;
+        this._fsPortalReparent = false;
+        this._boundClickOutside = (e) => this._handleClickOutside(e);
+        this._boundKeydownFs = (e) => this._handleKeydown(e);
         this._cmReady = false;
         this._editorView = null;
         this._cmModules = null;
@@ -337,18 +363,30 @@ export class CodeEditor extends PlatformElement {
 
     async firstUpdated() {
         await this._initCodeMirror();
-        document.addEventListener('click', this._handleClickOutside.bind(this));
-        document.addEventListener('keydown', this._handleKeydown.bind(this));
+        document.addEventListener('click', this._boundClickOutside);
+        document.addEventListener('keydown', this._boundKeydownFs);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        document.removeEventListener('click', this._handleClickOutside.bind(this));
-        document.removeEventListener('keydown', this._handleKeydown.bind(this));
-        if (this._fullscreen && !this._fullscreenEmbedRoot) {
-            document.body.style.overflow = '';
+        if (this._fsPortalReparent) {
+            return;
         }
-        this._fullscreenEmbedRoot = null;
+        document.removeEventListener('click', this._boundClickOutside);
+        document.removeEventListener('keydown', this._boundKeydownFs);
+        if (this._fullscreen) {
+            this._fullscreen = false;
+            this.classList.remove('fullscreen', 'fullscreen-embedded');
+            this.style.removeProperty('--platform-modal-layer-z');
+            if (this._fullscreenEmbedRoot) {
+                this._fullscreenEmbedRoot = null;
+            } else {
+                document.body.style.overflow = '';
+            }
+            this._clearEditorFullscreenMask();
+            this._fsPortalParent = null;
+            this._fsPortalNext = null;
+        }
         if (this._editorView) {
             this._editorView.destroy();
             this._editorView = null;
@@ -761,18 +799,47 @@ export class CodeEditor extends PlatformElement {
         }
     }
 
-    /**
-     * Контейнер для вложенного полноэкрана: glass-modal (.modal-content) или
-     * развёрнутая панель ноды в редакторе flow (.floating-panel-body).
-     */
-    _getFullscreenEmbedRoot() {
+    _clearEditorFullscreenMask() {
+        for (const host of this._editorFullscreenHosts) {
+            host.removeAttribute('data-editor-fullscreen');
+        }
+        this._editorFullscreenHosts = [];
+    }
+
+    _applyEditorFullscreenMask() {
+        this._editorFullscreenHosts = [];
         let el = this;
+        for (let i = 0; i < 64; i++) {
+            const root = el.getRootNode();
+            if (!(root instanceof ShadowRoot) || !(root.host instanceof HTMLElement)) {
+                break;
+            }
+            const host = root.host;
+            host.setAttribute('data-editor-fullscreen', '');
+            this._editorFullscreenHosts.push(host);
+            el = host;
+        }
+    }
+
+    _scheduleEditorMeasure() {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (this._editorView) {
+                    this._editorView.requestMeasure();
+                }
+            });
+        });
+    }
+
+    _getFullscreenEmbedRoot() {
+        let el = this.parentElement;
         for (let depth = 0; depth < 64 && el; depth++) {
             if (el.nodeType === Node.ELEMENT_NODE && el.classList) {
-                if (el.classList.contains('floating-panel-body')) {
-                    return el;
-                }
-                if (el.classList.contains('modal-content')) {
+                if (
+                    el.classList.contains('floating-panel-body')
+                    || el.classList.contains('modal-content')
+                    || el.classList.contains('modal-content-wrapper')
+                ) {
                     return el;
                 }
             }
@@ -794,6 +861,7 @@ export class CodeEditor extends PlatformElement {
     _toggleFullscreen() {
         this._fullscreen = !this._fullscreen;
         if (this._fullscreen) {
+            this._applyEditorFullscreenMask();
             this.classList.add('fullscreen');
             const embedRoot = this._getFullscreenEmbedRoot();
             if (embedRoot) {
@@ -801,14 +869,47 @@ export class CodeEditor extends PlatformElement {
                 this._fullscreenEmbedRoot = embedRoot;
             } else {
                 this._fullscreenEmbedRoot = null;
+                this._fsPortalParent = this.parentNode;
+                this._fsPortalNext = this.nextSibling;
+                this.style.setProperty(
+                    '--platform-modal-layer-z',
+                    String(nextModalLayerZIndex()),
+                );
+                this._fsPortalReparent = true;
+                try {
+                    document.body.appendChild(this);
+                } finally {
+                    this._fsPortalReparent = false;
+                }
                 document.body.style.overflow = 'hidden';
             }
         } else {
-            this.classList.remove('fullscreen');
-            this.classList.remove('fullscreen-embedded');
-            this._fullscreenEmbedRoot = null;
-            document.body.style.overflow = '';
+            this.classList.remove('fullscreen', 'fullscreen-embedded');
+            this._clearEditorFullscreenMask();
+            if (this._fullscreenEmbedRoot) {
+                this._fullscreenEmbedRoot = null;
+            } else {
+                this.style.removeProperty('--platform-modal-layer-z');
+                document.body.style.overflow = '';
+                const parent = this._fsPortalParent;
+                const next = this._fsPortalNext;
+                this._fsPortalParent = null;
+                this._fsPortalNext = null;
+                this._fsPortalReparent = true;
+                try {
+                    if (parent) {
+                        if (next && next.parentNode === parent) {
+                            parent.insertBefore(this, next);
+                        } else {
+                            parent.appendChild(this);
+                        }
+                    }
+                } finally {
+                    this._fsPortalReparent = false;
+                }
+            }
         }
+        this._scheduleEditorMeasure();
     }
 
     showValidation(status, message) {

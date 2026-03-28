@@ -389,7 +389,7 @@ export class FlowCanvas extends PlatformElement {
             border-radius: 12px;
             cursor: move;
             user-select: none;
-            z-index: 2;
+            z-index: 3;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -469,7 +469,7 @@ export class FlowCanvas extends PlatformElement {
         document.addEventListener('mouseup', () => {
             if (!isDragging) return;
             isDragging = false;
-            el.style.zIndex = '2';
+            el.style.zIndex = '3';
             
             const config = this.resourceConfigs.get(resourceId);
             if (config) {

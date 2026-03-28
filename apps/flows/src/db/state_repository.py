@@ -9,7 +9,7 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from pydantic import BaseModel, Field
 
@@ -31,6 +31,26 @@ from core.db import Storage
 logger = get_logger(__name__)
 
 
+def _execution_state_from_storage_dict(data: Dict[str, Any]) -> ExecutionState:
+    """Убирает устаревший ключ flow_config из JSON, переносит version в flow_config_version."""
+    fc = data.pop("flow_config", None)
+    if isinstance(fc, dict) and fc.get("version") and not data.get("flow_config_version"):
+        data["flow_config_version"] = str(fc["version"])
+    return ExecutionState.model_validate(data)
+
+
+def _execution_state_for_storage(
+    state: Union[ExecutionState, Dict[str, Any]],
+) -> ExecutionState:
+    """Сериализация без тяжёлого flow_config (раньше писался в states)."""
+    model = (
+        ExecutionState.model_validate(state) if isinstance(state, dict) else state
+    )
+    payload = model.model_dump(mode="json", exclude_none=False)
+    payload.pop("flow_config", None)
+    return ExecutionState.model_validate(payload)
+
+
 class StateData(BaseModel):
     """Модель для хранения state сессии."""
 
@@ -47,8 +67,10 @@ class BaseStateRepository(ABC):
         pass
 
     @abstractmethod
-    async def set(self, session_id: str, state: "ExecutionState") -> bool:
-        """Сохраняет состояние сессии."""
+    async def set(
+        self, session_id: str, state: Union["ExecutionState", Dict[str, Any]]
+    ) -> bool:
+        """Сохраняет состояние сессии (ExecutionState или dict для границы тестов/репозитория)."""
         pass
 
     @abstractmethod
@@ -63,7 +85,10 @@ class BaseStateRepository(ABC):
         return await self.get(session_id)
 
     async def set_in_transaction(
-        self, session_id: str, state: "ExecutionState", conn: Any = None
+        self,
+        session_id: str,
+        state: Union["ExecutionState", Dict[str, Any]],
+        conn: Any = None,
     ) -> bool:
         """Сохраняет состояние в рамках транзакции."""
         return await self.set(session_id, state)
@@ -109,20 +134,24 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         entity = await super().get(session_id)
         if entity is None:
             return None
-        return entity.data
+        raw = entity.data.model_dump(mode="json", exclude_none=False)
+        return _execution_state_from_storage_dict(raw)
 
-    async def set(self, session_id: str, state: "ExecutionState") -> bool:
+    async def set(
+        self, session_id: str, state: Union["ExecutionState", Dict[str, Any]]
+    ) -> bool:
         """
         Сохраняет состояние сессии.
 
         Args:
             session_id: ID сессии
-            state: ExecutionState
+            state: ExecutionState или dict (как после model_dump)
 
         Returns:
             True если успешно
         """
-        entity = StateData(session_id=session_id, data=state)
+        to_store = _execution_state_for_storage(state)
+        entity = StateData(session_id=session_id, data=to_store)
         return await super().set(entity)
 
     async def delete(self, session_id: str) -> bool:
@@ -147,24 +176,29 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         if data is None:
             return None
         entity = StateData.model_validate_json(data)
-        return entity.data
+        raw = entity.data.model_dump(mode="json", exclude_none=False)
+        return _execution_state_from_storage_dict(raw)
 
     async def set_in_transaction(
-        self, session_id: str, state: "ExecutionState", conn: "asyncpg.Connection"
+        self,
+        session_id: str,
+        state: Union["ExecutionState", Dict[str, Any]],
+        conn: "asyncpg.Connection",
     ) -> bool:
         """
         Сохраняет состояние в рамках транзакции.
 
         Args:
             session_id: ID сессии
-            state: ExecutionState
+            state: ExecutionState или dict
             conn: Активное соединение
 
         Returns:
             True если успешно
         """
         final_key = self._build_final_key(session_id)
-        entity = StateData(session_id=session_id, data=state)
+        to_store = _execution_state_for_storage(state)
+        entity = StateData(session_id=session_id, data=to_store)
         data = entity.model_dump_json()
         return await self._storage.set_in_transaction(self._get_table(), final_key, data, conn)
 
@@ -387,10 +421,12 @@ class InMemoryStateRepository(BaseStateRepository):
         async with self._get_lock(session_id):
             return self._storage.get(session_id)
 
-    async def set(self, session_id: str, state: "ExecutionState") -> bool:
+    async def set(
+        self, session_id: str, state: Union["ExecutionState", Dict[str, Any]]
+    ) -> bool:
         """Сохраняет состояние сессии."""
         async with self._get_lock(session_id):
-            self._storage[session_id] = state
+            self._storage[session_id] = _execution_state_for_storage(state)
             return True
 
     async def delete(self, session_id: str) -> bool:

@@ -5,7 +5,7 @@ InputMapper - маппинг данных триггера в state.
 1. Payload автоматически записывается в state.triggers.{trigger_id}
 2. output_mapping указывает какие данные куда положить в state
    Формат: {"куда_в_state": "откуда_из_payload"}
-   Пути без префиксов!
+   Справа: путь в payload (например message.text) или @trigger:message.text, или @const:...
 """
 
 import re
@@ -26,15 +26,16 @@ class InputMapper:
     Пример output_mapping:
         {
             "content": "message.text",
-            "variables.chat_id": "message.chat.id",
+            "variables.chat_id": "@trigger:message.chat.id",
             "variables.username": "message.from.username"
         }
         
     Слева - путь в state куда записать
-    Справа - путь в payload откуда взять
+    Справа - путь в payload откуда взять (опционально с префиксом @trigger:)
     """
     
     CONST_PREFIX = "@const:"
+    TRIGGER_PREFIX = "@trigger:"
     
     def map(
         self,
@@ -76,7 +77,11 @@ class InputMapper:
         """
         if expr.startswith(self.CONST_PREFIX):
             return expr[len(self.CONST_PREFIX):]
-        
+
+        if expr.startswith(self.TRIGGER_PREFIX):
+            path = expr[len(self.TRIGGER_PREFIX) :]
+            return self._get_nested(payload, path)
+
         return self._get_nested(payload, expr)
     
     def _get_nested(self, data: Dict[str, Any], path: str) -> Any:

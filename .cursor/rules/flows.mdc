@@ -10,6 +10,18 @@ alwaysApply: false
 2. **Stream-First** - все события через Redis Pub/Sub
 3. **Zero-Guess** - нет fallback значений, ошибка = exception
 
+## Каналы и выполнение графа
+
+Запрос пользователя в `BaseChannel.process_task` (A2A и остальные каналы) всегда идёт через `runtime_flow.run` / `Flow._execute_loop`: ноды выполняются по `edges`, состояние меняется в этом цикле. Отдельного пути «только runner на entry-`llm_node`» нет; дублирующих путей исполнения в канале не держим.
+
+## Трейсы (UI)
+
+API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/api/v1/traces.py` строится с сортировкой по `start_time` по возрастанию на каждом уровне — порядок siblings в UI совпадает с хронологией выполнения. `get_spans_by_task` в репозитории отдаёт spans по `start_time` asc.
+
+### Breakpoint в редакторе и `previewExecutionState`
+
+При срабатывании breakpoint в стриме приходит `metadata.state_snapshot` (dump `ExecutionState`). `flow-editor-page` пишет его в `FlowsStore.editor.previewExecutionState` через `setPreviewExecutionStateFromBreakpoint`, чтобы панель ноды показывала реальный runtime state, а не только шаблон из `getEditorState`. После успешного завершения прогона или при ошибке выполнения вызывается `refreshPreviewExecutionState`, чтобы вернуть шаблонный preview.
+
 ## NodeType
 
 | Тип | Класс | Описание |
@@ -21,6 +33,14 @@ alwaysApply: false
 | external_api | ExternalAPINode | HTTP запросы |
 | mcp | MCPNode | MCP tools |
 | channel | ChannelNode | Отправка сообщений (Telegram, Webhook) |
+
+## Bundles (`apps/flows/bundles/<id>/flow.json`)
+
+При загрузке в БД `FlowsLoader` инлайнит:
+- `prompt: "prompts/foo.md"` — текст промпта из файла;
+- `output_schema_file: "schemas/bar.json"` — подставляет JSON Schema в `output_schema` (поле `output_schema_file` удаляется). Путь относительно каталога bundle.
+
+У ноды `llm` в JSON — это `llm_override` (не `llm_config`).
 
 ## FlowConfig
 

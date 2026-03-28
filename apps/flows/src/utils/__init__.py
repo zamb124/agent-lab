@@ -20,15 +20,15 @@ def extract_json_from_response(text: str) -> Any:
     """
     if not text:
         return None
-    
-    # Пробуем извлечь из markdown блока ```json ... ```
-    match = re.search(r'```json\s*([\s\S]*?)```', text)
+
+    # Markdown: ```json ... ``` / ``` ... ``` (регистронезависимо json)
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.IGNORECASE)
     if match:
         try:
             return json.loads(match.group(1).strip())
         except json.JSONDecodeError:
             pass
-    
+
     # Пробуем распарсить как JSON напрямую
     stripped = text.strip()
     if stripped.startswith('{') or stripped.startswith('['):

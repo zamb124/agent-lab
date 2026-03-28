@@ -27,13 +27,16 @@ from core.state import (
 logger = get_logger(__name__)
 
 
-def _new_user_message(content: str, task_id: Optional[str] = None) -> Message:
-    """Создаёт A2A Message от пользователя."""
+def _new_user_message(
+    content: str, source_node_id: str, task_id: Optional[str] = None
+) -> Message:
+    """Создаёт A2A Message от пользователя с привязкой к ноде (nested resume)."""
     return Message(
         messageId=str(uuid.uuid4()),
         role=Role.user,
         parts=[Part(root=TextPart(text=content))],
         taskId=task_id,
+        metadata={"node_id": source_node_id},
     )
 
 
@@ -217,7 +220,9 @@ class InterruptManager:
         """
         nested_state = InterruptManager.load_nested_state(parent_state, nested_id)
 
-        nested_state.messages.append(_new_user_message(user_answer, nested_state.task_id))
+        nested_state.messages.append(
+            _new_user_message(user_answer, nested_id, nested_state.task_id)
+        )
 
         if parent_state.interrupt_path:
             nested_state.interrupt_path = parent_state.interrupt_path[1:]

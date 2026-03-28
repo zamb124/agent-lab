@@ -186,6 +186,12 @@ class A2AClient:
                     text = part.get("text", "")
                     if text:
                         response_text += text + "\n"
+                elif part.get("type") == "data" or part.get("kind") == "data":
+                    data = part.get("data")
+                    if isinstance(data, dict) and "res" in data:
+                        res_val = data["res"]
+                        if isinstance(res_val, str) and res_val.strip():
+                            response_text += res_val.strip() + "\n"
         
         return {
             "response": response_text.strip(),

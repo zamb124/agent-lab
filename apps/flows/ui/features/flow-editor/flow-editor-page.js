@@ -41,6 +41,7 @@ export class FlowEditorPage extends PlatformElement {
             panelOpen: s.editor.panelOpen,
             panelExpanded: s.editor.panelExpanded,
             executionPanelOpen: s.editor.executionPanelOpen,
+            agentExecutionRunning: s.editor.agentExecutionRunning,
             variablesPanelOpen: s.editor.variablesPanelOpen,
             isDirty: s.editor.isDirty,
             isSaving: s.editor.isSaving,
@@ -127,9 +128,19 @@ export class FlowEditorPage extends PlatformElement {
         super.updated(changedProperties);
         
         console.log('[FlowEditorPage] updated() called, changed:', Array.from(changedProperties.keys()));
-        
-        if (changedProperties.has('flowConfig') && this.state.value.flowConfig) {
-            this._setupComponentReferences();
+
+        const panelBody = this.querySelector('.floating-panel-body');
+        if (panelBody?.classList.contains('editor-fullscreen-embed-clip')) {
+            panelBody.classList.remove('editor-fullscreen-embed-clip');
+        }
+
+        if (this.state.value.loading) {
+            return;
+        }
+        const canvas = this.querySelector('flow-canvas');
+        const breakpointManager = this.querySelector('breakpoint-manager');
+        if (canvas && breakpointManager && canvas.breakpointManager !== breakpointManager) {
+            canvas.setBreakpointManager(breakpointManager);
         }
     }
     
@@ -156,15 +167,6 @@ export class FlowEditorPage extends PlatformElement {
         });
         
         canvas.loadData(data, inherited);
-    }
-
-    _setupComponentReferences() {
-        const canvas = this.querySelector('flow-canvas');
-        const breakpointManager = this.querySelector('breakpoint-manager');
-        
-        if (canvas && breakpointManager) {
-            canvas.setBreakpointManager(breakpointManager);
-        }
     }
 
     async _loadFlow() {
@@ -292,7 +294,7 @@ export class FlowEditorPage extends PlatformElement {
     }
 
     _onRunAgent(e) {
-        const { message, files, mocks } = e.detail;
+        const { message, files, mocks, reuseContext } = e.detail;
         const executionRunner = this.querySelector('execution-runner');
         const breakpointManager = this.querySelector('breakpoint-manager');
         const canvas = this.querySelector('flow-canvas');
@@ -310,7 +312,8 @@ export class FlowEditorPage extends PlatformElement {
         }
 
         const breakpoints = breakpointManager.getBreakpointsObject();
-        executionRunner.run(message, files, breakpoints, mocks, flowNodes);
+        const reuse = reuseContext !== false;
+        executionRunner.run(message, files, breakpoints, mocks, flowNodes, { reuseContext: reuse });
     }
 
     _onStopAgent() {
@@ -318,6 +321,11 @@ export class FlowEditorPage extends PlatformElement {
         if (executionRunner) {
             executionRunner.stop();
         }
+        const executionPanel = this.querySelector('execution-panel');
+        if (executionPanel) {
+            executionPanel.setRunning(false);
+        }
+        FlowsStore.setAgentExecutionRunning(false);
     }
 
     _onResumeFlow(e) {
@@ -332,6 +340,7 @@ export class FlowEditorPage extends PlatformElement {
         if (executionRunner) {
             executionRunner.resume(answer, contextId);
         }
+        FlowsStore.setAgentExecutionRunning(true);
     }
 
     _onNodeStatusUpdate(e) {
@@ -382,6 +391,15 @@ export class FlowEditorPage extends PlatformElement {
         if (executionPanel) {
             executionPanel.setBreakpoint(nodeId);
         }
+        FlowsStore.setAgentExecutionRunning(false);
+
+        if (
+            stateSnapshot != null &&
+            typeof stateSnapshot === 'object' &&
+            Object.keys(stateSnapshot).length > 0
+        ) {
+            FlowsStore.setPreviewExecutionStateFromBreakpoint(stateSnapshot);
+        }
         
         this.info(`Breakpoint hit на ноде "${nodeId}". Нажмите "Продолжить выполнение" для resume.`);
     }
@@ -396,7 +414,8 @@ export class FlowEditorPage extends PlatformElement {
             executionPanel.showResult(result || 'Выполнение завершено');
             executionPanel.clearBreakpoint();
         }
-        
+        FlowsStore.setAgentExecutionRunning(false);
+
         if (breakpointManager) {
             breakpointManager.clearActiveBreakpoint();
         }
@@ -404,6 +423,14 @@ export class FlowEditorPage extends PlatformElement {
         const canvas = this.querySelector('flow-canvas');
         if (canvas) {
             canvas.clearAllHighlights();
+        }
+
+        const fid = this.flowId;
+        const skill = this.state.value.currentSkillId;
+        if (fid && this.a2a) {
+            FlowsStore.refreshPreviewExecutionState(fid, this.a2a, skill).catch((err) => {
+                console.error('[FlowEditorPage] refreshPreviewExecutionState after run:', err);
+            });
         }
         
         this.success('Выполнение завершено');
@@ -416,6 +443,7 @@ export class FlowEditorPage extends PlatformElement {
         if (executionPanel) {
             executionPanel.setInputRequired(question, contextId);
         }
+        FlowsStore.setAgentExecutionRunning(false);
     }
 
     _onExecutionStarted(e) {
@@ -427,7 +455,8 @@ export class FlowEditorPage extends PlatformElement {
             executionPanel.setRunning(true);
             executionPanel.setExecutionData(contextId, taskId);
         }
-        
+        FlowsStore.setAgentExecutionRunning(true);
+
         if (canvas) {
             canvas.clearAllHighlights();
         }
@@ -440,6 +469,15 @@ export class FlowEditorPage extends PlatformElement {
         if (executionPanel) {
             executionPanel.setRunning(false);
             executionPanel.showError(error);
+        }
+        FlowsStore.setAgentExecutionRunning(false);
+
+        const fid = this.flowId;
+        const skill = this.state.value.currentSkillId;
+        if (fid && this.a2a) {
+            FlowsStore.refreshPreviewExecutionState(fid, this.a2a, skill).catch((err) => {
+                console.error('[FlowEditorPage] refreshPreviewExecutionState after error:', err);
+            });
         }
         
         this.error('Ошибка выполнения');
@@ -560,6 +598,9 @@ export class FlowEditorPage extends PlatformElement {
     }
 
     _onCloseExecutionPanel() {
+        if (this.state.value.agentExecutionRunning) {
+            this._onStopAgent();
+        }
         FlowsStore.setExecutionPanelOpen(false);
         this.editorMode = 'visual';
     }
@@ -1104,9 +1145,11 @@ export class FlowEditorPage extends PlatformElement {
                     flow-name=${flowConfig?.name || 'New Flow'}
                     ?saving=${isSaving}
                     .mode=${this.editorMode}
+                    ?agent-execution-running=${this.state.value.agentExecutionRunning}
                     @save=${this._handleSave}
                     @close=${this._handleClose}
                     @mode-changed=${this._onModeChanged}
+                    @stop-agent-requested=${this._onStopAgent}
                     @show-code=${this._onShowCode}
                 ></editor-header>
                 

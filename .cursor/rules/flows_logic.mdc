@@ -35,6 +35,17 @@ Merge:
 - tool_results → merge (все результаты)
 - остальное → last wins
 
+## LlmNode — контекст для LLM (`messages_filter`)
+
+- Конфиг ноды: `messages_filter`: `"all"` | `"own"` | `list[node_id]` (см. `NodeConfig`). Задаёт **какие сообщения из `state.messages` передаются в модель**; полный лог в `state.messages` **не режется**.
+- Режимы `own` и список учитывают **только** `metadata.node_id` (и user, и agent). Сообщения другой ноды с `role=user` в срез не попадают — иначе при нескольких LLM-нодах дублировался бы один и тот же ввод.
+- Новые реплики ReAct пишутся в **`state.messages`** с `metadata.node_id` = `node_id` этой `llm_node`.
+- `FlowValidator`: элементы списка `messages_filter` должны быть **существующими** `node_id` графа.
+
+## BaseNode — фильтрация для прочих нод
+
+- `messages_filter` в dict-конфиге ноды + `_get_filtered_messages()` (используется не только LLM). Недопустимое значение → `ValueError` (без тихого fallback на «все сообщения»).
+
 ## CodeNode
 
     def execute(args, state):

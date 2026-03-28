@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": { "type": "string" },
+    "key_events": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "statistics": {
+      "type": "object",
+      "properties": {
+        "entities_created": { "type": "integer" },
+        "notes_added": { "type": "integer" },
+        "tasks_completed": { "type": "integer" }
+      },
+      "required": ["entities_created", "notes_added", "tasks_completed"],
+      "additionalProperties": false
+    },
+    "highlights": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["summary", "key_events", "statistics", "highlights"],
+  "additionalProperties": false
+}

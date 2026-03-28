@@ -10,6 +10,19 @@ const codeModalStyles = css`
         --modal-max-width: 1200px;
     }
 
+    .code-modal-title-row {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2, 8px);
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .code-modal-title-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .code-container {
         flex: 1;
         overflow: auto;
@@ -66,13 +79,40 @@ export class CodeModal extends PlatformModal {
         super.showModal();
     }
 
-    _onCopy() {
+    _copyWithExecCommand(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        ta.style.top = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+    }
+
+    async _onCopy() {
         const text = JSON.stringify(this.code, null, 2);
-        navigator.clipboard.writeText(text).then(() => {
+        let copied = false;
+        if (navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                copied = true;
+            } catch {
+                copied = this._copyWithExecCommand(text);
+            }
+        } else {
+            copied = this._copyWithExecCommand(text);
+        }
+        if (copied) {
             this.success('Код скопирован в буфер обмена');
-        }).catch(err => {
+        } else {
             this.error('Не удалось скопировать код');
-        });
+        }
     }
 
     _syntaxHighlight(json) {
@@ -97,21 +137,18 @@ export class CodeModal extends PlatformModal {
 
     renderHeader() {
         return html`
-            <div class="modal-title">
-                <div class="modal-icon info">
-                    <platform-icon name="code" size="24"></platform-icon>
-                </div>
-                <span>Код агента</span>
-            </div>
-            <div class="modal-actions">
-                <platform-button variant="primary" @click=${this._onCopy}>
-                    <platform-icon name="copy" size="16"></platform-icon>
-                    Копировать
-                </platform-button>
-                <button class="modal-action-btn" @click=${this.close} title="Закрыть">
-                    <platform-icon name="close" size="18"></platform-icon>
-                </button>
-            </div>
+            <span class="code-modal-title-row">
+                <platform-icon name="code" size="20"></platform-icon>
+                <span class="code-modal-title-text">Код агента</span>
+            </span>
+        `;
+    }
+
+    renderHeaderActions() {
+        return html`
+            <button type="button" class="header-btn" title="Копировать" @click=${this._onCopy}>
+                <platform-icon name="copy" size="16"></platform-icon>
+            </button>
         `;
     }
 

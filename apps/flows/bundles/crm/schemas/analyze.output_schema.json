@@ -1,0 +1,87 @@
+{
+  "type": "object",
+  "properties": {
+    "note": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "entity_type": { "type": "string" },
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "attributes": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "confidence": { "type": "number" }
+          },
+          "required": ["entity_type", "name", "description", "attributes", "confidence"],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "confidence": { "type": "number" }
+        },
+        "required": ["entity_type", "name", "description", "attributes", "confidence"],
+        "additionalProperties": true
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_name": { "type": "string" },
+          "source_type": { "type": "string" },
+          "target_name": { "type": "string" },
+          "target_type": { "type": "string" },
+          "relationship_type": { "type": "string" },
+          "weight": { "type": "number" }
+        },
+        "required": [
+          "source_name",
+          "source_type",
+          "target_name",
+          "target_type",
+          "relationship_type",
+          "weight"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "dates_mentioned": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "places_mentioned": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "key_topics": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["dates_mentioned", "places_mentioned", "key_topics"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["note", "entities", "relationships", "metadata"],
+  "additionalProperties": false
+}

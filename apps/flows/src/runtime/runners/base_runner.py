@@ -106,11 +106,14 @@ class BaseLlmNodeRunner(ABC):
 
     def add_user_message(self, state: "ExecutionState", content: str) -> None:
         """Добавляет сообщение пользователя."""
+        if not self.node_config:
+            raise ValueError("add_user_message: node_config required")
         message = Message(
             messageId=str(uuid.uuid4()),
             role=Role.user,
             parts=[Part(root=TextPart(text=content))],
             taskId=state.task_id,
+            metadata={"node_id": self.node_config.node_id},
         )
         self.add_message(state, message)
 
@@ -121,23 +124,32 @@ class BaseLlmNodeRunner(ABC):
         tool_calls: List[Dict[str, Any]] | None = None,
     ) -> None:
         """Добавляет сообщение LlmNode."""
-        metadata = {"tool_calls": tool_calls} if tool_calls else None
+        if not self.node_config:
+            raise ValueError("add_llm_node_message: node_config required")
+        meta: Dict[str, Any] = {"node_id": self.node_config.node_id}
+        if tool_calls:
+            meta["tool_calls"] = tool_calls
         message = Message(
             messageId=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=content))],
-            metadata=metadata,
+            metadata=meta,
             taskId=state.task_id,
         )
         self.add_message(state, message)
 
     def add_tool_message(self, state: "ExecutionState", tool_call_id: str, content: str) -> None:
         """Добавляет сообщение от tool."""
+        if not self.node_config:
+            raise ValueError("add_tool_message: node_config required")
         message = Message(
             messageId=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=content))],
-            metadata={"tool_call_id": tool_call_id},
+            metadata={
+                "tool_call_id": tool_call_id,
+                "node_id": self.node_config.node_id,
+            },
             taskId=state.task_id,
         )
         self.add_message(state, message)

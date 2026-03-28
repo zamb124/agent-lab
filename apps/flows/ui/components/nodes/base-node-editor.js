@@ -31,6 +31,7 @@ export class BaseNodeEditor extends PlatformElement {
             
             :host([expanded]) .panel-layout {
                 flex-direction: row;
+                align-items: flex-start;
                 gap: var(--space-6);
             }
             
@@ -56,11 +57,15 @@ export class BaseNodeEditor extends PlatformElement {
                 gap: var(--space-4);
             }
 
-            :host([expanded]:has(code-editor.fullscreen)) .panel-sidebar {
+            :host([expanded][data-editor-fullscreen]) .panel-sidebar,
+            :host([expanded]:has(code-editor.fullscreen)) .panel-sidebar,
+            :host([expanded]:has(json-field-editor.fullscreen)) .panel-sidebar {
                 display: none;
             }
 
-            :host([expanded]:has(code-editor.fullscreen)) .panel-layout {
+            :host([expanded][data-editor-fullscreen]) .panel-layout,
+            :host([expanded]:has(code-editor.fullscreen)) .panel-layout,
+            :host([expanded]:has(json-field-editor.fullscreen)) .panel-layout {
                 gap: 0;
             }
             
@@ -474,14 +479,7 @@ export class BaseNodeEditor extends PlatformElement {
     }
 
     renderActions() {
-        return html`
-            <div class="form-actions">
-                <platform-button variant="danger" size="sm" @click=${this._deleteNode}>
-                    <platform-icon name="trash" size="16"></platform-icon>
-                    Удалить ноду
-                </platform-button>
-            </div>
-        `;
+        return '';
     }
 
     renderResourcesSection() {

@@ -218,6 +218,93 @@ export class LlmNodeEditor extends BaseNodeEditor {
             .mode-option input[type="radio"] {
                 display: none;
             }
+
+            .messages-filter-nodes {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                margin-top: var(--space-2);
+                max-height: 200px;
+                overflow-y: auto;
+                padding: var(--space-2);
+                background: var(--glass-tint-subtle);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+            }
+
+            .messages-filter-node-label {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                cursor: pointer;
+                padding: var(--space-1) 0;
+                border-radius: var(--radius-sm);
+            }
+
+            .messages-filter-node-label:hover .messages-filter-box {
+                border-color: var(--accent-light);
+            }
+
+            .messages-filter-control {
+                position: relative;
+                width: 18px;
+                height: 18px;
+                flex-shrink: 0;
+            }
+
+            .messages-filter-input {
+                position: absolute;
+                inset: 0;
+                width: 18px;
+                height: 18px;
+                margin: 0;
+                opacity: 0;
+                cursor: pointer;
+                z-index: 1;
+            }
+
+            .messages-filter-box {
+                position: absolute;
+                inset: 0;
+                box-sizing: border-box;
+                border: 1.5px solid var(--border-default);
+                border-radius: var(--radius-sm);
+                background: var(--glass-tint-subtle);
+                pointer-events: none;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition:
+                    background var(--duration-fast) ease,
+                    border-color var(--duration-fast) ease;
+            }
+
+            .messages-filter-control:has(.messages-filter-input:checked) .messages-filter-box {
+                background: var(--accent, #10b981);
+                border-color: var(--accent, #10b981);
+            }
+
+            .messages-filter-input:focus-visible + .messages-filter-box {
+                outline: 2px solid var(--accent, #10b981);
+                outline-offset: 2px;
+            }
+
+            .messages-filter-control:has(.messages-filter-input:checked) .messages-filter-box::after {
+                content: '';
+                width: 4px;
+                height: 8px;
+                margin-bottom: 2px;
+                border: solid white;
+                border-width: 0 2px 2px 0;
+                transform: rotate(45deg);
+            }
+
+            .messages-filter-text {
+                flex: 1;
+                min-width: 0;
+            }
         `
     ];
 
@@ -233,6 +320,9 @@ export class LlmNodeEditor extends BaseNodeEditor {
         maxIterations: { type: Number },
         structuredOutput: { type: Boolean },
         outputSchema: { type: Object },
+        graphNodes: { type: Array },
+        messagesFilterMode: { type: String },
+        messagesFilterCustomIds: { type: Array },
     };
 
     constructor() {
@@ -248,6 +338,9 @@ export class LlmNodeEditor extends BaseNodeEditor {
         this.maxIterations = 10;
         this.structuredOutput = false;
         this.outputSchema = this._getDefaultSchema();
+        this.graphNodes = [];
+        this.messagesFilterMode = 'all';
+        this.messagesFilterCustomIds = [];
     }
     
     _getDefaultSchema() {
@@ -267,6 +360,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
             console.log('[LlmNodeEditor] nodeConfig changed, parsing and re-rendering...');
             this._parseTools();
             this._parseReactConfig();
+            this._parseMessagesFilter();
         }
     }
     
@@ -315,6 +409,55 @@ export class LlmNodeEditor extends BaseNodeEditor {
         if (JSON.stringify(this.outputSchema) !== JSON.stringify(newOutputSchema)) {
             this.outputSchema = newOutputSchema;
         }
+    }
+
+    _parseMessagesFilter() {
+        const mf = this.nodeConfig?.messages_filter;
+        if (mf === 'own') {
+            this.messagesFilterMode = 'own';
+            this.messagesFilterCustomIds = [];
+        } else if (Array.isArray(mf)) {
+            this.messagesFilterMode = 'custom';
+            this.messagesFilterCustomIds = [...mf];
+        } else {
+            this.messagesFilterMode = 'all';
+            this.messagesFilterCustomIds = [];
+        }
+    }
+
+    _onMessagesFilterPresetChange(e) {
+        const v = e.target.value;
+        if (v === 'all' || v === 'own') {
+            this.messagesFilterMode = v;
+            this.messagesFilterCustomIds = [];
+            this._updateConfig('messages_filter', v);
+            return;
+        }
+        this.messagesFilterMode = 'custom';
+        const fallbackId = this.nodeId || this.nodeConfig?.node_id || 'main';
+        const next =
+            this.messagesFilterCustomIds && this.messagesFilterCustomIds.length > 0
+                ? [...this.messagesFilterCustomIds]
+                : [fallbackId];
+        this.messagesFilterCustomIds = next;
+        this._updateConfig('messages_filter', next);
+    }
+
+    _onMessagesFilterNodeToggle(e, graphNodeId) {
+        const checked = e.target.checked;
+        const set = new Set(this.messagesFilterCustomIds || []);
+        if (checked) {
+            set.add(graphNodeId);
+        } else {
+            set.delete(graphNodeId);
+        }
+        let arr = [...set];
+        const fallbackId = this.nodeId || this.nodeConfig?.node_id || 'main';
+        if (arr.length === 0) {
+            arr = [fallbackId];
+        }
+        this.messagesFilterCustomIds = arr;
+        this._updateConfig('messages_filter', arr);
     }
     
     _onModeChange(mode) {
@@ -663,11 +806,6 @@ export class LlmNodeEditor extends BaseNodeEditor {
         this._onInputChange(field, !currentValue);
     }
 
-    _emitDelete() {
-        console.log('[LlmNodeEditor] _emitDelete called');
-        this._deleteNode();
-    }
-
     renderFields() {
         if (!this.nodeConfig) {
             return html`<div>Загрузка...</div>`;
@@ -744,6 +882,58 @@ export class LlmNodeEditor extends BaseNodeEditor {
                         @change=${this._onLLMChange}
                     ></llm-config-editor>
                 </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <span class="section-title">Область истории для LLM</span>
+                    </div>
+                    <div class="loop-config">
+                        <span class="form-label-hint">
+                            Полный диалог хранится в state; в модель уходит только выбранный срез (без удаления истории).
+                        </span>
+                        <div class="loop-config-row" style="margin-top: var(--space-2);">
+                            <div class="form-label">
+                                <span class="form-label-text">Контекст для запросов к модели</span>
+                            </div>
+                            <select
+                                class="form-input form-select"
+                                .value=${this.messagesFilterMode === 'custom' ? 'custom' : this.messagesFilterMode}
+                                @change=${this._onMessagesFilterPresetChange}
+                            >
+                                <option value="all">Весь flow (all)</option>
+                                <option value="own">Только эта нода (own)</option>
+                                <option value="custom">Выбранные ноды</option>
+                            </select>
+                        </div>
+                        ${this.messagesFilterMode === 'custom'
+                            ? html`
+                                  <div class="messages-filter-nodes">
+                                      ${(this.graphNodes || []).length === 0
+                                          ? html`<span class="form-label-hint">Нет нод в конфиге flow.</span>`
+                                          : (this.graphNodes || []).map(
+                                                (n) => html`
+                                                    <label class="messages-filter-node-label">
+                                                        <span class="messages-filter-control">
+                                                            <input
+                                                                type="checkbox"
+                                                                class="messages-filter-input"
+                                                                .checked=${(
+                                                                    this.messagesFilterCustomIds || []
+                                                                ).includes(n.id)}
+                                                                @change=${(ev) =>
+                                                                    this._onMessagesFilterNodeToggle(ev, n.id)}
+                                                            />
+                                                            <span class="messages-filter-box" aria-hidden="true"></span>
+                                                        </span>
+                                                        <span class="messages-filter-text">${n.name} (${n.id})</span>
+                                                    </label>
+                                                `
+                                            )}
+                                  </div>
+                              `
+                            : ''}
+                    </div>
+                </div>
                 
                 <div class="section">
                     <div class="section-header">
@@ -778,8 +968,9 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                     <span class="form-label-text">Output Schema (JSON Schema)</span>
                                 </div>
                                 <json-field-editor
+                                    bounded
                                     .value=${JSON.stringify(this.outputSchema, null, 2)}
-                                    min-height="150"
+                                    min-height="120"
                                     hint="JSON Schema для структурированного вывода"
                                     @change=${this._onOutputSchemaJsonChange}
                                 ></json-field-editor>
@@ -916,7 +1107,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                 const isSubflow = this._isSubflowTool(tool);
                                 const isMCP = this._isMCPTool(tool);
                                 const icon = this._getToolIcon(tool);
-                                const canEdit = isInline || isAgent || isMCP;
+                                const canEdit = isInline || isSubflow || isMCP;
                                 return html`
                                     <div class="tool-item ${isInline ? 'is-inline' : ''} ${isSubflow ? 'is-subflow-tool' : ''} ${isMCP ? 'is-mcp' : ''}">
                                         <platform-icon class="tool-item-icon" name="${icon}" size="14"></platform-icon>

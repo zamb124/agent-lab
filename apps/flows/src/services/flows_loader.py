@@ -286,6 +286,7 @@ class FlowsLoader:
 
             # Инлайним промпт из .md файла если prompt - это путь к файлу
             node = self._inline_prompt_from_file(node, bundle_dir)
+            node = self._inline_output_schema_file(node, bundle_dir)
 
             # Инлайним function -> code
             self._inline_function_to_code(node, node_id)
@@ -332,6 +333,27 @@ class FlowsLoader:
         
         return node
 
+    def _inline_output_schema_file(
+        self, node: Dict[str, Any], bundle_dir: Path
+    ) -> Dict[str, Any]:
+        """
+        Подставляет output_schema из JSON рядом с flow (как промпт из .md).
+        Поле output_schema_file удаляется после загрузки.
+        """
+        ref = node.get("output_schema_file")
+        if not ref or not isinstance(ref, str):
+            return node
+        if node.get("output_schema") is not None:
+            del node["output_schema_file"]
+            return node
+        schema_path = bundle_dir / ref
+        if not schema_path.exists():
+            raise ValueError(f"output_schema file not found: {schema_path}")
+        with open(schema_path, "r", encoding="utf-8") as f:
+            node["output_schema"] = json.load(f)
+        del node["output_schema_file"]
+        return node
+
     def _merge_node_with_cache(
         self, node_config: Dict[str, Any], ref_node_id: str, bundle_dir: Path
     ) -> Dict[str, Any]:
@@ -372,7 +394,8 @@ class FlowsLoader:
                     merged[key] = value
         
         # Инлайним prompt из файла если это путь к .md
-        return self._inline_prompt_from_file(merged, bundle_dir)
+        merged = self._inline_prompt_from_file(merged, bundle_dir)
+        return self._inline_output_schema_file(merged, bundle_dir)
 
     def _inline_function_to_code(self, node: Dict[str, Any], node_id: str) -> None:
         """
@@ -424,7 +447,8 @@ class FlowsLoader:
                     
                     # Инлайним промпт из файла
                     node = self._inline_prompt_from_file(node, bundle_dir)
-                    
+                    node = self._inline_output_schema_file(node, bundle_dir)
+
                     # Инлайним function -> code
                     self._inline_function_to_code(node, f"{skill_id}.{node_id}")
                     processed_nodes[node_id] = node

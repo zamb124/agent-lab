@@ -55,6 +55,13 @@ export class PlatformIcon extends PlatformElement {
         this._svg = '';
     }
 
+    firstUpdated(changedProperties) {
+        super.firstUpdated(changedProperties);
+        if (this.name && !this._svg) {
+            this._loadIcon();
+        }
+    }
+
     updated(changedProperties) {
         if (changedProperties.has('name') && this.name) {
             this._loadIcon();

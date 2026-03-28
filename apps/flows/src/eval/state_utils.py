@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_EVAL
 from apps.flows.src.utils import extract_json_from_response
 from core.errors import SafeEvalError
 
@@ -271,6 +272,7 @@ def add_user_message(state: Dict[str, Any], content: str) -> Dict[str, Any]:
         role=Role.user,
         parts=[Part(root=TextPart(text=content))],
         taskId=task_id,
+        metadata={"node_id": MESSAGE_SOURCE_EVAL},
     )
     state["messages"].append(message)
     return state
@@ -296,6 +298,7 @@ def add_agent_message(state: Dict[str, Any], content: str) -> Dict[str, Any]:
         role=Role.agent,
         parts=[Part(root=TextPart(text=content))],
         taskId=task_id,
+        metadata={"node_id": MESSAGE_SOURCE_EVAL},
     )
     state["messages"].append(message)
     return state

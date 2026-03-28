@@ -234,8 +234,9 @@ def execute(args, state):
         from core.clients.llm.factory import _message_to_openai
         
         tool_result = new_tool_result_message(
-            tool_call_id="call_test_123",
-            content="Test result",
+            "call_test_123",
+            "Test result",
+            "test_node",
             context_id="ctx_test",
         )
         

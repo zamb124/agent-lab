@@ -34,6 +34,24 @@ export class ExecutionRunner extends PlatformElement {
         return null;
     }
 
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (changedProperties.has('flowId')) {
+            const prev = changedProperties.get('flowId');
+            if (prev !== undefined && prev !== this.flowId) {
+                this._contextId = null;
+                this._taskId = null;
+            }
+        }
+        if (changedProperties.has('skillId')) {
+            const prev = changedProperties.get('skillId');
+            if (prev !== undefined && prev !== this.skillId) {
+                this._contextId = null;
+                this._taskId = null;
+            }
+        }
+    }
+
     /**
      * Запустить выполнение
      * @param {string} message - сообщение пользователя
@@ -41,8 +59,9 @@ export class ExecutionRunner extends PlatformElement {
      * @param {Object} breakpoints - объект breakpoints для отладки
      * @param {Array} mocks - строки редактора моков
      * @param {Record<string, object>} flowNodes - ноды текущего графа (nodeId -> конфиг)
+     * @param {{ reuseContext?: boolean }} [options] — reuseContext !== false: повторные run с тем же contextId (тот же state на бэкенде)
      */
-    async run(message, files = [], breakpoints = {}, mocks = [], flowNodes = null) {
+    async run(message, files = [], breakpoints = {}, mocks = [], flowNodes = null, options = null) {
         if (this._isRunning) {
             console.warn('[ExecutionRunner] Уже выполняется');
             return;
@@ -64,7 +83,12 @@ export class ExecutionRunner extends PlatformElement {
         }
 
         this._isRunning = true;
-        this._contextId = `exec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+        const reuseContext = options?.reuseContext !== false;
+        if (!reuseContext || !this._contextId) {
+            this._contextId = `exec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        }
+
         this._taskId = null;
         this._nodeErrors.clear();
 
@@ -240,10 +264,19 @@ export class ExecutionRunner extends PlatformElement {
             return;
         }
 
-        const { node_id, node_type, state_snapshot } = data;
+        const node_id = data.node_id;
+        const node_type = data.node_type || 'unknown';
+        const state_snapshot = data.state_snapshot ?? data.stateSnapshot ?? {};
         console.log('[ExecutionRunner] Сработала точка останова (artifact):', node_id, node_type);
 
-        this.emit('node-status', { nodeId: node_id, status: 'breakpoint' });
+        if (node_id) {
+            this.emit('node-status', { nodeId: node_id, status: 'breakpoint' });
+            this.emit('breakpoint-hit', {
+                nodeId: node_id,
+                nodeType: node_type,
+                stateSnapshot: state_snapshot,
+            });
+        }
     }
 
     /**
@@ -279,8 +312,11 @@ export class ExecutionRunner extends PlatformElement {
                     console.log('[ExecutionRunner] Сработала точка останова из статуса');
                     const nodeId = metadata.node_id;
                     const nodeType = metadata.node_type || 'unknown';
-                    const stateSnapshot = metadata.state_snapshot || {};
-                    
+                    const stateSnapshot =
+                        metadata.state_snapshot ??
+                        metadata.stateSnapshot ??
+                        {};
+
                     if (nodeId) {
                         this.emit('node-status', { nodeId, status: 'breakpoint' });
                         this.emit('breakpoint-hit', { 

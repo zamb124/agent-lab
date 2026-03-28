@@ -2596,20 +2596,15 @@ class TestReactAgentWithChannelToolE2E:
         await container.flow_repository.delete(flow_id)
 
 
-@pytest.mark.real_taskiq
 class TestFullWebhookToChannelE2E:
     """
     Полный E2E flow: Telegram Webhook → LlmNode → ChannelNode tool → HTTP.
-    
-    Самый полный тест - от входящего webhook до исходящего HTTP.
-    Mock только LLM через Redis, реальный TaskIQ worker, все HTTP реальные.
+
+    Mock LLM через Redis (mock_llm_redis); process_flow_task выполняется через
+    патч sync_tools (in-process), иначе отдельный worker не видит ту же привязку
+    MockLLM к Redis, что и uvicorn в тестах.
     """
-    
-    @pytest.fixture(autouse=True)
-    def require_taskiq_worker(self, taskiq_worker):
-        """Требуем реальный TaskIQ worker."""
-        pass
-    
+
     @pytest.mark.asyncio
     async def test_telegram_webhook_triggers_react_agent_which_sends_webhook(
         self, notification_server, unique_id, container, client, mock_llm_redis

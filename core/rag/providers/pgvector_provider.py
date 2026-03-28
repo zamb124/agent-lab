@@ -20,6 +20,48 @@ from core.rag.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
+# Значения из шаблонного conf.json — не отправлять в OpenRouter как ключ
+_EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
+    {
+        "YOUR_EMBEDDING_API_KEY",
+        "YOUR_OPENROUTER_API_KEY",
+    }
+)
+
+
+def _normalize_embedding_api_key(raw: Optional[str]) -> str:
+    if raw is None:
+        return ""
+    s = str(raw).strip()
+    if not s or s in _EMBEDDING_API_KEY_PLACEHOLDERS:
+        return ""
+    return s
+
+
+def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
+    key = _normalize_embedding_api_key(config.get("embedding_api_key"))
+    if key:
+        return key
+    from core.config import get_settings
+
+    settings = get_settings()
+    if getattr(settings.llm, "provider", None) == "openrouter":
+        or_conf = getattr(settings.llm, "openrouter", None)
+        if or_conf is not None:
+            llm_key = _normalize_embedding_api_key(getattr(or_conf, "api_key", None))
+            if llm_key:
+                logger.info(
+                    "pgvector: для embeddings используется llm.openrouter.api_key "
+                    "(rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
+                )
+                return llm_key
+    raise ValueError(
+        "Нужен rag.providers.pgvector.embedding_api_key (OpenRouter sk-or-...) "
+        "или llm.openrouter.api_key при llm.provider=openrouter. "
+        "Плейсхолдеры YOUR_* из conf.json не считаются ключом. "
+        "ENV: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY, LLM__OPENROUTER__API_KEY"
+    )
+
 
 class PgVectorProvider(BaseRAGProvider):
     """
@@ -53,15 +95,14 @@ class PgVectorProvider(BaseRAGProvider):
             expire_on_commit=False,
         )
 
-        api_key = config.get("embedding_api_key")
-        if not api_key:
-            raise ValueError("embedding_api_key обязателен для PgVector провайдера")
+        api_key = _resolve_pgvector_embedding_api_key(config)
 
         timeout = config.get("timeout", 60)
 
         emb_cfg = embedding_config or {}
         model = emb_cfg.get("model")
         dimension = emb_cfg.get("dimension")
+        embedding_base_url = emb_cfg.get("base_url")
 
         if not model:
             raise ValueError("embedding.model обязателен в конфигурации")
@@ -74,6 +115,7 @@ class PgVectorProvider(BaseRAGProvider):
         self._embedding_service = EmbeddingService(
             api_key=api_key,
             models=[model],
+            base_url=embedding_base_url or None,
             timeout=timeout,
             dimension=dimension,
             cost_per_1m_tokens=cost_per_1m_tokens,

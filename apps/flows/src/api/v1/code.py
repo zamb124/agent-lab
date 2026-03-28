@@ -138,7 +138,7 @@ async def get_editor_state(
 ) -> Dict[str, Any]:
     """
     Стартовый ExecutionState как при реальном запуске flow: резолвнутые variables,
-    flow_config и формат session_id. Для редактора нод и TestPanel.
+    flow_config_version и формат session_id. Для редактора нод и TestPanel.
     """
     context = get_context()
     if not context or not context.user:
@@ -166,7 +166,9 @@ async def get_editor_state(
         skill_id=skill_id,
     )
     state.variables = {**state.variables, **runtime_flow.variables}
-    state.flow_config = runtime_flow.config
+    cfg_ver = (runtime_flow.config or {}).get("version")
+    if cfg_ver:
+        state.flow_config_version = str(cfg_ver)
     state.current_nodes = [runtime_flow.entry]
 
     return state.model_dump(mode="json")
@@ -522,7 +524,7 @@ def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> L
     SKIP_KEYS = {
         "task_id", "context_id", "user_id", "session_id",
         "messages", "prompt_history", "node_history", "nested_states",
-        "current_nodes", "skill_id", "flow_config", "user_groups",
+        "current_nodes", "skill_id", "flow_config_version", "user_groups",
         "interrupt_path", "tool_results", "triggers", "files",
         "breakpoints", "scheduled_tasks", "reasoning_history",
         "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt"
@@ -628,7 +630,7 @@ async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
         input_state_normalized.setdefault("breakpoint_hit", None)
         input_state_normalized.setdefault("breakpoint_state", None)
         input_state_normalized.setdefault("interrupt", None)
-        input_state_normalized.setdefault("flow_config", {})
+        input_state_normalized.setdefault("flow_config_version", None)
         input_state_normalized.setdefault("result", None)
         
         node_config = await _build_node_config(request)

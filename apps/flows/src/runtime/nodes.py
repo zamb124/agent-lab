@@ -101,7 +101,7 @@ class BaseNode(ABC):
     - output_mapping: Dict[str, str] - маппинг полей результата -> state fields
     - save_to_messages: bool - добавлять результат в messages
     - message_field: str - какое поле писать в messages (по умолчанию diff стейта)
-    - messages_filter: "all" / "own" / List[str] - фильтрация входящих messages
+    - messages_filter: "all" / "own" / List[str] — срез по metadata.node_id
     
     Контракт _run_impl() для ВСЕХ нод:
     - Возвращает Any (dict, str, None, etc)
@@ -154,29 +154,33 @@ class BaseNode(ABC):
     def _get_filtered_messages(self, state: ExecutionState) -> List[Message]:
         """
         Возвращает отфильтрованные messages.
-        
+
         Фильтры:
-        - "all" - все сообщения
-        - "own" - только свои (node_id совпадает) + user messages
-        - List[str] - от указанных node_id + user messages
+        - "all" — все сообщения
+        - "own" — только сообщения с metadata.node_id == node_id этой ноды
+        - List[str] — только сообщения, у которых metadata.node_id входит в список
         """
         all_messages = state.messages or []
-        
+
         if self.messages_filter == "all":
             return list(all_messages)
-        
+
         if self.messages_filter == "own":
-            return [m for m in all_messages 
-                    if self._get_message_node_id(m) == self.node_id 
-                    or self._is_user_message(m)]
-        
+            return [
+                m for m in all_messages
+                if self._get_message_node_id(m) == self.node_id
+            ]
+
         if isinstance(self.messages_filter, list):
             allowed = set(self.messages_filter)
-            return [m for m in all_messages 
-                    if self._get_message_node_id(m) in allowed
-                    or self._is_user_message(m)]
-        
-        return list(all_messages)
+            return [
+                m for m in all_messages
+                if self._get_message_node_id(m) in allowed
+            ]
+
+        raise ValueError(
+            f"messages_filter: ожидается 'all', 'own' или list[str], получено {self.messages_filter!r}"
+        )
 
     def _append_to_messages(self, state: ExecutionState, result: Any) -> None:
         """Добавляет результат в messages с маркировкой node_id."""
@@ -196,35 +200,22 @@ class BaseNode(ABC):
         metadata = getattr(msg, "metadata", None) or {}
         return metadata.get("node_id")
 
-    @staticmethod
-    def _is_user_message(msg: Message) -> bool:
-        """Проверяет является ли сообщение от пользователя."""
-        return getattr(msg, "role", None) == Role.user
-
     async def _resolve_resources(self, state: ExecutionState) -> Dict[str, Any]:
         """
         Резолвит ресурсы для ноды.
         
-        Иерархия (node > skill > flow):
-        - flow_config.resources - ресурсы flow
-        - flow_config.skills[skill_id].resources - ресурсы skill
-        - node config resources - ресурсы ноды
+        Иерархия (node > skill > flow): flow/skill из БД по session_flow_id и flow_config_version.
         
         Returns:
             Dict[resource_id, wrapper] для использования в namespace
         """
         container = get_container()
         
-        # Ресурсы из flow_config (inline в state)
-        flow_resources = state.flow_config.get("resources", {})
-        
-        # Ресурсы skill (если есть)
-        skill_resources = None
-        skill_id = state.skill_id
-        if skill_id and skill_id != "default":
-            skills = state.flow_config.get("skills", {})
-            skill_config = skills.get(skill_id, {})
-            skill_resources = skill_config.get("resources")
+        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
+            state.session_flow_id,
+            state.skill_id,
+            state.flow_config_version,
+        )
         
         # Ресурсы ноды из конфига
         node_resources = self.config.get("resources", {})
@@ -456,6 +447,21 @@ class LlmNode(BaseNode):
         self._node_config = node_config
         self._runner = None
         self._loaded_tools: Optional[List[Any]] = None
+        if node_config is not None:
+            self.messages_filter = node_config.messages_filter
+
+    def _prepare_llm_runner_state(
+        self, state: ExecutionState, inputs: Dict[str, Any]
+    ) -> ExecutionState:
+        """
+        Копия state для раннера LLM: общий список messages с родителем (полный лог), без подмены фильтром.
+        """
+        new_state = ExecutionState.model_validate(state.model_dump(exclude_none=False))
+        for key, value in inputs.items():
+            setattr(new_state, key, value)
+        new_state.messages = state.messages
+        new_state.current_nodes = list(state.current_nodes)
+        return new_state
 
     @property
     def llm_node_id(self) -> str:
@@ -497,7 +503,7 @@ class LlmNode(BaseNode):
         _copy_state_back мержит все изменения из рабочей копии state обратно в state.
         При structured_output возвращает dict с полями из JSON ответа.
         """
-        runner_state = self._prepare_state(state, inputs)
+        runner_state = self._prepare_llm_runner_state(state, inputs)
 
         if self.tool_refs and self._loaded_tools is None:
             self._loaded_tools = await self._load_tools(runner_state)
@@ -612,6 +618,7 @@ class LlmNode(BaseNode):
         # Structured output из config
         structured_output = self.config.get("structured_output", False) if self.config else False
         output_schema = self.config.get("output_schema") if self.config else None
+        messages_filter = self.config.get("messages_filter", "all") if self.config else "all"
             
         return NodeConfig(
             node_id=self.node_id,
@@ -623,6 +630,7 @@ class LlmNode(BaseNode):
             react=react_config,
             structured_output=structured_output,
             output_schema=output_schema,
+            messages_filter=messages_filter,
         )
 
     async def _load_tools(self, state: Optional[ExecutionState] = None) -> List[Any]:
@@ -633,15 +641,16 @@ class LlmNode(BaseNode):
         """
         container = get_container()
         
-        flow_resources = {}
-        skill_resources = {}
+        flow_resources: Dict[str, Any] = {}
+        skill_resources: Dict[str, Any] = {}
         if state is not None:
-            flow_resources = (state.flow_config or {}).get("resources") or {}
-            skill_id = getattr(state, "skill_id", None)
-            if skill_id and skill_id != "default":
-                skills = (state.flow_config or {}).get("skills", {}) or {}
-                skill_cfg = skills.get(skill_id, {}) or {}
-                skill_resources = skill_cfg.get("resources") or {}
+            fr, sr = await container.flow_factory.get_resource_maps(
+                state.session_flow_id,
+                state.skill_id,
+                state.flow_config_version,
+            )
+            flow_resources = fr or {}
+            skill_resources = dict(sr) if sr else {}
         node_resources_cfg = self.config.get("resources", {}) or {}
         merged_node_level = {**flow_resources, **skill_resources, **node_resources_cfg}
         

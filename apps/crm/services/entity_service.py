@@ -437,11 +437,19 @@ class EntityService:
             return {}
         
         task_result = raw_response["result"]
-        
-        if "artifacts" not in task_result:
+        artifacts = task_result.get("artifacts")
+        if artifacts is None:
+            artifacts = []
+
+        if not artifacts:
+            plain = (response.get("response") or "").strip()
+            if plain:
+                extracted = self._extract_json_from_text(plain)
+                if extracted:
+                    return extracted
             return {}
-        
-        for artifact in task_result["artifacts"]:
+
+        for artifact in artifacts:
             if "parts" not in artifact:
                 continue
             
@@ -450,19 +458,39 @@ class EntityService:
                 
                 if part_kind == "data" and "data" in part:
                     data = part["data"]
+                    if not isinstance(data, dict):
+                        continue
                     if "res" in data:
                         try:
-                            return json.loads(data["res"])
+                            parsed = json.loads(data["res"])
                         except (json.JSONDecodeError, TypeError):
-                            pass
-                    return data
-                
+                            parsed = None
+                        if isinstance(parsed, dict):
+                            return parsed
+                        continue
+                    if any(
+                        k in data
+                        for k in ("entities", "relationships", "note", "is_duplicate")
+                    ):
+                        return data
+                    content = data.get("content")
+                    if isinstance(content, str) and content.strip():
+                        extracted = self._extract_json_from_text(content)
+                        if extracted:
+                            return extracted
+                    continue
+
                 if part_kind == "text" and "text" in part:
                     text = part["text"]
                     extracted = self._extract_json_from_text(text)
                     if extracted:
                         return extracted
-        
+
+        plain = (response.get("response") or "").strip()
+        if plain:
+            extracted = self._extract_json_from_text(plain)
+            if extracted:
+                return extracted
         return {}
     
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
@@ -528,11 +556,17 @@ class EntityService:
             skill_id="summarize",
             metadata={"company_id": company_id}
         )
-        
+
+        raw = (response.get("response") or "").strip()
+        parsed = self._extract_json_from_text(raw) if raw else {}
+        summary_text = raw
+        if isinstance(parsed, dict) and parsed.get("summary"):
+            summary_text = str(parsed["summary"])
+
         return {
             "date": date_str,
-            "summary": response.get("response", ""),
-            "entities_count": len(notes)
+            "summary": summary_text,
+            "entities_count": len(notes),
         }
     
     async def get_entity_card(

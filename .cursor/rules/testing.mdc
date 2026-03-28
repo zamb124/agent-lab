@@ -146,6 +146,10 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 `@pytest.mark.real_taskiq` отключает `sync_tools` — tools идут через реальный worker и Redis pub/sub.
 
+**Полный E2E flows (webhook → `process_flow_task` → LLM из `mock_llm:responses` → channel HTTP):** маркер `real_taskiq` здесь не использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis — в `apps/flows/main.py` при `TESTING=true` вызываются `get_llm("mock-gpt-4")` и `configure_mock_llm_redis(container.redis_client)` (та же схема, что в `apps/broker/worker.py`). Иначе глобальный `MockLLM` в процессе uvicorn не привязан к Redis, а отдельный platform worker не разделяет с тестом ту же настройку экземпляра.
+
+**Platform TaskIQ в тестах:** в `tests/fixtures/workers.py` worker запускается с **`-w 1`**, чтобы не было гонок за одним ключом `mock_llm:responses` при нескольких consumer-процессах.
+
 ---
 
 ## E2E UI (единый движок)

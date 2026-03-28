@@ -8,9 +8,9 @@
     "main": {
       "type": "llm_node",
       "prompt": "prompts/main.md",
-      "llm_config": {
-        "model": "anthropic/claude-sonnet-4.5",
-        "temperature": 0.1
+      "llm": {
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
       },
       "tools": [],
       "output_key": "response"
@@ -25,11 +25,13 @@
         "main": {
           "type": "llm_node",
           "prompt": "prompts/analyze.md",
-          "llm_config": {
-            "model": "x-ai/grok-code-fast-1",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
             "temperature": 0.1
           },
           "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/analyze.output_schema.json",
           "output_key": "response"
         }
       },
@@ -42,11 +44,13 @@
         "main": {
           "type": "llm_node",
           "prompt": "prompts/summarize.md",
-          "llm_config": {
-            "model": "x-ai/grok-code-fast-1",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
             "temperature": 0.3
           },
           "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/summarize.output_schema.json",
           "output_key": "response"
         }
       },
@@ -59,11 +63,13 @@
         "main": {
           "type": "llm_node",
           "prompt": "prompts/deduplicate.md",
-          "llm_config": {
-            "model": "x-ai/grok-code-fast-1",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
             "temperature": 0.1
           },
           "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/deduplicate.output_schema.json",
           "output_key": "response"
         }
       },
@@ -71,4 +77,3 @@
     }
   }
 }
-

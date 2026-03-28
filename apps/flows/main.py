@@ -113,7 +113,13 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             logger.error(f"Ошибка при синхронизации LLM моделей: {e}")
     else:
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING=true)")
-    
+        from core.clients.llm.factory import get_llm
+        from core.clients.llm.mock import configure_mock_llm_redis
+
+        get_llm("mock-gpt-4")
+        configure_mock_llm_redis(container.redis_client)
+        logger.info("MockLLM: очередь ответов из Redis (как в TaskIQ worker)")
+
     # Telegram Dev Polling (только в development)
     if settings.server.env == "development" and os.getenv("TESTING") != "true":
         from apps.flows.src.triggers.dev_polling import start_dev_polling

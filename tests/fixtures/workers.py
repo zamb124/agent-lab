@@ -340,7 +340,9 @@ def taskiq_worker():
         name="TaskIQ",
         lock_file=_TASKIQ_WORKER_LOCK,
         pid_file=_TASKIQ_WORKER_PID,
-        command=[sys.executable, "-m", "taskiq", "worker", "apps.broker.worker:broker", "-w", "2"],
+        # Один процесс: mock LLM в Redis (mock_llm:responses) без атомарного pop — при -w 2
+        # параллельные задачи крадут ответы друг у друга и E2E (триггеры, RAG) падают.
+        command=[sys.executable, "-m", "taskiq", "worker", "apps.broker.worker:broker", "-w", "1"],
         env={
             **TEST_DATABASE_ENV,
             "TESTING": "true",
@@ -378,12 +380,12 @@ def rag_worker():
         yield None
         return
     
-    # Используем SessionWorkerManager для управления worker
+    # Один процесс: меньше гонок при нагрузочном прогоне и общей БД/S3.
     manager = SessionWorkerManager(
         name="RAGWorker",
         lock_file=_RAG_WORKER_LOCK,
         pid_file=_RAG_WORKER_PID,
-        command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:broker", "-w", "2"],
+        command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:broker", "-w", "1"],
         env={
             **TEST_DATABASE_ENV,
             "TESTING": "true",

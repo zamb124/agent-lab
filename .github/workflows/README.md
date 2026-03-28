@@ -128,12 +128,15 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | `AUTH_GITHUB_CLIENT_ID` | GitHub OAuth client id |
 | `AUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth client secret |
 
-### RAG / Embeddings (нужны для RAG)
+### RAG / Embeddings (нужны для RAG и CRM-индексации)
 
-| Secret | ENV переменная | Описание |
+В `docker-compose-prod.yaml` в контейнеры пробрасывается `RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY`. Если задан только `LLM_OPENROUTER_API_KEY`, он же подставляется для эмбеддингов (отдельный секрет не обязателен).
+
+| Secret | Передаётся на сервер как | Описание |
 |---|---|---|
-| `RAG_EMBEDDING_API_KEY` | `RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY` | API ключ для эмбеддингов |
-| `RAG_AGENTSET_API_KEY` | `RAG__PROVIDERS__AGENTSET__API_KEY` | Agentset API key |
+| `LLM_OPENROUTER_API_KEY` | `LLM_OPENROUTER_API_KEY` | OpenRouter: чат и эмбеддинги по умолчанию |
+| `RAG_EMBEDDING_API_KEY` (опционально) | `RAG_EMBEDDING_API_KEY` | Другой ключ только для embeddings (перебивает LLM-ключ в compose) |
+| `RAG_AGENTSET_API_KEY` (опционально) | не в workflow — добавь в `deploy.yml` env + `envs`, если используете Agentset | Agentset API key |
 
 ### Платежи YooMoney (опционально)
 

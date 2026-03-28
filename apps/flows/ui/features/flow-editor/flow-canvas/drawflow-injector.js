@@ -62,7 +62,7 @@ flow-canvas #drawflow-area {
     border-radius: 12px !important;
     min-width: 180px !important;
     color: #fff !important;
-    z-index: 2 !important;
+    z-index: 3 !important;
     box-shadow: 0 4px 24px rgba(0,0,0,0.4);
     padding: 0 !important;
     cursor: move !important;
@@ -534,12 +534,12 @@ flow-canvas .context-menu-separator {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: 5;
+    z-index: 2;
 }
 
 .edge-label {
     position: absolute;
-    z-index: 5;
+    z-index: 2;
     padding: 4px 10px;
     background: var(--glass-solid-strong, rgba(40, 40, 64, 0.95));
     border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));

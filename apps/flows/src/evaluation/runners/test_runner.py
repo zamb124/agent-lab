@@ -462,13 +462,18 @@ class TestRunner:
     async def _get_node_config(
         self, input_config: InputConfig, execution_state: Optional[ExecutionState] = None
     ) -> NodeConfig:
-        """Получает конфигурацию ноды: inline dict, из flow_config или из node_repository."""
+        """Получает конфигурацию ноды: inline dict, из графа flow по session/skill/version или node_repository."""
         if input_config.node:
             return NodeConfig(**input_config.node)
         
         node_id = input_config.value
         if node_id and execution_state:
-            nodes_map = (execution_state.flow_config or {}).get("nodes", {})
+            container = get_container()
+            nodes_map = await container.flow_factory.get_effective_nodes_map(
+                execution_state.session_flow_id,
+                execution_state.skill_id,
+                execution_state.flow_config_version,
+            )
             node_dict = nodes_map.get(node_id)
             if node_dict is not None:
                 config = dict(node_dict)
@@ -576,13 +581,18 @@ class TestRunner:
     async def _get_judge_config(
         self, check_config: CheckConfig, execution_state: Optional[ExecutionState] = None
     ) -> NodeConfig:
-        """Получает конфигурацию судьи: inline dict, из flow_config или из node_repository."""
+        """Получает конфигурацию судьи: inline dict, из графа flow по session/skill/version или node_repository."""
         if check_config.node:
             return NodeConfig(**check_config.node)
         
         node_id = check_config.value
         if node_id and execution_state:
-            nodes_map = (execution_state.flow_config or {}).get("nodes", {})
+            container = get_container()
+            nodes_map = await container.flow_factory.get_effective_nodes_map(
+                execution_state.session_flow_id,
+                execution_state.skill_id,
+                execution_state.flow_config_version,
+            )
             node_dict = nodes_map.get(node_id)
             if node_dict is not None:
                 config = dict(node_dict)

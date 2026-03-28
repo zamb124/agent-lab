@@ -9,9 +9,9 @@ Zero-Guess Architecture:
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.models import StrictBaseModel
 from core.urn import extract_id
@@ -120,6 +120,40 @@ class NodeConfig(StrictBaseModel):
     react: Optional[ReactConfig] = Field(
         default=None, description="Конфигурация ReAct цикла (loop_mode, exit_tool)"
     )
+    messages_filter: Union[Literal["all", "own"], List[str]] = Field(
+        default="all",
+        description=(
+            "Срез истории для запросов к LLM (полный лог всегда в state.messages): "
+            "all — весь лог; own — только сообщения с metadata.node_id равным id этой ноды; "
+            "список — только сообщения с metadata.node_id из списка (user и agent по тегу)"
+        ),
+    )
+
+    @field_validator("messages_filter", mode="before")
+    @classmethod
+    def validate_messages_filter(cls, v: Any) -> Union[str, List[str]]:
+        if v is None:
+            return "all"
+        if isinstance(v, str):
+            if v not in ("all", "own"):
+                raise ValueError(
+                    f"messages_filter: ожидается 'all' или 'own', получено {v!r}"
+                )
+            return v
+        if isinstance(v, list):
+            if not v:
+                raise ValueError("messages_filter: список node_id не может быть пустым")
+            out: List[str] = []
+            for i, item in enumerate(v):
+                if not isinstance(item, str) or not item.strip():
+                    raise ValueError(
+                        f"messages_filter: элемент #{i} должен быть непустой строкой (node_id)"
+                    )
+                out.append(extract_id(item))
+            return out
+        raise ValueError(
+            f"messages_filter: ожидается 'all', 'own' или список строк, получено {type(v).__name__}"
+        )
     
     # Structured Output (взаимоисключающе с tools)
     structured_output: bool = Field(

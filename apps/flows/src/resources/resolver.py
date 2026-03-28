@@ -72,7 +72,7 @@ class ResourceResolver:
         Приоритет: node > skill > flow
         
         Args:
-            flow_resources: Ресурсы уровня flow (flow_config.resources)
+            flow_resources: Ресурсы уровня flow (из FlowConfig.resources)
             skill_resources: Ресурсы skill
             node_resources: Ресурсы ноды
             variables: Переменные для резолвинга @var:

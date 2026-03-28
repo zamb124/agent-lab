@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from apps.flows.src.runtime.flow import Flow
 from core.logging import get_logger
+from core.urn import extract_id
 
 logger = get_logger(__name__)
 
@@ -112,6 +113,9 @@ class FlowValidator:
         
         # 4. Парсинг inline code
         self._parse_inline_code(nodes, result)
+        
+        # 4b. messages_filter у llm_node (список node_id)
+        self._validate_messages_filters(nodes, result)
         
         # 5. Попытка сборки (если нет критических ошибок)
         if result.valid:
@@ -422,6 +426,31 @@ class FlowValidator:
             elif isinstance(var_value, str):
                 # Простой строковый формат
                 check_var_refs(var_value, "variables", f"variables.{var_key}")
+    
+    def _validate_messages_filters(
+        self,
+        nodes: Dict[str, Dict[str, Any]],
+        result: FlowValidationResult,
+    ) -> None:
+        """Список messages_filter у llm_node должен ссылаться только на node_id из этого графа."""
+        node_ids = set(nodes.keys())
+        for nid, cfg in nodes.items():
+            if cfg.get("type") != "llm_node":
+                continue
+            mf = cfg.get("messages_filter", "all")
+            if not isinstance(mf, list):
+                continue
+            for ref in mf:
+                rid = extract_id(ref) if isinstance(ref, str) else str(ref)
+                if rid not in node_ids:
+                    result.add_error(
+                        code="messages_filter_unknown_node",
+                        message=(
+                            f"Нода '{nid}': messages_filter содержит неизвестный node_id '{rid}'"
+                        ),
+                        node_id=nid,
+                        details={"messages_filter": mf, "unknown": rid},
+                    )
     
     def _parse_inline_code(
         self,

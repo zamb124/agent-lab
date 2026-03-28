@@ -165,5 +165,24 @@ class TestFlowsLoaderToolTypeValidation:
             loader._validate_llm_node_tools("test_node", tools)
 
 
+class TestFlowValidatorMessagesFilter:
+    """messages_filter со списком node_id должен ссылаться на ноды графа."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_node_in_list_errors(self):
+        validator = FlowValidator()
+        nodes = {
+            "main": {
+                "type": "llm_node",
+                "name": "Main",
+                "description": "d",
+                "prompt": "x",
+                "messages_filter": ["ghost"],
+            },
+        }
+        edges = [{"from": "main", "to": None}]
+        r = await validator.validate(nodes, edges, "main", {})
+        assert not r.valid
+        assert any(e.code == "messages_filter_unknown_node" for e in r.errors)
 
 

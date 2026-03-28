@@ -14,8 +14,21 @@ export function renderPanel(component) {
     return html`
         <div class="execution-panel-container">
             <div class="execution-panel-header">
-                <span class="execution-panel-title">Запуск агента</span>
-                <div class="execution-panel-actions">
+                <div class="execution-panel-header-top">
+                    <span class="execution-panel-title">Запуск агента</span>
+                    <div class="execution-panel-actions">
+                    <button
+                        type="button"
+                        class="context-persist-toggle ${component.persistSessionContext ? 'active' : ''}"
+                        role="switch"
+                        aria-checked=${component.persistSessionContext ? 'true' : 'false'}
+                        aria-label="Один и тот же контекст сессии между запусками"
+                        @click=${component._onPersistToggleClick}
+                    ></button>
+                    <platform-help-hint
+                        .text=${component.persistContextHelpText}
+                        label="Справка: контекст сессии"
+                    ></platform-help-hint>
                     ${showState ? html`
                         <button 
                             type="button"
@@ -56,6 +69,7 @@ export function renderPanel(component) {
                     >
                         ×
                     </button>
+                    </div>
                 </div>
             </div>
 
@@ -78,17 +92,67 @@ export function renderPanel(component) {
                             >
                             <platform-icon name="file" size="20"></platform-icon>
                         </label>
-                        ${!component.isBreakpoint && !component.isRunning ? html`
-                            <button
-                                type="button"
-                                class="btn-run-icon ${hasError ? 'btn-retry-icon' : ''}"
-                                @click=${component._handleRun}
-                                ?disabled=${!component.message.trim()}
-                                title=${hasError ? 'Запустить заново' : 'Запустить'}
-                            >
-                                <platform-icon name="play" size="20"></platform-icon>
-                            </button>
-                        ` : ''}
+                        ${component.isBreakpoint
+                            ? html`
+                                  <button
+                                      type="button"
+                                      class="btn-run-icon btn-resume-inline"
+                                      @click=${component._handleResume}
+                                      ?disabled=${component.inputQuestion && !component.message.trim()}
+                                      title=${component.inputQuestion ? 'Отправить ответ' : 'Продолжить выполнение'}
+                                  >
+                                      <svg
+                                          class="btn-resume-combo-svg"
+                                          xmlns="http://www.w3.org/2000/svg"
+                                          viewBox="0 0 24 24"
+                                          width="20"
+                                          height="20"
+                                          aria-hidden="true"
+                                      >
+                                          <polygon points="4,5 4,19 13,12" fill="currentColor" />
+                                          <rect x="15" y="6" width="2.8" height="12" rx="0.5" fill="currentColor" />
+                                          <rect x="19.2" y="6" width="2.8" height="12" rx="0.5" fill="currentColor" />
+                                      </svg>
+                                  </button>
+                              `
+                            : component.isRunning
+                              ? html`
+                                    <button
+                                        type="button"
+                                        class="btn-run-icon btn-stop-icon"
+                                        @click=${component._handleStop}
+                                        title="Остановить"
+                                    >
+                                        <svg
+                                            class="btn-stop-svg"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            width="20"
+                                            height="20"
+                                            aria-hidden="true"
+                                        >
+                                            <rect
+                                                x="5"
+                                                y="5"
+                                                width="14"
+                                                height="14"
+                                                rx="2"
+                                                fill="currentColor"
+                                            />
+                                        </svg>
+                                    </button>
+                                `
+                              : html`
+                                    <button
+                                        type="button"
+                                        class="btn-run-icon ${hasError ? 'btn-retry-icon' : ''}"
+                                        @click=${component._handleRun}
+                                        ?disabled=${!component.message.trim()}
+                                        title=${hasError ? 'Запустить заново' : 'Запустить'}
+                                    >
+                                        <platform-icon name="play" size="20"></platform-icon>
+                                    </button>
+                                `}
                     </div>
                     <textarea
                         class="input-text"
@@ -115,29 +179,6 @@ export function renderPanel(component) {
                             </div>
                         `)}
                     </div>
-                ` : ''}
-            </div>
-
-            <div class="execution-panel-footer">
-                ${component.isBreakpoint ? html`
-                    <button 
-                        type="button"
-                        class="btn btn-resume"
-                        @click=${component._handleResume}
-                        ?disabled=${component.inputQuestion && !component.message.trim()}
-                    >
-                        <platform-icon name="play" size="14"></platform-icon>
-                        ${component.inputQuestion ? 'Отправить ответ' : 'Продолжить выполнение'}
-                    </button>
-                ` : component.isRunning ? html`
-                    <button 
-                        type="button"
-                        class="btn btn-stop"
-                        @click=${component._handleStop}
-                    >
-                        <platform-icon name="stop" size="14"></platform-icon>
-                        Остановить
-                    </button>
                 ` : ''}
             </div>
 

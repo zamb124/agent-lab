@@ -1579,11 +1579,18 @@ def execute(args, state):
 
 class TestResourceHierarchy:
     """
-    Иерархия ресурсов: flow_config.resources -> skill.resources -> node.resources
+    Иерархия ресурсов: flow.resources -> skill.resources -> node.resources (из БД по session + version).
     """
 
+    @staticmethod
+    def _stub_entry_node() -> dict:
+        return {
+            "type": "code",
+            "code": "def execute(args, state):\n    return {}\n",
+        }
+
     @pytest.mark.asyncio
-    async def test_agent_level_resources_in_llm_tool(self, mock_llm_with_queue):
+    async def test_agent_level_resources_in_llm_tool(self, mock_llm_with_queue, app, container):
         """
         Resources на уровне агента доступны в tools LlmNode.
         """
@@ -1616,13 +1623,19 @@ def execute(args, state):
             {"type": "text", "content": "Done"},
         ])
         
-        # Имя ресурса не "math": в namespace уже есть стандартный модуль math
-        flow_config = {
-            "resources": {
-                "arith": ResourceReference.model_validate(code_resource).model_dump()
-            }
-        }
-        
+        from apps.flows.src.models.flow_config import Edge, FlowConfig
+
+        flow_id = "test_res_hierarchy_llm"
+        fc = FlowConfig(
+            flow_id=flow_id,
+            name="res hierarchy llm",
+            entry="main",
+            nodes={"main": self._stub_entry_node()},
+            edges=[Edge(from_node="main", to_node=None)],
+            resources={"arith": ResourceReference.model_validate(code_resource)},
+        )
+        await container.flow_repository.set(fc)
+
         tool_with_arith = {
             **tool,
             "code": """
@@ -1638,19 +1651,20 @@ def execute(args, state):
             config={
                 "prompt": "Calculate",
                 "tools": [tool_with_arith],
-                "resources": {
-                    "arith": ResourceReference.model_validate(code_resource)
-                }
             }
         )
         
-        state = make_state(content="Double 21", flow_config=flow_config)
+        state = make_state(
+            content="Double 21",
+            session_id=f"{flow_id}:test-context",
+            flow_config_version=fc.version,
+        )
         result = await llm_node.run(state)
         
         assert result.result == 42
 
     @pytest.mark.asyncio
-    async def test_skill_level_resources(self):
+    async def test_skill_level_resources(self, app, container):
         """
         Resources на уровне skill доступны в нодах этого skill.
         """
@@ -1665,17 +1679,24 @@ def triple(x):
             }
         }
         
-        # flow_config с skill resources
-        flow_config = {
-            "skills": {
-                "math_skill": {
-                    "resources": {
-                        "math": ResourceReference.model_validate(skill_resource).model_dump()
-                    }
-                }
-            }
-        }
-        
+        from apps.flows.src.models.flow_config import Edge, FlowConfig, SkillConfig
+
+        flow_id = "test_res_hierarchy_skill"
+        fc = FlowConfig(
+            flow_id=flow_id,
+            name="res hierarchy skill",
+            entry="main",
+            nodes={"main": self._stub_entry_node()},
+            edges=[Edge(from_node="main", to_node=None)],
+            skills={
+                "math_skill": SkillConfig(
+                    name="Math",
+                    resources={"math": ResourceReference.model_validate(skill_resource)},
+                )
+            },
+        )
+        await container.flow_repository.set(fc)
+
         node = CodeNode(
             node_id="triple_node",
             config={
@@ -1685,19 +1706,21 @@ def execute(args, state):
     state.output = result
     return {'result': result}
 """,
-                "resources": {
-                    "math": ResourceReference.model_validate(skill_resource)
-                }
             }
         )
         
-        state = make_state(input=10, skill_id="math_skill", flow_config=flow_config)
+        state = make_state(
+            input=10,
+            skill_id="math_skill",
+            session_id=f"{flow_id}:test-context",
+            flow_config_version=fc.version,
+        )
         result = await node.run(state)
         
         assert result.output == 30
 
     @pytest.mark.asyncio
-    async def test_skill_overrides_agent_resource(self):
+    async def test_skill_overrides_agent_resource(self, app, container):
         """
         Skill resource переопределяет agent resource с тем же именем.
         """
@@ -1723,19 +1746,25 @@ def compute(x):
             }
         }
         
-        flow_config = {
-            "resources": {
-                "helper": ResourceReference.model_validate(agent_resource).model_dump()
+        from apps.flows.src.models.flow_config import Edge, FlowConfig, SkillConfig
+
+        flow_id = "test_res_hierarchy_override"
+        fc = FlowConfig(
+            flow_id=flow_id,
+            name="res hierarchy override",
+            entry="main",
+            nodes={"main": self._stub_entry_node()},
+            edges=[Edge(from_node="main", to_node=None)],
+            resources={"helper": ResourceReference.model_validate(agent_resource)},
+            skills={
+                "premium": SkillConfig(
+                    name="Premium",
+                    resources={"helper": ResourceReference.model_validate(skill_resource)},
+                )
             },
-            "skills": {
-                "premium": {
-                    "resources": {
-                        "helper": ResourceReference.model_validate(skill_resource).model_dump()
-                    }
-                }
-            }
-        }
-        
+        )
+        await container.flow_repository.set(fc)
+
         node = CodeNode(
             node_id="compute_node",
             config={
@@ -1745,13 +1774,15 @@ def execute(args, state):
     state.output = result
     return {'result': result}
 """,
-                "resources": {
-                    "helper": ResourceReference.model_validate(skill_resource)
-                }
             }
         )
         
-        state = make_state(input=5, skill_id="premium", flow_config=flow_config)
+        state = make_state(
+            input=5,
+            skill_id="premium",
+            session_id=f"{flow_id}:test-context",
+            flow_config_version=fc.version,
+        )
         result = await node.run(state)
         
         # Должен использоваться skill resource: 5 + 100 = 105
@@ -1844,7 +1875,7 @@ def from_node():
             }
         }
         
-        # В реальном сценарии flow_config передаётся в state
+        # Ресурсы flow/skill берутся из БД по session_flow_id и flow_config_version
         # Здесь мы проверяем что node resource работает
         node = CodeNode(
             node_id="hierarchy_test",

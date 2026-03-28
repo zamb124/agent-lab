@@ -126,6 +126,18 @@ export class PropertyPanel extends PlatformElement {
         this.emit('node-id-changed', e.detail);
     }
 
+    _graphNodesFromFlow() {
+        const raw = this.flowConfig?.nodes;
+        if (!raw || typeof raw !== 'object') {
+            return [];
+        }
+        return Object.keys(raw).map((id) => ({
+            id,
+            name: raw[id]?.name || id,
+            type: raw[id]?.type || '',
+        }));
+    }
+
     _renderDefaultPanel() {
         return html`
             <div style="padding: var(--space-4); text-align: center; color: var(--text-tertiary);">
@@ -159,6 +171,7 @@ export class PropertyPanel extends PlatformElement {
                     .skillId=${this.skillId}
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
+                    .graphNodes=${this._graphNodesFromFlow()}
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}

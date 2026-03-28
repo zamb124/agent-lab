@@ -15,9 +15,10 @@ export class InlineToolModal extends PlatformModal {
             }
             
             .modal-content-wrapper {
+                position: relative;
                 min-height: 400px;
             }
-            
+
             .action-row {
                 display: flex;
                 gap: var(--space-3);

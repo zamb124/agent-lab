@@ -132,12 +132,12 @@ class ExecutionState(FlexibleBaseModel):
     session_id: str = Field(..., description="ID сессии в формате flow_id:context_id")
     
     # ========================================================================
-    # Agent Config - полный inline конфиг агента
+    # Снимок конфигурации flow в БД (полный граф не хранится в state)
     # ========================================================================
     
-    flow_config: Dict[str, Any] = Field(
-        default_factory=dict, 
-        description="Полный inline конфиг агента (nodes, edges, resources, skills и т.д.)"
+    flow_config_version: Optional[str] = Field(
+        default=None,
+        description="Версия FlowConfig в flows_versions; None = при выполнении брать последнюю из flows",
     )
     
     # ========================================================================
@@ -164,6 +164,11 @@ class ExecutionState(FlexibleBaseModel):
         if not context_id:
             raise ValueError(f"context_id part of session_id is empty: '{v}'")
         return v
+    
+    @property
+    def session_flow_id(self) -> str:
+        """flow_id из session_id (формат flow_id:context_id)."""
+        return self.session_id.split(":", 1)[0]
     
     
     # ========================================================================
@@ -364,25 +369,6 @@ class ExecutionState(FlexibleBaseModel):
         if not self.prompt_history:
             return None
         return self.prompt_history[-1].prompt
-    
-    @property
-    def resources(self) -> Dict[str, Any]:
-        """
-        Resources из flow_config.
-        
-        Возвращает Dict[str, ResourceDefinition] (inline resources).
-        """
-        return self.flow_config.get("resources", {})
-    
-    def get_node_config(self, node_id: str) -> Optional[Dict[str, Any]]:
-        """Получает конфиг ноды из flow_config."""
-        nodes = self.flow_config.get("nodes", {})
-        return nodes.get(node_id)
-    
-    def get_skill_config(self, skill_id: str) -> Optional[Dict[str, Any]]:
-        """Получает конфиг skill из flow_config."""
-        skills = self.flow_config.get("skills", {})
-        return skills.get(skill_id)
     
     @classmethod
     def create(

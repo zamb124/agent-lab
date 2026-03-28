@@ -124,8 +124,9 @@ async def _build_task_from_events(
             name="response",
             parts=[Part(root=DataPart(data={"res": json.dumps(json_data, ensure_ascii=False)}))],
         )
-    elif response_text and "reasoning" in artifacts_dict:
-        # Создаем текстовый response artifact только если есть reasoning (чтобы разделить)
+    elif response_text:
+        # Текстовый артефакт нужен всегда, иначе A2A-ответ без DataPart и без reasoning
+        # не содержит parts — CRM и другие клиенты получают пустой parse.
         artifacts_dict["response"] = Artifact(
             artifactId=str(uuid.uuid4()),
             name="response",

@@ -7,7 +7,7 @@ import '@platform/lib/components/auth-modal.js';
 
 export class ProductSyncPage extends PlatformElement {
     static styles = [
-        PlatformElement.styles,
+        ...PlatformElement.styles,
         css`
             :host {
                 display: block;
@@ -37,7 +37,7 @@ export class ProductSyncPage extends PlatformElement {
                 border-radius: 100px;
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 14px;
-                color: #8b5cf6;
+                color: var(--landing-primary, #6366f1);
                 margin-bottom: 24px;
             }
             
@@ -79,7 +79,7 @@ export class ProductSyncPage extends PlatformElement {
                 align-items: center;
                 gap: 8px;
                 padding: 16px 32px;
-                background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+                background: var(--landing-primary, #6366f1);
                 border: none;
                 border-radius: 100px;
                 color: #FFFFFF;
@@ -182,13 +182,13 @@ export class ProductSyncPage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: rgba(139, 92, 246, 0.2);
-                border: 2px solid #8b5cf6;
+                background: rgba(99, 102, 241, 0.2);
+                border: 2px solid var(--landing-primary, #6366f1);
                 border-radius: 50%;
                 font-family: 'Fira Sans Condensed', sans-serif;
                 font-size: 20px;
                 font-weight: 600;
-                color: #8b5cf6;
+                color: var(--landing-primary, #6366f1);
             }
             
             .step-content h3 {
@@ -298,7 +298,7 @@ export class ProductSyncPage extends PlatformElement {
             }
             
             .back-link:hover {
-                color: #8b5cf6;
+                color: var(--landing-primary, #6366f1);
             }
             
             @media (min-width: 768px) {

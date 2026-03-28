@@ -231,11 +231,13 @@ export const formStyles = css`
         min-height: 400px;
     }
 
-    .form-layout:has(code-editor.fullscreen) {
+    .form-layout:has(code-editor.fullscreen),
+    .form-layout:has(json-field-editor.fullscreen) {
         grid-template-columns: 1fr;
     }
 
-    .form-layout:has(code-editor.fullscreen) .form-sidebar {
+    .form-layout:has(code-editor.fullscreen) .form-sidebar,
+    .form-layout:has(json-field-editor.fullscreen) .form-sidebar {
         display: none;
     }
     

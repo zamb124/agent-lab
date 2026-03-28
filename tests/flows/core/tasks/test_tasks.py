@@ -6,6 +6,8 @@
 
 import pytest
 
+from core.context import set_context
+
 from apps.broker.broker import broker
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.eval_task import execute_inline_code
@@ -175,6 +177,71 @@ class TestProcessAgentTaskResume:
                 is_resume=True,
                 context_data=mock_context.model_dump(),
             )
+
+
+class TestProcessFlowTaskSequentialLlmNodes:
+    """process_flow_task обходит граф: несколько llm_node подряд по рёбрам."""
+
+    @pytest.fixture
+    async def two_llm_flow_id(self, app, container, unique_id):
+        from apps.flows.src.models import FlowConfig
+
+        flow_id = f"two_llm_seq_{unique_id}"
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="Two LLM sequential",
+            entry="first",
+            nodes={
+                "first": {
+                    "type": "llm_node",
+                    "prompt": "Reply exactly: FIRST_OK",
+                    "tools": [],
+                },
+                "second": {
+                    "type": "llm_node",
+                    "prompt": "Reply exactly: SECOND_OK",
+                    "tools": [],
+                },
+            },
+            edges=[{"from": "first", "to": "second"}],
+        )
+        await container.flow_repository.set(flow_config)
+        return flow_id
+
+    @pytest.mark.asyncio
+    async def test_both_llm_nodes_run_via_process_task(
+        self,
+        app,
+        container,
+        two_llm_flow_id,
+        unique_id,
+        mock_context,
+        mock_llm_with_queue,
+    ):
+        mock_llm_with_queue(["FIRST_OK", "SECOND_OK"])
+        flow_id = two_llm_flow_id
+        ctx = f"ctx-{unique_id}"
+        session_id = f"{flow_id}:{ctx}"
+        mock_context.session_id = session_id
+        mock_context.flow_id = flow_id
+        mock_context.user.user_id = "test-user-1"
+
+        result = await process_flow_task(
+            flow_id=flow_id,
+            session_id=session_id,
+            user_id="test-user-1",
+            content="hello",
+            context_data=mock_context.model_dump(),
+        )
+
+        assert result["status"] == "completed"
+        assert result["response"] == "SECOND_OK"
+
+        set_context(mock_context)
+        saved = await container.state_manager.get_state(session_id)
+        assert saved is not None
+        assert "first" in saved.node_history
+        assert "second" in saved.node_history
 
 
 class TestExecuteInlineCode:

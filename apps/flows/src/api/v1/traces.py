@@ -4,7 +4,7 @@ API для получения трейсов.
 Позволяет получить все spans по сессии, task_id, user_id или flow_id.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
@@ -189,32 +189,60 @@ async def search_traces(
     }
 
 
+def _parse_span_start_time(span: Dict[str, Any]) -> datetime:
+    """Время начала span для сортировки по порядку выполнения."""
+    raw = span.get("start_time")
+    if raw is None:
+        return datetime.max.replace(tzinfo=timezone.utc)
+    if isinstance(raw, datetime):
+        dt = raw
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    text = str(raw).replace("Z", "+00:00")
+    dt = datetime.fromisoformat(text)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _span_exec_sort_key(span: Dict[str, Any]) -> tuple:
+    return (_parse_span_start_time(span), span.get("span_id") or "")
+
+
+def _sort_span_tree_execution_order(nodes: List[Dict[str, Any]]) -> None:
+    """Рекурсивно сортирует siblings по start_time (порядок выполнения)."""
+    nodes.sort(key=_span_exec_sort_key)
+    for node in nodes:
+        children = node.get("children")
+        if children:
+            _sort_span_tree_execution_order(children)
+
+
 def _build_span_tree(spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Строит дерево spans из плоского списка.
-    
-    Root spans (parent_span_id is None) становятся корнями,
-    остальные spans вкладываются в children.
+
+    Порядок siblings в дереве — строго по start_time (хронология выполнения),
+    независимо от порядка строк в ответе репозитория.
     """
     if not spans:
         return []
-    
-    # Индекс spans по span_id
-    span_map = {s["span_id"]: {**s, "children": []} for s in spans}
-    
-    # Корневые spans
-    roots = []
-    
-    for span in spans:
+
+    ordered = sorted(spans, key=_span_exec_sort_key)
+
+    span_map = {s["span_id"]: {**s, "children": []} for s in ordered}
+    roots: List[Dict[str, Any]] = []
+
+    for span in ordered:
         span_id = span["span_id"]
         parent_id = span.get("parent_span_id")
-        
+
         if parent_id and parent_id in span_map:
-            # Добавляем как child
             span_map[parent_id]["children"].append(span_map[span_id])
         else:
-            # Root span
             roots.append(span_map[span_id])
-    
+
+    _sort_span_tree_execution_order(roots)
     return roots
 

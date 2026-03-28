@@ -238,7 +238,9 @@ class NodeAsToolWrapper(BaseTool):
             user_id=parent_state.user_id,
             variables=parent_state.variables.copy(),
             content=args.get("query", args.get("content", "")),
-            messages=[],  # Чистая история для субагента
+            messages=[],
+            skill_id=parent_state.skill_id,
+            flow_config_version=parent_state.flow_config_version,
         )
         
         # Записываем args в nested_state

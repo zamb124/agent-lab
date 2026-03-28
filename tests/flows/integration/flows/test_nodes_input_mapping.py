@@ -939,8 +939,8 @@ class TestMessagesFilter:
         
         assert len(result) == 3
 
-    def test_filter_own_returns_own_and_user_messages(self):
-        """messages_filter='own' возвращает свои + user сообщения"""
+    def test_filter_own_returns_only_messages_tagged_with_node_id(self):
+        """messages_filter='own' — только сообщения с metadata.node_id == эта нода"""
         from a2a.types import Message, Role, Part, TextPart
         
         node = LlmNode(
@@ -954,7 +954,7 @@ class TestMessagesFilter:
             Message(
                 messageId="1", role=Role.user,
                 parts=[Part(root=TextPart(text="User msg"))],
-                taskId="test", metadata={}
+                taskId="test", metadata={"node_id": "test_node"}
             ),
             Message(
                 messageId="2", role=Role.agent,
@@ -964,6 +964,11 @@ class TestMessagesFilter:
             Message(
                 messageId="3", role=Role.agent,
                 parts=[Part(root=TextPart(text="Other msg"))],
+                taskId="test", metadata={"node_id": "other_node"}
+            ),
+            Message(
+                messageId="4", role=Role.user,
+                parts=[Part(root=TextPart(text="Other user"))],
                 taskId="test", metadata={"node_id": "other_node"}
             ),
         ]
@@ -979,7 +984,7 @@ class TestMessagesFilter:
         assert result[1].message_id == "2"
 
     def test_filter_list_returns_specified_nodes(self):
-        """messages_filter=['node1', 'node2'] возвращает от указанных + user"""
+        """messages_filter=['node1', 'node2'] — только сообщения с node_id из списка"""
         from a2a.types import Message, Role, Part, TextPart
         
         node = LlmNode(
@@ -993,7 +998,7 @@ class TestMessagesFilter:
             Message(
                 messageId="1", role=Role.user,
                 parts=[Part(root=TextPart(text="User"))],
-                taskId="test", metadata={}
+                taskId="test", metadata={"node_id": "node1"}
             ),
             Message(
                 messageId="2", role=Role.agent,
@@ -1010,6 +1015,11 @@ class TestMessagesFilter:
                 parts=[Part(root=TextPart(text="From node2"))],
                 taskId="test", metadata={"node_id": "node2"}
             ),
+            Message(
+                messageId="5", role=Role.user,
+                parts=[Part(root=TextPart(text="node3 user"))],
+                taskId="test", metadata={"node_id": "node3"}
+            ),
         ]
         state = ExecutionState(
             task_id="test", context_id="ctx", user_id="u",
@@ -1024,6 +1034,66 @@ class TestMessagesFilter:
         assert "2" in ids
         assert "4" in ids
         assert "3" not in ids
+        assert "5" not in ids
+
+    def test_own_filter_full_log_not_truncated(self):
+        """messages_filter=own сужает только срез для LLM; полный лог в state накапливается."""
+        from a2a.types import Message, Part, Role, TextPart
+
+        from apps.flows.src.runtime.runners.llm_runner import new_assistant_message
+
+        node = LlmNode(
+            node_id="test_node",
+            config={"prompt": "Test", "messages_filter": "own"},
+        )
+        messages = [
+            Message(
+                messageId="1",
+                role=Role.user,
+                parts=[Part(root=TextPart(text="u"))],
+                taskId="t",
+                metadata={},
+            ),
+            Message(
+                messageId="2",
+                role=Role.agent,
+                parts=[Part(root=TextPart(text="other"))],
+                taskId="t",
+                metadata={"node_id": "other"},
+            ),
+        ]
+        state = ExecutionState(
+            task_id="t",
+            context_id="c",
+            user_id="u",
+            session_id="x:c",
+            messages=messages,
+            variables={},
+        )
+        full_before = len(state.messages)
+        filtered = node._get_filtered_messages(state)
+        assert len(filtered) < full_before
+        state.messages.append(
+            new_assistant_message("reply", "test_node", None, context_id="c", task_id="t")
+        )
+        assert len(state.messages) == full_before + 1
+
+    def test_llm_runner_message_factories_tag_node_id(self):
+        from apps.flows.src.runtime.runners.llm_runner import (
+            new_assistant_message,
+            new_tool_result_message,
+            new_user_message,
+        )
+
+        u = new_user_message("hi", "n1", "ctx", "tid")
+        assert u.metadata["node_id"] == "n1"
+        a = new_assistant_message(
+            "a", "n1", [{"name": "t", "id": "1"}], "ctx", "tid"
+        )
+        assert a.metadata["node_id"] == "n1"
+        assert a.metadata.get("tool_calls")
+        tr = new_tool_result_message("1", "ok", "n1", "ctx", "tid")
+        assert tr.metadata["node_id"] == "n1"
 
 
 class TestSaveToMessages:

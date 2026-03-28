@@ -232,6 +232,8 @@ class EmbeddingConfig(BaseModel):
 
     model: str = "baai/bge-m3"
     dimension: int = 1024
+    # OpenAI-compatible POST .../embeddings; пусто = OpenRouter (EmbeddingService.OPENROUTER_URL)
+    base_url: Optional[str] = None
 
 
 class RAGProviderConfig(BaseModel):

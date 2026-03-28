@@ -114,6 +114,17 @@ export class EditorHeader extends PlatformElement {
                 color: var(--text-primary);
                 box-shadow: var(--glass-shadow-subtle);
             }
+
+            .mode-btn.active.agent-stop {
+                background: var(--bg-elevated);
+                color: var(--error, #ef4444);
+                box-shadow: var(--glass-shadow-subtle);
+            }
+
+            .mode-btn.active.agent-stop:hover {
+                background: var(--error-bg, rgba(239, 68, 68, 0.12));
+                color: var(--error, #ef4444);
+            }
             
             .mode-btn:hover:not(.active) {
                 color: var(--text-secondary);
@@ -172,6 +183,7 @@ export class EditorHeader extends PlatformElement {
         flowName: { type: String, attribute: 'flow-name' },
         saving: { type: Boolean },
         mode: { type: String },
+        agentExecutionRunning: { type: Boolean, attribute: 'agent-execution-running' },
     };
 
     constructor() {
@@ -179,6 +191,7 @@ export class EditorHeader extends PlatformElement {
         this.flowName = 'New Flow';
         this.saving = false;
         this.mode = 'visual';
+        this.agentExecutionRunning = false;
     }
 
     getFlowName() {
@@ -202,6 +215,16 @@ export class EditorHeader extends PlatformElement {
     _setMode(mode) {
         this.mode = mode;
         this.emit('mode-changed', { mode });
+    }
+
+    _onRunModeButtonClick(e) {
+        if (this.agentExecutionRunning) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.emit('stop-agent-requested');
+            return;
+        }
+        this._setMode('run');
     }
 
     _onShowCode() {
@@ -230,6 +253,7 @@ export class EditorHeader extends PlatformElement {
                 <div class="header-center">
                     <div class="mode-toggle">
                         <button 
+                            type="button"
                             class="mode-btn ${this.mode === 'visual' ? 'active' : ''}"
                             @click=${() => this._setMode('visual')}
                             title="Visual Editor"
@@ -237,11 +261,15 @@ export class EditorHeader extends PlatformElement {
                             <platform-icon name="edit" size="18"></platform-icon>
                         </button>
                         <button 
-                            class="mode-btn ${this.mode === 'run' ? 'active' : ''}"
-                            @click=${() => this._setMode('run')}
-                            title="Run"
+                            type="button"
+                            class="mode-btn ${this.mode === 'run' ? 'active' : ''} ${this.agentExecutionRunning ? 'agent-stop' : ''}"
+                            @click=${this._onRunModeButtonClick}
+                            title=${this.agentExecutionRunning ? 'Остановить' : 'Run'}
                         >
-                            <platform-icon name="play" size="18"></platform-icon>
+                            <platform-icon
+                                name="${this.agentExecutionRunning ? 'stop' : 'play'}"
+                                size="18"
+                            ></platform-icon>
                         </button>
                     </div>
                 </div>

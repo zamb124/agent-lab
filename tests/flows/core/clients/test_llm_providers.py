@@ -547,11 +547,13 @@ class TestLLMModelsServiceRealAPI:
         print(f"Синхронизация всех провайдеров: {results}")
         print(f"Всего моделей: {total}")
         
-        # Проверяем что можем получить модели по каждому провайдеру
+        # Репозиторий только upsert; записи снятые с API не удаляются — в БД может быть больше строк.
         for provider, count in results.items():
             if count > 0:
                 models = await service.get_models_by_provider(provider)
-                assert len(models) == count, f"Количество моделей {provider} должно совпадать"
+                assert len(models) >= count, (
+                    f"В БД должно быть не меньше моделей {provider}, чем синхронизировано"
+                )
                 print(f"  {provider}: {count} моделей, примеры: {models[:3]}")
 
     @pytest.mark.asyncio

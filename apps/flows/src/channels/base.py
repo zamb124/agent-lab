@@ -29,8 +29,6 @@ from a2a.types import (
 )
 from a2a.utils.message import get_message_text, new_agent_text_message
 
-from apps.flows.src.runtime.exceptions import FlowInterrupt
-from core.state import InterruptData
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
 from apps.flows.config import get_settings
@@ -46,7 +44,6 @@ from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
 from apps.flows.src.tasks.push_notification_tasks import send_task_update
 from core.tracing import get_tracer
-from core.tracing.context import TraceContext, get_current_trace_context
 from core.tracing.provider import is_tracing_enabled
 from apps.flows.src.utils import extract_json_from_response
 from apps.flows.src.variables import VariableResolver
@@ -206,10 +203,7 @@ class BaseChannel(ABC):
     async def _get_state(self, session_id: str) -> Optional[ExecutionState]:
         """Получает state из StateManager."""
         container = get_container()
-        state_dict = await container.state_manager.get_state(session_id)
-        if state_dict is None:
-            return None
-        return ExecutionState.model_validate(state_dict)
+        return await container.state_manager.get_state(session_id)
     
     async def _save_state(self, session_id: str, state: ExecutionState) -> None:
         """Сохраняет state в StateManager."""
@@ -359,17 +353,16 @@ class BaseChannel(ABC):
         # Устанавливаем в ContextVar для доступа из других компонентов
         set_context(self.context)
         
-        # Загружаем state для определения task_id и resume
+        # Загружаем state для определения task_id, resume и закреплённой версии flow
         container = get_container()
-        state_dict = await container.state_manager.get_state(params.session_id)
+        saved_state = await container.state_manager.get_state(params.session_id)
         
         saved_task_id = None
-        if state_dict:
-            interrupt_data = state_dict.get("interrupt")
-            if interrupt_data and isinstance(interrupt_data, dict):
-                context = interrupt_data.get("context")
-                if context and isinstance(context, dict):
-                    saved_task_id = context.get("task_id")
+        if saved_state and saved_state.interrupt is not None:
+            ir = saved_state.interrupt
+            ctx = ir.context if ir.context is not None else None
+            if isinstance(ctx, dict):
+                saved_task_id = ctx.get("task_id")
         effective_task_id = saved_task_id or params.task_id
         
         logger.debug(f"[process_task] Starting task_id={effective_task_id} (from params: {params.task_id})")
@@ -393,7 +386,14 @@ class BaseChannel(ABC):
         logger.debug(f"[process_task] Emitter created for stream:{effective_task_id}")
         
         try:
-            runtime_flow = await container.flow_factory.get_flow(self.flow_id, params.skill_id)
+            pinned_version = saved_state.flow_config_version if saved_state else None
+            try:
+                runtime_flow = await container.flow_factory.get_flow(
+                    self.flow_id, params.skill_id, config_version=pinned_version
+                )
+            except ValueError as verr:
+                await emitter.emit_error(str(verr))
+                raise
             if runtime_flow is None:
                 await emitter.emit_error(f"Flow не найден: {self.flow_id}")
                 raise ValueError(f"Flow не найден: {self.flow_id}")
@@ -426,8 +426,7 @@ class BaseChannel(ABC):
             user_id = self.context.user.user_id if self.context.user else params.user_id
             user_groups = self.context.metadata.get("grps", []) or []
             
-            # Загружаем state из state_dict
-            state = ExecutionState.model_validate(state_dict) if state_dict else None
+            state = saved_state
             
             if state is None:
                 state = create_initial_state(
@@ -466,15 +465,18 @@ class BaseChannel(ABC):
             if request_triggers:
                 state.triggers = {**state.triggers, **request_triggers}
             
-            # Передаём полный inline flow_config в state
-            state.flow_config = runtime_flow.config
+            cfg_ver = (runtime_flow.config or {}).get("version")
+            if cfg_ver and not state.flow_config_version:
+                state.flow_config_version = str(cfg_ver)
             
             # Обновляем breakpoints из metadata (для отладки)
             if breakpoints:
                 state.breakpoints = breakpoints
             
             # Резолвим mock конфиг из всех уровней иерархии
-            flow_config = await container.flow_repository.get(self.flow_id)
+            flow_config = await container.flow_factory.get_flow_config_snapshot(
+                self.flow_id, state.flow_config_version
+            )
             root_flow_mock = flow_config.mock if flow_config else None
             
             skill_mock = None
@@ -503,106 +505,48 @@ class BaseChannel(ABC):
                 state.mock = mock_config.model_dump(exclude_none=False)
                 logger.info(f"[mock] Mock enabled for session {params.session_id}")
             
-            entry_node = runtime_flow.nodes.get(runtime_flow.entry)
-            node_type = entry_node.config.get("type", "") if entry_node else ""
-            
             final_response = ""
-            
-            LlmNode = get_container().llm_node_class
-            if node_type == NodeType.LLM_NODE.value and isinstance(entry_node, LlmNode):
-                if entry_node.tool_refs and entry_node._loaded_tools is None:
-                    entry_node._loaded_tools = await entry_node._load_tools()
-                
-                runner = await entry_node.get_runner()
-                
-                trace_ctx = None
-                if is_tracing_enabled():
-                    trace_ctx_data = get_current_trace_context()
-                    if trace_ctx_data:
-                        trace_ctx = TraceContext.from_dict(trace_ctx_data)
-                
-                tracer = get_tracer()
-                
-                try:
-                    async with tracer.flow_span(self.flow_id, runtime_flow.entry, trace_ctx):
-                        async with tracer.node_span(runtime_flow.entry, "llm_node", trace_ctx):
-                            async for event in runner.run({"content": params.content}, state):
-                                await emitter.emit(event)
-                    
-                    final_response = state.response or ""
-                    
-                    state.current_nodes = []
-                    state.interrupt = None
-                    
-                    json_data = extract_json_from_response(final_response)
-                    has_artifact = json_data is not None
-                    if has_artifact:
-                        await emitter.emit_artifact(json.dumps(json_data, ensure_ascii=False))
-                    
-                    await emitter.emit_complete(final_response, has_artifact=has_artifact)
-                    
-                    await self._save_state(params.session_id, state)
-                    
-                    await self._send_push_notification(
-                        params.task_id, params.context_id, "completed", final_response
-                    )
-                    
-                except FlowInterrupt as e:
-                    state.interrupt = InterruptData(
-                        question=e.question,
-                        context={"task_id": state.task_id}
-                    )
-                    state.current_nodes = [runtime_flow.entry]
-                    await emitter.emit_interrupt(e.question)
-                    final_response = e.question
-                    
-                    await self._save_state(params.session_id, state)
-                    
-                    await self._send_push_notification(
-                        params.task_id, params.context_id, "input-required", e.question
-                    )
+
+            if params.is_resume and state.interrupt:
+                state.content = params.content
+
+            state = await runtime_flow.run(state)
+
+            final_response = state.response or ""
+
+            if state.breakpoint_hit:
+                node_id = state.breakpoint_hit
+                logger.info(f"Breakpoint hit at node '{node_id}'")
+
+                node_type = (
+                    runtime_flow.nodes.get(node_id).config.get("type", "unknown")
+                    if runtime_flow.nodes.get(node_id)
+                    else "unknown"
+                )
+                await emitter.emit_breakpoint(node_id, node_type, state.breakpoint_state or {})
+
+                await self._save_state(params.session_id, state)
+                return {
+                    "response": "",
+                    "breakpoint_hit": node_id,
+                    "breakpoint_state": state.breakpoint_state,
+                    "status": "input-required",
+                }
+            if state.interrupt:
+                question = state.interrupt.question
+                await emitter.emit_interrupt(question)
+                await self._send_push_notification(
+                    params.task_id, params.context_id, "input-required", question
+                )
             else:
-                if params.is_resume and state.interrupt:
-                    # Resume после interrupt: устанавливаем content (ответ пользователя)
-                    state.content = params.content
-                
-                # Единый вызов: runtime_flow.run() — resume или старт
-                state = await runtime_flow.run(state)
-                
-                final_response = state.response or ""
-                
-                if state.breakpoint_hit:
-                    # Breakpoint сработал - выполнение остановлено
-                    node_id = state.breakpoint_hit
-                    logger.info(f"Breakpoint hit at node '{node_id}'")
-                    
-                    # Эмитим событие breakpoint для stream (A2A)
-                    node_type = runtime_flow.nodes.get(node_id).config.get("type", "unknown") if runtime_flow.nodes.get(node_id) else "unknown"
-                    await emitter.emit_breakpoint(node_id, node_type, state.breakpoint_state or {})
-                    
-                    # Сохраняем state с breakpoint данными
-                    await self._save_state(params.session_id, state)
-                    return {
-                        "response": "",
-                        "breakpoint_hit": node_id,
-                        "breakpoint_state": state.breakpoint_state,
-                        "status": "input-required",
-                    }
-                elif state.interrupt:
-                    question = state.interrupt.question
-                    await emitter.emit_interrupt(question)
-                    await self._send_push_notification(
-                        params.task_id, params.context_id, "input-required", question
-                    )
-                else:
-                    json_data = extract_json_from_response(final_response)
-                    has_artifact = json_data is not None
-                    if has_artifact:
-                        await emitter.emit_artifact(json.dumps(json_data, ensure_ascii=False))
-                    await emitter.emit_complete(final_response, has_artifact=has_artifact)
-                    await self._send_push_notification(
-                        params.task_id, params.context_id, "completed", final_response
-                    )
+                json_data = extract_json_from_response(final_response)
+                has_artifact = json_data is not None
+                if has_artifact:
+                    await emitter.emit_artifact(json.dumps(json_data, ensure_ascii=False))
+                await emitter.emit_complete(final_response, has_artifact=has_artifact)
+                await self._send_push_notification(
+                    params.task_id, params.context_id, "completed", final_response
+                )
             
             messages_count = len(state.messages)
 

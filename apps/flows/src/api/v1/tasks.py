@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from apps.flows.src.container import get_container
+from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
 from core.logging import get_logger
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from core.context import Context, User, get_context
@@ -137,6 +138,7 @@ async def submit_task(request: TaskSubmitRequest) -> Dict[str, Any]:
                 parts=[Part(root=TextPart(text=request.content))],
                 taskId=task_id,
                 contextId=session_id,
+                metadata={"node_id": MESSAGE_SOURCE_TASK},
             ),
             Message(
                 messageId=str(uuid.uuid4()),
@@ -144,6 +146,7 @@ async def submit_task(request: TaskSubmitRequest) -> Dict[str, Any]:
                 parts=[Part(root=TextPart(text=response_text))],
                 taskId=task_id,
                 contextId=session_id,
+                metadata={"node_id": MESSAGE_SOURCE_TASK},
             ),
         ],
     )

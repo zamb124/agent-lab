@@ -164,6 +164,9 @@ var devtoolsImpl = (fn, devtoolsOptions = {}) => (set, get, api) => {
   }
   connection.subscribe((message) => {
     var _a;
+    if (message == null || message.type == null) {
+      return;
+    }
     switch (message.type) {
       case "ACTION":
         if (typeof message.payload !== "string") {
@@ -204,6 +207,9 @@ var devtoolsImpl = (fn, devtoolsOptions = {}) => (set, get, api) => {
           }
         );
       case "DISPATCH":
+        if (message.payload == null) {
+          return;
+        }
         switch (message.payload.type) {
           case "RESET":
             setStateFromDevtools(initialState);

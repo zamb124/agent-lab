@@ -340,16 +340,11 @@ class InlineTool(BaseTool):
         """
         container = get_container()
         
-        # Ресурсы из flow_config (inline в state)
-        flow_resources = state.flow_config.get("resources", {}) if state.flow_config else {}
-        
-        # Ресурсы skill
-        skill_resources = None
-        skill_id = state.skill_id
-        if skill_id and skill_id != "default" and state.flow_config:
-            skills = state.flow_config.get("skills", {})
-            skill_config = skills.get(skill_id, {})
-            skill_resources = skill_config.get("resources")
+        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
+            state.session_flow_id,
+            state.skill_id,
+            state.flow_config_version,
+        )
         
         # Ресурсы tool
         tool_resources = self._resources_config

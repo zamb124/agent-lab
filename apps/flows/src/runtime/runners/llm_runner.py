@@ -47,7 +47,10 @@ def _get_trace_ctx_from_state() -> Optional[TraceContext]:
 
 
 def new_user_message(
-    content: str, context_id: Optional[str] = None, task_id: Optional[str] = None
+    content: str,
+    source_node_id: str,
+    context_id: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> Message:
     """Создаёт сообщение от пользователя."""
     return Message(
@@ -56,29 +59,37 @@ def new_user_message(
         parts=[Part(root=TextPart(text=content))],
         context_id=context_id,
         task_id=task_id,
+        metadata={"node_id": source_node_id},
     )
 
 
 def new_assistant_message(
     content: str,
+    source_node_id: str,
     tool_calls: Optional[List[Dict[str, Any]]] = None,
     context_id: Optional[str] = None,
     task_id: Optional[str] = None,
 ) -> Message:
     """Создаёт сообщение от ассистента."""
-    metadata = {"tool_calls": tool_calls} if tool_calls else None
+    meta: Dict[str, Any] = {"node_id": source_node_id}
+    if tool_calls:
+        meta["tool_calls"] = tool_calls
     return Message(
         message_id=str(uuid.uuid4()),
         role=Role.agent,
         parts=[Part(root=TextPart(text=content))],
         context_id=context_id,
         task_id=task_id,
-        metadata=metadata,
+        metadata=meta,
     )
 
 
 def new_tool_result_message(
-    tool_call_id: str, content: str, context_id: Optional[str] = None, task_id: Optional[str] = None
+    tool_call_id: str,
+    content: str,
+    source_node_id: str,
+    context_id: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> Message:
     """Создаёт сообщение с результатом tool."""
     return Message(
@@ -87,21 +98,27 @@ def new_tool_result_message(
         parts=[Part(root=TextPart(text=content))],
         context_id=context_id,
         task_id=task_id,
-        metadata={"tool_call_id": tool_call_id},
+        metadata={"tool_call_id": tool_call_id, "node_id": source_node_id},
     )
 
 
 def new_system_message(
-    content: str, context_id: Optional[str] = None, task_id: Optional[str] = None
+    content: str,
+    context_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    source_node_id: Optional[str] = None,
 ) -> Message:
-    """Создаёт системное сообщение."""
+    """Создаёт системное сообщение (для LLM-запроса или для записи в state.messages)."""
+    meta: Dict[str, Any] = {"system": True}
+    if source_node_id is not None:
+        meta["node_id"] = source_node_id
     return Message(
         message_id=str(uuid.uuid4()),
         role=Role.agent,
         parts=[Part(root=TextPart(text=content))],
         context_id=context_id,
         task_id=task_id,
-        metadata={"system": True},
+        metadata=meta,
     )
 
 
@@ -121,6 +138,16 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     """
 
     MAX_ITERATIONS = 10
+
+    def _source_node_id(self) -> str:
+        if not self.node_config:
+            raise ValueError("LlmNodeRunner.node_config required for message tagging")
+        return self.node_config.node_id
+
+    def _messages_for_llm_context(self, state: ExecutionState) -> List[Message]:
+        if self.llm_node is not None:
+            return self.llm_node._get_filtered_messages(state)
+        return list(state.messages)
 
     async def run(
         self,
@@ -143,38 +170,28 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             container = get_container()
             emitter = Emitter(container.redis_client, state)
 
-        messages = self._get_messages(state)
         user_content = input_data.get("content", "")
         llm_node_label = self.node_config.name if self.node_config else "unknown"
+        sid = self._source_node_id()
 
         interrupt_path = InterruptManager.get_interrupt_path(state)
 
         if interrupt_path:
             if user_content:
                 resumed = await self._handle_resume(
-                    messages, state, user_content, interrupt_path, context_id, task_id
+                    state, user_content, interrupt_path, context_id, task_id
                 )
                 if not resumed:
                     return
-                messages = self._get_messages(state)
             else:
                 InterruptManager.clear_interrupt_path(state)
         elif user_content:
-            messages.append(new_user_message(user_content, context_id, task_id))
-            self._save_messages_to_state(messages, state)
+            state.messages.append(new_user_message(user_content, sid, context_id, task_id))
 
         async for event in self._react_loop(
-            messages, state, llm_node_label, context_id, task_id, emitter
+            state, llm_node_label, context_id, task_id, emitter
         ):
             yield event
-
-    def _get_messages(self, state: ExecutionState) -> List[Message]:
-        """Получает историю сообщений."""
-        return list(state.messages)
-
-    def _save_messages_to_state(self, messages: List[Message], state: ExecutionState) -> None:
-        """Сохраняет сообщения в state."""
-        state.messages = messages
 
     def _messages_to_dict(self, messages: List[Message]) -> List[Dict[str, Any]]:
         """Конвертирует Message объекты в dict для трейсинга."""
@@ -241,25 +258,27 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
     def _ensure_assistant_tool_calls(
         self,
-        messages: List[Message],
+        state: ExecutionState,
         tool_call_id: str,
         tool_call: Dict[str, Any],
         context_id: str,
         task_id: Optional[str] = None,
     ) -> None:
         """Гарантирует наличие assistant.tool_calls перед tool_result."""
-        for msg in reversed(messages):
+        sid = self._source_node_id()
+        for msg in reversed(state.messages):
             metadata = _get_message_metadata(msg)
             if metadata.get("tool_calls"):
                 for tc in metadata["tool_calls"]:
                     if tc.get("id") == tool_call_id:
                         return
                 break
-        messages.append(new_assistant_message("", [tool_call], context_id, task_id))
+        state.messages.append(
+            new_assistant_message("", sid, [tool_call], context_id, task_id)
+        )
 
     async def _handle_resume(
         self,
-        messages: List[Message],
         state: ExecutionState,
         user_answer: str,
         interrupt_path: List[InterruptPathItem],
@@ -276,9 +295,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         tool_call = next_call.tool_call or {}
 
         if not tool_call:
-            tool_call = self._find_tool_call_in_messages(messages, call_id)
+            tool_call = self._find_tool_call_in_messages(state.messages, call_id)
 
         tool_call_id = tool_call.get("id", call_id)
+        sid = self._source_node_id()
 
         logger.info(
             f"Resume: type={call_type}, id={call_id}, tool_call_id={tool_call_id}, "
@@ -296,30 +316,28 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     state,
                 )
                 for tr in tool_results:
-                    messages.append(
+                    state.messages.append(
                         new_tool_result_message(
-                            tr["tool_call_id"], tr["content"], context_id, task_id
+                            tr["tool_call_id"], tr["content"], sid, context_id, task_id
                         )
                     )
-                # Очищаем interrupt_path после успешного выполнения
                 InterruptManager.clear_interrupt_path(state)
             except FlowInterrupt as e:
-                self._save_messages_to_state(messages, state)
                 InterruptManager.set_interrupt(state, e.question, tool_call)
                 raise
         else:
             self._ensure_assistant_tool_calls(
-                messages, tool_call_id, tool_call, context_id, task_id
+                state, tool_call_id, tool_call, context_id, task_id
             )
-            messages.append(new_tool_result_message(tool_call_id, user_answer, context_id, task_id))
+            state.messages.append(
+                new_tool_result_message(tool_call_id, user_answer, sid, context_id, task_id)
+            )
 
-        self._save_messages_to_state(messages, state)
         InterruptManager.clear_interrupt_path(state)
         return True
 
     async def _react_loop(
         self,
-        messages: List[Message],
         state: ExecutionState,
         llm_node_label: str,
         context_id: str,
@@ -327,6 +345,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         emitter: Emitter,
     ) -> AsyncGenerator[StreamEvent, None]:
         """ReAct цикл со стримингом событий."""
+        sid = self._source_node_id()
         system_prompt = await self._render_prompt(state)
         trace_ctx = _get_trace_ctx_from_state()
         tracer = get_tracer()
@@ -355,7 +374,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         reason_tool_name = self._get_reason_tool_name()
         exit_tool_name = self._get_exit_tool_name() or exit_tool
 
-        system_msg = new_system_message(system_prompt, context_id)
+        system_msg = new_system_message(system_prompt, context_id, task_id)
 
         iteration = 0
         final_response = ""
@@ -365,6 +384,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 while iteration < max_iterations:
                     iteration += 1
                     logger.debug(f"[llm_node:{llm_node_label}] ReAct iteration {iteration} (streaming)")
+
+                    messages = self._messages_for_llm_context(state)
 
                     async with tracer.react_iteration_span(
                         iteration, llm_node_label, trace_ctx=trace_ctx
@@ -434,29 +455,27 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     f"[llm_node:{llm_node_label}] Exit tool '{exit_tool_name}' вызван, завершение"
                                 )
                                 
-                                messages.append(
-                                    new_assistant_message(content, tool_calls, context_id, task_id)
+                                state.messages.append(
+                                    new_assistant_message(content, sid, tool_calls, context_id, task_id)
                                 )
                                 
                                 exit_call_id = exit_call.get("id", exit_tool_name)
                                 await emitter.emit_tool_call(exit_tool_name, exit_args, exit_call_id)
                                 
-                                messages.append(
+                                state.messages.append(
                                     new_tool_result_message(
-                                        exit_call_id, final_response, context_id, task_id
+                                        exit_call_id, final_response, sid, context_id, task_id
                                     )
                                 )
                                 await emitter.emit_tool_result(exit_tool_name, final_response, exit_call_id)
                                 
-                                self._save_messages_to_state(messages, state)
                                 state.response = final_response
                                 InterruptManager.clear_interrupt_path(state)
                                 break
 
-                            messages.append(
-                                new_assistant_message(content, tool_calls, context_id, task_id)
+                            state.messages.append(
+                                new_assistant_message(content, sid, tool_calls, context_id, task_id)
                             )
-                            self._save_messages_to_state(messages, state)
 
                             for tc in tool_calls:
                                 tool_call_id = tc.get("id", tc.get("name", "unknown"))
@@ -474,9 +493,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 )
 
                                 for tr in tool_results:
-                                    messages.append(
+                                    state.messages.append(
                                         new_tool_result_message(
-                                            tr["tool_call_id"], tr["content"], context_id, task_id
+                                            tr["tool_call_id"], tr["content"], sid, context_id, task_id
                                         )
                                     )
                                     tool_call_id = tr["tool_call_id"]
@@ -497,8 +516,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     await emitter.emit_reasoning(pending_reasoning)
                                     delattr(state, "_pending_reasoning")
 
-                                self._save_messages_to_state(messages, state)
-
                             except FlowInterrupt as e:
                                 interrupted_tc = tool_calls[0]
                                 logger.info(
@@ -508,8 +525,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 async with tracer.interrupt_span(
                                     e.question, interrupted_tc["name"], trace_ctx=trace_ctx
                                 ):
-                                    self._save_messages_to_state(messages, state)
-                                    
                                     # Добавляем элемент в путь только если это первичный interrupt
                                     # (не от вложенного субагента)
                                     if not state.interrupt_path:
@@ -541,12 +556,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     logger.error(f"[llm_node:{llm_node_label}] Ошибка парсинга structured output: {e}")
                                     final_response = content
                                 
-                                messages.append(
+                                state.messages.append(
                                     new_assistant_message(
-                                        final_response, context_id=context_id, task_id=task_id
+                                        final_response, sid, None, context_id=context_id, task_id=task_id
                                     )
                                 )
-                                self._save_messages_to_state(messages, state)
                                 InterruptManager.clear_interrupt_path(state)
                                 break
                             
@@ -555,12 +569,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 logger.info(
                                     f"[llm_node:{llm_node_label}] Финальный ответ: {final_response[:100]}..."
                                 )
-                                messages.append(
+                                state.messages.append(
                                     new_assistant_message(
-                                        final_response, context_id=context_id, task_id=task_id
+                                        final_response, sid, None, context_id=context_id, task_id=task_id
                                     )
                                 )
-                                self._save_messages_to_state(messages, state)
                                 InterruptManager.clear_interrupt_path(state)
                                 break
                             else:
@@ -569,12 +582,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     logger.info(
                                         f"[llm_node:{llm_node_label}] EXPLICIT non-strict: текст принят как ответ"
                                     )
-                                    messages.append(
+                                    state.messages.append(
                                         new_assistant_message(
-                                            final_response, context_id=context_id, task_id=task_id
+                                            final_response, sid, None, context_id=context_id, task_id=task_id
                                         )
                                     )
-                                    self._save_messages_to_state(messages, state)
                                     InterruptManager.clear_interrupt_path(state)
                                     break
                                 
@@ -582,8 +594,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     f"[llm_node:{llm_node_label}] EXPLICIT strict: LLM вернул текст без "
                                     f"exit_tool '{exit_tool_name}', добавляем reminder"
                                 )
-                                messages.append(
-                                    new_assistant_message(content, context_id=context_id, task_id=task_id)
+                                state.messages.append(
+                                    new_assistant_message(content, sid, None, context_id=context_id, task_id=task_id)
                                 )
                                 
                                 if reason_tool_name:
@@ -599,20 +611,20 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         f"Используй {exit_tool_name}(answer='твой финальный ответ') "
                                         f"чтобы завершить работу."
                                     )
-                                messages.append(
+                                state.messages.append(
                                     new_system_message(
                                         reminder_message or default_reminder,
-                                        context_id
+                                        context_id,
+                                        task_id,
+                                        source_node_id=sid,
                                     )
                                 )
-                                self._save_messages_to_state(messages, state)
             except FlowInterrupt:
                 tracer.record_state_snapshot(llm_node_span, state)
                 raise
             finally:
                 if final_response:
                     state.response = final_response
-                    self._save_messages_to_state(messages, state)
                     tracer.record_state_snapshot(llm_node_span, state)
 
     async def _call_llm(

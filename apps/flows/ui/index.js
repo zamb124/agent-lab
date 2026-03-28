@@ -20,6 +20,7 @@ import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/glass-textarea.js';
 import '@platform/lib/components/glass-toast.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-help-hint.js';
 
 // Компоненты выполнения
 import './components/execution-runner/index.js';

@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "is_duplicate": { "type": "boolean" },
+    "confidence": { "type": "number" },
+    "reason": { "type": "string" },
+    "action": { "type": "string", "enum": ["merge", "create"] },
+    "merged_attributes": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      ]
+    },
+    "merged_description": {
+      "anyOf": [{ "type": "null" }, { "type": "string" }]
+    }
+  },
+  "required": ["is_duplicate", "confidence", "reason", "action"],
+  "additionalProperties": false
+}

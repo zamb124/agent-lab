@@ -32,7 +32,35 @@ class FlowFactory:
         self.variables_service = variables_service
         self.compiler = graph_compiler
 
-    async def get_flow(self, flow_id: str, skill_id: str = "default") -> Optional[Flow]:
+    @staticmethod
+    def _resource_map_to_plain(ref_map: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """ResourceReference и dict в плоский dict для ResourceResolver."""
+        out: Dict[str, Any] = {}
+        for key, value in (ref_map or {}).items():
+            if hasattr(value, "model_dump"):
+                out[key] = value.model_dump()
+            elif isinstance(value, dict):
+                out[key] = value
+            else:
+                raise TypeError(
+                    f"resource '{key}': ожидается ResourceReference или dict, получен {type(value)}"
+                )
+        return out
+
+    async def get_flow_config_snapshot(
+        self, flow_id: str, config_version: Optional[str] = None
+    ) -> Optional[FlowConfig]:
+        """Снимок FlowConfig: конкретная версия или последняя в flows."""
+        if config_version:
+            return await self.flow_repository.get_version(flow_id, config_version)
+        return await self.flow_repository.get(flow_id)
+
+    async def get_flow(
+        self,
+        flow_id: str,
+        skill_id: str = "default",
+        config_version: Optional[str] = None,
+    ) -> Optional[Flow]:
         """
         Загружает flow из БД и создаёт Flow.
         Применяет skill overrides если указан skill_id.
@@ -40,16 +68,68 @@ class FlowFactory:
         Args:
             flow_id: ID flow
             skill_id: ID skill (по умолчанию "default")
+            config_version: версия из flows_versions; None = последняя запись в flows
 
         Returns:
             Flow или None
         """
-        config = await self.flow_repository.get(flow_id)
+        config = await self.get_flow_config_snapshot(flow_id, config_version)
         if config is None:
+            if config_version:
+                raise ValueError(
+                    f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
+                )
             logger.warning(f"Flow не найден: {flow_id}")
             return None
 
         return await self._create_flow(config, skill_id)
+
+    async def get_resource_maps(
+        self,
+        flow_id: str,
+        skill_id: str,
+        config_version: Optional[str] = None,
+    ) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+        """
+        Ресурсы уровня flow и skill из БД (без inline state.flow_config).
+
+        Returns:
+            (flow_resources, skill_resources или None)
+        """
+        config = await self.get_flow_config_snapshot(flow_id, config_version)
+        if config is None:
+            if config_version:
+                raise ValueError(
+                    f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
+                )
+            return {}, None
+
+        flow_resources = self._resource_map_to_plain(config.resources)
+        skill_resources: Optional[Dict[str, Any]] = None
+        if skill_id and skill_id != "default" and config.skills and skill_id in config.skills:
+            sk = config.skills[skill_id]
+            raw_skill_res = sk.resources or {}
+            if raw_skill_res:
+                skill_resources = self._resource_map_to_plain(raw_skill_res)
+
+        return flow_resources, skill_resources
+
+    async def get_effective_nodes_map(
+        self,
+        flow_id: str,
+        skill_id: str,
+        config_version: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Ноды графа после применения skill (для evaluation и отладки)."""
+        config = await self.get_flow_config_snapshot(flow_id, config_version)
+        if config is None:
+            if config_version:
+                raise ValueError(
+                    f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
+                )
+            raise ValueError(f"Flow '{flow_id}' не найден")
+        effective = self._apply_skill(config, skill_id)
+        return effective["nodes"]
 
     async def _create_flow(self, config: FlowConfig, skill_id: str = "default") -> Flow:
         """

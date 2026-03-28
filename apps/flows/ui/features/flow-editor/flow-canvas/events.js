@@ -180,6 +180,7 @@ export function setupNodeClickHandling(component) {
     let mouseDownTime = 0;
 
     container.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
         const node = e.target.closest('.drawflow-node');
         if (node) {
             mouseDownPos = { x: e.clientX, y: e.clientY };
@@ -188,6 +189,10 @@ export function setupNodeClickHandling(component) {
     });
 
     container.addEventListener('mouseup', (e) => {
+        if (e.button !== 0) {
+            mouseDownPos = null;
+            return;
+        }
         const node = e.target.closest('.drawflow-node');
         if (!node || !mouseDownPos) {
             mouseDownPos = null;

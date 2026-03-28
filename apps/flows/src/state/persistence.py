@@ -5,9 +5,11 @@ State persistence - управление состоянием сессий.
 """
 
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from a2a.types import Message, Part, Role, TextPart
+
+from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_CHANNEL
 
 from core.state import ExecutionState
 from core.logging import get_logger
@@ -63,15 +65,22 @@ class StateManager:
         """Получает state с блокировкой."""
         return await self._repository.get_for_update(session_id, conn)
 
-    async def save_state(self, session_id: str, state: ExecutionState) -> bool:
+    async def save_state(
+        self, session_id: str, state: Union[ExecutionState, Dict[str, Any]]
+    ) -> bool:
         """Сохраняет state сессии в БД."""
-        return await self._repository.set(session_id, state)
+        st = ExecutionState.model_validate(state) if isinstance(state, dict) else state
+        return await self._repository.set(session_id, st)
 
     async def save_state_in_transaction(
-        self, session_id: str, state: ExecutionState, conn: Any = None
+        self,
+        session_id: str,
+        state: Union[ExecutionState, Dict[str, Any]],
+        conn: Any = None,
     ) -> bool:
         """Сохраняет state в рамках транзакции."""
-        return await self._repository.set_in_transaction(session_id, state, conn)
+        st = ExecutionState.model_validate(state) if isinstance(state, dict) else state
+        return await self._repository.set_in_transaction(session_id, st, conn)
 
     async def delete_state(self, session_id: str) -> bool:
         """Удаляет state сессии."""
@@ -92,6 +101,7 @@ class StateManager:
             role=Role.user,
             parts=[Part(root=TextPart(text=content))],
             taskId=state.task_id,
+            metadata={"node_id": MESSAGE_SOURCE_CHANNEL},
         )
         self.add_message(state, message)
     
@@ -102,6 +112,7 @@ class StateManager:
             role=Role.agent,
             parts=[Part(root=TextPart(text=content))],
             taskId=state.task_id,
+            metadata={"node_id": MESSAGE_SOURCE_CHANNEL},
         )
         self.add_message(state, message)
 

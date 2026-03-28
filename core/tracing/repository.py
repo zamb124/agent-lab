@@ -91,7 +91,7 @@ class SpanRepository:
         from core.db.models import Spans
         
         async with self._storage._get_session() as session:
-            stmt = select(Spans).where(Spans.task_id == task_id).order_by(Spans.start_time.desc())
+            stmt = select(Spans).where(Spans.task_id == task_id).order_by(Spans.start_time.asc())
             result = await session.execute(stmt)
             rows = result.scalars().all()
             return [self._serialize_span(row) for row in rows]

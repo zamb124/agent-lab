@@ -34,6 +34,7 @@ const baseStore = new BaseStore('flows', {
         panelExpanded: false,
         variablesPanelOpen: false,
         executionPanelOpen: false,
+        agentExecutionRunning: false,
         activeTool: 'select',
         canUndo: false,
         canRedo: false,
@@ -310,6 +311,19 @@ export const FlowsStore = {
         }));
     },
 
+    /**
+     * Полный снимок ExecutionState с воркера при breakpoint (metadata.state_snapshot).
+     * Подставляется в previewExecutionState для панелей нод и тестового state.
+     */
+    setPreviewExecutionStateFromBreakpoint(snapshot) {
+        if (snapshot == null || typeof snapshot !== 'object') {
+            return;
+        }
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, previewExecutionState: snapshot },
+        }));
+    },
+
     async loadFlow(flowId, a2aService, skillId = null) {
         baseStore.setState((s) => ({
             editor: { ...s.editor, loading: true, flowId, previewExecutionState: null }
@@ -350,6 +364,7 @@ export const FlowsStore = {
                     currentSkillId: skillId,
                     loading: false,
                     previewExecutionState,
+                    agentExecutionRunning: false,
                 },
                 app: {
                     ...s.app,
@@ -514,6 +529,12 @@ export const FlowsStore = {
     setExecutionPanelOpen(isOpen) {
         baseStore.setState((s) => ({
             editor: { ...s.editor, executionPanelOpen: isOpen }
+        }));
+    },
+
+    setAgentExecutionRunning(isRunning) {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, agentExecutionRunning: isRunning }
         }));
     },
     

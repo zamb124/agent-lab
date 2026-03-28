@@ -2,8 +2,17 @@
  * Модальное окно трейсинга
  */
 import { html, css } from 'lit';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+
+const TRACE_NODE_TYPE_ICONS = {
+    llm_node: 'llm_node',
+    code: 'code',
+    external_api: 'globe',
+    remote_flow: 'cloud',
+    flow: 'workflow',
+    mcp: 'mcp',
+    channel: 'send',
+};
 
 export class TracingModal extends PlatformModal {
     static styles = [
@@ -55,8 +64,11 @@ export class TracingModal extends PlatformModal {
             }
             
             .span-icon {
-                font-size: var(--text-lg);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
                 flex-shrink: 0;
+                color: var(--text-secondary);
             }
             
             .span-status {
@@ -180,17 +192,40 @@ export class TracingModal extends PlatformModal {
         this.loading = false;
     }
 
-    _getSpanIcon(operationName) {
-        if (operationName.startsWith('flow.')) return '📊';
-        if (operationName.startsWith('llm_node.')) return '🤖';
-        if (operationName.startsWith('agent.')) return '🤖';
-        if (operationName.startsWith('node.')) return '📦';
-        if (operationName.startsWith('llm.')) return '🔵';
-        if (operationName.startsWith('tool.')) return '🔧';
-        if (operationName.startsWith('react.iteration')) return '🔄';
-        if (operationName.startsWith('interrupt.')) return '⏸️';
-        if (operationName.startsWith('request.')) return '🌐';
-        return '📝';
+    /**
+     * Имена иконок — те же, что на канвасе flow-редактора (NODE_TYPE_ICON_NAMES и ресурсы).
+     */
+    _getSpanPlatformIcon(operationName) {
+        if (operationName.startsWith('flow.')) {
+            return 'workflow';
+        }
+        if (operationName.startsWith('node.')) {
+            const parts = operationName.split('.');
+            const nodeType = parts.length >= 2 ? parts[1] : '';
+            return TRACE_NODE_TYPE_ICONS[nodeType] || 'box';
+        }
+        if (operationName.startsWith('llm_node.') || operationName.startsWith('agent.')) {
+            return 'llm_node';
+        }
+        if (operationName.startsWith('react.iteration')) {
+            return 'refresh';
+        }
+        if (operationName.startsWith('llm.')) {
+            return 'bot';
+        }
+        if (operationName.startsWith('tool.')) {
+            return 'tool';
+        }
+        if (operationName.startsWith('interrupt.')) {
+            return 'breakpoint';
+        }
+        if (operationName.startsWith('request.')) {
+            return 'globe';
+        }
+        if (operationName.startsWith('prompt.build.')) {
+            return 'chat';
+        }
+        return 'terminal';
     }
 
     _toggleSpanChildren(e, spanId) {
@@ -223,14 +258,16 @@ export class TracingModal extends PlatformModal {
         const duration = span.duration_ms || 0;
         const status = span.status || 'OK';
         const hasChildren = span.children && span.children.length > 0;
-        const icon = this._getSpanIcon(operationName);
+        const iconName = this._getSpanPlatformIcon(operationName);
         const statusClass = status === 'ERROR' ? 'error' : 'ok';
 
         return html`
             <div class="tracing-span" data-span-id="${span.span_id}">
                 <div class="span-header" @click=${() => this._showSpanDetails(span)}>
                     <div class="span-info">
-                        <span class="span-icon">${icon}</span>
+                        <span class="span-icon">
+                            <platform-icon name="${iconName}" size="18"></platform-icon>
+                        </span>
                         <span class="span-status ${statusClass}"></span>
                         <span class="span-name">${operationName}</span>
                         <span class="span-duration">${duration}ms</span>

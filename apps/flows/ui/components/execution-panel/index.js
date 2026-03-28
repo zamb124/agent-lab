@@ -5,7 +5,7 @@
  * Public API:
  * - Properties: .runner, show-state, show-tracing, show-mocks, placeholder
  * - Methods: showResult(), clearResult(), setRunning()
- * - Events: run-requested, stop-requested, state-requested, tracing-requested, mocks-requested, close-requested
+ * - Events: run-requested (detail.reuseContext), stop-requested, state-requested, tracing-requested, mocks-requested, close-requested
  */
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { executionPanelStyles } from './styles.js';
@@ -34,6 +34,7 @@ export class ExecutionPanel extends PlatformElement {
         showMocksSection: { type: Boolean },
         mockResponses: { type: Array },
         flowNodes: { type: Object },
+        persistSessionContext: { type: Boolean, attribute: 'persist-session-context' },
     };
 
     constructor() {
@@ -57,6 +58,18 @@ export class ExecutionPanel extends PlatformElement {
         this.showMocksSection = false;
         this.mockResponses = [];
         this.flowNodes = {};
+        this.persistSessionContext = true;
+    }
+
+    get persistContextHelpText() {
+        return (
+            'Включено: каждый запуск использует тот же contextId — продолжается один state сессии. '
+            + 'Выключено: каждый запуск с новым контекстом.'
+        );
+    }
+
+    _onPersistToggleClick() {
+        this.persistSessionContext = !this.persistSessionContext;
     }
 
     render() {
@@ -97,7 +110,8 @@ export class ExecutionPanel extends PlatformElement {
         this.emit('run-requested', {
             message: this.message,
             files: this.files,
-            mocks: this.mockResponses
+            mocks: this.mockResponses,
+            reuseContext: this.persistSessionContext,
         });
 
         this.isRunning = true;

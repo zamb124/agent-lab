@@ -7,7 +7,7 @@ import { css } from 'lit';
 export const executionPanelStyles = css`
     :host {
         display: block;
-        width: 360px;
+        width: 440px;
         max-height: min(85vh, 720px);
     }
 
@@ -26,10 +26,58 @@ export const executionPanelStyles = css`
 
     .execution-panel-header {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
         padding: 12px 16px;
         border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+    }
+
+    .execution-panel-header-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .context-persist-toggle {
+        position: relative;
+        flex-shrink: 0;
+        width: 36px;
+        height: 20px;
+        padding: 0;
+        border: none;
+        border-radius: var(--radius-full, 10px);
+        background: var(--glass-tint-strong, rgba(255, 255, 255, 0.08));
+        cursor: pointer;
+        transition: background var(--duration-fast, 0.2s) ease;
+    }
+
+    .context-persist-toggle::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        background: white;
+        border-radius: var(--radius-full, 50%);
+        transition: transform var(--duration-fast, 0.2s) ease;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .context-persist-toggle.active {
+        background: var(--accent-gradient, linear-gradient(135deg, #10b981 0%, #059669 100%));
+    }
+
+    .context-persist-toggle.active::after {
+        transform: translateX(16px);
+    }
+
+    .context-persist-toggle:focus-visible {
+        outline: 2px solid var(--accent, #6366f1);
+        outline-offset: 2px;
     }
 
     .execution-panel-title {
@@ -42,6 +90,10 @@ export const executionPanelStyles = css`
         display: flex;
         align-items: center;
         gap: 6px;
+    }
+
+    .execution-panel-actions platform-help-hint {
+        flex-shrink: 0;
     }
 
     .action-btn {
@@ -156,8 +208,47 @@ export const executionPanelStyles = css`
         border-color: var(--warning, #f59e0b);
     }
 
+    .btn-run-icon.btn-stop-icon {
+        color: var(--error, #ef4444);
+        border-color: rgba(239, 68, 68, 0.45);
+        background: rgba(239, 68, 68, 0.12);
+    }
+
+    .btn-run-icon.btn-stop-icon:hover {
+        background: rgba(239, 68, 68, 0.22);
+        border-color: var(--error, #ef4444);
+        color: var(--error, #ef4444);
+    }
+
     .btn-run-icon platform-icon {
         color: inherit;
+    }
+
+    .btn-run-icon .btn-stop-svg {
+        display: block;
+        flex-shrink: 0;
+    }
+
+    .btn-run-icon.btn-resume-inline {
+        color: rgba(30, 22, 0, 0.92);
+        background: #facc15;
+        border-color: #ca8a04;
+    }
+
+    .btn-run-icon.btn-resume-inline:hover:not(:disabled) {
+        background: #fde047;
+        border-color: #a16207;
+        color: rgba(20, 14, 0, 1);
+    }
+
+    .btn-run-icon.btn-resume-inline:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+
+    .btn-run-icon .btn-resume-combo-svg {
+        display: block;
+        flex-shrink: 0;
     }
 
     .input-question {
@@ -282,19 +373,6 @@ export const executionPanelStyles = css`
         color: #ef4444;
     }
 
-    .execution-panel-footer {
-        padding: 12px 16px;
-        border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
-        flex-shrink: 0;
-        min-width: 0;
-    }
-
-    .execution-panel-footer:empty {
-        display: none;
-        padding: 0;
-        border-top: none;
-    }
-
     .btn {
         width: 100%;
         display: flex;
@@ -332,26 +410,6 @@ export const executionPanelStyles = css`
     .btn-retry:hover:not(:disabled) {
         background: #d97706;
         box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-    }
-
-    .btn-stop {
-        background: #ef4444;
-        color: #ffffff;
-    }
-
-    .btn-stop:hover {
-        background: #dc2626;
-        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-    }
-
-    .btn-resume {
-        background: #10b981;
-        color: #ffffff;
-    }
-
-    .btn-resume:hover {
-        background: #059669;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
     }
 
     .result-section {

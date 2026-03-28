@@ -15,16 +15,25 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
     context_id: str        # ID контекста
     user_id: str           # ID пользователя
     session_id: str        # flow_id:context_id
+    flow_config_version: Optional[str]  # снимок FlowConfig в flows_versions; None = latest при загрузке
+
+Граф нод и полный JSON flow в state **не хранятся**. Ресурсы flow/skill: `FlowFactory.get_resource_maps(session_flow_id, skill_id, flow_config_version)`.
     
     content: str           # Входной запрос
     response: str          # Итоговый ответ
     result: Any            # Произвольный результат ноды/tool (CodeNode, inline execute)
     
-    messages: List[Message]           # История сообщений
+    messages: List[Message]           # Полный лог диалога (только append; не сокращать из-за фильтра LLM)
     tool_results: Dict[str, Any]      # Результаты tools
     variables: Dict[str, Any]         # Переменные flow (variables)
     
     current_nodes: List[str]          # Текущие ноды (для resume)
+
+## messages и metadata.node_id
+
+- `state.messages` — единый упорядоченный лог; **`messages_filter` у `llm_node` не удаляет** записи, а задаёт **срез для входа в LLM** при каждом запросе.
+- В `Message.metadata` для реплик из runtime flows поле **`node_id`**: id ноды-источника (user/tool/assistant в рамках этой LLM-ноды). Служебные источники: см. `apps/flows/src/runtime/message_metadata.py` (`__channel__`, `__eval__`, `__task__` и т.д.).
+- Для `messages_filter` `own` / список нод в срез входят только сообщения с подходящим **`metadata.node_id`** (в т.ч. user-реплики той же ноды), не «все user подряд».
 
 ## tool_results
 

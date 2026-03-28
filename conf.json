@@ -138,7 +138,8 @@
     "default_provider": "pgvector",
     "embedding": {
       "model": "baai/bge-m3",
-      "dimension": 1024
+      "dimension": 1024,
+      "base_url": null
     },
     "providers": {
       "pgvector": {
