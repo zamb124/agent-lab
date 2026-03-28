@@ -16,6 +16,7 @@ import httpx
 from pydantic import BaseModel
 
 from core.http import get_httpx_client
+from core.variables import VarResolver, VariableResolutionError
 from a2a.types import (
     Artifact,
     FilePart,
@@ -500,7 +501,7 @@ class LLMClient:
                         
                         if reasoning_text:
                             full_reasoning += reasoning_text
-                            logger.info(f"LLM reasoning chunk: {len(reasoning_text)} chars")
+                            logger.debug(f"LLM reasoning chunk: {len(reasoning_text)} chars")
                             yield TaskArtifactUpdateEvent(
                                 contextId=context_id,
                                 taskId=task_id,
@@ -798,15 +799,25 @@ class LLMClient:
 
 
 def _resolve_var(value: Optional[str], state: Optional["ExecutionState"]) -> Optional[str]:
-    """Резолвит @var:key из state.variables."""
+    """Резолвит @var:path из state.variables по strict-контракту."""
     if not value:
         return None
     if not value.startswith("@var:"):
         return value
-    var_key = value[5:]
-    if state and state.variables and var_key in state.variables:
-        return state.variables[var_key]
-    return None
+    if state is None:
+        raise VariableResolutionError(
+            f"Cannot resolve '{value}' without ExecutionState"
+        )
+    resolved = VarResolver.resolve_ref(value, state.variables or {})
+    if not isinstance(resolved, str):
+        raise VariableResolutionError(
+            f"Variable '{value}' for LLM config must resolve to string"
+        )
+    if not resolved:
+        raise VariableResolutionError(
+            f"Variable '{value}' resolved to empty string"
+        )
+    return resolved
 
 
 def _detect_provider(base_url: Optional[str]) -> Optional[str]:

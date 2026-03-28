@@ -20,9 +20,9 @@ export class NoteEditor extends PlatformElement {
                 display: block;
                 width: 100%;
                 height: 100%;
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 backdrop-filter: blur(var(--glass-blur-strong));
-                border: 1px solid var(--glass-border-medium);
+                border: 1px solid var(--crm-stroke-strong);
                 border-radius: var(--radius-2xl);
                 overflow: hidden;
                 position: relative;
@@ -37,12 +37,8 @@ export class NoteEditor extends PlatformElement {
             
             .header {
                 padding: var(--space-4);
-                border-bottom: 1px solid var(--glass-border-subtle);
-                background: linear-gradient(
-                    180deg,
-                    rgba(255, 255, 255, 0.08) 0%,
-                    transparent 100%
-                );
+                border-bottom: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-tint);
                 display: flex;
                 align-items: center;
                 gap: var(--space-3);
@@ -79,19 +75,19 @@ export class NoteEditor extends PlatformElement {
                 justify-content: center;
                 width: 40px;
                 height: 40px;
-                background: linear-gradient(135deg, rgba(66, 133, 244, 0.15) 0%, rgba(156, 39, 176, 0.15) 100%);
-                border: 1px solid rgba(66, 133, 244, 0.3);
+                background: var(--accent-secondary-subtle);
+                border: 1px solid var(--crm-info-stroke);
                 border-radius: var(--radius-lg);
                 cursor: pointer;
-                transition: all 0.2s ease;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                transition: all var(--duration-fast) var(--easing-default);
+                box-shadow: var(--glass-shadow-subtle);
             }
 
             .ai-analyze-btn:hover {
-                background: linear-gradient(135deg, rgba(66, 133, 244, 0.25) 0%, rgba(156, 39, 176, 0.25) 100%);
-                border-color: rgba(66, 133, 244, 0.5);
+                background: var(--accent-secondary-subtle);
+                border-color: var(--accent-secondary);
                 transform: scale(1.05);
-                box-shadow: 0 4px 12px rgba(66, 133, 244, 0.2);
+                box-shadow: var(--glass-shadow-medium);
             }
 
             .ai-analyze-btn:active {
@@ -176,8 +172,8 @@ export class NoteEditor extends PlatformElement {
             .entity-mention {
                 cursor: pointer;
                 padding: 1px 4px;
-                border-radius: 4px;
-                transition: filter 0.15s ease;
+                border-radius: var(--radius-sm);
+                transition: filter var(--duration-fast) ease;
                 border-bottom: 1px dashed currentColor;
             }
 
@@ -190,7 +186,7 @@ export class NoteEditor extends PlatformElement {
                 flex-wrap: wrap;
                 gap: var(--space-2);
                 padding: var(--space-2) var(--space-4);
-                border-bottom: 1px solid var(--glass-border-subtle);
+                border-bottom: 1px solid var(--crm-stroke);
                 background: var(--glass-tint-subtle);
             }
 
@@ -204,7 +200,7 @@ export class NoteEditor extends PlatformElement {
                 font-size: var(--text-xs);
                 font-weight: 500;
                 cursor: pointer;
-                transition: filter 0.15s ease;
+                transition: filter var(--duration-fast) ease;
             }
 
             .related-entity-chip:hover {
@@ -406,7 +402,7 @@ export class NoteEditor extends PlatformElement {
         
         const crmApi = this.services.get('crmApi');
         await CRMStore.analyzeText(crmApi, this._noteText, this._currentNoteId);
-        
+        this.emit('analysis-ready', { noteId: this._currentNoteId });
         this.success('Анализ завершен');
     }
 
@@ -446,12 +442,12 @@ export class NoteEditor extends PlatformElement {
         const entityType = this._getEntityTypeById(typeId);
         if (entityType) {
             return {
-                icon: entityType.icon || '📄',
-                color: entityType.color || '#9E9E9E',
+                icon: entityType.icon || 'file',
+                color: entityType.color || 'var(--text-tertiary)',
                 label: entityType.name || typeId,
             };
         }
-        return { icon: '📄', color: '#9E9E9E', label: entity.entity_type };
+        return { icon: 'file', color: 'var(--text-tertiary)', label: entity.entity_type };
     }
 
     _renderTextWithHighlights() {
@@ -500,7 +496,7 @@ export class NoteEditor extends PlatformElement {
     }
 
     _hexToRgba(hex, alpha) {
-        if (!hex) return `rgba(158, 158, 158, ${alpha})`;
+        if (!hex) return `rgba(148, 163, 184, ${alpha})`;
         
         const cleanHex = hex.replace('#', '');
         const r = parseInt(cleanHex.substring(0, 2), 16);
@@ -510,7 +506,17 @@ export class NoteEditor extends PlatformElement {
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
+    _resolveIconName(iconName) {
+        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
+            return iconName;
+        }
+        return 'file';
+    }
+
     _onEditorMouseOver(e) {
+        if (this._isMobile) {
+            return;
+        }
         const mention = e.target.closest('.entity-mention');
         if (!mention) {
             return;
@@ -535,6 +541,9 @@ export class NoteEditor extends PlatformElement {
     }
 
     _onEditorMouseOut(e) {
+        if (this._isMobile) {
+            return;
+        }
         const mention = e.target.closest('.entity-mention');
         if (!mention) return;
 
@@ -544,6 +553,9 @@ export class NoteEditor extends PlatformElement {
     }
 
     _onChipMouseEnter(entity, e) {
+        if (this._isMobile) {
+            return;
+        }
         clearTimeout(this._tooltipHideTimer);
 
         const rect = e.currentTarget.getBoundingClientRect();
@@ -559,6 +571,9 @@ export class NoteEditor extends PlatformElement {
     }
 
     _onChipMouseLeave() {
+        if (this._isMobile) {
+            return;
+        }
         this._tooltipHideTimer = setTimeout(() => {
             this._tooltipVisible = false;
         }, 150);
@@ -581,7 +596,9 @@ export class NoteEditor extends PlatformElement {
                             @mouseenter=${(e) => this._onChipMouseEnter(entity, e)}
                             @mouseleave=${this._onChipMouseLeave}
                         >
-                            <span class="chip-icon">${typeConfig.icon}</span>
+                            <span class="chip-icon">
+                                <platform-icon name="${this._resolveIconName(typeConfig.icon)}" size="14"></platform-icon>
+                            </span>
                             <span>${entity.name}</span>
                         </div>
                     `;
@@ -595,7 +612,7 @@ export class NoteEditor extends PlatformElement {
             return html`
                 <div class="empty-state">
                     <div class="empty-icon">
-                        <img src="/crm/ui/static/assets/icons/book.png" alt="" />
+                        <platform-icon name="book-open" size="56"></platform-icon>
                     </div>
                     <div>Выберите заметку</div>
                     <div style="margin-top: var(--space-2); font-size: var(--text-sm);">

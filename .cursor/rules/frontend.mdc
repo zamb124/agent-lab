@@ -160,9 +160,30 @@ class MyModal extends GlassModal {
 
 - Реализация: `core/frontend/static/services/icon.service.js` — словарь **`ICON_MAP`**: логическое имя иконки → базовое имя файла в `core/frontend/static/assets/icons/{name}.svg`.
 - Новое имя без дублирования SVG: добавить ключ в `ICON_MAP` (например `'llm_node': 'agent'` — то же изображение, другое имя для UI).
+- Для продуктовых экранов (включая CRM/Figma-экраны) запрещены emoji/символьные псевдоиконки (`✓`, `✕`, `🌐` и т.п.) в шаблонах: только `<platform-icon name="...">` + имя из `ICON_MAP`; если иконки нет — сначала добавить SVG в `assets/icons`, потом ключ в `ICON_MAP`.
 - Компонент: `core/frontend/static/lib/components/platform-icon.js` — атрибут **`name`** должен существовать в `ICON_MAP`, иначе загрузка падает с ошибкой в консоль.
 - Редактор flows (`apps/flows/ui/`): узел типа **`llm_node`** везде использует **`name="llm_node"`** (сайдбар типов, канва, `llm-node-editor`), не `agent`.
 - Трейсинг (`apps/flows/ui/modals/tracing-modal.js`): иконки span — `<platform-icon>`, не эмодзи. Соответствие `operation_name` → `name` согласовано с канвасом (`flow-canvas` `NODE_TYPE_ICON_NAMES` / `TRACE_NODE_TYPE_ICONS` в модалке): `flow.*` → workflow, `node.{type}.*` → иконка типа ноды (неизвестный тип → box), `llm_node.*` / `agent.*` → llm_node, `react.iteration*` → refresh, `llm.*` → bot, `tool.*` → tool, `interrupt.*` → breakpoint, `request.*` → globe, `prompt.build.*` → chat, иначе terminal.
+
+## Date/Time Picker (`platform-date-picker`)
+
+- Общий компонент даты/времени: `core/frontend/static/lib/components/platform-date-picker.js` (side-effect import `@platform/lib/components/platform-date-picker.js`).
+- Режимы:
+  - `mode="date" | "datetime" | "time"`
+  - `selection="single" | "range"`
+  - `value-format="iso" | "date"` (по умолчанию `iso`)
+- Встраивание в готовые контейнеры:
+  - `embedded` — убирает собственный бордер/фон триггера (чтобы не было «контейнер в контейнере»)
+  - `hide-trigger-icon` — скрывает правую иконку в триггере (если иконка уже есть во внешнем контейнере)
+- `value`:
+  - `single`: `string | Date | null`
+  - `range`: `{ start: string|Date|null, end: string|Date|null }`
+- События: `input` и `change` (bubble + composed), текущее значение читается через `e.target.value`.
+- Для API сервисов по умолчанию использовать `value-format="iso"`; формат ISO:
+  - date: `YYYY-MM-DD`
+  - datetime: `YYYY-MM-DDTHH:mm`
+  - time: `HH:mm`
+- Нативные `input[type="date"]`, `input[type="time"]`, `input[type="datetime-local"]` в приложениях платформы не использовать — только `platform-date-picker`.
 
 **Короткие методы notify:**
 - `this.success(message)` — зелёное уведомление
@@ -495,6 +516,13 @@ _openSidebar() {
 }
 ```
 
+### Навигация и UX-ожидания
+
+- Пункты основного меню сервиса не должны вести на «пустой» экран без сценария. Допустимы только два режима:
+  - полноценный рабочий или mock/read-only сценарий с реальными экранами и состояниями;
+  - disabled-пункт с явным статусом «Скоро» без ложного перехода.
+- Для мобильных и десктопных empty-state текст не должен ссылаться на конкретное расположение («слева», «справа»), если layout меняется по брейкпоинтам.
+
 ---
 
 ## Импорты: Алиасы
@@ -606,6 +634,8 @@ css`
     font-size: var(--text-sm);
 `
 ```
+
+**Сервисные семантические токены:** допускается слой переменных в `tokens.css` с префиксом сервиса (например `--crm-*`) для сложных экранов. Правило: компоненты используют только семантические токены/базовые токены, а сами значения (`rgba`, градиенты, тени) задаются централизованно в `tokens.css`, не в `apps/<service>/ui/*.js`.
 
 **Доступные переменные (core/frontend/static/assets/css/tokens.css):**
 

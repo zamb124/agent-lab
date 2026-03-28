@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { CRMStore } from '../store/crm.store.js';
+import '@platform/lib/components/platform-icon.js';
 import './ai-entity-card.js';
 import './ai-relationship-card.js';
 
@@ -27,8 +28,8 @@ export class AISuggestionsPanel extends PlatformElement {
                 display: block;
                 width: 320px;
                 height: 100%;
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-medium);
+                background: var(--crm-surface);
+                border: 1px solid var(--crm-stroke-strong);
                 border-radius: var(--radius-2xl);
                 overflow: hidden;
                 flex-shrink: 0;
@@ -39,12 +40,8 @@ export class AISuggestionsPanel extends PlatformElement {
                 align-items: center;
                 justify-content: space-between;
                 padding: var(--space-4);
-                background: linear-gradient(
-                    180deg,
-                    rgba(255, 255, 255, 0.08) 0%,
-                    transparent 100%
-                );
-                border-bottom: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-tint);
+                border-bottom: 1px solid var(--crm-stroke);
             }
 
             .panel-title {
@@ -60,19 +57,19 @@ export class AISuggestionsPanel extends PlatformElement {
 
             .confirm-all-btn {
                 padding: var(--space-2) var(--space-3);
-                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                background: var(--accent-gradient);
                 border: none;
                 border-radius: var(--radius-md);
-                color: white;
+                color: var(--text-inverse);
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
                 cursor: pointer;
-                transition: all var(--duration-fast) ease;
+                transition: all var(--duration-fast) var(--easing-default);
             }
 
             .confirm-all-btn:hover:not(:disabled) {
                 transform: translateY(-1px);
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+                box-shadow: var(--accent-glow);
             }
 
             .confirm-all-btn:disabled {
@@ -86,17 +83,17 @@ export class AISuggestionsPanel extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: var(--glass-tint-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-tint);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-md);
                 color: var(--text-secondary);
                 cursor: pointer;
                 font-size: var(--text-lg);
-                transition: all var(--duration-fast) ease;
+                transition: all var(--duration-fast) var(--easing-default);
             }
 
             .close-btn:hover {
-                background: var(--glass-tint-medium);
+                background: var(--crm-surface-tint-strong);
                 color: var(--text-primary);
             }
 
@@ -129,7 +126,7 @@ export class AISuggestionsPanel extends PlatformElement {
 
             .section-count {
                 padding: var(--space-1) var(--space-2);
-                background: var(--glass-tint-medium);
+                background: var(--crm-surface-tint-strong);
                 border-radius: var(--radius-full);
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
@@ -169,16 +166,12 @@ export class AISuggestionsPanel extends PlatformElement {
             }
 
             :host-context([data-theme="light"]) {
-                background: rgba(255, 255, 255, 0.9);
-                border-color: rgba(15, 23, 42, 0.1);
+                background: var(--crm-surface);
+                border-color: var(--crm-stroke-strong);
             }
 
             :host-context([data-theme="light"]) .panel-header {
-                background: linear-gradient(
-                    180deg,
-                    rgba(255, 255, 255, 0.8) 0%,
-                    transparent 100%
-                );
+                background: var(--crm-surface-tint);
             }
 
             @media (max-width: 767px) {
@@ -340,7 +333,7 @@ export class AISuggestionsPanel extends PlatformElement {
                         </button>
                     ` : ''}
                     <button class="close-btn" @click=${this._onClose} title="Закрыть">
-                        ×
+                        <platform-icon name="close" size="14"></platform-icon>
                     </button>
                 </div>
             </div>
@@ -349,7 +342,7 @@ export class AISuggestionsPanel extends PlatformElement {
                 ${!hasContent ? html`
                     <div class="empty-state">
                         <div class="empty-icon">
-                            <img src="/crm/ui/static/assets/icons/book.png" alt="" />
+                            <platform-icon name="book-open" size="56"></platform-icon>
                         </div>
                         <div class="empty-text">Нет предложений</div>
                     </div>

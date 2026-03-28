@@ -41,6 +41,7 @@ from core.clients.llm.factory import (
     get_llm,
     LLMClient,
 )
+from core.variables import VariableResolutionError
 from core.state import ExecutionState
 
 
@@ -74,8 +75,8 @@ class TestResolveVar:
         result = _resolve_var("@var:my_api_key", state)
         assert result == "sk-resolved-key"
 
-    def test_resolve_var_missing_key_returns_none(self):
-        """Отсутствующий ключ возвращает None."""
+    def test_resolve_var_missing_key_raises_error(self):
+        """Отсутствующий ключ вызывает VariableResolutionError."""
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -83,16 +84,16 @@ class TestResolveVar:
             session_id="test:session",
             variables={"other_key": "value"}
         )
-        result = _resolve_var("@var:missing_key", state)
-        assert result is None
+        with pytest.raises(VariableResolutionError):
+            _resolve_var("@var:missing_key", state)
 
-    def test_resolve_var_no_state_returns_none(self):
-        """@var: без state возвращает None."""
-        result = _resolve_var("@var:my_key", None)
-        assert result is None
+    def test_resolve_var_no_state_raises_error(self):
+        """@var: без state вызывает VariableResolutionError."""
+        with pytest.raises(VariableResolutionError):
+            _resolve_var("@var:my_key", None)
 
-    def test_resolve_var_empty_variables_returns_none(self):
-        """@var: с пустыми variables возвращает None."""
+    def test_resolve_var_empty_variables_raises_error(self):
+        """@var: с пустыми variables вызывает VariableResolutionError."""
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -100,8 +101,8 @@ class TestResolveVar:
             session_id="test:session",
             variables={}
         )
-        result = _resolve_var("@var:my_key", state)
-        assert result is None
+        with pytest.raises(VariableResolutionError):
+            _resolve_var("@var:my_key", state)
 
 
 class TestDetectProvider:

@@ -288,28 +288,24 @@ export class DashboardPage extends PlatformElement {
                 name: 'Flows',
                 logo: '/static/core/assets/service_logos/agents_logo.svg',
                 description: 'Конструктор flow: графы, skills и интеграции',
-                path: '/flows',
             },
             {
                 id: 'crm',
                 name: 'CRM',
                 logo: '/static/core/assets/service_logos/crm_logo.svg',
                 description: 'Управление контактами и Knowledge Graph',
-                path: '/crm',
             },
             {
                 id: 'rag',
                 name: 'RAG',
                 logo: '/static/core/assets/service_logos/rag_logo.svg',
                 description: 'Управление документами и поиск',
-                path: '/rag',
             },
             {
                 id: 'sync',
                 name: 'Sync',
                 logo: '/static/core/assets/service_logos/sync_logo.svg',
                 description: 'Инженерный чат с Git-интеграцией',
-                path: '/sync',
             },
         ];
 
@@ -325,7 +321,7 @@ export class DashboardPage extends PlatformElement {
 
     _renderServiceCard(service) {
         return html`
-            <div class="service-card" @click=${() => window.open(service.path, '_blank')}>
+            <div class="service-card" @click=${() => window.open(this._buildServiceUrl(service.id), '_blank')}>
                 <div class="service-header">
                     <span class="service-icon">
                         <img src="${service.logo}" alt="${service.name}">
@@ -338,6 +334,40 @@ export class DashboardPage extends PlatformElement {
                 <p class="service-description">${service.description}</p>
             </div>
         `;
+    }
+
+    _buildServiceUrl(serviceId) {
+        const servicePath = `/${serviceId}`;
+        if (!this._isLocalHost(window.location.hostname)) {
+            return servicePath;
+        }
+
+        const servicePortById = {
+            flows: '8001',
+            frontend: '8002',
+            crm: '8003',
+            rag: '8004',
+            sync: '8005',
+        };
+
+        const targetPort = servicePortById[serviceId];
+        if (!targetPort) {
+            throw new Error(`Неизвестный сервис для dashboard ссылки: ${serviceId}`);
+        }
+
+        if (window.location.port === targetPort) {
+            return servicePath;
+        }
+
+        return `${window.location.protocol}//${window.location.hostname}:${targetPort}${servicePath}`;
+    }
+
+    _isLocalHost(hostname) {
+        return (
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname.endsWith('.lvh.me')
+        );
     }
 
     _renderQuickActions() {

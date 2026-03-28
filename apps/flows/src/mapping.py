@@ -20,8 +20,8 @@ Zero-Guess: работает с ExecutionState напрямую (но может
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, Union, TYPE_CHECKING
+from core.variables import VarResolver
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -50,13 +50,12 @@ class MappingResolver:
             return MappingResolver.get_nested_value(state, path)
 
         if source.startswith("@var:"):
-            var_path = source[5:]
             # Получаем variables - либо из ExecutionState, либо из dict
             if isinstance(state, dict):
                 variables = state.get("variables", {})
             else:
                 variables = state.variables
-            return MappingResolver.get_nested_value(variables, var_path)
+            return VarResolver.resolve_ref(source, variables)
 
         return source
 
@@ -108,18 +107,7 @@ class MappingResolver:
         """
         if not value or not isinstance(value, str):
             return value
-
-        # Паттерн для @var:path.to.value (поддерживает точки)
-        pattern = r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)"
-
-        def replace_var(match: re.Match) -> str:
-            var_path = match.group(1)
-            resolved = MappingResolver.get_nested_value(variables, var_path)
-            if resolved is None:
-                return match.group(0)  # Оставляем как есть если не найдено
-            return str(resolved)
-
-        return re.sub(pattern, replace_var, value)
+        return VarResolver.resolve_text(value, variables)
 
     @staticmethod
     def build_mapped_state(

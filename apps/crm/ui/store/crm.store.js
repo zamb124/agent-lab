@@ -4,6 +4,19 @@
  */
 import { BaseStore } from '@platform/lib/store/BaseStore.js';
 
+function getNamespaceName(namespace) {
+    if (!namespace) {
+        return null;
+    }
+    if (typeof namespace === 'string') {
+        return namespace;
+    }
+    if (typeof namespace === 'object' && typeof namespace.name === 'string') {
+        return namespace.name;
+    }
+    throw new Error('Invalid namespace value');
+}
+
 const baseStore = new BaseStore('crm', {
     namespaces: {
         list: [],
@@ -176,9 +189,10 @@ export const CRMStore = {
         baseStore.setState({ loading: true });
         
         const currentNamespace = baseStore.state.namespaces.current;
+        const namespaceName = getNamespaceName(currentNamespace);
         const params = { entity_type: 'note' };
-        if (currentNamespace?.name) {
-            params.namespace = currentNamespace.name;
+        if (namespaceName) {
+            params.namespace = namespaceName;
         }
         
         const notes = await crmApi.getEntities(params);
@@ -240,9 +254,10 @@ export const CRMStore = {
         baseStore.setState({ loading: true });
         
         const currentNamespace = baseStore.state.namespaces.current;
+        const namespaceName = getNamespaceName(currentNamespace);
         const note = await crmApi.createEntity({
             entity_type: 'note',
-            namespace: currentNamespace?.name || 'default',
+            namespace: namespaceName || 'default',
             ...data
         });
         
@@ -667,11 +682,12 @@ export const CRMStore = {
     },
 
     setCurrentNamespace(namespace) {
+        const namespaceName = getNamespaceName(namespace);
         baseStore.setState((s) => ({
             namespaces: { ...s.namespaces, current: namespace },
             entities: {
                 ...s.entities,
-                filters: { ...s.entities.filters, namespace },
+                filters: { ...s.entities.filters, namespace: namespaceName },
                 list: [],
                 currentEntityId: null,
                 currentEntity: null,
@@ -693,7 +709,7 @@ export const CRMStore = {
             namespaces: {
                 ...s.namespaces,
                 list: [...s.namespaces.list, namespace],
-                current: namespace.name,
+                current: namespace,
             },
             entities: {
                 ...s.entities,
@@ -793,11 +809,12 @@ export const CRMStore = {
 
     clearEntityFilters() {
         const currentNamespace = baseStore.state.namespaces.current;
+        const namespaceName = getNamespaceName(currentNamespace);
         baseStore.setState((s) => ({
             entities: {
                 ...s.entities,
                 filters: {
-                    namespace: currentNamespace,
+                    namespace: namespaceName,
                     entity_type: null,
                     entity_subtype: null,
                     date_from: null,
@@ -821,10 +838,11 @@ export const CRMStore = {
 
         const filters = baseStore.state.entities.filters;
         const currentNamespace = baseStore.state.namespaces.current;
+        const namespaceName = getNamespaceName(currentNamespace);
         const queryParams = {
             entity_type: params.entity_type || filters.entity_type,
             entity_subtype: params.entity_subtype || filters.entity_subtype,
-            namespace: currentNamespace?.name,
+            namespace: namespaceName,
             date_from: filters.date_from,
             date_to: filters.date_to,
             tags: filters.tags.length > 0 ? filters.tags.join(',') : undefined,
@@ -911,9 +929,10 @@ export const CRMStore = {
         }
 
         const currentNamespace = baseStore.state.namespaces.current;
+        const namespaceName = getNamespaceName(currentNamespace);
         const entityData = {
             ...data,
-            namespace: data.namespace || currentNamespace?.name || 'default',
+            namespace: data.namespace || namespaceName || 'default',
         };
 
         const entity = await crmApi.createEntity(entityData);

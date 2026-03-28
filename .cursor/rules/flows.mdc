@@ -230,6 +230,24 @@ input_mapping:
 output_mapping:
 - result: field - result → state.field
 
+## @var strict-контракт
+
+Для `@var` используется единый strict-резолвер из `core/variables`.
+
+- Поддерживаются только форматы:
+  - `@var:key`
+  - `@var:nested.path`
+- Единый API резолва:
+  - `resolve_ref(...)` — полная ссылка
+  - `resolve_text(...)` — подстановка в строке
+  - `resolve_deep(...)` — рекурсивный резолв в `dict/list`
+- Любая неразрешимая ссылка `@var` (ключ/путь отсутствует) вызывает исключение `VariableResolutionError`.
+- Никаких fallback-поведений:
+  - нельзя возвращать `None` вместо ошибки для `@var`
+  - нельзя оставлять `@var:...` в итоговом значении
+  - нельзя auto-create пустых переменных
+  - нельзя неявно подставлять дефолты при ошибке резолва
+
 ## Resources
 
 Ресурсы = переиспользуемые компоненты (RAG, S3, LLM, Cache, HTTP, Code модули).

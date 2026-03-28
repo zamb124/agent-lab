@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class EntityPreviewTooltip extends PlatformElement {
     static properties = {
@@ -37,12 +38,11 @@ export class EntityPreviewTooltip extends PlatformElement {
             .tooltip {
                 min-width: 200px;
                 max-width: 320px;
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 backdrop-filter: blur(var(--glass-blur-strong));
-                border: 1px solid var(--glass-border-medium);
+                border: 1px solid var(--crm-stroke-strong);
                 border-radius: var(--radius-lg);
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
-                            0 4px 16px rgba(0, 0, 0, 0.2);
+                box-shadow: var(--glass-shadow-strong);
                 overflow: hidden;
             }
 
@@ -51,7 +51,7 @@ export class EntityPreviewTooltip extends PlatformElement {
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-3);
-                border-bottom: 1px solid var(--glass-border-subtle);
+                border-bottom: 1px solid var(--crm-stroke);
             }
 
             .type-icon {
@@ -121,14 +121,13 @@ export class EntityPreviewTooltip extends PlatformElement {
 
             .footer {
                 padding: var(--space-2) var(--space-3);
-                border-top: 1px solid var(--glass-border-subtle);
+                border-top: 1px solid var(--crm-stroke);
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
             }
 
-            [data-theme="light"] .tooltip {
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15),
-                            0 4px 16px rgba(0, 0, 0, 0.1);
+            :host-context([data-theme="light"]) .tooltip {
+                box-shadow: var(--glass-shadow-medium);
             }
         `
     ];
@@ -190,12 +189,19 @@ export class EntityPreviewTooltip extends PlatformElement {
     _getTypeConfig() {
         if (this.entityType) {
             return {
-                icon: this.entityType.icon || '📄',
-                color: this.entityType.color || '#9E9E9E',
+                icon: this.entityType.icon || 'file',
+                color: this.entityType.color || 'var(--text-tertiary)',
                 label: this.entityType.name || this.entity?.entity_type || 'Сущность',
             };
         }
-        return { icon: '📄', color: '#9E9E9E', label: this.entity?.entity_type || 'Сущность' };
+        return { icon: 'file', color: 'var(--text-tertiary)', label: this.entity?.entity_type || 'Сущность' };
+    }
+
+    _resolveIconName(iconName) {
+        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
+            return iconName;
+        }
+        return 'file';
     }
 
     _getDisplayAttributes() {
@@ -260,7 +266,7 @@ export class EntityPreviewTooltip extends PlatformElement {
                         class="type-icon" 
                         style="background: ${typeConfig.color}20; color: ${typeConfig.color}"
                     >
-                        ${typeConfig.icon}
+                        <platform-icon name="${this._resolveIconName(typeConfig.icon)}" size="18"></platform-icon>
                     </div>
                     <div class="header-info">
                         <div class="entity-name">${this.entity.name}</div>

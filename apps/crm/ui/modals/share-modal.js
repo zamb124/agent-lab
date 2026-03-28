@@ -7,6 +7,8 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-date-picker.js';
 
 export class ShareModal extends PlatformModal {
     static properties = {
@@ -37,25 +39,25 @@ export class ShareModal extends PlatformModal {
             .role-chip {
                 flex: 1;
                 padding: var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 text-align: center;
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .role-chip:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 color: var(--text-primary);
             }
 
             .role-chip.active {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
+                background: var(--crm-selected-bg);
+                border-color: var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
             }
 
             .role-description {
@@ -77,24 +79,31 @@ export class ShareModal extends PlatformModal {
                 font-size: var(--text-sm);
                 font-weight: 500;
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .btn-secondary {
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 color: var(--text-secondary);
             }
 
             .btn-secondary:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 color: var(--text-primary);
             }
 
             .btn-primary {
                 background: var(--accent);
                 border: 1px solid var(--accent);
-                color: white;
+                color: var(--text-inverse);
+            }
+
+            .role-title {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-1);
             }
 
             .btn-primary:hover:not(:disabled) {
@@ -190,7 +199,10 @@ export class ShareModal extends PlatformModal {
                             class="role-chip ${this._role === 'viewer' ? 'active' : ''}"
                             @click=${() => this._onRoleSelect('viewer')}
                         >
-                            <div>👁️ Просмотр</div>
+                            <div class="role-title">
+                                <platform-icon name="eye" size="14"></platform-icon>
+                                <span>Просмотр</span>
+                            </div>
                             <div class="role-description">Только чтение</div>
                         </button>
                         <button
@@ -198,7 +210,10 @@ export class ShareModal extends PlatformModal {
                             class="role-chip ${this._role === 'editor' ? 'active' : ''}"
                             @click=${() => this._onRoleSelect('editor')}
                         >
-                            <div>✏️ Редактор</div>
+                            <div class="role-title">
+                                <platform-icon name="edit" size="14"></platform-icon>
+                                <span>Редактор</span>
+                            </div>
                             <div class="role-description">Чтение и запись</div>
                         </button>
                         <button
@@ -206,7 +221,10 @@ export class ShareModal extends PlatformModal {
                             class="role-chip ${this._role === 'admin' ? 'active' : ''}"
                             @click=${() => this._onRoleSelect('admin')}
                         >
-                            <div>👑 Админ</div>
+                            <div class="role-title">
+                                <platform-icon name="settings" size="14"></platform-icon>
+                                <span>Админ</span>
+                            </div>
                             <div class="role-description">Полный доступ</div>
                         </button>
                     </div>
@@ -214,12 +232,13 @@ export class ShareModal extends PlatformModal {
 
                 <div class="form-group">
                     <label class="form-label">Срок действия (опционально)</label>
-                    <input
-                        type="date"
+                    <platform-date-picker
                         class="form-input"
-                        .value=${this._expiresAt}
+                        mode="date"
+                        value-format="iso"
+                        .value=${this._expiresAt || null}
                         @change=${this._onExpiresAtChange}
-                    />
+                    ></platform-date-picker>
                 </div>
             </div>
         `;

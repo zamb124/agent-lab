@@ -25,18 +25,18 @@ export class NotesList extends CRMPanel {
             .search-box {
                 flex: 1;
                 padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 color: var(--text-primary);
                 font-size: var(--text-sm);
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
             
             .search-box:focus {
                 outline: none;
                 border-color: var(--accent);
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
             }
             
             .notes-container {
@@ -49,22 +49,22 @@ export class NotesList extends CRMPanel {
                 position: relative;
                 padding: var(--space-3);
                 margin-bottom: var(--space-2);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
             
             .note-card:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 border-color: var(--accent-subtle);
                 transform: translateX(4px);
             }
             
             .note-card.active {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
+                background: var(--crm-selected-bg);
+                border-color: var(--crm-selected-stroke);
             }
             
             .delete-btn {
@@ -83,16 +83,20 @@ export class NotesList extends CRMPanel {
                 color: var(--text-tertiary);
                 cursor: pointer;
                 opacity: 0;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
             
             .note-card:hover .delete-btn {
                 opacity: 1;
             }
+
+            .note-card:focus-within .delete-btn {
+                opacity: 1;
+            }
             
             .delete-btn:hover {
-                color: var(--error, #f43f5e);
-                background: rgba(244, 63, 94, 0.1);
+                color: var(--error);
+                background: var(--crm-danger-bg);
             }
             
             .note-title {
@@ -133,7 +137,7 @@ export class NotesList extends CRMPanel {
             
             .note-tag {
                 padding: 2px 8px;
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-tint);
                 border-radius: var(--radius-sm);
                 font-size: var(--text-xs);
             }
@@ -168,6 +172,12 @@ export class NotesList extends CRMPanel {
                 justify-content: center;
                 height: 100%;
                 color: var(--text-secondary);
+            }
+
+            @media (max-width: 767px) {
+                .delete-btn {
+                    opacity: 1;
+                }
             }
         `
     ];
@@ -292,7 +302,7 @@ export class NotesList extends CRMPanel {
                 ${filteredNotes.length === 0 ? html`
                     <div class="empty-state">
                         <div class="empty-icon">
-                            <img src="/crm/ui/static/assets/icons/book.png" alt="" />
+                            <platform-icon name="book-open" size="56"></platform-icon>
                         </div>
                         <div>Нет заметок</div>
                         <div style="margin-top: var(--space-2); font-size: var(--text-sm);">

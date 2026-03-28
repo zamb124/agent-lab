@@ -7,6 +7,8 @@ import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMPanel } from './crm-panel.js';
 import { CRMStore } from '../store/crm.store.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-date-picker.js';
 
 export class EntityFilters extends CRMPanel {
     static properties = {
@@ -43,19 +45,19 @@ export class EntityFilters extends CRMPanel {
             .filter-input {
                 width: 100%;
                 padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 color: var(--text-primary);
                 font-size: var(--text-sm);
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
                 box-sizing: border-box;
             }
 
             .filter-input:focus {
                 outline: none;
                 border-color: var(--accent);
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
             }
 
             .type-chips {
@@ -69,24 +71,24 @@ export class EntityFilters extends CRMPanel {
                 align-items: center;
                 gap: var(--space-1);
                 padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .type-chip:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 color: var(--text-primary);
             }
 
             .type-chip.active {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
+                background: var(--crm-selected-bg);
+                border-color: var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
             }
 
             .type-chip .chip-icon {
@@ -98,7 +100,8 @@ export class EntityFilters extends CRMPanel {
                 gap: var(--space-2);
             }
 
-            .date-row .filter-input {
+            .date-row .filter-input,
+            .date-row platform-date-picker {
                 flex: 1;
             }
 
@@ -107,16 +110,16 @@ export class EntityFilters extends CRMPanel {
                 margin-top: var(--space-4);
                 padding: var(--space-2) var(--space-3);
                 background: transparent;
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .clear-btn:hover {
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-muted);
                 color: var(--text-primary);
             }
 
@@ -125,8 +128,8 @@ export class EntityFilters extends CRMPanel {
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-3);
-                background: var(--accent-subtle);
-                border: 1px solid var(--accent);
+                background: var(--crm-selected-bg);
+                border: 1px solid var(--crm-selected-stroke);
                 border-radius: var(--radius-lg);
                 margin-bottom: var(--space-4);
             }
@@ -149,7 +152,7 @@ export class EntityFilters extends CRMPanel {
             .namespace-indicator-value {
                 font-size: var(--text-sm);
                 font-weight: 500;
-                color: var(--accent);
+                color: var(--crm-selected-text);
             }
         `
     ];
@@ -171,6 +174,7 @@ export class EntityFilters extends CRMPanel {
         this._entityTypes = [];
         this._selectedType = null;
         this._currentNamespace = null;
+        this._applyFiltersTimer = null;
 
         this._filtersUnsubscribe = CRMStore.subscribe(state => {
             this._filters = state.entities.filters;
@@ -183,11 +187,15 @@ export class EntityFilters extends CRMPanel {
     disconnectedCallback() {
         super.disconnectedCallback();
         this._filtersUnsubscribe?.();
+        if (this._applyFiltersTimer) {
+            clearTimeout(this._applyFiltersTimer);
+            this._applyFiltersTimer = null;
+        }
     }
 
     _onSearchInput(e) {
         CRMStore.setEntityFilters({ search: e.target.value });
-        this._applyFilters();
+        this._applyFiltersDebounced();
     }
 
     _onTypeSelect(typeId) {
@@ -205,13 +213,15 @@ export class EntityFilters extends CRMPanel {
         this._applyFilters();
     }
 
-    _onDateFromChange(e) {
-        CRMStore.setEntityFilters({ date_from: e.target.value || null });
-        this._applyFilters();
-    }
-
-    _onDateToChange(e) {
-        CRMStore.setEntityFilters({ date_to: e.target.value || null });
+    _onDateRangeChange(e) {
+        const nextRange = e.target.value;
+        if (nextRange && typeof nextRange !== 'object') {
+            throw new Error('Date range value must be object');
+        }
+        CRMStore.setEntityFilters({
+            date_from: nextRange?.start || null,
+            date_to: nextRange?.end || null,
+        });
         this._applyFilters();
     }
 
@@ -225,12 +235,42 @@ export class EntityFilters extends CRMPanel {
         await CRMStore.loadEntities(crmApi);
     }
 
+    _applyFiltersDebounced() {
+        if (this._applyFiltersTimer) {
+            clearTimeout(this._applyFiltersTimer);
+        }
+        this._applyFiltersTimer = setTimeout(() => {
+            this._applyFiltersTimer = null;
+            this._applyFilters();
+        }, 250);
+    }
+
     _getBaseTypes() {
         return this._entityTypes.filter(t => !t.parent_type_id);
     }
 
     _getSubtypes(parentTypeId) {
         return this._entityTypes.filter(t => t.parent_type_id === parentTypeId);
+    }
+
+    _getCurrentNamespaceName() {
+        if (!this._currentNamespace) {
+            return '';
+        }
+        if (typeof this._currentNamespace === 'string') {
+            return this._currentNamespace;
+        }
+        if (typeof this._currentNamespace === 'object' && typeof this._currentNamespace.name === 'string') {
+            return this._currentNamespace.name;
+        }
+        throw new Error('Invalid namespace in filters state');
+    }
+
+    _resolveIconName(iconName) {
+        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
+            return iconName;
+        }
+        return 'file';
     }
 
     renderContent() {
@@ -243,10 +283,12 @@ export class EntityFilters extends CRMPanel {
             <div class="content">
                 ${this._currentNamespace ? html`
                     <div class="namespace-indicator">
-                        <span class="namespace-indicator-icon">📁</span>
+                        <span class="namespace-indicator-icon">
+                            <platform-icon name="folder" size="16"></platform-icon>
+                        </span>
                         <div class="namespace-indicator-content">
                             <div class="namespace-indicator-label">Пространство</div>
-                            <div class="namespace-indicator-value">${this._currentNamespace}</div>
+                                <div class="namespace-indicator-value">${this._getCurrentNamespaceName()}</div>
                         </div>
                     </div>
                 ` : ''}
@@ -270,7 +312,9 @@ export class EntityFilters extends CRMPanel {
                                 class="type-chip ${this._selectedType === type.type_id ? 'active' : ''}"
                                 @click=${() => this._onTypeSelect(type.type_id)}
                             >
-                                <span class="chip-icon">${type.icon || '📄'}</span>
+                                <span class="chip-icon">
+                                    <platform-icon name="${this._resolveIconName(type.icon)}" size="15"></platform-icon>
+                                </span>
                                 <span>${type.name}</span>
                             </button>
                         `)}
@@ -286,7 +330,9 @@ export class EntityFilters extends CRMPanel {
                                     class="type-chip ${this._filters.entity_subtype === type.type_id ? 'active' : ''}"
                                     @click=${() => this._onSubtypeSelect(type.type_id)}
                                 >
-                                    <span class="chip-icon">${type.icon || '📄'}</span>
+                                    <span class="chip-icon">
+                                        <platform-icon name="${this._resolveIconName(type.icon)}" size="15"></platform-icon>
+                                    </span>
                                     <span>${type.name}</span>
                                 </button>
                             `)}
@@ -297,18 +343,17 @@ export class EntityFilters extends CRMPanel {
                 <div class="filter-group">
                     <label class="filter-label">Дата</label>
                     <div class="date-row">
-                        <input
-                            type="date"
+                        <platform-date-picker
                             class="filter-input"
-                            .value=${this._filters.date_from || ''}
-                            @change=${this._onDateFromChange}
-                        />
-                        <input
-                            type="date"
-                            class="filter-input"
-                            .value=${this._filters.date_to || ''}
-                            @change=${this._onDateToChange}
-                        />
+                            mode="date"
+                            selection="range"
+                            value-format="iso"
+                            .value=${{
+                                start: this._filters.date_from || null,
+                                end: this._filters.date_to || null,
+                            }}
+                            @change=${this._onDateRangeChange}
+                        ></platform-date-picker>
                     </div>
                 </div>
 

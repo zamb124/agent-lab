@@ -8,6 +8,8 @@ import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/tag-input.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-date-picker.js';
 
 export class EntityModal extends PlatformModal {
     static properties = {
@@ -51,24 +53,24 @@ export class EntityModal extends PlatformModal {
                 align-items: center;
                 gap: var(--space-1);
                 padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .type-chip:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 color: var(--text-primary);
             }
 
             .type-chip.active {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
+                background: var(--crm-selected-bg);
+                border-color: var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
             }
 
             .attributes-section {
@@ -132,24 +134,24 @@ export class EntityModal extends PlatformModal {
                 font-size: var(--text-sm);
                 font-weight: 500;
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .btn-secondary {
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 color: var(--text-secondary);
             }
 
             .btn-secondary:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 color: var(--text-primary);
             }
 
             .btn-primary {
                 background: var(--accent);
                 border: 1px solid var(--accent);
-                color: white;
+                color: var(--text-inverse);
             }
 
             .btn-primary:hover:not(:disabled) {
@@ -339,6 +341,13 @@ export class EntityModal extends PlatformModal {
         this.close();
     }
 
+    _resolveIconName(iconName) {
+        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
+            return iconName;
+        }
+        return 'file';
+    }
+
     renderBody() {
         const baseTypes = this._getBaseTypes();
         const subtypes = this._getSubtypes(this._selectedType);
@@ -356,7 +365,7 @@ export class EntityModal extends PlatformModal {
                                     class="type-chip ${this._selectedType === type.type_id ? 'active' : ''}"
                                     @click=${() => this._onTypeSelect(type.type_id)}
                                 >
-                                    <span>${type.icon || '📄'}</span>
+                                    <platform-icon name="${this._resolveIconName(type.icon)}" size="16"></platform-icon>
                                     <span>${type.name}</span>
                                 </button>
                             `)}
@@ -376,7 +385,7 @@ export class EntityModal extends PlatformModal {
                                     class="type-chip ${this._formData.entity_subtype === type.type_id ? 'active' : ''}"
                                     @click=${() => this._onSubtypeSelect(type.type_id)}
                                 >
-                                    <span>${type.icon || '📄'}</span>
+                                    <platform-icon name="${this._resolveIconName(type.icon)}" size="16"></platform-icon>
                                     <span>${type.name}</span>
                                 </button>
                             `)}
@@ -419,12 +428,13 @@ export class EntityModal extends PlatformModal {
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">Дедлайн</label>
-                            <input
-                                type="date"
+                            <platform-date-picker
                                 class="form-input"
-                                .value=${this._formData.due_date || ''}
+                                mode="date"
+                                value-format="iso"
+                                .value=${this._formData.due_date || null}
                                 @change=${this._onDueDateChange}
-                            />
+                            ></platform-date-picker>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Приоритет</label>
@@ -466,7 +476,7 @@ export class EntityModal extends PlatformModal {
                                 class="remove-btn"
                                 @click=${() => this._onRemoveAttribute(index)}
                             >
-                                ✕
+                                <platform-icon name="close" size="14"></platform-icon>
                             </button>
                         </div>
                     `)}

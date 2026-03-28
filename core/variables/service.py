@@ -8,6 +8,7 @@ import re
 from typing import Optional, Dict, Any, Set, List, TYPE_CHECKING
 
 from core.db.repositories.variable_repository import Variable
+from core.variables.resolver import VarResolver
 
 if TYPE_CHECKING:
     from core.db.repositories.variable_repository import VariableRepository
@@ -58,14 +59,12 @@ class VariablesService:
         logger.info(f"Переменная сохранена: {key} (secret={is_secret}, groups={groups})")
         return result
     
-    async def get_var(self, key: str, create_if_missing: bool = False) -> Optional[str]:
+    async def get_var(self, key: str) -> Optional[str]:
         """
         Получает переменную компании.
         
         Args:
             key: Ключ переменной
-            create_if_missing: Создать пустую переменную если не существует
-        
         Returns:
             Значение или None
         """
@@ -73,12 +72,6 @@ class VariablesService:
         
         if variable:
             return variable.value
-        
-        if create_if_missing:
-            logger.warning(f"Переменная {key} не найдена, создаем с пустым значением")
-            await self.set_var(key, "", is_secret=False)
-            return ""
-        
         return None
     
     async def delete_var(self, key: str) -> bool:
@@ -117,28 +110,11 @@ class VariablesService:
         """
         if not text:
             return text
-        
-        pattern = r'@var:(\w+)'
-        matches = re.findall(pattern, text)
-        
-        if not matches:
-            return text
-        
-        result = text
-        for var_key in matches:
-            value = None
-            
-            if context_vars and var_key in context_vars:
-                value = context_vars[var_key]
-            else:
-                value = await self.get_var(var_key)
-            
-            if value is not None:
-                result = result.replace(f"@var:{var_key}", value)
-            else:
-                logger.warning(f"Переменная @var:{var_key} не найдена")
-        
-        return result
+
+        variables_map = await self._get_company_variables_map()
+        if context_vars:
+            variables_map = {**variables_map, **context_vars}
+        return VarResolver.resolve_text(text, variables_map)
     
     async def get_all_resolved_vars(self) -> Dict[str, str]:
         """
@@ -159,40 +135,23 @@ class VariablesService:
         
         return resolved
     
-    async def resolve(self, value: Any, auto_create: bool = True) -> Any:
+    async def resolve(self, value: Any) -> Any:
         """
         Резолвит значение:
         - @var:key → загружает переменную компании
         - обычное значение → возвращает как есть
         - dict/list → рекурсивно резолвит все строки внутри
         
-        Args:
-            value: Значение для резолюции
-            auto_create: Автоматически создавать пустые переменные если не найдены
-        
         Returns:
             Резолвнутое значение
-            
-        Raises:
-            ValueError: Если auto_create=False и переменная не найдена
         """
-        if not isinstance(value, str):
-            if isinstance(value, dict):
-                return {k: await self.resolve(v, auto_create) for k, v in value.items()}
-            if isinstance(value, list):
-                return [await self.resolve(item, auto_create) for item in value]
-            return value
-        
-        if not value.startswith("@var:"):
-            return value
-        
-        var_key = value[5:]
-        resolved = await self.get_var(var_key, create_if_missing=auto_create)
-        
-        if resolved is None:
-            raise ValueError(f"Variable {var_key} not found")
-        
-        return resolved
+        variables_map = await self._get_company_variables_map()
+        return VarResolver.resolve_deep(value, variables_map)
+
+    async def _get_company_variables_map(self) -> Dict[str, Any]:
+        """Возвращает словарь переменных компании в формате key -> value."""
+        all_variables = await self._variable_repository.get_all_variables()
+        return {key: variable.value for key, variable in all_variables.items()}
     
     def extract_variable_keys(self, value: Any) -> Set[str]:
         """

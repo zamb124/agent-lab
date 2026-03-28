@@ -109,14 +109,18 @@ export class CRMAPIService extends BaseService {
         if (!entityId) {
             throw new Error('Entity ID is required');
         }
-        return this.get(`/graph/${entityId}/influence`, params);
+        return this.get(`/entities/${entityId}/influence-graph`, params);
     }
     
     async getShortestPath(sourceId, targetId, params = {}) {
         if (!sourceId || !targetId) {
             throw new Error('Source and target IDs are required');
         }
-        return this.get(`/graph/${sourceId}/path/${targetId}`, params);
+        return this.get('/relationships/path/', {
+            from: sourceId,
+            to: targetId,
+            ...params,
+        });
     }
     
     async getEntityRelationships(entityId) {
@@ -167,11 +171,16 @@ export class CRMAPIService extends BaseService {
         return this.get(`/entities/${entityId}/card`);
     }
 
-    async getDailySummary(date) {
+    async getDailySummary(date, options = {}) {
         if (!date) {
             throw new Error('Date is required');
         }
-        return this.post('/entities/daily-summary', { date });
+        const namespace = options.namespace;
+        return this.post('/entities/daily-summary', {
+            date,
+            namespace: namespace ?? null,
+            force_rebuild: options.forceRebuild === true,
+        });
     }
 
     // === GRANTS ===

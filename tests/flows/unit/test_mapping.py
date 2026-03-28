@@ -13,6 +13,7 @@ MappingResolver работает с dict представлением ExecutionS
 import pytest
 
 from apps.flows.src.mapping import MappingResolver
+from core.variables import VariableResolutionError
 
 
 class TestResolveValue:
@@ -226,29 +227,26 @@ class TestResolveValueWithVar:
         
         assert result == "deep_var_value"
 
-    def test_resolve_missing_var_returns_none(self):
-        """@var:missing -> None"""
+    def test_resolve_missing_var_raises_error(self):
+        """@var:missing -> VariableResolutionError"""
         state = {"variables": {"existing": "value"}}
-        
-        result = MappingResolver.resolve_value("@var:missing", state)
-        
-        assert result is None
 
-    def test_resolve_var_without_variables_returns_none(self):
-        """@var:name без variables -> None"""
+        with pytest.raises(VariableResolutionError):
+            MappingResolver.resolve_value("@var:missing", state)
+
+    def test_resolve_var_without_variables_raises_error(self):
+        """@var:name без variables -> VariableResolutionError"""
         state = {"content": "hello"}
-        
-        result = MappingResolver.resolve_value("@var:any_var", state)
-        
-        assert result is None
 
-    def test_resolve_var_empty_variables_returns_none(self):
-        """@var:name с пустым variables -> None"""
+        with pytest.raises(VariableResolutionError):
+            MappingResolver.resolve_value("@var:any_var", state)
+
+    def test_resolve_var_empty_variables_raises_error(self):
+        """@var:name с пустым variables -> VariableResolutionError"""
         state = {"variables": {}}
-        
-        result = MappingResolver.resolve_value("@var:any_var", state)
-        
-        assert result is None
+
+        with pytest.raises(VariableResolutionError):
+            MappingResolver.resolve_value("@var:any_var", state)
 
     def test_resolve_var_numeric_value(self):
         """@var:count -> числовое значение"""
@@ -280,13 +278,12 @@ class TestResolveValueWithVar:
         
         assert result == [1, 2, 3]
 
-    def test_resolve_var_prefix_only(self):
-        """@var: без имени -> None"""
+    def test_resolve_var_prefix_only_raises_error(self):
+        """@var: без имени -> VariableResolutionError"""
         state = {"variables": {"x": 1}}
-        
-        result = MappingResolver.resolve_value("@var:", state)
-        
-        assert result is None
+
+        with pytest.raises(VariableResolutionError):
+            MappingResolver.resolve_value("@var:", state)
 
     def test_mixed_state_and_var(self):
         """@state: и @var: работают независимо"""
@@ -618,18 +615,16 @@ class TestBuildMappedStateWithVar:
         assert result["default_lang"] == "ru"
         assert result["max_retries"] == 3
 
-    def test_missing_var_returns_none(self):
-        """Отсутствующая переменная -> None"""
+    def test_missing_var_raises_error(self):
+        """Отсутствующая переменная -> VariableResolutionError"""
         mapping = {
             "existing": "@var:existing",
             "missing": "@var:missing"
         }
         state = {"variables": {"existing": "value"}}
-        
-        result = MappingResolver.build_mapped_state(mapping, state)
-        
-        assert result["existing"] == "value"
-        assert result["missing"] is None
+
+        with pytest.raises(VariableResolutionError):
+            MappingResolver.build_mapped_state(mapping, state)
 
     def test_auth_headers_with_var(self):
         """Реальный сценарий: auth headers с @var:"""
@@ -783,25 +778,23 @@ class TestResolveVarsInString:
         
         assert result == "Just a regular string"
 
-    def test_missing_var_unchanged(self):
-        """Отсутствующая переменная остаётся как есть"""
+    def test_missing_var_raises_error(self):
+        """Отсутствующая переменная вызывает VariableResolutionError"""
         variables = {"existing": "value"}
-        
-        result = MappingResolver.resolve_vars_in_string(
-            "Found: @var:existing, Missing: @var:missing", variables
-        )
-        
-        assert result == "Found: value, Missing: @var:missing"
 
-    def test_missing_nested_var_unchanged(self):
-        """Отсутствующий вложенный путь остаётся как есть"""
+        with pytest.raises(VariableResolutionError):
+            MappingResolver.resolve_vars_in_string(
+                "Found: @var:existing, Missing: @var:missing", variables
+            )
+
+    def test_missing_nested_var_raises_error(self):
+        """Отсутствующий вложенный путь вызывает VariableResolutionError"""
         variables = {"config": {"key": "value"}}
-        
-        result = MappingResolver.resolve_vars_in_string(
-            "@var:config.key @var:config.missing", variables
-        )
-        
-        assert result == "value @var:config.missing"
+
+        with pytest.raises(VariableResolutionError):
+            MappingResolver.resolve_vars_in_string(
+                "@var:config.key @var:config.missing", variables
+            )
 
     def test_empty_string(self):
         """Пустая строка"""
@@ -827,13 +820,10 @@ class TestResolveVarsInString:
         assert MappingResolver.resolve_vars_in_string(True, variables) is True
         assert MappingResolver.resolve_vars_in_string([1, 2], variables) == [1, 2]
 
-    def test_empty_variables(self):
-        """Пустой словарь переменных"""
-        result = MappingResolver.resolve_vars_in_string(
-            "@var:key", {}
-        )
-        
-        assert result == "@var:key"
+    def test_empty_variables_raises_error(self):
+        """Пустой словарь переменных приводит к ошибке."""
+        with pytest.raises(VariableResolutionError):
+            MappingResolver.resolve_vars_in_string("@var:key", {})
 
     def test_var_only_string(self):
         """Строка состоящая только из @var:"""

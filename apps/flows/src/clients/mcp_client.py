@@ -13,7 +13,6 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
 
-from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.mcp import (
     MCPCallResult,
     MCPServerConfig,
@@ -22,6 +21,7 @@ from apps.flows.src.models.mcp import (
 )
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.variables import VarResolver
 
 logger = get_logger(__name__)
 
@@ -74,9 +74,8 @@ class MCPClient:
             headers["Mcp-Session-Id"] = self.session_id
         
         for key, value in self.config.headers.items():
-            if isinstance(value, str) and value.startswith("@var:"):
-                resolved = MappingResolver.resolve_vars_in_string(value, self.variables)
-                headers[key] = resolved
+            if isinstance(value, str) and "@var:" in value:
+                headers[key] = VarResolver.resolve_text(value, self.variables)
             else:
                 headers[key] = value
         

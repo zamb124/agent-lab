@@ -24,6 +24,7 @@ class NotificationType(str, Enum):
     MENTION = "mention"
     SYSTEM = "system"
     SYNC_NEW_MESSAGE = "sync_new_message"
+    CRM_DAILY_SUMMARY_UPDATED = "crm_daily_summary_updated"
 
 
 class Notification(BaseModel):

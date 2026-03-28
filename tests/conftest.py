@@ -637,6 +637,7 @@ def sync_tools(request, monkeypatch):
 
 # Worker фикстуры вынесены в tests/fixtures/workers.py для переиспользования
 from tests.fixtures.workers import (  # noqa: F401
+    crm_worker,
     rag_worker,
     sync_worker,
     taskiq_broker,
@@ -646,7 +647,7 @@ from tests.fixtures.workers import (  # noqa: F401
 
 
 @pytest_asyncio.fixture(scope="session")
-async def app(taskiq_worker):
+async def app(taskiq_worker, crm_worker):
     """
     Реальное FastAPI приложение с lifespan.
     Загружает flows, инициализирует контейнер.

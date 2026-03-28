@@ -4,7 +4,7 @@ API для работы с entities.
 Единый endpoint для всех типов entities.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.crm.models.api import EntityCreate, EntityUpdate, EntityResponse, AIAnalyzeRequest, AIAnalyzeResponse, SearchMentionsRequest
@@ -191,12 +191,20 @@ async def analyze_text(
 
 @router.post("/daily-summary")
 async def get_daily_summary(
-    request: Dict[str, str],
+    request: Dict[str, Any],
     service: EntityService = Depends(get_entity_service)
 ):
     """Получить AI саммари заметок за день"""
-    date = request.get("date")
-    summary = await service.generate_daily_summary(date)
+    date_str = request.get("date")
+    if date_str is None:
+        raise HTTPException(status_code=400, detail="date is required")
+    namespace = request.get("namespace")
+    force_rebuild = request.get("force_rebuild") is True
+    summary = await service.get_daily_summary_cached(
+        date_str=date_str,
+        namespace=namespace,
+        force_rebuild=force_rebuild,
+    )
     return summary
 
 

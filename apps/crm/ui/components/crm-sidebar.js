@@ -28,7 +28,8 @@ export class CRMSidebar extends PlatformElement {
                 gap: var(--space-2);
                 padding: var(--space-2);
                 margin-bottom: var(--space-4);
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 min-width: 0;
             }
@@ -57,7 +58,7 @@ export class CRMSidebar extends PlatformElement {
             }
 
             .namespace-selector select option {
-                background: var(--glass-solid-strong);
+                background: var(--crm-surface-elevated);
                 color: var(--text-primary);
             }
 
@@ -69,7 +70,7 @@ export class CRMSidebar extends PlatformElement {
                 height: 24px;
                 border: none;
                 background: var(--accent);
-                color: white;
+                color: var(--text-inverse);
                 border-radius: var(--radius-md);
                 cursor: pointer;
                 transition: all var(--duration-fast);
@@ -118,7 +119,9 @@ export class CRMSidebar extends PlatformElement {
             }
 
             .nav-item.active {
-                background: rgba(255, 149, 0, 0.15);
+                background: var(--crm-selected-bg);
+                border: 1px solid var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
             }
 
             .nav-item.active .nav-icon-wrapper {
@@ -132,38 +135,17 @@ export class CRMSidebar extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 border-radius: var(--radius-md);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
                 transition: transform var(--duration-fast);
                 flex-shrink: 0;
             }
 
-            .nav-icon-wrapper.notes {
-                background: linear-gradient(145deg, #FFD60A 0%, #FF9500 100%);
-                color: white;
-                box-shadow: 0 2px 8px rgba(255, 149, 0, 0.3);
-            }
-
-            .nav-icon-wrapper.entities {
-                background: linear-gradient(145deg, #5AC8FA 0%, #007AFF 100%);
-                color: white;
-                box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
-            }
-
-            .nav-icon-wrapper.graph {
-                background: linear-gradient(145deg, #AF52DE 0%, #5856D6 100%);
-                color: white;
-                box-shadow: 0 2px 8px rgba(88, 86, 214, 0.3);
-            }
-
-            .nav-icon-wrapper.tasks {
-                background: linear-gradient(145deg, #34C759 0%, #30D158 100%);
-                color: white;
-                box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3);
-            }
-
-            .nav-icon-wrapper.calendar {
-                background: linear-gradient(145deg, #FF3B30 0%, #FF453A 100%);
-                color: white;
-                box-shadow: 0 2px 8px rgba(255, 59, 48, 0.3);
+            .nav-item.active .nav-icon-wrapper {
+                border-color: var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
+                background: var(--crm-selected-bg);
             }
 
             .nav-label {
@@ -175,8 +157,8 @@ export class CRMSidebar extends PlatformElement {
                 font-size: 12px;
                 font-weight: 600;
                 color: var(--text-secondary);
-                padding: 3px 8px;
-                background: var(--glass-solid-medium);
+                padding: var(--space-1) var(--space-2);
+                background: var(--crm-surface-tint-strong);
                 border-radius: var(--radius-full);
             }
 
@@ -232,11 +214,11 @@ export class CRMSidebar extends PlatformElement {
 
             /* Light theme */
             :host-context([data-theme="light"]) .nav-item.active {
-                background: rgba(255, 149, 0, 0.12);
+                background: var(--crm-selected-bg);
             }
 
             :host-context([data-theme="light"]) .nav-count {
-                background: rgba(0, 0, 0, 0.06);
+                background: var(--crm-surface-tint-strong);
             }
         `
     ];
@@ -323,6 +305,19 @@ export class CRMSidebar extends PlatformElement {
         this.emit('open-namespace-modal');
     }
 
+    _getCurrentNamespaceName() {
+        if (!this._currentNamespace) {
+            return '';
+        }
+        if (typeof this._currentNamespace === 'string') {
+            return this._currentNamespace;
+        }
+        if (typeof this._currentNamespace === 'object' && typeof this._currentNamespace.name === 'string') {
+            return this._currentNamespace.name;
+        }
+        throw new Error('Invalid namespace in sidebar state');
+    }
+
     render() {
         return html`
             <platform-sidebar
@@ -341,7 +336,7 @@ export class CRMSidebar extends PlatformElement {
                             ${this._namespaces.map(ns => html`
                                 <option
                                     value=${ns.name}
-                                    ?selected=${ns.name === this._currentNamespace}
+                                    ?selected=${ns.name === this._getCurrentNamespaceName()}
                                 >
                                     ${ns.name}
                                 </option>
@@ -363,7 +358,7 @@ export class CRMSidebar extends PlatformElement {
                         @click=${() => this._navigate('notes')}
                     >
                         <div class="nav-icon-wrapper notes">
-                            <platform-icon name="doc-detail" size="18"></platform-icon>
+                            <platform-icon name="list" size="18"></platform-icon>
                         </div>
                         <span class="nav-label">Заметки</span>
                         ${this._notesCount > 0 ? html`
@@ -375,7 +370,7 @@ export class CRMSidebar extends PlatformElement {
                         @click=${() => this._navigate('entities')}
                     >
                         <div class="nav-icon-wrapper entities">
-                            <platform-icon name="building-one" size="18"></platform-icon>
+                            <platform-icon name="database" size="18"></platform-icon>
                         </div>
                         <span class="nav-label">Сущности</span>
                     </button>
@@ -384,7 +379,7 @@ export class CRMSidebar extends PlatformElement {
                         @click=${() => this._navigate('graph')}
                     >
                         <div class="nav-icon-wrapper graph">
-                            <platform-icon name="network" size="18"></platform-icon>
+                            <platform-icon name="share" size="18"></platform-icon>
                         </div>
                         <span class="nav-label">Граф связей</span>
                     </button>
@@ -397,7 +392,7 @@ export class CRMSidebar extends PlatformElement {
                         @click=${() => this._navigate('tasks')}
                     >
                         <div class="nav-icon-wrapper tasks">
-                            <platform-icon name="checklist" size="18"></platform-icon>
+                            <platform-icon name="check" size="18"></platform-icon>
                         </div>
                         <span class="nav-label">Задачи</span>
                     </button>

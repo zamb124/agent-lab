@@ -38,24 +38,24 @@ export class NamespaceModal extends PlatformModal {
                 font-size: var(--text-sm);
                 font-weight: 500;
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .btn-secondary {
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 color: var(--text-secondary);
             }
 
             .btn-secondary:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 color: var(--text-primary);
             }
 
             .btn-primary {
                 background: var(--accent);
                 border: 1px solid var(--accent);
-                color: white;
+                color: var(--text-inverse);
             }
 
             .btn-primary:hover:not(:disabled) {

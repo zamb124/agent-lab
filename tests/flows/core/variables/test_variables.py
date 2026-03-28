@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from apps.flows.src.container import get_container
 from core.db.repositories import Variable
-from core.variables import VariablesService, VariableResolver
+from core.variables import VariablesService, VariableResolver, VariableResolutionError
 
 
 class TestVariableResolver:
@@ -960,14 +960,13 @@ class TestVariablesService:
         await container.variable_repository.delete("list_var")
 
     @pytest.mark.asyncio
-    async def test_resolve_missing_var_returns_empty(self, app):
-        """Несуществующая переменная возвращает пустую строку."""
+    async def test_resolve_missing_var_raises_error(self, app):
+        """Несуществующая переменная вызывает VariableResolutionError."""
         container = get_container()
         service = container.variables_service
 
-        result = await service.resolve("@var:nonexistent_var_xyz")
-
-        assert result == ""
+        with pytest.raises(VariableResolutionError):
+            await service.resolve("@var:nonexistent_var_xyz")
 
     @pytest.mark.asyncio
     async def test_resolve_preserves_non_var_strings(self, app):

@@ -97,8 +97,8 @@ export class EntitiesPage extends PlatformElement {
                     display: flex;
                     padding: var(--space-2);
                     gap: var(--space-2);
-                    background: var(--glass-solid-subtle);
-                    border-bottom: 1px solid var(--glass-border-subtle);
+                    background: var(--crm-surface-muted);
+                    border-bottom: 1px solid var(--crm-stroke);
                     flex-shrink: 0;
                     overflow-x: auto;
                 }
@@ -110,15 +110,15 @@ export class EntitiesPage extends PlatformElement {
                     align-items: center;
                     justify-content: center;
                     border-radius: var(--radius-md);
-                    background: var(--glass-solid-subtle);
-                    border: 1px solid var(--glass-border-subtle);
+                    background: var(--crm-surface-muted);
+                    border: 1px solid var(--crm-stroke);
                     color: var(--text-primary);
                     cursor: pointer;
                     flex-shrink: 0;
                 }
                 
                 .menu-btn:hover {
-                    background: var(--glass-solid-medium);
+                    background: var(--crm-surface);
                 }
                 
                 .mobile-tab {
@@ -138,13 +138,13 @@ export class EntitiesPage extends PlatformElement {
                 }
                 
                 .mobile-tab:hover {
-                    background: var(--glass-solid-medium);
+                    background: var(--crm-surface);
                     color: var(--text-primary);
                 }
                 
                 .mobile-tab.active {
-                    background: var(--glass-solid-strong);
-                    border-color: var(--glass-border-medium);
+                    background: var(--crm-selected-bg);
+                    border-color: var(--crm-selected-stroke);
                     color: var(--text-primary);
                 }
                 

@@ -7,6 +7,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class AccessRequestModal extends PlatformModal {
     static properties = {
@@ -31,7 +32,8 @@ export class AccessRequestModal extends PlatformModal {
 
             .entity-preview {
                 padding: var(--space-3);
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 display: flex;
                 align-items: center;
@@ -44,9 +46,9 @@ export class AccessRequestModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: var(--accent-subtle);
+                background: var(--crm-selected-bg);
+                color: var(--crm-selected-text);
                 border-radius: var(--radius-lg);
-                font-size: var(--text-xl);
             }
 
             .entity-preview-name {
@@ -60,13 +62,14 @@ export class AccessRequestModal extends PlatformModal {
                 align-items: flex-start;
                 gap: var(--space-3);
                 padding: var(--space-3);
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 cursor: pointer;
             }
 
             .checkbox-group:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
             }
 
             .checkbox-group input[type="checkbox"] {
@@ -95,7 +98,8 @@ export class AccessRequestModal extends PlatformModal {
             .depth-slider {
                 margin-top: var(--space-3);
                 padding: var(--space-3);
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
             }
 
@@ -124,8 +128,8 @@ export class AccessRequestModal extends PlatformModal {
 
             .info-box {
                 padding: var(--space-3);
-                background: rgba(0, 122, 255, 0.1);
-                border: 1px solid rgba(0, 122, 255, 0.2);
+                background: var(--crm-info-bg);
+                border: 1px solid var(--crm-info-stroke);
                 border-radius: var(--radius-lg);
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
@@ -133,7 +137,7 @@ export class AccessRequestModal extends PlatformModal {
 
             .info-box-title {
                 font-weight: 500;
-                color: #007aff;
+                color: var(--crm-info-text);
                 margin-bottom: var(--space-1);
             }
 
@@ -150,24 +154,24 @@ export class AccessRequestModal extends PlatformModal {
                 font-size: var(--text-sm);
                 font-weight: 500;
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .btn-secondary {
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 color: var(--text-secondary);
             }
 
             .btn-secondary:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 color: var(--text-primary);
             }
 
             .btn-primary {
                 background: var(--accent);
                 border: 1px solid var(--accent);
-                color: white;
+                color: var(--text-inverse);
             }
 
             .btn-primary:hover:not(:disabled) {
@@ -229,7 +233,9 @@ export class AccessRequestModal extends PlatformModal {
         return html`
             <div class="form-grid">
                 <div class="entity-preview">
-                    <div class="entity-preview-icon">📄</div>
+                    <div class="entity-preview-icon">
+                        <platform-icon name="file" size="20"></platform-icon>
+                    </div>
                     <div class="entity-preview-name">
                         ${this.entityName || 'Сущность'}
                     </div>

@@ -1107,7 +1107,7 @@ class ChannelNode(BaseNode):
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """Отправляет сообщение через channel handler."""
-        from apps.flows.src.variables import VariableResolver
+        from apps.flows.src.variables import VariableResolver, VarResolver
         
         container = get_container()
         handler = container.channel_registry.get(self.channel)
@@ -1117,15 +1117,7 @@ class ChannelNode(BaseNode):
         
         # Merge channel_config с inputs
         config = {**self.channel_config}
-        
-        # Резолвим @var: в channel_config используя все переменные
-        for key, value in config.items():
-            if isinstance(value, str) and value.startswith("@var:"):
-                var_key = value[5:]
-                resolved = all_variables.get(var_key)
-                if resolved is None:
-                    raise ValueError(f"Variable not found: {var_key}")
-                config[key] = resolved
+        config = VarResolver.resolve_deep(config, all_variables)
         
         result = await handler.execute_action(
             action=self.action,

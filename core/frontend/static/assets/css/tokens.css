@@ -109,6 +109,8 @@
     /* Третичный акцент (фиолетовый) */
     --accent-tertiary: #8b5cf6;
     --accent-tertiary-subtle: rgba(139, 92, 246, 0.15);
+    --accent-quaternary: #f59e0b;
+    --accent-quaternary-subtle: rgba(245, 158, 11, 0.15);
     
     /* ========== ТЕКСТ ========== */
     
@@ -124,6 +126,15 @@
     --border-default: rgba(255, 255, 255, 0.1);
     --border-strong: rgba(255, 255, 255, 0.15);
     --border-focus: var(--accent);
+
+    /* ========== PLATFORM DATE PICKER ========== */
+
+    --platform-date-picker-popup-bg: var(--glass-solid-strong);
+    --platform-date-picker-popup-border: var(--border-default);
+    --platform-date-picker-day-hover-bg: var(--glass-solid-medium);
+    --platform-date-picker-day-hover-border: var(--border-default);
+    --platform-date-picker-range-bg: var(--accent-subtle);
+    --platform-date-picker-range-text: var(--accent-secondary);
     
     /* ========== СОСТОЯНИЯ ========== */
     
@@ -244,6 +255,55 @@
     /* Hover glow для интерактивных элементов */
     --hover-glow: 0 0 0 4px rgba(16, 185, 129, 0.15);
     --focus-ring: 0 0 0 3px rgba(16, 185, 129, 0.4);
+
+    /* ========== CRM SEMANTIC TOKENS ========== */
+
+    --crm-surface: var(--glass-solid-medium);
+    --crm-surface-muted: var(--glass-solid-subtle);
+    --crm-surface-elevated: var(--glass-solid-strong);
+    --crm-surface-tint: var(--glass-tint-subtle);
+    --crm-surface-tint-strong: var(--glass-tint-medium);
+
+    --crm-stroke: var(--glass-border-subtle);
+    --crm-stroke-strong: var(--glass-border-medium);
+
+    --crm-selected-bg: var(--accent-subtle);
+    --crm-selected-stroke: var(--accent);
+    --crm-selected-text: var(--accent);
+
+    --crm-info-bg: rgba(59, 130, 246, 0.12);
+    --crm-info-stroke: rgba(59, 130, 246, 0.28);
+    --crm-info-text: #60a5fa;
+
+    --crm-danger-bg: rgba(244, 63, 94, 0.12);
+    --crm-danger-stroke: rgba(244, 63, 94, 0.28);
+
+    --crm-nav-notes-gradient: linear-gradient(145deg, #ffd60a 0%, #ff9500 100%);
+    --crm-nav-notes-shadow: 0 2px 8px rgba(255, 149, 0, 0.3);
+
+    --crm-nav-entities-gradient: linear-gradient(145deg, #5ac8fa 0%, #007aff 100%);
+    --crm-nav-entities-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+
+    --crm-nav-graph-gradient: linear-gradient(145deg, #af52de 0%, #5856d6 100%);
+    --crm-nav-graph-shadow: 0 2px 8px rgba(88, 86, 214, 0.3);
+
+    --crm-nav-tasks-gradient: linear-gradient(145deg, #34c759 0%, #30d158 100%);
+    --crm-nav-tasks-shadow: 0 2px 8px rgba(52, 199, 89, 0.3);
+
+    --crm-nav-calendar-gradient: linear-gradient(145deg, #ff3b30 0%, #ff453a 100%);
+    --crm-nav-calendar-shadow: 0 2px 8px rgba(255, 59, 48, 0.3);
+
+    --crm-daily-notes-cta-bg: #8f9cf6;
+    --crm-daily-notes-cta-hover: #7f8eec;
+
+    --crm-summary-bg: rgba(95, 101, 150, 0.26);
+    --crm-summary-stroke: rgba(136, 145, 204, 0.42);
+    --crm-summary-title-gradient: linear-gradient(90deg, #f6c679 0%, #ff9e7a 52%, #99a6f9 100%);
+    --crm-summary-meta: rgba(255, 255, 255, 0.58);
+    --crm-summary-chip-blue-bg: rgba(126, 142, 255, 0.25);
+    --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.28);
+    --crm-summary-chip-orange-bg: rgba(255, 171, 120, 0.3);
+    --crm-summary-chip-rose-bg: rgba(250, 176, 187, 0.32);
     
     /* Shimmer эффект для загрузки */
     --shimmer-gradient: linear-gradient(
@@ -331,12 +391,20 @@
     --border-subtle: rgba(15, 23, 42, 0.06);
     --border-default: rgba(15, 23, 42, 0.1);
     --border-strong: rgba(15, 23, 42, 0.15);
+
+    --platform-date-picker-popup-bg: var(--glass-solid-strong);
+    --platform-date-picker-popup-border: var(--border-default);
+    --platform-date-picker-day-hover-bg: var(--glass-solid-medium);
+    --platform-date-picker-day-hover-border: var(--border-default);
+    --platform-date-picker-range-bg: var(--accent-subtle);
+    --platform-date-picker-range-text: var(--accent-secondary);
     
     /* Акценты для светлой темы */
     --accent: #059669;
     --accent-hover: #10b981;
     --accent-subtle: rgba(5, 150, 105, 0.1);
     --accent-glow: 0 0 24px rgba(5, 150, 105, 0.25);
+    --accent-quaternary-subtle: rgba(245, 158, 11, 0.12);
     
     /* Shimmer для светлой темы */
     --shimmer-gradient: linear-gradient(
@@ -345,6 +413,53 @@
         rgba(0, 0, 0, 0.04) 50%,
         transparent 100%
     );
+
+    --crm-surface: var(--glass-solid-medium);
+    --crm-surface-muted: var(--glass-solid-subtle);
+    --crm-surface-elevated: var(--glass-solid-strong);
+    --crm-surface-tint: var(--glass-tint-subtle);
+    --crm-surface-tint-strong: var(--glass-tint-medium);
+
+    --crm-stroke: var(--glass-border-subtle);
+    --crm-stroke-strong: var(--glass-border-medium);
+
+    --crm-selected-bg: var(--accent-subtle);
+    --crm-selected-stroke: var(--accent);
+    --crm-selected-text: var(--accent);
+
+    --crm-info-bg: rgba(59, 130, 246, 0.1);
+    --crm-info-stroke: rgba(59, 130, 246, 0.22);
+    --crm-info-text: #2563eb;
+
+    --crm-danger-bg: rgba(244, 63, 94, 0.08);
+    --crm-danger-stroke: rgba(244, 63, 94, 0.2);
+
+    --crm-nav-notes-gradient: linear-gradient(145deg, #facc15 0%, #f59e0b 100%);
+    --crm-nav-notes-shadow: 0 2px 8px rgba(245, 158, 11, 0.28);
+
+    --crm-nav-entities-gradient: linear-gradient(145deg, #38bdf8 0%, #3b82f6 100%);
+    --crm-nav-entities-shadow: 0 2px 8px rgba(59, 130, 246, 0.28);
+
+    --crm-nav-graph-gradient: linear-gradient(145deg, #a78bfa 0%, #6366f1 100%);
+    --crm-nav-graph-shadow: 0 2px 8px rgba(99, 102, 241, 0.28);
+
+    --crm-nav-tasks-gradient: linear-gradient(145deg, #22c55e 0%, #16a34a 100%);
+    --crm-nav-tasks-shadow: 0 2px 8px rgba(34, 197, 94, 0.28);
+
+    --crm-nav-calendar-gradient: linear-gradient(145deg, #f87171 0%, #ef4444 100%);
+    --crm-nav-calendar-shadow: 0 2px 8px rgba(239, 68, 68, 0.28);
+
+    --crm-daily-notes-cta-bg: #8f9cf6;
+    --crm-daily-notes-cta-hover: #7f8eec;
+
+    --crm-summary-bg: rgba(174, 180, 224, 0.28);
+    --crm-summary-stroke: rgba(141, 149, 205, 0.45);
+    --crm-summary-title-gradient: linear-gradient(90deg, #f6c679 0%, #ff9e7a 52%, #99a6f9 100%);
+    --crm-summary-meta: rgba(15, 23, 42, 0.45);
+    --crm-summary-chip-blue-bg: rgba(126, 142, 255, 0.25);
+    --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.32);
+    --crm-summary-chip-orange-bg: rgba(255, 171, 120, 0.35);
+    --crm-summary-chip-rose-bg: rgba(250, 176, 187, 0.38);
 }
 
 /* ========== УТИЛИТЫ ========== */

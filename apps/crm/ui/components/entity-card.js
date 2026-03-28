@@ -28,9 +28,9 @@ export class EntityCard extends PlatformElement {
                 display: block;
                 width: 100%;
                 height: 100%;
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 backdrop-filter: blur(var(--glass-blur-strong));
-                border: 1px solid var(--glass-border-medium);
+                border: 1px solid var(--crm-stroke-strong);
                 border-radius: var(--radius-2xl);
                 overflow: hidden;
             }
@@ -40,26 +40,22 @@ export class EntityCard extends PlatformElement {
                 align-items: center;
                 gap: var(--space-3);
                 padding: var(--space-4);
-                border-bottom: 1px solid var(--glass-border-subtle);
-                background: linear-gradient(
-                    180deg,
-                    rgba(255, 255, 255, 0.08) 0%,
-                    transparent 100%
-                );
+                border-bottom: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-tint);
             }
 
             .back-btn {
                 padding: var(--space-2);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 color: var(--text-primary);
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .back-btn:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
             }
 
             .header-icon {
@@ -97,24 +93,24 @@ export class EntityCard extends PlatformElement {
 
             .action-btn {
                 padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
             }
 
             .action-btn:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 color: var(--text-primary);
             }
 
             .action-btn.primary {
                 background: var(--accent);
                 border-color: var(--accent);
-                color: white;
+                color: var(--text-inverse);
             }
 
             .action-btn.primary:hover {
@@ -155,7 +151,7 @@ export class EntityCard extends PlatformElement {
 
             .attribute-item {
                 padding: var(--space-3);
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-muted);
                 border-radius: var(--radius-lg);
             }
 
@@ -182,15 +178,17 @@ export class EntityCard extends PlatformElement {
                 align-items: center;
                 gap: var(--space-3);
                 padding: var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
+                width: 100%;
+                text-align: left;
             }
 
             .related-item:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 border-color: var(--accent-subtle);
             }
 
@@ -247,7 +245,7 @@ export class EntityCard extends PlatformElement {
 
             .tag {
                 padding: var(--space-1) var(--space-3);
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-tint);
                 border-radius: var(--radius-full);
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
@@ -255,7 +253,7 @@ export class EntityCard extends PlatformElement {
 
             .request-access-section {
                 padding: var(--space-4);
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-muted);
                 border-radius: var(--radius-lg);
                 text-align: center;
             }
@@ -267,7 +265,7 @@ export class EntityCard extends PlatformElement {
             }
 
             :host-context([data-theme="light"]) {
-                background: rgba(255, 255, 255, 0.9);
+                background: var(--crm-surface);
             }
             
             @media (max-width: 767px) {
@@ -323,21 +321,28 @@ export class EntityCard extends PlatformElement {
         const entityType = this._entityTypes.find(t => t.type_id === typeId);
         if (entityType) {
             return {
-                icon: entityType.icon || '📄',
-                color: entityType.color || '#9E9E9E',
+                icon: entityType.icon || 'file',
+                color: entityType.color || 'var(--text-tertiary)',
                 label: entityType.name || typeId,
             };
         }
-        return { icon: '📄', color: '#9E9E9E', label: entity?.entity_type || '' };
+        return { icon: 'file', color: 'var(--text-tertiary)', label: entity?.entity_type || '' };
     }
 
     _hexToRgba(hex, alpha) {
-        if (!hex) return `rgba(158, 158, 158, ${alpha})`;
+        if (!hex) return `rgba(148, 163, 184, ${alpha})`;
         const cleanHex = hex.replace('#', '');
         const r = parseInt(cleanHex.substring(0, 2), 16);
         const g = parseInt(cleanHex.substring(2, 4), 16);
         const b = parseInt(cleanHex.substring(4, 6), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    _resolveIconName(iconName) {
+        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
+            return iconName;
+        }
+        return 'file';
     }
 
     _onBack() {
@@ -401,19 +406,20 @@ export class EntityCard extends PlatformElement {
                         const bgColor = this._hexToRgba(typeConfig.color, 0.15);
                         
                         return html`
-                            <div
+                            <button
                                 class="related-item"
+                                type="button"
                                 @click=${() => this._onRelatedClick(entity.entity_id)}
                             >
                                 <div
                                     class="related-icon"
                                     style="background: ${bgColor}; color: ${typeConfig.color};"
                                 >
-                                    ${typeConfig.icon}
+                                    <platform-icon name="${this._resolveIconName(typeConfig.icon)}" size="18"></platform-icon>
                                 </div>
                                 <div class="related-name">${entity.name}</div>
                                 <div class="related-type">${typeConfig.label}</div>
-                            </div>
+                            </button>
                         `;
                     })}
                 </div>
@@ -426,11 +432,11 @@ export class EntityCard extends PlatformElement {
             return html`
                 <div class="empty-state">
                     <div class="empty-icon">
-                        <img src="/crm/ui/static/assets/icons/book.png" alt="" />
+                        <platform-icon name="book-open" size="56"></platform-icon>
                     </div>
                     <div>Выберите сущность</div>
                     <div style="margin-top: var(--space-2); font-size: var(--text-sm);">
-                        из списка слева
+                        из списка или фильтров
                     </div>
                 </div>
             `;
@@ -459,7 +465,7 @@ export class EntityCard extends PlatformElement {
                     class="header-icon"
                     style="background: ${bgColor}; color: ${typeConfig.color};"
                 >
-                    ${typeConfig.icon}
+                    <platform-icon name="${this._resolveIconName(typeConfig.icon)}" size="22"></platform-icon>
                 </div>
 
                 <div class="header-content">

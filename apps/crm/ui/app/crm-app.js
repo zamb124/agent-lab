@@ -8,14 +8,21 @@ import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/Platform
 import { CRMAPIService } from '../services/crm-api.service.js';
 import { CRMStore } from '../store/crm.store.js';
 import '../components/notes-list.js';
+import '../components/note-editor.js';
 import '../components/ai-suggestions-panel.js';
+import '../pages/daily-notes-page.js';
 import '../pages/entities-page.js';
+import '../pages/graph-page.js';
+import '../pages/tasks-page.js';
+import '../pages/calendar-page.js';
 import '../modals/entity-modal.js';
+import '../modals/ai-analysis-modal.js';
 import '../modals/share-modal.js';
 import '../modals/access-request-modal.js';
 import '../modals/namespace-modal.js';
 import '../components/crm-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/layout/platform-island.js';
 
 export class CRMApp extends PlatformApp {
     static properties = {
@@ -25,6 +32,7 @@ export class CRMApp extends PlatformApp {
         _hasSuggestions: { state: true },
         _currentView: { state: true },
         _showNamespaceModal: { state: true },
+        _showAiModal: { state: true },
         _activeMobilePanel: { state: true },
     };
 
@@ -32,8 +40,8 @@ export class CRMApp extends PlatformApp {
         PlatformApp.styles,
         css`
             :host {
-                display: flex !important;
-                flex-direction: row !important;
+                display: flex;
+                flex-direction: row;
                 width: var(--app-vw, 100vw);
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
@@ -88,6 +96,11 @@ export class CRMApp extends PlatformApp {
             ai-suggestions-panel.hidden {
                 display: none;
             }
+
+            platform-island {
+                flex: 1;
+                min-height: calc(var(--app-vh, 100vh) - 2rem);
+            }
             
             @media (min-width: 768px) and (max-width: 1023px) {
                 notes-list {
@@ -132,8 +145,8 @@ export class CRMApp extends PlatformApp {
                     display: flex;
                     padding: max(var(--space-2), env(safe-area-inset-top, 0px)) var(--space-2) var(--space-2);
                     gap: var(--space-2);
-                    background: var(--glass-solid-subtle);
-                    border-bottom: 1px solid var(--glass-border-subtle);
+                    background: var(--crm-surface-muted);
+                    border-bottom: 1px solid var(--crm-stroke);
                     flex-shrink: 0;
                     overflow-x: auto;
                 }
@@ -145,15 +158,15 @@ export class CRMApp extends PlatformApp {
                     align-items: center;
                     justify-content: center;
                     border-radius: var(--radius-md);
-                    background: var(--glass-solid-subtle);
-                    border: 1px solid var(--glass-border-subtle);
+                    background: var(--crm-surface-muted);
+                    border: 1px solid var(--crm-stroke);
                     color: var(--text-primary);
                     cursor: pointer;
                     flex-shrink: 0;
                 }
                 
                 .menu-btn:hover {
-                    background: var(--glass-solid-medium);
+                    background: var(--crm-surface);
                 }
                 
                 .mobile-tab {
@@ -173,13 +186,13 @@ export class CRMApp extends PlatformApp {
                 }
                 
                 .mobile-tab:hover {
-                    background: var(--glass-solid-medium);
+                    background: var(--crm-surface);
                     color: var(--text-primary);
                 }
                 
                 .mobile-tab.active {
-                    background: var(--glass-solid-strong);
-                    border-color: var(--glass-border-medium);
+                    background: var(--crm-selected-bg);
+                    border-color: var(--crm-selected-stroke);
                     color: var(--text-primary);
                 }
                 
@@ -192,6 +205,10 @@ export class CRMApp extends PlatformApp {
                 .mobile-panel > * {
                     width: 100%;
                     height: 100%;
+                }
+
+                platform-island {
+                    min-height: 100%;
                 }
             }
             
@@ -218,7 +235,8 @@ export class CRMApp extends PlatformApp {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-xl);
                 margin-bottom: var(--space-4);
                 color: var(--text-tertiary);
@@ -246,6 +264,7 @@ export class CRMApp extends PlatformApp {
         this._hasSuggestions = false;
         this._currentView = 'notes';
         this._showNamespaceModal = false;
+        this._showAiModal = false;
         this._activeMobilePanel = 'notes';
         this._resizeObserver = null;
     }
@@ -321,14 +340,24 @@ export class CRMApp extends PlatformApp {
             }
             
             return html`
-                <notes-list></notes-list>
-                <note-editor></note-editor>
-                <ai-suggestions-panel class="${this._hasSuggestions ? '' : 'hidden'}"></ai-suggestions-panel>
+                <daily-notes-page @analysis-ready=${this._openAiModal}></daily-notes-page>
             `;
         }
         
         if (this._currentView === 'entities') {
             return html`<entities-page></entities-page>`;
+        }
+
+        if (this._currentView === 'graph') {
+            return html`<graph-page></graph-page>`;
+        }
+
+        if (this._currentView === 'tasks') {
+            return html`<tasks-page></tasks-page>`;
+        }
+
+        if (this._currentView === 'calendar') {
+            return html`<calendar-page></calendar-page>`;
         }
         
         return this._renderPlaceholder(this._currentView);
@@ -338,11 +367,8 @@ export class CRMApp extends PlatformApp {
         const panels = [
             { id: 'notes', label: 'Заметки', icon: 'file' },
             { id: 'editor', label: 'Редактор', icon: 'edit' },
+            { id: 'ai', label: this._hasSuggestions ? 'AI' : 'AI (0)', icon: 'ai' },
         ];
-        
-        if (this._hasSuggestions) {
-            panels.push({ id: 'ai', label: 'AI', icon: 'ai' });
-        }
         
         return html`
             <div class="mobile-panels-container">
@@ -372,7 +398,7 @@ export class CRMApp extends PlatformApp {
             case 'notes':
                 return html`<notes-list @note-selected=${this._onNoteSelected}></notes-list>`;
             case 'editor':
-                return html`<note-editor></note-editor>`;
+                return html`<note-editor @analysis-ready=${this._openAiModal}></note-editor>`;
             case 'ai':
                 return html`<ai-suggestions-panel></ai-suggestions-panel>`;
             default:
@@ -431,6 +457,14 @@ export class CRMApp extends PlatformApp {
     _closeNamespaceModal() {
         this._showNamespaceModal = false;
     }
+
+    _openAiModal() {
+        this._showAiModal = true;
+    }
+
+    _closeAiModal() {
+        this._showAiModal = false;
+    }
     
     async _onNamespaceChanged() {
         const crmApi = this.services.get('crmApi');
@@ -464,7 +498,9 @@ export class CRMApp extends PlatformApp {
                 ></crm-sidebar>
             </div>
             <div class="${mainClass}">
-                ${this._renderContent()}
+                <platform-island padding=${this._isMobile ? 'none' : 'md'}>
+                    ${this._renderContent()}
+                </platform-island>
             </div>
             
             ${this._showNamespaceModal ? html`
@@ -473,6 +509,14 @@ export class CRMApp extends PlatformApp {
                     @close=${this._closeNamespaceModal}
                     @saved=${this._onNamespaceSaved}
                 ></namespace-modal>
+            ` : ''}
+
+            ${this._showAiModal ? html`
+                <ai-analysis-modal
+                    .open=${true}
+                    @close=${this._closeAiModal}
+                    @saved=${this._closeAiModal}
+                ></ai-analysis-modal>
             ` : ''}
         `;
     }

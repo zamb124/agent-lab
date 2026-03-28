@@ -229,13 +229,13 @@ export class GrantsPanel extends PlatformElement {
     _getGrantTypeIcon(grantType) {
         switch (grantType) {
             case 'public':
-                return '🌐';
+                return 'globe';
             case 'user':
-                return '👤';
+                return 'user';
             case 'company':
-                return '🏢';
+                return 'building-one';
             default:
-                return '🔒';
+                return 'lock';
         }
     }
 
@@ -289,7 +289,7 @@ export class GrantsPanel extends PlatformElement {
                         ${this._grants.map(grant => html`
                             <div class="grant-item">
                                 <div class="grant-icon ${grant.grant_type}">
-                                    ${this._getGrantTypeIcon(grant.grant_type)}
+                                    <platform-icon name="${this._getGrantTypeIcon(grant.grant_type)}" size="18"></platform-icon>
                                 </div>
                                 <div class="grant-content">
                                     <div class="grant-target">
@@ -319,14 +319,17 @@ export class GrantsPanel extends PlatformElement {
                 <div class="action-buttons">
                     ${!this._hasPublicGrant() ? html`
                         <button class="action-btn public" @click=${this._onMakePublic}>
-                            🌐 Сделать публичной
+                            <platform-icon name="globe" size="14"></platform-icon>
+                            Сделать публичной
                         </button>
                     ` : ''}
                     <button class="action-btn" @click=${this._onShareToUser}>
-                        👤 Поделиться с пользователем
+                        <platform-icon name="user" size="14"></platform-icon>
+                        Поделиться с пользователем
                     </button>
                     <button class="action-btn" @click=${this._onShareToCompany}>
-                        🏢 Поделиться с компанией
+                        <platform-icon name="building-one" size="14"></platform-icon>
+                        Поделиться с компанией
                     </button>
                 </div>
             </div>

@@ -26,7 +26,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
 - Email, телефон
 - Компания (создавай связь works_at)
         """,
-        "icon": "👤",
+        "icon": "user",
         "color": "#9C27B0",
         "weight_coefficient": 1.0
     },
@@ -50,7 +50,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
 - Сфера деятельности
 - Сайт, контакты
         """,
-        "icon": "🏢",
+        "icon": "building-one",
         "color": "#3F51B5",
         "weight_coefficient": 1.0
     },
@@ -70,7 +70,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
 
 Всегда извлекай дату события.
         """,
-        "icon": "📝",
+        "icon": "doc-detail",
         "color": "#607D8B",
         "weight_coefficient": 1.0
     },
@@ -97,7 +97,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
 - Обсуждаемые темы
 - Договоренности и решения
         """,
-        "icon": "🤝",
+        "icon": "chat",
         "color": "#4CAF50",
         "weight_coefficient": 1.2
     },
@@ -124,7 +124,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
 - Договоренности
 - Следующие шаги
         """,
-        "icon": "📞",
+        "icon": "phone",
         "color": "#2196F3",
         "weight_coefficient": 1.0
     },
@@ -151,7 +151,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
 - Приоритет (low, medium, high, urgent)
 - Связанные проекты/сделки
         """,
-        "icon": "✅",
+        "icon": "checklist",
         "color": "#FF9800",
         "weight_coefficient": 1.1
     },
@@ -175,7 +175,7 @@ SYSTEM_RELATIONSHIP_TYPE_TEMPLATES = [
 
 НЕ создавай mentions для явных ссылок через @ (это тип "linked").
         """,
-        "icon": "💬",
+        "icon": "chat",
         "color": "#9E9E9E",
         "weight_default": 0.5
     },
@@ -186,7 +186,7 @@ SYSTEM_RELATIONSHIP_TYPE_TEMPLATES = [
         "is_system": True,
         "is_directed": True,
         "prompt": None,
-        "icon": "🔗",
+        "icon": "circular-connection",
         "color": "#2196F3",
         "weight_default": 1.0
     },

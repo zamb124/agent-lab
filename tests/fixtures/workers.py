@@ -29,6 +29,8 @@ _RAG_WORKER_PID = "/tmp/platform_test_rag_worker.pid"
 
 _SYNC_WORKER_LOCK = "/tmp/platform_test_sync_taskiq_worker.lock"
 _SYNC_WORKER_PID = "/tmp/platform_test_sync_taskiq_worker.pid"
+_CRM_WORKER_LOCK = "/tmp/platform_test_crm_taskiq_worker.lock"
+_CRM_WORKER_PID = "/tmp/platform_test_crm_taskiq_worker.pid"
 
 
 class SessionWorkerManager:
@@ -448,6 +450,49 @@ def sync_worker():
         ],
         log_file="/tmp/sync_taskiq_worker_test.log",
         err_file="/tmp/sync_taskiq_worker_test_err.log",
+    )
+
+    with manager.start() as worker_process:
+        yield worker_process
+
+
+@pytest.fixture(scope="session")
+def crm_worker():
+    """
+    TaskIQ worker очереди crm (apps.crm_worker.worker:broker).
+    """
+    if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
+        yield None
+        return
+
+    manager = SessionWorkerManager(
+        name="CRMTaskIQ",
+        lock_file=_CRM_WORKER_LOCK,
+        pid_file=_CRM_WORKER_PID,
+        command=[
+            sys.executable,
+            "-m",
+            "taskiq",
+            "worker",
+            "apps.crm_worker.worker:broker",
+            "-w",
+            "1",
+        ],
+        env={
+            **TEST_DATABASE_ENV,
+            "TESTING": "true",
+            "DATABASE__REDIS_URL": "redis://localhost:63792/0",
+            "TASKS__BROKER_URL": "redis://localhost:63792/1",
+            "AUTH__PERMISSIONS_ENABLED": "false",
+        },
+        cleanup_patterns=[
+            "apps.crm_worker.worker",
+            "taskiq.*worker",
+            "multiprocessing.spawn.*spawn_main",
+            "multiprocessing.resource_tracker",
+        ],
+        log_file="/tmp/crm_taskiq_worker_test.log",
+        err_file="/tmp/crm_taskiq_worker_test_err.log",
     )
 
     with manager.start() as worker_process:

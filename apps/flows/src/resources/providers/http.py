@@ -37,22 +37,13 @@ class HTTPResourceProvider(BaseResourceProvider):
         resolved_config = self._resolve_variable_refs(definition.config, variables)
         config = HTTPResourceConfig.model_validate(resolved_config)
         
-        # Резолвим headers отдельно
-        resolved_headers = {}
-        for key, value in config.headers.items():
-            if isinstance(value, str) and value.startswith("@var:"):
-                var_name = value[5:]
-                resolved_headers[key] = variables.get(var_name, value)
-            else:
-                resolved_headers[key] = value
-        
         logger.debug(
             f"HTTP resource '{definition.resource_id}' loaded: base_url={config.base_url}"
         )
         
         return HTTPResource(
             base_url=config.base_url,
-            headers=resolved_headers,
+            headers=config.headers,
             timeout=config.timeout,
             auth_type=config.auth_type,
             auth_value=config.auth_value,

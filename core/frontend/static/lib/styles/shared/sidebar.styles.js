@@ -322,7 +322,7 @@ export const sidebarNavItemStyles = css`
         border-color: var(--accent);
         color: var(--accent);
         font-weight: var(--font-semibold);
-        box-shadow: 0 4px 16px rgba(16, 185, 129, 0.15);
+        box-shadow: var(--accent-glow);
     }
 
     .nav-item-icon {
@@ -384,48 +384,48 @@ export const sidebarNavItemStyles = css`
     }
 
     .nav-item-icon.gradient-emerald {
-        background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
-        color: white;
-        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        background: var(--accent-gradient);
+        color: var(--text-inverse);
+        box-shadow: var(--crm-nav-entities-shadow);
     }
 
     .nav-item-icon.gradient-blue {
-        background: linear-gradient(145deg, #5AC8FA 0%, #007AFF 100%);
-        color: white;
-        box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+        background: var(--crm-nav-entities-gradient);
+        color: var(--text-inverse);
+        box-shadow: var(--crm-nav-entities-shadow);
     }
 
     .nav-item-icon.gradient-purple {
-        background: linear-gradient(145deg, #AF52DE 0%, #5856D6 100%);
-        color: white;
-        box-shadow: 0 2px 8px rgba(88, 86, 214, 0.3);
+        background: var(--crm-nav-graph-gradient);
+        color: var(--text-inverse);
+        box-shadow: var(--crm-nav-graph-shadow);
     }
 
     .nav-item-icon.gradient-orange {
-        background: linear-gradient(145deg, #FFD60A 0%, #FF9500 100%);
-        color: white;
-        box-shadow: 0 2px 8px rgba(255, 149, 0, 0.3);
+        background: var(--crm-nav-notes-gradient);
+        color: var(--text-inverse);
+        box-shadow: var(--crm-nav-notes-shadow);
     }
 
     .nav-item-icon.gradient-green {
-        background: linear-gradient(145deg, #34C759 0%, #30D158 100%);
-        color: white;
-        box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3);
+        background: var(--crm-nav-tasks-gradient);
+        color: var(--text-inverse);
+        box-shadow: var(--crm-nav-tasks-shadow);
     }
 
     .nav-item-icon.gradient-red {
-        background: linear-gradient(145deg, #FF3B30 0%, #FF453A 100%);
-        color: white;
-        box-shadow: 0 2px 8px rgba(255, 59, 48, 0.3);
+        background: var(--crm-nav-calendar-gradient);
+        color: var(--text-inverse);
+        box-shadow: var(--crm-nav-calendar-shadow);
     }
 
     :host-context([data-theme="light"]) .nav-item.active {
-        background: rgba(5, 150, 105, 0.1);
-        box-shadow: 0 4px 16px rgba(5, 150, 105, 0.1);
+        background: var(--accent-subtle);
+        box-shadow: var(--accent-glow);
     }
 
     :host-context([data-theme="light"]) .nav-item-badge {
-        background: rgba(0, 0, 0, 0.06);
+        background: var(--crm-surface-tint-strong);
     }
 `;
 

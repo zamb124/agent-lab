@@ -6,6 +6,8 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles, iconButtonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-date-picker.js';
 
 const PRIORITY_OPTIONS = [
     { value: 'low', label: 'Низкий' },
@@ -34,8 +36,8 @@ export class AIEntityCard extends PlatformElement {
             }
 
             .card {
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 overflow: hidden;
                 transition: all var(--duration-fast) ease;
@@ -84,15 +86,15 @@ export class AIEntityCard extends PlatformElement {
             }
 
             .dedup-badge.new {
-                background: rgba(16, 185, 129, 0.15);
+                background: var(--accent-subtle);
                 color: var(--accent);
-                border: 1px solid rgba(16, 185, 129, 0.3);
+                border: 1px solid var(--crm-selected-stroke);
             }
 
             .dedup-badge.existing {
-                background: rgba(245, 158, 11, 0.15);
-                color: #f59e0b;
-                border: 1px solid rgba(245, 158, 11, 0.3);
+                background: var(--accent-quaternary-subtle);
+                color: var(--accent-quaternary);
+                border: 1px solid var(--warning-border);
             }
 
             .dedup-confidence {
@@ -105,14 +107,14 @@ export class AIEntityCard extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-secondary);
                 padding: var(--space-2);
-                background: rgba(245, 158, 11, 0.1);
-                border: 1px solid rgba(245, 158, 11, 0.2);
+                background: var(--accent-quaternary-subtle);
+                border: 1px solid var(--warning-border);
                 border-radius: var(--radius-sm);
                 margin-bottom: var(--space-2);
             }
 
             .existing-info strong {
-                color: #f59e0b;
+                color: var(--accent-quaternary);
             }
 
             .confirm-btn {
@@ -126,7 +128,7 @@ export class AIEntityCard extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 background: var(--accent-subtle);
-                border: 1px solid rgba(16, 185, 129, 0.3);
+                border: 1px solid var(--crm-selected-stroke);
                 border-radius: var(--radius-sm);
                 color: var(--accent);
                 cursor: pointer;
@@ -138,7 +140,7 @@ export class AIEntityCard extends PlatformElement {
 
             .confirm-btn:hover {
                 background: var(--accent);
-                color: white;
+                color: var(--text-inverse);
             }
 
             .card-body {
@@ -246,7 +248,7 @@ export class AIEntityCard extends PlatformElement {
 
             .add-attr-btn:hover {
                 background: var(--accent-subtle);
-                border-color: rgba(16, 185, 129, 0.3);
+                border-color: var(--crm-selected-stroke);
                 color: var(--accent);
             }
 
@@ -293,8 +295,8 @@ export class AIEntityCard extends PlatformElement {
             }
 
             .remove-attr-btn:hover {
-                background: rgba(244, 63, 94, 0.1);
-                border-color: rgba(244, 63, 94, 0.3);
+                background: var(--crm-danger-bg);
+                border-color: var(--crm-danger-stroke);
                 color: var(--error);
             }
 
@@ -306,17 +308,17 @@ export class AIEntityCard extends PlatformElement {
             }
 
             :host-context([data-theme="light"]) .card {
-                background: rgba(255, 255, 255, 0.8);
-                border-color: rgba(15, 23, 42, 0.1);
+                background: var(--crm-surface-muted);
+                border-color: var(--crm-stroke);
             }
 
             :host-context([data-theme="light"]) .card-header {
-                background: rgba(255, 255, 255, 0.5);
+                background: var(--crm-surface-tint);
             }
 
             :host-context([data-theme="light"]) .field-input {
-                background: rgba(255, 255, 255, 0.9);
-                border-color: rgba(15, 23, 42, 0.1);
+                background: var(--crm-surface-elevated);
+                border-color: var(--crm-stroke);
             }
         `
     ];
@@ -349,8 +351,8 @@ export class AIEntityCard extends PlatformElement {
         
         if (entityType) {
             return {
-                icon: entityType.icon || '📄',
-                color: entityType.color || '#607D8B',
+                icon: entityType.icon || 'file',
+                color: entityType.color || 'var(--text-tertiary)',
                 label: entityType.name
             };
         }
@@ -358,13 +360,13 @@ export class AIEntityCard extends PlatformElement {
         const baseEntityType = types.find(t => t.type_id === baseType);
         if (baseEntityType) {
             return {
-                icon: baseEntityType.icon || '📄',
-                color: baseEntityType.color || '#607D8B',
+                icon: baseEntityType.icon || 'file',
+                color: baseEntityType.color || 'var(--text-tertiary)',
                 label: baseEntityType.name
             };
         }
         
-        return { icon: '📄', color: '#607D8B', label: baseType || 'Сущность' };
+        return { icon: 'file', color: 'var(--text-tertiary)', label: baseType || 'Сущность' };
     }
 
     _getSubtypeOptions() {
@@ -425,6 +427,13 @@ export class AIEntityCard extends PlatformElement {
         });
     }
 
+    _resolveIconName(iconName) {
+        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
+            return iconName;
+        }
+        return 'file';
+    }
+
     _getDedupBadge() {
         const action = this.suggestion.dedup_action;
         const confidence = this.suggestion.dedup_confidence;
@@ -456,7 +465,9 @@ export class AIEntityCard extends PlatformElement {
         return html`
             <div class="card">
                 <div class="card-header">
-                    <span class="type-icon">${config.icon}</span>
+                    <span class="type-icon">
+                        <platform-icon name="${this._resolveIconName(config.icon)}" size="18"></platform-icon>
+                    </span>
                     <span class="type-label">${config.label}</span>
                     <span class="dedup-badge ${dedupBadge.class}">
                         ${dedupBadge.label}
@@ -468,7 +479,7 @@ export class AIEntityCard extends PlatformElement {
                         <span class="type-badge">${this.suggestion.entity_subtype}</span>
                     ` : ''}
                     <button type="button" class="confirm-btn" @click=${this._onConfirm} title="${isUpdate ? 'Обновить' : 'Создать'}">
-                        ${isUpdate ? '↑' : '✓'}
+                        <platform-icon name="${isUpdate ? 'arrow-up' : 'check'}" size="14"></platform-icon>
                     </button>
                 </div>
 
@@ -520,24 +531,26 @@ export class AIEntityCard extends PlatformElement {
                         ${isNote ? html`
                             <div class="field-group">
                                 <label class="field-label">Дата</label>
-                                <input
-                                    type="date"
+                                <platform-date-picker
                                     class="field-input"
-                                    .value=${this.suggestion.note_date || ''}
-                                    @input=${(e) => this._onFieldChange('note_date', e)}
-                                />
+                                    mode="date"
+                                    value-format="iso"
+                                    .value=${this.suggestion.note_date || null}
+                                    @change=${(e) => this._onFieldChange('note_date', e)}
+                                ></platform-date-picker>
                             </div>
                         ` : ''}
 
                         ${isTask ? html`
                             <div class="field-group">
                                 <label class="field-label">Дедлайн</label>
-                                <input
-                                    type="date"
+                                <platform-date-picker
                                     class="field-input"
-                                    .value=${this.suggestion.due_date || ''}
-                                    @input=${(e) => this._onFieldChange('due_date', e)}
-                                />
+                                    mode="date"
+                                    value-format="iso"
+                                    .value=${this.suggestion.due_date || null}
+                                    @change=${(e) => this._onFieldChange('due_date', e)}
+                                ></platform-date-picker>
                             </div>
                             <div class="field-group">
                                 <label class="field-label">Приоритет</label>
@@ -558,7 +571,7 @@ export class AIEntityCard extends PlatformElement {
                         <div class="attributes-header">
                             <span class="attributes-title">Атрибуты</span>
                             <button type="button" class="add-attr-btn" @click=${this._addAttribute} title="Добавить атрибут">
-                                +
+                                <platform-icon name="plus" size="14"></platform-icon>
                             </button>
                         </div>
 
@@ -586,7 +599,7 @@ export class AIEntityCard extends PlatformElement {
                                     @click=${() => this._removeAttribute(i)}
                                     title="Удалить"
                                 >
-                                    −
+                                    <platform-icon name="close" size="12"></platform-icon>
                                 </button>
                             </div>
                         `)}

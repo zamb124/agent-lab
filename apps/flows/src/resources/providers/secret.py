@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from apps.flows.src.models import ResourceDefinition, SecretResourceConfig
 from apps.flows.src.resources.providers.base import BaseResourceProvider
+from core.variables import VarResolver
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -42,16 +43,11 @@ class SecretResourceProvider(BaseResourceProvider):
         
         # Резолвим @var: ссылку
         if key.startswith("@var:"):
-            var_name = key[5:]
-            if var_name in variables:
-                value = variables[var_name]
-                logger.debug(f"Secret resource '{definition.resource_id}' resolved from variables")
-                return value
-            else:
-                raise ValueError(
-                    f"Secret resource '{definition.resource_id}': "
-                    f"variable '{var_name}' not found"
-                )
+            value = VarResolver.resolve_ref(key, variables)
+            logger.debug(f"Secret resource '{definition.resource_id}' resolved from variables")
+            if not isinstance(value, str):
+                return str(value)
+            return value
         
         # Если не @var:, возвращаем как есть (прямое значение)
         return key

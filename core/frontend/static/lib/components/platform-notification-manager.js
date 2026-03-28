@@ -146,11 +146,20 @@ export class PlatformNotificationManager extends PlatformElement {
         this.unreadCount++;
         this._showToast(notification);
         this.requestUpdate();
+        this._emitNotificationEvents(notification);
+    }
+
+    _emitNotificationEvents(notification) {
         this.dispatchEvent(
             new CustomEvent('notification-received', {
                 detail: notification,
                 bubbles: true,
                 composed: true,
+            })
+        );
+        window.dispatchEvent(
+            new CustomEvent('platform-notification-received', {
+                detail: notification,
             })
         );
     }
@@ -257,11 +266,7 @@ export class PlatformNotificationManager extends PlatformElement {
             });
         }
 
-        this.dispatchEvent(new CustomEvent('notification-received', {
-            detail: notification,
-            bubbles: true,
-            composed: true
-        }));
+        this._emitNotificationEvents(notification);
     }
 
     _showToast(notification) {

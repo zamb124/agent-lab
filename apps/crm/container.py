@@ -90,6 +90,14 @@ class CRMContainer(BaseContainer):
     def attachment_service(self):
         from apps.crm.services.attachment_service import AttachmentService
         return AttachmentService()
+
+    @lazy
+    def daily_summary_cache_service(self):
+        from core.config import get_settings
+        from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
+
+        settings = get_settings()
+        return DailySummaryCacheService(redis_url=settings.database.redis_url)
     
     @lazy
     def company_init_service(self):
@@ -109,7 +117,8 @@ class CRMContainer(BaseContainer):
             relationship_type_repo=self.relationship_type_repository,
             relationship_repo=self.relationship_repository,
             attachment_service=self.attachment_service,
-            a2a_client=A2AClient()
+            a2a_client=A2AClient(timeout=300.0),
+            daily_summary_cache_service=self.daily_summary_cache_service,
         )
     
     @lazy

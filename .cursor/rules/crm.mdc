@@ -10,6 +10,28 @@ description: "CRM NetWorkle система управления сущностя
 CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relationships, grants)**
 
 ```
+
+### Daily Summary (event-driven, SWR)
+
+- `POST /crm/api/v1/entities/daily-summary` работает в режиме stale-while-revalidate:
+  - возвращает последнее `summary` из Redis state;
+  - при `miss/stale` ставит фоновую задачу и отдает `revalidating=true`.
+- Доставка нового summary на UI выполняется push-событием через WebSocket:
+  - после успешного `crm_rebuild_daily_summary` воркер отправляет `crm_daily_summary_updated`;
+  - payload содержит `event=crm.daily_summary.updated`, `date`, `namespace`, `summary_state`;
+  - фронтенд не использует polling для ожидания завершения пересчета.
+- Redis контракт состояния:
+  - ключ state: `crm:daily_summary:v1:{company}:{namespace_or_all}:{date}:state`;
+  - lock: `...:lock` (`SET NX EX`);
+  - revalidating flag: `...:revalidating`.
+- `source_version` обязателен и строится из заметок дня: `notes_count`, `max_updated_at`.
+- Триггеры пересчета:
+  - после `create/update/delete` note в `EntityService`;
+  - в `update` note с изменением `note_date` пересчитываются обе даты (старая и новая).
+- Фоновая обработка:
+  - отдельный TaskIQ worker `apps.crm_worker` с queue `crm`;
+  - задача `crm_rebuild_daily_summary` пересчитывает и сохраняет state;
+  - задача `crm_reconcile_daily_summary` периодически доставляет пропущенные пересчеты.
 ┌─────────────────────────────────────────────────────────────┐
 │  crm_entities (атрибуты)       │   PostgreSQL (relations)   │
 ├────────────────────────────────┼────────────────────────────┤

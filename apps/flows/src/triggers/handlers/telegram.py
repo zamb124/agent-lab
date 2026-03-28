@@ -288,7 +288,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         container = get_container()
         var_key = var_ref[5:]  # Убираем "@var:"
         
-        value = await container.variables_service.get(var_key)
+        value = await container.variables_service.get_var(var_key)
         
         if value is None:
             raise TriggerRegistrationError(

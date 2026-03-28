@@ -34,22 +34,24 @@ export class EntitiesList extends CRMPanel {
                 gap: var(--space-3);
                 padding: var(--space-3);
                 margin-bottom: var(--space-2);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all var(--duration-fast);
+                width: 100%;
+                text-align: left;
             }
 
             .entity-item:hover {
-                background: var(--glass-solid-medium);
+                background: var(--crm-surface);
                 border-color: var(--accent-subtle);
                 transform: translateX(4px);
             }
 
             .entity-item.active {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
+                background: var(--crm-selected-bg);
+                border-color: var(--crm-selected-stroke);
             }
 
             .entity-icon {
@@ -103,7 +105,7 @@ export class EntitiesList extends CRMPanel {
                 align-items: center;
                 gap: var(--space-1);
                 padding: 2px 6px;
-                background: var(--glass-solid-subtle);
+                background: var(--crm-surface-tint);
                 border-radius: var(--radius-sm);
                 font-size: var(--text-xs);
             }
@@ -197,12 +199,12 @@ export class EntitiesList extends CRMPanel {
         const entityType = this._entityTypes.find(t => t.type_id === typeId);
         if (entityType) {
             return {
-                icon: entityType.icon || '📄',
-                color: entityType.color || '#9E9E9E',
+                icon: entityType.icon || 'file',
+                color: entityType.color || 'var(--text-tertiary)',
                 label: entityType.name || typeId,
             };
         }
-        return { icon: '📄', color: '#9E9E9E', label: entity.entity_type };
+        return { icon: 'file', color: 'var(--text-tertiary)', label: entity.entity_type };
     }
 
     _formatDate(dateString) {
@@ -215,12 +217,19 @@ export class EntitiesList extends CRMPanel {
     }
 
     _hexToRgba(hex, alpha) {
-        if (!hex) return `rgba(158, 158, 158, ${alpha})`;
+        if (!hex) return `rgba(148, 163, 184, ${alpha})`;
         const cleanHex = hex.replace('#', '');
         const r = parseInt(cleanHex.substring(0, 2), 16);
         const g = parseInt(cleanHex.substring(2, 4), 16);
         const b = parseInt(cleanHex.substring(4, 6), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    _renderTypeIcon(iconName) {
+        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
+            return html`<platform-icon name="${iconName}" size="20"></platform-icon>`;
+        }
+        return html`<platform-icon name="file" size="20"></platform-icon>`;
     }
     
     renderHeaderActions() {
@@ -246,7 +255,7 @@ export class EntitiesList extends CRMPanel {
                 ${this._entities.length === 0 ? html`
                     <div class="empty-state">
                         <div class="empty-icon">
-                            <img src="/crm/ui/static/assets/icons/book.png" alt="" />
+                            <platform-icon name="book-open" size="56"></platform-icon>
                         </div>
                         <div>Нет сущностей</div>
                         <div style="margin-top: var(--space-2); font-size: var(--text-sm);">
@@ -258,15 +267,16 @@ export class EntitiesList extends CRMPanel {
                     const bgColor = this._hexToRgba(typeConfig.color, 0.15);
                     
                     return html`
-                        <div
+                        <button
                             class="entity-item ${entity.entity_id === this._currentEntityId ? 'active' : ''}"
+                            type="button"
                             @click=${() => this._onSelectEntity(entity.entity_id)}
                         >
                             <div
                                 class="entity-icon"
                                 style="background: ${bgColor}; color: ${typeConfig.color};"
                             >
-                                ${typeConfig.icon}
+                                ${this._renderTypeIcon(typeConfig.icon)}
                             </div>
                             <div class="entity-content">
                                 <div class="entity-name">${entity.name}</div>
@@ -280,7 +290,7 @@ export class EntitiesList extends CRMPanel {
                                     <span>${this._formatDate(entity.created_at)}</span>
                                 </div>
                             </div>
-                        </div>
+                        </button>
                     `;
                 })}
             </div>

@@ -19,6 +19,83 @@ class UnmatchedBracesError(Exception):
     pass
 
 
+class VariableResolutionError(ValueError):
+    """Ошибка резолва ссылки @var:."""
+
+    pass
+
+
+class VarResolver:
+    """
+    Единый strict-резолвер @var ссылок.
+
+    Контракт:
+    - Поддерживает только @var:key и @var:nested.path
+    - Отсутствующий ключ или путь всегда приводит к VariableResolutionError
+    """
+
+    _VAR_REF_PATTERN = re.compile(r"^@var:([a-zA-Z_][a-zA-Z0-9_.]*)$")
+    _VAR_TOKEN_PATTERN = re.compile(r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)")
+
+    @classmethod
+    def resolve_ref(cls, value: str, variables: Dict[str, Any]) -> Any:
+        """Резолвит только полную ссылку формата @var:path."""
+        if not isinstance(value, str):
+            raise VariableResolutionError(
+                f"@var reference must be string, got {type(value).__name__}"
+            )
+        match = cls._VAR_REF_PATTERN.match(value)
+        if match is None:
+            raise VariableResolutionError(
+                f"Invalid @var reference format: '{value}'"
+            )
+        return cls._resolve_path(match.group(1), variables)
+
+    @classmethod
+    def resolve_text(cls, value: str, variables: Dict[str, Any]) -> str:
+        """
+        Резолвит все @var:path токены в строке.
+        Если любой токен неразрешим, бросает VariableResolutionError.
+        """
+        if not isinstance(value, str):
+            raise VariableResolutionError(
+                f"Text for @var resolution must be string, got {type(value).__name__}"
+            )
+
+        def replace_var(match: re.Match) -> str:
+            resolved = cls._resolve_path(match.group(1), variables)
+            return str(resolved)
+
+        return cls._VAR_TOKEN_PATTERN.sub(replace_var, value)
+
+    @classmethod
+    def resolve_deep(cls, value: Any, variables: Dict[str, Any]) -> Any:
+        """
+        Рекурсивно резолвит @var во всех строках dict/list.
+        """
+        if isinstance(value, dict):
+            return {k: cls.resolve_deep(v, variables) for k, v in value.items()}
+        if isinstance(value, list):
+            return [cls.resolve_deep(item, variables) for item in value]
+        if isinstance(value, str):
+            if cls._VAR_REF_PATTERN.match(value):
+                return cls.resolve_ref(value, variables)
+            if "@var:" in value:
+                return cls.resolve_text(value, variables)
+            return value
+        return value
+
+    @classmethod
+    def _resolve_path(cls, path: str, variables: Dict[str, Any]) -> Any:
+        value: Any = variables
+        for key in path.split("."):
+            if isinstance(value, dict) and key in value:
+                value = value[key]
+                continue
+            raise VariableResolutionError(f"Variable '@var:{path}' not found")
+        return value
+
+
 class VariableResolver:
     """
     Резолвер переменных с приоритетами.

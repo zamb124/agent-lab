@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict
 
 from apps.flows.src.models import ResourceDefinition
+from core.variables import VarResolver
 
 
 class BaseResourceProvider(ABC):
@@ -48,16 +49,9 @@ class BaseResourceProvider(ABC):
         Returns:
             Конфиг с резолвнутыми значениями
         """
-        resolved = {}
-        for key, value in config.items():
-            if isinstance(value, str) and value.startswith("@var:"):
-                var_name = value[5:]
-                if var_name in variables:
-                    resolved[key] = variables[var_name]
-                else:
-                    resolved[key] = value
-            elif isinstance(value, dict):
-                resolved[key] = self._resolve_variable_refs(value, variables)
-            else:
-                resolved[key] = value
+        resolved = VarResolver.resolve_deep(config, variables)
+        if not isinstance(resolved, dict):
+            raise TypeError(
+                f"Resolved config must be dict, got {type(resolved).__name__}"
+            )
         return resolved

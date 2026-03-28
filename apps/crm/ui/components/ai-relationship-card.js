@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class AIRelationshipCard extends PlatformElement {
     static properties = {
@@ -23,8 +24,8 @@ export class AIRelationshipCard extends PlatformElement {
             }
 
             .card {
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 padding: var(--space-3);
                 transition: all var(--duration-fast) ease;
@@ -62,7 +63,7 @@ export class AIRelationshipCard extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 background: var(--accent-subtle);
-                border: 1px solid rgba(16, 185, 129, 0.3);
+                border: 1px solid var(--crm-selected-stroke);
                 border-radius: var(--radius-sm);
                 color: var(--accent);
                 cursor: pointer;
@@ -72,7 +73,7 @@ export class AIRelationshipCard extends PlatformElement {
 
             .confirm-btn:hover {
                 background: var(--accent);
-                color: white;
+                color: var(--text-inverse);
             }
 
             .relationship-flow {
@@ -112,12 +113,12 @@ export class AIRelationshipCard extends PlatformElement {
             }
 
             :host-context([data-theme="light"]) .card {
-                background: rgba(255, 255, 255, 0.8);
-                border-color: rgba(15, 23, 42, 0.1);
+                background: var(--crm-surface-muted);
+                border-color: var(--crm-stroke);
             }
 
             :host-context([data-theme="light"]) .entity-box {
-                background: rgba(255, 255, 255, 0.6);
+                background: var(--crm-surface-tint);
             }
         `
     ];
@@ -136,13 +137,20 @@ export class AIRelationshipCard extends PlatformElement {
         
         if (relType) {
             return {
-                icon: relType.icon || '🔗',
-                color: relType.color || '#9E9E9E',
+                icon: relType.icon || 'link',
+                color: relType.color || 'var(--text-tertiary)',
                 label: relType.name
             };
         }
         
-        return { icon: '🔗', color: '#9E9E9E', label: typeId || 'Связь' };
+        return { icon: 'link', color: 'var(--text-tertiary)', label: typeId || 'Связь' };
+    }
+
+    _resolveIconName(iconName) {
+        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
+            return iconName;
+        }
+        return 'link';
     }
 
     _onConfirm() {
@@ -159,10 +167,12 @@ export class AIRelationshipCard extends PlatformElement {
         return html`
             <div class="card">
                 <div class="card-header">
-                    <span class="type-icon">${config.icon}</span>
+                    <span class="type-icon">
+                        <platform-icon name="${this._resolveIconName(config.icon)}" size="16"></platform-icon>
+                    </span>
                     <span class="type-label">${config.label}</span>
                     <button class="confirm-btn" @click=${this._onConfirm} title="Подтвердить">
-                        ✓
+                        <platform-icon name="check" size="12"></platform-icon>
                     </button>
                 </div>
 
@@ -171,7 +181,7 @@ export class AIRelationshipCard extends PlatformElement {
                         <div class="entity-name">${source}</div>
                         ${sourceType ? html`<div class="entity-type">${sourceType}</div>` : ''}
                     </div>
-                    <span class="arrow">→</span>
+                    <span class="arrow"><platform-icon name="arrow-right" size="14"></platform-icon></span>
                     <div class="entity-box">
                         <div class="entity-name">${target}</div>
                         ${targetType ? html`<div class="entity-type">${targetType}</div>` : ''}

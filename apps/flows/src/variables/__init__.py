@@ -4,6 +4,8 @@ Variables - управление переменными агентов.
 
 from core.variables import (
     VariableResolver,
+    VariableResolutionError,
+    VarResolver,
     UnmatchedBracesError,
     VariablesService,
     get_state,
@@ -12,6 +14,8 @@ from core.variables import (
 
 __all__ = [
     "VariableResolver",
+    "VariableResolutionError",
+    "VarResolver",
     "UnmatchedBracesError",
     "VariablesService",
     "get_state",

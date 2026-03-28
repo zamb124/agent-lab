@@ -12,6 +12,7 @@
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py rag-worker  # Запуск RAG worker
     python scripts/run.py sync-worker # Запуск Sync worker
+    python scripts/run.py crm-worker  # Запуск CRM worker
     python scripts/run.py all         # Все сервисы параллельно (make app)
 
 Конфигурация загружается из conf.json и conf.local.json.
@@ -72,6 +73,11 @@ SERVICES = {
     "sync-worker": {
         "type": "taskiq-worker",
         "broker": "apps.sync_worker.worker:broker",
+        "workers": "1",
+    },
+    "crm-worker": {
+        "type": "taskiq-worker",
+        "broker": "apps.crm_worker.worker:broker",
         "workers": "1",
     },
     

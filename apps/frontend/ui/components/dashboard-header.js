@@ -137,7 +137,41 @@ export class DashboardHeader extends PlatformElement {
 
     _handleNavigation(path, e) {
         e.preventDefault();
-        window.location.href = path;
+        window.location.href = this._resolveNavigationUrl(path);
+    }
+
+    _resolveNavigationUrl(path) {
+        if (!this._isLocalHost(window.location.hostname)) {
+            return path;
+        }
+
+        const localPortByPath = {
+            '/flows': '8001',
+            '/crm': '8003',
+            '/rag': '8004',
+            '/sync': '8005',
+            '/dashboard': '8002',
+            '/billing': '8002',
+        };
+
+        const targetPort = localPortByPath[path];
+        if (!targetPort) {
+            return path;
+        }
+
+        if (window.location.port === targetPort) {
+            return path;
+        }
+
+        return `${window.location.protocol}//${window.location.hostname}:${targetPort}${path}`;
+    }
+
+    _isLocalHost(hostname) {
+        return (
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname.endsWith('.lvh.me')
+        );
     }
 
     async _handleLogout() {
