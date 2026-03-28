@@ -60,13 +60,20 @@ export const formStyles = css`
         padding: var(--space-3, 14px) var(--space-4, 16px);
         font-size: var(--text-base, 15px);
         color: var(--text-primary, rgba(255, 255, 255, 0.95));
-        background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.03));
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%),
+            var(--glass-tint-subtle, rgba(255, 255, 255, 0.03));
         border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
-        border-radius: var(--radius-md, 12px);
+        border-radius: var(--radius-lg, 16px);
         outline: none;
         transition: all var(--duration-fast, 0.2s) ease;
         font-family: inherit;
         box-sizing: border-box;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 8px 24px rgba(0, 0, 0, 0.12);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
     }
     
     .form-input::placeholder,
@@ -77,9 +84,14 @@ export const formStyles = css`
     .form-input:focus,
     .form-select:focus,
     .form-textarea:focus {
-        background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
-        border-color: var(--accent, #10b981);
-        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%),
+            var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
+        border-color: var(--border-focus, var(--accent, #10b981));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.16),
+            0 0 0 3px color-mix(in srgb, var(--accent, #10b981) 25%, transparent),
+            0 10px 28px rgba(0, 0, 0, 0.16);
     }
     
     .form-input:disabled,
@@ -93,6 +105,37 @@ export const formStyles = css`
         background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.02));
         color: var(--text-secondary, rgba(255, 255, 255, 0.65));
         cursor: default;
+    }
+
+    :host-context([data-theme="light"]) .form-input,
+    :host-context([data-theme="light"]) .form-select,
+    :host-context([data-theme="light"]) .form-textarea {
+        color: #222222;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.72) 100%),
+            rgba(34, 34, 34, 0.02);
+        border: 1px solid rgba(34, 34, 34, 0.1);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.95),
+            0 6px 18px rgba(34, 34, 34, 0.08);
+    }
+
+    :host-context([data-theme="light"]) .form-input::placeholder,
+    :host-context([data-theme="light"]) .form-textarea::placeholder {
+        color: rgba(34, 34, 34, 0.35);
+    }
+
+    :host-context([data-theme="light"]) .form-input:focus,
+    :host-context([data-theme="light"]) .form-select:focus,
+    :host-context([data-theme="light"]) .form-textarea:focus {
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.86) 100%),
+            rgba(153, 166, 249, 0.08);
+        border-color: #99a6f9;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 1),
+            0 0 0 3px rgba(153, 166, 249, 0.2),
+            0 8px 22px rgba(153, 166, 249, 0.18);
     }
     
     .form-select {

@@ -267,9 +267,9 @@
     --crm-stroke: var(--glass-border-subtle);
     --crm-stroke-strong: var(--glass-border-medium);
 
-    --crm-selected-bg: var(--accent-subtle);
-    --crm-selected-stroke: var(--accent);
-    --crm-selected-text: var(--accent);
+    --crm-selected-bg: rgba(153, 166, 249, 0.2);
+    --crm-selected-stroke: var(--crm-button-primary-bg);
+    --crm-selected-text: var(--crm-button-primary-bg);
 
     --crm-info-bg: rgba(59, 130, 246, 0.12);
     --crm-info-stroke: rgba(59, 130, 246, 0.28);
@@ -295,10 +295,17 @@
 
     --crm-daily-notes-cta-bg: #8f9cf6;
     --crm-daily-notes-cta-hover: #7f8eec;
+    --crm-button-primary-bg: #99A6F9;
+    --crm-button-primary-hover: #8794F0;
+    --crm-button-primary-text: #ffffff;
+    --crm-button-secondary-bg: #FF885C;
+    --crm-button-secondary-hover: #F2784A;
+    --crm-button-secondary-text: #ffffff;
 
+    --crm-main-gradient: linear-gradient(258.06deg, #FAD17A 13.41%, #FF9A76 50.99%, #99A6F9 95.5%);
     --crm-summary-bg: rgba(95, 101, 150, 0.26);
     --crm-summary-stroke: rgba(136, 145, 204, 0.42);
-    --crm-summary-title-gradient: linear-gradient(90deg, #f6c679 0%, #ff9e7a 52%, #99a6f9 100%);
+    --crm-summary-title-gradient: var(--crm-main-gradient);
     --crm-summary-meta: rgba(255, 255, 255, 0.58);
     --crm-summary-chip-blue-bg: rgba(126, 142, 255, 0.25);
     --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.28);
@@ -423,9 +430,9 @@
     --crm-stroke: var(--glass-border-subtle);
     --crm-stroke-strong: var(--glass-border-medium);
 
-    --crm-selected-bg: var(--accent-subtle);
-    --crm-selected-stroke: var(--accent);
-    --crm-selected-text: var(--accent);
+    --crm-selected-bg: rgba(153, 166, 249, 0.26);
+    --crm-selected-stroke: var(--crm-button-primary-bg);
+    --crm-selected-text: #6f7ee8;
 
     --crm-info-bg: rgba(59, 130, 246, 0.1);
     --crm-info-stroke: rgba(59, 130, 246, 0.22);
@@ -451,10 +458,17 @@
 
     --crm-daily-notes-cta-bg: #8f9cf6;
     --crm-daily-notes-cta-hover: #7f8eec;
+    --crm-button-primary-bg: #99A6F9;
+    --crm-button-primary-hover: #8794F0;
+    --crm-button-primary-text: #ffffff;
+    --crm-button-secondary-bg: #FF885C;
+    --crm-button-secondary-hover: #F2784A;
+    --crm-button-secondary-text: #ffffff;
 
+    --crm-main-gradient: linear-gradient(258.06deg, #FAD17A 13.41%, #FF9A76 50.99%, #99A6F9 95.5%);
     --crm-summary-bg: rgba(174, 180, 224, 0.28);
     --crm-summary-stroke: rgba(141, 149, 205, 0.45);
-    --crm-summary-title-gradient: linear-gradient(90deg, #f6c679 0%, #ff9e7a 52%, #99a6f9 100%);
+    --crm-summary-title-gradient: var(--crm-main-gradient);
     --crm-summary-meta: rgba(15, 23, 42, 0.45);
     --crm-summary-chip-blue-bg: rgba(126, 142, 255, 0.25);
     --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.32);

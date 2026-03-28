@@ -5,6 +5,7 @@
 Включает AI анализ с составными промптами и каскадное удаление через Saga.
 """
 
+from collections import deque
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
@@ -228,84 +229,160 @@ class EntityService:
             limit=limit,
         )
     
-    async def delete_entity(
+    @staticmethod
+    def _get_related_entity_id(relationship: Relationship, current_entity_id: str) -> str:
+        if relationship.source_entity_id == current_entity_id:
+            return relationship.target_entity_id
+        if relationship.target_entity_id == current_entity_id:
+            return relationship.source_entity_id
+        raise ValueError(
+            f"Relationship {relationship.relationship_id} does not include entity {current_entity_id}"
+        )
+
+    async def _build_entity_component_relationships(
+        self,
+        root_entity_id: str,
+    ) -> Dict[str, List[Relationship]]:
+        queue: deque[str] = deque([root_entity_id])
+        visited: set[str] = set()
+        relationships_by_entity: Dict[str, List[Relationship]] = {}
+
+        while queue:
+            entity_id = queue.popleft()
+            if entity_id in visited:
+                continue
+            visited.add(entity_id)
+
+            relationships = await self._relationship_repo.get_by_entity(entity_id)
+            relationships_by_entity[entity_id] = relationships
+
+            for relationship in relationships:
+                related_entity_id = self._get_related_entity_id(relationship, entity_id)
+                if related_entity_id not in visited:
+                    queue.append(related_entity_id)
+
+        return relationships_by_entity
+
+    async def _collect_exclusive_related_entities_for_note(
+        self,
+        note_entity_id: str,
+    ) -> List[str]:
+        relationships_by_entity = await self._build_entity_component_relationships(note_entity_id)
+        component_order = list(relationships_by_entity.keys())
+        entities_to_delete: set[str] = {note_entity_id}
+
+        changed = True
+        while changed:
+            changed = False
+            for entity_id in component_order:
+                if entity_id in entities_to_delete:
+                    continue
+
+                relationships = relationships_by_entity.get(entity_id, [])
+                has_surviving_relationship = False
+                for relationship in relationships:
+                    related_entity_id = self._get_related_entity_id(relationship, entity_id)
+                    if related_entity_id not in entities_to_delete:
+                        has_surviving_relationship = True
+                        break
+
+                if not has_surviving_relationship:
+                    entities_to_delete.add(entity_id)
+                    changed = True
+
+        return [
+            entity_id
+            for entity_id in component_order
+            if entity_id in entities_to_delete and entity_id != note_entity_id
+        ]
+
+    async def _delete_entity_with_saga(
         self,
         entity_id: str,
-        
-    ) -> bool:
-        """
-        Каскадное удаление entity через Saga pattern.
-        
-        Шаги:
-        1. Удалить все relationships
-        2. Удалить все attachments
-        3. Удалить entity из БД + vector_documents
-        """
-        
-        
+    ) -> CRMEntity:
         entity = await self._entity_repo.get(entity_id)
         if not entity:
-            logger.warning(f"Entity not found for deletion: {entity_id}")
-            return False
-        
+            raise ValueError(f"Entity not found for deletion: {entity_id}")
+
         saga = EntityDeletionSaga()
-        
-        deleted_relationships = []
-        deleted_attachments = []
-        
-        async def delete_relationships():
+        deleted_relationships: List[Relationship] = []
+        async def delete_relationships() -> None:
             nonlocal deleted_relationships
-            rels = await self._relationship_repo.get_by_entity(entity_id)
-            deleted_relationships = rels.copy()
+            relationships = await self._relationship_repo.get_by_entity(entity_id)
+            deleted_relationships = relationships.copy()
             await self._relationship_repo.delete_by_entity(entity_id)
-        
-        async def restore_relationships():
-            for rel in deleted_relationships:
-                await self._relationship_repo.create(rel)
-    
-        async def delete_attachments():
-            nonlocal deleted_attachments
-            deleted_count = await self._attachment_service.delete_all_attachments(
-                entity_id
-            )
-            deleted_attachments = entity.attachment_ids.copy()
-        
-        async def restore_attachments():
+
+        async def restore_relationships() -> None:
+            for relationship in deleted_relationships:
+                await self._relationship_repo.create(relationship)
+
+        async def delete_attachments() -> None:
+            await self._attachment_service.delete_all_attachments(entity_id)
+
+        async def restore_attachments() -> None:
             pass
-        
-        async def delete_entity_from_db():
+
+        async def delete_entity_from_db() -> None:
             await self._entity_repo.delete(entity_id)
-        
-        async def restore_entity_to_db():
+
+        async def restore_entity_to_db() -> None:
             await self._entity_repo.create(entity)
-        
+
         saga.add_step(SagaStep(
             name="Delete relationships",
             execute_fn=delete_relationships,
             compensate_fn=restore_relationships
         ))
-        
         saga.add_step(SagaStep(
             name="Delete attachments",
             execute_fn=delete_attachments,
             compensate_fn=restore_attachments
         ))
-        
         saga.add_step(SagaStep(
             name="Delete entity",
             execute_fn=delete_entity_from_db,
             compensate_fn=restore_entity_to_db
         ))
-        
+
         await saga.execute()
-        logger.info(f"Successfully deleted entity: {entity_id} (cascade)")
+        return entity
+
+    async def delete_entity(
+        self,
+        entity_id: str,
+    ) -> bool:
+        """
+        Каскадное удаление entity через Saga pattern.
+
+        Для note: удаляет саму заметку и эксклюзивно связанные сущности.
+        Эксклюзивная сущность - та, у которой после удаления note не остается связей
+        с сущностями вне удаляемого подграфа.
+        """
+        entity = await self._entity_repo.get(entity_id)
+        if not entity:
+            logger.warning(f"Entity not found for deletion: {entity_id}")
+            return False
+
+        if entity.entity_type == "note":
+            exclusive_related_entity_ids = await self._collect_exclusive_related_entities_for_note(entity_id)
+            for related_entity_id in exclusive_related_entity_ids:
+                await self._delete_entity_with_saga(related_entity_id)
+                logger.info(f"Deleted exclusive related entity for note {entity_id}: {related_entity_id}")
+
+            await self._delete_entity_with_saga(entity_id)
+            logger.info(
+                f"Successfully deleted note {entity_id} with {len(exclusive_related_entity_ids)} exclusive entities"
+            )
+        else:
+            await self._delete_entity_with_saga(entity_id)
+            logger.info(f"Successfully deleted entity: {entity_id} (cascade)")
 
         if entity.entity_type == "note" and entity.note_date is not None:
             await self.enqueue_daily_summary_rebuild(
                 date_str=entity.note_date.isoformat(),
                 namespace=entity.namespace,
             )
-        
+
         return True
     
     async def search_entities(

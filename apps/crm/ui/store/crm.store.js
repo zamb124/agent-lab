@@ -69,6 +69,8 @@ const baseStore = new BaseStore('crm', {
         suggestions: [],
         mentionedEntities: [],
         analyzing: false,
+        noteSummaries: {},
+        draftByNoteId: {},
     },
     loading: false,
     error: null,
@@ -304,6 +306,7 @@ export const CRMStore = {
         }
         
         const prevNotes = baseStore.state.entities.notes;
+        const prevCurrentNoteId = baseStore.state.entities.currentNoteId;
         
         baseStore.setState((s) => ({
             entities: {
@@ -317,7 +320,11 @@ export const CRMStore = {
             await crmApi.deleteEntity(noteId);
         } catch (error) {
             baseStore.setState((s) => ({
-                entities: { ...s.entities, notes: prevNotes },
+                entities: {
+                    ...s.entities,
+                    notes: prevNotes,
+                    currentNoteId: prevCurrentNoteId,
+                },
                 error: error.message
             }));
             throw error;
@@ -357,29 +364,141 @@ export const CRMStore = {
         if (!text) {
             throw new Error('Text is required');
         }
-        
+
         baseStore.setState((s) => ({
             ai: { ...s.ai, analyzing: true }
         }));
-        
-        const analysis = await crmApi.analyzeText(text, noteId);
-        
-        const suggestions = [
-            ...(analysis.entities || []),
-            ...(analysis.relationships || [])
-        ];
-        
-        console.log('[CRMStore] analyzeText result:', { analysis, suggestions });
-        
+
+        try {
+            const analysis = await crmApi.analyzeText(text, noteId);
+
+            const suggestions = [
+                ...(analysis.entities || []),
+                ...(analysis.relationships || [])
+            ];
+
+            console.log('[CRMStore] analyzeText result:', { analysis, suggestions });
+
+            const noteSummaryText = typeof analysis?.note?.description === 'string' ? analysis.note.description.trim() : '';
+            const noteSummaryEntities = Array.isArray(analysis?.entities)
+                ? analysis.entities
+                    .map((entity) => (typeof entity?.name === 'string' ? entity.name.trim() : ''))
+                    .filter((name) => name.length > 0)
+                    .slice(0, 8)
+                : [];
+            const noteSummaryGeneratedAt = new Date().toISOString();
+
+            if (noteId) {
+                const state = baseStore.state;
+                const note = state.entities.notes.find((item) => item.entity_id === noteId);
+                if (!note) {
+                    throw new Error(`Note not found for summary update: ${noteId}`);
+                }
+
+                const currentAttributes = note.attributes && typeof note.attributes === 'object'
+                    ? note.attributes
+                    : {};
+                const nextAttributes = {
+                    ...currentAttributes,
+                    ai_analysis_draft: {
+                        note: analysis?.note || null,
+                        entities: Array.isArray(analysis?.entities) ? analysis.entities : [],
+                        relationships: Array.isArray(analysis?.relationships) ? analysis.relationships : [],
+                        saved_at: noteSummaryGeneratedAt,
+                    },
+                };
+                if (noteSummaryText.length > 0) {
+                    nextAttributes.ai_summary = noteSummaryText;
+                    nextAttributes.ai_summary_entities = noteSummaryEntities;
+                    nextAttributes.ai_summary_generated_at = noteSummaryGeneratedAt;
+                }
+
+                const updatedNote = await crmApi.updateEntity(noteId, {
+                    attributes: nextAttributes,
+                });
+
+                baseStore.setState((s) => ({
+                    entities: {
+                        ...s.entities,
+                        notes: s.entities.notes.map((item) => (
+                            item.entity_id === noteId ? updatedNote : item
+                        )),
+                    },
+                    ai: {
+                        ...s.ai,
+                        suggestions,
+                        noteSummaries: {
+                            ...s.ai.noteSummaries,
+                            ...(noteSummaryText.length > 0
+                                ? {
+                                    [noteId]: {
+                                        summary: noteSummaryText,
+                                        entities: noteSummaryEntities,
+                                        generated_at: noteSummaryGeneratedAt,
+                                    },
+                                }
+                                : {}),
+                        },
+                        draftByNoteId: {
+                            ...s.ai.draftByNoteId,
+                            [noteId]: {
+                                note: analysis?.note || null,
+                                entities: Array.isArray(analysis?.entities) ? analysis.entities : [],
+                                relationships: Array.isArray(analysis?.relationships) ? analysis.relationships : [],
+                                saved_at: noteSummaryGeneratedAt,
+                            },
+                        },
+                    },
+                }));
+                return analysis;
+            }
+
+            baseStore.setState((s) => ({
+                ai: {
+                    ...s.ai,
+                    suggestions,
+                }
+            }));
+
+            return analysis;
+        } finally {
+            baseStore.setState((s) => ({
+                ai: { ...s.ai, analyzing: false }
+            }));
+        }
+    },
+
+    openNoteAnalysisDraft(noteId) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
+        }
+        const note = baseStore.state.entities.notes.find((item) => item.entity_id === noteId);
+        if (!note) {
+            throw new Error(`Note not found: ${noteId}`);
+        }
+        const attrs = note.attributes;
+        if (!attrs || typeof attrs !== 'object') {
+            throw new Error('Note attributes are required');
+        }
+        const draft = attrs.ai_analysis_draft;
+        if (!draft || typeof draft !== 'object') {
+            throw new Error('AI draft is not available for this note');
+        }
+        const draftEntities = Array.isArray(draft.entities) ? draft.entities : [];
+        const draftRelationships = Array.isArray(draft.relationships) ? draft.relationships : [];
+        const suggestions = [...draftEntities, ...draftRelationships];
         baseStore.setState((s) => ({
+            entities: { ...s.entities, currentNoteId: noteId },
             ai: {
                 ...s.ai,
                 suggestions,
-                analyzing: false
-            }
+                draftByNoteId: {
+                    ...s.ai.draftByNoteId,
+                    [noteId]: draft,
+                },
+            },
         }));
-        
-        return analysis;
+        return draft;
     },
     
     clearAISuggestions() {
@@ -633,7 +752,14 @@ export const CRMStore = {
             throw new Error('crmApi service is required');
         }
         
-        const types = await crmApi.getRelationshipTypes();
+        const response = await crmApi.getRelationshipTypes();
+        if (!response || typeof response !== 'object') {
+            throw new Error('Relationship types response must be object');
+        }
+        if (!Array.isArray(response.relationship_types)) {
+            throw new Error('relationship_types must be array');
+        }
+        const types = response.relationship_types;
         baseStore.setState((s) => ({
             entities: { ...s.entities, relationshipTypes: types }
         }));

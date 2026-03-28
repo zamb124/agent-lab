@@ -46,6 +46,17 @@ export class CRMApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
+                --btn-primary-bg: var(--crm-button-primary-bg);
+                --btn-primary-hover-bg: var(--crm-button-primary-hover);
+                --btn-primary-text: var(--crm-button-primary-text);
+                --btn-primary-shadow: 0 4px 12px rgba(153, 166, 249, 0.35);
+                --btn-primary-hover-shadow: 0 6px 20px rgba(153, 166, 249, 0.45);
+                --btn-secondary-bg: var(--crm-button-secondary-bg);
+                --btn-secondary-border: var(--crm-button-secondary-bg);
+                --btn-secondary-text: var(--crm-button-secondary-text);
+                --btn-secondary-hover-bg: var(--crm-button-secondary-hover);
+                --btn-secondary-hover-border: var(--crm-button-secondary-hover);
+                --btn-secondary-hover-text: var(--crm-button-secondary-text);
             }
             
             .sidebar {

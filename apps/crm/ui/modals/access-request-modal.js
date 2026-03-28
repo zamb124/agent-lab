@@ -158,24 +158,26 @@ export class AccessRequestModal extends PlatformModal {
             }
 
             .btn-secondary {
-                background: var(--crm-surface-muted);
-                border: 1px solid var(--crm-stroke);
-                color: var(--text-secondary);
+                background: var(--crm-button-secondary-bg);
+                border: 1px solid var(--crm-button-secondary-bg);
+                color: var(--crm-button-secondary-text);
             }
 
             .btn-secondary:hover {
-                background: var(--crm-surface);
-                color: var(--text-primary);
+                background: var(--crm-button-secondary-hover);
+                border-color: var(--crm-button-secondary-hover);
+                color: var(--crm-button-secondary-text);
             }
 
             .btn-primary {
-                background: var(--accent);
-                border: 1px solid var(--accent);
-                color: var(--text-inverse);
+                background: var(--crm-button-primary-bg);
+                border: 1px solid var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
             }
 
             .btn-primary:hover:not(:disabled) {
-                background: var(--accent-hover);
+                background: var(--crm-button-primary-hover);
+                border-color: var(--crm-button-primary-hover);
             }
 
             .btn-primary:disabled {

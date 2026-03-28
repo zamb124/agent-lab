@@ -193,8 +193,8 @@ export const sidebarStyles = css`
     }
 
     .sidebar-logo-icon {
-        width: 36px;
-        height: 36px;
+        width: var(--sidebar-logo-width, 36px);
+        height: var(--sidebar-logo-height, 36px);
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -220,8 +220,12 @@ export const sidebarStyles = css`
 
     .sidebar-logo-text {
         font-size: var(--text-xl);
-        font-weight: var(--font-bold);
-        color: var(--text-primary);
+        font-weight: var(--sidebar-logo-text-weight, var(--font-bold));
+        color: var(--sidebar-logo-text-color, var(--text-primary));
+        background: var(--sidebar-logo-text-gradient, none);
+        -webkit-background-clip: var(--sidebar-logo-text-clip, border-box);
+        background-clip: var(--sidebar-logo-text-clip, border-box);
+        -webkit-text-fill-color: var(--sidebar-logo-text-fill, currentColor);
         letter-spacing: var(--tracking-tight);
         white-space: nowrap;
         overflow: hidden;

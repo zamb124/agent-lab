@@ -5,6 +5,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '../modals/entity-modal.js';
 import '../modals/note-view-modal.js';
+import '../modals/ai-analysis-modal.js';
 
 export class DailyNotesPage extends PlatformElement {
     static properties = {
@@ -177,11 +178,41 @@ export class DailyNotesPage extends PlatformElement {
                 cursor: pointer;
             }
 
+            .note-tags-row {
+                position: relative;
+                min-height: 24px;
+            }
+
             .note-tags {
                 display: flex;
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 gap: 12px;
                 min-height: 24px;
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding-right: 52px;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+            }
+
+            .note-tags::-webkit-scrollbar {
+                display: none;
+            }
+
+            .note-tags-hint {
+                position: absolute;
+                top: 0;
+                right: 0;
+                height: 24px;
+                display: inline-flex;
+                align-items: center;
+                padding-left: 12px;
+                background: linear-gradient(90deg, rgba(34, 34, 34, 0) 0%, rgba(34, 34, 34, 0.05) 42%);
+                color: var(--text-tertiary);
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                pointer-events: none;
             }
 
             .note-tag {
@@ -198,6 +229,8 @@ export class DailyNotesPage extends PlatformElement {
                 border: none;
                 cursor: pointer;
                 transition: filter var(--duration-fast);
+                white-space: nowrap;
+                flex: 0 0 auto;
             }
 
             .note-tag:hover {
@@ -300,6 +333,12 @@ export class DailyNotesPage extends PlatformElement {
                 cursor: pointer;
             }
 
+            .analyze-btn.has-draft {
+                border-color: var(--crm-button-secondary-bg);
+                background: rgba(255, 136, 92, 0.18);
+                color: var(--crm-button-secondary-bg);
+            }
+
             .summary-panel {
                 background: var(--crm-summary-bg);
                 border-radius: var(--radius-xl);
@@ -375,6 +414,20 @@ export class DailyNotesPage extends PlatformElement {
 
             .summary-refresh-btn:hover {
                 color: var(--accent-tertiary);
+            }
+
+            .summary-refresh-icon.spinning {
+                animation: summary-refresh-spin 0.9s linear infinite;
+                transform-origin: center;
+            }
+
+            @keyframes summary-refresh-spin {
+                from {
+                    transform: rotate(0deg);
+                }
+                to {
+                    transform: rotate(360deg);
+                }
             }
 
             .summary-meta {
@@ -523,15 +576,22 @@ export class DailyNotesPage extends PlatformElement {
     }
 
     async _loadDailySummary(options = {}) {
-        const { forceRebuild = false } = options;
+        const { forceRebuild = false, waitForWsUpdate = false } = options;
         this._loadingSummary = true;
-        const crmApi = this.services.get('crmApi');
-        const response = await crmApi.getDailySummary(this._selectedDate, {
-            forceRebuild,
-            namespace: this._getCurrentNamespaceName(),
-        });
-        this._applySummaryPayload(response);
-        this._loadingSummary = false;
+        try {
+            const crmApi = this.services.get('crmApi');
+            const response = await crmApi.getDailySummary(this._selectedDate, {
+                forceRebuild,
+                namespace: this._getCurrentNamespaceName(),
+            });
+            this._applySummaryPayload(response);
+            if (!waitForWsUpdate) {
+                this._loadingSummary = false;
+            }
+        } catch (error) {
+            this._loadingSummary = false;
+            throw error;
+        }
     }
 
     _applySummaryPayload(payload) {
@@ -611,6 +671,28 @@ export class DailyNotesPage extends PlatformElement {
         return `${hours}:${minutes}`;
     }
 
+    _getLimitedText(text, maxLength = 220) {
+        if (typeof text !== 'string') {
+            return '';
+        }
+        const normalized = text.trim();
+        if (normalized.length <= maxLength) {
+            return normalized;
+        }
+        return `${normalized.slice(0, maxLength).trimEnd()}...`;
+    }
+
+    _getNotePreviewText(note) {
+        if (!note || typeof note !== 'object') {
+            throw new Error('Note object is required');
+        }
+        const attrs = note.attributes;
+        if (attrs && typeof attrs === 'object' && typeof attrs.ai_summary === 'string' && attrs.ai_summary.trim().length > 0) {
+            return this._getLimitedText(attrs.ai_summary, 260);
+        }
+        return this._getLimitedText(this._getTextValue(note.description, 'Без описания'), 220);
+    }
+
     _getTextValue(value, defaultValue) {
         if (typeof value === 'string' && value.trim().length > 0) {
             return value;
@@ -630,31 +712,70 @@ export class DailyNotesPage extends PlatformElement {
     }
 
     async _onCreateNote() {
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.createNote(crmApi, {
-            name: `Заметка от ${new Date().toLocaleDateString('ru-RU')}`,
+        const draftNote = {
+            entity_id: `draft-${Date.now()}`,
+            entity_type: 'note',
+            name: '',
             description: '',
             note_date: this._selectedDate,
-        });
-        await this._loadVisibleNoteEntities();
-        await this._loadDailySummary();
+            attributes: {},
+        };
+        this._openNoteModal(draftNote, { editable: true, draftMode: true });
     }
 
     async _onRefreshSummary() {
-        await this._loadDailySummary({ forceRebuild: true });
+        await this._loadDailySummary({ forceRebuild: true, waitForWsUpdate: true });
     }
 
     async _onAnalyzeNote(note) {
         if (!note || typeof note.description !== 'string') {
             throw new Error('Note description is required for AI analysis');
         }
+        if (this._hasNoteAnalysisDraft(note)) {
+            this._openNoteAnalysisDraftModal(note);
+            return;
+        }
         const noteText = note.description.trim();
         if (!noteText) {
             throw new Error('Empty note cannot be analyzed');
         }
+        CRMStore.setCurrentNote(note.entity_id);
+        const analysisModal = document.createElement('ai-analysis-modal');
+        analysisModal.loading = true;
+        document.body.appendChild(analysisModal);
+        analysisModal.showModal();
+        analysisModal.addEventListener('close', () => analysisModal.remove());
         const crmApi = this.services.get('crmApi');
-        await CRMStore.analyzeText(crmApi, noteText, note.entity_id);
-        this.emit('analysis-ready', { noteId: note.entity_id });
+        try {
+            await CRMStore.analyzeText(crmApi, noteText, note.entity_id);
+        } finally {
+            analysisModal.loading = false;
+        }
+    }
+
+    _hasNoteAnalysisDraft(note) {
+        if (!note || typeof note !== 'object') {
+            throw new Error('Note object is required');
+        }
+        const attrs = note.attributes;
+        if (!attrs || typeof attrs !== 'object') {
+            return false;
+        }
+        return typeof attrs.ai_analysis_draft === 'object' && attrs.ai_analysis_draft !== null;
+    }
+
+    _openNoteAnalysisDraftModal(note) {
+        if (!note || typeof note !== 'object') {
+            throw new Error('Note object is required');
+        }
+        if (typeof note.entity_id !== 'string' || note.entity_id.trim().length === 0) {
+            throw new Error('Note entity_id is required');
+        }
+        CRMStore.openNoteAnalysisDraft(note.entity_id);
+        const analysisModal = document.createElement('ai-analysis-modal');
+        document.body.appendChild(analysisModal);
+        analysisModal.showModal();
+        analysisModal.addEventListener('close', () => analysisModal.remove());
     }
 
     _getFilteredNotes() {
@@ -815,7 +936,7 @@ export class DailyNotesPage extends PlatformElement {
         modal.addEventListener('close', () => modal.remove());
     }
 
-    _openNoteModal(note) {
+    _openNoteModal(note, options = {}) {
         if (!note || typeof note !== 'object') {
             throw new Error('Note object is required');
         }
@@ -824,12 +945,15 @@ export class DailyNotesPage extends PlatformElement {
         }
         const modal = document.createElement('note-view-modal');
         modal.note = note;
-        modal.summaryText = this._summaryText;
-        modal.summaryGeneratedAt = this._summaryGeneratedAt;
-        modal.summaryEntities = this._summaryEntities;
+        modal.startInEditMode = options.editable === true;
+        modal.draftMode = options.draftMode === true;
         document.body.appendChild(modal);
         modal.showModal();
         modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('note-created', async () => {
+            await this._loadVisibleNoteEntities();
+            await this._loadDailySummary();
+        });
     }
 
     render() {
@@ -880,23 +1004,28 @@ export class DailyNotesPage extends PlatformElement {
                                         ${(() => {
                                             const relatedEntities = this._getNoteEntities(note);
                                             return html`
-                                                <div class="note-tags">
-                                                    ${relatedEntities.map((entity, index) => html`
-                                                        <button
-                                                            class="note-tag ${this._getEntityTagTone(index)}"
-                                                            type="button"
-                                                            title="Открыть сущность"
-                                                            @click=${(event) => this._openEntityModal(entity, event)}
-                                                        >
-                                                            <platform-icon name=${this._getEntityTagIcon(entity)} size="12"></platform-icon>
-                                                            ${this._getTextValue(entity.name, 'Entity')}
-                                                        </button>
-                                                    `)}
+                                                <div class="note-tags-row">
+                                                    <div class="note-tags">
+                                                        ${relatedEntities.map((entity, index) => html`
+                                                            <button
+                                                                class="note-tag ${this._getEntityTagTone(index)}"
+                                                                type="button"
+                                                                title="Открыть сущность"
+                                                                @click=${(event) => this._openEntityModal(entity, event)}
+                                                            >
+                                                                <platform-icon name=${this._getEntityTagIcon(entity)} size="12"></platform-icon>
+                                                                ${this._getTextValue(entity.name, 'Entity')}
+                                                            </button>
+                                                        `)}
+                                                    </div>
+                                                    ${relatedEntities.length > 1 ? html`
+                                                        <span class="note-tags-hint" aria-hidden="true">... &gt;&gt;</span>
+                                                    ` : ''}
                                                 </div>
                                             `;
                                         })()}
                                         <h3 class="note-title">${note.name}</h3>
-                                        <p class="note-text">${this._getTextValue(note.description, 'Без описания')}</p>
+                                        <p class="note-text">${this._getNotePreviewText(note)}</p>
                                         <div class="note-footer">
                                             ${(() => {
                                                 const authorName = this._getAuthorName(note);
@@ -914,7 +1043,12 @@ export class DailyNotesPage extends PlatformElement {
                                             })()}
                                             <div class="note-footer-right">
                                                 <span class="published-at">Опубликовано в ${this._formatTime(this._getTextValue(note.updated_at, this._getTextValue(note.created_at, new Date().toISOString())))}</span>
-                                                <button class="analyze-btn" type="button" @click=${(event) => { event.stopPropagation(); this._onAnalyzeNote(note); }} title="AI анализ">
+                                                <button
+                                                    class="analyze-btn ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : ''}"
+                                                    type="button"
+                                                    @click=${(event) => { event.stopPropagation(); this._onAnalyzeNote(note); }}
+                                                    title=${this._hasNoteAnalysisDraft(note) ? 'Открыть черновик AI анализа' : 'AI анализ'}
+                                                >
                                                     <platform-icon name="ai" size="14" colored></platform-icon>
                                                 </button>
                                             </div>
@@ -934,8 +1068,12 @@ export class DailyNotesPage extends PlatformElement {
                             </span>
                             <span class="summary-title-text">Daily summary</span>
                         </h3>
-                        <button class="summary-refresh-btn" type="button" title="Обновить" @click=${this._onRefreshSummary}>
-                            <platform-icon name="refresh" size="18"></platform-icon>
+                        <button class="summary-refresh-btn" type="button" title="Обновить" @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
+                            <platform-icon
+                                class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
+                                name="refresh"
+                                size="18"
+                            ></platform-icon>
                         </button>
                     </div>
                     <div class="summary-meta">

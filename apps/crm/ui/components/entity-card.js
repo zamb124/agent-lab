@@ -93,28 +93,30 @@ export class EntityCard extends PlatformElement {
 
             .action-btn {
                 padding: var(--space-2) var(--space-3);
-                background: var(--crm-surface-muted);
-                border: 1px solid var(--crm-stroke);
+                background: var(--crm-button-secondary-bg);
+                border: 1px solid var(--crm-button-secondary-bg);
                 border-radius: var(--radius-lg);
-                color: var(--text-secondary);
+                color: var(--crm-button-secondary-text);
                 font-size: var(--text-sm);
                 cursor: pointer;
                 transition: all var(--duration-fast);
             }
 
             .action-btn:hover {
-                background: var(--crm-surface);
-                color: var(--text-primary);
+                background: var(--crm-button-secondary-hover);
+                border-color: var(--crm-button-secondary-hover);
+                color: var(--crm-button-secondary-text);
             }
 
             .action-btn.primary {
-                background: var(--accent);
-                border-color: var(--accent);
-                color: var(--text-inverse);
+                background: var(--crm-button-primary-bg);
+                border-color: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
             }
 
             .action-btn.primary:hover {
-                background: var(--accent-hover);
+                background: var(--crm-button-primary-hover);
+                border-color: var(--crm-button-primary-hover);
             }
 
             .content {

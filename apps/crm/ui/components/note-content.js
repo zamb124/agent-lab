@@ -1,29 +1,49 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class NoteContent extends PlatformElement {
     static properties = {
         note: { type: Object },
         relatedEntities: { type: Array },
+        relationships: { type: Array },
+        entityTypes: { type: Array },
+        relationshipTypes: { type: Array },
         summaryText: { type: String },
         summaryGeneratedAt: { type: String },
         summaryEntities: { type: Array },
+        hasAnalysisDraft: { type: Boolean },
+        analysisDraftGeneratedAt: { type: String },
+        processingEntities: { type: Boolean },
+        deletingNote: { type: Boolean },
+        editable: { type: Boolean },
+        savingNote: { type: Boolean },
+        draftMode: { type: Boolean },
+        _draftTitle: { state: true },
+        _draftText: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
+        formStyles,
         css`
             :host {
                 display: block;
                 width: 100%;
+                height: 100%;
+                min-height: 0;
             }
 
             .layout {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) 440px;
                 gap: 24px;
-                align-items: start;
+                align-items: stretch;
+                height: 100%;
+                min-height: 0;
+                overflow-x: hidden;
             }
 
             .note-main {
@@ -31,6 +51,15 @@ export class NoteContent extends PlatformElement {
                 flex-direction: column;
                 gap: 24px;
                 min-height: 0;
+                min-width: 0;
+            }
+
+            .note-main.is-editing {
+                display: grid;
+                grid-template-rows: auto minmax(0, 1fr);
+                gap: 16px;
+                min-height: 0;
+                height: 100%;
             }
 
             .note-header {
@@ -44,6 +73,8 @@ export class NoteContent extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: 2px;
+                min-width: 0;
+                flex: 1;
             }
 
             .note-title {
@@ -65,6 +96,8 @@ export class NoteContent extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 gap: 16px;
+                flex-wrap: wrap;
+                justify-content: flex-end;
             }
 
             .round-btn {
@@ -80,9 +113,34 @@ export class NoteContent extends PlatformElement {
                 color: rgba(34, 34, 34, 0.7);
             }
 
+            .round-btn:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+            }
+
+            .refresh-icon.spinning {
+                animation: note-refresh-spin 0.9s linear infinite;
+                transform-origin: center;
+            }
+
+            @keyframes note-refresh-spin {
+                from {
+                    transform: rotate(0deg);
+                }
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
             .round-btn.danger {
                 background: rgba(255, 136, 92, 0.15);
                 color: #ff885c;
+            }
+
+            .round-btn.analysis-draft {
+                background: rgba(255, 136, 92, 0.18);
+                color: var(--crm-button-secondary-bg);
+                border: 1px solid rgba(255, 136, 92, 0.45);
             }
 
             .edit-btn {
@@ -97,12 +155,118 @@ export class NoteContent extends PlatformElement {
                 cursor: pointer;
             }
 
+            .edit-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
+            .cancel-btn {
+                height: 44px;
+                border: none;
+                border-radius: 22px;
+                padding: 0 18px;
+                background: rgba(34, 34, 34, 0.05);
+                color: rgba(34, 34, 34, 0.7);
+                font-size: 14px;
+                line-height: 18px;
+                cursor: pointer;
+            }
+
+            .cancel-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
             .note-text {
                 margin: 0;
                 white-space: pre-wrap;
                 font-size: 16px;
                 line-height: 20px;
                 color: var(--text-primary);
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                max-width: 100%;
+            }
+
+            .note-markdown {
+                color: var(--text-primary);
+                font-size: 16px;
+                line-height: 20px;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                max-width: 100%;
+            }
+
+            .note-markdown > :first-child {
+                margin-top: 0;
+            }
+
+            .note-markdown > :last-child {
+                margin-bottom: 0;
+            }
+
+            .note-markdown p,
+            .note-markdown ul,
+            .note-markdown ol,
+            .note-markdown blockquote,
+            .note-markdown pre,
+            .note-markdown h1,
+            .note-markdown h2,
+            .note-markdown h3,
+            .note-markdown h4 {
+                margin: 0 0 12px 0;
+            }
+
+            .note-markdown ul,
+            .note-markdown ol {
+                padding-left: 20px;
+            }
+
+            .note-markdown code {
+                background: rgba(34, 34, 34, 0.06);
+                border-radius: 6px;
+                padding: 1px 6px;
+                font-size: 0.92em;
+            }
+
+            .note-markdown pre {
+                background: rgba(34, 34, 34, 0.06);
+                border-radius: 10px;
+                padding: 12px;
+                overflow: auto;
+            }
+
+            .note-markdown pre code {
+                background: transparent;
+                border-radius: 0;
+                padding: 0;
+            }
+
+            .note-title-input {
+                width: min(560px, 100%);
+                padding: 8px 12px;
+                font-size: 28px;
+                line-height: 34px;
+                font-weight: 700;
+            }
+
+            .note-text-input {
+                width: 100%;
+                min-height: 180px;
+                resize: vertical;
+                font-size: 16px;
+                line-height: 20px;
+                white-space: pre-wrap;
+                overflow-x: hidden;
+                overflow-y: auto;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+
+            .note-main.is-editing .note-text-input {
+                height: 100%;
+                min-height: 260px;
+                max-height: 100%;
             }
 
             .sidebar {
@@ -110,6 +274,7 @@ export class NoteContent extends PlatformElement {
                 flex-direction: column;
                 gap: 24px;
                 min-height: 0;
+                min-width: 0;
             }
 
             .card {
@@ -118,6 +283,7 @@ export class NoteContent extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: 16px;
+                min-width: 0;
             }
 
             .summary-card {
@@ -135,6 +301,13 @@ export class NoteContent extends PlatformElement {
                 padding-bottom: 24px;
             }
 
+            .relationships-section {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding-bottom: 8px;
+            }
+
             .card-header {
                 display: flex;
                 align-items: center;
@@ -142,11 +315,18 @@ export class NoteContent extends PlatformElement {
                 gap: 12px;
             }
 
+            .summary-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+            }
+
             .summary-title {
                 margin: 0;
                 display: inline-flex;
                 align-items: center;
                 gap: 8px;
+                flex-wrap: wrap;
                 font-size: 20px;
                 line-height: 26px;
                 font-weight: 700;
@@ -168,6 +348,8 @@ export class NoteContent extends PlatformElement {
                 color: var(--text-primary);
                 font-size: 16px;
                 line-height: 20px;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .summary-tags {
@@ -190,7 +372,8 @@ export class NoteContent extends PlatformElement {
             }
 
             .tasks-title,
-            .entities-title {
+            .entities-title,
+            .relationships-title {
                 margin: 0;
                 font-size: 20px;
                 line-height: 26px;
@@ -273,6 +456,12 @@ export class NoteContent extends PlatformElement {
                 border-radius: 16px;
                 cursor: pointer;
                 background: rgba(153, 166, 249, 0.2);
+                transition: transform var(--duration-fast), filter var(--duration-fast);
+            }
+
+            .entity-link:hover {
+                transform: translateY(-1px);
+                filter: brightness(0.99);
             }
 
             .entity-link.tone-yellow {
@@ -293,6 +482,7 @@ export class NoteContent extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 background: linear-gradient(312.35deg, #fad17a 18.71%, #ff9a76 82.25%, #99a6f9 157.48%);
+                color: #222222;
             }
 
             .entity-avatar img {
@@ -338,7 +528,6 @@ export class NoteContent extends PlatformElement {
 
             .entity-score-fill {
                 height: 100%;
-                width: var(--score, 80%);
                 background: #99a6f9;
             }
 
@@ -350,9 +539,203 @@ export class NoteContent extends PlatformElement {
                 background: #ff885c;
             }
 
+            .relationship-link {
+                border: none;
+                width: 100%;
+                text-align: left;
+                display: flex;
+                align-items: flex-start;
+                gap: 12px;
+                padding: 12px;
+                border-radius: 16px;
+                cursor: pointer;
+                background: rgba(153, 166, 249, 0.2);
+                transition: transform var(--duration-fast), filter var(--duration-fast);
+            }
+
+            .relationship-link:hover {
+                transform: translateY(-1px);
+                filter: brightness(0.99);
+            }
+
+            .relationship-avatar {
+                width: 56px;
+                height: 56px;
+                border-radius: 12px;
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(255, 255, 255, 0.65);
+                color: #222222;
+            }
+
+            .relationship-data {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                min-width: 0;
+                flex: 1;
+            }
+
+            .relationship-name {
+                margin: 0;
+                font-size: 16px;
+                line-height: 20px;
+                font-weight: 600;
+                color: var(--text-primary);
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+
+            .relationship-subtitle {
+                margin: 0;
+                font-size: 12px;
+                line-height: 16px;
+                color: rgba(34, 34, 34, 0.55);
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+
             @media (max-width: 1279px) {
                 .layout {
                     grid-template-columns: 1fr;
+                }
+
+                .note-main,
+                .sidebar {
+                    width: 100%;
+                    max-width: 100%;
+                }
+            }
+
+            @media (max-width: 767px) {
+                .layout {
+                    gap: 16px;
+                }
+
+                .note-main {
+                    gap: 16px;
+                }
+
+                .note-header {
+                    flex-direction: column;
+                    align-items: stretch;
+                    gap: 12px;
+                }
+
+                .note-title {
+                    font-size: 24px;
+                    line-height: 30px;
+                }
+
+                .note-title-input {
+                    font-size: 22px;
+                    line-height: 28px;
+                }
+
+                .note-date {
+                    font-size: 14px;
+                    line-height: 18px;
+                }
+
+                .note-actions {
+                    width: 100%;
+                    display: grid;
+                    grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr);
+                    gap: 10px;
+                    justify-content: stretch;
+                    align-items: center;
+                }
+
+                .round-btn {
+                    width: 44px;
+                    height: 44px;
+                }
+
+                .cancel-btn,
+                .edit-btn {
+                    width: 100%;
+                    min-width: 0;
+                    padding: 0 12px;
+                    font-size: 14px;
+                    line-height: 18px;
+                }
+
+                .card {
+                    padding: 16px;
+                }
+
+                .summary-title,
+                .tasks-title,
+                .entities-title,
+                .relationships-title {
+                    font-size: 18px;
+                    line-height: 24px;
+                }
+
+                .summary-text,
+                .task-text {
+                    font-size: 14px;
+                    line-height: 18px;
+                }
+
+                .note-text-input {
+                    min-height: 220px;
+                }
+
+                .note-main.is-editing .note-text-input {
+                    height: 100%;
+                    min-height: 220px;
+                }
+
+                .entity-link {
+                    padding: 10px;
+                    gap: 10px;
+                }
+
+                .entity-avatar {
+                    width: 56px;
+                    height: 56px;
+                }
+
+                .entity-name {
+                    font-size: 15px;
+                }
+
+                .relationship-link {
+                    padding: 10px;
+                    gap: 10px;
+                }
+
+                .relationship-avatar {
+                    width: 48px;
+                    height: 48px;
+                }
+
+                .relationship-name {
+                    font-size: 14px;
+                    line-height: 18px;
+                }
+            }
+
+            @media (max-width: 420px) {
+                .note-actions {
+                    grid-template-columns: 1fr 1fr;
+                }
+
+                .round-btn {
+                    width: 100%;
+                    border-radius: 14px;
+                }
+
+                .cancel-btn,
+                .edit-btn {
+                    width: 100%;
+                }
+
+                .summary-actions {
+                    gap: 6px;
                 }
             }
         `,
@@ -362,9 +745,32 @@ export class NoteContent extends PlatformElement {
         super();
         this.note = null;
         this.relatedEntities = [];
+        this.entityTypes = [];
+        this.relationships = [];
+        this.relationshipTypes = [];
         this.summaryText = '';
         this.summaryGeneratedAt = '';
         this.summaryEntities = [];
+        this.hasAnalysisDraft = false;
+        this.analysisDraftGeneratedAt = '';
+        this.processingEntities = false;
+        this.deletingNote = false;
+        this.editable = false;
+        this.savingNote = false;
+        this.draftMode = false;
+        this._draftTitle = '';
+        this._draftText = '';
+    }
+
+    willUpdate(changedProperties) {
+        if (changedProperties.has('note') || changedProperties.has('editable')) {
+            const noteName = this.note && typeof this.note.name === 'string' ? this.note.name : '';
+            const noteDescription = this.note && typeof this.note.description === 'string' ? this.note.description : '';
+            if (this.editable) {
+                this._draftTitle = noteName;
+                this._draftText = noteDescription;
+            }
+        }
     }
 
     _formatNoteDate(dateValue) {
@@ -396,6 +802,17 @@ export class NoteContent extends PlatformElement {
         return this.relatedEntities.filter((entity) => entity?.entity_type !== 'task');
     }
 
+    _getRelationships() {
+        if (!Array.isArray(this.relationships)) {
+            throw new Error('relationships must be an array');
+        }
+        const noteId = this.note?.entity_id;
+        if (!noteId) {
+            return [];
+        }
+        return this.relationships.filter((rel) => rel?.source_entity_id === noteId || rel?.target_entity_id === noteId);
+    }
+
     _getText(value, fallback) {
         if (typeof value === 'string' && value.trim().length > 0) {
             return value;
@@ -407,7 +824,14 @@ export class NoteContent extends PlatformElement {
         if (typeof this.summaryGeneratedAt === 'string' && this.summaryGeneratedAt.trim().length > 0) {
             return `Сгенерирована в ${this.summaryGeneratedAt}`;
         }
-        return 'Нет summary';
+        if (
+            this.hasAnalysisDraft
+            && typeof this.analysisDraftGeneratedAt === 'string'
+            && this.analysisDraftGeneratedAt.trim().length > 0
+        ) {
+            return `Есть черновик анализа от ${this.analysisDraftGeneratedAt}`;
+        }
+        return 'Нажмите обновить для генерации summary';
     }
 
     _getEntityAvatarUrl(entity) {
@@ -422,6 +846,16 @@ export class NoteContent extends PlatformElement {
     }
 
     _getEntitySubtitle(entity) {
+        const attrs = entity?.attributes;
+        if (attrs && typeof attrs === 'object') {
+            const subtitleKeys = ['position', 'role', 'department', 'company', 'title'];
+            for (const key of subtitleKeys) {
+                const value = attrs[key];
+                if (typeof value === 'string' && value.trim().length > 0) {
+                    return value;
+                }
+            }
+        }
         const subtype = this._getText(entity?.entity_subtype, '');
         if (subtype) {
             return subtype;
@@ -434,6 +868,121 @@ export class NoteContent extends PlatformElement {
         return tones[index % tones.length];
     }
 
+    _getEntityTypeConfig(entity) {
+        if (!Array.isArray(this.entityTypes)) {
+            throw new Error('entityTypes must be array');
+        }
+        const typeId = this._getText(entity?.entity_subtype, entity?.entity_type);
+        if (!typeId) {
+            return null;
+        }
+        return this.entityTypes.find((item) => item?.type_id === typeId) || null;
+    }
+
+    _getRelationshipTypeLabel(relationshipType) {
+        if (typeof relationshipType !== 'string' || relationshipType.trim().length === 0) {
+            return 'Связь';
+        }
+        if (!Array.isArray(this.relationshipTypes)) {
+            throw new Error('relationshipTypes must be array');
+        }
+        const foundType = this.relationshipTypes.find((item) => item?.type_id === relationshipType);
+        if (foundType && typeof foundType.name === 'string' && foundType.name.trim().length > 0) {
+            return foundType.name.trim();
+        }
+        return relationshipType
+            .split('_')
+            .filter((part) => part.length > 0)
+            .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+            .join(' ');
+    }
+
+    _getEntityLabelById(entityId) {
+        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+            return 'Неизвестная сущность';
+        }
+        if (!Array.isArray(this.relatedEntities)) {
+            throw new Error('relatedEntities must be an array');
+        }
+        if (this.note?.entity_id === entityId) {
+            return this._getText(this.note?.name, 'Текущая заметка');
+        }
+        const foundEntity = this.relatedEntities.find((entity) => entity?.entity_id === entityId);
+        if (!foundEntity) {
+            return entityId;
+        }
+        return this._getText(foundEntity.name, entityId);
+    }
+
+    _getEntityIcon(entity) {
+        const typeConfig = this._getEntityTypeConfig(entity);
+        if (typeConfig && typeof typeConfig.icon === 'string' && typeConfig.icon.trim().length > 0) {
+            const rawIconName = typeConfig.icon.trim();
+            if (/^[a-z0-9-]+$/i.test(rawIconName)) {
+                return rawIconName;
+            }
+            const emojiIconAliases = {
+                '🤝': 'share',
+                '👤': 'user',
+                '🏢': 'database',
+            };
+            const aliasIconName = emojiIconAliases[rawIconName];
+            if (typeof aliasIconName === 'string') {
+                return aliasIconName;
+            }
+        }
+        const entityType = this._getText(entity?.entity_type, '');
+        if (entityType === 'organization') {
+            return 'database';
+        }
+        if (entityType === 'task') {
+            return 'check';
+        }
+        return 'user';
+    }
+
+    _hexToRgba(hexColor, alpha) {
+        if (typeof hexColor !== 'string' || !hexColor.startsWith('#') || hexColor.length !== 7) {
+            return `rgba(153, 166, 249, ${alpha})`;
+        }
+        const red = parseInt(hexColor.slice(1, 3), 16);
+        const green = parseInt(hexColor.slice(3, 5), 16);
+        const blue = parseInt(hexColor.slice(5, 7), 16);
+        return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    }
+
+    _getEntityAvatarStyle(entity, tone) {
+        const typeConfig = this._getEntityTypeConfig(entity);
+        if (typeConfig && typeof typeConfig.color === 'string' && typeConfig.color.trim().length > 0) {
+            return `background: ${this._hexToRgba(typeConfig.color, 0.2)}; color: ${typeConfig.color};`;
+        }
+        if (tone === 'yellow') {
+            return 'background: rgba(250, 209, 122, 0.45); color: #222222;';
+        }
+        if (tone === 'orange') {
+            return 'background: rgba(255, 136, 92, 0.4); color: #222222;';
+        }
+        return 'background: rgba(153, 166, 249, 0.4); color: #222222;';
+    }
+
+    _getEntityScorePercent(entity) {
+        const relevance = entity?.relevance;
+        if (typeof relevance === 'number' && Number.isFinite(relevance)) {
+            if (relevance > 1) {
+                return Math.max(0, Math.min(100, Math.round(relevance)));
+            }
+            return Math.max(0, Math.min(100, Math.round(relevance * 100)));
+        }
+        const confidence = entity?.attributes?.confidence;
+        if (typeof confidence === 'number' && Number.isFinite(confidence)) {
+            if (confidence > 1) {
+                return Math.max(0, Math.min(100, Math.round(confidence)));
+            }
+            return Math.max(0, Math.min(100, Math.round(confidence * 100)));
+        }
+        return 80;
+    }
+
     _emitEntityOpen(entity) {
         if (!entity || typeof entity !== 'object') {
             throw new Error('Entity is required');
@@ -441,37 +990,156 @@ export class NoteContent extends PlatformElement {
         this.emit('entity-open', { entity });
     }
 
+    _emitShareNote() {
+        this.emit('share-note', { noteId: this.note.entity_id });
+    }
+
+    _emitDeleteNote() {
+        this.emit('delete-note', { noteId: this.note.entity_id });
+    }
+
+    _emitEditNote() {
+        this.emit('edit-note', { noteId: this.note.entity_id });
+    }
+
+    _emitSaveNote() {
+        const title = this._draftTitle.trim();
+        if (title.length === 0) {
+            throw new Error('Название заметки не может быть пустым');
+        }
+        this.emit('save-note', {
+            noteId: this.note.entity_id,
+            name: title,
+            description: this._draftText,
+        });
+    }
+
+    _emitCancelEdit() {
+        this.emit('cancel-edit-note', { noteId: this.note.entity_id });
+    }
+
+    _onTitleInput(event) {
+        this._draftTitle = event.target.value;
+    }
+
+    _onTextInput(event) {
+        this._draftText = event.target.value;
+    }
+
+    _escapeHtml(rawText) {
+        if (typeof rawText !== 'string') {
+            return '';
+        }
+        return rawText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    _renderMarkdown(text) {
+        const escaped = this._escapeHtml(text);
+        if (escaped.length === 0) {
+            return html`<p class="note-text">Без описания</p>`;
+        }
+        if (window.marked && typeof window.marked.parse === 'function') {
+            const htmlContent = window.marked.parse(escaped, {
+                breaks: true,
+                gfm: true,
+            });
+            return html`<div class="note-markdown">${unsafeHTML(htmlContent)}</div>`;
+        }
+        const htmlContent = escaped.replace(/\n/g, '<br>');
+        return html`<div class="note-markdown">${unsafeHTML(htmlContent)}</div>`;
+    }
+
+    _emitSummaryRefresh() {
+        this.emit('summary-refresh', { noteId: this.note.entity_id });
+    }
+
+    _emitOpenAnalysisDraft() {
+        this.emit('open-analysis-draft', { noteId: this.note.entity_id });
+    }
+
     render() {
         if (!this.note || typeof this.note !== 'object') {
             throw new Error('note is required');
         }
 
-        const noteText = this._getText(this.note.description, 'Без описания');
-        const noteTitle = this._getText(this.note.name, 'Заметка');
+        const noteText = this.editable ? this._draftText : this._getText(this.note.description, 'Без описания');
+        const noteTitle = this.editable ? this._draftTitle : this._getText(this.note.name, 'Заметка');
         const noteDate = this._formatNoteDate(this.note.note_date || this.note.updated_at || this.note.created_at);
         const taskEntities = this._getTaskEntities();
         const nonTaskEntities = this._getNonTaskEntities();
+        const relationships = this._getRelationships();
         const summaryTags = Array.isArray(this.summaryEntities) ? this.summaryEntities : [];
 
         return html`
-            <div class="layout">
-                <section class="note-main">
+            <div class="layout ${this.editable ? 'is-editing' : ''}">
+                <section class="note-main ${this.editable ? 'is-editing' : ''}">
                     <div class="note-header">
                         <div class="note-title-wrap">
-                            <h2 class="note-title">${noteTitle}</h2>
+                            ${this.editable ? html`
+                                <input
+                                    class="form-input note-title-input"
+                                    type="text"
+                                    .value=${noteTitle}
+                                    @input=${this._onTitleInput}
+                                    placeholder="Название заметки"
+                                />
+                            ` : html`<h2 class="note-title">${noteTitle}</h2>`}
                             <p class="note-date">${noteDate}</p>
                         </div>
                         <div class="note-actions">
-                            <button class="round-btn" type="button" title="Поделиться">
+                            <button
+                                class="round-btn"
+                                type="button"
+                                title="Поделиться"
+                                ?disabled=${this.draftMode}
+                                @click=${this._emitShareNote}
+                            >
                                 <platform-icon name="share" size="20"></platform-icon>
                             </button>
-                            <button class="round-btn danger" type="button" title="Удалить">
+                            <button
+                                class="round-btn danger"
+                                type="button"
+                                title="Удалить"
+                                ?disabled=${this.deletingNote || this.draftMode}
+                                @click=${this._emitDeleteNote}
+                            >
                                 <platform-icon name="delete" size="20"></platform-icon>
                             </button>
-                            <button class="edit-btn" type="button">Редактировать</button>
+                            ${this.editable ? html`
+                                <button
+                                    class="cancel-btn"
+                                    type="button"
+                                    ?disabled=${this.savingNote}
+                                    @click=${this._emitCancelEdit}
+                                >
+                                    Отмена
+                                </button>
+                                <button
+                                    class="edit-btn"
+                                    type="button"
+                                    ?disabled=${this.savingNote}
+                                    @click=${this._emitSaveNote}
+                                >
+                                    ${this.savingNote ? 'Сохранение...' : 'Сохранить'}
+                                </button>
+                            ` : html`
+                                <button class="edit-btn" type="button" @click=${this._emitEditNote}>Редактировать</button>
+                            `}
                         </div>
                     </div>
-                    <p class="note-text">${noteText}</p>
+                    ${this.editable ? html`
+                        <textarea
+                            class="form-textarea note-text-input"
+                            .value=${noteText}
+                            @input=${this._onTextInput}
+                            placeholder="Введите текст заметки"
+                        ></textarea>
+                    ` : this._renderMarkdown(noteText)}
                 </section>
 
                 <aside class="sidebar">
@@ -479,11 +1147,34 @@ export class NoteContent extends PlatformElement {
                         <div class="card-header">
                             <h3 class="summary-title">
                                 <platform-icon name="ai" size="24" colored></platform-icon>
-                                Daily summary
+                                AI summary заметки
                             </h3>
-                            <button class="round-btn" type="button" title="Обновить">
-                                <platform-icon name="refresh" size="18" colored></platform-icon>
-                            </button>
+                            <div class="summary-actions">
+                                ${this.hasAnalysisDraft ? html`
+                                    <button
+                                        class="round-btn analysis-draft"
+                                        type="button"
+                                        title="Открыть черновик анализа"
+                                        @click=${this._emitOpenAnalysisDraft}
+                                    >
+                                        <platform-icon name="ai" size="18" colored></platform-icon>
+                                    </button>
+                                ` : ''}
+                                <button
+                                    class="round-btn"
+                                    type="button"
+                                    title="Обновить"
+                                    ?disabled=${this.processingEntities || this.draftMode}
+                                    @click=${this._emitSummaryRefresh}
+                                >
+                                    <platform-icon
+                                        class="refresh-icon ${this.processingEntities ? 'spinning' : ''}"
+                                        name="refresh"
+                                        size="18"
+                                        colored
+                                    ></platform-icon>
+                                </button>
+                            </div>
                         </div>
                         <p class="summary-meta">${this._getSummaryMeta()}</p>
                         <p class="summary-text">${this._getText(this.summaryText, 'Нет summary')}</p>
@@ -524,16 +1215,18 @@ export class NoteContent extends PlatformElement {
                         ${nonTaskEntities.map((entity, index) => {
                             const tone = this._getEntityTone(index);
                             const avatarUrl = this._getEntityAvatarUrl(entity);
+                            const entityIcon = this._getEntityIcon(entity);
+                            const scorePercent = this._getEntityScorePercent(entity);
                             return html`
                                 <button
                                     class="entity-link ${tone === 'yellow' ? 'tone-yellow' : ''} ${tone === 'orange' ? 'tone-orange' : ''}"
                                     type="button"
                                     @click=${() => this._emitEntityOpen(entity)}
                                 >
-                                    <span class="entity-avatar">
+                                    <span class="entity-avatar" style=${this._getEntityAvatarStyle(entity, tone)}>
                                         ${avatarUrl
                                             ? html`<img src=${avatarUrl} alt=${this._getText(entity.name, 'Entity')} />`
-                                            : html`<platform-icon name="user" size="28"></platform-icon>`}
+                                            : html`<platform-icon name=${entityIcon} size="28"></platform-icon>`}
                                     </span>
                                     <span class="entity-data">
                                         <span>
@@ -541,8 +1234,41 @@ export class NoteContent extends PlatformElement {
                                             <p class="entity-subtitle">${this._getEntitySubtitle(entity)}</p>
                                         </span>
                                         <span class="entity-score">
-                                            <span class="entity-score-fill ${tone === 'yellow' ? 'tone-yellow' : ''} ${tone === 'orange' ? 'tone-orange' : ''}"></span>
+                                            <span
+                                                class="entity-score-fill ${tone === 'yellow' ? 'tone-yellow' : ''} ${tone === 'orange' ? 'tone-orange' : ''}"
+                                                style=${`width: ${scorePercent}%;`}
+                                            ></span>
                                         </span>
+                                    </span>
+                                </button>
+                            `;
+                        })}
+                    </section>
+
+                    <section class="relationships-section">
+                        <h3 class="relationships-title">Связи</h3>
+                        ${relationships.map((relationship) => {
+                            const sourceId = this._getText(relationship.source_entity_id, '');
+                            const targetId = this._getText(relationship.target_entity_id, '');
+                            const relationshipType = this._getText(relationship.relationship_type, '');
+                            const sourceLabel = this._getEntityLabelById(sourceId);
+                            const targetLabel = this._getEntityLabelById(targetId);
+                            const relationshipLabel = this._getRelationshipTypeLabel(relationshipType);
+                            return html`
+                                <button
+                                    class="relationship-link"
+                                    type="button"
+                                    @click=${() => this._emitEntityOpen({
+                                        entity_id: sourceId === this.note.entity_id ? targetId : sourceId,
+                                        name: sourceId === this.note.entity_id ? targetLabel : sourceLabel,
+                                    })}
+                                >
+                                    <span class="relationship-avatar">
+                                        <platform-icon name="share" size="24"></platform-icon>
+                                    </span>
+                                    <span class="relationship-data">
+                                        <p class="relationship-name">${relationshipLabel}</p>
+                                        <p class="relationship-subtitle">${sourceLabel} -> ${targetLabel}</p>
                                     </span>
                                 </button>
                             `;

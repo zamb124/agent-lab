@@ -22,6 +22,13 @@ export class CRMSidebar extends PlatformElement {
                 height: 100%;
             }
 
+            platform-sidebar {
+                --sidebar-logo-text-weight: 700;
+                --sidebar-logo-text-gradient: var(--crm-main-gradient);
+                --sidebar-logo-text-clip: text;
+                --sidebar-logo-text-fill: transparent;
+            }
+
             .namespace-selector {
                 display: flex;
                 align-items: center;
@@ -69,7 +76,7 @@ export class CRMSidebar extends PlatformElement {
                 width: 24px;
                 height: 24px;
                 border: none;
-                background: var(--accent);
+                background: var(--crm-button-primary-bg);
                 color: var(--text-inverse);
                 border-radius: var(--radius-md);
                 cursor: pointer;
@@ -78,7 +85,7 @@ export class CRMSidebar extends PlatformElement {
             }
 
             .namespace-add-btn:hover {
-                background: var(--accent-hover);
+                background: var(--crm-button-primary-hover);
                 transform: scale(1.05);
             }
 

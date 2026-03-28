@@ -87,6 +87,130 @@ class TestSagaRollback:
         delete_resp = await crm_client.delete(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
         assert delete_resp.status_code == 200
         assert delete_resp.json()["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_delete_note_removes_only_exclusive_related_entities(
+        self,
+        crm_client,
+        unique_id,
+        auth_headers_system,
+    ):
+        """
+        Удаление note удаляет только эксклюзивно связанный подграф.
+
+        Сценарий:
+        note -> exclusive_a
+        note -> shared_a -> keeper
+
+        Ожидание:
+        - note и exclusive_a удаляются
+        - shared_a и keeper сохраняются
+        - связь shared_a <-> keeper сохраняется
+        """
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={"entity_type": "note", "name": f"Note {unique_id}"},
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code == 200
+        note_id = note_resp.json()["entity_id"]
+
+        exclusive_a_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={"entity_type": "contact", "name": f"Exclusive A {unique_id}"},
+            headers=auth_headers_system,
+        )
+        assert exclusive_a_resp.status_code == 200
+        exclusive_a_id = exclusive_a_resp.json()["entity_id"]
+
+        shared_a_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={"entity_type": "organization", "name": f"Shared A {unique_id}"},
+            headers=auth_headers_system,
+        )
+        assert shared_a_resp.status_code == 200
+        shared_a_id = shared_a_resp.json()["entity_id"]
+
+        keeper_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={"entity_type": "contact", "name": f"Keeper {unique_id}"},
+            headers=auth_headers_system,
+        )
+        assert keeper_resp.status_code == 200
+        keeper_id = keeper_resp.json()["entity_id"]
+
+        note_to_exclusive_resp = await crm_client.post(
+            "/crm/api/v1/relationships/",
+            json={
+                "source_entity_id": note_id,
+                "target_entity_id": exclusive_a_id,
+                "relationship_type": "mentions",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_to_exclusive_resp.status_code == 200
+        note_to_exclusive_rel_id = note_to_exclusive_resp.json()["relationship_id"]
+
+        note_to_shared_resp = await crm_client.post(
+            "/crm/api/v1/relationships/",
+            json={
+                "source_entity_id": note_id,
+                "target_entity_id": shared_a_id,
+                "relationship_type": "mentions",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_to_shared_resp.status_code == 200
+        note_to_shared_rel_id = note_to_shared_resp.json()["relationship_id"]
+
+        shared_to_keeper_resp = await crm_client.post(
+            "/crm/api/v1/relationships/",
+            json={
+                "source_entity_id": shared_a_id,
+                "target_entity_id": keeper_id,
+                "relationship_type": "mentions",
+            },
+            headers=auth_headers_system,
+        )
+        assert shared_to_keeper_resp.status_code == 200
+        shared_to_keeper_rel_id = shared_to_keeper_resp.json()["relationship_id"]
+
+        delete_note_resp = await crm_client.delete(
+            f"/crm/api/v1/entities/{note_id}",
+            headers=auth_headers_system,
+        )
+        assert delete_note_resp.status_code == 200
+        assert delete_note_resp.json()["success"] is True
+
+        note_get_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
+        assert note_get_resp.status_code == 404
+
+        exclusive_a_get_resp = await crm_client.get(f"/crm/api/v1/entities/{exclusive_a_id}", headers=auth_headers_system)
+        assert exclusive_a_get_resp.status_code == 404
+
+        shared_a_get_resp = await crm_client.get(f"/crm/api/v1/entities/{shared_a_id}", headers=auth_headers_system)
+        assert shared_a_get_resp.status_code == 200
+
+        keeper_get_resp = await crm_client.get(f"/crm/api/v1/entities/{keeper_id}", headers=auth_headers_system)
+        assert keeper_get_resp.status_code == 200
+
+        note_to_exclusive_rel_get = await crm_client.get(
+            f"/crm/api/v1/relationships/{note_to_exclusive_rel_id}",
+            headers=auth_headers_system,
+        )
+        assert note_to_exclusive_rel_get.status_code == 404
+
+        note_to_shared_rel_get = await crm_client.get(
+            f"/crm/api/v1/relationships/{note_to_shared_rel_id}",
+            headers=auth_headers_system,
+        )
+        assert note_to_shared_rel_get.status_code == 404
+
+        shared_to_keeper_rel_get = await crm_client.get(
+            f"/crm/api/v1/relationships/{shared_to_keeper_rel_id}",
+            headers=auth_headers_system,
+        )
+        assert shared_to_keeper_rel_get.status_code == 200
     
     @pytest.mark.asyncio
     async def test_rollback_on_failure_simulation(self, crm_client, unique_id, auth_headers_system):

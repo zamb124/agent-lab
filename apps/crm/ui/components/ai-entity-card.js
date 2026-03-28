@@ -139,8 +139,8 @@ export class AIEntityCard extends PlatformElement {
             }
 
             .confirm-btn:hover {
-                background: var(--accent);
-                color: var(--text-inverse);
+                background: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
             }
 
             .card-body {

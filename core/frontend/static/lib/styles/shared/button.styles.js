@@ -33,15 +33,16 @@ export const buttonStyles = css`
     /* Primary Button - Accent Gradient */
     .btn-primary,
     .btn.primary {
-        color: white;
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+        color: var(--btn-primary-text, white);
+        background: var(--btn-primary-bg, linear-gradient(135deg, #10b981 0%, #059669 100%));
+        box-shadow: var(--btn-primary-shadow, 0 4px 12px rgba(16, 185, 129, 0.25));
     }
     
     .btn-primary:hover:not(:disabled),
     .btn.primary:hover:not(:disabled) {
         transform: translateY(-1px);
-        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+        background: var(--btn-primary-hover-bg, var(--btn-primary-bg, linear-gradient(135deg, #10b981 0%, #059669 100%)));
+        box-shadow: var(--btn-primary-hover-shadow, 0 6px 20px rgba(16, 185, 129, 0.35));
     }
 
     .btn-primary:active:not(:disabled),
@@ -52,15 +53,16 @@ export const buttonStyles = css`
     /* Secondary Button */
     .btn-secondary,
     .btn.secondary {
-        color: var(--text-secondary, rgba(255, 255, 255, 0.65));
-        background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
-        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+        color: var(--btn-secondary-text, var(--text-secondary, rgba(255, 255, 255, 0.65)));
+        background: var(--btn-secondary-bg, var(--glass-tint-medium, rgba(255, 255, 255, 0.05)));
+        border: 1px solid var(--btn-secondary-border, var(--border-default, rgba(255, 255, 255, 0.1)));
     }
     
     .btn-secondary:hover:not(:disabled),
     .btn.secondary:hover:not(:disabled) {
-        background: var(--glass-tint-strong, rgba(255, 255, 255, 0.08));
-        border-color: var(--border-strong, rgba(255, 255, 255, 0.15));
+        background: var(--btn-secondary-hover-bg, var(--glass-tint-strong, rgba(255, 255, 255, 0.08)));
+        border-color: var(--btn-secondary-hover-border, var(--border-strong, rgba(255, 255, 255, 0.15)));
+        color: var(--btn-secondary-hover-text, var(--btn-secondary-text, var(--text-secondary, rgba(255, 255, 255, 0.65))));
     }
     
     /* Danger Button - Red Gradient */
@@ -169,15 +171,16 @@ export const buttonStyles = css`
     /* Light Theme */
     :host-context([data-theme="light"]) .btn-secondary,
     :host-context([data-theme="light"]) .btn.secondary {
-        color: rgba(15, 23, 42, 0.7);
-        background: rgba(255, 255, 255, 0.6);
-        border-color: rgba(15, 23, 42, 0.1);
+        color: var(--btn-secondary-text, rgba(15, 23, 42, 0.7));
+        background: var(--btn-secondary-bg, rgba(255, 255, 255, 0.6));
+        border-color: var(--btn-secondary-border, rgba(15, 23, 42, 0.1));
     }
 
     :host-context([data-theme="light"]) .btn-secondary:hover:not(:disabled),
     :host-context([data-theme="light"]) .btn.secondary:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.9);
-        border-color: rgba(15, 23, 42, 0.15);
+        background: var(--btn-secondary-hover-bg, rgba(255, 255, 255, 0.9));
+        border-color: var(--btn-secondary-hover-border, rgba(15, 23, 42, 0.15));
+        color: var(--btn-secondary-hover-text, var(--btn-secondary-text, rgba(15, 23, 42, 0.7)));
     }
 
     :host-context([data-theme="light"]) .btn-ghost,
