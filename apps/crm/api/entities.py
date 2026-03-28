@@ -7,7 +7,7 @@ API для работы с entities.
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from apps.crm.models.api import EntityCreate, EntityUpdate, EntityResponse, AIAnalyzeRequest, AIAnalyzeResponse, SearchMentionsRequest
+from apps.crm.models.api import EntityCreate, EntityUpdate, EntityResponse, AIAnalyzeRequest, AIAnalyzeResponse, SearchMentionsRequest, RelationshipResponse
 from apps.crm.db.models import CRMEntity
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.access_control_service import AccessControlService
@@ -211,7 +211,8 @@ async def get_daily_summary(
 @router.get("/{entity_id}/card")
 async def get_entity_card(
     entity_id: str,
-    service: EntityService = Depends(get_entity_service)
+    service: EntityService = Depends(get_entity_service),
+    access_control: AccessControlService = Depends(get_access_control_service)
 ):
     """
     Получить полную карточку entity с контекстом:
@@ -221,6 +222,14 @@ async def get_entity_card(
     - Attachments
     """
     try:
+        entity = await service.get_entity(entity_id)
+        if not entity:
+            raise HTTPException(status_code=404, detail="Entity not found")
+        ctx = get_context()
+        user_id = ctx.user.user_id if ctx and ctx.user else None
+        company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+        if not await access_control.can_read_entity(entity, user_id, company_id):
+            raise HTTPException(status_code=403, detail="Access denied")
         card = await service.get_entity_card(entity_id)
         return card
     except ValueError as e:
@@ -263,15 +272,26 @@ async def search_mentions(
 
 
 @router.get("/{entity_id}/relationships")
-async def get_entity_relationships(entity_id: str):
+async def get_entity_relationships(
+    entity_id: str,
+    service: EntityService = Depends(get_entity_service),
+    access_control: AccessControlService = Depends(get_access_control_service)
+):
     """Получить все relationships для entity"""
     from apps.crm.container import get_crm_container
-    from core.context import get_context
-    
+
     container = get_crm_container()
     repo = container.relationship_repository
-    
-    context = get_context()
+
+    entity = await service.get_entity(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not await access_control.can_read_entity(entity, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
     relationships = await repo.get_by_entity(entity_id)
     return {"relationships": [
         {
@@ -279,8 +299,12 @@ async def get_entity_relationships(entity_id: str):
             "source_entity_id": r.source_entity_id,
             "target_entity_id": r.target_entity_id,
             "relationship_type": r.relationship_type,
+            "namespace": r.namespace,
             "weight": r.weight,
-            "attributes": r.attributes or {}
+            "attributes": r.attributes or {},
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            "company_id": r.company_id,
         }
         for r in relationships
     ]}

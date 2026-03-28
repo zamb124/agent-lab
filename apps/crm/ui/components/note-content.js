@@ -3,14 +3,17 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-date-picker.js';
 
 export class NoteContent extends PlatformElement {
     static properties = {
         note: { type: Object },
         relatedEntities: { type: Array },
         relationships: { type: Array },
+        attachments: { type: Array },
         entityTypes: { type: Array },
         relationshipTypes: { type: Array },
+        noteSubtypes: { type: Array },
         summaryText: { type: String },
         summaryGeneratedAt: { type: String },
         summaryEntities: { type: Array },
@@ -21,8 +24,12 @@ export class NoteContent extends PlatformElement {
         editable: { type: Boolean },
         savingNote: { type: Boolean },
         draftMode: { type: Boolean },
+        processingAttachment: { type: Boolean },
+        processingRelationship: { type: Boolean },
         _draftTitle: { state: true },
         _draftText: { state: true },
+        _draftSubtype: { state: true },
+        _draftNoteDate: { state: true },
     };
 
     static styles = [
@@ -92,6 +99,39 @@ export class NoteContent extends PlatformElement {
                 color: rgba(34, 34, 34, 0.3);
             }
 
+            .note-subtype {
+                margin: 0;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 13px;
+                line-height: 16px;
+                color: rgba(34, 34, 34, 0.55);
+            }
+
+            .note-edit-meta {
+                margin-top: 8px;
+                display: grid;
+                grid-template-columns: minmax(0, 240px) minmax(0, 220px);
+                gap: 12px;
+                align-items: center;
+                max-width: 520px;
+            }
+
+            .note-subtype-select {
+                min-width: 0;
+            }
+
+            .note-date-picker {
+                min-width: 0;
+                --platform-date-picker-labeled-bg: rgba(34, 34, 34, 0.04);
+                --platform-date-picker-labeled-border: rgba(34, 34, 34, 0.06);
+                --platform-date-picker-labeled-height: 44px;
+                --platform-date-picker-labeled-padding: 0 12px;
+                --platform-date-picker-label-size: var(--text-xs);
+                --platform-date-picker-value-size: var(--text-lg);
+            }
+
             .note-actions {
                 display: inline-flex;
                 align-items: center;
@@ -103,14 +143,21 @@ export class NoteContent extends PlatformElement {
             .round-btn {
                 width: 44px;
                 height: 44px;
-                border: none;
+                border: 1px solid var(--crm-stroke);
                 border-radius: 22px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
-                background: rgba(34, 34, 34, 0.05);
-                color: rgba(34, 34, 34, 0.7);
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+            }
+
+            .round-btn:hover {
+                background: var(--crm-surface);
+                border-color: var(--crm-stroke-strong);
+                color: var(--text-primary);
             }
 
             .round-btn:disabled {
@@ -162,14 +209,20 @@ export class NoteContent extends PlatformElement {
 
             .cancel-btn {
                 height: 44px;
-                border: none;
+                border: 1px solid var(--crm-button-secondary-bg);
                 border-radius: 22px;
                 padding: 0 18px;
-                background: rgba(34, 34, 34, 0.05);
-                color: rgba(34, 34, 34, 0.7);
+                background: var(--crm-button-secondary-bg);
+                color: var(--crm-button-secondary-text);
                 font-size: 14px;
                 line-height: 18px;
                 cursor: pointer;
+                transition: background var(--duration-fast), border-color var(--duration-fast);
+            }
+
+            .cancel-btn:hover {
+                background: var(--crm-button-secondary-hover);
+                border-color: var(--crm-button-secondary-hover);
             }
 
             .cancel-btn:disabled {
@@ -308,6 +361,37 @@ export class NoteContent extends PlatformElement {
                 padding-bottom: 8px;
             }
 
+            .attachments-section {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                padding-bottom: 8px;
+            }
+
+            .section-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+
+            .section-action-btn {
+                height: 30px;
+                border: none;
+                border-radius: 14px;
+                padding: 0 12px;
+                background: rgba(34, 34, 34, 0.08);
+                color: var(--text-primary);
+                font-size: 12px;
+                line-height: 14px;
+                cursor: pointer;
+            }
+
+            .section-action-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
             .card-header {
                 display: flex;
                 align-items: center;
@@ -373,7 +457,8 @@ export class NoteContent extends PlatformElement {
 
             .tasks-title,
             .entities-title,
-            .relationships-title {
+            .relationships-title,
+            .attachments-title {
                 margin: 0;
                 font-size: 20px;
                 line-height: 26px;
@@ -597,6 +682,106 @@ export class NoteContent extends PlatformElement {
                 word-break: break-word;
             }
 
+            .relationship-entities {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                flex-wrap: wrap;
+            }
+
+            .relationship-entity-btn {
+                border: none;
+                border-radius: 10px;
+                background: rgba(255, 255, 255, 0.75);
+                color: var(--text-primary);
+                padding: 4px 8px;
+                font-size: 12px;
+                line-height: 16px;
+                cursor: pointer;
+            }
+
+            .relationship-entity-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .relationship-weight {
+                margin-left: auto;
+                font-size: 12px;
+                line-height: 16px;
+                color: rgba(34, 34, 34, 0.55);
+            }
+
+            .relationship-actions {
+                display: flex;
+                justify-content: flex-end;
+            }
+
+            .relationship-delete-btn {
+                height: 28px;
+                border: none;
+                border-radius: 12px;
+                padding: 0 10px;
+                background: rgba(255, 136, 92, 0.18);
+                color: #ff885c;
+                font-size: 12px;
+                line-height: 14px;
+                cursor: pointer;
+            }
+
+            .relationship-delete-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
+            .attachment-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                border-radius: 12px;
+                padding: 10px 12px;
+                background: rgba(34, 34, 34, 0.05);
+            }
+
+            .attachment-name {
+                min-width: 0;
+                font-size: 14px;
+                line-height: 18px;
+                color: var(--text-primary);
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+
+            .attachment-status {
+                font-size: 12px;
+                line-height: 16px;
+                color: rgba(34, 34, 34, 0.45);
+                flex-shrink: 0;
+            }
+
+            .attachment-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .attachment-delete-btn {
+                border: none;
+                border-radius: 10px;
+                background: rgba(255, 136, 92, 0.18);
+                color: #ff885c;
+                padding: 4px 8px;
+                font-size: 12px;
+                line-height: 14px;
+                cursor: pointer;
+            }
+
+            .attachment-delete-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
             @media (max-width: 1279px) {
                 .layout {
                     grid-template-columns: 1fr;
@@ -669,9 +854,15 @@ export class NoteContent extends PlatformElement {
                 .summary-title,
                 .tasks-title,
                 .entities-title,
-                .relationships-title {
+                .relationships-title,
+                .attachments-title {
                     font-size: 18px;
                     line-height: 24px;
+                }
+
+                .note-edit-meta {
+                    grid-template-columns: 1fr;
+                    max-width: 100%;
                 }
 
                 .summary-text,
@@ -747,7 +938,9 @@ export class NoteContent extends PlatformElement {
         this.relatedEntities = [];
         this.entityTypes = [];
         this.relationships = [];
+        this.attachments = [];
         this.relationshipTypes = [];
+        this.noteSubtypes = [];
         this.summaryText = '';
         this.summaryGeneratedAt = '';
         this.summaryEntities = [];
@@ -758,17 +951,28 @@ export class NoteContent extends PlatformElement {
         this.editable = false;
         this.savingNote = false;
         this.draftMode = false;
+        this.processingAttachment = false;
+        this.processingRelationship = false;
         this._draftTitle = '';
         this._draftText = '';
+        this._draftSubtype = '';
+        this._draftNoteDate = '';
     }
 
     willUpdate(changedProperties) {
         if (changedProperties.has('note') || changedProperties.has('editable')) {
             const noteName = this.note && typeof this.note.name === 'string' ? this.note.name : '';
             const noteDescription = this.note && typeof this.note.description === 'string' ? this.note.description : '';
+            const noteSubtype = this.note && typeof this.note.entity_subtype === 'string' ? this.note.entity_subtype : '';
+            const noteDate = this.note && typeof this.note.note_date === 'string' ? this.note.note_date : '';
             if (this.editable) {
                 this._draftTitle = noteName;
                 this._draftText = noteDescription;
+                const fallbackSubtype = Array.isArray(this.noteSubtypes) && this.noteSubtypes.length > 0
+                    ? this._getText(this.noteSubtypes[0]?.type_id, 'meeting')
+                    : 'meeting';
+                this._draftSubtype = noteSubtype || fallbackSubtype;
+                this._draftNoteDate = noteDate || new Date().toISOString().slice(0, 10);
             }
         }
     }
@@ -914,6 +1118,59 @@ export class NoteContent extends PlatformElement {
         return this._getText(foundEntity.name, entityId);
     }
 
+    _getRelationshipTypeConfig(relationshipType) {
+        if (typeof relationshipType !== 'string' || relationshipType.trim().length === 0) {
+            return null;
+        }
+        if (!Array.isArray(this.relationshipTypes)) {
+            throw new Error('relationshipTypes must be array');
+        }
+        return this.relationshipTypes.find((item) => item?.type_id === relationshipType) || null;
+    }
+
+    _getRelationshipDirectionArrow(relationshipType) {
+        const config = this._getRelationshipTypeConfig(relationshipType);
+        if (config && config.is_directed === false) {
+            return '<->';
+        }
+        return '->';
+    }
+
+    _getRelationshipWeightText(relationship) {
+        const rawWeight = relationship?.weight;
+        if (typeof rawWeight !== 'number' || !Number.isFinite(rawWeight)) {
+            return '';
+        }
+        return `Вес: ${rawWeight.toFixed(2)}`;
+    }
+
+    _getNoteSubtypeOptions() {
+        if (!Array.isArray(this.noteSubtypes)) {
+            throw new Error('noteSubtypes must be array');
+        }
+        return this.noteSubtypes;
+    }
+
+    _getNoteSubtypeLabel() {
+        const subtypeId = this._getText(this.note?.entity_subtype, '');
+        if (subtypeId.length === 0) {
+            return '';
+        }
+        const subtype = this._getNoteSubtypeOptions().find((item) => item?.type_id === subtypeId);
+        if (!subtype) {
+            return subtypeId;
+        }
+        return this._getText(subtype.name, subtypeId);
+    }
+
+    _getAttachmentName(attachment) {
+        return this._getText(attachment?.filename, this._getText(attachment?.document_id, 'Файл'));
+    }
+
+    _getAttachmentStatus(attachment) {
+        return this._getText(attachment?.status, 'unknown');
+    }
+
     _getEntityIcon(entity) {
         const typeConfig = this._getEntityTypeConfig(entity);
         if (typeConfig && typeof typeConfig.icon === 'string' && typeConfig.icon.trim().length > 0) {
@@ -1007,10 +1264,20 @@ export class NoteContent extends PlatformElement {
         if (title.length === 0) {
             throw new Error('Название заметки не может быть пустым');
         }
+        const subtype = this._draftSubtype.trim();
+        if (subtype.length === 0) {
+            throw new Error('Подтип заметки не выбран');
+        }
+        const noteDate = this._draftNoteDate.trim();
+        if (noteDate.length === 0) {
+            throw new Error('Дата заметки не выбрана');
+        }
         this.emit('save-note', {
             noteId: this.note.entity_id,
             name: title,
             description: this._draftText,
+            entitySubtype: subtype,
+            noteDate,
         });
     }
 
@@ -1024,6 +1291,14 @@ export class NoteContent extends PlatformElement {
 
     _onTextInput(event) {
         this._draftText = event.target.value;
+    }
+
+    _onSubtypeChange(event) {
+        this._draftSubtype = event.target.value;
+    }
+
+    _onNoteDateChange(event) {
+        this._draftNoteDate = event.target.value;
     }
 
     _escapeHtml(rawText) {
@@ -1062,6 +1337,41 @@ export class NoteContent extends PlatformElement {
         this.emit('open-analysis-draft', { noteId: this.note.entity_id });
     }
 
+    _openFilePicker() {
+        const fileInput = this.renderRoot?.querySelector('#note-attachment-input');
+        if (!(fileInput instanceof HTMLInputElement)) {
+            throw new Error('Attachment file input is not available');
+        }
+        fileInput.click();
+    }
+
+    _onAttachmentFileSelected(event) {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('Attachment input must be HTMLInputElement');
+        }
+        if (!input.files || input.files.length === 0) {
+            return;
+        }
+        const file = input.files[0];
+        this.emit('upload-attachment', { noteId: this.note.entity_id, file });
+        input.value = '';
+    }
+
+    _emitDeleteAttachment(attachment) {
+        if (!attachment || typeof attachment !== 'object') {
+            throw new Error('Attachment payload is required');
+        }
+        this.emit('delete-attachment', { noteId: this.note.entity_id, attachment });
+    }
+
+    _emitDeleteRelationship(relationship) {
+        if (!relationship || typeof relationship !== 'object') {
+            throw new Error('Relationship payload is required');
+        }
+        this.emit('delete-relationship', { noteId: this.note.entity_id, relationship });
+    }
+
     render() {
         if (!this.note || typeof this.note !== 'object') {
             throw new Error('note is required');
@@ -1070,9 +1380,12 @@ export class NoteContent extends PlatformElement {
         const noteText = this.editable ? this._draftText : this._getText(this.note.description, 'Без описания');
         const noteTitle = this.editable ? this._draftTitle : this._getText(this.note.name, 'Заметка');
         const noteDate = this._formatNoteDate(this.note.note_date || this.note.updated_at || this.note.created_at);
+        const noteSubtypeLabel = this._getNoteSubtypeLabel();
+        const noteSubtypeOptions = this._getNoteSubtypeOptions();
         const taskEntities = this._getTaskEntities();
         const nonTaskEntities = this._getNonTaskEntities();
         const relationships = this._getRelationships();
+        const attachments = Array.isArray(this.attachments) ? this.attachments : [];
         const summaryTags = Array.isArray(this.summaryEntities) ? this.summaryEntities : [];
 
         return html`
@@ -1088,8 +1401,34 @@ export class NoteContent extends PlatformElement {
                                     @input=${this._onTitleInput}
                                     placeholder="Название заметки"
                                 />
+                                <div class="note-edit-meta">
+                                    <select
+                                        class="form-select note-subtype-select"
+                                        .value=${this._draftSubtype}
+                                        @change=${this._onSubtypeChange}
+                                    >
+                                        <option value="" disabled>Выберите тип заметки</option>
+                                        ${noteSubtypeOptions.map((item) => html`
+                                            <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
+                                        `)}
+                                    </select>
+                                    <platform-date-picker
+                                        class="note-date-picker"
+                                        mode="date"
+                                        value-format="iso"
+                                        label="Дата"
+                                        .value=${this._draftNoteDate}
+                                        @change=${this._onNoteDateChange}
+                                    ></platform-date-picker>
+                                </div>
                             ` : html`<h2 class="note-title">${noteTitle}</h2>`}
                             <p class="note-date">${noteDate}</p>
+                            ${!this.editable && noteSubtypeLabel.length > 0 ? html`
+                                <p class="note-subtype">
+                                    <platform-icon name="tag" size="14"></platform-icon>
+                                    ${noteSubtypeLabel}
+                                </p>
+                            ` : ''}
                         </div>
                         <div class="note-actions">
                             <button
@@ -1246,7 +1585,9 @@ export class NoteContent extends PlatformElement {
                     </section>
 
                     <section class="relationships-section">
-                        <h3 class="relationships-title">Связи</h3>
+                        <div class="section-toolbar">
+                            <h3 class="relationships-title">Связи</h3>
+                        </div>
                         ${relationships.map((relationship) => {
                             const sourceId = this._getText(relationship.source_entity_id, '');
                             const targetId = this._getText(relationship.target_entity_id, '');
@@ -1254,25 +1595,89 @@ export class NoteContent extends PlatformElement {
                             const sourceLabel = this._getEntityLabelById(sourceId);
                             const targetLabel = this._getEntityLabelById(targetId);
                             const relationshipLabel = this._getRelationshipTypeLabel(relationshipType);
+                            const directionArrow = this._getRelationshipDirectionArrow(relationshipType);
+                            const weightText = this._getRelationshipWeightText(relationship);
                             return html`
-                                <button
-                                    class="relationship-link"
-                                    type="button"
-                                    @click=${() => this._emitEntityOpen({
-                                        entity_id: sourceId === this.note.entity_id ? targetId : sourceId,
-                                        name: sourceId === this.note.entity_id ? targetLabel : sourceLabel,
-                                    })}
-                                >
+                                <div class="relationship-link">
                                     <span class="relationship-avatar">
                                         <platform-icon name="share" size="24"></platform-icon>
                                     </span>
                                     <span class="relationship-data">
                                         <p class="relationship-name">${relationshipLabel}</p>
-                                        <p class="relationship-subtitle">${sourceLabel} -> ${targetLabel}</p>
+                                        <div class="relationship-entities">
+                                            <button
+                                                class="relationship-entity-btn"
+                                                type="button"
+                                                ?disabled=${sourceId.length === 0}
+                                                @click=${() => this._emitEntityOpen({ entity_id: sourceId, name: sourceLabel })}
+                                            >
+                                                ${sourceLabel}
+                                            </button>
+                                            <span class="relationship-subtitle">${directionArrow}</span>
+                                            <button
+                                                class="relationship-entity-btn"
+                                                type="button"
+                                                ?disabled=${targetId.length === 0}
+                                                @click=${() => this._emitEntityOpen({ entity_id: targetId, name: targetLabel })}
+                                            >
+                                                ${targetLabel}
+                                            </button>
+                                            ${weightText.length > 0 ? html`<span class="relationship-weight">${weightText}</span>` : ''}
+                                        </div>
+                                        <div class="relationship-actions">
+                                            <button
+                                                class="relationship-delete-btn"
+                                                type="button"
+                                                ?disabled=${this.processingRelationship || this.draftMode}
+                                                @click=${() => this._emitDeleteRelationship(relationship)}
+                                            >
+                                                Удалить
+                                            </button>
+                                        </div>
                                     </span>
-                                </button>
+                                </div>
                             `;
                         })}
+                    </section>
+
+                    <section class="attachments-section">
+                        <div class="section-toolbar">
+                            <h3 class="attachments-title">Вложения</h3>
+                            <button
+                                class="section-action-btn"
+                                type="button"
+                                ?disabled=${this.processingAttachment || this.draftMode}
+                                @click=${this._openFilePicker}
+                            >
+                                ${this.processingAttachment ? 'Загрузка...' : 'Добавить файл'}
+                            </button>
+                            <input
+                                id="note-attachment-input"
+                                type="file"
+                                style="display: none;"
+                                @change=${this._onAttachmentFileSelected}
+                            />
+                        </div>
+                        ${attachments.length === 0 ? html`
+                            <div class="attachment-item">
+                                <span class="attachment-name">Нет вложений</span>
+                            </div>
+                        ` : attachments.map((attachment) => html`
+                            <div class="attachment-item">
+                                <span class="attachment-name">${this._getAttachmentName(attachment)}</span>
+                                <span class="attachment-actions">
+                                    <span class="attachment-status">${this._getAttachmentStatus(attachment)}</span>
+                                    <button
+                                        class="attachment-delete-btn"
+                                        type="button"
+                                        ?disabled=${this.processingAttachment || this.draftMode}
+                                        @click=${() => this._emitDeleteAttachment(attachment)}
+                                    >
+                                        Удалить
+                                    </button>
+                                </span>
+                            </div>
+                        `)}
                     </section>
                 </aside>
             </div>

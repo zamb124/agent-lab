@@ -30,11 +30,10 @@ class TestCompanyInit:
     @pytest.mark.asyncio
     async def test_system_relationship_types_exist(self, crm_client, unique_id, auth_headers_system):
         """Системные типы связей существуют"""
-        types_resp = await crm_client.get("/crm/api/v1/relationship-types", headers=auth_headers_system)
+        types_resp = await crm_client.get("/crm/api/v1/relationships/types/", headers=auth_headers_system)
         assert types_resp.status_code == 200
-        
-        data = types_resp.json()
-        types = data.get("relationship_types", [])
+
+        types = types_resp.json()
         type_ids = [t["type_id"] for t in types]
         
         assert "mentions" in type_ids

@@ -242,7 +242,7 @@ class TestAIAnalysis:
     @pytest.mark.asyncio
     async def test_ai_extract_custom_relationship_types(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI извлекает кастомные типы связей"""
-        await crm_client.post("/crm/api/v1/relationship-types", json={
+        await crm_client.post("/crm/api/v1/relationships/types/", json={
             "type_id": f"works_on_{unique_id}",
             "name": "Работает над",
             "prompt": "Ищи кто над чем работает",

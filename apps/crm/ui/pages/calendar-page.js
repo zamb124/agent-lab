@@ -1,22 +1,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
-
-function resolveNamespaceName(namespace) {
-    if (!namespace) {
-        return null;
-    }
-    if (typeof namespace === 'string') {
-        return namespace;
-    }
-    if (typeof namespace === 'object' && typeof namespace.name === 'string') {
-        return namespace.name;
-    }
-    throw new Error('Invalid namespace value');
-}
 
 function toIsoDate(value) {
     if (!value) {
@@ -259,20 +247,68 @@ export class CalendarPage extends PlatformElement {
         this._selectedDate = new Date().toISOString().slice(0, 10);
         this._summary = '';
         this._loading = false;
+        this._onPlatformNotification = this._onPlatformNotification.bind(this);
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener('platform-notification-received', this._onPlatformNotification);
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        window.removeEventListener('platform-notification-received', this._onPlatformNotification);
     }
 
     async firstUpdated() {
         await this._loadCalendarData();
     }
 
+    _normalizeNamespaceName(namespace) {
+        const normalized = resolveObjectName(namespace, null);
+        if (!normalized) {
+            return 'all';
+        }
+        return normalized;
+    }
+
+    _onPlatformNotification(event) {
+        const notification = event.detail;
+        if (!notification || notification.service !== 'crm') {
+            return;
+        }
+        if (notification.type !== 'crm_daily_summary_updated') {
+            return;
+        }
+        const payload = notification.data;
+        if (!payload || payload.event !== 'crm.daily_summary.updated') {
+            return;
+        }
+        const selectedNamespace = this._normalizeNamespaceName(CRMStore.state.namespaces.current);
+        const payloadNamespace = this._normalizeNamespaceName(payload.namespace);
+        if (selectedNamespace !== payloadNamespace) {
+            return;
+        }
+        if (payload.date !== this._selectedDate) {
+            return;
+        }
+        const summaryState = payload.summary_state;
+        if (!summaryState || typeof summaryState !== 'object') {
+            throw new Error('summary_state must be object');
+        }
+        const summary = summaryState.summary;
+        this._summary = typeof summary === 'string' ? summary : '';
+        this._loading = false;
+    }
+
     async _loadCalendarData() {
         this._loading = true;
-        const crmApi = this.services.get('crmApi');
-        const namespaceName = resolveNamespaceName(CRMStore.state.namespaces.current);
+        const crmApi = this.crmApi;
+        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
         const [notes, tasks, summary] = await Promise.all([
             crmApi.getEntities({ entity_type: 'note', namespace: namespaceName, limit: 200 }),
             crmApi.getEntities({ entity_type: 'task', namespace: namespaceName, limit: 200 }),
-            crmApi.getDailySummary(this._selectedDate),
+            crmApi.getDailySummary(this._selectedDate, { namespace: namespaceName }),
         ]);
 
         const mergedEvents = [...(Array.isArray(notes) ? notes : []), ...(Array.isArray(tasks) ? tasks : [])]

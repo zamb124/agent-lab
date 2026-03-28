@@ -47,7 +47,7 @@ export class CRMAPIService extends BaseService {
         if (!query) {
             throw new Error('Search query is required');
         }
-        return this.post('/entities/search', { query, ...params });
+        return this.get('/entities/search', { query, ...params });
     }
     
     async findEntitiesByText(text) {
@@ -57,12 +57,45 @@ export class CRMAPIService extends BaseService {
         return this.post('/entities/search/mentions', { text });
     }
     
-    async analyzeText(text, noteId = null, mentioned_entity_ids = null) {
+    async analyzeText(text, noteId = null, options = {}) {
         if (!text) {
             throw new Error('Text is required');
         }
-        const params = noteId ? `?note_id=${noteId}` : '';
-        return this.post(`/entities/analyze${params}`, { text, mentioned_entity_ids });
+        if (options !== null && typeof options !== 'object') {
+            throw new Error('Analyze options must be object');
+        }
+
+        const query = new URLSearchParams();
+        if (noteId) {
+            query.set('note_id', noteId);
+        }
+        if (typeof options.checkDuplicates === 'boolean') {
+            query.set('check_duplicates', options.checkDuplicates ? 'true' : 'false');
+        }
+
+        const mentionedEntityIds = Array.isArray(options.mentionedEntityIds)
+            ? options.mentionedEntityIds
+            : (Array.isArray(options.mentioned_entity_ids) ? options.mentioned_entity_ids : null);
+        const extractEntityTypes = Array.isArray(options.extractEntityTypes)
+            ? options.extractEntityTypes
+            : null;
+        const extractRelationshipTypes = Array.isArray(options.extractRelationshipTypes)
+            ? options.extractRelationshipTypes
+            : null;
+
+        const body = { text };
+        if (mentionedEntityIds && mentionedEntityIds.length > 0) {
+            body.mentioned_entity_ids = mentionedEntityIds;
+        }
+        if (extractEntityTypes && extractEntityTypes.length > 0) {
+            body.extract_entity_types = extractEntityTypes;
+        }
+        if (extractRelationshipTypes && extractRelationshipTypes.length > 0) {
+            body.extract_relationship_types = extractRelationshipTypes;
+        }
+
+        const params = query.size > 0 ? `?${query.toString()}` : '';
+        return this.post(`/entities/analyze${params}`, body);
     }
     
     async getEntityTypes() {
@@ -95,14 +128,27 @@ export class CRMAPIService extends BaseService {
     }
     
     async getRelationshipTypes() {
-        return this.get('/relationship-types');
+        const response = await this.get('/relationships/types/');
+        if (Array.isArray(response)) {
+            return { relationship_types: response };
+        }
+        if (!response || typeof response !== 'object') {
+            throw new Error('Relationship types response must be object');
+        }
+        if (Array.isArray(response.relationship_types)) {
+            return { relationship_types: response.relationship_types };
+        }
+        if (Array.isArray(response.items)) {
+            return { relationship_types: response.items };
+        }
+        throw new Error('relationship_types must be array');
     }
     
     async createRelationshipType(data) {
         if (!data) {
             throw new Error('Relationship type data is required');
         }
-        return this.post('/relationship-types', data);
+        return this.post('/relationships/types/', data);
     }
     
     async getInfluenceGraph(entityId, params = {}) {
@@ -123,11 +169,11 @@ export class CRMAPIService extends BaseService {
         });
     }
     
-    async getEntityRelationships(entityId) {
+    async getEntityRelationships(entityId, params = {}) {
         if (!entityId) {
             throw new Error('Entity ID is required');
         }
-        return this.get(`/entities/${entityId}/relationships`);
+        return this.get(`/entities/${entityId}/relationships`, params);
     }
     
     async getEntityWithRelatedEntities(entityId) {

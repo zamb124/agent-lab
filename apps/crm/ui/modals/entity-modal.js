@@ -173,6 +173,14 @@ export class EntityModal extends PlatformModal {
                 font-size: var(--text-sm);
                 text-align: center;
             }
+
+            .task-date-picker {
+                width: 100%;
+                --platform-date-picker-labeled-bg: var(--crm-surface);
+                --platform-date-picker-labeled-border: var(--crm-stroke);
+                --platform-date-picker-labeled-height: 44px;
+                --platform-date-picker-labeled-padding: 0 var(--space-3);
+            }
         `
     ];
 
@@ -431,7 +439,7 @@ export class EntityModal extends PlatformModal {
                         <div class="form-group">
                             <label class="form-label">Дедлайн</label>
                             <platform-date-picker
-                                class="form-input"
+                                class="task-date-picker"
                                 mode="date"
                                 value-format="iso"
                                 .value=${this._formData.due_date || null}

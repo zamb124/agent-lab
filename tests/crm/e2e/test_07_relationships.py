@@ -102,7 +102,7 @@ class TestRelationships:
     @pytest.mark.asyncio
     async def test_custom_relationship_type(self, crm_client, unique_id, auth_headers_system):
         """Создание и использование кастомного типа связи"""
-        type_resp = await crm_client.post("/crm/api/v1/relationship-types", json={
+        type_resp = await crm_client.post("/crm/api/v1/relationships/types/", json={
             "type_id": f"works_for_{unique_id}",
             "name": "Работает в",
             "prompt": "Ищи где человек работает",

@@ -1051,6 +1051,7 @@ class EntityService:
             }
 
         cached_version = cached_state.get("source_version")
+        cached_stale = cached_state.get("stale") is True
         is_stale = cached_version != current_version
         cached_entities = cached_state.get("entities")
         normalized_entities: list[str] = []
@@ -1070,7 +1071,7 @@ class EntityService:
             "entities": normalized_entities,
             "source_version": current_version if is_stale else cached_version,
             "revalidating": is_revalidating,
-            "stale": is_stale or force_rebuild,
+            "stale": is_stale or force_rebuild or cached_stale or is_revalidating,
         }
 
     async def get_entity_card(
@@ -1120,11 +1121,15 @@ class EntityService:
             "relationships": [
                 {
                     "relationship_id": rel.relationship_id,
+                    "company_id": rel.company_id,
+                    "namespace": rel.namespace,
                     "source_entity_id": rel.source_entity_id,
                     "target_entity_id": rel.target_entity_id,
                     "relationship_type": rel.relationship_type,
                     "weight": rel.weight,
-                    "attributes": rel.attributes
+                    "attributes": rel.attributes,
+                    "created_at": rel.created_at.isoformat() if rel.created_at else None,
+                    "updated_at": rel.updated_at.isoformat() if rel.updated_at else None,
                 }
                 for rel in relationships
             ],

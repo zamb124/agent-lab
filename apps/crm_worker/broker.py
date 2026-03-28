@@ -8,6 +8,7 @@ from taskiq import TaskiqState
 from core.config import get_settings
 from core.logging import get_logger, setup_logging
 from core.scheduler import get_schedule_source
+from core.websocket.manager import notification_manager
 from core.tasks.broker import (
     create_broker,
     create_scheduler,
@@ -48,11 +49,14 @@ async def _ensure_reconcile_schedule() -> None:
 
 async def crm_worker_startup(state: TaskiqState) -> None:
     setup_logging(service_name="crm-worker")
+    settings = get_settings()
+    await notification_manager.start_redis_listener(settings.database.redis_url)
     await _ensure_reconcile_schedule()
     logger.info("CRM Worker: запуск")
 
 
 async def crm_worker_shutdown(state: TaskiqState) -> None:
+    await notification_manager.stop_redis_listener()
     logger.info("CRM Worker: остановка")
 
 

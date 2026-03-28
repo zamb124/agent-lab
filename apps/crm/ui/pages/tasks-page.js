@@ -1,22 +1,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
 import '../modals/entity-modal.js';
 import '@platform/lib/components/platform-icon.js';
-
-function resolveNamespaceName(namespace) {
-    if (!namespace) {
-        return null;
-    }
-    if (typeof namespace === 'string') {
-        return namespace;
-    }
-    if (typeof namespace === 'object' && typeof namespace.name === 'string') {
-        return namespace.name;
-    }
-    throw new Error('Invalid namespace value');
-}
 
 const TASK_STATUS = ['todo', 'in_progress', 'done'];
 
@@ -225,8 +213,8 @@ export class TasksPage extends PlatformElement {
 
     async _loadTasks() {
         this._loading = true;
-        const crmApi = this.services.get('crmApi');
-        const namespaceName = resolveNamespaceName(CRMStore.state.namespaces.current);
+        const crmApi = this.crmApi;
+        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
         const tasks = await crmApi.getEntities({
             entity_type: 'task',
             namespace: namespaceName,
@@ -242,7 +230,7 @@ export class TasksPage extends PlatformElement {
     }
 
     async _moveTask(task, targetStatus) {
-        const crmApi = this.services.get('crmApi');
+        const crmApi = this.crmApi;
         const attributes = {
             ...(task.attributes || {}),
             status: targetStatus,
@@ -252,8 +240,8 @@ export class TasksPage extends PlatformElement {
     }
 
     async _createTask() {
-        const crmApi = this.services.get('crmApi');
-        const namespaceName = resolveNamespaceName(CRMStore.state.namespaces.current);
+        const crmApi = this.crmApi;
+        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
         await crmApi.createEntity({
             entity_type: 'task',
             name: 'Новая задача',

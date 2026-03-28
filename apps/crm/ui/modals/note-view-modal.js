@@ -15,8 +15,12 @@ export class NoteViewModal extends PlatformModal {
         _relatedEntities: { state: true },
         _relationships: { state: true },
         _entityTypes: { state: true },
+        _noteSubtypes: { state: true },
         _relationshipTypes: { state: true },
+        _attachments: { state: true },
         _processingEntities: { state: true },
+        _processingAttachment: { state: true },
+        _processingRelationship: { state: true },
         _deleting: { state: true },
         _editing: { state: true },
         _savingNote: { state: true },
@@ -56,8 +60,12 @@ export class NoteViewModal extends PlatformModal {
         this._relatedEntities = [];
         this._relationships = [];
         this._entityTypes = [];
+        this._noteSubtypes = [];
         this._relationshipTypes = [];
+        this._attachments = [];
         this._processingEntities = false;
+        this._processingAttachment = false;
+        this._processingRelationship = false;
         this._deleting = false;
         this._editing = false;
         this._savingNote = false;
@@ -76,16 +84,17 @@ export class NoteViewModal extends PlatformModal {
     }
 
     async _loadEntityTypes() {
-        const crmApi = this.services.get('crmApi');
+        const crmApi = this.crmApi;
         const types = await CRMStore.loadEntityTypes(crmApi);
         if (!Array.isArray(types)) {
             throw new Error('Entity types must be array');
         }
         this._entityTypes = types;
+        this._noteSubtypes = types.filter((type) => type?.parent_type_id === 'note');
     }
 
     async _loadRelationshipTypes() {
-        const crmApi = this.services.get('crmApi');
+        const crmApi = this.crmApi;
         const types = await CRMStore.loadRelationshipTypes(crmApi);
         if (!Array.isArray(types)) {
             throw new Error('Relationship types must be array');
@@ -100,18 +109,25 @@ export class NoteViewModal extends PlatformModal {
         if (this.draftMode) {
             this._relatedEntities = [];
             this._relationships = [];
+            this._attachments = [];
             return;
         }
         if (typeof this.note.entity_id !== 'string' || this.note.entity_id.trim().length === 0) {
             throw new Error('Note entity_id is required');
         }
-        const crmApi = this.services.get('crmApi');
-        const card = await crmApi.getEntityCard(this.note.entity_id);
-        if (!card || !Array.isArray(card.related_entities) || !Array.isArray(card.relationships)) {
-            throw new Error('Entity card must contain related_entities and relationships arrays');
+        const crmApi = this.crmApi;
+        const card = await CRMStore.loadEntityCard(crmApi, this.note.entity_id);
+        if (
+            !card
+            || !Array.isArray(card.related_entities)
+            || !Array.isArray(card.relationships)
+            || !Array.isArray(card.attachments)
+        ) {
+            throw new Error('Entity card must contain related_entities, relationships and attachments arrays');
         }
         this._relatedEntities = card.related_entities;
         this._relationships = card.relationships;
+        this._attachments = card.attachments;
     }
 
     async _openEntityModal(event) {
@@ -124,8 +140,8 @@ export class NoteViewModal extends PlatformModal {
             throw new Error('Entity ID is required');
         }
 
-        const crmApi = this.services.get('crmApi');
-        const entity = await crmApi.getEntity(entityPayload.entity_id);
+        const crmApi = this.crmApi;
+        const entity = await CRMStore.getEntityById(crmApi, entityPayload.entity_id);
         if (!entity || typeof entity !== 'object') {
             throw new Error('Entity must be object');
         }
@@ -170,9 +186,23 @@ export class NoteViewModal extends PlatformModal {
         analysisModal.showModal();
         analysisModal.addEventListener('close', () => analysisModal.remove());
         try {
-            const crmApi = this.services.get('crmApi');
+            const crmApi = this.crmApi;
             CRMStore.setCurrentNote(this.note.entity_id);
-            await CRMStore.analyzeText(crmApi, noteText, this.note.entity_id);
+            const extractEntityTypes = this._entityTypes
+                .map((type) => type?.type_id)
+                .filter((typeId) => typeof typeId === 'string' && typeId.trim().length > 0);
+            const extractRelationshipTypes = this._relationshipTypes
+                .map((type) => type?.type_id)
+                .filter((typeId) => typeof typeId === 'string' && typeId.trim().length > 0 && typeId !== 'linked');
+            const mentionedEntityIds = this._relatedEntities
+                .map((entity) => entity?.entity_id)
+                .filter((entityId) => typeof entityId === 'string' && entityId.trim().length > 0);
+            await CRMStore.analyzeText(crmApi, noteText, this.note.entity_id, {
+                checkDuplicates: true,
+                extractEntityTypes,
+                extractRelationshipTypes,
+                mentionedEntityIds,
+            });
         } finally {
             this._processingEntities = false;
             analysisModal.loading = false;
@@ -214,7 +244,7 @@ export class NoteViewModal extends PlatformModal {
 
         this._deleting = true;
         try {
-            const crmApi = this.services.get('crmApi');
+            const crmApi = this.crmApi;
             await CRMStore.deleteNote(crmApi, this.note.entity_id);
         } finally {
             this._deleting = false;
@@ -236,6 +266,93 @@ export class NoteViewModal extends PlatformModal {
 
     async _handleDeleteNote() {
         await this._deleteNote();
+    }
+
+    async _handleUploadAttachment(event) {
+        if (!event.detail || typeof event.detail !== 'object') {
+            throw new Error('upload-attachment payload is required');
+        }
+        const file = event.detail.file;
+        if (!(file instanceof File)) {
+            throw new Error('Attachment file is required');
+        }
+        if (this.draftMode) {
+            throw new Error('Attachment upload is not available in draft mode');
+        }
+        if (!this.note || typeof this.note !== 'object' || typeof this.note.entity_id !== 'string') {
+            throw new Error('Note entity_id is required');
+        }
+        this._processingAttachment = true;
+        try {
+            const crmApi = this.crmApi;
+            await CRMStore.uploadEntityAttachment(crmApi, this.note.entity_id, file);
+            await this._loadRelatedEntities();
+        } finally {
+            this._processingAttachment = false;
+        }
+    }
+
+    _resolveAttachmentId(attachment) {
+        const attachmentId = attachment?.attachment_id || attachment?.document_id || attachment?.id;
+        if (typeof attachmentId !== 'string' || attachmentId.trim().length === 0) {
+            throw new Error('Attachment id is required');
+        }
+        return attachmentId;
+    }
+
+    async _handleDeleteAttachment(event) {
+        if (!event.detail || typeof event.detail !== 'object') {
+            throw new Error('delete-attachment payload is required');
+        }
+        const attachment = event.detail.attachment;
+        if (!attachment || typeof attachment !== 'object') {
+            throw new Error('Attachment payload is required');
+        }
+        if (this.draftMode) {
+            throw new Error('Attachment delete is not available in draft mode');
+        }
+        if (!this.note || typeof this.note !== 'object' || typeof this.note.entity_id !== 'string') {
+            throw new Error('Note entity_id is required');
+        }
+        const attachmentId = this._resolveAttachmentId(attachment);
+        this._processingAttachment = true;
+        try {
+            const crmApi = this.crmApi;
+            await CRMStore.deleteEntityAttachment(crmApi, this.note.entity_id, attachmentId);
+            await this._loadRelatedEntities();
+        } finally {
+            this._processingAttachment = false;
+        }
+    }
+
+    _resolveRelationshipId(relationship) {
+        const relationshipId = relationship?.relationship_id || relationship?.id;
+        if (typeof relationshipId !== 'string' || relationshipId.trim().length === 0) {
+            throw new Error('Relationship id is required');
+        }
+        return relationshipId;
+    }
+
+    async _handleDeleteRelationship(event) {
+        if (!event.detail || typeof event.detail !== 'object') {
+            throw new Error('delete-relationship payload is required');
+        }
+        const relationship = event.detail.relationship;
+        if (!relationship || typeof relationship !== 'object') {
+            throw new Error('Relationship payload is required');
+        }
+        if (this.draftMode) {
+            throw new Error('Relationship delete is not available in draft mode');
+        }
+        const relationshipId = this._resolveRelationshipId(relationship);
+        this._processingRelationship = true;
+        try {
+            const crmApi = this.crmApi;
+            await CRMStore.deleteRelationshipById(crmApi, relationshipId, this.note.entity_id);
+            await this._loadRelatedEntities();
+        } finally {
+            this._processingRelationship = false;
+        }
     }
 
     _handleEditNote() {
@@ -267,17 +384,26 @@ export class NoteViewModal extends PlatformModal {
         if (typeof noteDescription !== 'string') {
             throw new Error('Note description must be string');
         }
+        const entitySubtype = detail.entitySubtype;
+        if (typeof entitySubtype !== 'string' || entitySubtype.trim().length === 0) {
+            throw new Error('Note subtype is required');
+        }
+        const noteDate = detail.noteDate;
+        if (typeof noteDate !== 'string' || noteDate.trim().length === 0) {
+            throw new Error('Note date is required');
+        }
         if (!this.note || typeof this.note !== 'object') {
             throw new Error('note is required');
         }
         this._savingNote = true;
         try {
-            const crmApi = this.services.get('crmApi');
+            const crmApi = this.crmApi;
             if (this.draftMode) {
                 const createdNote = await CRMStore.createNote(crmApi, {
                     name: noteName.trim(),
                     description: noteDescription,
-                    note_date: this.note.note_date || new Date().toISOString().slice(0, 10),
+                    entity_subtype: entitySubtype.trim(),
+                    note_date: noteDate.trim(),
                 });
                 this.note = createdNote;
                 this.draftMode = false;
@@ -290,6 +416,8 @@ export class NoteViewModal extends PlatformModal {
                 await CRMStore.updateNote(crmApi, this.note.entity_id, {
                     name: noteName.trim(),
                     description: noteDescription,
+                    entity_subtype: entitySubtype.trim(),
+                    note_date: noteDate.trim(),
                 });
             }
         } finally {
@@ -408,7 +536,9 @@ export class NoteViewModal extends PlatformModal {
                     .relatedEntities=${this._relatedEntities}
                     .relationships=${this._relationships}
                     .entityTypes=${this._entityTypes}
+                    .noteSubtypes=${this._noteSubtypes}
                     .relationshipTypes=${this._relationshipTypes}
+                    .attachments=${this._attachments}
                     .summaryText=${this._getNoteSummaryText()}
                     .summaryGeneratedAt=${this._getNoteSummaryGeneratedAt()}
                     .summaryEntities=${this._getNoteSummaryEntities()}
@@ -419,11 +549,16 @@ export class NoteViewModal extends PlatformModal {
                     .editable=${this._editing}
                     .savingNote=${this._savingNote}
                     .draftMode=${this.draftMode}
+                    .processingAttachment=${this._processingAttachment}
+                    .processingRelationship=${this._processingRelationship}
                     @entity-open=${this._openEntityModal}
                     @share-note=${this._handleShareNote}
                     @summary-refresh=${this._handleSummaryRefresh}
                     @open-analysis-draft=${this._handleOpenAnalysisDraft}
                     @delete-note=${this._handleDeleteNote}
+                    @upload-attachment=${this._handleUploadAttachment}
+                    @delete-attachment=${this._handleDeleteAttachment}
+                    @delete-relationship=${this._handleDeleteRelationship}
                     @edit-note=${this._handleEditNote}
                     @cancel-edit-note=${this._handleCancelEdit}
                     @save-note=${this._handleSaveNote}

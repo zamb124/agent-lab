@@ -3,7 +3,7 @@ API для работы со связями (relationships).
 """
 
 import uuid
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -39,14 +39,20 @@ def get_relationship_type_repo() -> RelationshipTypeRepository:
 @router.get("", response_model=List[RelationshipResponse])
 async def list_relationships(
     entity_id: str = None,
+    namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
+    limit: int = Query(1000, ge=1, le=10000, description="Лимит для полного списка связей"),
     repo: RelationshipRepository = Depends(get_relationship_repo)
 ):
     """Получить все связи (опционально для конкретной entity)"""
     if entity_id:
         relationships = await repo.get_by_entity(entity_id)
     else:
-        relationships = []
-    return relationships
+        relationships = await repo.get_all_for_graph(limit=limit)
+    if namespace is None:
+        return relationships
+    if namespace.strip() == "":
+        raise HTTPException(status_code=400, detail="namespace must not be empty")
+    return [rel for rel in relationships if rel.namespace == namespace]
 
 
 @router.get("/{relationship_id}", response_model=RelationshipResponse)
@@ -67,18 +73,16 @@ async def create_relationship(
     repo: RelationshipRepository = Depends(get_relationship_repo)
 ):
     """Создать новую связь"""
-    
-    
-    from core.context import get_context
-    
+
     context = get_context()
     company_id = context.active_company.company_id
-    
+
     relationship = Relationship(
         relationship_id=str(uuid.uuid4()),
         source_entity_id=data.source_entity_id,
         target_entity_id=data.target_entity_id,
         relationship_type=data.relationship_type,
+        namespace=data.namespace,
         weight=data.weight,
         attributes=data.attributes or {},
         company_id=company_id,
@@ -107,7 +111,7 @@ async def list_relationship_types(
     repo: RelationshipTypeRepository = Depends(get_relationship_type_repo)
 ):
     """Получить все типы связей для компании"""
-    types = await repo.get_all_for_company("system")
+    types = await repo.get_all_for_company(include_system=True)
     return types
 
 
@@ -117,8 +121,7 @@ async def create_relationship_type(
     repo: RelationshipTypeRepository = Depends(get_relationship_type_repo)
 ):
     """Создать новый тип связи"""
-    
-    
+
     rel_type = RelationshipType(
         type_id=data.type_id,
         name=data.name,
@@ -126,10 +129,13 @@ async def create_relationship_type(
         prompt=data.prompt,
         is_directed=data.is_directed,
         inverse_type_id=data.inverse_type_id,
-        company_id="system"
+        icon=data.icon,
+        color=data.color,
+        weight_default=data.weight_default,
+        is_system=False,
     )
-    
-    await repo.create(rel_type)
+
+    await repo.create_custom_type(rel_type)
     return rel_type
 
 

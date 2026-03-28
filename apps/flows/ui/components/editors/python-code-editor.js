@@ -4,7 +4,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 
 const DEFAULT_CODE = `async def run(state):
@@ -422,7 +421,7 @@ export class PythonCodeEditor extends PlatformElement {
     _notifyCopied() {
         const message = 'Код скопирован';
         try {
-            ServiceRegistry.notify.success(message);
+            this.success(message);
         } catch {
             window.dispatchEvent(
                 new CustomEvent(AppEvents.TOAST_SHOW, {

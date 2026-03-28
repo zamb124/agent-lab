@@ -18,6 +18,9 @@ export class EntityCard extends PlatformElement {
         _entityTypes: { state: true },
         _loading: { state: true },
         _isOwner: { state: true },
+        _pendingAccessRequests: { state: true },
+        _requestsLoading: { state: true },
+        _processingRequestId: { state: true },
     };
 
     static styles = [
@@ -266,6 +269,64 @@ export class EntityCard extends PlatformElement {
                 font-size: var(--text-sm);
             }
 
+            .requests-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+
+            .request-item {
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-lg);
+                background: var(--crm-surface-muted);
+                padding: var(--space-3);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+
+            .request-title {
+                font-size: var(--text-sm);
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
+            .request-message {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                white-space: pre-wrap;
+            }
+
+            .request-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: var(--space-2);
+            }
+
+            .request-btn {
+                height: 30px;
+                border: none;
+                border-radius: var(--radius-md);
+                padding: 0 var(--space-3);
+                font-size: var(--text-xs);
+                cursor: pointer;
+            }
+
+            .request-btn.approve {
+                background: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
+            }
+
+            .request-btn.reject {
+                background: rgba(255, 136, 92, 0.18);
+                color: #ff885c;
+            }
+
+            .request-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
             :host-context([data-theme="light"]) {
                 background: var(--crm-surface);
             }
@@ -288,6 +349,9 @@ export class EntityCard extends PlatformElement {
         this._entityTypes = [];
         this._loading = false;
         this._isOwner = false;
+        this._pendingAccessRequests = [];
+        this._requestsLoading = false;
+        this._processingRequestId = '';
 
         this._unsubscribe = CRMStore.subscribe(state => {
             this._entity = state.entities.currentEntity;
@@ -311,11 +375,83 @@ export class EntityCard extends PlatformElement {
     async _loadEntityCard() {
         if (!this.entityId) return;
         
-        const crmApi = this.services.get('crmApi');
+        const crmApi = this.crmApi;
         const card = await CRMStore.loadEntityCard(crmApi, this.entityId);
         
         const currentUser = this.auth?.user;
         this._isOwner = currentUser && card.entity?.user_id === currentUser.user_id;
+        if (this._isOwner) {
+            await this._loadPendingRequests();
+        } else {
+            this._pendingAccessRequests = [];
+        }
+    }
+
+    _resolveRequestEntityId(request) {
+        const entityId = request?.resource_id || request?.entity_id;
+        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+            throw new Error('Access request entity id is required');
+        }
+        return entityId;
+    }
+
+    _resolveRequestId(request) {
+        const requestId = request?.request_id || request?.id;
+        if (typeof requestId !== 'string' || requestId.trim().length === 0) {
+            throw new Error('Access request id is required');
+        }
+        return requestId;
+    }
+
+    _resolveRequesterLabel(request) {
+        if (typeof request?.requester_name === 'string' && request.requester_name.trim().length > 0) {
+            return request.requester_name;
+        }
+        if (typeof request?.requester_id === 'string' && request.requester_id.trim().length > 0) {
+            return request.requester_id;
+        }
+        if (typeof request?.user_id === 'string' && request.user_id.trim().length > 0) {
+            return request.user_id;
+        }
+        return 'Пользователь';
+    }
+
+    async _loadPendingRequests() {
+        const crmApi = this.crmApi;
+        this._requestsLoading = true;
+        try {
+            const requests = await CRMStore.loadAccessRequests(crmApi, 'pending');
+            if (!Array.isArray(requests)) {
+                throw new Error('Access requests payload must be array');
+            }
+            this._pendingAccessRequests = requests.filter((request) => this._resolveRequestEntityId(request) === this.entityId);
+        } finally {
+            this._requestsLoading = false;
+        }
+    }
+
+    async _approveRequest(request) {
+        const requestId = this._resolveRequestId(request);
+        this._processingRequestId = requestId;
+        try {
+            const crmApi = this.crmApi;
+            await CRMStore.approveAccessRequest(crmApi, requestId);
+            await this._loadPendingRequests();
+        } finally {
+            this._processingRequestId = '';
+        }
+    }
+
+    async _rejectRequest(request) {
+        const requestId = this._resolveRequestId(request);
+        this._processingRequestId = requestId;
+        try {
+            const crmApi = this.crmApi;
+            await CRMStore.rejectAccessRequest(crmApi, requestId);
+            await this._loadPendingRequests();
+        } finally {
+            this._processingRequestId = '';
+        }
     }
 
     _getEntityTypeConfig(entity) {
@@ -429,6 +565,59 @@ export class EntityCard extends PlatformElement {
         `;
     }
 
+    _renderPendingAccessRequests() {
+        if (!this._isOwner) {
+            return '';
+        }
+        return html`
+            <div class="section">
+                <div class="section-title">Запросы доступа</div>
+                ${this._requestsLoading ? html`
+                    <div class="request-item">
+                        <div class="request-message">Загрузка запросов...</div>
+                    </div>
+                ` : this._pendingAccessRequests.length === 0 ? html`
+                    <div class="request-item">
+                        <div class="request-message">Нет ожидающих запросов</div>
+                    </div>
+                ` : html`
+                    <div class="requests-list">
+                        ${this._pendingAccessRequests.map((request) => {
+                            const requestId = this._resolveRequestId(request);
+                            const message = request?.message && typeof request.message === 'string'
+                                ? request.message
+                                : 'Без комментария';
+                            return html`
+                                <div class="request-item">
+                                    <div class="request-title">${this._resolveRequesterLabel(request)}</div>
+                                    <div class="request-message">${message}</div>
+                                    <div class="request-actions">
+                                        <button
+                                            class="request-btn reject"
+                                            type="button"
+                                            ?disabled=${this._processingRequestId === requestId}
+                                            @click=${() => this._rejectRequest(request)}
+                                        >
+                                            Отклонить
+                                        </button>
+                                        <button
+                                            class="request-btn approve"
+                                            type="button"
+                                            ?disabled=${this._processingRequestId === requestId}
+                                            @click=${() => this._approveRequest(request)}
+                                        >
+                                            Одобрить
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        })}
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
     render() {
         if (!this.entityId) {
             return html`
@@ -512,6 +701,7 @@ export class EntityCard extends PlatformElement {
                 ${this._renderAttributes(this._entity.attributes)}
 
                 ${this._renderRelated()}
+                ${this._renderPendingAccessRequests()}
 
                 ${this._isOwner ? html`
                     <grants-panel .entityId=${this.entityId}></grants-panel>

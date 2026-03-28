@@ -52,7 +52,7 @@ export const sidebarHostStyles = css`
     }
 
     :host([collapsed]) .sidebar-footer {
-        padding: var(--space-3);
+        padding: var(--space-3) 0;
     }
 
     /* ========== MOBILE MODE ========== */
@@ -268,7 +268,7 @@ export const sidebarStyles = css`
 
     .sidebar-footer {
         margin-top: auto;
-        padding: var(--space-4);
+        padding: var(--space-4) 0;
         border-top: 1px solid var(--glass-border-subtle);
         overflow: visible;
     }

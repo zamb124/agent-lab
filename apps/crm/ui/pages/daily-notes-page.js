@@ -167,8 +167,8 @@ export class DailyNotesPage extends PlatformElement {
             }
 
             .note-card {
-                border: none;
-                background: rgba(34, 34, 34, 0.05);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface);
                 border-radius: 16px;
                 padding: 20px;
                 display: flex;
@@ -176,6 +176,12 @@ export class DailyNotesPage extends PlatformElement {
                 gap: 16px;
                 min-height: 222px;
                 cursor: pointer;
+                transition: border-color var(--duration-fast), background var(--duration-fast);
+            }
+
+            .note-card:hover {
+                border-color: var(--crm-stroke-strong);
+                background: var(--crm-surface-elevated);
             }
 
             .note-tags-row {
@@ -207,7 +213,7 @@ export class DailyNotesPage extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 padding-left: 12px;
-                background: linear-gradient(90deg, rgba(34, 34, 34, 0) 0%, rgba(34, 34, 34, 0.05) 42%);
+                background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, var(--crm-surface) 42%);
                 color: var(--text-tertiary);
                 font-size: 12px;
                 font-weight: 600;
@@ -315,7 +321,7 @@ export class DailyNotesPage extends PlatformElement {
             }
 
             .published-at {
-                color: rgba(34, 34, 34, 0.3);
+                color: var(--text-tertiary);
                 font-size: 12px;
                 line-height: 15px;
             }
@@ -546,14 +552,15 @@ export class DailyNotesPage extends PlatformElement {
             this._currentNamespace = state.namespaces.current;
             const nextNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
             if (previousNamespace !== nextNamespace) {
+                this._reloadNotesForSelectedDate();
                 this._loadDailySummary();
             }
             this._loadVisibleNoteEntities();
         });
         window.addEventListener('platform-notification-received', this._onPlatformNotification);
+        this._reloadNotesForSelectedDate();
         this._loadDailySummary();
         this._loadCurrentUser();
-        this._loadVisibleNoteEntities();
     }
 
     disconnectedCallback() {
@@ -707,14 +714,26 @@ export class DailyNotesPage extends PlatformElement {
 
     async _onDateChange(event) {
         this._selectedDate = event.target.value;
+        await this._reloadNotesForSelectedDate();
         await this._loadDailySummary();
         await this._loadVisibleNoteEntities();
+    }
+
+    async _reloadNotesForSelectedDate() {
+        const crmApi = this.services.get('crmApi');
+        this._noteEntitiesByNoteId = {};
+        await CRMStore.loadNotes(crmApi, {
+            dateFrom: this._selectedDate,
+            dateTo: this._selectedDate,
+            limit: 300,
+        });
     }
 
     async _onCreateNote() {
         const draftNote = {
             entity_id: `draft-${Date.now()}`,
             entity_type: 'note',
+            entity_subtype: 'meeting',
             name: '',
             description: '',
             note_date: this._selectedDate,
@@ -747,7 +766,16 @@ export class DailyNotesPage extends PlatformElement {
         analysisModal.addEventListener('close', () => analysisModal.remove());
         const crmApi = this.services.get('crmApi');
         try {
-            await CRMStore.analyzeText(crmApi, noteText, note.entity_id);
+            const relatedEntities = this._getNoteEntities(note);
+            const mentionedEntityIds = relatedEntities
+                .map((entity) => entity?.entity_id)
+                .filter((entityId) => typeof entityId === 'string' && entityId.trim().length > 0);
+            await CRMStore.analyzeText(crmApi, noteText, note.entity_id, {
+                mentionedEntityIds,
+                extractEntityTypes: ['note', 'task', 'person', 'organization'],
+                extractRelationshipTypes: ['mentions'],
+                checkDuplicates: true,
+            });
         } finally {
             analysisModal.loading = false;
         }
@@ -781,13 +809,12 @@ export class DailyNotesPage extends PlatformElement {
     _getFilteredNotes() {
         const normalizedQuery = this._query.trim().toLowerCase();
         return this._notes.filter((note) => {
-            const isByDate = note.note_date === this._selectedDate;
             if (!normalizedQuery) {
-                return isByDate;
+                return true;
             }
             const inTitle = typeof note.name === 'string' && note.name.toLowerCase().includes(normalizedQuery);
             const inDescription = typeof note.description === 'string' && note.description.toLowerCase().includes(normalizedQuery);
-            return isByDate && (inTitle || inDescription);
+            return inTitle || inDescription;
         });
     }
 
@@ -859,6 +886,18 @@ export class DailyNotesPage extends PlatformElement {
             return 'database';
         }
         return 'folder';
+    }
+
+    _getNoteSubtypeLabel(note) {
+        const subtype = typeof note?.entity_subtype === 'string' ? note.entity_subtype.trim() : '';
+        if (subtype.length === 0) {
+            return '';
+        }
+        return subtype
+            .split('_')
+            .filter((part) => part.length > 0)
+            .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+            .join(' ');
     }
 
     _getAuthorName(note) {
@@ -1025,6 +1064,9 @@ export class DailyNotesPage extends PlatformElement {
                                             `;
                                         })()}
                                         <h3 class="note-title">${note.name}</h3>
+                                        ${this._getNoteSubtypeLabel(note).length > 0 ? html`
+                                            <p class="published-at">${this._getNoteSubtypeLabel(note)}</p>
+                                        ` : ''}
                                         <p class="note-text">${this._getNotePreviewText(note)}</p>
                                         <div class="note-footer">
                                             ${(() => {

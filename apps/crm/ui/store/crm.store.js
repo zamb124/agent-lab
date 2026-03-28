@@ -17,6 +17,78 @@ function getNamespaceName(namespace) {
     throw new Error('Invalid namespace value');
 }
 
+function normalizeEntityTypeList(payload) {
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+    throw new Error('Entity types payload must be array');
+}
+
+function normalizeRelationshipTypeList(payload) {
+    if (!payload || typeof payload !== 'object') {
+        throw new Error('Relationship types payload must be object');
+    }
+    if (!Array.isArray(payload.relationship_types)) {
+        throw new Error('relationship_types must be array');
+    }
+    return payload.relationship_types.map((item) => {
+        if (!item || typeof item !== 'object') {
+            throw new Error('Relationship type must be object');
+        }
+        if (typeof item.type_id !== 'string' || item.type_id.trim().length === 0) {
+            throw new Error('Relationship type_id is required');
+        }
+        if (typeof item.name !== 'string' || item.name.trim().length === 0) {
+            throw new Error('Relationship name is required');
+        }
+        return {
+            type_id: item.type_id,
+            name: item.name,
+            is_directed: item.is_directed === false ? false : true,
+            inverse_type_id: typeof item.inverse_type_id === 'string' ? item.inverse_type_id : null,
+            icon: typeof item.icon === 'string' ? item.icon : '',
+            color: typeof item.color === 'string' ? item.color : '',
+            weight_default: typeof item.weight_default === 'number' ? item.weight_default : null,
+        };
+    });
+}
+
+function isRelationshipSuggestion(suggestion) {
+    return typeof suggestion?.relationship_type === 'string' && suggestion.relationship_type.trim().length > 0;
+}
+
+function normalizeString(value) {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    return value.trim();
+}
+
+function getSuggestionDedupeKey(suggestion) {
+    const entityType = normalizeString(suggestion?.entity_type).toLowerCase();
+    const entitySubtype = normalizeString(suggestion?.entity_subtype).toLowerCase();
+    const name = normalizeString(suggestion?.name).toLowerCase();
+    const dueDate = normalizeString(suggestion?.due_date).toLowerCase();
+    const noteDate = normalizeString(suggestion?.note_date).toLowerCase();
+    if (entityType.length === 0 || name.length === 0) {
+        throw new Error('Suggestion must contain entity_type and name');
+    }
+    return `${entityType}|${entitySubtype}|${name}|${dueDate}|${noteDate}`;
+}
+
+function normalizeAnalyzeResponse(analysis) {
+    if (!analysis || typeof analysis !== 'object') {
+        throw new Error('Analyze response must be object');
+    }
+    const entities = Array.isArray(analysis.entities) ? analysis.entities : [];
+    const relationships = Array.isArray(analysis.relationships) ? analysis.relationships : [];
+    return {
+        ...analysis,
+        entities,
+        relationships,
+    };
+}
+
 const baseStore = new BaseStore('crm', {
     namespaces: {
         list: [],
@@ -183,7 +255,7 @@ export const CRMStore = {
         return baseStore.state.ui.collapsedPanels[panelId] || false;
     },
     
-    async loadNotes(crmApi) {
+    async loadNotes(crmApi, options = {}) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
         }
@@ -192,9 +264,24 @@ export const CRMStore = {
         
         const currentNamespace = baseStore.state.namespaces.current;
         const namespaceName = getNamespaceName(currentNamespace);
-        const params = { entity_type: 'note' };
+        if (options !== null && typeof options !== 'object') {
+            throw new Error('loadNotes options must be object');
+        }
+        const params = {
+            entity_type: 'note',
+            limit: typeof options.limit === 'number' ? options.limit : 300,
+        };
         if (namespaceName) {
             params.namespace = namespaceName;
+        }
+        if (typeof options.entitySubtype === 'string' && options.entitySubtype.trim().length > 0) {
+            params.entity_subtype = options.entitySubtype.trim();
+        }
+        if (typeof options.dateFrom === 'string' && options.dateFrom.trim().length > 0) {
+            params.date_from = options.dateFrom.trim();
+        }
+        if (typeof options.dateTo === 'string' && options.dateTo.trim().length > 0) {
+            params.date_to = options.dateTo.trim();
         }
         
         const notes = await crmApi.getEntities(params);
@@ -357,12 +444,15 @@ export const CRMStore = {
         return entities;
     },
     
-    async analyzeText(crmApi, text, noteId = null) {
+    async analyzeText(crmApi, text, noteId = null, options = {}) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
         }
         if (!text) {
             throw new Error('Text is required');
+        }
+        if (options !== null && typeof options !== 'object') {
+            throw new Error('Analyze options must be object');
         }
 
         baseStore.setState((s) => ({
@@ -370,14 +460,20 @@ export const CRMStore = {
         }));
 
         try {
-            const analysis = await crmApi.analyzeText(text, noteId);
+            const fallbackMentionedEntityIds = baseStore.state.ai.mentionedEntities
+                .map((entity) => entity?.entity_id)
+                .filter((entityId) => typeof entityId === 'string' && entityId.trim().length > 0);
+            const analyzeOptions = {
+                ...options,
+                ...(Array.isArray(options.mentionedEntityIds) ? {} : { mentionedEntityIds: fallbackMentionedEntityIds }),
+            };
+            const analyzeResponse = await crmApi.analyzeText(text, noteId, analyzeOptions);
+            const analysis = normalizeAnalyzeResponse(analyzeResponse);
 
             const suggestions = [
-                ...(analysis.entities || []),
-                ...(analysis.relationships || [])
+                ...analysis.entities,
+                ...analysis.relationships,
             ];
-
-            console.log('[CRMStore] analyzeText result:', { analysis, suggestions });
 
             const noteSummaryText = typeof analysis?.note?.description === 'string' ? analysis.note.description.trim() : '';
             const noteSummaryEntities = Array.isArray(analysis?.entities)
@@ -402,8 +498,8 @@ export const CRMStore = {
                     ...currentAttributes,
                     ai_analysis_draft: {
                         note: analysis?.note || null,
-                        entities: Array.isArray(analysis?.entities) ? analysis.entities : [],
-                        relationships: Array.isArray(analysis?.relationships) ? analysis.relationships : [],
+                        entities: analysis.entities,
+                        relationships: analysis.relationships,
                         saved_at: noteSummaryGeneratedAt,
                     },
                 };
@@ -443,8 +539,8 @@ export const CRMStore = {
                             ...s.ai.draftByNoteId,
                             [noteId]: {
                                 note: analysis?.note || null,
-                                entities: Array.isArray(analysis?.entities) ? analysis.entities : [],
-                                relationships: Array.isArray(analysis?.relationships) ? analysis.relationships : [],
+                                entities: analysis.entities,
+                                relationships: analysis.relationships,
                                 saved_at: noteSummaryGeneratedAt,
                             },
                         },
@@ -537,6 +633,131 @@ export const CRMStore = {
         });
     },
 
+    _getCurrentNamespaceName() {
+        const currentNamespace = baseStore.state.namespaces.current;
+        const namespaceName = getNamespaceName(currentNamespace);
+        return namespaceName || 'default';
+    },
+
+    _buildEntityPayloadFromSuggestion(suggestion) {
+        if (!suggestion || typeof suggestion !== 'object') {
+            throw new Error('Suggestion must be object');
+        }
+        const name = normalizeString(suggestion.name);
+        if (name.length === 0) {
+            throw new Error('Suggestion name is required');
+        }
+        const entityType = normalizeString(suggestion.entity_type);
+        if (entityType.length === 0) {
+            throw new Error('Suggestion entity_type is required');
+        }
+        return {
+            entity_type: entityType,
+            entity_subtype: suggestion.entity_subtype || null,
+            name,
+            description: suggestion.description || null,
+            attributes: suggestion.attributes || {},
+            note_date: suggestion.note_date || null,
+            due_date: suggestion.due_date || null,
+            priority: suggestion.priority || null,
+            assignees: suggestion.assignees || [],
+            namespace: this._getCurrentNamespaceName(),
+        };
+    },
+
+    async _createRelationshipIfMissing(crmApi, relationshipPayload) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!relationshipPayload || typeof relationshipPayload !== 'object') {
+            throw new Error('relationship payload is required');
+        }
+        const sourceId = normalizeString(relationshipPayload.source_entity_id);
+        const targetId = normalizeString(relationshipPayload.target_entity_id);
+        const relationshipType = normalizeString(relationshipPayload.relationship_type);
+        if (sourceId.length === 0 || targetId.length === 0 || relationshipType.length === 0) {
+            throw new Error('Relationship source, target and type are required');
+        }
+
+        const existingRelationshipsResponse = await crmApi.getEntityRelationships(sourceId);
+        if (!existingRelationshipsResponse || typeof existingRelationshipsResponse !== 'object') {
+            throw new Error('Entity relationships response must be object');
+        }
+        const existingRelationships = Array.isArray(existingRelationshipsResponse.relationships)
+            ? existingRelationshipsResponse.relationships
+            : [];
+        const alreadyExists = existingRelationships.some((item) => (
+            item
+            && item.source_entity_id === sourceId
+            && item.target_entity_id === targetId
+            && item.relationship_type === relationshipType
+        ));
+        if (alreadyExists) {
+            return null;
+        }
+        return crmApi.createRelationship({
+            source_entity_id: sourceId,
+            target_entity_id: targetId,
+            relationship_type: relationshipType,
+            weight: relationshipPayload.weight || 1.0,
+            attributes: relationshipPayload.attributes || {},
+        });
+    },
+
+    async _linkEntityToCurrentNoteIfNeeded(crmApi, entity) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!entity || typeof entity !== 'object') {
+            throw new Error('Entity is required');
+        }
+        const currentNoteId = baseStore.state.entities.currentNoteId;
+        if (!currentNoteId || entity.entity_type === 'note') {
+            return;
+        }
+        await this._createRelationshipIfMissing(crmApi, {
+            source_entity_id: currentNoteId,
+            target_entity_id: entity.entity_id,
+            relationship_type: 'mentions',
+            weight: 1.0,
+        });
+    },
+
+    async _clearNoteAnalysisDraft(crmApi, noteId) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!noteId) {
+            return;
+        }
+        const note = baseStore.state.entities.notes.find((item) => item.entity_id === noteId);
+        if (!note) {
+            throw new Error(`Note not found for draft cleanup: ${noteId}`);
+        }
+        const attributes = note.attributes && typeof note.attributes === 'object'
+            ? { ...note.attributes }
+            : {};
+        if (!Object.prototype.hasOwnProperty.call(attributes, 'ai_analysis_draft')) {
+            return;
+        }
+        delete attributes.ai_analysis_draft;
+        const updatedNote = await crmApi.updateEntity(noteId, { attributes });
+        baseStore.setState((s) => ({
+            entities: {
+                ...s.entities,
+                notes: s.entities.notes.map((item) => (
+                    item.entity_id === noteId ? updatedNote : item
+                )),
+            },
+            ai: {
+                ...s.ai,
+                draftByNoteId: Object.fromEntries(
+                    Object.entries(s.ai.draftByNoteId).filter(([key]) => key !== noteId)
+                ),
+            },
+        }));
+    },
+
     async confirmSuggestion(crmApi, index) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
@@ -551,40 +772,39 @@ export const CRMStore = {
         }
 
         const suggestion = suggestions[index];
-        if (suggestion.relationship_type) {
+        if (isRelationshipSuggestion(suggestion)) {
             throw new Error('Use confirmRelationship for relationships');
+        }
+
+        const isMergeSuggestion = suggestion?.dedup_action === 'merge'
+            && typeof suggestion?.dedup_existing_id === 'string'
+            && suggestion.dedup_existing_id.trim().length > 0;
+
+        let entity = null;
+        if (isMergeSuggestion) {
+            const updateData = {
+                name: normalizeString(suggestion.name),
+                description: suggestion.description || null,
+                attributes: suggestion.attributes || {},
+            };
+            entity = await crmApi.updateEntity(suggestion.dedup_existing_id, updateData);
+        } else {
+            const payload = this._buildEntityPayloadFromSuggestion(suggestion);
+            entity = await crmApi.createEntity(payload);
+            await this._linkEntityToCurrentNoteIfNeeded(crmApi, entity);
         }
 
         const currentNoteId = baseStore.state.entities.currentNoteId;
 
-        const entity = await crmApi.createEntity({
-            entity_type: suggestion.entity_type,
-            entity_subtype: suggestion.entity_subtype || null,
-            name: suggestion.name,
-            description: suggestion.description || null,
-            attributes: suggestion.attributes || {},
-            note_date: suggestion.note_date || null,
-            due_date: suggestion.due_date || null,
-            priority: suggestion.priority || null,
-            assignees: suggestion.assignees || [],
-        });
-
-        if (currentNoteId && entity.entity_type !== 'note') {
-            await crmApi.createRelationship({
-                source_entity_id: currentNoteId,
-                target_entity_id: entity.entity_id,
-                relationship_type: 'mentions',
-                weight: 1.0,
-            });
-        }
-
         baseStore.setState((s) => {
             const newSuggestions = s.ai.suggestions.filter((_, i) => i !== index);
-            const updatedNotes = suggestion.entity_type === 'note'
+            const updatedNotes = suggestion.entity_type === 'note' && entity
                 ? [entity, ...s.entities.notes]
                 : s.entities.notes;
-            const updatedRelated = currentNoteId && entity.entity_type !== 'note'
-                ? [...s.entities.noteRelatedEntities, entity]
+            const updatedRelated = currentNoteId && entity && entity.entity_type !== 'note'
+                ? [...s.entities.noteRelatedEntities, entity].filter((value, idx, list) => (
+                    list.findIndex((item) => item?.entity_id === value?.entity_id) === idx
+                ))
                 : s.entities.noteRelatedEntities;
             return {
                 ai: { ...s.ai, suggestions: newSuggestions },
@@ -613,15 +833,16 @@ export const CRMStore = {
         }
 
         const suggestion = suggestions[index];
-        if (!suggestion.relationship_type) {
+        if (!isRelationshipSuggestion(suggestion)) {
             throw new Error('Not a relationship suggestion');
         }
 
-        const relationship = await crmApi.createRelationship({
+        const relationship = await this._createRelationshipIfMissing(crmApi, {
             source_entity_id: suggestion.source_entity_id,
             target_entity_id: suggestion.target_entity_id,
             relationship_type: suggestion.relationship_type,
             weight: suggestion.weight || 1.0,
+            attributes: suggestion.attributes || {},
         });
 
         baseStore.setState((s) => ({
@@ -650,7 +871,7 @@ export const CRMStore = {
         const suggestion = suggestions[index];
         
         const updateData = {
-            name: suggestion.name,
+            name: normalizeString(suggestion.name),
             description: suggestion.description || null,
             attributes: suggestion.attributes || {},
         };
@@ -680,59 +901,88 @@ export const CRMStore = {
 
         const currentNoteId = baseStore.state.entities.currentNoteId;
         const suggestions = [...baseStore.state.ai.suggestions];
-        let createdCount = 0;
-        const createdEntities = [];
+        let processedCount = 0;
+        const createdOrUpdatedEntities = [];
 
-        const entitySuggestions = suggestions.filter(s => s.entity_type && !s.relationship_type);
+        const entitySuggestions = suggestions.filter((item) => item?.entity_type && !isRelationshipSuggestion(item));
+        const uniqueEntitySuggestions = [];
+        const seenKeys = new Set();
         for (const suggestion of entitySuggestions) {
-            const entity = await crmApi.createEntity({
-                entity_type: suggestion.entity_type,
-                entity_subtype: suggestion.entity_subtype || null,
-                name: suggestion.name,
-                description: suggestion.description || null,
-                attributes: suggestion.attributes || {},
-                note_date: suggestion.note_date || null,
-                due_date: suggestion.due_date || null,
-                priority: suggestion.priority || null,
-                assignees: suggestion.assignees || [],
-            });
-            createdCount++;
-
-            if (currentNoteId && entity.entity_type !== 'note') {
-                await crmApi.createRelationship({
-                    source_entity_id: currentNoteId,
-                    target_entity_id: entity.entity_id,
-                    relationship_type: 'mentions',
-                    weight: 1.0,
-                });
-                createdEntities.push(entity);
+            const isMergeSuggestion = suggestion?.dedup_action === 'merge'
+                && typeof suggestion?.dedup_existing_id === 'string'
+                && suggestion.dedup_existing_id.trim().length > 0;
+            if (isMergeSuggestion) {
+                uniqueEntitySuggestions.push(suggestion);
+                continue;
             }
+            const dedupeKey = getSuggestionDedupeKey(suggestion);
+            if (seenKeys.has(dedupeKey)) {
+                continue;
+            }
+            seenKeys.add(dedupeKey);
+            uniqueEntitySuggestions.push(suggestion);
         }
 
-        const relationships = suggestions.filter(s => s.relationship_type);
-        for (const suggestion of relationships) {
-            if (suggestion.source_entity_id && suggestion.target_entity_id) {
-                await crmApi.createRelationship({
-                    source_entity_id: suggestion.source_entity_id,
-                    target_entity_id: suggestion.target_entity_id,
-                    relationship_type: suggestion.relationship_type,
-                    weight: suggestion.weight || 1.0,
+        for (const suggestion of uniqueEntitySuggestions) {
+            const isMergeSuggestion = suggestion?.dedup_action === 'merge'
+                && typeof suggestion?.dedup_existing_id === 'string'
+                && suggestion.dedup_existing_id.trim().length > 0;
+            let entity = null;
+            if (isMergeSuggestion) {
+                entity = await crmApi.updateEntity(suggestion.dedup_existing_id, {
+                    name: normalizeString(suggestion.name),
+                    description: suggestion.description || null,
+                    attributes: suggestion.attributes || {},
                 });
-                createdCount++;
+            } else {
+                const payload = this._buildEntityPayloadFromSuggestion(suggestion);
+                entity = await crmApi.createEntity(payload);
+                await this._linkEntityToCurrentNoteIfNeeded(crmApi, entity);
             }
+            createdOrUpdatedEntities.push(entity);
+            processedCount++;
+        }
+
+        const relationships = suggestions.filter((item) => isRelationshipSuggestion(item));
+        const relationshipKeys = new Set();
+        for (const suggestion of relationships) {
+            const sourceId = normalizeString(suggestion.source_entity_id);
+            const targetId = normalizeString(suggestion.target_entity_id);
+            const typeId = normalizeString(suggestion.relationship_type);
+            if (sourceId.length === 0 || targetId.length === 0 || typeId.length === 0) {
+                continue;
+            }
+            const relationKey = `${sourceId}|${targetId}|${typeId}`;
+            if (relationshipKeys.has(relationKey)) {
+                continue;
+            }
+            relationshipKeys.add(relationKey);
+            await this._createRelationshipIfMissing(crmApi, {
+                source_entity_id: sourceId,
+                target_entity_id: targetId,
+                relationship_type: typeId,
+                weight: suggestion.weight || 1.0,
+                attributes: suggestion.attributes || {},
+            });
+            processedCount++;
         }
 
         baseStore.setState((s) => ({
             ai: { ...s.ai, suggestions: [] },
             entities: {
                 ...s.entities,
-                noteRelatedEntities: [...s.entities.noteRelatedEntities, ...createdEntities],
-            }
+                noteRelatedEntities: currentNoteId
+                    ? [...s.entities.noteRelatedEntities, ...createdOrUpdatedEntities]
+                        .filter((value, idx, list) => list.findIndex((item) => item?.entity_id === value?.entity_id) === idx)
+                    : s.entities.noteRelatedEntities,
+            },
         }));
 
         await this.loadNotes(crmApi);
+        await this.loadEntities(crmApi);
+        await this._clearNoteAnalysisDraft(crmApi, currentNoteId);
 
-        return createdCount;
+        return processedCount;
     },
 
     async loadEntityTypes(crmApi) {
@@ -740,7 +990,8 @@ export const CRMStore = {
             throw new Error('crmApi service is required');
         }
         
-        const types = await crmApi.getEntityTypes();
+        const response = await crmApi.getEntityTypes();
+        const types = normalizeEntityTypeList(response);
         baseStore.setState((s) => ({
             entities: { ...s.entities, entityTypes: types }
         }));
@@ -753,13 +1004,7 @@ export const CRMStore = {
         }
         
         const response = await crmApi.getRelationshipTypes();
-        if (!response || typeof response !== 'object') {
-            throw new Error('Relationship types response must be object');
-        }
-        if (!Array.isArray(response.relationship_types)) {
-            throw new Error('relationship_types must be array');
-        }
-        const types = response.relationship_types;
+        const types = normalizeRelationshipTypeList(response);
         baseStore.setState((s) => ({
             entities: { ...s.entities, relationshipTypes: types }
         }));
@@ -1047,6 +1292,79 @@ export const CRMStore = {
         }));
 
         return card;
+    },
+
+    async getEntityById(crmApi, entityId) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!entityId) {
+            throw new Error('Entity ID is required');
+        }
+
+        const entity = await crmApi.getEntity(entityId);
+        if (!entity || typeof entity !== 'object') {
+            throw new Error('Entity must be object');
+        }
+        if (typeof entity.entity_id !== 'string' || entity.entity_id.trim().length === 0) {
+            throw new Error('entity_id is required');
+        }
+
+        baseStore.setState((s) => ({
+            entities: {
+                ...s.entities,
+                currentEntityId: entity.entity_id,
+                currentEntity: entity,
+            }
+        }));
+
+        return entity;
+    },
+
+    async uploadEntityAttachment(crmApi, entityId, file) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!entityId) {
+            throw new Error('Entity ID is required');
+        }
+        if (!(file instanceof File)) {
+            throw new Error('File is required');
+        }
+
+        await crmApi.uploadAttachment(entityId, file);
+        return await this.loadEntityCard(crmApi, entityId);
+    },
+
+    async deleteEntityAttachment(crmApi, entityId, attachmentId) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!entityId) {
+            throw new Error('Entity ID is required');
+        }
+        if (!attachmentId) {
+            throw new Error('Attachment ID is required');
+        }
+
+        await crmApi.deleteAttachment(entityId, attachmentId);
+        return await this.loadEntityCard(crmApi, entityId);
+    },
+
+    async deleteRelationshipById(crmApi, relationshipId, linkedEntityId = null) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!relationshipId) {
+            throw new Error('Relationship ID is required');
+        }
+
+        await crmApi.deleteRelationship(relationshipId);
+        if (!linkedEntityId) {
+            return null;
+        }
+
+        return await this.loadEntityCard(crmApi, linkedEntityId);
     },
 
     async createEntity(crmApi, data) {

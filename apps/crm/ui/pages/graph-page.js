@@ -1,21 +1,9 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
-
-function resolveNamespaceName(namespace) {
-    if (!namespace) {
-        return null;
-    }
-    if (typeof namespace === 'string') {
-        return namespace;
-    }
-    if (typeof namespace === 'object' && typeof namespace.name === 'string') {
-        return namespace.name;
-    }
-    throw new Error('Invalid namespace value');
-}
 
 export class GraphPage extends PlatformElement {
     static properties = {
@@ -26,6 +14,11 @@ export class GraphPage extends PlatformElement {
         _loading: { state: true },
         _graphNodes: { state: true },
         _graphEdges: { state: true },
+        _pathSourceId: { state: true },
+        _pathTargetId: { state: true },
+        _shortestPathEdges: { state: true },
+        _findingPath: { state: true },
+        _entitySearchQuery: { state: true },
     };
 
     static styles = [
@@ -86,6 +79,23 @@ export class GraphPage extends PlatformElement {
                 font-size: var(--text-sm);
             }
 
+            .refresh-btn {
+                padding: var(--space-2) var(--space-4);
+                min-height: 36px;
+                font-size: var(--text-sm);
+                border-radius: var(--radius-md);
+            }
+
+            .toolbar-search {
+                min-width: 220px;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+            }
+
             .stats {
                 display: grid;
                 grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -115,12 +125,39 @@ export class GraphPage extends PlatformElement {
 
             .content {
                 flex: 1;
-                min-height: 0;
                 display: grid;
                 grid-template-columns: 1fr 1fr;
+                grid-template-rows: minmax(0, 1fr) auto;
+                min-height: 0;
                 gap: var(--space-3);
                 padding: var(--space-4);
                 overflow: auto;
+            }
+
+            .path-panel {
+                grid-column: 1 / -1;
+            }
+
+            .path-toolbar {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+            }
+
+            .path-select {
+                min-width: 0;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface);
+                color: var(--text-primary);
+            }
+
+            .path-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
             }
 
             .panel {
@@ -215,6 +252,7 @@ export class GraphPage extends PlatformElement {
             @media (max-width: 1023px) {
                 .content {
                     grid-template-columns: 1fr;
+                    grid-template-rows: auto;
                 }
 
                 .stats {
@@ -240,6 +278,10 @@ export class GraphPage extends PlatformElement {
                 .content {
                     padding: var(--space-3);
                 }
+
+                .path-toolbar {
+                    grid-template-columns: 1fr;
+                }
             }
         `,
     ];
@@ -253,6 +295,11 @@ export class GraphPage extends PlatformElement {
         this._loading = false;
         this._graphNodes = [];
         this._graphEdges = [];
+        this._pathSourceId = '';
+        this._pathTargetId = '';
+        this._shortestPathEdges = [];
+        this._findingPath = false;
+        this._entitySearchQuery = '';
     }
 
     async firstUpdated() {
@@ -261,21 +308,41 @@ export class GraphPage extends PlatformElement {
 
     async _loadGraphData() {
         this._loading = true;
-        const crmApi = this.services.get('crmApi');
-        const namespaceName = resolveNamespaceName(CRMStore.state.namespaces.current);
-        const [entities, relationships] = await Promise.all([
-            crmApi.getEntities({ namespace: namespaceName, limit: 200 }),
-            crmApi.getRelationships(),
-        ]);
+        const crmApi = this.crmApi;
+        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
+        const entities = await crmApi.getEntities({ namespace: namespaceName, limit: 200 });
         this._entities = Array.isArray(entities) ? entities : [];
-        this._relationships = Array.isArray(relationships) ? relationships : [];
-
         if (!this._selectedRootId && this._entities.length > 0) {
             const currentEntityId = CRMStore.state.entities.currentEntityId;
             this._selectedRootId = currentEntityId || this._entities[0].entity_id;
         }
+        if (this._pathSourceId.length === 0 && this._entities.length > 0) {
+            this._pathSourceId = this._selectedRootId || this._entities[0].entity_id;
+        }
+        if (this._pathTargetId.length === 0 && this._entities.length > 1) {
+            const secondEntity = this._entities.find((entity) => entity.entity_id !== this._pathSourceId);
+            this._pathTargetId = secondEntity ? secondEntity.entity_id : this._entities[0].entity_id;
+        }
+        await this._loadRelationshipsForFallback(namespaceName);
         await this._rebuildGraph();
         this._loading = false;
+    }
+
+    async _loadRelationshipsForFallback(namespaceName) {
+        if (typeof this._selectedRootId !== 'string' || this._selectedRootId.trim().length === 0) {
+            this._relationships = [];
+            return;
+        }
+        const crmApi = this.crmApi;
+        const response = await crmApi.getEntityRelationships(this._selectedRootId, { namespace: namespaceName });
+        if (Array.isArray(response)) {
+            this._relationships = response;
+            return;
+        }
+        if (!response || typeof response !== 'object' || !Array.isArray(response.relationships)) {
+            throw new Error('Entity relationships must be array');
+        }
+        this._relationships = response.relationships;
     }
 
     async _rebuildGraph() {
@@ -285,7 +352,7 @@ export class GraphPage extends PlatformElement {
             return;
         }
 
-        const crmApi = this.services.get('crmApi');
+        const crmApi = this.crmApi;
         const influence = await crmApi.getInfluenceGraph(this._selectedRootId, { max_depth: this._maxDepth });
         const nodes = Array.isArray(influence.nodes) ? influence.nodes : [];
         const edges = Array.isArray(influence.edges) ? influence.edges : [];
@@ -297,6 +364,7 @@ export class GraphPage extends PlatformElement {
         }
         this._graphNodes = nodes;
         this._graphEdges = edges;
+        this._relationships = edges;
     }
 
     _buildFallbackGraph() {
@@ -341,6 +409,8 @@ export class GraphPage extends PlatformElement {
 
     async _onRootChange(event) {
         this._selectedRootId = event.target.value;
+        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
+        await this._loadRelationshipsForFallback(namespaceName);
         await this._rebuildGraph();
     }
 
@@ -353,6 +423,67 @@ export class GraphPage extends PlatformElement {
         await this._loadGraphData();
     }
 
+    _onSearchQueryInput(event) {
+        this._entitySearchQuery = event.target.value;
+    }
+
+    async _onSearchEntity() {
+        const query = this._entitySearchQuery.trim();
+        if (query.length === 0) {
+            throw new Error('Search query is required');
+        }
+        const crmApi = this.crmApi;
+        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
+        const response = await crmApi.searchEntities(query, { namespace: namespaceName, limit: 20 });
+        const result = Array.isArray(response) ? response : response?.entities;
+        if (!Array.isArray(result) || result.length === 0) {
+            throw new Error('Search returned no entities');
+        }
+        const foundEntity = result[0];
+        if (typeof foundEntity.entity_id !== 'string' || foundEntity.entity_id.trim().length === 0) {
+            throw new Error('Search entity_id is required');
+        }
+        this._selectedRootId = foundEntity.entity_id;
+        this._pathSourceId = foundEntity.entity_id;
+        await this._loadRelationshipsForFallback(namespaceName);
+        await this._rebuildGraph();
+    }
+
+    _onPathSourceChange(event) {
+        this._pathSourceId = event.target.value;
+    }
+
+    _onPathTargetChange(event) {
+        this._pathTargetId = event.target.value;
+    }
+
+    async _onFindShortestPath() {
+        if (this._pathSourceId.length === 0 || this._pathTargetId.length === 0) {
+            throw new Error('Both source and target entities are required');
+        }
+        if (this._pathSourceId === this._pathTargetId) {
+            throw new Error('Source and target entities must be different');
+        }
+        this._findingPath = true;
+        const crmApi = this.crmApi;
+        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
+        try {
+            const response = await crmApi.getShortestPath(this._pathSourceId, this._pathTargetId, {
+                namespace: namespaceName,
+            });
+            if (!response || typeof response !== 'object') {
+                throw new Error('Shortest path response must be object');
+            }
+            const candidateEdges = response.path_relationships || response.relationships || response.edges || response.path;
+            if (!Array.isArray(candidateEdges)) {
+                throw new Error('Shortest path relationships must be array');
+            }
+            this._shortestPathEdges = candidateEdges;
+        } finally {
+            this._findingPath = false;
+        }
+    }
+
     _onOpenEntity(entityId) {
         CRMStore.setCurrentView('entities');
         CRMStore.setCurrentEntity(entityId);
@@ -360,6 +491,33 @@ export class GraphPage extends PlatformElement {
 
     _resolveEntity(entityId) {
         return this._entities.find((entity) => entity.entity_id === entityId) || null;
+    }
+
+    _getRelationshipTypeConfig(typeId) {
+        const relationshipTypes = CRMStore.state.entities.relationshipTypes;
+        if (!Array.isArray(relationshipTypes)) {
+            throw new Error('relationshipTypes must be array');
+        }
+        if (typeof typeId !== 'string' || typeId.trim().length === 0) {
+            return null;
+        }
+        return relationshipTypes.find((item) => item?.type_id === typeId) || null;
+    }
+
+    _getRelationshipTypeLabel(typeId) {
+        const config = this._getRelationshipTypeConfig(typeId);
+        if (config && typeof config.name === 'string' && config.name.trim().length > 0) {
+            return config.name.trim();
+        }
+        return typeId;
+    }
+
+    _getRelationshipArrow(typeId) {
+        const config = this._getRelationshipTypeConfig(typeId);
+        if (config && config.is_directed === false) {
+            return '<->';
+        }
+        return '->';
     }
 
     _renderNodes() {
@@ -400,14 +558,40 @@ export class GraphPage extends PlatformElement {
             const targetEntity = this._resolveEntity(targetId);
             const sourceName = sourceEntity?.name || sourceId;
             const targetName = targetEntity?.name || targetId;
-            const relation = edge.relationship_type || edge.type || 'related';
+            const relationType = edge.relationship_type || edge.type || 'related';
+            const relationLabel = this._getRelationshipTypeLabel(relationType);
+            const relationArrow = this._getRelationshipArrow(relationType);
             return html`
                 <div class="edge-item">
-                    <div class="edge-relation">${sourceName} -> ${targetName}</div>
-                    <div class="edge-meta">${relation}</div>
+                    <div class="edge-relation">${sourceName} ${relationArrow} ${targetName}</div>
+                    <div class="edge-meta">${relationLabel}</div>
                 </div>
             `;
         });
+    }
+
+    _renderShortestPathEdges() {
+        if (this._shortestPathEdges.length === 0) {
+            return html`
+                <div class="empty">
+                    <platform-icon name="route" size="24"></platform-icon>
+                    <div>Путь не построен</div>
+                </div>
+            `;
+        }
+        return html`<div class="path-list">${this._shortestPathEdges.map((edge) => {
+            const sourceId = edge.source_entity_id || edge.source_id || edge.source;
+            const targetId = edge.target_entity_id || edge.target_id || edge.target;
+            const sourceName = this._resolveEntity(sourceId)?.name || sourceId;
+            const targetName = this._resolveEntity(targetId)?.name || targetId;
+            const relationType = edge.relationship_type || edge.type || 'related';
+            return html`
+                <div class="edge-item">
+                    <div class="edge-relation">${sourceName} ${this._getRelationshipArrow(relationType)} ${targetName}</div>
+                    <div class="edge-meta">${this._getRelationshipTypeLabel(relationType)}</div>
+                </div>
+            `;
+        })}</div>`;
     }
 
     render() {
@@ -435,8 +619,18 @@ export class GraphPage extends PlatformElement {
                         <option value="5">5 уровней</option>
                     </select>
                 </div>
-                <button class="btn btn-secondary" type="button" @click=${this._onRefresh}>
+                <button class="btn btn-secondary refresh-btn" type="button" @click=${this._onRefresh}>
                     Обновить
+                </button>
+                <input
+                    class="toolbar-search"
+                    type="text"
+                    placeholder="Поиск сущности..."
+                    .value=${this._entitySearchQuery}
+                    @input=${this._onSearchQueryInput}
+                />
+                <button class="btn btn-secondary refresh-btn" type="button" @click=${this._onSearchEntity}>
+                    Найти
                 </button>
             </div>
 
@@ -473,6 +667,36 @@ export class GraphPage extends PlatformElement {
                     </div>
                     <div class="panel-body">
                         ${this._loading ? html`<div class="empty">Загрузка связей...</div>` : this._renderEdges()}
+                    </div>
+                </section>
+
+                <section class="panel path-panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Кратчайший путь</div>
+                        <div class="panel-count">${this._shortestPathEdges.length}</div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="path-toolbar">
+                            <select class="path-select" .value=${this._pathSourceId} @change=${this._onPathSourceChange}>
+                                ${this._entities.map((entity) => html`
+                                    <option value=${entity.entity_id}>От: ${entity.name}</option>
+                                `)}
+                            </select>
+                            <select class="path-select" .value=${this._pathTargetId} @change=${this._onPathTargetChange}>
+                                ${this._entities.map((entity) => html`
+                                    <option value=${entity.entity_id}>До: ${entity.name}</option>
+                                `)}
+                            </select>
+                            <button
+                                class="btn btn-secondary"
+                                type="button"
+                                ?disabled=${this._findingPath}
+                                @click=${this._onFindShortestPath}
+                            >
+                                ${this._findingPath ? 'Поиск...' : 'Построить путь'}
+                            </button>
+                        </div>
+                        ${this._renderShortestPathEdges()}
                     </div>
                 </section>
             </div>

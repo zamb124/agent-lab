@@ -5,6 +5,14 @@ description: "CRM NetWorkle система управления сущностя
 
 # CRM Service - Правила
 
+## Назначение сервиса
+
+`NetWorkle/CRM` — универсальный движок рабочих пространств компании.
+
+- Пространства (`namespace`) создаются под любую предметную область через шаблоны (например: CRM продажи, команда разработки, HR).
+- Набор типов сущностей в каждом пространстве задается бизнес-задачей (например: собеседования, кандидаты, сделки, встречи, заметки).
+- **Каждая сущность жестко принадлежит одному `namespace` внутри своей `company_id` и не существует вне этого пространства.**
+
 ## Архитектура
 
 CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relationships, grants)**
@@ -289,7 +297,8 @@ company_id="acme", namespace="default"   # По умолчанию
 **Types:**
 - `GET /entity-types` - список типов
 - `POST /entity-types` - создать тип
-- `GET /relationship-types` - список типов связей
+- `GET /relationships/types/` - список типов связей
+- `POST /relationships/types/` - создать тип связи
 
 **Relationships:**
 - `POST /relationships` - создать связь

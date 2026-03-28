@@ -429,7 +429,7 @@ export class PlatformNotificationManager extends PlatformElement {
         .notification-panel {
             position: fixed;
             max-height: min(600px, 70vh);
-            background: var(--surface-color);
+            background: var(--bg-tertiary, #1e2a47);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);

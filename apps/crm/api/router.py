@@ -9,7 +9,6 @@ from fastapi import APIRouter
 from apps.crm.api.entities import router as entities_router
 from apps.crm.api.entity_types import router as entity_types_router
 from apps.crm.api.relationships import router as relationships_router
-from apps.crm.api.relationship_types import router as relationship_types_router
 from apps.crm.api.attachments import router as attachments_router
 from apps.crm.api.access_requests import router as access_requests_router
 from apps.crm.api.namespaces import router as namespaces_router
@@ -23,7 +22,6 @@ router = APIRouter()
 router.include_router(entities_router)
 router.include_router(entity_types_router)
 router.include_router(relationships_router)
-router.include_router(relationship_types_router)
 router.include_router(attachments_router)
 router.include_router(access_requests_router)
 router.include_router(namespaces_router)
