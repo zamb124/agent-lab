@@ -1305,6 +1305,15 @@ export class MessageComposer extends PlatformElement {
     }
 
     _onSendClick(e) {
+        if (this._isMobile && this._isRecording) {
+            e.preventDefault();
+            this._sendHoldTriggered = false;
+            this._clearSendHoldTimer();
+            this._sendHoldPointerId = null;
+            this._isRecordHoldActive = false;
+            void this._stopRecording();
+            return;
+        }
         if (this._sendHoldTriggered) {
             e.preventDefault();
             this._sendHoldTriggered = false;
@@ -1383,16 +1392,22 @@ export class MessageComposer extends PlatformElement {
 
                     <button
                         class="icon-btn send ${this._isMobile && this._isRecording ? 'recording' : ''} ${this._isMobile && this._isRecordHoldActive ? 'record-hold-active' : ''}"
-                        title="Отправить"
+                        title=${this._isMobile && this._isRecording ? 'Остановить запись' : 'Отправить'}
                         @click=${this._onSendClick}
                         @pointerdown=${this._onSendPointerDown}
                         @pointerup=${this._onSendPointerUp}
                         @pointercancel=${this._onSendPointerCancel}
                     >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                            <path d="M21.2 3.6L10.1 14.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M21.2 3.6l-7.2 19.2-3.3-7.7-7.7-3.3 18.2-8.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                        ${this._isMobile && this._isRecording ? html`
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <rect x="7" y="7" width="10" height="10" rx="2.2" fill="currentColor"></rect>
+                            </svg>
+                        ` : html`
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M21.2 3.6L10.1 14.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M21.2 3.6l-7.2 19.2-3.3-7.7-7.7-3.3 18.2-8.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        `}
                     </button>
 
                     ${this._attachMenuOpen ? html`

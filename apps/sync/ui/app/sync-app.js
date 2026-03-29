@@ -40,7 +40,8 @@ export class SyncApp extends PlatformApp {
             @media (max-width: 767px) {
                 :host {
                     overflow-x: hidden;
-                    overflow-y: visible;
+                    overflow-y: hidden;
+                    overscroll-behavior-y: none;
                 }
             }
 

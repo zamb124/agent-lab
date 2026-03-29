@@ -479,6 +479,81 @@ export class ChatView extends PlatformElement {
                 padding-right: var(--space-1);
                 margin-bottom: var(--space-2);
             }
+
+            .meetings-overlay {
+                position: absolute;
+                inset: 0;
+                z-index: 220;
+                background: rgba(0, 0, 0, 0.45);
+                display: flex;
+                align-items: stretch;
+                justify-content: center;
+                padding: var(--space-3);
+            }
+
+            .meetings-modal {
+                width: min(1240px, 100%);
+                height: 100%;
+                border-radius: var(--radius-xl);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-strong);
+                backdrop-filter: blur(var(--glass-blur-medium));
+                box-shadow: var(--glass-shadow-strong);
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+
+            .meetings-modal-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: var(--space-3);
+                padding: var(--space-3) var(--space-4);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                flex-shrink: 0;
+            }
+
+            .meetings-modal-content {
+                display: grid;
+                grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+                gap: var(--space-3);
+                min-height: 0;
+                flex: 1;
+                padding: var(--space-3) var(--space-4) var(--space-4);
+            }
+
+            .meetings-list-pane,
+            .meetings-detail-pane {
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                padding: var(--space-2);
+                overflow: auto;
+                min-height: 0;
+            }
+
+            .meetings-detail-pane {
+                padding: var(--space-3);
+            }
+
+            @media (max-width: 767px) {
+                .meetings-overlay {
+                    padding: var(--space-1);
+                }
+
+                .meetings-modal {
+                    border-radius: var(--radius-lg);
+                }
+
+                .meetings-modal-header {
+                    padding: var(--space-2) var(--space-3);
+                }
+
+                .meetings-modal-content {
+                    grid-template-columns: 1fr;
+                    padding: var(--space-2) var(--space-3) var(--space-3);
+                }
+            }
         `
     ];
 
@@ -1097,109 +1172,7 @@ export class ChatView extends PlatformElement {
             </div>
 
             <div class="content">
-                ${meetingsOpen ? html`
-                    <div style="display:flex;flex-direction:column;height:100%;min-height:0;padding:var(--space-4);gap:var(--space-3);">
-                        <div style="display:flex;justify-content:space-between;align-items:center;">
-                            <div class="header-title">Встречи</div>
-                            <button type="button" class="back-btn" @click=${() => SyncStore.closeMeetingsPanel()}>Закрыть</button>
-                        </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);min-height:0;flex:1;">
-                            <div style="border:1px solid var(--glass-border-subtle);border-radius:var(--radius-lg);padding:var(--space-2);overflow:auto;">
-                                ${meetingsState.loading ? html`<div class="header-subtitle">Загрузка...</div>` : ''}
-                                ${!meetingsState.loading && meetingsState.list.length === 0 ? html`<div class="header-subtitle">Встреч нет</div>` : ''}
-                                ${meetingsState.list.map((m) => html`
-                                    <button
-                                        type="button"
-                                        class="header-more-item"
-                                        @click=${async () => {
-        await this._selectMeeting(m.meeting_id);
-    }}
-                                    >
-                                        <span>Встреча ${m.meeting_id.slice(0, 8)}</span>
-                                        <span class="header-subtitle">crm: ${m.export_status}</span>
-                                    </button>
-                                `)}
-                            </div>
-                            <div style="border:1px solid var(--glass-border-subtle);border-radius:var(--radius-lg);padding:var(--space-3);overflow:auto;">
-                                ${meetingsState.selected ? html`
-                                    <div class="header-title">Карточка встречи</div>
-                                    <div class="header-subtitle">call_id: ${meetingsState.selected.call_id}</div>
-                                    <div class="header-subtitle">recording_id: ${meetingsState.selected.recording_id || '—'}</div>
-                                    <div class="header-subtitle">transcript_file_id: ${meetingsState.selected.transcript_text_file_id || '—'}</div>
-                                    <div class="header-subtitle">crm_export_status: ${meetingsState.selected.export_status}</div>
-                                    ${meetingsState.selected.export_status === 'pending' ? html`
-                                        <div class="header-subtitle">Выполняется обработка встречи</div>
-                                    ` : ''}
-                                    ${meetingsState.selected.recording?.raw_file_id ? html`
-                                        <div class="header-subtitle" style="margin-top:var(--space-2);">raw_file_id: ${meetingsState.selected.recording.raw_file_id}</div>
-                                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2);">
-                                            ${meetingsState.selected.recording.raw_file_download_url ? html`
-                                                <a
-                                                    class="back-btn"
-                                                    href=${meetingsState.selected.recording.raw_file_download_url}
-                                                    download
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                >Скачать запись</a>
-                                            ` : ''}
-                                        </div>
-                                    ` : ''}
-                                    ${meetingsState.selected.transcript_text_file_id ? html`
-                                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2);">
-                                            ${meetingsState.selected.transcript_text_download_url ? html`
-                                                <a
-                                                    class="back-btn"
-                                                    href=${meetingsState.selected.transcript_text_download_url}
-                                                    download
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                >Скачать транскрипт</a>
-                                            ` : ''}
-                                        </div>
-                                    ` : ''}
-                                    <button
-                                        type="button"
-                                        class="back-btn"
-                                        style="margin-top:var(--space-3);"
-                                        @click=${async () => {
-                                            const syncApi = this.services.get('syncApi');
-                                            try {
-                                                await syncApi.exportMeetingToCrm(meetingsState.selected.meeting_id, null);
-                                                await this._loadMeetings();
-                                                await this._selectMeeting(meetingsState.selected.meeting_id);
-                                            } catch (err) {
-                                                const text = err instanceof Error ? err.message : String(err);
-                                                this.error(text);
-                                            }
-                                        }}
-                                    >
-                                        Экспортировать в CRM сейчас
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="back-btn"
-                                        style="margin-top:var(--space-2);"
-                                        @click=${async () => {
-                                            const syncApi = this.services.get('syncApi');
-                                            try {
-                                                await syncApi.retryMeetingProcessing(meetingsState.selected.meeting_id);
-                                                await this._loadMeetings();
-                                                await this._selectMeeting(meetingsState.selected.meeting_id);
-                                            } catch (err) {
-                                                const text = err instanceof Error ? err.message : String(err);
-                                                this.error(text);
-                                            }
-                                        }}
-                                    >
-                                        Повторить обработку
-                                    </button>
-                                ` : html`
-                                    <div class="header-subtitle">Выберите встречу слева</div>
-                                `}
-                            </div>
-                        </div>
-                    </div>
-                ` : !selectedChannelId ? html`
+                ${!selectedChannelId ? html`
                     <channel-picker @sync-request-adhoc-call=${() => void this._startAdHocCall()}></channel-picker>
                 ` : html`
                     ${pinCount > 0 && !focusedThreadId ? html`
@@ -1233,6 +1206,116 @@ export class ChatView extends PlatformElement {
                     <message-list .channelId=${selectedChannelId}></message-list>
                     <message-composer .channelId=${selectedChannelId}></message-composer>
                 `}
+
+                ${meetingsOpen ? html`
+                    <div class="meetings-overlay" @click=${(e) => {
+        if (e.target === e.currentTarget) {
+            SyncStore.closeMeetingsPanel();
+        }
+    }}>
+                        <div class="meetings-modal" @click=${(e) => e.stopPropagation()}>
+                            <div class="meetings-modal-header">
+                                <div class="header-title">Встречи</div>
+                                <button type="button" class="back-btn" @click=${() => SyncStore.closeMeetingsPanel()}>Закрыть</button>
+                            </div>
+                            <div class="meetings-modal-content">
+                                <div class="meetings-list-pane">
+                                    ${meetingsState.loading ? html`<div class="header-subtitle">Загрузка...</div>` : ''}
+                                    ${!meetingsState.loading && meetingsState.list.length === 0 ? html`<div class="header-subtitle">Встреч нет</div>` : ''}
+                                    ${meetingsState.list.map((m) => html`
+                                        <button
+                                            type="button"
+                                            class="header-more-item"
+                                            @click=${async () => {
+        await this._selectMeeting(m.meeting_id);
+    }}
+                                        >
+                                            <span>Встреча ${m.meeting_id.slice(0, 8)}</span>
+                                            <span class="header-subtitle">crm: ${m.export_status}</span>
+                                        </button>
+                                    `)}
+                                </div>
+                                <div class="meetings-detail-pane">
+                                    ${meetingsState.selected ? html`
+                                        <div class="header-title">Карточка встречи</div>
+                                        <div class="header-subtitle">call_id: ${meetingsState.selected.call_id}</div>
+                                        <div class="header-subtitle">recording_id: ${meetingsState.selected.recording_id || '—'}</div>
+                                        <div class="header-subtitle">transcript_file_id: ${meetingsState.selected.transcript_text_file_id || '—'}</div>
+                                        <div class="header-subtitle">crm_export_status: ${meetingsState.selected.export_status}</div>
+                                        ${meetingsState.selected.export_status === 'pending' ? html`
+                                            <div class="header-subtitle">Выполняется обработка встречи</div>
+                                        ` : ''}
+                                        ${meetingsState.selected.recording?.raw_file_id ? html`
+                                            <div class="header-subtitle" style="margin-top:var(--space-2);">raw_file_id: ${meetingsState.selected.recording.raw_file_id}</div>
+                                            <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2);">
+                                                ${meetingsState.selected.recording.raw_file_download_url ? html`
+                                                    <a
+                                                        class="back-btn"
+                                                        href=${meetingsState.selected.recording.raw_file_download_url}
+                                                        download
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >Скачать запись</a>
+                                                ` : ''}
+                                            </div>
+                                        ` : ''}
+                                        ${meetingsState.selected.transcript_text_file_id ? html`
+                                            <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2);">
+                                                ${meetingsState.selected.transcript_text_download_url ? html`
+                                                    <a
+                                                        class="back-btn"
+                                                        href=${meetingsState.selected.transcript_text_download_url}
+                                                        download
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >Скачать транскрипт</a>
+                                                ` : ''}
+                                            </div>
+                                        ` : ''}
+                                        <button
+                                            type="button"
+                                            class="back-btn"
+                                            style="margin-top:var(--space-3);"
+                                            @click=${async () => {
+                                                const syncApi = this.services.get('syncApi');
+                                                try {
+                                                    await syncApi.exportMeetingToCrm(meetingsState.selected.meeting_id, null);
+                                                    await this._loadMeetings();
+                                                    await this._selectMeeting(meetingsState.selected.meeting_id);
+                                                } catch (err) {
+                                                    const text = err instanceof Error ? err.message : String(err);
+                                                    this.error(text);
+                                                }
+                                            }}
+                                        >
+                                            Экспортировать в CRM сейчас
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="back-btn"
+                                            style="margin-top:var(--space-2);"
+                                            @click=${async () => {
+                                                const syncApi = this.services.get('syncApi');
+                                                try {
+                                                    await syncApi.retryMeetingProcessing(meetingsState.selected.meeting_id);
+                                                    await this._loadMeetings();
+                                                    await this._selectMeeting(meetingsState.selected.meeting_id);
+                                                } catch (err) {
+                                                    const text = err instanceof Error ? err.message : String(err);
+                                                    this.error(text);
+                                                }
+                                            }}
+                                        >
+                                            Повторить обработку
+                                        </button>
+                                    ` : html`
+                                        <div class="header-subtitle">Выберите встречу слева</div>
+                                    `}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
             </div>
 
             ${fwdOpen ? html`
