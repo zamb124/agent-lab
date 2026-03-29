@@ -17,6 +17,7 @@ import apps.flows.src.tasks.tool_tasks  # noqa: F401, E402
 import apps.flows.src.tasks.push_notification_tasks  # noqa: F401, E402
 import apps.flows.src.tasks.scheduled_tasks  # noqa: F401, E402
 import apps.flows.src.tasks.llm_models_tasks  # noqa: F401, E402
+import apps.flows.src.tasks.calendar_sync_tasks  # noqa: F401, E402
 
 __all__ = ["scheduler"]
 

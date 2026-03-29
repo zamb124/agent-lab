@@ -83,6 +83,12 @@ WebSocket /sync/ws        ────┘
 - Presence пишется в **`apps/sync/ws.py`** при connect, на каждый кадр от клиента и **фоновым циклом** (интервал ~45 с), пока WebSocket открыт — иначе TTL 120 с истек бы при простое. Ключ снимается только при закрытии **последнего** сокета пользователя (несколько вкладок). **`sync:last_seen:{user_id}`** — ISO-время ухода в офлайн (запись при последнем disconnect).
 - UI: **`platform-notification-manager`** в `apps/sync/ui/index.html`; мьют — настройки канала (`channel-settings-modal`), API см. выше. Deep link: query **`?channel=`** на старте `sync-app.js`.
 
+### Календарные уведомления
+
+- Уведомления о новых событиях внешних календарей не реализуются в `apps/sync/*`.
+- Источник календарных уведомлений: фоновая задача `calendar_sync_tick` (`apps/flows/src/tasks/calendar_sync_tasks.py`) через `core.websocket.publisher.notify_user`.
+- Если нужен единый UX в Sync UI, обрабатывается общий поток платформенных уведомлений (`platform-notification-manager`), без дублирования бизнес-логики календаря в sync handlers.
+
 ### Правила
 
 - **Мутации** — через команды: `CommandEnvelope` -> `execute_command()` в `handlers.py`; доставка — обычно `handle_command.kiq()` -> worker, для `channels.mark_read` из REST — `dispatch_sync_command()` (`apps/sync/realtime/command_dispatch.py`)

@@ -335,6 +335,19 @@ class TasksConfig(BaseModel):
     max_workers: int = 4
 
 
+class CalendarSyncConfig(BaseModel):
+    """Конфигурация фоновой синхронизации календаря."""
+
+    enabled: bool = True
+    cron: str = "*/1 * * * *"
+    lookback_days: int = 7
+    lookahead_months: int = 3
+    batch_size: int = 100
+    max_integrations_per_tick: int = 1000
+    max_parallel_integrations: int = 10
+    notification_dedup_ttl_seconds: int = 86400
+
+
 class OpenAIProviderConfig(BaseModel):
     """Конфигурация OpenAI провайдера"""
 

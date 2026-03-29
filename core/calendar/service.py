@@ -12,13 +12,17 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from uuid import uuid4
 from xml.etree import ElementTree
+from zoneinfo import ZoneInfo
 
 from core.calendar.repositories import CalendarEventSqlRepository, CalendarIntegrationSqlRepository
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
+from core.db.repositories.company_repository import CompanyRepository
+from core.db.repositories.user_repository import UserRepository
 from core.db.storage import Storage
 from core.http import get_httpx_client
 from core.models import (
+    CalendarAttendee,
     CalendarEvent,
     CalendarEventSource,
     CalendarEventStatus,
@@ -28,6 +32,7 @@ from core.models import (
     CalendarIntegrationSettings,
     CalendarProvider,
 )
+from core.websocket.publisher import Notification, NotificationType, notify_user
 
 
 @dataclass(frozen=True)
@@ -312,11 +317,15 @@ class CalendarService:
         self,
         event_repository: CalendarEventSqlRepository,
         integration_repository: CalendarIntegrationSqlRepository,
+        user_repository: UserRepository,
+        company_repository: CompanyRepository,
         service_client: ServiceClient,
         storage: Storage,
     ) -> None:
         self._event_repository = event_repository
         self._integration_repository = integration_repository
+        self._user_repository = user_repository
+        self._company_repository = company_repository
         self._service_client = service_client
         self._storage = storage
         self._google_client = GoogleCalendarClient()
@@ -449,6 +458,7 @@ class CalendarService:
                 "sync_enabled": True,
                 "sync_inbound_enabled": True,
                 "sync_outbound_enabled": True,
+                "notifications_enabled": True,
             },
         )
         now = datetime.now(timezone.utc)
@@ -504,6 +514,72 @@ class CalendarService:
         filtered_events.sort(key=lambda item: item.start_at)
         return filtered_events[:limit]
 
+    async def _resolve_invited_platform_user_ids(
+        self,
+        company_id: str,
+        organizer_user_id: str,
+        attendees: list[CalendarAttendee],
+    ) -> list[str]:
+        company = await self._company_repository.get(company_id)
+        if company is None:
+            raise ValueError(f"Company {company_id} not found")
+        company_member_ids = set(company.members.keys())
+        invited_ids: set[str] = set()
+        invited_emails = {
+            attendee.email.strip().lower()
+            for attendee in attendees
+            if attendee.email and attendee.email.strip()
+        }
+        for attendee in attendees:
+            if attendee.attendee_id and attendee.attendee_id in company_member_ids:
+                invited_ids.add(attendee.attendee_id)
+        if invited_emails:
+            for member_user_id in company_member_ids:
+                member_user = await self._user_repository.get(member_user_id)
+                if member_user is None:
+                    raise ValueError(f"User {member_user_id} not found")
+                member_emails = {email.strip().lower() for email in member_user.emails if email and email.strip()}
+                if invited_emails.intersection(member_emails):
+                    invited_ids.add(member_user_id)
+        invited_ids.discard(organizer_user_id)
+        return sorted(invited_ids)
+
+    async def _notify_attendees_about_event_invite(
+        self,
+        event: CalendarEvent,
+        organizer_user_id: str,
+    ) -> None:
+        if not event.attendees:
+            return
+        invited_user_ids = await self._resolve_invited_platform_user_ids(
+            company_id=event.company_id,
+            organizer_user_id=organizer_user_id,
+            attendees=event.attendees,
+        )
+        if not invited_user_ids:
+            return
+        event_timezone = ZoneInfo(event.timezone)
+        event_start_local = event.start_at.astimezone(event_timezone)
+        event_start_label = event_start_local.strftime("%d.%m.%Y %H:%M")
+        for invited_user_id in invited_user_ids:
+            await notify_user(
+                user_id=invited_user_id,
+                notification=Notification(
+                    type=NotificationType.CALENDAR_NEW_EVENT,
+                    title="Приглашение на встречу",
+                    message=f"Вас пригласили на встречу \"{event.title}\" на {event_start_label}.",
+                    service="calendar",
+                    priority="normal",
+                    data={
+                        "event_id": event.event_id,
+                        "company_id": event.company_id,
+                        "start_at": event.start_at.isoformat(),
+                        "end_at": event.end_at.isoformat(),
+                        "timezone": event.timezone,
+                    },
+                ),
+            )
+
     async def upsert_event(self, event_id: str | None, payload: dict, user_id: str, company_id: str) -> CalendarEvent:
         now = datetime.now(timezone.utc)
         current = None
@@ -555,6 +631,11 @@ class CalendarService:
             updated_at=now,
         )
         await self._event_repository.upsert(event)
+        if event_id is None and event.source == CalendarEventSource.PLATFORM:
+            await self._notify_attendees_about_event_invite(
+                event=event,
+                organizer_user_id=user_id,
+            )
         return event
 
     async def delete_event(self, event_id: str, user_id: str, company_id: str) -> None:
@@ -599,6 +680,7 @@ class CalendarService:
                 sync_enabled=payload["sync_enabled"],
                 sync_inbound_enabled=payload["sync_inbound_enabled"],
                 sync_outbound_enabled=payload["sync_outbound_enabled"],
+                notifications_enabled=payload.get("notifications_enabled", True),
             ),
             created_at=existing.created_at if existing else now,
             updated_at=now,

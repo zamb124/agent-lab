@@ -260,6 +260,8 @@ class BaseContainer:
         return CalendarService(
             event_repository=CalendarEventSqlRepository(db_url=self.shared_db_url),
             integration_repository=CalendarIntegrationSqlRepository(db_url=self.shared_db_url),
+            user_repository=self.user_repository,
+            company_repository=self.company_repository,
             service_client=self.service_client,
             storage=self.shared_storage,
         )

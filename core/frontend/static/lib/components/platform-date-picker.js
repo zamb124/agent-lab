@@ -847,6 +847,33 @@ export class PlatformDatePicker extends PlatformElement {
     }
 
     _setTimeValue(minutesValue, target) {
+        if (this.mode === 'datetime') {
+            if (minutesValue === null) {
+                return;
+            }
+            if (!Number.isInteger(minutesValue) || minutesValue < 0 || minutesValue > 1439) {
+                throw new Error('Time value must be integer from 0 to 1439');
+            }
+            if (this.selection === 'single') {
+                if (!this._singleDate) {
+                    return;
+                }
+                this._singleDate = applyMinutes(this._singleDate, minutesValue);
+                return;
+            }
+            if (target === 'start') {
+                if (!this._rangeStart) {
+                    return;
+                }
+                this._rangeStart = applyMinutes(this._rangeStart, minutesValue);
+                return;
+            }
+            if (!this._rangeEnd) {
+                return;
+            }
+            this._rangeEnd = applyMinutes(this._rangeEnd, minutesValue);
+            return;
+        }
         if (minutesValue === null) {
             if (target === 'single') {
                 this._singleTime = null;
@@ -870,6 +897,15 @@ export class PlatformDatePicker extends PlatformElement {
     }
 
     _targetTimeValue(target) {
+        if (this.mode === 'datetime') {
+            if (this.selection === 'single') {
+                return this._singleDate ? dateToMinutes(this._singleDate) : null;
+            }
+            if (target === 'start') {
+                return this._rangeStart ? dateToMinutes(this._rangeStart) : null;
+            }
+            return this._rangeEnd ? dateToMinutes(this._rangeEnd) : null;
+        }
         if (target === 'single') {
             return this._singleTime;
         }
@@ -882,14 +918,11 @@ export class PlatformDatePicker extends PlatformElement {
     _onTimePartInput(target, part, event) {
         const raw = event.target.value;
         if (raw === '') {
-            this._setTimeValue(null, target);
-            this._setExposedValueFromInternal();
-            this._emitValueEvent('input');
             return;
         }
         const asNumber = Number(raw);
         if (!Number.isInteger(asNumber)) {
-            throw new Error('Time part must be integer');
+            return;
         }
 
         const current = this._targetTimeValue(target) ?? 0;
@@ -899,10 +932,10 @@ export class PlatformDatePicker extends PlatformElement {
         const nextMinutes = part === 'minutes' ? asNumber : currentMinutes;
 
         if (nextHours < 0 || nextHours > 23) {
-            throw new Error('Hours must be 0..23');
+            return;
         }
         if (nextMinutes < 0 || nextMinutes > 59) {
-            throw new Error('Minutes must be 0..59');
+            return;
         }
 
         this._setTimeValue((nextHours * 60) + nextMinutes, target);
@@ -913,7 +946,7 @@ export class PlatformDatePicker extends PlatformElement {
     _applyTimeChanges() {
         this._setExposedValueFromInternal();
         this._emitValueEvent('change');
-        if (this.mode === 'time') {
+        if (this.mode === 'time' || this.mode === 'datetime') {
             this._closePopup();
         }
     }

@@ -263,3 +263,178 @@ async def test_calendar_yandex_connect_requires_username(
     )
 
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_calendar_integration_notifications_flag_roundtrip(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    connect_response = await frontend_client.post(
+        "/frontend/api/calendar/integrations/connect",
+        json={
+            "provider": "yandex",
+            "username": f"user-{unique_id}@yandex.ru",
+            "access_token": "app-password",
+            "refresh_token": None,
+            "expires_at": None,
+            "scope": None,
+            "token_type": None,
+            "default_calendar_id": "default",
+            "sync_enabled": True,
+            "sync_inbound_enabled": True,
+            "sync_outbound_enabled": True,
+            "notifications_enabled": False,
+        },
+        headers=auth_headers_system,
+    )
+    assert connect_response.status_code == 200
+    connect_data = connect_response.json()
+    assert connect_data["provider"] == "yandex"
+    assert connect_data["settings"]["notifications_enabled"] is False
+
+    reconnect_response = await frontend_client.post(
+        "/frontend/api/calendar/integrations/connect",
+        json={
+            "provider": "yandex",
+            "username": f"user-{unique_id}@yandex.ru",
+            "access_token": "app-password-2",
+            "refresh_token": None,
+            "expires_at": None,
+            "scope": None,
+            "token_type": None,
+            "default_calendar_id": "default",
+            "sync_enabled": True,
+            "sync_inbound_enabled": True,
+            "sync_outbound_enabled": True,
+            "notifications_enabled": True,
+        },
+        headers=auth_headers_system,
+    )
+    assert reconnect_response.status_code == 200
+    reconnect_data = reconnect_response.json()
+    assert reconnect_data["settings"]["notifications_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_calendar_create_event_sends_invite_notification_by_attendee_id(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+    auth_token_system_user2,
+    system_user2_id: str,
+    monkeypatch,
+) -> None:
+    _ = auth_token_system_user2
+    sent_notifications: list[tuple[str, object]] = []
+
+    async def fake_notify_user(user_id: str, notification) -> None:
+        sent_notifications.append((user_id, notification))
+
+    monkeypatch.setattr("core.calendar.service.notify_user", fake_notify_user)
+
+    start_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    end_at = start_at + timedelta(minutes=30)
+    create_payload = {
+        "title": f"Invite by attendee_id {unique_id}",
+        "kind": "meeting",
+        "source": "platform",
+        "source_id": None,
+        "namespace": "tests",
+        "description": "Invite notification test",
+        "location": "Room A",
+        "status": "confirmed",
+        "timezone": "UTC",
+        "all_day": False,
+        "start_at": start_at.isoformat(),
+        "end_at": end_at.isoformat(),
+        "attendees": [{"attendee_id": system_user2_id}],
+        "recurrence_rule": None,
+        "recurrence_id": None,
+        "series_id": None,
+        "deep_link": None,
+        "metadata": {},
+    }
+    create_response = await frontend_client.post(
+        "/frontend/api/calendar/events",
+        json=create_payload,
+        headers=auth_headers_system,
+    )
+    assert create_response.status_code == 200
+    created_event = create_response.json()
+    event_id = created_event["event_id"]
+    try:
+        assert len(sent_notifications) == 1
+        notified_user_id, notification = sent_notifications[0]
+        assert notified_user_id == system_user2_id
+        assert notification.type.value == "calendar_new_event"
+        assert notification.service == "calendar"
+        assert notification.data["event_id"] == event_id
+    finally:
+        await frontend_client.delete(
+            f"/frontend/api/calendar/events/{event_id}",
+            headers=auth_headers_system,
+        )
+
+
+@pytest.mark.asyncio
+async def test_calendar_create_event_sends_invite_notification_by_attendee_email(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+    auth_token_system_user2,
+    system_user2_id: str,
+    monkeypatch,
+) -> None:
+    _ = auth_token_system_user2
+    sent_notifications: list[tuple[str, object]] = []
+
+    async def fake_notify_user(user_id: str, notification) -> None:
+        sent_notifications.append((user_id, notification))
+
+    monkeypatch.setattr("core.calendar.service.notify_user", fake_notify_user)
+
+    attendee_email = f"{system_user2_id}@system.com"
+    start_at = datetime.now(timezone.utc) + timedelta(hours=2)
+    end_at = start_at + timedelta(minutes=45)
+    create_payload = {
+        "title": f"Invite by attendee_email {unique_id}",
+        "kind": "meeting",
+        "source": "platform",
+        "source_id": None,
+        "namespace": "tests",
+        "description": "Invite notification by email",
+        "location": "Room B",
+        "status": "confirmed",
+        "timezone": "UTC",
+        "all_day": False,
+        "start_at": start_at.isoformat(),
+        "end_at": end_at.isoformat(),
+        "attendees": [{"email": attendee_email}],
+        "recurrence_rule": None,
+        "recurrence_id": None,
+        "series_id": None,
+        "deep_link": None,
+        "metadata": {},
+    }
+    create_response = await frontend_client.post(
+        "/frontend/api/calendar/events",
+        json=create_payload,
+        headers=auth_headers_system,
+    )
+    assert create_response.status_code == 200
+    created_event = create_response.json()
+    event_id = created_event["event_id"]
+    try:
+        assert len(sent_notifications) == 1
+        notified_user_id, notification = sent_notifications[0]
+        assert notified_user_id == system_user2_id
+        assert notification.type.value == "calendar_new_event"
+        assert notification.service == "calendar"
+        assert notification.data["event_id"] == event_id
+    finally:
+        await frontend_client.delete(
+            f"/frontend/api/calendar/events/{event_id}",
+            headers=auth_headers_system,
+        )

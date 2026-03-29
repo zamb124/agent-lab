@@ -27,6 +27,7 @@ from core.config.models import (
     LegalConfig,
     TracingConfig,
     TasksConfig,
+    CalendarSyncConfig,
     S3Config,
     LLMConfig,
     PushConfig,
@@ -68,6 +69,7 @@ class BaseSettings(PydanticBaseSettings):
     legal: LegalConfig = Field(default_factory=LegalConfig)
     tracing: TracingConfig = Field(default_factory=TracingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
+    calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     push: PushConfig = Field(default_factory=PushConfig)
     calls: CallsConfig = Field(default_factory=CallsConfig)
     recording_max_duration_seconds: float = Field(default=3600.0)

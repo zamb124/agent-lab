@@ -67,6 +67,7 @@ class CalendarConnectIntegrationRequest(BaseModel):
     sync_enabled: bool = True
     sync_inbound_enabled: bool = True
     sync_outbound_enabled: bool = True
+    notifications_enabled: bool = True
 
 
 class CalendarSyncRequest(BaseModel):

@@ -6,6 +6,13 @@ import datetime
 
 import pytest
 
+from apps.scheduler.main import (
+    CALENDAR_SYNC_TASK_NAME,
+    SYSTEM_SCHEDULER_COMPANY_ID,
+    on_startup,
+)
+from core.scheduler.models import PlatformScheduleType, ScheduledTaskStatus
+
 
 @pytest.mark.asyncio
 class TestFrontendSchedulerApi:
@@ -137,3 +144,71 @@ class TestFrontendSchedulerApi:
         assert response.status_code == 200
         payload = response.json()
         assert payload["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -> None:
+    class _FakeSettings:
+        class _CalendarSync:
+            enabled = True
+            cron = "*/1 * * * *"
+
+        calendar_sync = _CalendarSync()
+
+    class _FakeSchedulerService:
+        def __init__(self) -> None:
+            self.created_request = None
+
+        async def list(self, company_id, filters):
+            assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
+            assert filters.task_name == CALENDAR_SYNC_TASK_NAME
+            return []
+
+        async def create(self, company_id, user_id, request):
+            assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
+            assert user_id is None
+            self.created_request = request
+            return type("CreatedTask", (), {"id": "task-1", "schedule_id": "schedule-1"})()
+
+    fake_service = _FakeSchedulerService()
+    fake_container = type("Container", (), {"scheduler_service": fake_service})()
+
+    await on_startup(app=None, container=fake_container, settings=_FakeSettings())
+
+    assert fake_service.created_request is not None
+    assert fake_service.created_request.task_name == CALENDAR_SYNC_TASK_NAME
+    assert fake_service.created_request.schedule_type == PlatformScheduleType.CRON
+    assert fake_service.created_request.cron == "*/1 * * * *"
+
+
+@pytest.mark.asyncio
+async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None:
+    paused_task = type("PausedTask", (), {"id": "paused-1", "status": ScheduledTaskStatus.PAUSED})()
+
+    class _FakeSettings:
+        class _CalendarSync:
+            enabled = True
+            cron = "*/1 * * * *"
+
+        calendar_sync = _CalendarSync()
+
+    class _FakeSchedulerService:
+        def __init__(self) -> None:
+            self.resumed_task_id = None
+
+        async def list(self, company_id, filters):
+            assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
+            assert filters.task_name == CALENDAR_SYNC_TASK_NAME
+            return [paused_task]
+
+        async def resume(self, company_id, schedule_task_id):
+            assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
+            self.resumed_task_id = schedule_task_id
+            return type("ResumedTask", (), {"id": schedule_task_id, "schedule_id": "schedule-2"})()
+
+    fake_service = _FakeSchedulerService()
+    fake_container = type("Container", (), {"scheduler_service": fake_service})()
+
+    await on_startup(app=None, container=fake_container, settings=_FakeSettings())
+
+    assert fake_service.resumed_task_id == "paused-1"

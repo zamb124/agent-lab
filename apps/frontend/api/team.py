@@ -35,10 +35,11 @@ async def get_team_members(request: Request, container: ContainerDep):
     for user_id, roles in company.members.items():
         member_user = await user_repo.get(user_id)
         if member_user:
+            member_email = member_user.emails[0] if member_user.emails else None
             members.append(TeamMemberInfo(
                 user_id=user_id,
                 name=member_user.name,
-                email=None,  # Email храним в provider mapping
+                email=member_email,
                 roles=roles if isinstance(roles, list) else [roles],
                 joined_at=member_user.created_at,
                 avatar_url=member_user.avatar_url,

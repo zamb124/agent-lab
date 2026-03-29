@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from core.db.database import get_session_factory
@@ -194,6 +194,31 @@ class CalendarIntegrationSqlRepository:
                     CalendarIntegrationRecord.user_id == user_id,
                 )
                 .order_by(CalendarIntegrationRecord.created_at.asc())
+            )
+            rows = list(result.scalars().all())
+            return [_integration_from_record(item) for item in rows]
+
+    async def list_sync_enabled(
+        self,
+        *,
+        limit: int,
+    ) -> list[CalendarIntegration]:
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            sync_enabled_expr = CalendarIntegrationRecord.settings["sync_enabled"].astext
+            result = await session.execute(
+                select(CalendarIntegrationRecord)
+                .where(
+                    CalendarIntegrationRecord.provider.in_(
+                        [
+                            CalendarProvider.GOOGLE.value,
+                            CalendarProvider.YANDEX.value,
+                        ]
+                    ),
+                    or_(sync_enabled_expr == "true", sync_enabled_expr.is_(None)),
+                )
+                .order_by(CalendarIntegrationRecord.updated_at.asc())
+                .limit(limit)
             )
             rows = list(result.scalars().all())
             return [_integration_from_record(item) for item in rows]

@@ -26,6 +26,7 @@ import apps.flows.src.tasks.push_notification_tasks  # noqa: F401
 import apps.flows.src.tasks.scheduled_tasks  # noqa: F401
 import apps.flows.src.tasks.company_init_tasks  # noqa: F401
 import apps.flows.src.tasks.llm_models_tasks  # noqa: F401
+import apps.flows.src.tasks.calendar_sync_tasks  # noqa: F401
 
 # CRM attachment tasks теперь в rag broker (apps/rag_worker/worker.py)
 # import apps.crm.tasks.attachment_tasks  # noqa: F401

@@ -435,6 +435,20 @@ docker-compose up -d taskiq-scheduler
 
 **КРИТИЧНО**: Scheduler должен работать для выполнения отложенных задач!
 
+## Календарный автосинк (platform scheduler)
+
+- Платформенная периодическая задача календаря: `calendar_sync_tick` (`apps/flows/src/tasks/calendar_sync_tasks.py`).
+- Регистрация cron выполняется в `apps/scheduler/main.py` на старте scheduler через `SchedulerService`:
+  - company scope: `system`
+  - cron по умолчанию: `*/1 * * * *`
+  - idempotency: если есть `pending` запись для `calendar_sync_tick`, дубль не создаётся; если есть `paused`, задача резюмируется.
+- Task module `calendar_sync_tasks` обязан быть импортирован и в worker (`apps/broker/worker.py`), и в scheduler entrypoint (`apps/scheduler/scheduler.py`), иначе задача не будет обнаружена TaskIQ.
+- Окно синхронизации и лимиты берутся из `settings.calendar_sync` (`core/config/models.py`):
+  - `lookback_days`, `lookahead_months`
+  - `batch_size`, `max_integrations_per_tick`, `max_parallel_integrations`
+  - `notification_dedup_ttl_seconds`
+- Нотификации новых событий отправляются через `core.websocket.publisher.notify_user` и дедуплицируются по ключу `calendar:notify:{company_id}:{user_id}:{provider}:{event_id}` в `shared_storage`.
+
 ## Конфигурация
 
 Redis URL настраивается в `conf.json`:

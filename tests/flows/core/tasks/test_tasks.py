@@ -4,6 +4,8 @@
 Используется реальный Redis (через docker-compose-test.yaml).
 """
 
+from datetime import datetime, timezone
+
 import pytest
 
 from core.context import set_context
@@ -12,6 +14,14 @@ from apps.broker.broker import broker
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.eval_task import execute_inline_code
 from apps.flows.src.tasks.tool_tasks import execute_tool
+from apps.flows.src.tasks import calendar_sync_tasks
+from core.models import (
+    CalendarEventSource,
+    CalendarIntegration,
+    CalendarIntegrationCredentials,
+    CalendarIntegrationSettings,
+    CalendarProvider,
+)
 
 
 class TestBroker:
@@ -22,6 +32,131 @@ class TestBroker:
         from taskiq_redis import RedisStreamBroker
 
         assert isinstance(broker, RedisStreamBroker)
+
+
+@pytest.mark.asyncio
+async def test_calendar_sync_tick_returns_zero_when_disabled(monkeypatch):
+    class _FakeCalendarSync:
+        enabled = False
+
+    class _FakeDatabase:
+        shared_url = "postgresql://test"
+
+    class _FakeSettings:
+        calendar_sync = _FakeCalendarSync()
+        database = _FakeDatabase()
+
+    async def _list_sync_enabled(self, *, limit: int):
+        _ = (self, limit)
+        raise AssertionError("list_sync_enabled must not be called when task is disabled")
+
+    monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
+    monkeypatch.setattr(calendar_sync_tasks.CalendarIntegrationSqlRepository, "list_sync_enabled", _list_sync_enabled)
+
+    result = await calendar_sync_tasks.calendar_sync_tick()
+    assert result["integrations_total"] == 0
+    assert result["notifications_sent"] == 0
+
+
+@pytest.mark.asyncio
+async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monkeypatch):
+    class _FakeCalendarSync:
+        enabled = True
+        lookback_days = 7
+        lookahead_months = 3
+        batch_size = 100
+        max_integrations_per_tick = 1000
+        max_parallel_integrations = 2
+        notification_dedup_ttl_seconds = 86400
+
+    class _FakeDatabase:
+        shared_url = "postgresql://test"
+
+    class _FakeSettings:
+        calendar_sync = _FakeCalendarSync()
+        database = _FakeDatabase()
+
+    integration = CalendarIntegration(
+        integration_id="integration-1",
+        company_id="company-1",
+        user_id="user-1",
+        provider=CalendarProvider.GOOGLE,
+        credentials=CalendarIntegrationCredentials(access_token="token", refresh_token="refresh"),
+        settings=CalendarIntegrationSettings(
+            default_calendar_id="primary",
+            sync_enabled=True,
+            sync_inbound_enabled=True,
+            sync_outbound_enabled=False,
+            notifications_enabled=True,
+        ),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    async def _list_sync_enabled(self, *, limit: int):
+        _ = (self, limit)
+        return [integration]
+
+    class _FakeEvent:
+        def __init__(self, event_id: str):
+            self.event_id = event_id
+
+    class _FakeCalendarService:
+        def __init__(self) -> None:
+            self._list_calls = 0
+
+        async def run_sync(self, **kwargs):
+            _ = kwargs
+            return {"imported": 1, "exported": 0}
+
+        async def list_events(self, **kwargs):
+            _ = kwargs
+            self._list_calls += 1
+            if self._list_calls == 1:
+                return [_FakeEvent("existing-event")]
+            return [_FakeEvent("existing-event"), _FakeEvent("new-event")]
+
+    class _FakeStorage:
+        def __init__(self) -> None:
+            self._data = {}
+
+        async def get(self, key: str, force_global: bool = False):
+            _ = force_global
+            return self._data.get(key)
+
+        async def set(self, key: str, value: str, ttl: int, force_global: bool = False):
+            _ = (ttl, force_global)
+            self._data[key] = value
+            return True
+
+    sent_notifications = {"count": 0}
+
+    async def _notify_user(user_id, notification):
+        _ = (user_id, notification)
+        sent_notifications["count"] += 1
+
+    fake_container = type(
+        "Container",
+        (),
+        {
+            "calendar_service": _FakeCalendarService(),
+            "shared_storage": _FakeStorage(),
+        },
+    )()
+
+    monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
+    monkeypatch.setattr(calendar_sync_tasks.CalendarIntegrationSqlRepository, "list_sync_enabled", _list_sync_enabled)
+    monkeypatch.setattr(calendar_sync_tasks, "get_container", lambda: fake_container)
+    monkeypatch.setattr(calendar_sync_tasks, "notify_user", _notify_user)
+
+    first = await calendar_sync_tasks.calendar_sync_tick()
+    second = await calendar_sync_tasks.calendar_sync_tick()
+
+    assert first["integrations_total"] == 1
+    assert first["events_new"] == 1
+    assert first["notifications_sent"] == 1
+    assert second["notifications_sent"] == 0
+    assert sent_notifications["count"] == 1
 
 
 class TestProcessAgentTask:

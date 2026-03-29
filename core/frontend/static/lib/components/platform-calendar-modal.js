@@ -27,6 +27,17 @@ const BASE_TIMEZONE_OPTIONS = [
     'Australia/Sydney',
 ];
 
+const EVENT_COLOR_KEY = 'event_color';
+const DEFAULT_EVENT_COLOR = 'mint';
+const EVENT_COLOR_OPTIONS = [
+    { key: 'mint', dot: '#34c38f' },
+    { key: 'sky', dot: '#4ea8ff' },
+    { key: 'violet', dot: '#8f7bff' },
+    { key: 'amber', dot: '#f5b14c' },
+    { key: 'rose', dot: '#ef6f98' },
+    { key: 'gray', dot: '#8f96a3' },
+];
+
 function pad2(value) {
     return String(value).padStart(2, '0');
 }
@@ -68,20 +79,35 @@ function endOfMonth(date) {
     return new Date(date.getFullYear(), date.getMonth() + 1, 1, 0, 0, 0, 0);
 }
 
-function parseAttendeesInput(value) {
-    if (!value) {
-        return [];
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function toAttendeeTag(entry) {
+    if (!entry || typeof entry !== 'object') {
+        throw new Error('Attendee entry must be object');
     }
-    return value
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item !== '')
-        .map((email) => ({
-            attendee_id: email,
-            email,
-            display_name: email,
-            response_status: 'needsAction',
-        }));
+    const email = normalizeEmail(entry.email);
+    if (!email) {
+        throw new Error('Attendee email is required');
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+        throw new Error(`Invalid attendee email: ${email}`);
+    }
+    const displayName = typeof entry.display_name === 'string' && entry.display_name.trim()
+        ? entry.display_name.trim()
+        : email;
+    const attendeeId = typeof entry.attendee_id === 'string' && entry.attendee_id.trim()
+        ? entry.attendee_id.trim()
+        : email;
+    return {
+        attendee_id: attendeeId,
+        email,
+        display_name: displayName,
+        response_status: 'needsAction',
+    };
 }
 
 function recurrenceToRule(value) {
@@ -154,6 +180,20 @@ function buildEventMetadata(baseMetadata, attachments) {
     return nextMetadata;
 }
 
+function isKnownEventColor(colorKey) {
+    return EVENT_COLOR_OPTIONS.some((color) => color.key === colorKey);
+}
+
+function normalizeEventColor(colorKey) {
+    if (!colorKey) {
+        return DEFAULT_EVENT_COLOR;
+    }
+    if (isKnownEventColor(colorKey)) {
+        return colorKey;
+    }
+    return DEFAULT_EVENT_COLOR;
+}
+
 export class PlatformCalendarModal extends PlatformModal {
     static properties = {
         ...PlatformModal.properties,
@@ -176,6 +216,9 @@ export class PlatformCalendarModal extends PlatformModal {
         _selectedEventKind: { state: true },
         _selectedEventNamespace: { state: true },
         _timezoneOptions: { state: true },
+        _teamMembers: { state: true },
+        _attendeeDraft: { state: true },
+        _attendeeDropdownOpen: { state: true },
         _eventForm: { state: true },
         _integrationForm: { state: true },
     };
@@ -284,13 +327,13 @@ export class PlatformCalendarModal extends PlatformModal {
                 background: var(--glass-solid-subtle);
                 min-height: 0;
                 overflow: auto;
-                padding: var(--space-3);
+                padding: var(--space-2);
             }
 
             .month-grid {
                 display: grid;
                 grid-template-columns: repeat(7, minmax(0, 1fr));
-                gap: var(--space-2);
+                gap: var(--space-1);
             }
 
             .weekday {
@@ -309,8 +352,8 @@ export class PlatformCalendarModal extends PlatformModal {
             .month-cell {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
-                min-height: 108px;
-                padding: var(--space-2);
+                min-height: 114px;
+                padding: var(--space-1) 6px;
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-1);
@@ -329,40 +372,88 @@ export class PlatformCalendarModal extends PlatformModal {
             .month-cell .date-label {
                 font-size: var(--text-xs);
                 color: var(--text-secondary);
+                font-weight: var(--font-semibold);
+            }
+
+            .month-cell-events {
+                flex: 1;
+                min-height: 0;
+                display: grid;
+                gap: 6px;
+                grid-auto-rows: minmax(0, 1fr);
             }
 
             .event-chip {
-                font-size: 11px;
+                font-size: var(--text-xs);
                 line-height: 1.3;
-                background: var(--accent-subtle);
-                border: 1px solid var(--accent);
-                color: var(--accent);
+                background: color-mix(in srgb, #34c38f 18%, var(--glass-solid-medium));
+                border: none;
+                color: #0b7a59;
                 border-radius: var(--radius-sm);
-                padding: 2px 6px;
+                padding: 8px 10px;
                 cursor: pointer;
                 text-align: left;
                 display: grid;
-                gap: 2px;
+                gap: 6px;
                 min-width: 0;
+                min-height: 0;
+                align-content: start;
             }
 
             .event-chip.active {
-                background: var(--accent);
-                color: var(--text-inverse);
+                box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 45%, transparent);
+            }
+
+            .event-chip[data-color='mint'] {
+                background: color-mix(in srgb, #34c38f 18%, var(--glass-solid-medium));
+                color: #0b7a59;
+            }
+
+            .event-chip[data-color='sky'] {
+                background: color-mix(in srgb, #4ea8ff 18%, var(--glass-solid-medium));
+                color: #1866b8;
+            }
+
+            .event-chip[data-color='violet'] {
+                background: color-mix(in srgb, #8f7bff 18%, var(--glass-solid-medium));
+                color: #5c49ca;
+            }
+
+            .event-chip[data-color='amber'] {
+                background: color-mix(in srgb, #f5b14c 20%, var(--glass-solid-medium));
+                color: #9f6610;
+            }
+
+            .event-chip[data-color='rose'] {
+                background: color-mix(in srgb, #ef6f98 18%, var(--glass-solid-medium));
+                color: #a7365e;
+            }
+
+            .event-chip[data-color='gray'] {
+                background: color-mix(in srgb, #8f96a3 18%, var(--glass-solid-medium));
+                color: #4f5868;
             }
 
             .event-chip-top {
-                display: inline-flex;
+                display: flex;
                 align-items: center;
+                justify-content: flex-start;
+                flex-wrap: wrap;
                 gap: 4px;
                 min-width: 0;
             }
 
             .event-chip-title {
                 overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
                 color: inherit;
+            }
+
+            .event-chip-time {
+                font-weight: var(--font-semibold);
+                margin-right: 4px;
             }
 
             .event-badge {
@@ -647,20 +738,27 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .event-compose-attachments {
-                display: grid;
+                display: flex;
+                align-items: center;
                 gap: 8px;
+                flex-wrap: wrap;
             }
 
             .event-compose-attachment {
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
-                gap: 10px;
-                min-height: 34px;
+                gap: 8px;
+                min-height: 36px;
                 border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-full);
                 background: var(--glass-solid-subtle);
-                padding: 6px 10px;
+                padding: 4px 8px;
+                max-width: 320px;
+            }
+
+            .event-compose-attachment-icon {
+                color: var(--text-tertiary);
+                flex-shrink: 0;
             }
 
             .event-compose-attachment-link {
@@ -670,6 +768,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+                max-width: 220px;
             }
 
             .event-compose-attachment-remove {
@@ -677,11 +776,19 @@ export class PlatformCalendarModal extends PlatformModal {
                 background: transparent;
                 color: var(--text-tertiary);
                 cursor: pointer;
-                font-size: var(--text-sm);
+                font-size: 12px;
+                line-height: 1;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
             }
 
             .event-compose-attachment-remove:hover {
                 color: var(--danger);
+                background: color-mix(in srgb, var(--danger) 12%, transparent);
             }
 
             .event-compose-title-input,
@@ -713,6 +820,120 @@ export class PlatformCalendarModal extends PlatformModal {
                 color: var(--text-tertiary);
             }
 
+            .attendees-picker {
+                position: relative;
+                display: grid;
+                gap: 8px;
+            }
+
+            .attendees-tags {
+                min-height: 44px;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-medium);
+                padding: 8px 10px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .attendee-tag {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                max-width: 100%;
+                border-radius: var(--radius-full);
+                background: color-mix(in srgb, var(--accent) 16%, var(--glass-solid-subtle));
+                color: var(--text-primary);
+                padding: 4px 8px;
+                font-size: var(--text-xs);
+            }
+
+            .attendee-tag-label {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                max-width: 260px;
+            }
+
+            .attendee-tag-remove {
+                border: none;
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                font-size: 12px;
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .attendee-tag-remove:hover {
+                color: var(--danger);
+                background: color-mix(in srgb, var(--danger) 12%, transparent);
+            }
+
+            .attendees-input {
+                flex: 1;
+                min-width: 180px;
+                border: none;
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                outline: none;
+                padding: 0;
+            }
+
+            .attendees-input::placeholder {
+                color: var(--text-tertiary);
+            }
+
+            .attendees-dropdown {
+                position: absolute;
+                top: calc(100% + 4px);
+                left: 0;
+                right: 0;
+                max-height: 200px;
+                overflow: auto;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-strong);
+                z-index: 10;
+                box-shadow: var(--glass-shadow-medium);
+                padding: 4px;
+                display: grid;
+                gap: 2px;
+            }
+
+            .attendee-option {
+                border: none;
+                background: transparent;
+                border-radius: var(--radius-sm);
+                text-align: left;
+                padding: 6px 8px;
+                cursor: pointer;
+                display: grid;
+                gap: 2px;
+            }
+
+            .attendee-option:hover {
+                background: var(--glass-solid-medium);
+            }
+
+            .attendee-option-name {
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                font-weight: var(--font-medium);
+            }
+
+            .attendee-option-email {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+
             .event-compose-pills {
                 display: flex;
                 align-items: center;
@@ -738,6 +959,27 @@ export class PlatformCalendarModal extends PlatformModal {
             .event-compose-pill small {
                 font-size: var(--text-sm);
                 font-weight: 500;
+            }
+
+            .event-color-palette {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .event-color-swatch {
+                width: 22px;
+                height: 22px;
+                border: none;
+                border-radius: 50%;
+                padding: 0;
+                cursor: pointer;
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 10%, transparent);
+            }
+
+            .event-color-swatch.active {
+                box-shadow: 0 0 0 2px var(--glass-solid-strong), 0 0 0 4px color-mix(in srgb, #3f4959 55%, transparent);
             }
 
             .event-compose-textarea {
@@ -1018,6 +1260,9 @@ export class PlatformCalendarModal extends PlatformModal {
         this._selectedEventKind = 'event';
         this._selectedEventNamespace = null;
         this._timezoneOptions = [...BASE_TIMEZONE_OPTIONS];
+        this._teamMembers = [];
+        this._attendeeDraft = '';
+        this._attendeeDropdownOpen = false;
         const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         if (!this._timezoneOptions.includes(currentTimeZone)) {
             this._timezoneOptions = [currentTimeZone, ...this._timezoneOptions];
@@ -1027,6 +1272,7 @@ export class PlatformCalendarModal extends PlatformModal {
         defaultEnd.setMinutes(defaultEnd.getMinutes() + 30);
         this._eventForm = {
             kind: 'event',
+            color: DEFAULT_EVENT_COLOR,
             title: '',
             description: '',
             location: '',
@@ -1034,7 +1280,7 @@ export class PlatformCalendarModal extends PlatformModal {
             all_day: false,
             start_at: toDateTimeInputValue(now),
             end_at: toDateTimeInputValue(defaultEnd),
-            attendees_raw: '',
+            attendees: [],
             recurrence: 'none',
         };
         this._integrationForm = {
@@ -1044,13 +1290,27 @@ export class PlatformCalendarModal extends PlatformModal {
             sync_enabled: true,
             sync_inbound_enabled: true,
             sync_outbound_enabled: true,
+            notifications_enabled: true,
         };
     }
 
     async showModal() {
         this._isFullscreen = true;
         super.showModal();
+        await this._loadTeamMembers();
         await this._reload();
+    }
+
+    async _loadTeamMembers() {
+        if (!this.services.has('team')) {
+            this._teamMembers = [];
+            return;
+        }
+        const teamMembers = await this.services.get('team').getMembers();
+        if (!Array.isArray(teamMembers)) {
+            throw new Error('Team members response must be array');
+        }
+        this._teamMembers = teamMembers;
     }
 
     async _reload() {
@@ -1219,6 +1479,17 @@ export class PlatformCalendarModal extends PlatformModal {
         return this._sourceKey(source) === 'platform';
     }
 
+    _eventStartTimeLabel(event) {
+        const startDate = new Date(event.start_at);
+        if (Number.isNaN(startDate.getTime())) {
+            throw new Error('event.start_at must be valid datetime');
+        }
+        return startDate.toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    }
+
     _fillFormFromEvent(event) {
         this._ensureTimezoneOption(event.timezone);
         this._selectedEventId = event.event_id;
@@ -1230,6 +1501,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._eventAttachments = parseEventAttachments(this._eventMetadata);
         this._eventForm = {
             kind: event.kind || 'event',
+            color: normalizeEventColor(this._eventMetadata[EVENT_COLOR_KEY]),
             title: event.title || '',
             description: event.description || '',
             location: event.location || '',
@@ -1237,9 +1509,11 @@ export class PlatformCalendarModal extends PlatformModal {
             all_day: Boolean(event.all_day),
             start_at: toDateTimeInputValue(new Date(event.start_at)),
             end_at: toDateTimeInputValue(new Date(event.end_at)),
-            attendees_raw: Array.isArray(event.attendees) ? event.attendees.map((item) => item.email).filter(Boolean).join(', ') : '',
+            attendees: Array.isArray(event.attendees) ? event.attendees.map((item) => toAttendeeTag(item)) : [],
             recurrence: this._ruleToRecurrence(event.recurrence_rule),
         };
+        this._attendeeDraft = '';
+        this._attendeeDropdownOpen = false;
         this._eventDialogOpen = true;
     }
 
@@ -1276,6 +1550,107 @@ export class PlatformCalendarModal extends PlatformModal {
         };
     }
 
+    _attendeeTags() {
+        if (!Array.isArray(this._eventForm.attendees)) {
+            return [];
+        }
+        return this._eventForm.attendees.map((entry) => toAttendeeTag(entry));
+    }
+
+    _addAttendeeByEmail(emailValue) {
+        const normalized = normalizeEmail(emailValue);
+        if (!normalized) {
+            return;
+        }
+        if (!EMAIL_PATTERN.test(normalized)) {
+            this.error('Введите корректный email');
+            return;
+        }
+        const current = this._attendeeTags();
+        if (current.some((item) => item.email === normalized)) {
+            this._attendeeDraft = '';
+            this._attendeeDropdownOpen = false;
+            return;
+        }
+        this._onEventFormChange('attendees', [
+            ...current,
+            {
+                attendee_id: normalized,
+                email: normalized,
+                display_name: normalized,
+                response_status: 'needsAction',
+            },
+        ]);
+        this._attendeeDraft = '';
+        this._attendeeDropdownOpen = false;
+    }
+
+    _addTeamMemberAsAttendee(member) {
+        if (!member || typeof member !== 'object') {
+            throw new Error('Team member is required');
+        }
+        const email = normalizeEmail(member.email);
+        if (!email) {
+            throw new Error('Team member email is required');
+        }
+        const current = this._attendeeTags();
+        if (current.some((item) => item.email === email)) {
+            this._attendeeDraft = '';
+            this._attendeeDropdownOpen = false;
+            return;
+        }
+        this._onEventFormChange('attendees', [
+            ...current,
+            {
+                attendee_id: String(member.user_id || email),
+                email,
+                display_name: String(member.name || email).trim(),
+                response_status: 'needsAction',
+            },
+        ]);
+        this._attendeeDraft = '';
+        this._attendeeDropdownOpen = false;
+    }
+
+    _removeAttendee(emailValue) {
+        const email = normalizeEmail(emailValue);
+        const nextAttendees = this._attendeeTags().filter((item) => item.email !== email);
+        this._onEventFormChange('attendees', nextAttendees);
+    }
+
+    _attendeeSuggestions() {
+        const query = this._attendeeDraft.trim().toLowerCase();
+        const selectedEmails = new Set(this._attendeeTags().map((item) => item.email));
+        const membersWithEmail = this._teamMembers
+            .filter((member) => normalizeEmail(member.email) !== '')
+            .filter((member) => !selectedEmails.has(normalizeEmail(member.email)));
+        if (!query) {
+            return membersWithEmail.slice(0, 8);
+        }
+        return membersWithEmail
+            .filter((member) => {
+                const name = String(member.name || '').toLowerCase();
+                const email = String(member.email || '').toLowerCase();
+                return name.includes(query) || email.includes(query);
+            })
+            .slice(0, 8);
+    }
+
+    _onAttendeeInputKeyDown(event) {
+        if (event.key === 'Enter' || event.key === ',') {
+            event.preventDefault();
+            this._addAttendeeByEmail(this._attendeeDraft);
+            return;
+        }
+        if (event.key === 'Backspace' && !this._attendeeDraft) {
+            const tags = this._attendeeTags();
+            if (tags.length === 0) {
+                return;
+            }
+            this._removeAttendee(tags[tags.length - 1].email);
+        }
+    }
+
     _openCreateEventDialog(date) {
         const selectedDate = date instanceof Date ? new Date(date.getTime()) : new Date(this._anchorDate);
         if (Number.isNaN(selectedDate.getTime())) {
@@ -1296,10 +1671,11 @@ export class PlatformCalendarModal extends PlatformModal {
         this._eventForm = {
             ...this._eventForm,
             kind: 'event',
+            color: DEFAULT_EVENT_COLOR,
             title: '',
             description: '',
             location: '',
-            attendees_raw: '',
+            attendees: [],
             recurrence: 'none',
             start_at: toDateTimeInputValue(startDate),
             end_at: toDateTimeInputValue(endDate),
@@ -1310,6 +1686,8 @@ export class PlatformCalendarModal extends PlatformModal {
         this._eventMetadata = {};
         this._eventAttachments = [];
         this._showDescriptionField = false;
+        this._attendeeDraft = '';
+        this._attendeeDropdownOpen = false;
         this._eventDialogOpen = true;
     }
 
@@ -1370,62 +1748,75 @@ export class PlatformCalendarModal extends PlatformModal {
 
     async _saveEvent() {
         this._saving = true;
-        if (this._selectedEventId && !this._isEventEditable(this._selectedEventSource)) {
+        try {
+            if (this._selectedEventId && !this._isEventEditable(this._selectedEventSource)) {
+                throw new Error(`События источника ${this._sourceLabel(this._selectedEventSource)} редактируются в своем сервисе`);
+            }
+            const payload = {
+                title: this._eventForm.title.trim(),
+                kind: String(this._eventForm.kind || '').trim(),
+                source: 'platform',
+                source_id: null,
+                namespace: null,
+                description: this._eventForm.description.trim() || null,
+                location: this._eventForm.location.trim() || null,
+                status: 'confirmed',
+                timezone: this._eventForm.timezone.trim(),
+                all_day: Boolean(this._eventForm.all_day),
+                start_at: new Date(this._eventForm.start_at).toISOString(),
+                end_at: new Date(this._eventForm.end_at).toISOString(),
+                attendees: this._attendeeTags(),
+                recurrence_rule: recurrenceToRule(this._eventForm.recurrence),
+                recurrence_id: null,
+                series_id: null,
+                deep_link: null,
+                metadata: buildEventMetadata(
+                    {
+                        ...this._eventMetadata,
+                        [EVENT_COLOR_KEY]: normalizeEventColor(this._eventForm.color),
+                    },
+                    this._eventAttachments
+                ),
+            };
+            if (!payload.title) {
+                throw new Error('Название события обязательно');
+            }
+            if (!payload.kind) {
+                throw new Error('Тип события обязателен');
+            }
+            if (new Date(payload.start_at) >= new Date(payload.end_at)) {
+                throw new Error('Дата окончания должна быть позже даты начала');
+            }
+            if (this._selectedEventId) {
+                await this.calendarApi.updateEvent(this._selectedEventId, payload);
+            } else {
+                await this.calendarApi.createEvent(payload);
+            }
+            this._selectedEventId = null;
+            this._selectedEventSource = 'platform';
+            this._selectedEventKind = 'event';
+            this._selectedEventNamespace = null;
+            this._eventForm = {
+                ...this._eventForm,
+                kind: 'event',
+                color: DEFAULT_EVENT_COLOR,
+                title: '',
+                description: '',
+                location: '',
+                attendees: [],
+                recurrence: 'none',
+            };
+            this._eventMetadata = {};
+            this._eventAttachments = [];
+            this._attendeeDraft = '';
+            this._attendeeDropdownOpen = false;
+            this._eventDialogOpen = false;
+            await this._reload();
+        } catch (error) {
+            this.error(error instanceof Error ? error.message : 'Не удалось сохранить событие');
+        } finally {
             this._saving = false;
-            throw new Error(`События источника ${this._sourceLabel(this._selectedEventSource)} редактируются в своем сервисе`);
         }
-        const payload = {
-            title: this._eventForm.title.trim(),
-            kind: String(this._eventForm.kind || '').trim(),
-            source: 'platform',
-            source_id: null,
-            namespace: null,
-            description: this._eventForm.description.trim() || null,
-            location: this._eventForm.location.trim() || null,
-            status: 'confirmed',
-            timezone: this._eventForm.timezone.trim(),
-            all_day: Boolean(this._eventForm.all_day),
-            start_at: new Date(this._eventForm.start_at).toISOString(),
-            end_at: new Date(this._eventForm.end_at).toISOString(),
-            attendees: parseAttendeesInput(this._eventForm.attendees_raw),
-            recurrence_rule: recurrenceToRule(this._eventForm.recurrence),
-            recurrence_id: null,
-            series_id: null,
-            deep_link: null,
-            metadata: buildEventMetadata(this._eventMetadata, this._eventAttachments),
-        };
-        if (!payload.title) {
-            throw new Error('Название события обязательно');
-        }
-        if (!payload.kind) {
-            throw new Error('Тип события обязателен');
-        }
-        if (new Date(payload.start_at) >= new Date(payload.end_at)) {
-            throw new Error('Дата окончания должна быть позже даты начала');
-        }
-        if (this._selectedEventId) {
-            await this.calendarApi.updateEvent(this._selectedEventId, payload);
-        } else {
-            await this.calendarApi.createEvent(payload);
-        }
-        this._saving = false;
-        this._selectedEventId = null;
-        this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'event';
-        this._selectedEventNamespace = null;
-        this._eventForm = {
-            ...this._eventForm,
-            kind: 'event',
-            title: '',
-            description: '',
-            location: '',
-            attendees_raw: '',
-            recurrence: 'none',
-        };
-        this._eventMetadata = {};
-        this._eventAttachments = [];
-        this._eventDialogOpen = false;
-        await this._reload();
     }
 
     async _deleteSelectedEvent() {
@@ -1464,6 +1855,7 @@ export class PlatformCalendarModal extends PlatformModal {
             sync_enabled: Boolean(this._integrationForm.sync_enabled),
             sync_inbound_enabled: Boolean(this._integrationForm.sync_inbound_enabled),
             sync_outbound_enabled: Boolean(this._integrationForm.sync_outbound_enabled),
+            notifications_enabled: Boolean(this._integrationForm.notifications_enabled),
         };
         if (!payload.username) {
             this._saving = false;
@@ -1501,6 +1893,23 @@ export class PlatformCalendarModal extends PlatformModal {
         await this._reload();
     }
 
+    _onIntegrationProviderSelect(provider) {
+        this._activeProvider = provider;
+        const activeIntegration = this._integrations.find((item) => item.provider === provider) || null;
+        if (provider !== 'yandex' || !activeIntegration) {
+            return;
+        }
+        const settings = activeIntegration.settings || {};
+        this._integrationForm = {
+            ...this._integrationForm,
+            default_calendar_id: settings.default_calendar_id || '',
+            sync_enabled: settings.sync_enabled !== false,
+            sync_inbound_enabled: settings.sync_inbound_enabled !== false,
+            sync_outbound_enabled: settings.sync_outbound_enabled !== false,
+            notifications_enabled: settings.notifications_enabled !== false,
+        };
+    }
+
     _renderMonth() {
         const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
         const cells = this._monthCells();
@@ -1515,23 +1924,28 @@ export class PlatformCalendarModal extends PlatformModal {
                         @click=${() => this._openCreateEventDialog(cell.date)}
                     >
                         <div class="date-label">${cell.date.getDate()}</div>
-                        ${cell.events.slice(0, 3).map((event) => html`
-                            <button
-                                class="event-chip ${this._selectedEventId === event.event_id ? 'active' : ''}"
-                                type="button"
-                                @click=${(e) => {
-                                    e.stopPropagation();
-                                    this._fillFormFromEvent(event);
-                                }}
-                                title=${`${this._sourceLabel(event.source)} • ${this._kindLabel(event.kind)}`}
-                            >
-                                <span class="event-chip-top">
-                                    <span class="event-badge" data-source=${this._sourceKey(event.source)}>${this._sourceLabel(event.source)}</span>
-                                    <span class="event-badge">${this._kindLabel(event.kind)}</span>
-                                </span>
-                                <span class="event-chip-title">${event.title}</span>
-                            </button>
-                        `)}
+                        <div class="month-cell-events">
+                            ${cell.events.slice(0, 3).map((event) => html`
+                                <button
+                                    class="event-chip ${this._selectedEventId === event.event_id ? 'active' : ''}"
+                                    data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
+                                    type="button"
+                                    @click=${(e) => {
+                                        e.stopPropagation();
+                                        this._fillFormFromEvent(event);
+                                    }}
+                                    title=${`${this._sourceLabel(event.source)} • ${this._kindLabel(event.kind)}`}
+                                >
+                                    <span class="event-chip-top">
+                                        <span class="event-badge" data-source=${this._sourceKey(event.source)}>${this._sourceLabel(event.source)}</span>
+                                        <span class="event-badge">${this._kindLabel(event.kind)}</span>
+                                    </span>
+                                    <span class="event-chip-title">
+                                        <span class="event-chip-time">${this._eventStartTimeLabel(event)}</span>${event.title}
+                                    </span>
+                                </button>
+                            `)}
+                        </div>
                     </article>
                 `)}
             </div>
@@ -1603,6 +2017,7 @@ export class PlatformCalendarModal extends PlatformModal {
                             <div class="event-compose-attachments">
                                 ${this._eventAttachments.map((attachment) => html`
                                     <div class="event-compose-attachment">
+                                        <platform-icon class="event-compose-attachment-icon" name="attachment" size="14"></platform-icon>
                                         <a
                                             class="event-compose-attachment-link"
                                             href=${attachment.url}
@@ -1616,8 +2031,9 @@ export class PlatformCalendarModal extends PlatformModal {
                                             class="event-compose-attachment-remove"
                                             type="button"
                                             @click=${() => this._removeAttachment(attachment.file_id)}
+                                            title="Убрать файл"
                                         >
-                                            Убрать
+                                            ×
                                         </button>
                                     </div>
                                 `)}
@@ -1643,12 +2059,49 @@ export class PlatformCalendarModal extends PlatformModal {
                 <div class="event-compose-row">
                     <label class="event-compose-label">Участники</label>
                     <div class="event-compose-control">
-                        <input
-                            class="event-compose-input"
-                            .value=${this._eventForm.attendees_raw}
-                            @input=${(e) => this._onEventFormChange('attendees_raw', e.target.value)}
-                            placeholder="Начните вводить имя или эл. почту"
-                        />
+                        <div class="attendees-picker">
+                            <div class="attendees-tags">
+                                ${this._attendeeTags().map((attendee) => html`
+                                    <span class="attendee-tag">
+                                        <span class="attendee-tag-label">${attendee.display_name} (${attendee.email})</span>
+                                        <button
+                                            class="attendee-tag-remove"
+                                            type="button"
+                                            title="Удалить участника"
+                                            @click=${() => this._removeAttendee(attendee.email)}
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                `)}
+                                <input
+                                    class="attendees-input"
+                                    .value=${this._attendeeDraft}
+                                    @focus=${() => { this._attendeeDropdownOpen = true; }}
+                                    @blur=${() => {
+                                        setTimeout(() => {
+                                            this._attendeeDropdownOpen = false;
+                                        }, 120);
+                                    }}
+                                    @input=${(event) => {
+                                        this._attendeeDraft = event.target.value;
+                                        this._attendeeDropdownOpen = true;
+                                    }}
+                                    @keydown=${(event) => this._onAttendeeInputKeyDown(event)}
+                                    placeholder="Введите email или выберите пользователя"
+                                />
+                            </div>
+                            ${this._attendeeDropdownOpen && this._attendeeSuggestions().length > 0 ? html`
+                                <div class="attendees-dropdown">
+                                    ${this._attendeeSuggestions().map((member) => html`
+                                        <button class="attendee-option" type="button" @mousedown=${(event) => event.preventDefault()} @click=${() => this._addTeamMemberAsAttendee(member)}>
+                                            <span class="attendee-option-name">${member.name || member.email}</span>
+                                            <span class="attendee-option-email">${member.email}</span>
+                                        </button>
+                                    `)}
+                                </div>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
 
@@ -1696,6 +2149,23 @@ export class PlatformCalendarModal extends PlatformModal {
                                     <option value=${timezone}>${timezone}</option>
                                 `)}
                             </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="event-compose-row">
+                    <label class="event-compose-label">Цвет</label>
+                    <div class="event-compose-control">
+                        <div class="event-color-palette">
+                            ${EVENT_COLOR_OPTIONS.map((color) => html`
+                                <button
+                                    class="event-color-swatch ${this._eventForm.color === color.key ? 'active' : ''}"
+                                    type="button"
+                                    style=${`background:${color.dot};`}
+                                    title=${color.key}
+                                    @click=${() => this._onEventFormChange('color', color.key)}
+                                ></button>
+                            `)}
                         </div>
                     </div>
                 </div>
@@ -1774,7 +2244,7 @@ export class PlatformCalendarModal extends PlatformModal {
                         <button
                             type="button"
                             class=${this._activeProvider === provider ? 'active' : ''}
-                            @click=${() => { this._activeProvider = provider; }}
+                            @click=${() => this._onIntegrationProviderSelect(provider)}
                         >
                             ${provider.toUpperCase()}
                         </button>
@@ -1785,6 +2255,14 @@ export class PlatformCalendarModal extends PlatformModal {
                     <div class="hint">
                         Подключение Google выполняется через OAuth. После перехода откроется окно согласия Google.
                     </div>
+                    <div class="hint">
+                        Автосинхронизация работает в фоне каждую минуту.
+                    </div>
+                    ${activeIntegration ? html`
+                        <div class="hint">
+                            Уведомления: ${activeIntegration.settings?.notifications_enabled === false ? 'выключены' : 'включены'}
+                        </div>
+                    ` : ''}
                     <div class="actions">
                         <button class="btn btn-primary" type="button" @click=${() => this._startGoogleConnect()}>
                             ${activeIntegration ? 'Переподключить Google' : 'Подключить Google'}
@@ -1825,6 +2303,17 @@ export class PlatformCalendarModal extends PlatformModal {
                             @input=${(e) => this._integrationForm = { ...this._integrationForm, default_calendar_id: e.target.value }}
                             placeholder="default"
                         />
+                    </div>
+                    <label class="event-compose-check">
+                        <input
+                            type="checkbox"
+                            .checked=${Boolean(this._integrationForm.notifications_enabled)}
+                            @change=${(e) => this._integrationForm = { ...this._integrationForm, notifications_enabled: e.target.checked }}
+                        />
+                        <span>Уведомления о новых событиях</span>
+                    </label>
+                    <div class="hint">
+                        Автосинхронизация работает в фоне каждую минуту.
                     </div>
 
                     <div class="actions">
