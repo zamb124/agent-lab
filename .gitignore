@@ -33,3 +33,4 @@ docs/video/*.mov
 /scripts/logs/agents.log
 /.hypothesis/
 /sync1/
+.DS_Store
