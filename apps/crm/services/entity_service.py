@@ -104,14 +104,16 @@ class EntityService:
         entity_type_model = await self._entity_type_repo.get_by_type_id(entity_type)
         if entity_type_model is None:
             raise ValueError(f"Entity type not found: {entity_type}")
-        if namespace not in (entity_type_model.namespace_ids or []):
+        allowed_namespaces = entity_type_model.namespace_ids or []
+        if namespace not in allowed_namespaces:
             raise ValueError(f"Entity type '{entity_type}' is not allowed in namespace '{namespace}'")
 
         if entity_subtype:
             subtype_model = await self._entity_type_repo.get_by_type_id(entity_subtype)
             if subtype_model is None:
                 raise ValueError(f"Entity subtype not found: {entity_subtype}")
-            if namespace not in (subtype_model.namespace_ids or []):
+            subtype_namespaces = subtype_model.namespace_ids or []
+            if namespace not in subtype_namespaces:
                 raise ValueError(f"Entity subtype '{entity_subtype}' is not allowed in namespace '{namespace}'")
 
     async def _list_notes_for_date(self, date_str: str, namespace: Optional[str] = None) -> List[CRMEntity]:

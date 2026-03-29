@@ -50,6 +50,7 @@ x-common-env: &common-env
   # LLM: переопределяют conf.json; задайте в GitHub Secrets и передайте в deploy (см. .github/workflows/deploy.yml).
   LLM__BOTHUB__API_KEY: ${LLM_BOTHUB_API_KEY:-}
   LLM__OPENROUTER__API_KEY: ${LLM_OPENROUTER_API_KEY:-}
+  STT__CLOUD_RU__API_KEY: ${STT__CLOUD_RU__API_KEY:-${STT_CLOUD_RU_API_KEY:-}}
   # RAG pgvector (CRM, flows, сервис rag): OpenRouter embeddings. По умолчанию тот же ключ, что и LLM; иначе RAG_EMBEDDING_API_KEY в SSH/env деплоя.
   RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-${LLM_OPENROUTER_API_KEY:-}}
 

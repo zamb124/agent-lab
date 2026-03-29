@@ -533,6 +533,12 @@ class BaseChannel(ABC):
                     "status": "input-required",
                 }
             if state.interrupt:
+                interrupt_context = state.interrupt.context or {}
+                state.interrupt.context = {
+                    **interrupt_context,
+                    "task_id": effective_task_id,
+                    "context_id": params.context_id,
+                }
                 question = state.interrupt.question
                 await emitter.emit_interrupt(question)
                 await self._send_push_notification(

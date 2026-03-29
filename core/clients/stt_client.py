@@ -10,6 +10,28 @@ from core.config import get_settings
 from core.http import get_httpx_client
 
 
+def _extract_transcript_from_json_payload(payload: object) -> str | None:
+    """Достаёт транскрипт из JSON-ответа STT в разных форматах."""
+    if isinstance(payload, str):
+        text = payload.strip()
+        return text if text != "" else None
+    if isinstance(payload, dict):
+        direct_keys = ("text", "transcript", "transcription", "result")
+        for key in direct_keys:
+            if key in payload:
+                found = _extract_transcript_from_json_payload(payload[key])
+                if found is not None:
+                    return found
+        return None
+    if isinstance(payload, list):
+        for item in payload:
+            found = _extract_transcript_from_json_payload(item)
+            if found is not None:
+                return found
+        return None
+    return None
+
+
 class BaseSTTClient(ABC):
     """Базовый интерфейс STT клиента."""
 
@@ -101,17 +123,24 @@ class CloudRuSTTClient(BaseSTTClient):
         body_text = response.text.strip()
         if "application/json" in content_type:
             body_json = response.json()
-            transcript = body_json.get("text")
-            if not isinstance(transcript, str) or transcript.strip() == "":
+            transcript = _extract_transcript_from_json_payload(body_json)
+            if transcript is None:
                 raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
-            return transcript.strip()
+            return transcript
 
         if body_text.startswith("{") and body_text.endswith("}"):
             body_json = json.loads(body_text)
-            transcript = body_json.get("text")
-            if not isinstance(transcript, str) or transcript.strip() == "":
+            transcript = _extract_transcript_from_json_payload(body_json)
+            if transcript is None:
                 raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
-            return transcript.strip()
+            return transcript
+
+        if body_text.startswith("[") and body_text.endswith("]"):
+            body_json = json.loads(body_text)
+            transcript = _extract_transcript_from_json_payload(body_json)
+            if transcript is None:
+                raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
+            return transcript
 
         if body_text == "":
             raise ValueError("STT cloud_ru вернул пустой ответ.")
