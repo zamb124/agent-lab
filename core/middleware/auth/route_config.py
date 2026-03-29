@@ -194,6 +194,10 @@ ROUTE_RULES: List[RouteRule] = [
     # API фронтенда для статуса сервисов (публичный доступ для мониторинга)
     RouteRule("/api/services/status", context_type="anonymous", auth_required=False),
     RouteRule("/frontend/api/services/status", context_type="anonymous", auth_required=False),
+
+    # Core calendar API на всех сервисах
+    RouteRule("/api/calendar/*", context_type="api", auth_required=True),
+    RouteRule("/*/api/calendar/*", context_type="api", auth_required=True),
     
     # Универсальный эндпоинт информации о пользователе (доступен на всех сервисах)
     RouteRule("/api/auth/me", context_type="api", auth_required=True),
@@ -238,6 +242,11 @@ ROUTE_RULES: List[RouteRule] = [
     # приватные файлы проверяются самим хендлером по company_id
     RouteRule("*/api/v1/files/download/*", context_type="api", auth_required=False),
     RouteRule("*/v1/files/download/*", context_type="api", auth_required=False),
+    # Остальные файловые эндпоинты требуют авторизацию.
+    RouteRule("*/api/v1/files/*", context_type="api", auth_required=True),
+    RouteRule("*/api/v1/files", context_type="api", auth_required=True),
+    RouteRule("*/v1/files/*", context_type="api", auth_required=True),
+    RouteRule("*/v1/files", context_type="api", auth_required=True),
 
     # API агентов (новый путь)
     RouteRule("/flows/v1/auth/me", context_type="api", auth_required=True),

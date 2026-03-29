@@ -286,6 +286,16 @@ export class PlatformUser extends PlatformElement {
         window.location.href = `/${service}/settings`;
     }
 
+    async _openCalendar() {
+        this._menuOpen = false;
+        await import('./platform-calendar-modal.js');
+        const modal = document.createElement('platform-calendar-modal');
+        document.body.appendChild(modal);
+        modal.showModal();
+        const cleanup = () => modal.remove();
+        modal.addEventListener('modal-closed', cleanup, { once: true });
+    }
+
     _openDocumentation() {
         this._menuOpen = false;
         const tag =
@@ -376,6 +386,11 @@ export class PlatformUser extends PlatformElement {
                         <button class="menu-item" @click=${this._openSettings}>
                             <platform-icon name="settings" size="18" class="menu-icon"></platform-icon>
                             <span>Настройки</span>
+                        </button>
+
+                        <button class="menu-item" @click=${this._openCalendar}>
+                            <platform-icon name="calendar" size="18" class="menu-icon"></platform-icon>
+                            <span>Календарь</span>
                         </button>
                         
                         <button class="menu-item" @click=${this._openDocumentation}>

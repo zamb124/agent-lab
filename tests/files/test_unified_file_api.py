@@ -406,3 +406,51 @@ async def test_upload_without_s3_returns_503(auth_headers_system, monkeypatch):
     assert "S3" in r.json()["detail"]
 
     config_base._settings_instance = None
+
+
+@pytest.mark.asyncio
+async def test_frontend_upload_uses_unified_files_endpoint(frontend_client, auth_headers_system):
+    """Frontend (api_version=None) тоже должен иметь /frontend/api/v1/files/*."""
+    r = await frontend_client.post(
+        "/frontend/api/v1/files/",
+        headers=auth_headers_system,
+        files={"file": ("frontend.txt", io.BytesIO(b"frontend payload"), "text/plain")},
+    )
+    assert r.status_code in {200, 503}, r.text
+    if r.status_code == 200:
+        data = r.json()
+        assert data["url"].startswith("/frontend/api/v1/files/download/")
+
+
+async def _assert_upload_endpoint_exists(client, service_prefix: str, auth_headers_system) -> None:
+    response = await client.post(
+        f"{service_prefix}/api/v1/files/",
+        headers=auth_headers_system,
+        files={"file": ("contract.txt", io.BytesIO(b"contract"), "text/plain")},
+    )
+    assert response.status_code != 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_frontend_has_unified_files_upload_endpoint(frontend_client, auth_headers_system):
+    await _assert_upload_endpoint_exists(frontend_client, "/frontend", auth_headers_system)
+
+
+@pytest.mark.asyncio
+async def test_sync_has_unified_files_upload_endpoint(sync_client, auth_headers_system):
+    await _assert_upload_endpoint_exists(sync_client, "/sync", auth_headers_system)
+
+
+@pytest.mark.asyncio
+async def test_crm_has_unified_files_upload_endpoint(crm_client, auth_headers_system):
+    await _assert_upload_endpoint_exists(crm_client, "/crm", auth_headers_system)
+
+
+@pytest.mark.asyncio
+async def test_rag_has_unified_files_upload_endpoint(rag_client, auth_headers_system):
+    await _assert_upload_endpoint_exists(rag_client, "/rag", auth_headers_system)
+
+
+@pytest.mark.asyncio
+async def test_flows_has_unified_files_upload_endpoint(flows_client, auth_headers_system):
+    await _assert_upload_endpoint_exists(flows_client, "/flows", auth_headers_system)

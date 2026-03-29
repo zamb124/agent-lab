@@ -245,6 +245,17 @@ class BaseContainer:
         """ServiceClient для межсервисного взаимодействия"""
         from core.clients.service_client import ServiceClient
         return ServiceClient()
+
+    @lazy
+    def calendar_service(self):
+        """CalendarService для платформенного календаря"""
+        from core.calendar.repositories import CalendarEventSqlRepository, CalendarIntegrationSqlRepository
+        from core.calendar.service import CalendarService
+        return CalendarService(
+            event_repository=CalendarEventSqlRepository(db_url=self.shared_db_url),
+            integration_repository=CalendarIntegrationSqlRepository(db_url=self.shared_db_url),
+            service_client=self.service_client,
+        )
     
     @lazy
     def span_repository(self):

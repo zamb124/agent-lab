@@ -245,6 +245,87 @@ class Spans(Base):
         return f"<Spans(span_id='{self.span_id}', trace_id='{self.trace_id}', operation_name='{self.operation_name}')>"
 
 
+class CalendarEventRecord(Base):
+    """Реляционная таблица событий платформенного календаря."""
+
+    __tablename__ = "calendar_events"
+
+    event_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    namespace: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(1024), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    location: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    attendees: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    recurrence_rule: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recurrence_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    series_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    deep_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    external_refs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "source", "source_id", name="uq_calendar_events_company_source"),
+        Index("ix_calendar_events_company_time", "company_id", "start_at", "end_at"),
+        Index("ix_calendar_events_company_kind_time", "company_id", "kind", "start_at"),
+        Index("ix_calendar_events_attendees_gin", "attendees", postgresql_using="gin"),
+        Index("ix_calendar_events_external_refs_gin", "external_refs", postgresql_using="gin"),
+        Index("ix_calendar_events_metadata_gin", "metadata", postgresql_using="gin"),
+    )
+
+
+class CalendarIntegrationRecord(Base):
+    """Реляционная таблица интеграций календаря на уровне пользователя."""
+
+    __tablename__ = "calendar_integrations"
+
+    integration_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    credentials: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "user_id", "provider", name="uq_calendar_integrations_user_provider"),
+        Index("ix_calendar_integrations_credentials_gin", "credentials", postgresql_using="gin"),
+        Index("ix_calendar_integrations_settings_gin", "settings", postgresql_using="gin"),
+    )
+
+
 class PushSubscription(Base):
     """Подписка пользователя на push-уведомления."""
 

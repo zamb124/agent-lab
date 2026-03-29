@@ -46,6 +46,7 @@ from core.tracing.tracer import set_span_repository
 from core.websocket.manager import notification_manager
 from core.websocket.router import router as ws_router
 from core.api.auth import router as core_auth_router
+from core.api.calendar import router as core_calendar_router
 from core.push.router import router as push_router
 from core.push.service import init_web_push_service
 from core.app.pwa_routes import register_platform_pwa_routes
@@ -258,21 +259,25 @@ def create_service_app(
             tags = router.tags or [service_name]
             app.include_router(router, prefix=api_prefix, tags=tags)
 
-    # Файловый роутер (upload/download/metadata) — добавляется автоматически
-    # для всех сервисов с включённым S3 и заданной api_version
-    if api_version and settings.s3.enabled:
-        from core.files.api import build_file_api_router
-        _file_router = build_file_api_router(
-            get_file_repo=lambda: container.file_repository,
-            service_api_prefix=api_prefix,
-        )
-        app.include_router(_file_router, prefix=f"{api_prefix}/files")
-        logger.info(f"Файловый роутер подключён: {api_prefix}/files")
+    # Файловый роутер (upload/download/metadata) — единообразный контракт для всех сервисов.
+    # Даже когда S3 выключен, upload должен отвечать 503, а не 404.
+    files_api_prefix = f"/{settings.server.name}/api/{api_version or 'v1'}"
+    from core.files.api import build_file_api_router
+    _file_router = build_file_api_router(
+        get_file_repo=lambda: container.file_repository,
+        service_api_prefix=files_api_prefix,
+    )
+    app.include_router(_file_router, prefix=f"{files_api_prefix}/files")
+    logger.info(f"Файловый роутер подключён: {files_api_prefix}/files")
 
     # Core auth роутер (автоматически для всех сервисов)
     auth_prefix = f"/{service_name}/api/auth"
     logger.info(f"Подключение core auth роутера ({auth_prefix}/*)")
     app.include_router(core_auth_router, prefix=auth_prefix, tags=["auth"])
+
+    calendar_prefix = f"/{service_name}/api/calendar"
+    logger.info(f"Подключение core calendar роутера ({calendar_prefix}/*)")
+    app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
     
     # Push notifications роутер (автоматически для всех сервисов)
     push_prefix = f"/{service_name}"

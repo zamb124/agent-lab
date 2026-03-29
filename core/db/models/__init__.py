@@ -13,6 +13,8 @@ from core.db.models.platform import (
     Namespaces,
     Spans,
     PushSubscription,
+    CalendarEventRecord,
+    CalendarIntegrationRecord,
 )
 from core.db.models.rag import (
     DocumentProcessingStatus,
@@ -28,6 +30,8 @@ __all__ = [
     "Namespaces",
     "Spans",
     "PushSubscription",
+    "CalendarEventRecord",
+    "CalendarIntegrationRecord",
     "DocumentProcessingStatus",
     "VectorDocument",
 ]

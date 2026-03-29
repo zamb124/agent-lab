@@ -5,6 +5,8 @@ import { AuthService } from '../../services/auth.service.js';
 import { ThemeService } from '../../services/theme.service.js';
 import { NotifyService } from '../../services/notify.service.js';
 import { IconService } from '../../services/icon.service.js';
+import { CalendarService } from '../../services/calendar.service.js';
+import { FilesService } from '../../services/files.service.js';
 import { getPWAService } from '../../services/pwa.service.js';
 import { AppEvents } from '../utils/types.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
@@ -38,6 +40,8 @@ class ServiceRegistryClass {
         this.register('theme', new ThemeService());
         this.register('notify', new NotifyService());
         this.register('icon', new IconService('/static/core/assets/icons'));
+        this.register('calendarApi', new CalendarService(baseUrl));
+        this.register('filesApi', new FilesService(baseUrl));
         this.register('pwa', getPWAService(baseUrl));
 
         if (!this._auth401ListenerRegistered) {
@@ -87,6 +91,8 @@ class ServiceRegistryClass {
     get settings() { return this.has('settings') ? this.get('settings') : null; }
     get servicesStatus() { return this.has('servicesStatus') ? this.get('servicesStatus') : null; }
     get pwa() { return this.has('pwa') ? this.get('pwa') : null; }
+    get calendarApi() { return this.has('calendarApi') ? this.get('calendarApi') : null; }
+    get filesApi() { return this.has('filesApi') ? this.get('filesApi') : null; }
 }
 
 export const ServiceRegistry = new ServiceRegistryClass();

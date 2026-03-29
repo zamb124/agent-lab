@@ -52,6 +52,7 @@ export class PlatformElement extends LitElement {
     get syncWs() { return ServiceRegistry.syncWs; }
     get crmApi() { return ServiceRegistry.crmApi; }
     get ragApi() { return ServiceRegistry.ragApi; }
+    get calendarApi() { return ServiceRegistry.calendarApi; }
 
     async loadStyles(path) {
         const sheet = await StyleCache.load(path);

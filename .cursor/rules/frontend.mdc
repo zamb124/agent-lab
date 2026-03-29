@@ -186,6 +186,19 @@ class MyModal extends GlassModal {
   - time: `HH:mm`
 - Нативные `input[type="date"]`, `input[type="time"]`, `input[type="datetime-local"]` в приложениях платформы не использовать — только `platform-date-picker`.
 
+## Platform Calendar (`platform-calendar-modal`)
+
+- Единая календарная модалка платформы: `core/frontend/static/lib/components/platform-calendar-modal.js`.
+- Вход в календарь из меню пользователя реализуется в `core/frontend/static/lib/components/platform-user.js` через динамический импорт `platform-calendar-modal` и `showModal()`.
+- Компонент календаря живёт только в `core`, сервисные `apps/*/ui/` не создают свои базовые календарные модалки.
+- Все SPA получают API календаря через `ServiceRegistry.registerCore()` (`calendarApi`), без импорта `ServiceRegistry` напрямую в компонентах.
+- Все SPA получают единый файловый API через `ServiceRegistry.registerCore()` (`filesApi`).
+- Для загрузки/чтения файлов в UI использовать `files.service.js`; не дублировать upload-методы в сервисах фич (`calendar.service.js`, etc).
+- Канонические endpoint'ы файлов для любого сервиса: `/{service}/api/v1/files/`, `/{service}/api/v1/files/{file_id}`, `/{service}/api/v1/files/download/{file_id}`.
+- Для выбора даты/времени внутри календаря использовать `platform-date-picker`, не нативные поля даты.
+- API календаря: `/{service}/api/calendar/*` (единый core router), запросы в UI через `calendar.service.js`.
+- Для интеграции `yandex` в payload `/api/calendar/integrations/connect` обязательны `username` (логин Яндекса) и `access_token` (app password для CalDAV); `default_calendar_id` хранит имя календаря в CalDAV URL.
+
 ## Switch (`platform-switch`)
 
 - Общий компонент переключателя: `core/frontend/static/lib/components/platform-switch.js` (side-effect import `@platform/lib/components/platform-switch.js`).

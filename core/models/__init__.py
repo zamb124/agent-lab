@@ -23,6 +23,17 @@ from core.models.identity_models import (
 from core.models.i18n_models import Language
 from core.models.context_models import Context
 from core.models.variable_models import VariableDefinition, VariableDefinitionInput
+from core.models.calendar_models import (
+    CalendarProvider,
+    CalendarEventSource,
+    CalendarEventStatus,
+    CalendarAttendee,
+    CalendarExternalRef,
+    CalendarEvent,
+    CalendarIntegrationCredentials,
+    CalendarIntegrationSettings,
+    CalendarIntegration,
+)
 
 __all__ = [
     "StrictBaseModel",
@@ -39,5 +50,14 @@ __all__ = [
     "Context",
     "VariableDefinition",
     "VariableDefinitionInput",
+    "CalendarProvider",
+    "CalendarEventSource",
+    "CalendarEventStatus",
+    "CalendarAttendee",
+    "CalendarExternalRef",
+    "CalendarEvent",
+    "CalendarIntegrationCredentials",
+    "CalendarIntegrationSettings",
+    "CalendarIntegration",
 ]
 
