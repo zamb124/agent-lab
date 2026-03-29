@@ -315,6 +315,378 @@ async def test_sync_files_download_proxies_syncfile_storage_url(
 
 
 @pytest.mark.asyncio
+async def test_multiple_meetings_have_distinct_download_urls(
+    sync_client,
+    auth_headers_system,
+    sync_db_clean: None,
+    system_user_id: str,
+    space_repo,
+    channel_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    file_repo,
+) -> None:
+    company_id = "system"
+    user_id = system_user_id
+    space = SyncSpace(
+        space_id=uuid4().hex,
+        company_id=company_id,
+        name="Multi Meetings Space",
+        description=None,
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+    )
+    await space_repo.create(space)
+    channel = SyncChannel(
+        channel_id=uuid4().hex,
+        company_id=company_id,
+        space_id=space.space_id,
+        type="topic",
+        name="calls",
+        is_private=False,
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+        pinned_message_ids=[],
+    )
+    await channel_repo.create(channel)
+    await channel_repo.upsert_member(channel.channel_id, user_id, "owner", company_id=company_id)
+    call = SyncCall(
+        call_id=uuid4().hex,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name=f"call-{uuid4().hex[:8]}",
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+    )
+    await call_repo.create_call(call)
+
+    raw_file_1 = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting-1.mp4",
+        mime_type="video/mp4",
+        size_bytes=1234,
+        storage_url="https://files.example/m1/raw.mp4",
+        checksum=None,
+    )
+    raw_file_2 = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting-2.mp4",
+        mime_type="video/mp4",
+        size_bytes=5678,
+        storage_url="https://files.example/m2/raw.mp4",
+        checksum=None,
+    )
+    transcript_file_1 = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting-1.txt",
+        mime_type="text/plain",
+        size_bytes=100,
+        storage_url="https://files.example/m1/transcript.txt",
+        checksum=None,
+    )
+    transcript_file_2 = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting-2.txt",
+        mime_type="text/plain",
+        size_bytes=110,
+        storage_url="https://files.example/m2/transcript.txt",
+        checksum=None,
+    )
+    await file_repo.create(raw_file_1)
+    await file_repo.create(raw_file_2)
+    await file_repo.create(transcript_file_1)
+    await file_repo.create(transcript_file_2)
+
+    recording_1 = SyncCallRecording(
+        recording_id=uuid4().hex,
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        status="uploaded",
+        raw_file_id=raw_file_1.file_id,
+        provider_job_id="egress-m1",
+        created_at=datetime.now(UTC),
+    )
+    recording_2 = SyncCallRecording(
+        recording_id=uuid4().hex,
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        status="uploaded",
+        raw_file_id=raw_file_2.file_id,
+        provider_job_id="egress-m2",
+        created_at=datetime.now(UTC),
+    )
+    await call_recording_repo.create(recording_1)
+    await call_recording_repo.create(recording_2)
+
+    meeting_1 = SyncCallMeeting(
+        meeting_id=uuid4().hex,
+        call_id=call.call_id,
+        recording_id=recording_1.recording_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        transcript_text_file_id=transcript_file_1.file_id,
+        summary_json={"short_summary": "meeting 1"},
+        export_status="done",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    meeting_2 = SyncCallMeeting(
+        meeting_id=uuid4().hex,
+        call_id=call.call_id,
+        recording_id=recording_2.recording_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        transcript_text_file_id=transcript_file_2.file_id,
+        summary_json={"short_summary": "meeting 2"},
+        export_status="done",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await call_meeting_repo.create(meeting_1)
+    await call_meeting_repo.create(meeting_2)
+
+    list_resp = await sync_client.get("/sync/api/v1/meetings/", headers=auth_headers_system)
+    assert list_resp.status_code == 200
+    payload = list_resp.json()
+    assert len(payload) >= 2
+    row_1 = next(item for item in payload if item["meeting_id"] == meeting_1.meeting_id)
+    row_2 = next(item for item in payload if item["meeting_id"] == meeting_2.meeting_id)
+    assert row_1["transcript_text_download_url"] == f"/sync/api/v1/meetings/{meeting_1.meeting_id}/download/transcript"
+    assert row_2["transcript_text_download_url"] == f"/sync/api/v1/meetings/{meeting_2.meeting_id}/download/transcript"
+    assert row_1["transcript_text_download_url"] != row_2["transcript_text_download_url"]
+
+    details_1_resp = await sync_client.get(f"/sync/api/v1/meetings/{meeting_1.meeting_id}", headers=auth_headers_system)
+    details_2_resp = await sync_client.get(f"/sync/api/v1/meetings/{meeting_2.meeting_id}", headers=auth_headers_system)
+    assert details_1_resp.status_code == 200
+    assert details_2_resp.status_code == 200
+    details_1 = details_1_resp.json()
+    details_2 = details_2_resp.json()
+    assert details_1["recording"]["raw_file_download_url"] == f"/sync/api/v1/meetings/{meeting_1.meeting_id}/download/raw"
+    assert details_2["recording"]["raw_file_download_url"] == f"/sync/api/v1/meetings/{meeting_2.meeting_id}/download/raw"
+    assert details_1["recording"]["raw_file_download_url"] != details_2["recording"]["raw_file_download_url"]
+
+
+@pytest.mark.asyncio
+async def test_download_endpoints_return_correct_file_for_each_meeting(
+    sync_client,
+    auth_headers_system,
+    monkeypatch,
+    sync_db_clean: None,
+    system_user_id: str,
+    space_repo,
+    channel_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    file_repo,
+) -> None:
+    from apps.sync.api import meetings as meetings_api
+
+    class _FakeResponse:
+        def __init__(self, *, content: bytes, content_type: str) -> None:
+            self.status_code = 200
+            self.content = content
+            self.headers = {"content-type": content_type}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class _FakeClientContext:
+        def __init__(self, mapping: dict[str, tuple[bytes, str]]) -> None:
+            self._mapping = mapping
+
+        async def __aenter__(self) -> "_FakeClientContext":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        async def get(self, url: str):
+            if url not in self._mapping:
+                raise RuntimeError(f"Неожиданный URL в fake HTTP клиенте: {url}")
+            content, content_type = self._mapping[url]
+            return _FakeResponse(content=content, content_type=content_type)
+
+    mapping: dict[str, tuple[bytes, str]] = {
+        "https://files.example/m1/raw.mp4": (b"raw-bytes-1", "video/mp4"),
+        "https://files.example/m1/transcript.txt": (b"transcript-bytes-1", "text/plain; charset=utf-8"),
+        "https://files.example/m2/raw.mp4": (b"raw-bytes-2", "video/mp4"),
+        "https://files.example/m2/transcript.txt": (b"transcript-bytes-2", "text/plain; charset=utf-8"),
+    }
+
+    def _fake_get_httpx_client(*, timeout: float, **kwargs):
+        return _FakeClientContext(mapping=mapping)
+
+    monkeypatch.setattr(meetings_api, "get_httpx_client", _fake_get_httpx_client)
+
+    company_id = "system"
+    user_id = system_user_id
+    space = SyncSpace(
+        space_id=uuid4().hex,
+        company_id=company_id,
+        name="Multi Download Space",
+        description=None,
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+    )
+    await space_repo.create(space)
+    channel = SyncChannel(
+        channel_id=uuid4().hex,
+        company_id=company_id,
+        space_id=space.space_id,
+        type="topic",
+        name="calls",
+        is_private=False,
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+        pinned_message_ids=[],
+    )
+    await channel_repo.create(channel)
+    await channel_repo.upsert_member(channel.channel_id, user_id, "owner", company_id=company_id)
+    call = SyncCall(
+        call_id=uuid4().hex,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name=f"call-{uuid4().hex[:8]}",
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+    )
+    await call_repo.create_call(call)
+
+    raw_file_1 = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting-1.mp4",
+        mime_type="video/mp4",
+        size_bytes=1234,
+        storage_url="https://files.example/m1/raw.mp4",
+        checksum=None,
+    )
+    raw_file_2 = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting-2.mp4",
+        mime_type="video/mp4",
+        size_bytes=5678,
+        storage_url="https://files.example/m2/raw.mp4",
+        checksum=None,
+    )
+    transcript_file_1 = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting-1.txt",
+        mime_type="text/plain",
+        size_bytes=100,
+        storage_url="https://files.example/m1/transcript.txt",
+        checksum=None,
+    )
+    transcript_file_2 = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting-2.txt",
+        mime_type="text/plain",
+        size_bytes=110,
+        storage_url="https://files.example/m2/transcript.txt",
+        checksum=None,
+    )
+    await file_repo.create(raw_file_1)
+    await file_repo.create(raw_file_2)
+    await file_repo.create(transcript_file_1)
+    await file_repo.create(transcript_file_2)
+
+    recording_1 = SyncCallRecording(
+        recording_id=uuid4().hex,
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        status="uploaded",
+        raw_file_id=raw_file_1.file_id,
+        provider_job_id="egress-m1",
+        created_at=datetime.now(UTC),
+    )
+    recording_2 = SyncCallRecording(
+        recording_id=uuid4().hex,
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        status="uploaded",
+        raw_file_id=raw_file_2.file_id,
+        provider_job_id="egress-m2",
+        created_at=datetime.now(UTC),
+    )
+    await call_recording_repo.create(recording_1)
+    await call_recording_repo.create(recording_2)
+
+    meeting_1 = SyncCallMeeting(
+        meeting_id=uuid4().hex,
+        call_id=call.call_id,
+        recording_id=recording_1.recording_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        transcript_text_file_id=transcript_file_1.file_id,
+        summary_json={"short_summary": "meeting 1"},
+        export_status="done",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    meeting_2 = SyncCallMeeting(
+        meeting_id=uuid4().hex,
+        call_id=call.call_id,
+        recording_id=recording_2.recording_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        transcript_text_file_id=transcript_file_2.file_id,
+        summary_json={"short_summary": "meeting 2"},
+        export_status="done",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await call_meeting_repo.create(meeting_1)
+    await call_meeting_repo.create(meeting_2)
+
+    raw_1_resp = await sync_client.get(f"/sync/api/v1/meetings/{meeting_1.meeting_id}/download/raw", headers=auth_headers_system)
+    transcript_1_resp = await sync_client.get(
+        f"/sync/api/v1/meetings/{meeting_1.meeting_id}/download/transcript",
+        headers=auth_headers_system,
+    )
+    raw_2_resp = await sync_client.get(f"/sync/api/v1/meetings/{meeting_2.meeting_id}/download/raw", headers=auth_headers_system)
+    transcript_2_resp = await sync_client.get(
+        f"/sync/api/v1/meetings/{meeting_2.meeting_id}/download/transcript",
+        headers=auth_headers_system,
+    )
+
+    assert raw_1_resp.status_code == 200
+    assert transcript_1_resp.status_code == 200
+    assert raw_2_resp.status_code == 200
+    assert transcript_2_resp.status_code == 200
+    assert raw_1_resp.content == b"raw-bytes-1"
+    assert transcript_1_resp.content == b"transcript-bytes-1"
+    assert raw_2_resp.content == b"raw-bytes-2"
+    assert transcript_2_resp.content == b"transcript-bytes-2"
+
+
+@pytest.mark.asyncio
 @pytest.mark.real_taskiq
 async def test_meeting_transcript_and_manual_export(
     all_services,
