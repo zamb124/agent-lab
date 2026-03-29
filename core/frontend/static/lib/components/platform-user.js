@@ -13,6 +13,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { AppEvents } from '../utils/types.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
+import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
 import './platform-icon.js';
 
 export class PlatformUser extends PlatformElement {
@@ -38,6 +39,17 @@ export class PlatformUser extends PlatformElement {
         this.documentationTag = null;
         this._boundRepositionMenu = this._syncCollapsedMenuPosition.bind(this);
         this._boundDocumentClick = (e) => this._handleDocumentClick(e);
+        this._boundCompanySwitchStorage = (e) => this._handleCompanySwitchStorage(e);
+        this._boundWindowFocus = () => this._scheduleCompanyAlignmentCheck();
+        this._boundWindowPageShow = () => this._scheduleCompanyAlignmentCheck();
+        this._boundVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                this._scheduleCompanyAlignmentCheck();
+            }
+        };
+        this._companyAlignmentIntervalId = null;
+        this._companyAlignmentInFlight = false;
+        this._companyAlignmentQueued = false;
     }
 
     connectedCallback() {
@@ -45,11 +57,26 @@ export class PlatformUser extends PlatformElement {
         this._loadUser();
         window.addEventListener(AppEvents.AUTH_CHANGE, () => this._loadUser());
         document.addEventListener('click', this._boundDocumentClick);
+        window.addEventListener('storage', this._boundCompanySwitchStorage);
+        window.addEventListener('focus', this._boundWindowFocus);
+        window.addEventListener('pageshow', this._boundWindowPageShow);
+        document.addEventListener('visibilitychange', this._boundVisibilityChange);
+        this._companyAlignmentIntervalId = window.setInterval(() => {
+            this._scheduleCompanyAlignmentCheck();
+        }, 5000);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         document.removeEventListener('click', this._boundDocumentClick);
+        window.removeEventListener('storage', this._boundCompanySwitchStorage);
+        window.removeEventListener('focus', this._boundWindowFocus);
+        window.removeEventListener('pageshow', this._boundWindowPageShow);
+        document.removeEventListener('visibilitychange', this._boundVisibilityChange);
+        if (this._companyAlignmentIntervalId !== null) {
+            window.clearInterval(this._companyAlignmentIntervalId);
+            this._companyAlignmentIntervalId = null;
+        }
         this._detachCollapsedMenuListeners();
         this._clearCollapsedMenuPosition();
     }
@@ -122,20 +149,27 @@ export class PlatformUser extends PlatformElement {
             const userData = await this.auth.get('/api/auth/me');
             this.user = userData;
             this._avatarBroken = false;
-            
-            if (userData.companies && Object.keys(userData.companies).length > 1) {
-                this.companies = Object.entries(userData.companies).map(([company_id, roles]) => ({
-                    company_id,
-                    name: company_id,
-                    roles
-                }));
-            }
-            
+            await this._loadCompanies();
+            this._ensureCompanyAlignment();
             await this._loadServiceAttrs();
         } catch (error) {
             console.error('[PlatformUser] Failed to load user:', error);
             this.user = null;
         }
+    }
+
+    async _loadCompanies() {
+        const companyItems = await this.auth.get('/api/companies/me');
+        if (!Array.isArray(companyItems)) {
+            throw new Error('Некорректный ответ /api/companies/me: ожидался массив компаний');
+        }
+
+        this.companies = companyItems.map((company) => ({
+            company_id: company.company_id,
+            subdomain: company.subdomain,
+            name: company.subdomain,
+            roles: company.role
+        }));
     }
 
     async _loadServiceAttrs() {
@@ -241,6 +275,7 @@ export class PlatformUser extends PlatformElement {
             console.log('[PlatformUser] Modal created via new:', modal);
             
             modal.user = this.user;
+            modal.activeCompanyName = this._getCompanyName(this.user.active_company_id || this.user.company_id);
             modal.open = true;
             document.body.appendChild(modal);
             
@@ -268,15 +303,114 @@ export class PlatformUser extends PlatformElement {
 
         try {
             await this.auth.switchCompany(companyId);
+            const company = this.companies.find((item) => item.company_id === companyId);
+            if (!company?.subdomain) {
+                throw new Error('Не найден subdomain для выбранной компании');
+            }
             this.success('Компания изменена');
-            
-            setTimeout(() => {
-                window.location.reload();
-            }, 500);
+            this._broadcastCompanySwitch(company);
+            const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+            const targetUrl = buildCompanySubdomainUrl(company.subdomain, targetPath);
+            window.location.href = targetUrl;
         } catch (error) {
             console.error('[PlatformUser] Failed to switch company:', error);
             this.error(`Ошибка смены компании: ${error.message}`);
         }
+    }
+
+    _broadcastCompanySwitch(company) {
+        const payload = `${Date.now()}|${company.company_id}|${company.subdomain}`;
+        window.localStorage.setItem('platform:company-switch', payload);
+    }
+
+    _handleCompanySwitchStorage(event) {
+        if (event.key !== 'platform:company-switch' || !event.newValue) {
+            return;
+        }
+
+        const parts = event.newValue.split('|');
+        if (parts.length !== 3) {
+            return;
+        }
+
+        const [, , targetSubdomain] = parts;
+        if (!targetSubdomain) {
+            return;
+        }
+
+        const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        const targetUrl = buildCompanySubdomainUrl(targetSubdomain, targetPath);
+        if (targetUrl === window.location.href) {
+            return;
+        }
+        window.location.href = targetUrl;
+    }
+
+    _scheduleCompanyAlignmentCheck() {
+        if (this._companyAlignmentInFlight) {
+            this._companyAlignmentQueued = true;
+            return;
+        }
+        this._checkCompanyAlignment().catch((error) => {
+            console.error('[PlatformUser] Company alignment check failed:', error);
+        });
+    }
+
+    async _checkCompanyAlignment() {
+        this._companyAlignmentInFlight = true;
+        try {
+            const userData = await this.auth.get('/api/auth/me');
+            this.user = userData;
+            if (!Array.isArray(this.companies) || this.companies.length === 0) {
+                await this._loadCompanies();
+            }
+            this._ensureCompanyAlignment();
+        } finally {
+            this._companyAlignmentInFlight = false;
+            if (this._companyAlignmentQueued) {
+                this._companyAlignmentQueued = false;
+                this._scheduleCompanyAlignmentCheck();
+            }
+        }
+    }
+
+    _ensureCompanyAlignment() {
+        if (!this.user?.company_id) {
+            return;
+        }
+        const selectedCompany = this.companies.find((company) => company.company_id === this.user.company_id);
+        if (!selectedCompany?.subdomain) {
+            return;
+        }
+
+        const currentSubdomain = this._getCurrentSubdomain();
+        if (currentSubdomain === selectedCompany.subdomain) {
+            return;
+        }
+
+        const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        const targetUrl = buildCompanySubdomainUrl(selectedCompany.subdomain, targetPath);
+        if (targetUrl === window.location.href) {
+            return;
+        }
+        window.location.href = targetUrl;
+    }
+
+    _getCurrentSubdomain() {
+        const hostname = window.location.hostname;
+        if (hostname.endsWith('.lvh.me')) {
+            return hostname.slice(0, -'.lvh.me'.length);
+        }
+        if (hostname.endsWith('.localhost')) {
+            return hostname.slice(0, -'.localhost'.length);
+        }
+        if (hostname.endsWith('.humanitec.ru')) {
+            return hostname.slice(0, -'.humanitec.ru'.length);
+        }
+        if (hostname.endsWith('.agents-lab.ru')) {
+            return hostname.slice(0, -'.agents-lab.ru'.length);
+        }
+        return null;
     }
 
     _openSettings() {
@@ -324,7 +458,7 @@ export class PlatformUser extends PlatformElement {
 
     _getCompanyName(companyId) {
         const company = this.companies.find(c => c.company_id === companyId);
-        return company?.name || companyId;
+        return company?.name || '';
     }
 
     render() {

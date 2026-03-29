@@ -8,7 +8,11 @@ logger = get_logger(__name__)
 
 
 @broker.task(task_name="sync_llm_models_task", queue_name="default")
-async def sync_llm_models_task() -> dict[str, int]:
+async def sync_llm_models_task(
+    scheduler_task_id: str | None = None,
+    company_id: str | None = None,
+    system_task: str | None = None,
+) -> dict[str, int]:
     """Синхронизирует модели от всех настроенных LLM провайдеров."""
     container = get_container()
     result = await container.llm_models_service.sync_all_providers()

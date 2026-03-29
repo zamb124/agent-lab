@@ -8,13 +8,15 @@ API эндпоинты для авторизации.
 import logging
 from typing import Annotated, Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Request, Depends
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.config import get_settings
 from core.models import AuthProvider, AuthRequest
 from core.identity import AuthService
+from core.utils.tokens import get_token_service
+from core.utils.domain import get_cookie_domain
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,11 @@ class UserUpdate(BaseModel):
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
     ui_preferences: Optional[Dict[str, Any]] = None
+
+
+class SwitchCompanyRequest(BaseModel):
+    """Переключение активной компании пользователя"""
+    company_id: str
 
 
 def get_auth_service(request: Request) -> AuthService:
@@ -295,6 +302,51 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
+
+
+@router.post("/switch-company")
+async def switch_company(
+    request: Request,
+    payload: SwitchCompanyRequest,
+    auth_service: AuthServiceDep,
+):
+    """Переключает активную компанию пользователя и перевыпускает auth_token."""
+    token_data = getattr(request.state, "token_data", None)
+    if not token_data:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user_repo = auth_service._user_repository
+    user = await user_repo.get(token_data.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.company_id not in user.companies:
+        raise HTTPException(status_code=403, detail="Нет доступа к выбранной компании")
+
+    user.active_company_id = payload.company_id
+    await user_repo.set(user)
+
+    company_roles = user.companies[payload.company_id]
+    token_service = get_token_service()
+    new_token = token_service.create_token(
+        user_id=user.user_id,
+        company_id=payload.company_id,
+        roles=company_roles,
+        session_id=getattr(token_data, "session_id", None),
+    )
+
+    settings = get_settings()
+    response = JSONResponse(content={"success": True, "company_id": payload.company_id})
+    response.set_cookie(
+        key="auth_token",
+        value=new_token,
+        domain=get_cookie_domain(request.headers.get("host", "")),
+        httponly=True,
+        secure=settings.server.env == "production",
+        samesite="lax",
+        max_age=7200,
+    )
+    return response
 
 
 @router.put("/me")

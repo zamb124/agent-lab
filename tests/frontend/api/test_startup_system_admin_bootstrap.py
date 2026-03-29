@@ -23,10 +23,23 @@ class _InMemoryRepo:
         return list(self._entities.values())[:limit]
 
 
+class _InMemorySubdomainRepo:
+    def __init__(self):
+        self._mapping: dict[str, str] = {}
+
+    async def set_mapping(self, subdomain: str, company_id: str):
+        self._mapping[subdomain] = company_id
+        return True
+
+    async def get_company_id(self, subdomain: str):
+        return self._mapping.get(subdomain)
+
+
 class _Container:
     def __init__(self, company_repo: _InMemoryRepo, user_repo: _InMemoryRepo):
         self.company_repository = company_repo
         self.user_repository = user_repo
+        self.subdomain_repository = _InMemorySubdomainRepo()
 
 
 @pytest.mark.asyncio
@@ -80,3 +93,4 @@ async def test_bootstrap_creates_system_company_when_missing():
     assert company.company_id == "system"
     assert company.subdomain == "system"
     assert "system" in container.company_repository._entities
+    assert await container.subdomain_repository.get_company_id("system") == "system"

@@ -47,6 +47,7 @@ from core.websocket.manager import notification_manager
 from core.websocket.router import router as ws_router
 from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
+from core.api.companies import router as core_companies_router
 from core.push.router import router as push_router
 from core.push.service import init_web_push_service
 from core.app.pwa_routes import register_platform_pwa_routes
@@ -281,6 +282,11 @@ def create_service_app(
     calendar_prefix = f"/{service_name}/api/calendar"
     logger.info(f"Подключение core calendar роутера ({calendar_prefix}/*)")
     app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
+
+    if service_name != "frontend":
+        companies_prefix = f"/{service_name}/api/companies"
+        logger.info(f"Подключение core companies роутера ({companies_prefix}/*)")
+        app.include_router(core_companies_router, prefix=companies_prefix, tags=["companies"])
     
     # Push notifications роутер (автоматически для всех сервисов)
     push_prefix = f"/{service_name}"

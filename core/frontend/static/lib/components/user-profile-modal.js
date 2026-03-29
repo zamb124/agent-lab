@@ -7,13 +7,15 @@ import { PlatformFormModal } from './glass-form-modal.js';
 export class UserProfileModal extends PlatformFormModal {
     static get properties() {
         return {
-            user: { type: Object }
+            user: { type: Object },
+            activeCompanyName: { type: String }
         };
     }
 
     constructor() {
         super();
         this.user = null;
+        this.activeCompanyName = '';
         this.title = 'Редактирование профиля';
         this.maxWidth = '600px';
     }
@@ -132,7 +134,7 @@ export class UserProfileModal extends PlatformFormModal {
                 <div class="info-section">
                     <div class="info-item">
                         <span class="info-label">Компания:</span>
-                        <span class="info-value">${this.user.company_id || 'Не указана'}</span>
+                        <span class="info-value">${this.activeCompanyName || 'Не указана'}</span>
                     </div>
                     ${this.user.roles && this.user.roles.length > 0 ? html`
                         <div class="info-item">

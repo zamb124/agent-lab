@@ -157,6 +157,8 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/companies/check-slug", context_type="frontend", auth_required=True),
     RouteRule("/api/companies/me", context_type="frontend", auth_required=True),
     RouteRule("/api/companies", context_type="frontend", auth_required=True),
+    RouteRule("/*/api/companies/me", context_type="frontend", auth_required=True),
+    RouteRule("/*/api/companies", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/companies/check-slug", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/companies/me", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/companies", context_type="frontend", auth_required=True),

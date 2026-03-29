@@ -17,18 +17,27 @@ ADMIN_ROLE = "admin"
 async def ensure_system_company_exists(container: object) -> Company:
     """Гарантирует наличие system-компании в shared storage."""
     company = await container.company_repository.get(SYSTEM_COMPANY_ID)
-    if company is not None:
-        return company
+    if company is None:
+        company = Company(
+            company_id=SYSTEM_COMPANY_ID,
+            name=SYSTEM_COMPANY_NAME,
+            subdomain=SYSTEM_COMPANY_SUBDOMAIN,
+            members={},
+        )
+        await container.company_repository.set(company)
+        logger.info("Bootstrap created system company")
 
-    created_company = Company(
-        company_id=SYSTEM_COMPANY_ID,
-        name=SYSTEM_COMPANY_NAME,
-        subdomain=SYSTEM_COMPANY_SUBDOMAIN,
-        members={},
-    )
-    await container.company_repository.set(created_company)
-    logger.info("Bootstrap created system company")
-    return created_company
+    company_needs_update = False
+    if company.subdomain != SYSTEM_COMPANY_SUBDOMAIN:
+        company.subdomain = SYSTEM_COMPANY_SUBDOMAIN
+        company_needs_update = True
+
+    if company_needs_update:
+        await container.company_repository.set(company)
+        logger.info("Bootstrap updated system company subdomain to %s", SYSTEM_COMPANY_SUBDOMAIN)
+
+    await container.subdomain_repository.set_mapping(SYSTEM_COMPANY_SUBDOMAIN, SYSTEM_COMPANY_ID)
+    return company
 
 
 async def ensure_system_admin_membership(
