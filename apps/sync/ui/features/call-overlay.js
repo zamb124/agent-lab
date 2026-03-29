@@ -100,6 +100,8 @@ class CallOverlay extends PlatformElement {
         _mediaSettingsError: { state: true },
         /** Краткая галочка после успешного копирования ссылки (2 с), без правки innerHTML — переживает requestUpdate. */
         _copyLinkFeedback: { state: true },
+        _recordingStatus: { state: true },
+        _recordingError: { state: true },
     };
 
     static styles = [
@@ -678,6 +680,8 @@ class CallOverlay extends PlatformElement {
         this._cameraEnabledBeforeScreenShare = true;
         this._cameraSuspendedForScreenShare = false;
         this._copyLinkFeedback = false;
+        this._recordingStatus = 'idle';
+        this._recordingError = null;
         /** @type {ReturnType<typeof setTimeout> | null} */
         this._copyLinkFeedbackTimerId = null;
     }
@@ -1311,6 +1315,33 @@ class CallOverlay extends PlatformElement {
         }
     }
 
+    _toggleRecording() {
+        if (!this.callId) return;
+        if (this._recordingStatus === 'starting' || this._recordingStatus === 'stopping') return;
+        const start = this._recordingStatus === 'idle' || this._recordingStatus === 'failed';
+        if (start) {
+            this._recordingStatus = 'starting';
+            this.dispatchEvent(new CustomEvent('call-recording-start', {
+                bubbles: true,
+                composed: true,
+                detail: { callId: this.callId },
+            }));
+            return;
+        }
+        this._recordingStatus = 'stopping';
+        this.dispatchEvent(new CustomEvent('call-recording-stop', {
+            bubbles: true,
+            composed: true,
+            detail: { callId: this.callId },
+        }));
+    }
+
+    setRecordingStatus(status, error = null) {
+        this._recordingStatus = status;
+        this._recordingError = error;
+        this.requestUpdate();
+    }
+
     _cleanup() {
         this._clearCopyLinkFeedbackTimer();
         this._copyLinkFeedback = false;
@@ -1380,6 +1411,11 @@ class CallOverlay extends PlatformElement {
                     ${this._status === 'connecting' ? 'Подключение…' : this._formatDuration(this._duration)}
                 </span>
                 <div style="display:flex;align-items:center;gap:8px;">
+                    ${this._recordingStatus !== 'idle' ? html`
+                        <span style="color:${this._recordingStatus === 'recording' ? '#ef4444' : 'rgba(255,255,255,0.7)'};font-size:12px;">
+                            REC ${this._recordingStatus}
+                        </span>
+                    ` : ''}
                     <span style="opacity:0.5">${participantCount} уч.</span>
                     ${this.callId ? html`
                         <button class="ctrl-btn" style="width:36px;height:36px;font-size:14px;" @click=${this._copyLink} title="Скопировать ссылку на звонок">
@@ -1491,6 +1527,15 @@ class CallOverlay extends PlatformElement {
                             </svg>
                         </button>
                     ` : ''}
+                    <button
+                        class="ctrl-btn ${this._recordingStatus === 'recording' ? 'active' : ''}"
+                        @click=${this._toggleRecording}
+                        title="Запись встречи"
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="12" cy="12" r="6"></circle>
+                        </svg>
+                    </button>
                     <button class="ctrl-btn hangup" @click=${this._hangup} title="Завершить звонок">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C9.6 21 3 14.4 3 6c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
@@ -1561,6 +1606,9 @@ class CallOverlay extends PlatformElement {
                     ` : ''}
                 </div>
             </div>
+            ${this._recordingError ? html`
+                <div class="settings-error">${this._recordingError}</div>
+            ` : ''}
         `;
     }
 

@@ -54,6 +54,15 @@ const baseStore = new BaseStore('sync', {
         pending: {},
         loading: false,
     },
+    meetings: {
+        list: [],
+        selected: null,
+        loading: false,
+        filters: {
+            channel_id: null,
+            space_id: null,
+        },
+    },
     chat: {
         selectedSpaceId: null,
         selectedChannelId: null,
@@ -86,6 +95,7 @@ const baseStore = new BaseStore('sync', {
         /** space_id при открытии модалки создания канала (зафиксирован при open). */
         channelSettingsCreateSpaceId: null,
         spaceSettingsSpaceId: null,
+        meetingsPanelOpen: false,
         /** Пустой массив = показать все topic-каналы; иначе только каналы выбранных пространств (ИЛИ). */
         sidebarSpaceFilterIds: [],
     },
@@ -205,6 +215,33 @@ export const SyncStore = {
     setMessagesLoading(loading) {
         baseStore.setState(s => ({
             messages: { ...s.messages, loading },
+        }));
+    },
+
+    setMeetings(list) {
+        baseStore.setState((s) => ({
+            meetings: { ...s.meetings, list, loading: false },
+        }));
+    },
+
+    setMeetingsLoading(loading) {
+        baseStore.setState((s) => ({
+            meetings: { ...s.meetings, loading },
+        }));
+    },
+
+    setMeetingSelected(meeting) {
+        baseStore.setState((s) => ({
+            meetings: { ...s.meetings, selected: meeting },
+        }));
+    },
+
+    setMeetingsFilters(filters) {
+        if (!filters || typeof filters !== 'object') {
+            throw new Error('filters обязателен.');
+        }
+        baseStore.setState((s) => ({
+            meetings: { ...s.meetings, filters: { ...s.meetings.filters, ...filters } },
         }));
     },
 
@@ -525,6 +562,18 @@ export const SyncStore = {
     closeSpaceSettings() {
         baseStore.setState(s => ({
             ui: { ...s.ui, spaceSettingsSpaceId: null, spaceSettingsCreate: false },
+        }));
+    },
+
+    openMeetingsPanel() {
+        baseStore.setState((s) => ({
+            ui: { ...s.ui, meetingsPanelOpen: true },
+        }));
+    },
+
+    closeMeetingsPanel() {
+        baseStore.setState((s) => ({
+            ui: { ...s.ui, meetingsPanelOpen: false },
         }));
     },
 
@@ -1103,5 +1152,18 @@ export const SyncStore = {
         this.selectChannel(spaceId, channelId);
         this.patchChannelFields(channelId, { unread_count: 0, mention_unread_count: 0 });
         await this.loadMessages(syncApi, channelId);
+    },
+
+    async loadMeetings(syncApi, filters = null) {
+        this.setMeetingsLoading(true);
+        try {
+            const params = filters ?? baseStore.state.meetings.filters;
+            const rows = await syncApi.getMeetings(params);
+            this.setMeetings(rows);
+            return rows;
+        } catch (e) {
+            this.setMeetingsLoading(false);
+            throw e;
+        }
     },
 };

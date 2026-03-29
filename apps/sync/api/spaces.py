@@ -30,6 +30,9 @@ async def list_spaces(pagination: PaginationRequest = Depends()) -> list[SpaceRe
             name=s.name,
             description=s.description,
             avatar_url=s.avatar_url,
+            namespace=s.namespace,
+            auto_export_transcript_to_crm=s.auto_export_transcript_to_crm,
+            auto_export_summary_to_crm=s.auto_export_summary_to_crm,
             created_at=s.created_at,
             created_by_user_id=s.created_by_user_id,
         )

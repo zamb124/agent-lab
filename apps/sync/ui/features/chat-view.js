@@ -521,6 +521,10 @@ export class ChatView extends PlatformElement {
         this._boundDocPointerHeaderMore = this._onDocPointerDownHeaderMore.bind(this);
         this._boundWindowResize = () => this._checkMobileViewport();
         this._boundWindowAdhoc = () => void this._startAdHocCall();
+        this._boundWindowOpenMeetings = () => {
+            SyncStore.openMeetingsPanel();
+            void this._loadMeetings();
+        };
     }
 
     connectedCallback() {
@@ -532,6 +536,7 @@ export class ChatView extends PlatformElement {
         this._resizeObserver.observe(document.body);
         window.addEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
         window.addEventListener('sync-request-adhoc-call', this._boundWindowAdhoc);
+        window.addEventListener('sync-open-meetings', this._boundWindowOpenMeetings);
         this._unsubscribe = SyncStore.subscribe(state => {
             this._chat = state.chat;
             this._channels = state.channels;
@@ -552,6 +557,7 @@ export class ChatView extends PlatformElement {
         window.removeEventListener('resize', this._boundWindowResize);
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
         window.removeEventListener('sync-request-adhoc-call', this._boundWindowAdhoc);
+        window.removeEventListener('sync-open-meetings', this._boundWindowOpenMeetings);
         this._resizeObserver?.disconnect();
         this._resizeObserver = null;
         this._unsubscribe?.();
@@ -844,6 +850,17 @@ export class ChatView extends PlatformElement {
         }
     }
 
+    async _loadMeetings() {
+        const syncApi = this.services.get('syncApi');
+        const selectedChannelId = this._chat.selectedChannelId;
+        if (typeof selectedChannelId === 'string' && selectedChannelId !== '') {
+            SyncStore.setMeetingsFilters({ channel_id: selectedChannelId, space_id: null });
+            await SyncStore.loadMeetings(syncApi, { channel_id: selectedChannelId });
+            return;
+        }
+        await SyncStore.loadMeetings(syncApi);
+    }
+
     render() {
         const { selectedChannelId, focusedThreadId } = this._chat;
         const selectedChannel = this._selectedChannel();
@@ -882,6 +899,8 @@ export class ChatView extends PlatformElement {
             : null;
         const channelForModal = channelSettingsCreate ? channelCreateDraft : settingsChannel;
         const channelModalOpen = channelSettingsCreate || settingsChannel !== null;
+        const meetingsOpen = this._ui.meetingsPanelOpen === true;
+        const meetingsState = SyncStore.state.meetings;
 
         const typingLine = this._typingSubtitle;
         const subtitleFallback = this._getSubtitle();
@@ -974,6 +993,18 @@ export class ChatView extends PlatformElement {
                                                 </svg>
                                                 <span>Звонок</span>
                                             </button>
+                                            <button
+                                                type="button"
+                                                class="header-more-item"
+                                                @click=${() => {
+        this._closeHeaderMoreMenu();
+        SyncStore.openMeetingsPanel();
+        void this._loadMeetings();
+    }}
+                                            >
+                                                <platform-icon name="calendar" size="16"></platform-icon>
+                                                <span>Встречи</span>
+                                            </button>
                                         ` : ''}
                                         ${focusedThreadId ? html`
                                             <button
@@ -1014,6 +1045,17 @@ export class ChatView extends PlatformElement {
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                                 </svg>
                             </button>
+                            <button
+                                type="button"
+                                class="icon-btn"
+                                title="Открыть встречи канала"
+                                @click=${() => {
+                                    SyncStore.openMeetingsPanel();
+                                    void this._loadMeetings();
+                                }}
+                            >
+                                <platform-icon name="calendar" size="16"></platform-icon>
+                            </button>
                         ` : ''}
 
                             ${focusedThreadId ? html`
@@ -1038,7 +1080,53 @@ export class ChatView extends PlatformElement {
             </div>
 
             <div class="content">
-                ${!selectedChannelId ? html`
+                ${meetingsOpen ? html`
+                    <div style="display:flex;flex-direction:column;height:100%;min-height:0;padding:var(--space-4);gap:var(--space-3);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div class="header-title">Встречи</div>
+                            <button type="button" class="back-btn" @click=${() => SyncStore.closeMeetingsPanel()}>Закрыть</button>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);min-height:0;flex:1;">
+                            <div style="border:1px solid var(--glass-border-subtle);border-radius:var(--radius-lg);padding:var(--space-2);overflow:auto;">
+                                ${meetingsState.loading ? html`<div class="header-subtitle">Загрузка...</div>` : ''}
+                                ${!meetingsState.loading && meetingsState.list.length === 0 ? html`<div class="header-subtitle">Встреч нет</div>` : ''}
+                                ${meetingsState.list.map((m) => html`
+                                    <button
+                                        type="button"
+                                        class="header-more-item"
+                                        @click=${() => SyncStore.setMeetingSelected(m)}
+                                    >
+                                        <span>Встреча ${m.meeting_id.slice(0, 8)}</span>
+                                        <span class="header-subtitle">${m.export_status}</span>
+                                    </button>
+                                `)}
+                            </div>
+                            <div style="border:1px solid var(--glass-border-subtle);border-radius:var(--radius-lg);padding:var(--space-3);overflow:auto;">
+                                ${meetingsState.selected ? html`
+                                    <div class="header-title">Карточка встречи</div>
+                                    <div class="header-subtitle">call_id: ${meetingsState.selected.call_id}</div>
+                                    <div class="header-subtitle">recording_id: ${meetingsState.selected.recording_id || '—'}</div>
+                                    <div class="header-subtitle">transcript_file_id: ${meetingsState.selected.transcript_text_file_id || '—'}</div>
+                                    <div class="header-subtitle">export_status: ${meetingsState.selected.export_status}</div>
+                                    <button
+                                        type="button"
+                                        class="back-btn"
+                                        style="margin-top:var(--space-3);"
+                                        @click=${async () => {
+                                            const syncApi = this.services.get('syncApi');
+                                            await syncApi.exportMeetingToCrm(meetingsState.selected.meeting_id, null);
+                                            await this._loadMeetings();
+                                        }}
+                                    >
+                                        Экспортировать в CRM сейчас
+                                    </button>
+                                ` : html`
+                                    <div class="header-subtitle">Выберите встречу слева</div>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                ` : !selectedChannelId ? html`
                     <channel-picker @sync-request-adhoc-call=${() => void this._startAdHocCall()}></channel-picker>
                 ` : html`
                     ${pinCount > 0 && !focusedThreadId ? html`

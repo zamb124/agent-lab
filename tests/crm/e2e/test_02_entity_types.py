@@ -12,7 +12,7 @@ class TestEntityTypes:
     
     @pytest.mark.asyncio
     async def test_system_types_initialized(self, crm_client, auth_headers_system):
-        """Системные типы (note, meeting, call, task) инициализированы"""
+        """Системные типы минимального ядра (note, task) инициализированы"""
         response = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
         assert response.status_code == 200
         
@@ -20,8 +20,6 @@ class TestEntityTypes:
         type_ids = [t["type_id"] for t in types]
         
         assert "note" in type_ids
-        assert "meeting" in type_ids
-        assert "call" in type_ids
         assert "task" in type_ids
         
         for entity_type in types:
@@ -78,7 +76,7 @@ class TestEntityTypes:
         """Иерархия типов: parent → child"""
         await crm_client.post("/crm/api/v1/entity-types/", json={
             "type_id": f"workshop_{unique_id}",
-            "parent_type_id": "meeting",
+            "parent_type_id": "note",
             "name": "Воркшоп",
             "prompt": "Воркшоп с практическими заданиями"
         }, headers=auth_headers_system)
@@ -88,7 +86,7 @@ class TestEntityTypes:
         
         workshop = next((t for t in types if t["type_id"] == f"workshop_{unique_id}"), None)
         assert workshop is not None
-        assert workshop["parent_type_id"] == "meeting"
+        assert workshop["parent_type_id"] == "note"
     
     @pytest.mark.asyncio
     async def test_entity_type_with_prompt(self, crm_client, unique_id, auth_headers_system):
@@ -144,4 +142,95 @@ class TestEntityTypes:
         updated = get_resp.json()
         assert updated["name"] == "Обновленное название"
         assert updated["icon"] == "📝"
+
+    @pytest.mark.asyncio
+    async def test_create_namespace_from_template(self, crm_client, unique_id, auth_headers_system):
+        create_template_response = await crm_client.post("/crm/api/v1/namespaces/templates", json={
+            "template_id": f"sales_{unique_id}",
+            "name": "Sales template",
+            "description": "sales custom",
+        }, headers=auth_headers_system)
+        assert create_template_response.status_code == 201
+
+        create_template_type_response = await crm_client.post(f"/crm/api/v1/namespaces/templates/sales_{unique_id}/types", json={
+            "type_id": f"lead_{unique_id}",
+            "name": "Лид",
+            "prompt": "Ищи лидов",
+            "required_fields": {"source": {"type": "string"}},
+            "optional_fields": {},
+            "namespace_ids": [],
+        }, headers=auth_headers_system)
+        assert create_template_type_response.status_code == 201
+
+        response = await crm_client.post("/crm/api/v1/namespaces", json={
+            "name": f"sales_{unique_id}",
+            "description": "Пространство продаж",
+            "template_id": f"sales_{unique_id}",
+        }, headers=auth_headers_system)
+        assert response.status_code == 201
+        namespace = response.json()
+        assert namespace["name"] == f"sales_{unique_id}"
+
+    @pytest.mark.asyncio
+    async def test_list_entity_types_by_namespace(self, crm_client, unique_id, auth_headers_system):
+        namespace_name = f"dev_{unique_id}"
+        create_template_response = await crm_client.post("/crm/api/v1/namespaces/templates", json={
+            "template_id": f"development_{unique_id}",
+            "name": "Development template",
+        }, headers=auth_headers_system)
+        assert create_template_response.status_code == 201
+
+        create_template_type_response = await crm_client.post(f"/crm/api/v1/namespaces/templates/development_{unique_id}/types", json={
+            "type_id": f"incident_{unique_id}",
+            "name": "Инцидент",
+            "required_fields": {"severity": {"type": "string"}},
+            "optional_fields": {},
+            "namespace_ids": [],
+        }, headers=auth_headers_system)
+        assert create_template_type_response.status_code == 201
+
+        create_namespace_resp = await crm_client.post("/crm/api/v1/namespaces", json={
+            "name": namespace_name,
+            "description": "Пространство разработки",
+            "template_id": f"development_{unique_id}",
+        }, headers=auth_headers_system)
+        assert create_namespace_resp.status_code == 201
+
+        types_response = await crm_client.get(f"/crm/api/v1/entity-types/by-namespace/{namespace_name}", headers=auth_headers_system)
+        assert types_response.status_code == 200
+        types = types_response.json()
+        assert isinstance(types, list)
+        assert len(types) >= 1
+
+    @pytest.mark.asyncio
+    async def test_namespace_template_crud(self, crm_client, unique_id, auth_headers_system):
+        template_id = f"tmpl_{unique_id}"
+        create_resp = await crm_client.post("/crm/api/v1/namespaces/templates", json={
+            "template_id": template_id,
+            "name": "Custom template",
+            "description": "For CRUD",
+        }, headers=auth_headers_system)
+        assert create_resp.status_code == 201
+
+        update_resp = await crm_client.put(f"/crm/api/v1/namespaces/templates/{template_id}", json={
+            "name": "Updated template",
+            "description": "Updated description",
+        }, headers=auth_headers_system)
+        assert update_resp.status_code == 200
+        assert update_resp.json()["name"] == "Updated template"
+
+        type_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
+            "type_id": f"type_{unique_id}",
+            "name": "Type in template",
+            "required_fields": {"field_a": {"type": "string"}},
+            "optional_fields": {"field_b": {"type": "string"}},
+            "namespace_ids": [],
+        }, headers=auth_headers_system)
+        assert type_resp.status_code == 201
+
+        details_resp = await crm_client.get(f"/crm/api/v1/namespaces/templates/{template_id}", headers=auth_headers_system)
+        assert details_resp.status_code == 200
+        details = details_resp.json()
+        assert details["template_id"] == template_id
+        assert any(item["type_id"] == f"type_{unique_id}" for item in details["types"])
 

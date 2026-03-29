@@ -10,6 +10,7 @@ from apps.sync.models.calls import CallRead, CallType
 from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelUpdate
 from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
 from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
+from apps.sync.models.meetings import CallMeetingRead, CallRecordingRead
 from apps.sync.models.spaces import SpaceCreate, SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadCreate, ThreadRead
 from core.calls.models import SignalType
@@ -36,6 +37,9 @@ CommandType = Literal[
     "call.accept",
     "call.decline",
     "call.hangup",
+    "call.recording.start",
+    "call.recording.stop",
+    "call.meeting.export_to_crm",
 ]
 
 
@@ -66,7 +70,17 @@ class WsResultFrame(BaseModel):
 
     id: str
     ok: bool
-    result: SpaceRead | ChannelRead | ThreadRead | MessageRead | GitResourceRefRead | CallRead | None = None
+    result: (
+        SpaceRead
+        | ChannelRead
+        | ThreadRead
+        | MessageRead
+        | GitResourceRefRead
+        | CallRead
+        | CallRecordingRead
+        | CallMeetingRead
+        | None
+    ) = None
     error_code: str | None = None
     error_detail: str | None = None
 
@@ -176,3 +190,16 @@ class CallDeclinePayload(BaseModel):
 
 class CallHangupPayload(BaseModel):
     call_id: str
+
+
+class CallRecordingStartPayload(BaseModel):
+    call_id: str
+
+
+class CallRecordingStopPayload(BaseModel):
+    call_id: str
+
+
+class CallMeetingExportToCrmPayload(BaseModel):
+    meeting_id: str
+    namespace: str | None = None

@@ -143,7 +143,7 @@ def crm_service():
         pid_file=_CRM_SERVER_PID,
         app_path="apps.crm.main:app",
         port=9003,
-        startup_wait=5.0,
+        startup_wait=12.0,
         log_file="/tmp/crm_server.log",
         err_file="/tmp/crm_server_err.log",
         env=_COMMON_TEST_ENV

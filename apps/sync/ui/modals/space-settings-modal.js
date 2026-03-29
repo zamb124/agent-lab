@@ -14,6 +14,11 @@ export class SpaceSettingsModal extends PlatformModal {
         _name: { state: true },
         _description: { state: true },
         _avatarUrl: { state: true },
+        _namespace: { state: true },
+        _autoExportTranscriptToCrm: { state: true },
+        _autoExportSummaryToCrm: { state: true },
+        _crmNamespaces: { state: true },
+        _crmNamespacesLoading: { state: true },
         _saving: { state: true },
     };
 
@@ -115,6 +120,11 @@ export class SpaceSettingsModal extends PlatformModal {
         this._name = '';
         this._description = '';
         this._avatarUrl = '';
+        this._namespace = '';
+        this._autoExportTranscriptToCrm = false;
+        this._autoExportSummaryToCrm = false;
+        this._crmNamespaces = [];
+        this._crmNamespacesLoading = false;
         this._saving = false;
         this._lastModalOpenTag = null;
         this.open = false;
@@ -132,6 +142,9 @@ export class SpaceSettingsModal extends PlatformModal {
                     this._name = '';
                     this._description = '';
                     this._avatarUrl = '';
+                    this._namespace = '';
+                    this._autoExportTranscriptToCrm = false;
+                    this._autoExportSummaryToCrm = false;
                 }
             } else if (nextId === null) {
                 this._syncedForSpaceId = null;
@@ -148,6 +161,9 @@ export class SpaceSettingsModal extends PlatformModal {
                     this._name = typeof sp.name === 'string' ? sp.name : '';
                     this._description = typeof sp.description === 'string' ? sp.description : '';
                     this._avatarUrl = typeof sp.avatar_url === 'string' ? sp.avatar_url : '';
+                    this._namespace = typeof sp.namespace === 'string' ? sp.namespace : '';
+                    this._autoExportTranscriptToCrm = sp.auto_export_transcript_to_crm === true;
+                    this._autoExportSummaryToCrm = sp.auto_export_summary_to_crm === true;
                 }
             }
 
@@ -168,6 +184,10 @@ export class SpaceSettingsModal extends PlatformModal {
         if (this.open !== show0) {
             this.open = show0;
         }
+        this._loadCrmNamespaces().catch((err) => {
+            const text = err instanceof Error ? err.message : String(err);
+            this.error(text);
+        });
     }
 
     disconnectedCallback() {
@@ -219,13 +239,27 @@ export class SpaceSettingsModal extends PlatformModal {
             const syncApi = this.services.get('syncApi');
             const url = this._avatarUrl.trim();
             const description = this._description.trim() || null;
+            const namespace = this._namespace.trim();
+            const autoExportTranscriptToCrm = this._autoExportTranscriptToCrm;
+            const autoExportSummaryToCrm = this._autoExportSummaryToCrm;
+            if ((autoExportTranscriptToCrm || autoExportSummaryToCrm) && namespace === '') {
+                throw new Error('Для автоэкспорта укажите namespace.');
+            }
             if (create) {
                 const created = await syncApi.createSpace(name, description);
-                if (url !== '') {
+                if (
+                    url !== ''
+                    || namespace !== ''
+                    || autoExportTranscriptToCrm
+                    || autoExportSummaryToCrm
+                ) {
                     await syncApi.updateSpace(created.id, {
                         name,
                         description,
                         avatar_url: url,
+                        namespace: namespace === '' ? null : namespace,
+                        auto_export_transcript_to_crm: autoExportTranscriptToCrm,
+                        auto_export_summary_to_crm: autoExportSummaryToCrm,
                     });
                 }
                 await SyncStore.loadSpaces(syncApi);
@@ -241,6 +275,9 @@ export class SpaceSettingsModal extends PlatformModal {
                 name,
                 description,
                 avatar_url: url === '' ? null : url,
+                namespace: namespace === '' ? null : namespace,
+                auto_export_transcript_to_crm: autoExportTranscriptToCrm,
+                auto_export_summary_to_crm: autoExportSummaryToCrm,
             });
             await SyncStore.loadSpaces(syncApi);
             this.close();
@@ -313,7 +350,61 @@ export class SpaceSettingsModal extends PlatformModal {
                     Загрузить изображение
                 </button>
             </div>
+
+            <div class="field">
+                <label class="label">Namespace (общий для CRM/RAG)</label>
+                <input
+                    class="input"
+                    list="space-settings-namespace-options"
+                    .value=${this._namespace}
+                    @input=${(e) => {
+                        this._namespace = e.target.value;
+                    }}
+                />
+                <datalist id="space-settings-namespace-options">
+                    ${this._crmNamespaces.map((ns) => html`
+                        <option value=${ns.name}>${ns.name}</option>
+                    `)}
+                </datalist>
+                ${this._crmNamespacesLoading ? html`
+                    <div class="label" style="margin-top:8px;">Загрузка namespace...</div>
+                ` : ''}
+            </div>
+
+            <div class="field">
+                <label class="label">
+                    <input
+                        type="checkbox"
+                        .checked=${this._autoExportTranscriptToCrm}
+                        @change=${(e) => {
+                            this._autoExportTranscriptToCrm = e.target.checked;
+                        }}
+                    />
+                    Автоэкспорт транскрипта в CRM
+                </label>
+                <label class="label">
+                    <input
+                        type="checkbox"
+                        .checked=${this._autoExportSummaryToCrm}
+                        @change=${(e) => {
+                            this._autoExportSummaryToCrm = e.target.checked;
+                        }}
+                    />
+                    Автоэкспорт summary в CRM
+                </label>
+            </div>
         `;
+    }
+
+    async _loadCrmNamespaces() {
+        this._crmNamespacesLoading = true;
+        try {
+            const syncApi = this.services.get('syncApi');
+            const rows = await syncApi.getCrmNamespaces();
+            this._crmNamespaces = rows;
+        } finally {
+            this._crmNamespacesLoading = false;
+        }
     }
 
     renderFooter() {

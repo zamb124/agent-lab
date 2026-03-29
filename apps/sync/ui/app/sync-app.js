@@ -498,6 +498,30 @@ export class SyncApp extends PlatformApp {
             }
             return;
         }
+        if (msg.type === 'call.recording.started') {
+            if (this._activeCall?.call_id === p.call_id) {
+                const overlay = this.renderRoot?.querySelector('call-overlay');
+                overlay?.setRecordingStatus?.('recording');
+            }
+            return;
+        }
+        if (msg.type === 'call.recording.stopped') {
+            if (this._activeCall?.call_id === p.call_id) {
+                const overlay = this.renderRoot?.querySelector('call-overlay');
+                overlay?.setRecordingStatus?.('idle');
+            }
+            return;
+        }
+        if (msg.type === 'call.recording.failed') {
+            if (this._activeCall?.call_id === p.call_id) {
+                const overlay = this.renderRoot?.querySelector('call-overlay');
+                overlay?.setRecordingStatus?.('failed', p.error || 'Ошибка записи');
+            }
+            return;
+        }
+        if (msg.type === 'call.transcript.ready' || msg.type === 'call.summary.ready' || msg.type === 'call.export.crm.done' || msg.type === 'call.export.crm.failed') {
+            return;
+        }
         if (msg.type === 'call.accepted') {
             return;
         }
@@ -602,6 +626,22 @@ export class SyncApp extends PlatformApp {
         ws.sendJson({ id, type: 'call.hangup', payload: { call_id: callId } });
     }
 
+    _sendCallRecordingWs(callId, action) {
+        if (typeof callId !== 'string' || callId === '') return;
+        if (action !== 'start' && action !== 'stop') {
+            throw new Error('action должен быть start или stop.');
+        }
+        const ws = this.services.get('syncWs');
+        if (!ws) return;
+        const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+            (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        ws.sendJson({
+            id,
+            type: action === 'start' ? 'call.recording.start' : 'call.recording.stop',
+            payload: { call_id: callId },
+        });
+    }
+
     async _refetchOnReconnect() {
         const syncApi = this.services.get('syncApi');
         await SyncStore.loadChannels(syncApi);
@@ -696,6 +736,8 @@ export class SyncApp extends PlatformApp {
                     .names=${this._buildNamesMap()}
                     @call-ended=${() => { this._activeCall = null; }}
                     @call-hangup-request=${(e) => this._sendCallHangupWs(e.detail?.callId)}
+                    @call-recording-start=${(e) => this._sendCallRecordingWs(e.detail?.callId, 'start')}
+                    @call-recording-stop=${(e) => this._sendCallRecordingWs(e.detail?.callId, 'stop')}
                 ></call-overlay>
             ` : ''}
 

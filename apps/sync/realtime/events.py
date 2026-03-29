@@ -12,6 +12,7 @@ from apps.sync.models.channels import ChannelRead
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.messages import MessageRead, MessageStatus
+from apps.sync.models.meetings import CallMeetingRead, CallRecordingRead
 from apps.sync.models.spaces import SpaceRead
 from apps.sync.models.threads import ThreadRead
 from core.calls.models import SignalType
@@ -38,6 +39,13 @@ EventType = Literal[
     "call.ended",
     "call.participant_joined",
     "call.participant_left",
+    "call.recording.started",
+    "call.recording.stopped",
+    "call.recording.failed",
+    "call.transcript.ready",
+    "call.summary.ready",
+    "call.export.crm.done",
+    "call.export.crm.failed",
     "user.presence",
 ]
 
@@ -213,6 +221,62 @@ def event_call_participant_left(call_id: str, user_id: str) -> RealtimeEvent:
         type="call.participant_left",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
+    )
+
+
+def event_call_recording_started(recording: CallRecordingRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.recording.started",
+        channel_id=recording.channel_id,
+        payload=recording.model_dump(mode="json"),
+    )
+
+
+def event_call_recording_stopped(recording: CallRecordingRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.recording.stopped",
+        channel_id=recording.channel_id,
+        payload=recording.model_dump(mode="json"),
+    )
+
+
+def event_call_recording_failed(recording: CallRecordingRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.recording.failed",
+        channel_id=recording.channel_id,
+        payload=recording.model_dump(mode="json"),
+    )
+
+
+def event_call_transcript_ready(meeting: CallMeetingRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.transcript.ready",
+        channel_id=meeting.channel_id,
+        payload=meeting.model_dump(mode="json"),
+    )
+
+
+def event_call_summary_ready(meeting: CallMeetingRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.summary.ready",
+        channel_id=meeting.channel_id,
+        payload=meeting.model_dump(mode="json"),
+    )
+
+
+def event_call_export_crm_done(meeting: CallMeetingRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.export.crm.done",
+        channel_id=meeting.channel_id,
+        payload=meeting.model_dump(mode="json"),
+    )
+
+
+def event_call_export_crm_failed(meeting: CallMeetingRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.export.crm.failed",
+        channel_id=meeting.channel_id,
+        payload=meeting.model_dump(mode="json"),
     )
 
 

@@ -162,6 +162,7 @@ class MyModal extends GlassModal {
 - Новое имя без дублирования SVG: добавить ключ в `ICON_MAP` (например `'llm_node': 'agent'` — то же изображение, другое имя для UI).
 - Для продуктовых экранов (включая CRM/Figma-экраны) запрещены emoji/символьные псевдоиконки (`✓`, `✕`, `🌐` и т.п.) в шаблонах: только `<platform-icon name="...">` + имя из `ICON_MAP`; если иконки нет — сначала добавить SVG в `assets/icons`, потом ключ в `ICON_MAP`.
 - Компонент: `core/frontend/static/lib/components/platform-icon.js` — атрибут **`name`** должен существовать в `ICON_MAP`, иначе загрузка падает с ошибкой в консоль.
+- Для визуального выбора иконки в формах использовать core-компонент `platform-icon-picker` (`core/frontend/static/lib/components/platform-icon-picker.js`, side-effect import `@platform/lib/components/platform-icon-picker.js`), а не `input + datalist` с ручным вводом.
 - Редактор flows (`apps/flows/ui/`): узел типа **`llm_node`** везде использует **`name="llm_node"`** (сайдбар типов, канва, `llm-node-editor`), не `agent`.
 - Трейсинг (`apps/flows/ui/modals/tracing-modal.js`): иконки span — `<platform-icon>`, не эмодзи. Соответствие `operation_name` → `name` согласовано с канвасом (`flow-canvas` `NODE_TYPE_ICON_NAMES` / `TRACE_NODE_TYPE_ICONS` в модалке): `flow.*` → workflow, `node.{type}.*` → иконка типа ноды (неизвестный тип → box), `llm_node.*` / `agent.*` → llm_node, `react.iteration*` → refresh, `llm.*` → bot, `tool.*` → tool, `interrupt.*` → breakpoint, `request.*` → globe, `prompt.build.*` → chat, иначе terminal.
 

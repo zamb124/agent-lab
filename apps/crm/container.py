@@ -57,6 +57,11 @@ class CRMContainer(BaseContainer):
     def relationship_repository(self):
         from apps.crm.db.repositories.relationship_repository import RelationshipRepository
         return RelationshipRepository(db=self.crm_db)
+
+    @lazy
+    def namespace_template_repository(self):
+        from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
+        return NamespaceTemplateRepository(db=self.crm_db)
     
     @lazy
     def entity_repository(self):
@@ -105,6 +110,16 @@ class CRMContainer(BaseContainer):
         return CompanyInitService(
             entity_type_repo=self.entity_type_repository,
             relationship_type_repo=self.relationship_type_repository,
+            namespace_template_repo=self.namespace_template_repository,
+        )
+
+    @lazy
+    def namespace_template_service(self):
+        from apps.crm.services.namespace_template_service import NamespaceTemplateService
+        return NamespaceTemplateService(
+            template_repo=self.namespace_template_repository,
+            entity_type_repo=self.entity_type_repository,
+            namespace_repo=self.namespace_repository,
         )
     
     @lazy
@@ -116,6 +131,7 @@ class CRMContainer(BaseContainer):
             entity_type_repo=self.entity_type_repository,
             relationship_type_repo=self.relationship_type_repository,
             relationship_repo=self.relationship_repository,
+            namespace_repo=self.namespace_repository,
             attachment_service=self.attachment_service,
             a2a_client=A2AClient(timeout=300.0),
             daily_summary_cache_service=self.daily_summary_cache_service,

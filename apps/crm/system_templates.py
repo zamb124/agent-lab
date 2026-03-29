@@ -6,154 +6,35 @@
 
 SYSTEM_ENTITY_TYPE_TEMPLATES = [
     {
-        "type_id": "person",
-        "parent_type_id": None,
-        "name": "Человек",
-        "description": "Люди, контакты, персоны",
-        "is_system": True,
-        "is_event": False,
-        "prompt": """
-Ищи упоминания людей, персон, контактов.
-
-Ключевые слова:
-- Имена людей (Иван, Мария, Петр)
-- Должности (менеджер, директор, разработчик)
-- Роли (клиент, партнер, коллега)
-
-Извлекай:
-- Имя (name)
-- Должность (position)
-- Email, телефон
-- Компания (создавай связь works_at)
-        """,
-        "icon": "user",
-        "color": "#9C27B0",
-        "weight_coefficient": 1.0
-    },
-    {
-        "type_id": "organization",
-        "parent_type_id": None,
-        "name": "Организация",
-        "description": "Компании, организации, юр. лица",
-        "is_system": True,
-        "is_event": False,
-        "prompt": """
-Ищи упоминания компаний, организаций.
-
-Ключевые слова:
-- Названия компаний (Google, Яндекс, ООО)
-- Типы (компания, фирма, корпорация)
-- Бренды, продукты
-
-Извлекай:
-- Название (name)
-- Сфера деятельности
-- Сайт, контакты
-        """,
-        "icon": "building-one",
-        "color": "#3F51B5",
-        "weight_coefficient": 1.0
-    },
-    {
         "type_id": "note",
         "parent_type_id": None,
         "name": "Заметка",
-        "description": "Базовый тип для всех записей",
+        "description": "Базовый системный тип заметки",
         "is_system": True,
         "is_event": True,
-        "prompt": """
-Общий тип для всех записей и заметок.
-Ищи любую информацию, которую нужно зафиксировать:
-- Встречи, звонки, беседы
-- Мысли, идеи, наблюдения
-- Резюме, выводы, итоги
-
-Всегда извлекай дату события.
-        """,
+        "prompt": "Извлекай факты, выводы и контекст заметки в структурированный объект note.",
         "icon": "doc-detail",
         "color": "#607D8B",
-        "weight_coefficient": 1.0
-    },
-    {
-        "type_id": "meeting",
-        "parent_type_id": "note",
-        "name": "Встреча",
-        "description": "Встречи, переговоры, совещания",
-        "is_system": True,
-        "is_event": True,
-        "prompt": """
-Ищи упоминания встреч, переговоров, совещаний.
-
-Ключевые слова:
-- встреча, встретились, провели встречу
-- совещание, планерка
-- переговоры, обсуждение
-- конференция, сессия
-
-Извлекай:
-- Участников (создавай связи)
-- Дату и время
-- Место проведения (офис, онлайн, адрес)
-- Обсуждаемые темы
-- Договоренности и решения
-        """,
-        "icon": "chat",
-        "color": "#4CAF50",
-        "weight_coefficient": 1.2
-    },
-    {
-        "type_id": "call",
-        "parent_type_id": "note",
-        "name": "Звонок",
-        "description": "Телефонные разговоры",
-        "is_system": True,
-        "is_event": True,
-        "prompt": """
-Ищи упоминания звонков, телефонных разговоров.
-
-Ключевые слова:
-- звонил, позвонил, созвонились
-- разговор по телефону
-- телефонный разговор
-- прозвонил, обзвон
-
-Извлекай:
-- Кому звонили (создавай связи)
-- Дату и время звонка
-- Тему разговора
-- Договоренности
-- Следующие шаги
-        """,
-        "icon": "phone",
-        "color": "#2196F3",
-        "weight_coefficient": 1.0
+        "weight_coefficient": 1.0,
+        "required_fields": {"summary": {"type": "string", "label": "Краткое содержание"}},
+        "optional_fields": {"note_date": {"type": "date", "label": "Дата заметки"}},
     },
     {
         "type_id": "task",
         "parent_type_id": None,
-        "name": "Задача",
-        "description": "Задачи с дедлайнами",
+        "name": "Задача (системная)",
+        "description": "Базовый системный тип задачи",
         "is_system": True,
         "is_event": False,
-        "prompt": """
-Ищи упоминания задач, дел, поручений.
-
-Ключевые слова:
-- задача, задание
-- поручение, нужно сделать
-- дело, to-do
-- план, действие
-
-Извлекай:
-- Название задачи
-- Дедлайн (due_date)
-- Исполнителей (assignees)
-- Приоритет (low, medium, high, urgent)
-- Связанные проекты/сделки
-        """,
+        "prompt": "Извлекай конкретные действия с дедлайном и исполнителями в объект task.",
         "icon": "checklist",
         "color": "#FF9800",
-        "weight_coefficient": 1.1
+        "weight_coefficient": 1.1,
+        "required_fields": {"title": {"type": "string", "label": "Название задачи"}},
+        "optional_fields": {
+            "due_date": {"type": "date", "label": "Срок"},
+            "priority": {"type": "enum", "values": ["low", "medium", "high", "urgent"]},
+        },
     },
 ]
 
@@ -189,6 +70,106 @@ SYSTEM_RELATIONSHIP_TYPE_TEMPLATES = [
         "icon": "circular-connection",
         "color": "#2196F3",
         "weight_default": 1.0
+    },
+]
+
+
+NAMESPACE_TEMPLATE_SEEDS = [
+    {
+        "template_id": "sales",
+        "name": "CRM система для продаж",
+        "description": "Лиды, контакты, сделки, активность по продажам.",
+        "icon": "chart",
+        "types": [
+            {
+                "type_id": "lead",
+                "name": "Лид",
+                "description": "Потенциальный клиент",
+                "prompt": "Извлекай потенциальных клиентов и стадию квалификации.",
+                "required_fields": {"source": {"type": "string"}, "stage": {"type": "string"}},
+                "optional_fields": {"budget": {"type": "number"}},
+                "icon": "target-lock",
+                "color": "#7E57C2",
+                "is_event": False,
+                "check_duplicates": True,
+            },
+            {
+                "type_id": "deal",
+                "name": "Сделка",
+                "description": "Коммерческая сделка",
+                "prompt": "Извлекай сумму, стадию и вероятность закрытия сделки.",
+                "required_fields": {"amount": {"type": "number"}, "stage": {"type": "string"}},
+                "optional_fields": {"close_date": {"type": "date"}},
+                "icon": "chart-multifunction",
+                "color": "#EF6C00",
+                "is_event": False,
+                "check_duplicates": True,
+            },
+        ],
+    },
+    {
+        "template_id": "development",
+        "name": "Команда разработки",
+        "description": "Инциденты, задачи разработки, архитектурные заметки.",
+        "icon": "code",
+        "types": [
+            {
+                "type_id": "incident",
+                "name": "Инцидент",
+                "description": "Сбой или деградация сервиса",
+                "prompt": "Извлекай влияние, компонент и приоритет инцидента.",
+                "required_fields": {"severity": {"type": "string"}, "service": {"type": "string"}},
+                "optional_fields": {"started_at": {"type": "datetime"}},
+                "icon": "error",
+                "color": "#D32F2F",
+                "is_event": True,
+                "check_duplicates": True,
+            },
+            {
+                "type_id": "decision",
+                "name": "Архитектурное решение",
+                "description": "Принятое техрешение",
+                "prompt": "Извлекай решение, причины и последствия.",
+                "required_fields": {"decision": {"type": "string"}},
+                "optional_fields": {"alternatives": {"type": "array"}},
+                "icon": "tree-square-dot",
+                "color": "#1976D2",
+                "is_event": False,
+                "check_duplicates": False,
+            },
+        ],
+    },
+    {
+        "template_id": "hr",
+        "name": "HR команда",
+        "description": "Подбор, интервью, кадровые заметки.",
+        "icon": "user",
+        "types": [
+            {
+                "type_id": "candidate",
+                "name": "Кандидат",
+                "description": "Профиль кандидата",
+                "prompt": "Извлекай кандидата, стек и этап найма.",
+                "required_fields": {"stage": {"type": "string"}, "position": {"type": "string"}},
+                "optional_fields": {"salary_expectation": {"type": "number"}},
+                "icon": "user",
+                "color": "#8E24AA",
+                "is_event": False,
+                "check_duplicates": True,
+            },
+            {
+                "type_id": "interview",
+                "name": "Интервью",
+                "description": "Запись интервью",
+                "prompt": "Извлекай итоги интервью, сильные и слабые стороны.",
+                "required_fields": {"result": {"type": "string"}},
+                "optional_fields": {"interviewer": {"type": "string"}},
+                "icon": "chat",
+                "color": "#00897B",
+                "is_event": True,
+                "check_duplicates": False,
+            },
+        ],
     },
 ]
 

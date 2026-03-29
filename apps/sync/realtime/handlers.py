@@ -8,11 +8,20 @@ from uuid import uuid4
 
 from apps.sync.channel_lane_preview import lane_preview_from_content_row
 from apps.sync.channel_read_helpers import channel_read_entity_minimal
-from apps.sync.db.models import SyncChannel, SyncGitResourceRef, SyncMessage, SyncSpace, SyncThread
+from apps.sync.db.models import (
+    SyncCallMeeting,
+    SyncCallRecording,
+    SyncChannel,
+    SyncGitResourceRef,
+    SyncMessage,
+    SyncSpace,
+    SyncThread,
+)
 from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
+from apps.sync.db.repositories.meeting_repository import CallMeetingRepository, CallRecordingRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
@@ -27,6 +36,7 @@ from apps.sync.models.messages import (
     MessageStatus,
     TextPlainContent,
 )
+from apps.sync.models.meetings import CallMeetingRead, CallRecordingRead
 from apps.sync.models.spaces import SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadRead
 from apps.sync.realtime.call_handlers import (
@@ -36,6 +46,9 @@ from apps.sync.realtime.call_handlers import (
     handle_call_invite,
 )
 from apps.sync.realtime.commands import (
+    CallMeetingExportToCrmPayload,
+    CallRecordingStartPayload,
+    CallRecordingStopPayload,
     ChannelsCreatePayload,
     ChannelsMarkReadPayload,
     ChannelsTypingPayload,
@@ -60,6 +73,9 @@ from apps.sync.realtime.events import (
     event_channel_pins_changed,
     event_channel_read_updated,
     event_channel_typing,
+    event_call_export_crm_done,
+    event_call_recording_started,
+    event_call_recording_stopped,
     event_git_resource_upserted,
     event_message_created,
     event_message_deleted,
@@ -257,6 +273,8 @@ async def execute_command(
     git_refs: GitResourceRefRepository,
     user_repository: Optional[UserRepository] = None,
     calls: Optional[CallRepository] = None,
+    call_recordings: Optional[CallRecordingRepository] = None,
+    call_meetings: Optional[CallMeetingRepository] = None,
 ) -> CommandExecutionResult:
     if cmd.type == "spaces.create":
         payload = SpacesCreatePayload.model_validate(cmd.payload)
@@ -440,9 +458,23 @@ async def execute_command(
         ref = await _upsert_git_resource(payload.body, company_id=cmd.company_id, git_refs=git_refs)
         return CommandExecutionResult(ok=True, result=ref, events=[event_git_resource_upserted(ref)])
 
-    if cmd.type in ("call.invite", "call.accept", "call.decline", "call.hangup"):
+    if cmd.type in (
+        "call.invite",
+        "call.accept",
+        "call.decline",
+        "call.hangup",
+        "call.recording.start",
+        "call.recording.stop",
+        "call.meeting.export_to_crm",
+    ):
         if calls is None:
             raise RuntimeError("CallRepository не передан в execute_command для call.* команд.")
+        if cmd.type in ("call.recording.start", "call.recording.stop", "call.meeting.export_to_crm"):
+            if call_recordings is None:
+                raise RuntimeError("CallRecordingRepository не передан в execute_command для call.* команд.")
+            if call_meetings is None:
+                raise RuntimeError("CallMeetingRepository не передан в execute_command для call.* команд.")
+
         if cmd.type == "call.invite":
             out, evs = await handle_call_invite(
                 cmd, calls=calls, channels=channels, user_repository=user_repository
@@ -451,8 +483,106 @@ async def execute_command(
             out, evs = await handle_call_accept(cmd, calls=calls)
         elif cmd.type == "call.decline":
             out, evs = await handle_call_decline(cmd, calls=calls)
-        else:
+        elif cmd.type == "call.hangup":
             out, evs = await handle_call_hangup(cmd, calls=calls)
+        elif cmd.type == "call.recording.start":
+            payload = CallRecordingStartPayload.model_validate(cmd.payload)
+            call = await calls.get_call(payload.call_id, cmd.company_id)
+            if call.status == "ended":
+                raise ValueError("Нельзя включить запись завершённого звонка.")
+            if not await channels.is_member(call.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+                raise PermissionError("Нет доступа к звонку.")
+            active = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
+            if active is not None:
+                raise ValueError("Запись уже запущена.")
+
+            channel_entity = await channels.get(call.channel_id)
+            if channel_entity is None:
+                raise ValueError(f"Канал {call.channel_id} не найден.")
+            recording = SyncCallRecording(
+                recording_id=uuid4().hex,
+                call_id=call.call_id,
+                company_id=cmd.company_id,
+                channel_id=call.channel_id,
+                space_id=channel_entity.space_id,
+                status="recording",
+                started_at=datetime.now(UTC),
+            )
+            await call_recordings.create(recording)
+            out = _recording_read_from_entity(recording)
+            evs = [event_call_recording_started(out)]
+        elif cmd.type == "call.recording.stop":
+            payload = CallRecordingStopPayload.model_validate(cmd.payload)
+            call = await calls.get_call(payload.call_id, cmd.company_id)
+            if not await channels.is_member(call.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+                raise PermissionError("Нет доступа к звонку.")
+            active = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
+            if active is None:
+                raise ValueError("Активная запись не найдена.")
+            await call_recordings.mark_status(
+                active.recording_id,
+                status="uploaded",
+                ended_at=datetime.now(UTC),
+            )
+            updated = await call_recordings.get(active.recording_id)
+            if updated is None:
+                raise RuntimeError("Запись пропала после обновления.")
+            meeting = await call_meetings.get_by_recording(updated.recording_id, cmd.company_id)
+            if meeting is None:
+                meeting = SyncCallMeeting(
+                    meeting_id=uuid4().hex,
+                    call_id=updated.call_id,
+                    recording_id=updated.recording_id,
+                    company_id=updated.company_id,
+                    channel_id=updated.channel_id,
+                    space_id=updated.space_id,
+                    summary_json={},
+                    export_status="pending",
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+                await call_meetings.create(meeting)
+            out = _recording_read_from_entity(updated)
+            from apps.sync.realtime.tasks import sync_finalize_recording_task
+            await sync_finalize_recording_task.kiq(
+                recording_id=updated.recording_id,
+                company_id=cmd.company_id,
+                actor_user_id=cmd.actor_user_id,
+            )
+            evs = [event_call_recording_stopped(out)]
+        elif cmd.type == "call.meeting.export_to_crm":
+            payload = CallMeetingExportToCrmPayload.model_validate(cmd.payload)
+            meeting = await call_meetings.get(payload.meeting_id)
+            if meeting is None or meeting.company_id != cmd.company_id:
+                raise ValueError(f"Встреча {payload.meeting_id} не найдена.")
+            if not await channels.is_member(meeting.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+                raise PermissionError("Нет доступа к встрече.")
+            target_namespace = payload.namespace
+            if target_namespace is None and meeting.space_id is not None:
+                space = await spaces.get(meeting.space_id)
+                if space is not None:
+                    target_namespace = space.namespace
+            if target_namespace is None:
+                raise ValueError("Не задан namespace для экспорта встречи.")
+            from apps.sync.realtime.tasks import sync_export_meeting_to_crm_task
+            await sync_export_meeting_to_crm_task.kiq(
+                meeting_id=meeting.meeting_id,
+                company_id=cmd.company_id,
+                actor_user_id=cmd.actor_user_id,
+                namespace=target_namespace,
+            )
+            await call_meetings.set_export_status(
+                meeting.meeting_id,
+                status="done",
+                target_namespace=target_namespace,
+            )
+            updated_meeting = await call_meetings.get(meeting.meeting_id)
+            if updated_meeting is None:
+                raise RuntimeError("Встреча пропала после экспорта.")
+            out = _meeting_read_from_entity(updated_meeting)
+            evs = [event_call_export_crm_done(out)]
+        else:
+            raise RuntimeError(f"Неизвестный call.* тип команды: {cmd.type!r}.")
         return CommandExecutionResult(ok=True, result=out, events=evs)
 
     raise RuntimeError(f"Неизвестный тип команды: {cmd.type!r}.")
@@ -488,6 +618,39 @@ async def _message_read_from_db(
 
 def _channel_read_entity(entity: SyncChannel) -> ChannelRead:
     return channel_read_entity_minimal(entity)
+
+
+def _recording_read_from_entity(recording) -> CallRecordingRead:
+    return CallRecordingRead(
+        recording_id=recording.recording_id,
+        call_id=recording.call_id,
+        channel_id=recording.channel_id,
+        space_id=recording.space_id,
+        status=recording.status,
+        provider_job_id=recording.provider_job_id,
+        raw_file_id=recording.raw_file_id,
+        started_at=recording.started_at,
+        ended_at=recording.ended_at,
+        created_at=recording.created_at,
+        error=recording.error,
+    )
+
+
+def _meeting_read_from_entity(meeting) -> CallMeetingRead:
+    return CallMeetingRead(
+        meeting_id=meeting.meeting_id,
+        call_id=meeting.call_id,
+        recording_id=meeting.recording_id,
+        channel_id=meeting.channel_id,
+        space_id=meeting.space_id,
+        transcript_file_id=meeting.transcript_file_id,
+        transcript_text_file_id=meeting.transcript_text_file_id,
+        summary_json=meeting.summary_json or {},
+        export_status=meeting.export_status,
+        export_target_namespace=meeting.export_target_namespace,
+        created_at=meeting.created_at,
+        updated_at=meeting.updated_at,
+    )
 
 
 def _apply_reaction_json(
@@ -529,6 +692,9 @@ async def _create_space(body, *, actor_user_id: str, company_id: str, spaces: Sp
         name=entity.name,
         description=entity.description,
         avatar_url=entity.avatar_url,
+        namespace=entity.namespace,
+        auto_export_transcript_to_crm=entity.auto_export_transcript_to_crm,
+        auto_export_summary_to_crm=entity.auto_export_summary_to_crm,
         created_at=entity.created_at,
         created_by_user_id=actor_user_id,
     )
@@ -545,23 +711,50 @@ async def _update_space(
     data = body.model_dump(exclude_unset=True)
     if not data:
         raise ValueError("Нет полей для обновления пространства.")
+    next_namespace = data["namespace"] if "namespace" in data else None
+    next_auto_export_transcript = data["auto_export_transcript_to_crm"] if "auto_export_transcript_to_crm" in data else None
+    next_auto_export_summary = data["auto_export_summary_to_crm"] if "auto_export_summary_to_crm" in data else None
     entity = await spaces.get(space_id)
     if entity is None:
         raise ValueError(f"Пространство {space_id} не найдено.")
     if entity.company_id != company_id:
         raise PermissionError("Пространство принадлежит другой компании.")
+    effective_namespace = next_namespace if "namespace" in data else entity.namespace
+    effective_auto_export_transcript = (
+        next_auto_export_transcript
+        if "auto_export_transcript_to_crm" in data
+        else entity.auto_export_transcript_to_crm
+    )
+    effective_auto_export_summary = (
+        next_auto_export_summary
+        if "auto_export_summary_to_crm" in data
+        else entity.auto_export_summary_to_crm
+    )
+    if (effective_auto_export_transcript or effective_auto_export_summary) and (
+        effective_namespace is None or str(effective_namespace).strip() == ""
+    ):
+        raise ValueError("Для автоэкспорта требуется namespace.")
     if "name" in data:
         entity.name = data["name"]
     if "description" in data:
         entity.description = data["description"]
     if "avatar_url" in data:
         entity.avatar_url = data["avatar_url"]
+    if "namespace" in data:
+        entity.namespace = data["namespace"]
+    if "auto_export_transcript_to_crm" in data:
+        entity.auto_export_transcript_to_crm = data["auto_export_transcript_to_crm"]
+    if "auto_export_summary_to_crm" in data:
+        entity.auto_export_summary_to_crm = data["auto_export_summary_to_crm"]
     await spaces.update(entity)
     return SpaceRead(
         id=entity.space_id,
         name=entity.name,
         description=entity.description,
         avatar_url=entity.avatar_url,
+        namespace=entity.namespace,
+        auto_export_transcript_to_crm=entity.auto_export_transcript_to_crm,
+        auto_export_summary_to_crm=entity.auto_export_summary_to_crm,
         created_at=entity.created_at,
         created_by_user_id=entity.created_by_user_id,
     )

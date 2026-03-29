@@ -15,7 +15,7 @@ from datetime import datetime, date, timezone
 from typing import Optional, Dict, Any, List
 
 from sqlalchemy import String, Text, Boolean, Float, Date, DateTime, Index, UniqueConstraint, ForeignKey, Integer
-from sqlalchemy.orm import Mapped, mapped_column, relationship as sa_relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 
 from core.db.models import Base
@@ -116,11 +116,12 @@ class EntityType(Base):
     type_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(
         String(100),
+        primary_key=True,
         nullable=False,
         index=True
     )
     parent_type_id: Mapped[Optional[str]] = mapped_column(
-        ForeignKey("entity_types.type_id", ondelete="CASCADE"),
+        String(100),
         nullable=True,
         index=True
     )
@@ -156,20 +157,19 @@ class EntityType(Base):
         nullable=False,
         comment="Какие поля показывать при публичном доступе"
     )
+    namespace_ids: Mapped[List[str]] = mapped_column(
+        JSONB,
+        default=["default"],
+        nullable=False,
+        comment="Список namespace, где тип разрешен"
+    )
     
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
     
-    children = sa_relationship(
-        "EntityType",
-        backref="parent",
-        remote_side=[type_id]
-    )
-    
     __table_args__ = (
-        UniqueConstraint("type_id", "company_id", name="uq_entity_type_company"),
         Index("idx_entity_types_parent", "parent_type_id"),
         Index("idx_entity_types_system", "is_system"),
     )
@@ -197,6 +197,7 @@ class RelationshipType(Base):
     type_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(
         String(100),
+        primary_key=True,
         nullable=False,
         index=True
     )
@@ -236,10 +237,7 @@ class RelationshipType(Base):
         default=lambda: datetime.now(timezone.utc)
     )
     
-    __table_args__ = (
-        UniqueConstraint("type_id", "company_id", name="uq_relationship_type_company"),
-        Index("idx_relationship_types_system", "is_system"),
-    )
+    __table_args__ = (Index("idx_relationship_types_system", "is_system"),)
     
     def __repr__(self) -> str:
         return f"<RelationshipType(type_id='{self.type_id}', name='{self.name}', company='{self.company_id}')>"
@@ -456,3 +454,81 @@ class AccessRequest(Base):
     
     def __repr__(self) -> str:
         return f"<AccessRequest(request_id='{self.request_id}', status='{self.status}')>"
+
+
+class NamespaceTemplate(Base):
+    """Шаблон namespace (редактируемый в БД)."""
+
+    __tablename__ = "namespace_templates"
+
+    template_key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    template_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "template_id", name="uq_namespace_template_company"),
+        Index("idx_namespace_template_company_system", "company_id", "is_system"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<NamespaceTemplate(template_id='{self.template_id}', company='{self.company_id}')>"
+
+
+class NamespaceTemplateType(Base):
+    """Тип сущности внутри шаблона namespace."""
+
+    __tablename__ = "namespace_template_types"
+
+    entry_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    template_key: Mapped[str] = mapped_column(
+        ForeignKey("namespace_templates.template_key", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    type_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    parent_type_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    required_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    optional_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    is_event: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    check_duplicates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    weight_coefficient: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    namespace_ids: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("template_key", "type_id", name="uq_namespace_template_type"),
+        Index("idx_namespace_template_type_template", "template_key"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<NamespaceTemplateType(template_key='{self.template_key}', type_id='{self.type_id}')>"

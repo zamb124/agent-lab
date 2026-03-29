@@ -190,7 +190,7 @@ export class EntityModal extends PlatformModal {
         this.entityId = null;
         this.entity = null;
         this._formData = {
-            entity_type: 'person',
+            entity_type: 'note',
             entity_subtype: null,
             name: '',
             description: '',
@@ -200,7 +200,7 @@ export class EntityModal extends PlatformModal {
             priority: null,
         };
         this._entityTypes = [];
-        this._selectedType = 'person';
+        this._selectedType = 'note';
         this._saving = false;
         this._attributeRows = [];
 
@@ -218,11 +218,23 @@ export class EntityModal extends PlatformModal {
         super.firstUpdated?.();
         
         const crmApi = this.services.get('crmApi');
-        await CRMStore.loadEntityTypes(crmApi);
+        const namespace = CRMStore.state.namespaces.current;
+        const namespaceName = typeof namespace === 'string'
+            ? namespace
+            : (namespace && typeof namespace.name === 'string' ? namespace.name : 'default');
+        await CRMStore.loadEntityTypes(crmApi, namespaceName);
+        if (!this.entity && this._entityTypes.length > 0) {
+            const defaultType = this._entityTypes.find((item) => !item.parent_type_id) || this._entityTypes[0];
+            this._selectedType = defaultType.type_id;
+            this._formData = {
+                ...this._formData,
+                entity_type: defaultType.type_id,
+            };
+        }
         
         if (this.entity) {
             this._formData = {
-                entity_type: this.entity.entity_type || 'person',
+                entity_type: this.entity.entity_type || 'note',
                 entity_subtype: this.entity.entity_subtype || null,
                 name: this.entity.name || '',
                 description: this.entity.description || '',
@@ -231,7 +243,7 @@ export class EntityModal extends PlatformModal {
                 due_date: this.entity.due_date || null,
                 priority: this.entity.priority || null,
             };
-            this._selectedType = this.entity.entity_type || 'person';
+            this._selectedType = this.entity.entity_type || 'note';
             this._attributeRows = Object.entries(this.entity.attributes || {}).map(
                 ([key, value]) => ({ key, value })
             );

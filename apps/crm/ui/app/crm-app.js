@@ -15,6 +15,7 @@ import '../pages/entities-page.js';
 import '../pages/graph-page.js';
 import '../pages/tasks-page.js';
 import '../pages/calendar-page.js';
+import '../pages/settings-page.js';
 import '../modals/entity-modal.js';
 import '../modals/ai-analysis-modal.js';
 import '../modals/share-modal.js';
@@ -370,6 +371,10 @@ export class CRMApp extends PlatformApp {
         if (this._currentView === 'calendar') {
             return html`<calendar-page></calendar-page>`;
         }
+
+        if (this._currentView === 'settings') {
+            return html`<settings-page></settings-page>`;
+        }
         
         return this._renderPlaceholder(this._currentView);
     }
@@ -437,6 +442,7 @@ export class CRMApp extends PlatformApp {
             graph: 'Граф связей',
             tasks: 'Задачи',
             calendar: 'Календарь',
+            settings: 'Настройки',
         };
         
         const viewName = viewNames[view] || view;
@@ -457,6 +463,7 @@ export class CRMApp extends PlatformApp {
             graph: 'network',
             tasks: 'checklist',
             calendar: 'calendar',
+            settings: 'settings',
         };
         return icons[view] || 'folder';
     }
@@ -479,6 +486,11 @@ export class CRMApp extends PlatformApp {
     
     async _onNamespaceChanged() {
         const crmApi = this.services.get('crmApi');
+        const currentNamespace = CRMStore.state.namespaces.current;
+        const namespaceName = typeof currentNamespace === 'string'
+            ? currentNamespace
+            : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
+        await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
         await CRMStore.loadNotes(crmApi);
     }
@@ -486,6 +498,12 @@ export class CRMApp extends PlatformApp {
     async _onNamespaceSaved(e) {
         this._showNamespaceModal = false;
         const crmApi = this.services.get('crmApi');
+        await CRMStore.loadNamespaces(crmApi);
+        const currentNamespace = CRMStore.state.namespaces.current;
+        const namespaceName = typeof currentNamespace === 'string'
+            ? currentNamespace
+            : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
+        await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
     }
 

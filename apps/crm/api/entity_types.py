@@ -2,14 +2,15 @@
 API для работы с типами entities.
 """
 
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.crm.models.api import EntityTypeCreate, EntityTypeUpdate, EntityTypeResponse
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import EntityType
+from core.context import get_context
 
 router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
 
@@ -27,16 +28,24 @@ def get_entity_type_repo() -> EntityTypeRepository:
 
 @router.get("", response_model=List[EntityTypeResponse])
 async def list_entity_types(
+    namespace: Optional[str] = Query(default=None, description="Фильтр разрешенных типов по namespace"),
     repo: EntityTypeRepository = Depends(get_entity_type_repo)
 ):
     """Получить все типы entities для компании"""
-    from core.context import get_context
-    
-    context = get_context()
-    company_id = context.active_company.company_id
-    
-    types = await repo.get_all_for_company(company_id)
+    types = await repo.get_all_for_company(namespace=namespace)
     return types
+
+
+@router.get("/by-namespace/{namespace}", response_model=List[EntityTypeResponse])
+async def list_entity_types_by_namespace(
+    namespace: str,
+    repo: EntityTypeRepository = Depends(get_entity_type_repo)
+):
+    """Получить типы сущностей, разрешенные в namespace."""
+    normalized_namespace = namespace.strip()
+    if not normalized_namespace:
+        raise HTTPException(status_code=422, detail="namespace is required")
+    return await repo.list_allowed_for_namespace(normalized_namespace)
 
 
 @router.get("/{type_id}", response_model=EntityTypeResponse)
@@ -45,7 +54,7 @@ async def get_entity_type(
     repo: EntityTypeRepository = Depends(get_entity_type_repo)
 ):
     """Получить тип entity по ID"""
-    entity_type = await repo.get(type_id)
+    entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
     return entity_type
@@ -57,8 +66,12 @@ async def create_entity_type(
     repo: EntityTypeRepository = Depends(get_entity_type_repo)
 ):
     """Создать новый тип entity"""
-    
-    
+    context = get_context()
+    company_id = context.active_company.company_id
+    namespace_ids = data.namespace_ids or ["default"]
+    if len(namespace_ids) == 0:
+        raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
+
     entity_type = EntityType(
         type_id=data.type_id,
         name=data.name,
@@ -72,10 +85,11 @@ async def create_entity_type(
         is_system=False,
         is_event=data.is_event,
         check_duplicates=data.check_duplicates,
-        company_id="system"
+        namespace_ids=namespace_ids,
+        company_id=company_id
     )
     
-    await repo.create(entity_type)
+    await repo.create_custom_type(entity_type, company_id)
     return entity_type
 
 
@@ -86,7 +100,7 @@ async def update_entity_type(
     repo: EntityTypeRepository = Depends(get_entity_type_repo)
 ):
     """Обновить тип entity"""
-    entity_type = await repo.get(type_id)
+    entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
     
@@ -106,6 +120,10 @@ async def update_entity_type(
         entity_type.icon = data.icon
     if data.color is not None:
         entity_type.color = data.color
+    if data.namespace_ids is not None:
+        if len(data.namespace_ids) == 0:
+            raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
+        entity_type.namespace_ids = data.namespace_ids
     
     await repo.update(entity_type)
     return entity_type
@@ -118,12 +136,7 @@ async def update_public_fields(
     repo: EntityTypeRepository = Depends(get_entity_type_repo)
 ):
     """Обновить список публичных полей для типа"""
-    from core.context import get_context
-    
-    context = get_context()
-    company_id = context.active_company.company_id
-    
-    entity_type = await repo.get(type_id, company_id)
+    entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
     

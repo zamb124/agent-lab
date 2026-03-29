@@ -142,6 +142,21 @@ LiveKit `--dev` mode дефолтные ключи: `devkey` / `secret`.
 | `sync_calls` | Звонки: mode (p2p/sfu), status (ringing/active/ended), livekit_room_name |
 | `sync_call_participants` | Участники: status (invited/joined/declined/left) |
 | `sync_call_links` | Гостевые ссылки: link_token, expires_at, call_type |
+| `sync_call_recordings` | Записи звонков: status (requested/recording/uploaded/failed), provider_job_id, raw_file_id |
+| `sync_call_meetings` | Карточки встреч: transcript_file_id, summary_json, export_status |
+| `sync_call_speaker_segments` | Сегменты речи с speaker identity и таймкодами |
+
+## Запись, транскрипт, export
+
+- WS-команды: `call.recording.start`, `call.recording.stop`, `call.meeting.export_to_crm`.
+- WS-события: `call.recording.started|stopped|failed`, `call.transcript.ready`, `call.summary.ready`, `call.export.crm.done|failed`.
+- REST:
+  - `GET /sync/api/v1/calls/{call_id}/recordings`
+  - `GET /sync/api/v1/meetings`
+  - `GET /sync/api/v1/meetings/{meeting_id}`
+  - `GET /sync/api/v1/meetings/{meeting_id}/transcript`
+  - `POST /sync/api/v1/meetings/{meeting_id}/export/crm`
+- Настройки `sync_spaces`: `namespace` (общий для CRM/RAG), `auto_export_transcript_to_crm`, `auto_export_summary_to_crm`.
 
 ## Ключевые файлы
 

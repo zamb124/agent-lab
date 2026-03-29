@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
@@ -18,6 +19,7 @@ os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID", "minioadmin")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY", "minioadmin")
 import uuid
 from collections.abc import AsyncIterator
+from typing import Callable
 
 import pytest
 import pytest_asyncio
@@ -29,6 +31,7 @@ from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.file_repository import SyncFileRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
+from apps.sync.db.repositories.meeting_repository import CallMeetingRepository, CallRecordingRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 
@@ -70,6 +73,9 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
 _SYNC_DELETE_ORDER = (
     # Дочерние таблицы первыми; без TRUNCATE — меньше AccessExclusiveLock и deadlock с xdist.
     "sync_call_links",
+    "sync_call_speaker_segments",
+    "sync_call_meetings",
+    "sync_call_recordings",
     "sync_call_participants",
     "sync_calls",
     "sync_message_files",
@@ -147,8 +153,92 @@ def call_repo(sync_database: SyncDatabase) -> CallRepository:
 
 
 @pytest.fixture()
+def call_recording_repo(sync_database: SyncDatabase) -> CallRecordingRepository:
+    return CallRecordingRepository(db=sync_database)
+
+
+@pytest.fixture()
+def call_meeting_repo(sync_database: SyncDatabase) -> CallMeetingRepository:
+    return CallMeetingRepository(db=sync_database)
+
+
+@pytest.fixture()
 def sync_user_repository(sync_database: SyncDatabase):
     """UserRepository shared БД (как в dispatch_sync_command)."""
     from apps.sync.container import get_sync_container
 
     return get_sync_container().user_repository
+
+
+@pytest.fixture()
+def deterministic_stt_transcript(monkeypatch) -> Callable[[str], None]:
+    """Подменяет генерацию транскрипта в sync pipeline детерминированным STT-текстом."""
+    from apps.sync.realtime import tasks as sync_tasks
+
+    def _apply(transcript_body: str) -> None:
+        async def _stubbed_builder(meeting_id: str, source_url: str) -> str:
+            return (
+                f"Транскрипт встречи {meeting_id}\n"
+                f"Источник: {source_url}\n"
+                f"{transcript_body}"
+            )
+
+        monkeypatch.setattr(sync_tasks, "build_call_transcript_text", _stubbed_builder)
+
+    return _apply
+
+
+@pytest.fixture()
+def wait_for_meeting_pipeline_complete(call_meeting_repo):
+    """Ожидает завершения meeting pipeline до готового транскрипта и summary."""
+
+    async def _wait(
+        meeting_id: str,
+        company_id: str,
+        *,
+        timeout_seconds: float = 40.0,
+        expected_namespace: str | None = None,
+        require_export_done: bool = True,
+    ):
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        latest = await call_meeting_repo.get(meeting_id)
+        while loop.time() < deadline:
+            latest = await call_meeting_repo.get(meeting_id)
+            if latest is None:
+                await asyncio.sleep(0.25)
+                continue
+            if latest.company_id != company_id:
+                raise AssertionError(
+                    f"Встреча {meeting_id} принадлежит другой компании: {latest.company_id}."
+                )
+            summary = latest.summary_json or {}
+            has_summary = "short_summary" in summary
+            has_transcript = isinstance(latest.transcript_text_file_id, str) and latest.transcript_text_file_id != ""
+            export_ok = (latest.export_status == "done") if require_export_done else True
+            namespace_ok = True
+            if expected_namespace is not None:
+                namespace_ok = latest.export_target_namespace == expected_namespace
+            if has_summary and has_transcript and export_ok and namespace_ok:
+                return latest
+            await asyncio.sleep(0.25)
+
+        current_summary = {}
+        current_export_status = "missing"
+        current_namespace = None
+        current_transcript_file = None
+        if latest is not None:
+            current_summary = latest.summary_json or {}
+            current_export_status = latest.export_status
+            current_namespace = latest.export_target_namespace
+            current_transcript_file = latest.transcript_text_file_id
+        raise AssertionError(
+            "Meeting pipeline не завершился в срок: "
+            f"meeting_id={meeting_id}, "
+            f"export_status={current_export_status}, "
+            f"export_target_namespace={current_namespace}, "
+            f"transcript_text_file_id={current_transcript_file}, "
+            f"summary_keys={list(current_summary.keys())}."
+        )
+
+    return _wait

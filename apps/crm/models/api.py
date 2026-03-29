@@ -82,6 +82,7 @@ class EntityTypeCreate(BaseModel):
     color: Optional[str] = None
     is_event: bool = False
     check_duplicates: bool = True
+    namespace_ids: Optional[List[str]] = None
 
 
 class EntityTypeUpdate(BaseModel):
@@ -94,6 +95,7 @@ class EntityTypeUpdate(BaseModel):
     optional_fields: Optional[Dict[str, Any]] = None
     icon: Optional[str] = None
     color: Optional[str] = None
+    namespace_ids: Optional[List[str]] = None
 
 
 class EntityTypeResponse(BaseModel):
@@ -114,6 +116,7 @@ class EntityTypeResponse(BaseModel):
     is_event: bool
     check_duplicates: bool
     weight_coefficient: float
+    namespace_ids: List[str]
     created_at: datetime
 
 
@@ -194,6 +197,96 @@ class AIAnalyzeRequest(BaseModel):
         default=None,
         description="ID entities, упомянутых через @"
     )
+    namespace: Optional[str] = Field(
+        default=None,
+        description="Namespace для ограничения типов и дедупликации"
+    )
+
+
+class NamespaceCreateRequest(BaseModel):
+    """Создание namespace из шаблона."""
+    name: str = Field(..., description="Имя namespace")
+    description: Optional[str] = Field(default=None, description="Описание namespace")
+    template_id: str = Field(..., description="ID шаблона: sales | development | hr")
+
+
+class NamespaceResponse(BaseModel):
+    """Данные namespace."""
+    name: str
+    company_id: str
+    description: Optional[str] = None
+    is_default: bool = False
+
+
+class NamespaceListResponse(BaseModel):
+    """Список namespace компании."""
+    namespaces: List[NamespaceResponse]
+    company_id: str
+
+
+class NamespaceTemplateResponse(BaseModel):
+    """Шаблон namespace."""
+    template_id: str
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    is_system: bool = False
+    entity_type_ids: List[str]
+
+
+class NamespaceTemplateCreateRequest(BaseModel):
+    template_id: str
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+
+
+class NamespaceTemplateUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+
+
+class NamespaceTemplateTypeUpsertRequest(BaseModel):
+    type_id: str
+    parent_type_id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    prompt: Optional[str] = None
+    required_fields: Dict[str, Any] = Field(default_factory=dict)
+    optional_fields: Dict[str, Any] = Field(default_factory=dict)
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    is_event: bool = False
+    check_duplicates: bool = True
+    weight_coefficient: float = 1.0
+    namespace_ids: List[str] = Field(default_factory=list)
+
+
+class NamespaceTemplateTypeResponse(BaseModel):
+    type_id: str
+    parent_type_id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    prompt: Optional[str] = None
+    required_fields: Dict[str, Any]
+    optional_fields: Dict[str, Any]
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    is_event: bool
+    check_duplicates: bool
+    weight_coefficient: float
+    namespace_ids: List[str]
+
+
+class NamespaceTemplateDetailsResponse(BaseModel):
+    template_id: str
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    is_system: bool
+    types: List[NamespaceTemplateTypeResponse]
+    entity_type_ids: List[str]
 
 
 class AIExtractedEntity(BaseModel):

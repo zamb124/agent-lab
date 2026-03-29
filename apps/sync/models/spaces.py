@@ -26,6 +26,15 @@ class SpaceRead(BaseModel):
         default=None,
         description="URL аватара (изображение).",
     )
+    namespace: str | None = Field(default=None, description="Общий namespace для CRM/RAG.")
+    auto_export_transcript_to_crm: bool = Field(
+        default=False,
+        description="Автоэкспорт транскрипта встречи в CRM.",
+    )
+    auto_export_summary_to_crm: bool = Field(
+        default=False,
+        description="Автоэкспорт summary встречи в CRM.",
+    )
     created_at: datetime = Field(description="Время создания пространства.")
     created_by_user_id: str = Field(description="Создатель пространства.")
 
@@ -46,6 +55,9 @@ class SpaceUpdate(BaseModel):
     name: str | None = Field(default=None, description="Новое имя пространства.")
     description: str | None = Field(default=None, description="Новое описание пространства.")
     avatar_url: str | None = Field(default=None, description="URL аватара или null для сброса.")
+    namespace: str | None = Field(default=None, description="Общий namespace CRM/RAG или null для сброса.")
+    auto_export_transcript_to_crm: bool | None = Field(default=None)
+    auto_export_summary_to_crm: bool | None = Field(default=None)
 
     @field_validator("avatar_url")
     @classmethod

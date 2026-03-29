@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from playwright.async_api import Page
+from playwright.async_api import Page, expect
 
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -61,6 +61,26 @@ async def test_crm_shell_loads(
     await scenario.step("SPA CRM открыт", ui_page_system)
     await crm_ui.expect_shell(ui_page_system)
     await scenario.step("Оболочка crm-app видна", ui_page_system)
+
+
+@pytest.mark.scenario(
+    service="crm",
+    title="CRM: страница настроек",
+    description="Переход на /crm/settings и проверка отображения settings-page.",
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+async def test_crm_settings_page_loads(
+    scenario: ScenarioRecorder,
+    crm_ui: AppUI,
+    ui_page_system: Page,
+) -> None:
+    await ui_page_system.goto(f"{crm_ui.origin}/crm/settings", wait_until="domcontentloaded")
+    await scenario.step("Открыт маршрут /crm/settings", ui_page_system)
+    await expect(ui_page_system.locator("crm-app")).to_be_visible(timeout=30_000)
+    await expect(ui_page_system.locator("settings-page")).to_be_visible(timeout=30_000)
+    await expect(ui_page_system.get_by_text("Редактор шаблона")).to_be_visible(timeout=30_000)
+    await scenario.step("Страница настроек CRM отображена", ui_page_system)
 
 
 @pytest.mark.scenario(

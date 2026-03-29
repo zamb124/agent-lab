@@ -66,3 +66,14 @@ def test_command_envelope_channels_typing() -> None:
         payload={"channel_id": "ch1", "typing": False},
     )
     assert env.type == "channels.typing"
+
+
+def test_command_envelope_call_recording_start() -> None:
+    env = CommandEnvelope(
+        id="c" * 32,
+        actor_user_id="u1",
+        company_id="c1",
+        type="call.recording.start",
+        payload={"call_id": "call1"},
+    )
+    assert env.type == "call.recording.start"

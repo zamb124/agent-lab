@@ -20,26 +20,20 @@ class TestAIAnalysis:
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "entity_subtype": "meeting",
                     "name": "Встреча с Иваном",
                     "description": "Обсудили проект X. Иван предложил нанять Петра для разработки.",
                     "note_date": "2024-01-06"
                 },
                 "entities": [
                     {
-                        "entity_type": "contact",
+                        "entity_type": "task",
                         "name": "Иван Иванов",
                         "attributes": {"role": "менеджер"}
                     },
                     {
-                        "entity_type": "contact",
+                        "entity_type": "task",
                         "name": "Петр Петров",
                         "attributes": {"role": "разработчик"}
-                    },
-                    {
-                        "entity_type": "project",
-                        "name": "Проект X",
-                        "attributes": {"status": "в разработке"}
                     }
                 ],
                 "relationships": [
@@ -66,12 +60,11 @@ class TestAIAnalysis:
         
         assert result["note"] is not None
         assert result["note"]["entity_type"] == "note"
-        assert result["note"]["entity_subtype"] == "meeting"
+        assert result["note"]["entity_subtype"] is None
         
-        assert len(result["entities"]) == 3
+        assert len(result["entities"]) == 2
         entity_types = [e["entity_type"] for e in result["entities"]]
-        assert "contact" in entity_types
-        assert "project" in entity_types
+        assert "task" in entity_types
         
         assert len(result["relationships"]) >= 2
     
@@ -142,15 +135,14 @@ class TestAIAnalysis:
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "entity_subtype": "meeting",
                     "name": "Встреча команды",
                     "description": "Обсудили проект X (75% готовности). Решили нанять разработчика. Петр - backend, Анна - тестирование. Следующая встреча через неделю."
                 },
                 "entities": [
-                    {"entity_type": "project", "name": "Проект X"},
-                    {"entity_type": "contact", "name": "Иван"},
-                    {"entity_type": "contact", "name": "Петр"},
-                    {"entity_type": "contact", "name": "Анна"}
+                    {"entity_type": "task", "name": "Проект X"},
+                    {"entity_type": "task", "name": "Иван"},
+                    {"entity_type": "task", "name": "Петр"},
+                    {"entity_type": "task", "name": "Анна"}
                 ],
                 "relationships": []
             })
@@ -173,8 +165,8 @@ class TestAIAnalysis:
     async def test_ai_extract_with_mentioned_entities(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI учитывает явно упомянутые entities через @"""
         existing_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
-            "entity_type": "contact",
-            "name": f"Существующий контакт {unique_id}",
+            "entity_type": "task",
+            "name": f"Существующая задача {unique_id}",
             "attributes": {"email": "existing@example.com"}
         }, headers=auth_headers_system)
         existing_id = existing_entity_resp.json()["entity_id"]
@@ -221,8 +213,8 @@ class TestAIAnalysis:
                     "name": "Встреча"
                 },
                 "entities": [
-                    {"entity_type": "contact", "name": "Иван"},
-                    {"entity_type": "contact", "name": "Петр"}
+                    {"entity_type": "task", "name": "Иван"},
+                    {"entity_type": "task", "name": "Петр"}
                 ],
                 "relationships": []
             })
@@ -230,14 +222,14 @@ class TestAIAnalysis:
         
         response = await crm_client.post("/crm/api/v1/entities/analyze", json={
             "text": "Встретились с Иваном и Петром. Обсудили проект X.",
-            "extract_entity_types": ["contact"]
+            "extract_entity_types": ["task"]
         }, headers=auth_headers_system)
         
         assert response.status_code == 200
         result = response.json()
         
-        all_contacts = all(e["entity_type"] == "contact" for e in result["entities"])
-        assert all_contacts
+        all_tasks = all(e["entity_type"] == "task" for e in result["entities"])
+        assert all_tasks
     
     @pytest.mark.asyncio
     async def test_ai_extract_custom_relationship_types(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
@@ -257,8 +249,8 @@ class TestAIAnalysis:
                     "name": "Распределение задач"
                 },
                 "entities": [
-                    {"entity_type": "contact", "name": "Иван"},
-                    {"entity_type": "project", "name": "Проект A"}
+                    {"entity_type": "task", "name": "Иван"},
+                    {"entity_type": "task", "name": "Проект A"}
                 ],
                 "relationships": [
                     {
@@ -283,4 +275,12 @@ class TestAIAnalysis:
             None
         )
         assert custom_rel is not None
+
+    @pytest.mark.asyncio
+    async def test_ai_analyze_requires_existing_namespace(self, crm_client, auth_headers_system):
+        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
+            "text": "Текст для анализа",
+            "namespace": "missing_namespace_for_ai",
+        }, headers=auth_headers_system)
+        assert response.status_code == 422
 

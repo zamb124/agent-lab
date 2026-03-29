@@ -35,8 +35,10 @@ const ICON_MAP = {
     'refresh': 'refresh',
     'tool': 'tool',
     'workflow': 'workflow',
+    'tree-square-dot': 'workflow',
     'breakpoint': 'breakpoint',
     'target': 'target',
+    'target-lock': 'target',
     'globe': 'globe',
     'help': 'help',
     'share': 'share',
@@ -44,6 +46,7 @@ const ICON_MAP = {
     'eye': 'eye',
     'box': 'box',
     'chart': 'chart',
+    'chart-multifunction': 'chart',
     'cloud': 'cloud',
     'fullscreen': 'fullscreen',
     'clipboard': 'clipboard',
@@ -144,31 +147,45 @@ export class IconService {
             throw new Error('Icon name is required');
         }
 
-        if (this.cache.has(name)) {
-            return this.cache.get(name);
+        const requestedName = String(name).trim();
+        if (!requestedName) {
+            throw new Error('Icon name is required');
         }
 
-        const fileName = ICON_MAP[name];
-        if (!fileName) {
-            throw new Error(`Icon "${name}" not found in ICON_MAP`);
+        if (this.cache.has(requestedName)) {
+            return this.cache.get(requestedName);
         }
 
-        const url = `${this.basePath}/${fileName}.svg`;
-        
-        const response = await fetch(url);
-        
+        const mappedFileName = ICON_MAP[requestedName] || requestedName;
+        const primaryUrl = `${this.basePath}/${mappedFileName}.svg`;
+        const primaryResponse = await fetch(primaryUrl);
+
+        let response = primaryResponse;
+        let resolvedFileName = mappedFileName;
+        if (!primaryResponse.ok && mappedFileName !== requestedName) {
+            const fallbackUrl = `${this.basePath}/${requestedName}.svg`;
+            const fallbackResponse = await fetch(fallbackUrl);
+            if (fallbackResponse.ok) {
+                response = fallbackResponse;
+                resolvedFileName = requestedName;
+            }
+        }
+
         if (!response.ok) {
-            throw new Error(`Icon not found: ${name} (${url}), HTTP ${response.status}`);
+            throw new Error(`Icon not found: ${requestedName} (${primaryUrl}), HTTP ${response.status}`);
         }
 
         let svg = await response.text();
         if (!svg) {
-            throw new Error(`Icon "${name}" loaded but content is empty`);
+            throw new Error(`Icon "${requestedName}" loaded but content is empty`);
         }
 
         svg = this._normalizeSvg(svg);
 
-        this.cache.set(name, svg);
+        this.cache.set(requestedName, svg);
+        if (resolvedFileName !== requestedName) {
+            this.cache.set(resolvedFileName, svg);
+        }
         return svg;
     }
 
@@ -214,6 +231,6 @@ export class IconService {
      * Список доступных иконок
      */
     get availableIcons() {
-        return Object.keys(ICON_MAP);
+        return [...new Set([...Object.keys(ICON_MAP), ...Object.values(ICON_MAP)])].sort();
     }
 }

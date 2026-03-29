@@ -20,6 +20,7 @@ from apps.sync.models.calls import (
     GuestJoinRequest,
     JoinResponse,
 )
+from apps.sync.models.meetings import CallRecordingRead
 from core.calls.livekit_client import LiveKitClient
 from core.calls.models import TurnCredentials
 from core.calls.turn import generate_turn_credentials
@@ -186,6 +187,34 @@ async def get_call(call_id: str) -> CallRead:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     participants = await container.call_repository.list_participants(call_id)
     return _build_call_read(call, participants)
+
+
+@router.get("/{call_id}/recordings")
+async def list_call_recordings(call_id: str) -> list[CallRecordingRead]:
+    """Список записей звонка."""
+    context = get_context()
+    container = get_sync_container()
+    company_id = context.active_company.company_id
+    call = await container.call_repository.get_call(call_id, company_id)
+    if not await container.channel_repository.is_member(call.channel_id, context.user.user_id, company_id=company_id):
+        raise HTTPException(status_code=403, detail="Нет доступа к звонку.")
+    rows = await container.call_recording_repository.list_for_call(call_id, company_id)
+    return [
+        CallRecordingRead(
+            recording_id=r.recording_id,
+            call_id=r.call_id,
+            channel_id=r.channel_id,
+            space_id=r.space_id,
+            status=r.status,
+            provider_job_id=r.provider_job_id,
+            raw_file_id=r.raw_file_id,
+            started_at=r.started_at,
+            ended_at=r.ended_at,
+            created_at=r.created_at,
+            error=r.error,
+        )
+        for r in rows
+    ]
 
 
 @router.get("/{call_id}/token")

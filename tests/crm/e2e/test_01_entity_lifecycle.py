@@ -17,7 +17,6 @@ class TestEntityLifecycle:
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "entity_subtype": "meeting",
                 "name": f"Встреча {unique_id}",
                 "description": "Обсудили проект X"
             },
@@ -26,7 +25,7 @@ class TestEntityLifecycle:
         
         entity = response.json()
         assert entity["entity_type"] == "note"
-        assert entity["entity_subtype"] == "meeting"
+        assert entity["entity_subtype"] is None
         assert entity["name"] == f"Встреча {unique_id}"
         assert "entity_id" in entity
         assert "company_id" in entity
@@ -36,7 +35,6 @@ class TestEntityLifecycle:
         """Создание и получение entity по ID"""
         create_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
-            "entity_subtype": "call",
             "name": f"Звонок {unique_id}",
             "description": "Обсудили условия контракта",
             "tags": ["важно", "контракт"]
@@ -50,7 +48,7 @@ class TestEntityLifecycle:
         retrieved = get_resp.json()
         assert retrieved["entity_id"] == entity_id
         assert retrieved["name"] == f"Звонок {unique_id}"
-        assert retrieved["entity_subtype"] == "call"
+        assert retrieved["entity_subtype"] is None
         assert "важно" in retrieved["tags"]
     
     @pytest.mark.asyncio
@@ -124,7 +122,6 @@ class TestEntityLifecycle:
         
         await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
-            "entity_subtype": "meeting",
             "name": f"Meeting {unique_id}",
             "user_id": test_user_id
         }, headers=auth_headers_system)
@@ -135,7 +132,6 @@ class TestEntityLifecycle:
         }, headers=auth_headers_system)
         await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
-            "entity_subtype": "call",
             "name": f"Call {unique_id}",
             "user_id": test_user_id
         }, headers=auth_headers_system)
@@ -153,41 +149,67 @@ class TestEntityLifecycle:
     async def test_list_entities_with_subtype_filter(self, crm_client, unique_id, auth_headers_system):
         """Список с фильтрацией по подтипу"""
         test_user_id = f"test_user_{unique_id}"
-        
+
+        create_subtype_resp = await crm_client.post("/crm/api/v1/entity-types/", json={
+            "type_id": f"meeting_{unique_id}",
+            "parent_type_id": "note",
+            "name": "Meeting",
+            "namespace_ids": ["default"],
+        }, headers=auth_headers_system)
+        assert create_subtype_resp.status_code == 200
+
         await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
-            "entity_subtype": "meeting",
+            "entity_subtype": f"meeting_{unique_id}",
             "name": f"Meeting 1 {unique_id}",
             "user_id": test_user_id
         }, headers=auth_headers_system)
         await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
-            "entity_subtype": "meeting",
+            "entity_subtype": f"meeting_{unique_id}",
             "name": f"Meeting 2 {unique_id}",
             "user_id": test_user_id
         }, headers=auth_headers_system)
-        await crm_client.post("/crm/api/v1/entities/", json={
-            "entity_type": "note",
-            "entity_subtype": "call",
-            "name": f"Call {unique_id}",
-            "user_id": test_user_id
-        }, headers=auth_headers_system)
-        
-        list_resp = await crm_client.get(f"/crm/api/v1/entities/?entity_type=note&entity_subtype=meeting&user_id={test_user_id}", headers=auth_headers_system)
+
+        list_resp = await crm_client.get(f"/crm/api/v1/entities/?entity_type=note&entity_subtype=meeting_{unique_id}&user_id={test_user_id}", headers=auth_headers_system)
         entities = list_resp.json()
         
         assert len(entities) >= 2
         
         for entity in entities:
-            assert entity["entity_subtype"] == "meeting"
+            assert entity["entity_subtype"] == f"meeting_{unique_id}"
             assert entity["user_id"] == test_user_id
     
     @pytest.mark.asyncio
-    async def test_create_contact_entity(self, crm_client, unique_id, auth_headers_system):
-        """Создание entity типа contact"""
+    async def test_create_custom_entity(self, crm_client, unique_id, auth_headers_system):
+        """Создание entity пользовательского типа из шаблона namespace."""
+        create_template_resp = await crm_client.post("/crm/api/v1/namespaces/templates", json={
+            "template_id": f"custom_{unique_id}",
+            "name": "Custom template",
+            "description": "Template for custom types",
+        }, headers=auth_headers_system)
+        assert create_template_resp.status_code == 201
+
+        upsert_type_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/custom_{unique_id}/types", json={
+            "type_id": f"candidate_{unique_id}",
+            "name": "Кандидат",
+            "required_fields": {"phone": {"type": "string"}},
+            "optional_fields": {"role": {"type": "string"}},
+            "namespace_ids": [],
+        }, headers=auth_headers_system)
+        assert upsert_type_resp.status_code == 201
+
+        create_namespace_resp = await crm_client.post("/crm/api/v1/namespaces", json={
+            "name": f"custom_ns_{unique_id}",
+            "description": "custom namespace",
+            "template_id": f"custom_{unique_id}",
+        }, headers=auth_headers_system)
+        assert create_namespace_resp.status_code == 201
+
         response = await crm_client.post("/crm/api/v1/entities/", json={
-            "entity_type": "contact",
+            "entity_type": f"candidate_{unique_id}",
             "name": f"Иван Иванов {unique_id}",
+            "namespace": f"custom_ns_{unique_id}",
             "attributes": {
                 "phone": "+79991234567",
                 "email": "ivan@example.com",
@@ -197,7 +219,7 @@ class TestEntityLifecycle:
         assert response.status_code == 200
         
         entity = response.json()
-        assert entity["entity_type"] == "contact"
+        assert entity["entity_type"] == f"candidate_{unique_id}"
         assert entity["attributes"]["phone"] == "+79991234567"
         assert entity["attributes"]["role"] == "менеджер"
     
@@ -206,7 +228,6 @@ class TestEntityLifecycle:
         """Создание entity со всеми опциональными полями"""
         response = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "task",
-            "entity_subtype": "project_task",
             "name": f"Полная задача {unique_id}",
             "description": "Детальное описание задачи",
             "tags": ["срочно", "проект"],
@@ -223,4 +244,28 @@ class TestEntityLifecycle:
         assert entity["due_date"] == "2024-12-31"
         assert len(entity["assignees"]) == 2
         assert "срочно" in entity["tags"]
+
+    @pytest.mark.asyncio
+    async def test_create_entity_rejects_type_outside_namespace(self, crm_client, unique_id, auth_headers_system):
+        create_type_resp = await crm_client.post("/crm/api/v1/entity-types/", json={
+            "type_id": f"candidate_{unique_id}",
+            "name": "Кандидат",
+            "description": "HR сущность",
+            "namespace_ids": ["default"],
+        }, headers=auth_headers_system)
+        assert create_type_resp.status_code == 200
+
+        create_namespace_resp = await crm_client.post("/crm/api/v1/namespaces", json={
+            "name": f"hr_{unique_id}",
+            "description": "HR пространство",
+            "template_id": "hr",
+        }, headers=auth_headers_system)
+        assert create_namespace_resp.status_code == 201
+
+        create_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": f"candidate_{unique_id}",
+            "name": "Иван Кандидат",
+            "namespace": f"hr_{unique_id}",
+        }, headers=auth_headers_system)
+        assert create_entity_resp.status_code == 422
 

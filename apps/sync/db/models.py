@@ -29,6 +29,9 @@ class SyncSpace(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    namespace: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    auto_export_transcript_to_crm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    auto_export_summary_to_crm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -346,3 +349,121 @@ class SyncCallLink(Base):
 
     def __repr__(self) -> str:
         return f"<SyncCallLink(token='{self.link_token}', channel='{self.channel_id}')>"
+
+
+class SyncCallRecording(Base):
+    """Серверная запись звонка."""
+
+    __tablename__ = "sync_call_recordings"
+
+    recording_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    call_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_calls.call_id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
+    )
+    space_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("sync_spaces.space_id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="requested")
+    provider_job_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    raw_file_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("sync_files.file_id", ondelete="SET NULL"), nullable=True
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_sync_call_recordings_company", "company_id"),
+        Index("ix_sync_call_recordings_call", "call_id"),
+        Index("ix_sync_call_recordings_channel", "channel_id"),
+        Index("ix_sync_call_recordings_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncCallRecording(recording_id='{self.recording_id}', call_id='{self.call_id}', status='{self.status}')>"
+
+
+class SyncCallMeeting(Base):
+    """Карточка встречи по звонку: транскрипт, summary и статус экспорта."""
+
+    __tablename__ = "sync_call_meetings"
+
+    meeting_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    call_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_calls.call_id", ondelete="CASCADE"), nullable=False
+    )
+    recording_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("sync_call_recordings.recording_id", ondelete="SET NULL"), nullable=True
+    )
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
+    )
+    space_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("sync_spaces.space_id", ondelete="SET NULL"), nullable=True
+    )
+    transcript_file_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("sync_files.file_id", ondelete="SET NULL"), nullable=True
+    )
+    transcript_text_file_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("sync_files.file_id", ondelete="SET NULL"), nullable=True
+    )
+    summary_json: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    export_status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    export_target_namespace: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_sync_call_meetings_company", "company_id"),
+        Index("ix_sync_call_meetings_call", "call_id"),
+        Index("ix_sync_call_meetings_channel", "channel_id"),
+        Index("ix_sync_call_meetings_space", "space_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncCallMeeting(meeting_id='{self.meeting_id}', call_id='{self.call_id}')>"
+
+
+class SyncCallSpeakerSegment(Base):
+    """Сегмент речи с таймкодами и идентификацией говорящего."""
+
+    __tablename__ = "sync_call_speaker_segments"
+
+    segment_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    meeting_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_call_meetings.meeting_id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    speaker_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    speaker_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    speaker_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    speaker_guest_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    started_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    ended_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        Index("ix_sync_call_speaker_segments_company", "company_id"),
+        Index("ix_sync_call_speaker_segments_meeting", "meeting_id"),
+        Index("ix_sync_call_speaker_segments_identity", "speaker_identity"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncCallSpeakerSegment(segment_id='{self.segment_id}', meeting_id='{self.meeting_id}')>"

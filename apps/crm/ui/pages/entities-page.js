@@ -187,6 +187,11 @@ export class EntitiesPage extends PlatformElement {
 
     async _loadEntities() {
         const crmApi = this.services.get('crmApi');
+        const namespace = CRMStore.state.namespaces.current;
+        const namespaceName = typeof namespace === 'string'
+            ? namespace
+            : (namespace && typeof namespace.name === 'string' ? namespace.name : 'default');
+        await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
     }
 

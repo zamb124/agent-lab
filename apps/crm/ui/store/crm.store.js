@@ -92,6 +92,8 @@ function normalizeAnalyzeResponse(analysis) {
 const baseStore = new BaseStore('crm', {
     namespaces: {
         list: [],
+        templates: [],
+        templateDetails: null,
         current: null,
         grants: [],
         loading: false,
@@ -186,7 +188,7 @@ export const CRMStore = {
         }
         
         const [, view, id] = match;
-        const validViews = ['notes', 'entities', 'graph', 'tasks', 'calendar'];
+        const validViews = ['notes', 'entities', 'graph', 'tasks', 'calendar', 'settings'];
         
         if (!validViews.includes(view)) {
             history.replaceState({}, '', '/crm/notes');
@@ -466,6 +468,9 @@ export const CRMStore = {
             const analyzeOptions = {
                 ...options,
                 ...(Array.isArray(options.mentionedEntityIds) ? {} : { mentionedEntityIds: fallbackMentionedEntityIds }),
+                ...(typeof options.namespace === 'string'
+                    ? {}
+                    : { namespace: this._getCurrentNamespaceName() }),
             };
             const analyzeResponse = await crmApi.analyzeText(text, noteId, analyzeOptions);
             const analysis = normalizeAnalyzeResponse(analyzeResponse);
@@ -985,12 +990,14 @@ export const CRMStore = {
         return processedCount;
     },
 
-    async loadEntityTypes(crmApi) {
+    async loadEntityTypes(crmApi, namespace = null) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
         }
-        
-        const response = await crmApi.getEntityTypes();
+
+        const response = namespace
+            ? await crmApi.getEntityTypesByNamespace(namespace)
+            : await crmApi.getEntityTypes();
         const types = normalizeEntityTypeList(response);
         baseStore.setState((s) => ({
             entities: { ...s.entities, entityTypes: types }
@@ -1045,6 +1052,8 @@ export const CRMStore = {
             namespaces: {
                 ...s.namespaces,
                 list,
+                templates: s.namespaces.templates,
+                templateDetails: s.namespaces.templateDetails,
                 loading: false
             }
         }));
@@ -1066,15 +1075,96 @@ export const CRMStore = {
         }));
     },
 
-    async createNamespace(crmApi, name, description = null) {
+    async createNamespace(crmApi, name, description = null, templateId = null) {
+        return await this.createNamespaceFromTemplate(crmApi, name, templateId, description);
+    },
+
+    async loadNamespaceTemplates(crmApi) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const templates = await crmApi.getNamespaceTemplates();
+        if (!Array.isArray(templates)) {
+            throw new Error('Namespace templates payload must be array');
+        }
+        baseStore.setState((s) => ({
+            namespaces: {
+                ...s.namespaces,
+                templates,
+                templateDetails: s.namespaces.templateDetails,
+            }
+        }));
+        return templates;
+    },
+
+    async loadNamespaceTemplateDetails(crmApi, templateId) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!templateId) {
+            throw new Error('Template ID is required');
+        }
+        const details = await crmApi.getNamespaceTemplate(templateId);
+        baseStore.setState((s) => ({
+            namespaces: {
+                ...s.namespaces,
+                templateDetails: details,
+            }
+        }));
+        return details;
+    },
+
+    async createNamespaceTemplate(crmApi, payload) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const created = await crmApi.createNamespaceTemplate(payload);
+        await this.loadNamespaceTemplates(crmApi);
+        return created;
+    },
+
+    async updateNamespaceTemplate(crmApi, templateId, payload) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const updated = await crmApi.updateNamespaceTemplate(templateId, payload);
+        await this.loadNamespaceTemplates(crmApi);
+        const current = baseStore.state.namespaces.templateDetails;
+        if (current && current.template_id === templateId) {
+            await this.loadNamespaceTemplateDetails(crmApi, templateId);
+        }
+        return updated;
+    },
+
+    async upsertNamespaceTemplateType(crmApi, templateId, payload) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const item = await crmApi.upsertNamespaceTemplateType(templateId, payload);
+        await this.loadNamespaceTemplateDetails(crmApi, templateId);
+        return item;
+    },
+
+    async deleteNamespaceTemplateType(crmApi, templateId, typeId) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        await crmApi.deleteNamespaceTemplateType(templateId, typeId);
+        await this.loadNamespaceTemplateDetails(crmApi, templateId);
+    },
+
+    async createNamespaceFromTemplate(crmApi, name, templateId, description = null) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
         }
         if (!name) {
             throw new Error('Namespace name is required');
         }
+        if (!templateId) {
+            throw new Error('Template ID is required');
+        }
 
-        const namespace = await crmApi.createNamespace(name, description);
+        const namespace = await crmApi.createNamespace(name, description, templateId);
 
         baseStore.setState((s) => ({
             namespaces: {
@@ -1089,6 +1179,14 @@ export const CRMStore = {
         }));
 
         return namespace;
+    },
+
+    getAllowedEntityTypesForCurrentNamespace() {
+        const namespace = this._getCurrentNamespaceName();
+        return (baseStore.state.entities.entityTypes || []).filter((type) => {
+            const namespaceIds = Array.isArray(type?.namespace_ids) ? type.namespace_ids : [];
+            return namespaceIds.includes(namespace);
+        });
     },
 
     async loadNamespaceGrants(crmApi, namespace) {

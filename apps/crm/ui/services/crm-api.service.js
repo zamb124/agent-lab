@@ -93,6 +93,9 @@ export class CRMAPIService extends BaseService {
         if (extractRelationshipTypes && extractRelationshipTypes.length > 0) {
             body.extract_relationship_types = extractRelationshipTypes;
         }
+        if (typeof options.namespace === 'string' && options.namespace.trim().length > 0) {
+            body.namespace = options.namespace.trim();
+        }
 
         const params = query.size > 0 ? `?${query.toString()}` : '';
         return this.post(`/entities/analyze${params}`, body);
@@ -100,6 +103,13 @@ export class CRMAPIService extends BaseService {
     
     async getEntityTypes() {
         return this.get('/entity-types');
+    }
+
+    async getEntityTypesByNamespace(namespace) {
+        if (!namespace) {
+            throw new Error('Namespace is required');
+        }
+        return this.get(`/entity-types/by-namespace/${encodeURIComponent(namespace)}`);
     }
     
     async createEntityType(data) {
@@ -329,11 +339,66 @@ export class CRMAPIService extends BaseService {
         return this.get('/namespaces');
     }
 
-    async createNamespace(name, description = null) {
+    async getNamespaceTemplates() {
+        return this.get('/namespaces/templates');
+    }
+
+    async getNamespaceTemplate(templateId) {
+        if (!templateId) {
+            throw new Error('Template ID is required');
+        }
+        return this.get(`/namespaces/templates/${encodeURIComponent(templateId)}`);
+    }
+
+    async createNamespaceTemplate(data) {
+        if (!data || typeof data !== 'object') {
+            throw new Error('Template payload is required');
+        }
+        return this.post('/namespaces/templates', data);
+    }
+
+    async updateNamespaceTemplate(templateId, data) {
+        if (!templateId) {
+            throw new Error('Template ID is required');
+        }
+        if (!data || typeof data !== 'object') {
+            throw new Error('Template payload is required');
+        }
+        return this.put(`/namespaces/templates/${encodeURIComponent(templateId)}`, data);
+    }
+
+    async deleteNamespaceTemplate(templateId) {
+        if (!templateId) {
+            throw new Error('Template ID is required');
+        }
+        return this.delete(`/namespaces/templates/${encodeURIComponent(templateId)}`);
+    }
+
+    async upsertNamespaceTemplateType(templateId, data) {
+        if (!templateId) {
+            throw new Error('Template ID is required');
+        }
+        if (!data || typeof data !== 'object') {
+            throw new Error('Template type payload is required');
+        }
+        return this.post(`/namespaces/templates/${encodeURIComponent(templateId)}/types`, data);
+    }
+
+    async deleteNamespaceTemplateType(templateId, typeId) {
+        if (!templateId || !typeId) {
+            throw new Error('Template ID and type ID are required');
+        }
+        return this.delete(`/namespaces/templates/${encodeURIComponent(templateId)}/types/${encodeURIComponent(typeId)}`);
+    }
+
+    async createNamespace(name, description = null, templateId = null) {
         if (!name) {
             throw new Error('Namespace name is required');
         }
-        return this.post('/namespaces', { name, description });
+        if (!templateId) {
+            throw new Error('Template ID is required');
+        }
+        return this.post('/namespaces', { name, description, template_id: templateId });
     }
 
     // === NAMESPACE GRANTS ===

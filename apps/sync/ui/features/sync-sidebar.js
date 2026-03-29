@@ -533,6 +533,13 @@ export class SyncSidebar extends PlatformElement {
         }
     }
 
+    _openMeetings() {
+        window.dispatchEvent(new CustomEvent('sync-open-meetings', { bubbles: true }));
+        if (window.innerWidth < 768) {
+            SyncStore.setMobileSidebarOpen(false);
+        }
+    }
+
     async _selectChannel(channel) {
         const syncApi = this.services.get('syncApi');
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
@@ -615,6 +622,17 @@ export class SyncSidebar extends PlatformElement {
                                 <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                             </svg>
                             <span class="sidebar-adhoc-label">Создать Sync</span>
+                        </button>
+                    </div>
+                    <div class="sidebar-adhoc-row" style="padding-top:0;">
+                        <button
+                            type="button"
+                            class="sidebar-adhoc-btn"
+                            title="Открыть встречи"
+                            @click=${this._openMeetings}
+                        >
+                            <platform-icon name="calendar" size="16"></platform-icon>
+                            <span class="sidebar-adhoc-label">Встречи</span>
                         </button>
                     </div>
                     <div class="channels-section">

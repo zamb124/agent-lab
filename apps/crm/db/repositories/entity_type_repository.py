@@ -6,8 +6,7 @@
 """
 
 from typing import List, Optional
-from sqlalchemy import select, or_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from apps.crm.db.base import CRMDatabase, BaseCRMRepository
 from apps.crm.db.models import EntityType
@@ -29,7 +28,8 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     
     async def get_all_for_company(
         self,
-        include_system: bool = True
+        include_system: bool = True,
+        namespace: Optional[str] = None
     ) -> List[EntityType]:
         """
         Получает все типы доступные для компании из контекста.
@@ -42,19 +42,33 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         """
         company_id = self._get_company_id()
         async with self._db.session() as session:
-            conditions = [EntityType.company_id == company_id]
-            
-            if include_system:
-                conditions.append(
-                    or_(
-                        EntityType.company_id.is_(None),
-                        EntityType.is_system == True
-                    )
-                )
-            
-            stmt = select(EntityType).where(or_(*conditions))
+            stmt = select(EntityType).where(EntityType.company_id == company_id)
+            if namespace:
+                stmt = stmt.where(EntityType.namespace_ids.contains([namespace]))
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def get_by_type_id(
+        self,
+        type_id: str,
+        company_id: Optional[str] = None
+    ) -> Optional[EntityType]:
+        """Получает тип по type_id в рамках компании."""
+        effective_company_id = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(EntityType).where(
+                EntityType.type_id == type_id,
+                EntityType.company_id == effective_company_id,
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def list_allowed_for_namespace(
+        self,
+        namespace: str
+    ) -> List[EntityType]:
+        """Возвращает типы, разрешенные в конкретном namespace."""
+        return await self.get_all_for_company(namespace=namespace)
     
     async def get_subtypes(
         self,
@@ -74,12 +88,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             )
             
             if company_id:
-                stmt = stmt.where(
-                    or_(
-                        EntityType.company_id == company_id,
-                        EntityType.company_id.is_(None)
-                    )
-                )
+                stmt = stmt.where(EntityType.company_id == company_id)
             
             result = await session.execute(stmt)
             return list(result.scalars().all())

@@ -24,20 +24,23 @@ async def create_entity(
     service: EntityService = Depends(get_entity_service)
 ):
     """Создать новую entity"""
-    entity = await service.create_entity(
-        entity_type=data.entity_type,
-        name=data.name,
-        description=data.description,
-        entity_subtype=data.entity_subtype,
-        namespace=data.namespace,
-        attributes=data.attributes,
-        tags=data.tags,
-        user_id=data.user_id,
-        note_date=data.note_date,
-        due_date=data.due_date,
-        priority=data.priority,
-        assignees=data.assignees
-    )
+    try:
+        entity = await service.create_entity(
+            entity_type=data.entity_type,
+            name=data.name,
+            description=data.description,
+            entity_subtype=data.entity_subtype,
+            namespace=data.namespace,
+            attributes=data.attributes,
+            tags=data.tags,
+            user_id=data.user_id,
+            note_date=data.note_date,
+            due_date=data.due_date,
+            priority=data.priority,
+            assignees=data.assignees
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return EntityResponse.model_validate(entity)
 
 
@@ -110,7 +113,10 @@ async def update_entity(
     
     # Обновление
     updates = data.model_dump(exclude_none=True)
-    updated = await service.update_entity(entity_id, updates)
+    try:
+        updated = await service.update_entity(entity_id, updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return EntityResponse.model_validate(updated)
 
 
@@ -170,7 +176,10 @@ async def analyze_text(
     service: EntityService = Depends(get_entity_service)
 ):
     """AI анализ текста с извлечением entities и relationships"""
-    result = await service.analyze_text_with_ai(request, check_duplicates=check_duplicates)
+    try:
+        result = await service.analyze_text_with_ai(request, check_duplicates=check_duplicates)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     
     context = get_context()
     if note_id and context and context.user:

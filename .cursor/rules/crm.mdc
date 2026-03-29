@@ -62,10 +62,12 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
   - Связь: `document_id` -> `entity_id`
 
 **PostgreSQL:**
-- `EntityType` - типы сущностей (note, meeting, call, task, deal, contact)
+- `EntityType` - типы сущностей runtime (минимальное ядро: `note`, `task`; остальное создается из template)
 - `RelationshipType` - типы связей (mentions, linked, manages, reports_to)
 - `Relationship` - связи между entities (source → target, weight, metadata)
 - `AccessGrant` - права доступа (public, user, company, с ролями viewer/editor/admin)
+- `NamespaceTemplate` - шаблоны пространств (DB editable)
+- `NamespaceTemplateType` - типы внутри шаблона (`prompt`, `required_fields`, `optional_fields`, `check_duplicates`, `namespace_ids`)
 
 ### Изоляция
 
@@ -296,9 +298,20 @@ company_id="acme", namespace="default"   # По умолчанию
 
 **Types:**
 - `GET /entity-types` - список типов
+- `GET /entity-types/by-namespace/{namespace}` - типы, разрешенные в namespace
 - `POST /entity-types` - создать тип
 - `GET /relationships/types/` - список типов связей
 - `POST /relationships/types/` - создать тип связи
+
+**Namespaces & Templates:**
+- `GET /namespaces/templates` - список шаблонов из БД
+- `POST /namespaces/templates` - создать шаблон
+- `GET /namespaces/templates/{template_id}` - получить шаблон с типами
+- `PUT /namespaces/templates/{template_id}` - обновить метаданные шаблона
+- `DELETE /namespaces/templates/{template_id}` - удалить несистемный шаблон
+- `POST /namespaces/templates/{template_id}/types` - создать/обновить тип шаблона
+- `DELETE /namespaces/templates/{template_id}/types/{type_id}` - удалить тип из шаблона
+- `POST /namespaces` - создать namespace из DB-шаблона (`template_id` обязателен)
 
 **Relationships:**
 - `POST /relationships` - создать связь
@@ -326,9 +339,19 @@ company_id="acme", namespace="default"   # По умолчанию
 - Копирует системные EntityType с `company_id`
 - Копирует системные RelationshipType
 - Вызывается при старте CRM и при создании компании
+- Заполняет `EntityType.namespace_ids=["default"]` для системных типов
+
+## Namespace templates + type binding
+
+- Источник правды по доступности типа в пространстве: `EntityType.namespace_ids`.
+- Создание/обновление сущности обязано проходить проверку: `entity_type` (и `entity_subtype`, если указан) должен содержать текущий `namespace` в `namespace_ids`.
+- `AI analyze` работает в контексте `namespace` и использует только разрешенные в нем типы.
+- Дедупликация `EntityService._deduplicate_entities` обязана искать кандидатов в том же `namespace`.
+- При создании `namespace` через шаблон: типы из `NamespaceTemplateType` materialize в `EntityType` (если отсутствуют) и получают новый namespace в `namespace_ids`.
+- `NamespaceTemplate` хранит метаданные шаблона включая `icon`; иконка редактируется через Settings UI и используется для визуального выбора шаблона.
 
 **Системные типы:**
-- `note`, `meeting`, `call`, `task` - базовые entity types
+- `note`, `task` - базовые entity types
 - `mentions`, `linked` - базовые relationship types
 
 ## Cascade удаление

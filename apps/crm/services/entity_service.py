@@ -28,6 +28,7 @@ from apps.crm.services.daily_summary_cache_service import DailySummaryCacheServi
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
 from core.clients.a2a_client import A2AClient
 from core.context import get_context
+from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
 import json
 from datetime import datetime as dt
@@ -51,6 +52,7 @@ class EntityService:
         entity_type_repo: EntityTypeRepository,
         relationship_type_repo: RelationshipTypeRepository,
         relationship_repo: RelationshipRepository,
+        namespace_repo: NamespaceRepository,
         attachment_service: AttachmentService,
         a2a_client: A2AClient,
         daily_summary_cache_service: DailySummaryCacheService,
@@ -59,6 +61,7 @@ class EntityService:
         self._entity_type_repo = entity_type_repo
         self._relationship_type_repo = relationship_type_repo
         self._relationship_repo = relationship_repo
+        self._namespace_repo = namespace_repo
         self._attachment_service = attachment_service
         self._a2a_client = a2a_client
         self._daily_summary_cache_service = daily_summary_cache_service
@@ -76,6 +79,40 @@ class EntityService:
         if namespace.strip() == "":
             return None
         return namespace
+
+    @staticmethod
+    def _resolve_namespace_for_write(namespace: Optional[str]) -> str:
+        normalized = EntityService._normalize_namespace(namespace)
+        if normalized is None:
+            return "default"
+        return normalized
+
+    async def _ensure_namespace_exists(self, namespace: str) -> None:
+        existing_namespace = await self._namespace_repo.get(namespace)
+        if existing_namespace is None and namespace == "default":
+            await self._namespace_repo.list_all()
+            existing_namespace = await self._namespace_repo.get(namespace)
+        if existing_namespace is None:
+            raise ValueError(f"Namespace not found: {namespace}")
+
+    async def _ensure_entity_type_allowed_in_namespace(
+        self,
+        entity_type: str,
+        namespace: str,
+        entity_subtype: Optional[str] = None,
+    ) -> None:
+        entity_type_model = await self._entity_type_repo.get_by_type_id(entity_type)
+        if entity_type_model is None:
+            raise ValueError(f"Entity type not found: {entity_type}")
+        if namespace not in (entity_type_model.namespace_ids or []):
+            raise ValueError(f"Entity type '{entity_type}' is not allowed in namespace '{namespace}'")
+
+        if entity_subtype:
+            subtype_model = await self._entity_type_repo.get_by_type_id(entity_subtype)
+            if subtype_model is None:
+                raise ValueError(f"Entity subtype not found: {entity_subtype}")
+            if namespace not in (subtype_model.namespace_ids or []):
+                raise ValueError(f"Entity subtype '{entity_subtype}' is not allowed in namespace '{namespace}'")
 
     async def _list_notes_for_date(self, date_str: str, namespace: Optional[str] = None) -> List[CRMEntity]:
         query_filters: dict[str, Any] = {"note_date": date_str}
@@ -130,6 +167,15 @@ class EntityService:
             if not context or not context.user:
                 raise ValueError("user_id is required (no user in context)")
             user_id = context.user.user_id
+
+        namespace = self._resolve_namespace_for_write(kwargs.get("namespace"))
+        kwargs["namespace"] = namespace
+        await self._ensure_namespace_exists(namespace)
+        await self._ensure_entity_type_allowed_in_namespace(
+            entity_type=entity_type,
+            namespace=namespace,
+            entity_subtype=entity_subtype,
+        )
         
         entity = CRMEntity(
             user_id=user_id,
@@ -180,10 +226,27 @@ class EntityService:
         old_note_date = entity.note_date.isoformat() if entity.note_date is not None else None
         old_namespace = entity.namespace
         is_note = entity.entity_type == "note"
+
+        next_namespace = self._resolve_namespace_for_write(
+            updates["namespace"] if "namespace" in updates else entity.namespace
+        )
+        next_entity_type = updates["entity_type"] if "entity_type" in updates else getattr(entity, "entity_type", None)
+        next_entity_subtype = (
+            updates["entity_subtype"]
+            if "entity_subtype" in updates
+            else getattr(entity, "entity_subtype", None)
+        )
+        await self._ensure_namespace_exists(next_namespace)
+        await self._ensure_entity_type_allowed_in_namespace(
+            entity_type=next_entity_type,
+            namespace=next_namespace,
+            entity_subtype=next_entity_subtype,
+        )
         
         for key, value in updates.items():
             if hasattr(entity, key) and value is not None:
                 setattr(entity, key, value)
+        entity.namespace = next_namespace
         
         entity.updated_at = datetime.now(timezone.utc)
         await self._entity_repo.update(entity)
@@ -468,7 +531,9 @@ class EntityService:
             request: Запрос на анализ
             check_duplicates: Проверять ли дубликаты (по умолчанию True)
         """
-        entity_types = await self._entity_type_repo.get_all_for_company()
+        namespace = self._resolve_namespace_for_write(request.namespace)
+        await self._ensure_namespace_exists(namespace)
+        entity_types = await self._entity_type_repo.get_all_for_company(namespace=namespace)
         relationship_types = await self._relationship_type_repo.get_with_prompts()
         
         prompt = self._build_composite_prompt(
@@ -481,11 +546,16 @@ class EntityService:
         ai_result = await self._call_ai_agent(
             text=request.text,
             prompt=prompt,
-            mentioned_entity_ids=request.mentioned_entity_ids
+            mentioned_entity_ids=request.mentioned_entity_ids,
+            entity_types=entity_types,
+            relationship_types=relationship_types,
         )
         
         if check_duplicates and ai_result.entities:
-            dedup_results = await self._deduplicate_entities(ai_result.entities)
+            dedup_results = await self._deduplicate_entities(
+                extracted_entities=ai_result.entities,
+                namespace=namespace,
+            )
             
             for i, entity in enumerate(ai_result.entities):
                 if i < len(dedup_results):
@@ -536,16 +606,14 @@ class EntityService:
         self,
         text: str,
         prompt: str,
-        mentioned_entity_ids: Optional[List[str]]
+        mentioned_entity_ids: Optional[List[str]],
+        entity_types: List,
+        relationship_types: List,
     ) -> AIAnalyzeResponse:
         """Вызывает AI agent через A2A API для анализа"""
         from core.config import get_settings
         
         settings = get_settings()
-        
-        # Получаем типы из БД (уже с company_id из контекста)
-        entity_types = await self._entity_type_repo.get_all_for_company()
-        relationship_types = await self._relationship_type_repo.get_with_prompts()
         
         # Формируем переменные для агента
         variables = {
@@ -1176,7 +1244,8 @@ class EntityService:
     
     async def _deduplicate_entities(
         self,
-        extracted_entities: List[AIExtractedEntity]
+        extracted_entities: List[AIExtractedEntity],
+        namespace: str,
     ) -> List[DeduplicateResult]:
         """
         Проверяет каждую entity на дубликат.
@@ -1194,6 +1263,7 @@ class EntityService:
             candidates = await self._entity_repo.search(
                 query=search_query,
                 entity_type=entity.entity_type,
+                namespace=namespace,
                 limit=3
             )
             

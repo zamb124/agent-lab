@@ -56,6 +56,25 @@
       },
       "edges": []
     },
+    "call_summary": {
+      "name": "Call Summary",
+      "description": "Структурированное summary встречи по транскрипту",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/call_summary.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.1
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/call_summary.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
     "deduplicate": {
       "name": "Deduplicate Check",
       "description": "Сравнивает две сущности и определяет дубликат ли это",

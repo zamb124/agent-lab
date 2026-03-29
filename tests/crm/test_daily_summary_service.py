@@ -23,11 +23,18 @@ def _set_test_context() -> None:
 
 
 def _build_service() -> EntityService:
+    entity_type_repo = AsyncMock()
+    entity_type_repo.get_by_type_id = AsyncMock(
+        return_value=SimpleNamespace(namespace_ids=["default", "sales", "support"])
+    )
+    namespace_repo = AsyncMock()
+    namespace_repo.get = AsyncMock(return_value=SimpleNamespace(name="default"))
     return EntityService(
         entity_repo=AsyncMock(),
-        entity_type_repo=AsyncMock(),
+        entity_type_repo=entity_type_repo,
         relationship_type_repo=AsyncMock(),
         relationship_repo=AsyncMock(),
+        namespace_repo=namespace_repo,
         attachment_service=AsyncMock(),
         a2a_client=AsyncMock(),
         daily_summary_cache_service=AsyncMock(),

@@ -12,6 +12,8 @@ export class NamespaceModal extends PlatformModal {
         ...PlatformModal.properties,
         _name: { state: true },
         _description: { state: true },
+        _templateId: { state: true },
+        _templates: { state: true },
         _saving: { state: true },
     };
 
@@ -82,6 +84,8 @@ export class NamespaceModal extends PlatformModal {
         this.size = 'md';
         this._name = '';
         this._description = '';
+        this._templateId = 'sales';
+        this._templates = [];
         this._saving = false;
     }
 
@@ -97,6 +101,19 @@ export class NamespaceModal extends PlatformModal {
         this._description = e.target.value;
     }
 
+    async firstUpdated() {
+        super.firstUpdated?.();
+        const crmApi = this.services.get('crmApi');
+        this._templates = await CRMStore.loadNamespaceTemplates(crmApi);
+        if (!this._templates.some((template) => template.template_id === this._templateId) && this._templates.length > 0) {
+            this._templateId = this._templates[0].template_id;
+        }
+    }
+
+    _onTemplateChange(e) {
+        this._templateId = e.target.value;
+    }
+
     async _onSave() {
         if (!this._name.trim()) {
             this.error('Название обязательно');
@@ -109,7 +126,8 @@ export class NamespaceModal extends PlatformModal {
         await CRMStore.createNamespace(
             crmApi,
             this._name.trim(),
-            this._description.trim() || null
+            this._description.trim() || null,
+            this._templateId
         );
 
         this.success('Пространство создано');
@@ -128,6 +146,22 @@ export class NamespaceModal extends PlatformModal {
         return html`
             <div class="form-grid">
                 <div class="form-group">
+                    <label class="form-label">Шаблон *</label>
+                    <select
+                        class="form-select"
+                        .value=${this._templateId}
+                        @change=${this._onTemplateChange}
+                    >
+                        ${this._templates.map((template) => html`
+                            <option value=${template.template_id}>${template.name}</option>
+                        `)}
+                    </select>
+                    <div class="hint">
+                        Пространство создается с преднастроенными типами сущностей.
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Название *</label>
                     <input
                         type="text"
@@ -137,7 +171,7 @@ export class NamespaceModal extends PlatformModal {
                         @input=${this._onNameInput}
                     />
                     <div class="hint">
-                        Уникальный идентификатор пространства. Рекомендуется использовать латиницу.
+                        Уникальный идентификатор пространства. Рекомендуется латиница и snake_case.
                     </div>
                 </div>
 

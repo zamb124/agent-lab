@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.db.models import SyncChannel, SyncSpace
+from apps.sync.db.models import SyncCall, SyncCallParticipant, SyncChannel, SyncSpace
 from apps.sync.models.channels import ChannelCreate, ChannelType, ChannelUpdate
 from apps.sync.models.git import GitProvider, GitResourceKind, GitResourceRefCreate
 from apps.sync.models.messages import (
@@ -21,6 +21,7 @@ from apps.sync.models.spaces import SpaceCreate, SpaceUpdate
 from apps.sync.models.threads import ThreadCreate
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.handlers import execute_command
+from apps.sync.realtime.tasks import handle_command
 
 
 def _cmd(
@@ -817,3 +818,263 @@ async def test_git_resources_upsert(
     assert res.ok
     assert res.result is not None
     assert res.result.external_id == "99"
+
+
+@pytest.mark.asyncio
+async def test_call_recording_start_stop_flow(
+    flows_service,
+    monkeypatch,
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    sync_user_repository,
+    deterministic_stt_transcript,
+    wait_for_meeting_pipeline_complete,
+    sync_db_clean: None,
+    system_user_id: str,
+) -> None:
+    from apps.sync.realtime import tasks as sync_tasks
+
+    company_id = "system"
+    actor_user_id = system_user_id
+
+    async def _run_finalize_kiq(**kwargs):
+        await sync_tasks.sync_finalize_recording_task(**kwargs)
+
+    async def _run_transcribe_kiq(**kwargs):
+        await sync_tasks.sync_transcribe_recording_task(**kwargs)
+
+    async def _run_summarize_kiq(**kwargs):
+        await sync_tasks.sync_summarize_transcript_task(**kwargs)
+
+    monkeypatch.setattr(sync_tasks.sync_finalize_recording_task, "kiq", _run_finalize_kiq)
+    monkeypatch.setattr(sync_tasks.sync_transcribe_recording_task, "kiq", _run_transcribe_kiq)
+    monkeypatch.setattr(sync_tasks.sync_summarize_transcript_task, "kiq", _run_summarize_kiq)
+    deterministic_stt_transcript(
+        f"speaker:user:{actor_user_id}: Курьер опоздал на 20 минут.\n"
+        "speaker:guest:guest:anon: Подтверждаю, звонок состоялся поздно."
+    )
+    sp = SyncSpace(
+        space_id="sp_call_rec",
+        company_id=company_id,
+        name="S",
+        description=None,
+        namespace=None,
+        auto_export_transcript_to_crm=False,
+        auto_export_summary_to_crm=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await space_repo.create(sp)
+    ch = SyncChannel(
+        channel_id="ch_call_rec",
+        company_id=company_id,
+        space_id=sp.space_id,
+        type=ChannelType.TOPIC.value,
+        name="support",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await channel_repo.create(ch)
+    await channel_repo.upsert_member(ch.channel_id, actor_user_id, "owner", company_id=company_id)
+    call = SyncCall(
+        call_id="call_recording_test",
+        company_id=company_id,
+        channel_id=ch.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name="room-test",
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await call_repo.create_call(call)
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=actor_user_id,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id="guest:anon:Partner",
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+
+    start = await execute_command(
+        _cmd(
+            actor=actor_user_id,
+            company_id=company_id,
+            typ="call.recording.start",
+            payload={"call_id": call.call_id},
+        ),
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        user_repository=sync_user_repository,
+        calls=call_repo,
+        call_recordings=call_recording_repo,
+        call_meetings=call_meeting_repo,
+    )
+    assert start.ok
+    assert start.result.status in ("recording", "requested")
+
+    stop = await execute_command(
+        _cmd(
+            actor=actor_user_id,
+            company_id=company_id,
+            typ="call.recording.stop",
+            payload={"call_id": call.call_id},
+        ),
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        user_repository=sync_user_repository,
+        calls=call_repo,
+        call_recordings=call_recording_repo,
+        call_meetings=call_meeting_repo,
+    )
+    assert stop.ok
+    assert stop.result.status == "uploaded"
+    meeting = await call_meeting_repo.get_by_recording(stop.result.recording_id, company_id)
+    assert meeting is not None
+    completed_meeting = await wait_for_meeting_pipeline_complete(
+        meeting_id=meeting.meeting_id,
+        company_id=company_id,
+        require_export_done=False,
+    )
+    assert completed_meeting.transcript_text_file_id is not None
+    assert completed_meeting.summary_json is not None
+    assert "short_summary" in completed_meeting.summary_json
+
+
+@pytest.mark.asyncio
+@pytest.mark.real_taskiq
+async def test_call_recording_pipeline_via_real_queue_worker(
+    flows_service,
+    sync_worker,
+    space_repo,
+    channel_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    wait_for_meeting_pipeline_complete,
+    sync_db_clean: None,
+    system_user_id: str,
+) -> None:
+    """Полный pipeline через настоящий queue worker без monkeypatch .kiq."""
+    company_id = "system"
+    actor_user_id = system_user_id
+
+    space = SyncSpace(
+        space_id=f"sp_queue_{uuid.uuid4().hex[:8]}",
+        company_id=company_id,
+        name="Queue Pipeline Space",
+        description=None,
+        namespace=None,
+        auto_export_transcript_to_crm=False,
+        auto_export_summary_to_crm=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await space_repo.create(space)
+
+    channel = SyncChannel(
+        channel_id=f"ch_queue_{uuid.uuid4().hex[:8]}",
+        company_id=company_id,
+        space_id=space.space_id,
+        type=ChannelType.TOPIC.value,
+        name="queue-support",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await channel_repo.create(channel)
+    await channel_repo.upsert_member(channel.channel_id, actor_user_id, "owner", company_id=company_id)
+
+    call = SyncCall(
+        call_id=f"call_queue_{uuid.uuid4().hex[:8]}",
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name=f"room-queue-{uuid.uuid4().hex[:8]}",
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await call_repo.create_call(call)
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=actor_user_id,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id="guest:queue:Partner",
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+
+    start_envelope = _cmd(
+        actor=actor_user_id,
+        company_id=company_id,
+        typ="call.recording.start",
+        payload={"call_id": call.call_id},
+    )
+    start_task = await handle_command.kiq(start_envelope.model_dump(mode="json"))
+    start_result = await start_task.wait_result(timeout=30)
+    assert not start_result.is_err, f"Queue start task failed: {start_result.error}"
+    assert start_result.return_value["ok"] is True
+
+    stop_envelope = _cmd(
+        actor=actor_user_id,
+        company_id=company_id,
+        typ="call.recording.stop",
+        payload={"call_id": call.call_id},
+    )
+    stop_task = await handle_command.kiq(stop_envelope.model_dump(mode="json"))
+    stop_result = await stop_task.wait_result(timeout=30)
+    assert not stop_result.is_err, f"Queue stop task failed: {stop_result.error}"
+    assert stop_result.return_value["ok"] is True
+    stop_payload = stop_result.return_value["result"]
+    assert stop_payload["status"] == "uploaded"
+
+    meeting = await call_meeting_repo.get_by_recording(stop_payload["recording_id"], company_id)
+    assert meeting is not None
+    completed_meeting = await wait_for_meeting_pipeline_complete(
+        meeting_id=meeting.meeting_id,
+        company_id=company_id,
+        timeout_seconds=60.0,
+        require_export_done=False,
+    )
+    assert completed_meeting.transcript_text_file_id is not None
+    assert "short_summary" in (completed_meeting.summary_json or {})
+
+    recording = await call_recording_repo.get(stop_payload["recording_id"])
+    assert recording is not None
+    assert recording.raw_file_id is not None

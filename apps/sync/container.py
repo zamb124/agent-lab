@@ -60,6 +60,11 @@ class SyncContainer(BaseContainer):
         return MessageRepository(db=self.sync_db)
 
     @lazy
+    def file_repository(self):
+        from apps.sync.db.repositories.file_repository import SyncFileRepository
+        return SyncFileRepository(db=self.sync_db)
+
+    @lazy
     def git_resource_ref_repository(self):
         from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
         return GitResourceRefRepository(db=self.sync_db)
@@ -68,6 +73,21 @@ class SyncContainer(BaseContainer):
     def call_repository(self):
         from apps.sync.db.repositories.call_repository import CallRepository
         return CallRepository(db=self.sync_db)
+
+    @lazy
+    def call_recording_repository(self):
+        from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
+        return CallRecordingRepository(db=self.sync_db)
+
+    @lazy
+    def call_meeting_repository(self):
+        from apps.sync.db.repositories.meeting_repository import CallMeetingRepository
+        return CallMeetingRepository(db=self.sync_db)
+
+    @lazy
+    def call_speaker_segment_repository(self):
+        from apps.sync.db.repositories.meeting_repository import CallSpeakerSegmentRepository
+        return CallSpeakerSegmentRepository(db=self.sync_db)
 
 
 # === Глобальный контейнер ===
