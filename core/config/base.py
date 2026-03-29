@@ -70,6 +70,7 @@ class BaseSettings(PydanticBaseSettings):
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     push: PushConfig = Field(default_factory=PushConfig)
     calls: CallsConfig = Field(default_factory=CallsConfig)
+    recording_max_duration_seconds: float = Field(default=3600.0)
 
     model_config = ConfigDict(
         env_file=[".env"],

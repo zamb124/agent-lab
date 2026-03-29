@@ -24,7 +24,3 @@ class SyncSettings(BaseSettings):
         default=3000.0,
         description="Таймаут A2A вызова summary в flows (секунды).",
     )
-    recording_max_duration_seconds: float = Field(
-        default=3600.0,
-        description="Максимальная длительность записи звонка (секунды).",
-    )
