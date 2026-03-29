@@ -58,6 +58,13 @@ def _extract_transcript_from_json_payload(payload: object) -> str | None:
     return None
 
 
+def _short_json(value: object, *, limit: int = 1200) -> str:
+    serialized = json.dumps(value, ensure_ascii=False)
+    if len(serialized) <= limit:
+        return serialized
+    return serialized[:limit] + "...(truncated)"
+
+
 class BaseSTTClient(ABC):
     """Базовый интерфейс STT клиента."""
 
@@ -169,7 +176,10 @@ class CloudRuSTTClient(BaseSTTClient):
             body_json = response.json()
             transcript = _extract_transcript_from_json_payload(body_json)
             if transcript is None:
-                raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
+                raise ValueError(
+                    "STT cloud_ru вернул пустую транскрипцию. "
+                    f"content_type={content_type}; payload={_short_json(body_json)}"
+                )
             return STTTranscriptionResult(
                 provider="cloud_ru",
                 status=AudioTranscriptionStatus.DONE,
@@ -181,7 +191,10 @@ class CloudRuSTTClient(BaseSTTClient):
             body_json = json.loads(body_text)
             transcript = _extract_transcript_from_json_payload(body_json)
             if transcript is None:
-                raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
+                raise ValueError(
+                    "STT cloud_ru вернул пустую транскрипцию (json-string body). "
+                    f"payload={_short_json(body_json)}"
+                )
             return STTTranscriptionResult(
                 provider="cloud_ru",
                 status=AudioTranscriptionStatus.DONE,
@@ -193,7 +206,10 @@ class CloudRuSTTClient(BaseSTTClient):
             body_json = json.loads(body_text)
             transcript = _extract_transcript_from_json_payload(body_json)
             if transcript is None:
-                raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
+                raise ValueError(
+                    "STT cloud_ru вернул пустую транскрипцию (json-array body). "
+                    f"payload={_short_json(body_json)}"
+                )
             return STTTranscriptionResult(
                 provider="cloud_ru",
                 status=AudioTranscriptionStatus.DONE,

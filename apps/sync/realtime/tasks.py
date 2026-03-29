@@ -133,7 +133,10 @@ async def _try_download_recording_bytes_from_s3(source_url: str) -> tuple[bytes,
             continue
 
         s3_client = S3ClientFactory.create_client_for_bucket(bucket_alias)
-        payload = await s3_client.download_bytes(key=object_key, bucket=real_bucket_name)
+        try:
+            payload = await s3_client.download_bytes(key=object_key, bucket=real_bucket_name)
+        finally:
+            await s3_client.close()
         content_type, _ = mimetypes.guess_type(object_key)
         return payload, content_type
 
