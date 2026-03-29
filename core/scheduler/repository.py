@@ -132,15 +132,16 @@ class SchedulerTaskRepository:
         self,
         company_id: str,
         schedule_task_id: str,
-        status: ScheduledTaskStatus,
+        status: ScheduledTaskStatus | str,
         *,
         schedule_id: Optional[str] = None,
         last_run_at: Optional[datetime] = None,
         next_run_at: Optional[datetime] = None,
         error_message: Optional[str] = None,
     ) -> bool:
+        status_value = status.value if hasattr(status, "value") else str(status)
         values: dict[str, object] = {
-            "status": status.value,
+            "status": status_value,
             "updated_at": datetime.now(timezone.utc),
         }
         if schedule_id is not None:

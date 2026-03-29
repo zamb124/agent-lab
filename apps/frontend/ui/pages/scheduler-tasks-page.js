@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/glass-modal.js';
 
 export class SchedulerTasksPage extends PlatformElement {
     static styles = [
@@ -29,7 +30,8 @@ export class SchedulerTasksPage extends PlatformElement {
             .table-wrap {
                 background: var(--glass-solid-medium);
                 border-radius: var(--radius-lg);
-                overflow: auto;
+                overflow-x: auto;
+                overflow-y: visible;
             }
 
             table {
@@ -130,30 +132,36 @@ export class SchedulerTasksPage extends PlatformElement {
             }
 
             .actions-dropdown {
-                position: absolute;
-                right: 0;
-                top: calc(100% + 6px);
-                min-width: 170px;
+                min-width: 220px;
                 border: 1px solid var(--border-default);
                 background: var(--glass-solid-medium);
                 border-radius: var(--radius-md);
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+                box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
                 overflow: hidden;
-                z-index: 20;
                 backdrop-filter: blur(10px);
+            }
+
+            .actions-dropdown-inline {
+                position: absolute;
+                right: 0;
+                top: calc(100% + 6px);
+                z-index: 40;
             }
 
             .menu-item {
                 width: 100%;
-                border: none;
+                border: 1px solid var(--border-default);
                 border-radius: 0;
-                border-bottom: 1px solid var(--border-subtle);
+                border-left: none;
+                border-right: none;
+                border-top: none;
                 background: transparent;
                 display: flex;
                 align-items: center;
                 gap: 8px;
                 padding: 10px 12px;
                 text-align: left;
+                font-size: var(--text-xs);
             }
 
             .menu-item:last-child {
@@ -161,7 +169,7 @@ export class SchedulerTasksPage extends PlatformElement {
             }
 
             .menu-item:hover {
-                background: var(--glass-solid-subtle);
+                background: var(--glass-tint-medium);
             }
 
             .menu-item svg {
@@ -183,28 +191,18 @@ export class SchedulerTasksPage extends PlatformElement {
                 color: var(--text-secondary);
             }
 
-            .redis-panel {
-                margin-top: var(--space-4);
-                border: 1px solid var(--border-default);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-medium);
-                padding: var(--space-4);
-            }
-
-            .redis-panel-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: var(--space-3);
-                font-weight: 600;
-            }
-
-            .redis-panel pre {
-                margin: 0;
-                white-space: pre-wrap;
-                word-break: break-word;
+            .redis-json {
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+                    monospace;
                 font-size: 12px;
                 color: var(--text-secondary);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                padding: var(--space-3);
+                max-height: 60vh;
+                overflow: auto;
+                margin: 0;
             }
         `,
     ];
@@ -215,9 +213,9 @@ export class SchedulerTasksPage extends PlatformElement {
         statusFilter: { state: true },
         serviceFilter: { state: true },
         openMenuTaskId: { state: true },
-        menuPosition: { state: true },
         redisSnapshot: { state: true },
         redisSnapshotLoading: { state: true },
+        redisSnapshotModalOpen: { state: true },
     };
 
     constructor() {
@@ -227,36 +225,22 @@ export class SchedulerTasksPage extends PlatformElement {
         this.statusFilter = '';
         this.serviceFilter = '';
         this.openMenuTaskId = null;
-        this.menuPosition = null;
         this.redisSnapshot = null;
         this.redisSnapshotLoading = false;
-        this._handleDocumentClick = this._handleDocumentClick.bind(this);
-        this._handleWindowScroll = this._handleWindowScroll.bind(this);
+        this.redisSnapshotModalOpen = false;
     }
 
     async connectedCallback() {
         super.connectedCallback();
-        document.addEventListener('click', this._handleDocumentClick);
-        window.addEventListener('scroll', this._handleWindowScroll, true);
         await this._load();
     }
 
     disconnectedCallback() {
-        document.removeEventListener('click', this._handleDocumentClick);
-        window.removeEventListener('scroll', this._handleWindowScroll, true);
         super.disconnectedCallback();
     }
 
-    _handleDocumentClick(event) {
-        if (!event.target.closest('.actions-menu') && !event.target.closest('.actions-dropdown')) {
-            this.openMenuTaskId = null;
-            this.menuPosition = null;
-        }
-    }
-
-    _handleWindowScroll() {
+    _closeActionsMenu() {
         this.openMenuTaskId = null;
-        this.menuPosition = null;
     }
 
     _normalizeTask(task) {
@@ -301,16 +285,10 @@ export class SchedulerTasksPage extends PlatformElement {
     _toggleActionsMenu(taskId, event) {
         event.stopPropagation();
         if (this.openMenuTaskId === taskId) {
-            this.openMenuTaskId = null;
-            this.menuPosition = null;
+            this._closeActionsMenu();
             return;
         }
-        const triggerRect = event.currentTarget.getBoundingClientRect();
         this.openMenuTaskId = taskId;
-        this.menuPosition = {
-            top: triggerRect.bottom + 6,
-            left: triggerRect.right,
-        };
     }
 
     async _load() {
@@ -347,20 +325,23 @@ export class SchedulerTasksPage extends PlatformElement {
         } else {
             throw new Error(`Unknown action: ${action}`);
         }
-        this.openMenuTaskId = null;
-        this.menuPosition = null;
+        this._closeActionsMenu();
         await this._load();
     }
 
     async _openRedisSnapshot(taskId) {
+        this.redisSnapshotModalOpen = true;
         this.redisSnapshotLoading = true;
         try {
             this.redisSnapshot = await this.services.get('schedulerTasks').getRedisSnapshot(taskId);
-            this.openMenuTaskId = null;
-            this.menuPosition = null;
+            this._closeActionsMenu();
         } finally {
             this.redisSnapshotLoading = false;
         }
+    }
+
+    _closeRedisSnapshotModal() {
+        this.redisSnapshotModalOpen = false;
     }
 
     async _createSchedule() {
@@ -403,6 +384,7 @@ export class SchedulerTasksPage extends PlatformElement {
 
     render() {
         return html`
+            <div @click=${() => this._closeActionsMenu()}>
             <page-header title="Scheduler задачи"></page-header>
 
             <div class="toolbar">
@@ -456,7 +438,7 @@ export class SchedulerTasksPage extends PlatformElement {
                                         `
                                       : this.tasks.map(
                                             (task) => html`
-                                                <tr>
+                                                <tr class="task-row">
                                                     <td><code>${task.id}</code></td>
                                                     <td>${task.target_service}</td>
                                                     <td>${task.task_name}</td>
@@ -478,6 +460,51 @@ export class SchedulerTasksPage extends PlatformElement {
                                                             >
                                                                 ...
                                                             </button>
+                                                            ${this.openMenuTaskId === task.id
+                                                                ? html`
+                                                                      <div class="actions-dropdown actions-dropdown-inline" @click=${(event) => event.stopPropagation()}>
+                                                                          <button class="menu-item" @click=${() => this._executeAction('run-now', task.id)}>
+                                                                              <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                                                  <polygon points="8 5 19 12 8 19 8 5"></polygon>
+                                                                              </svg>
+                                                                              Run now
+                                                                          </button>
+                                                                          <button class="menu-item" @click=${() => this._openRedisSnapshot(task.id)}>
+                                                                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                                                  <ellipse cx="12" cy="6" rx="7" ry="3"></ellipse>
+                                                                                  <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"></path>
+                                                                                  <path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                                                                              </svg>
+                                                                              Redis snapshot
+                                                                          </button>
+                                                                          ${task.status === 'paused'
+                                                                              ? html`
+                                                                                    <button class="menu-item" @click=${() => this._executeAction('resume', task.id)}>
+                                                                                        <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                                                            <polygon points="8 5 19 12 8 19 8 5"></polygon>
+                                                                                        </svg>
+                                                                                        Resume
+                                                                                    </button>
+                                                                                `
+                                                                              : html`
+                                                                                    <button class="menu-item" @click=${() => this._executeAction('pause', task.id)}>
+                                                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                                                            <rect x="6" y="5" width="4" height="14"></rect>
+                                                                                            <rect x="14" y="5" width="4" height="14"></rect>
+                                                                                        </svg>
+                                                                                        Pause
+                                                                                    </button>
+                                                                                `}
+                                                                          <button class="menu-item" @click=${() => this._executeAction('cancel', task.id)}>
+                                                                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                                                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                                                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                                              </svg>
+                                                                              Cancel
+                                                                          </button>
+                                                                      </div>
+                                                                  `
+                                                                : ''}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -486,89 +513,25 @@ export class SchedulerTasksPage extends PlatformElement {
                               </tbody>
                           </table>
                       </div>
-                      ${this.openMenuTaskId && this.menuPosition
-                          ? html`
-                                <div
-                                    class="actions-dropdown"
-                                    style="position: fixed; top: ${this.menuPosition.top}px; left: ${this.menuPosition.left}px; transform: translateX(-100%);"
-                                >
-                                    <button
-                                        class="menu-item"
-                                        @click=${() => this._executeAction('run-now', this.openMenuTaskId)}
-                                    >
-                                        <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                            <polygon points="8 5 19 12 8 19 8 5"></polygon>
-                                        </svg>
-                                        Run now
-                                    </button>
-                                    <button
-                                        class="menu-item"
-                                        @click=${() => this._openRedisSnapshot(this.openMenuTaskId)}
-                                    >
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <ellipse cx="12" cy="6" rx="7" ry="3"></ellipse>
-                                            <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"></path>
-                                            <path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
-                                        </svg>
-                                        Redis snapshot
-                                    </button>
-                                    ${this.tasks.find((task) => task.id === this.openMenuTaskId)?.status === 'paused'
-                                        ? html`
-                                              <button
-                                                  class="menu-item"
-                                                  @click=${() => this._executeAction('resume', this.openMenuTaskId)}
-                                              >
-                                                  <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                      <polygon points="8 5 19 12 8 19 8 5"></polygon>
-                                                  </svg>
-                                                  Resume
-                                              </button>
-                                          `
-                                        : html`
-                                              <button
-                                                  class="menu-item"
-                                                  @click=${() => this._executeAction('pause', this.openMenuTaskId)}
-                                              >
-                                                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                      <rect x="6" y="5" width="4" height="14"></rect>
-                                                      <rect x="14" y="5" width="4" height="14"></rect>
-                                                  </svg>
-                                                  Pause
-                                              </button>
-                                          `}
-                                    <button
-                                        class="menu-item"
-                                        @click=${() => this._executeAction('cancel', this.openMenuTaskId)}
-                                    >
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                                        </svg>
-                                        Cancel
-                                    </button>
-                                </div>
-                            `
-                          : ''}
-                      ${this.redisSnapshotLoading
-                          ? html`
-                                <div class="redis-panel">
-                                    <div class="redis-panel-header">Redis snapshot</div>
-                                    <div>Загрузка...</div>
-                                </div>
-                            `
-                          : ''}
-                      ${this.redisSnapshot
-                          ? html`
-                                <div class="redis-panel">
-                                    <div class="redis-panel-header">
-                                        <span>Redis snapshot: ${this.redisSnapshot.schedule_task_id}</span>
-                                        <button @click=${() => (this.redisSnapshot = null)}>Close</button>
-                                    </div>
-                                    <pre>${JSON.stringify(this.redisSnapshot, null, 2)}</pre>
-                                </div>
-                            `
-                          : ''}
                   `}
+            <glass-modal
+                size="lg"
+                title="Redis snapshot"
+                ?open=${this.redisSnapshotModalOpen}
+                @modal-closed=${() => this._closeRedisSnapshotModal()}
+            >
+                <div slot="content">
+                    ${this.redisSnapshotLoading
+                        ? html`<div>Загрузка...</div>`
+                        : this.redisSnapshot
+                          ? html`<pre class="redis-json">${JSON.stringify(this.redisSnapshot, null, 2)}</pre>`
+                          : html`<div>Нет данных.</div>`}
+                </div>
+                <div slot="actions">
+                    <button @click=${() => this._closeRedisSnapshotModal()}>Закрыть</button>
+                </div>
+            </glass-modal>
+            </div>
         `;
     }
 }

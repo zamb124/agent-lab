@@ -37,6 +37,8 @@ export const islandStyles = css`
         position: relative;
         width: 100%;
         height: 100%;
+        display: flex;
+        flex-direction: column;
         background: var(--island-bg, var(--glass-solid-medium));
         backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
         -webkit-backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
@@ -70,8 +72,11 @@ export const islandStyles = css`
         position: relative;
         z-index: 1;
         padding: var(--island-padding, var(--space-6));
-        height: 100%;
+        flex: 1;
+        min-height: 0;
         box-sizing: border-box;
+        overflow-y: auto;
+        overflow-x: hidden;
     }
 
     :host([padding="none"]) .island-content {
@@ -120,7 +125,6 @@ export const islandStyles = css`
             padding: var(--space-4);
             display: flex;
             flex-direction: column;
-            overflow-y: auto;
         }
 
         :host([padding="none"]) .island-content {
