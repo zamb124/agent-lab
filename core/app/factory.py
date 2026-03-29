@@ -274,6 +274,9 @@ def create_service_app(
     auth_prefix = f"/{service_name}/api/auth"
     logger.info(f"Подключение core auth роутера ({auth_prefix}/*)")
     app.include_router(core_auth_router, prefix=auth_prefix, tags=["auth"])
+    if service_name == "frontend":
+        logger.info("Подключение core auth роутера (/auth/*) для единого OAuth callback")
+        app.include_router(core_auth_router, prefix="/auth", tags=["auth"])
 
     calendar_prefix = f"/{service_name}/api/calendar"
     logger.info(f"Подключение core calendar роутера ({calendar_prefix}/*)")

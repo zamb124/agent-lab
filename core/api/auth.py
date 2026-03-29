@@ -101,14 +101,8 @@ async def start_auth(
         # Это позволяет зарегистрировать один callback URL в провайдере
         base_host = get_host_with_port(original_host)
         
-        # Определяем префикс сервиса из текущего пути запроса
-        current_path = request.url.path
-        if current_path.startswith("/frontend/"):
-            callback_path = f"/frontend/api/auth/callback/{provider_name}"
-        elif current_path.startswith("/flows/"):
-            callback_path = f"/flows/api/auth/callback/{provider_name}"
-        else:
-            callback_path = f"/api/auth/callback/{provider_name}"
+        # Единый OAuth callback на frontend gateway.
+        callback_path = f"/auth/callback/{provider_name}"
         
         redirect_uri = f"{protocol}://{base_host}{callback_path}"
     
