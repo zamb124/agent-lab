@@ -147,6 +147,11 @@ class CloudRuSTTConfig(BaseModel):
     temperature: float = 0.5
     language: str = "ru"
     timeout: float = 120.0
+    max_upload_bytes: int = 24 * 1024 * 1024
+    chunk_duration_seconds: int = 300
+    chunk_bitrate_kbps: int = 32
+    chunk_sample_rate_hz: int = 16000
+    chunk_channels: int = 1
 
 
 class STTConfig(BaseModel):

@@ -368,9 +368,11 @@ async def join_via_link(
 
     return JoinResponse(
         call_id=call.call_id,
+        call_type="video",
         livekit_token=token,
         livekit_url=_livekit_public_url(settings),
         identity=identity,
+        meeting_admin_user_id=call.created_by_user_id,
         mode="sfu",
         participant_names=participant_names,
     )

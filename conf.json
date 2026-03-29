@@ -113,7 +113,12 @@
       "response_format": "text",
       "temperature": 0.5,
       "language": "ru",
-      "timeout": 120.0
+      "timeout": 120.0,
+      "max_upload_bytes": 25165824,
+      "chunk_duration_seconds": 300,
+      "chunk_bitrate_kbps": 32,
+      "chunk_sample_rate_hz": 16000,
+      "chunk_channels": 1
     }
   },
   "nano_banana": {

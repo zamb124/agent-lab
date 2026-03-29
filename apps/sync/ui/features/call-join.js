@@ -360,6 +360,9 @@ class CallJoinPage extends PlatformElement {
                     livekit-url=${this._joinData.livekit_url}
                     livekit-token=${this._joinData.livekit_token}
                     call-id=${this._joinData.call_id}
+                    call-type=${this._joinData.call_type}
+                    current-user-id=${this._joinData.identity}
+                    meeting-admin-user-id=${this._joinData.meeting_admin_user_id}
                     mode="sfu"
                     .identity=${this._joinData.identity}
                     .names=${this._joinData.participant_names ?? {}}

@@ -79,9 +79,11 @@ class GuestJoinRequest(BaseModel):
 class JoinResponse(BaseModel):
     """Ответ при входе в звонок (registered или guest)."""
     call_id: str
+    call_type: CallType
     livekit_token: str
     livekit_url: str
     identity: str
+    meeting_admin_user_id: str
     mode: CallMode
     participant_names: dict[str, str] = Field(
         default_factory=dict,

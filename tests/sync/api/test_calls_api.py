@@ -191,7 +191,9 @@ async def test_join_link_flow_registered_and_guest(
     assert join_reg.status_code == 200
     reg_data = join_reg.json()
     assert reg_data["mode"] == "sfu"
+    assert reg_data["call_type"] == "video"
     assert not reg_data["identity"].startswith("guest:")
+    assert reg_data["meeting_admin_user_id"] == reg_data["identity"]
     call_id = reg_data["call_id"]
 
     # Гость переиспользует ту же комнату
@@ -201,6 +203,8 @@ async def test_join_link_flow_registered_and_guest(
     )
     assert join_guest.status_code == 200
     guest_data = join_guest.json()
+    assert guest_data["call_type"] == "video"
+    assert guest_data["meeting_admin_user_id"] == reg_data["identity"]
     assert guest_data["identity"].startswith("guest:")
     assert guest_data["call_id"] == call_id
 
