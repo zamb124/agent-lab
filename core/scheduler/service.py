@@ -27,6 +27,10 @@ class SchedulerService:
         self._broker = broker
         self._redis_url = redis_url
 
+    @staticmethod
+    def _status_value(status: ScheduledTaskStatus | str) -> str:
+        return status.value if hasattr(status, "value") else str(status)
+
     async def _create_schedule(self, task: PlatformScheduledTask) -> str:
         source = get_schedule_source(self._redis_url)
         await source.startup()
@@ -97,7 +101,7 @@ class SchedulerService:
     async def pause(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
         task = await self.get(company_id, schedule_task_id)
         if task.status != ScheduledTaskStatus.PENDING:
-            raise ValueError(f"task status must be pending, got {task.status.value}")
+            raise ValueError(f"task status must be pending, got {self._status_value(task.status)}")
         if not task.schedule_id:
             raise ValueError(f"schedule_id is required for task {schedule_task_id}")
         source = get_schedule_source(self._redis_url)
@@ -114,7 +118,7 @@ class SchedulerService:
     async def resume(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
         task = await self.get(company_id, schedule_task_id)
         if task.status != ScheduledTaskStatus.PAUSED:
-            raise ValueError(f"task status must be paused, got {task.status.value}")
+            raise ValueError(f"task status must be paused, got {self._status_value(task.status)}")
         schedule_id = await self._create_schedule(task)
         await self._repository.update_status(
             company_id=company_id,
@@ -128,7 +132,7 @@ class SchedulerService:
     async def cancel(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
         task = await self.get(company_id, schedule_task_id)
         if task.status not in (ScheduledTaskStatus.PENDING, ScheduledTaskStatus.PAUSED):
-            raise ValueError(f"cannot cancel task with status={task.status.value}")
+            raise ValueError(f"cannot cancel task with status={self._status_value(task.status)}")
         if task.schedule_id:
             source = get_schedule_source(self._redis_url)
             await source.startup()
@@ -144,7 +148,7 @@ class SchedulerService:
     async def run_now(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
         task = await self.get(company_id, schedule_task_id)
         if task.status not in (ScheduledTaskStatus.PENDING, ScheduledTaskStatus.PAUSED):
-            raise ValueError(f"cannot run-now task with status={task.status.value}")
+            raise ValueError(f"cannot run-now task with status={self._status_value(task.status)}")
         kicker = AsyncKicker(task_name=task.task_name, broker=self._broker, labels={})
         await kicker.kiq(**task.payload)
         await self._repository.update_status(

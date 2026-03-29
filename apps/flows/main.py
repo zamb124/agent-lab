@@ -16,6 +16,7 @@ from core.tracing.middleware import TracingMiddleware
 from core.context import set_context, clear_context
 from core.models.context_models import Context, Language
 from core.models.identity_models import User, Company
+from core.utils.tokens import get_token_service
 from apps.flows.src.api import a2a_router, chat_router, registry_router, websocket_router
 from apps.flows.src.api.v1 import api_v1_router
 from apps.flows.src.api.embed import router as embed_router
@@ -25,6 +26,44 @@ from apps.flows.src.services.flows_loader import load_flows_to_db, load_tools_to
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+async def _build_scheduler_auth_context(container: object, trace_id: str, session_id: str) -> Context:
+    company = await container.company_repository.get("system")
+    if company is None:
+        companies = await container.company_repository.list_all(limit=1)
+        if not companies:
+            raise ValueError("No companies found for scheduler auth context")
+        company = companies[0]
+
+    actor_user_id = company.owner_user_id
+    if not actor_user_id:
+        member_user_ids = list(company.members.keys())
+        if not member_user_ids:
+            raise ValueError(f"No owner or members for company {company.company_id}")
+        actor_user_id = member_user_ids[0]
+
+    user = await container.user_repository.get(actor_user_id)
+    if user is None:
+        raise ValueError(f"Scheduler auth user not found: {actor_user_id}")
+
+    roles = user.companies.get(company.company_id, [])
+    auth_token = get_token_service().create_token(
+        user_id=user.user_id,
+        company_id=company.company_id,
+        roles=roles,
+    )
+    return Context(
+        user=User(user_id=user.user_id, name=user.name or user.user_id, groups=user.groups),
+        host="system",
+        session_id=session_id,
+        channel="system",
+        language=Language.RU,
+        active_company=Company(company_id=company.company_id, name=company.name, subdomain=company.subdomain),
+        user_companies=[],
+        trace_id=trace_id,
+        auth_token=auth_token,
+    )
 
 
 async def on_startup(app: FastAPI, container, settings: FlowSettings):
@@ -105,15 +144,10 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
     # Синхронизация LLM моделей от провайдера
     if os.getenv("TESTING") != "true":
         try:
-            scheduler_context = Context(
-                user=User(user_id="system", name="System", groups=["admin"]),
-                host="system",
-                session_id="system-scheduler-sync",
-                channel="system",
-                language=Language.RU,
-                active_company=Company(company_id="system", name="System", subdomain="system"),
-                user_companies=[],
+            scheduler_context = await _build_scheduler_auth_context(
+                container=container,
                 trace_id="system:scheduler-sync",
+                session_id="system-scheduler-sync",
             )
             set_context(scheduler_context)
             synced_count = await container.llm_models_service.sync_models()
@@ -151,19 +185,16 @@ async def on_shutdown(app: FastAPI, container):
         logger.warning(f"Error stopping dev polling: {e}")
     
     # Остановка фоновой синхронизации моделей
-    scheduler_context = Context(
-        user=User(user_id="system", name="System", groups=["admin"]),
-        host="system",
-        session_id="system-scheduler-stop",
-        channel="system",
-        language=Language.RU,
-        active_company=Company(company_id="system", name="System", subdomain="system"),
-        user_companies=[],
-        trace_id="system:scheduler-stop",
-    )
-    set_context(scheduler_context)
-    await container.llm_models_service.stop_background_sync()
-    clear_context()
+    try:
+        scheduler_context = await _build_scheduler_auth_context(
+            container=container,
+            trace_id="system:scheduler-stop",
+            session_id="system-scheduler-stop",
+        )
+        set_context(scheduler_context)
+        await container.llm_models_service.stop_background_sync()
+    finally:
+        clear_context()
     
     # Закрываем Redis с error handling
     try:

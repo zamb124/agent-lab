@@ -115,7 +115,8 @@ class SchedulerTaskRepository:
         session_factory = await get_session_factory(self._db_url)
         stmt = select(SchedulerTaskRecord).where(SchedulerTaskRecord.company_id == company_id)
         if filters.status is not None:
-            stmt = stmt.where(SchedulerTaskRecord.status == filters.status.value)
+            status_value = filters.status.value if hasattr(filters.status, "value") else str(filters.status)
+            stmt = stmt.where(SchedulerTaskRecord.status == status_value)
         if filters.target_service:
             stmt = stmt.where(SchedulerTaskRecord.target_service == filters.target_service)
         if filters.task_name:
