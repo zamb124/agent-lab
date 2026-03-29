@@ -42,6 +42,7 @@ const ICON_MAP = {
     'globe': 'globe',
     'help': 'help',
     'share': 'share',
+    'route': 'share',
     'save': 'save',
     'eye': 'eye',
     'box': 'box',

@@ -205,22 +205,6 @@ export class DailyNotesPage extends PlatformElement {
                 display: none;
             }
 
-            .note-tags-hint {
-                position: absolute;
-                top: 0;
-                right: 0;
-                height: 24px;
-                display: inline-flex;
-                align-items: center;
-                padding-left: 12px;
-                background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, var(--crm-surface) 42%);
-                color: var(--text-tertiary);
-                font-size: 12px;
-                font-weight: 600;
-                letter-spacing: 0.04em;
-                pointer-events: none;
-            }
-
             .note-tag {
                 display: inline-flex;
                 align-items: center;
@@ -529,7 +513,7 @@ export class DailyNotesPage extends PlatformElement {
         super();
         this._notes = [];
         this._query = '';
-        this._selectedDate = new Date().toISOString().slice(0, 10);
+        this._selectedDate = CRMStore.getDailyNotesDate();
         this._currentNamespace = null;
         this._noteEntitiesByNoteId = {};
         this._currentUser = null;
@@ -545,9 +529,11 @@ export class DailyNotesPage extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         this._notes = Array.isArray(CRMStore.state.entities.notes) ? CRMStore.state.entities.notes : [];
+        this._selectedDate = CRMStore.getDailyNotesDate();
         this._currentNamespace = CRMStore.state.namespaces.current;
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._notes = Array.isArray(state.entities.notes) ? state.entities.notes : [];
+            this._selectedDate = state.ui.dailyNotesDate;
             const previousNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
             this._currentNamespace = state.namespaces.current;
             const nextNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
@@ -713,7 +699,8 @@ export class DailyNotesPage extends PlatformElement {
     }
 
     async _onDateChange(event) {
-        this._selectedDate = event.target.value;
+        CRMStore.setDailyNotesDate(event.target.value);
+        this._selectedDate = CRMStore.getDailyNotesDate();
         await this._reloadNotesForSelectedDate();
         await this._loadDailySummary();
         await this._loadVisibleNoteEntities();
@@ -1057,9 +1044,6 @@ export class DailyNotesPage extends PlatformElement {
                                                             </button>
                                                         `)}
                                                     </div>
-                                                    ${relatedEntities.length > 1 ? html`
-                                                        <span class="note-tags-hint" aria-hidden="true">... &gt;&gt;</span>
-                                                    ` : ''}
                                                 </div>
                                             `;
                                         })()}

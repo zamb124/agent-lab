@@ -1,8 +1,9 @@
 /**
  * Кнопка «?» со всплывающей подсказкой (hover / focus).
  * Текст подсказки — свойство text (обязательно при использовании).
- * Пузырёк: position fixed + z-index из nextModalLayerZIndex(), чтобы быть поверх модалок
- * и не обрезаться родителями с overflow.
+ * Стратегии позиционирования:
+ * - fixed (по умолчанию): тултип поверх модалок и скролл-контейнеров;
+ * - local: тултип жестко привязан к кнопке внутри текущего блока.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
@@ -18,6 +19,7 @@ export class PlatformHelpHint extends PlatformElement {
             }
 
             .hint-root {
+                position: relative;
                 display: inline-flex;
                 align-items: center;
             }
@@ -52,8 +54,6 @@ export class PlatformHelpHint extends PlatformElement {
             }
 
             .hint-bubble {
-                position: fixed;
-                transform: translate(-50%, -100%);
                 min-width: 200px;
                 max-width: min(280px, 70vw);
                 padding: 10px 12px;
@@ -75,6 +75,19 @@ export class PlatformHelpHint extends PlatformElement {
                     visibility var(--duration-fast, 0.2s) ease;
             }
 
+            .hint-bubble.fixed {
+                position: fixed;
+                transform: translate(-50%, -100%);
+            }
+
+            .hint-bubble.local {
+                position: absolute;
+                left: 50%;
+                bottom: calc(100% + 8px);
+                transform: translateX(-50%);
+                z-index: var(--z-popover, 1200);
+            }
+
             .hint-bubble.is-open {
                 opacity: 1;
                 visibility: visible;
@@ -86,6 +99,7 @@ export class PlatformHelpHint extends PlatformElement {
     static properties = {
         text: { type: String },
         label: { type: String },
+        strategy: { type: String },
         _open: { state: true },
         _bubbleLeft: { state: true },
         _bubbleTop: { state: true },
@@ -96,10 +110,12 @@ export class PlatformHelpHint extends PlatformElement {
         super();
         this.text = '';
         this.label = 'Справка';
+        this.strategy = 'fixed';
         this._open = false;
         this._bubbleLeft = 0;
         this._bubbleTop = 0;
         this._bubbleZ = 0;
+        this._bubbleId = `platform-help-hint-${Math.random().toString(36).slice(2, 10)}`;
         this._closeTimer = null;
         this._onGlobalScroll = this._onGlobalScroll.bind(this);
         this._onGlobalKeydown = this._onGlobalKeydown.bind(this);
@@ -113,10 +129,12 @@ export class PlatformHelpHint extends PlatformElement {
 
     updated(changed) {
         super.updated(changed);
-        if (changed.has('_open')) {
+        if (changed.has('_open') || changed.has('strategy')) {
             if (this._open) {
-                window.addEventListener('scroll', this._onGlobalScroll, true);
-                window.addEventListener('resize', this._onGlobalScroll, true);
+                if (!this._isLocalStrategy()) {
+                    window.addEventListener('scroll', this._onGlobalScroll, true);
+                    window.addEventListener('resize', this._onGlobalScroll, true);
+                }
                 window.addEventListener('keydown', this._onGlobalKeydown, true);
             } else {
                 this._detachGlobalListeners();
@@ -131,7 +149,7 @@ export class PlatformHelpHint extends PlatformElement {
     }
 
     _onGlobalScroll() {
-        if (!this._open) {
+        if (!this._open || this._isLocalStrategy()) {
             return;
         }
         this._syncBubblePosition(false);
@@ -171,6 +189,9 @@ export class PlatformHelpHint extends PlatformElement {
      * @param {boolean} allocateZ — взять новый слой из стека (первое открытие)
      */
     _syncBubblePosition(allocateZ) {
+        if (this._isLocalStrategy()) {
+            return;
+        }
         const btn = this.renderRoot?.querySelector('.hint-btn');
         if (!btn) {
             return;
@@ -185,8 +206,14 @@ export class PlatformHelpHint extends PlatformElement {
 
     _openBubble() {
         this._cancelClose();
-        this._syncBubblePosition(true);
+        if (!this._isLocalStrategy()) {
+            this._syncBubblePosition(true);
+        }
         this._open = true;
+    }
+
+    _isLocalStrategy() {
+        return this.strategy === 'local';
     }
 
     _onBtnEnter() {
@@ -220,9 +247,10 @@ export class PlatformHelpHint extends PlatformElement {
     }
 
     render() {
-        const bubbleStyleAttr = this._open
+        const bubbleStyleAttr = this._open && !this._isLocalStrategy()
             ? `left:${this._bubbleLeft}px;top:${this._bubbleTop}px;z-index:${this._bubbleZ}`
             : '';
+        const bubbleStrategyClass = this._isLocalStrategy() ? 'local' : 'fixed';
 
         return html`
             <span class="hint-root">
@@ -231,6 +259,7 @@ export class PlatformHelpHint extends PlatformElement {
                     class="hint-btn"
                     aria-label=${this.label}
                     aria-expanded=${this._open ? 'true' : 'false'}
+                    aria-describedby=${this._bubbleId}
                     @mouseenter=${this._onBtnEnter}
                     @mouseleave=${this._onBtnLeave}
                     @focusin=${this._onBtnFocusIn}
@@ -239,8 +268,8 @@ export class PlatformHelpHint extends PlatformElement {
                     ?
                 </button>
                 <div
-                    id="platform-help-hint-bubble"
-                    class="hint-bubble ${this._open ? 'is-open' : ''}"
+                    id=${this._bubbleId}
+                    class="hint-bubble ${bubbleStrategyClass} ${this._open ? 'is-open' : ''}"
                     style=${bubbleStyleAttr}
                     role="tooltip"
                     @mouseenter=${this._onBubbleEnter}

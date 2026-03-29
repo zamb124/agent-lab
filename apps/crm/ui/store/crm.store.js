@@ -4,6 +4,19 @@
  */
 import { BaseStore } from '@platform/lib/store/BaseStore.js';
 
+const LAST_NAMESPACE_STORAGE_KEY = 'crm:last-namespace-by-company';
+const ALL_NAMESPACES_SENTINEL = '__ALL__';
+
+function getTodayIsoDate() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function assertIsoDate(value, fieldName) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new Error(`${fieldName} must be ISO date string YYYY-MM-DD`);
+    }
+}
+
 function getNamespaceName(namespace) {
     if (!namespace) {
         return null;
@@ -15,6 +28,62 @@ function getNamespaceName(namespace) {
         return namespace.name;
     }
     throw new Error('Invalid namespace value');
+}
+
+function readLastNamespaceByCompany() {
+    const raw = window.localStorage.getItem(LAST_NAMESPACE_STORAGE_KEY);
+    if (!raw) {
+        return {};
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Invalid stored namespace map');
+    }
+    return parsed;
+}
+
+function writeLastNamespaceByCompany(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('Stored namespace map must be object');
+    }
+    window.localStorage.setItem(LAST_NAMESPACE_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function getCompanyIdFromList(list) {
+    if (!Array.isArray(list) || list.length === 0) {
+        return null;
+    }
+    const companyId = list[0]?.company_id;
+    if (typeof companyId !== 'string' || companyId.trim().length === 0) {
+        throw new Error('Namespace company_id is required');
+    }
+    return companyId;
+}
+
+function persistNamespaceSelection(companyId, namespaceName) {
+    if (!companyId || typeof companyId !== 'string') {
+        return;
+    }
+    const map = readLastNamespaceByCompany();
+    map[companyId] = typeof namespaceName === 'string' && namespaceName.trim().length > 0
+        ? namespaceName
+        : ALL_NAMESPACES_SENTINEL;
+    writeLastNamespaceByCompany(map);
+}
+
+function resolveStoredNamespaceSelection(list, companyId) {
+    if (!companyId) {
+        return null;
+    }
+    const map = readLastNamespaceByCompany();
+    const saved = map[companyId];
+    if (saved === ALL_NAMESPACES_SENTINEL) {
+        return null;
+    }
+    if (typeof saved !== 'string' || saved.trim().length === 0) {
+        return null;
+    }
+    return list.find((item) => item.name === saved) || null;
 }
 
 function normalizeEntityTypeList(payload) {
@@ -139,6 +208,7 @@ const baseStore = new BaseStore('crm', {
         filterTags: [],
         searchQuery: '',
         collapsedPanels: {},
+        dailyNotesDate: getTodayIsoDate(),
     },
     ai: {
         suggestions: [],
@@ -160,6 +230,7 @@ const baseStore = new BaseStore('crm', {
             currentView: state.ui.currentView,
             sidebarOpen: state.ui.sidebarOpen,
             collapsedPanels: state.ui.collapsedPanels,
+            dailyNotesDate: state.ui.dailyNotesDate,
         }
     })
 });
@@ -234,6 +305,19 @@ export const CRMStore = {
             const url = currentId ? `/crm/${view}/${currentId}` : `/crm/${view}`;
             history.pushState({}, '', url);
         }
+    },
+
+    getDailyNotesDate() {
+        const value = baseStore.state.ui.dailyNotesDate;
+        assertIsoDate(value, 'ui.dailyNotesDate');
+        return value;
+    },
+
+    setDailyNotesDate(isoDate) {
+        assertIsoDate(isoDate, 'ui.dailyNotesDate');
+        baseStore.setState((s) => ({
+            ui: { ...s.ui, dailyNotesDate: isoDate }
+        }));
     },
     
     toggleSidebar() {
@@ -1048,6 +1132,17 @@ export const CRMStore = {
 
         const response = await crmApi.getNamespaces();
         const list = response.namespaces || [];
+        const currentNamespaceName = getNamespaceName(baseStore.state.namespaces.current);
+        const companyId = getCompanyIdFromList(list);
+        let resolvedCurrent = null;
+        if (currentNamespaceName) {
+            resolvedCurrent = list.find((item) => item.name === currentNamespaceName) || null;
+        }
+        if (!resolvedCurrent) {
+            resolvedCurrent = resolveStoredNamespaceSelection(list, companyId);
+        }
+        const resolvedNamespaceName = getNamespaceName(resolvedCurrent);
+        persistNamespaceSelection(companyId, resolvedNamespaceName);
 
         baseStore.setState((s) => ({
             namespaces: {
@@ -1056,7 +1151,15 @@ export const CRMStore = {
                 templates: s.namespaces.templates,
                 templateDetails: s.namespaces.templateDetails,
                 schemaOptions: s.namespaces.schemaOptions,
+                current: resolvedCurrent,
                 loading: false
+            },
+            entities: {
+                ...s.entities,
+                filters: {
+                    ...s.entities.filters,
+                    namespace: resolvedNamespaceName,
+                },
             }
         }));
 
@@ -1065,6 +1168,8 @@ export const CRMStore = {
 
     setCurrentNamespace(namespace) {
         const namespaceName = getNamespaceName(namespace);
+        const companyId = getCompanyIdFromList(baseStore.state.namespaces.list);
+        persistNamespaceSelection(companyId, namespaceName);
         baseStore.setState((s) => ({
             namespaces: { ...s.namespaces, current: namespace },
             entities: {

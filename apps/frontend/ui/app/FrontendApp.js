@@ -204,14 +204,18 @@ export class FrontendApp extends PlatformApp {
         }
         let parsed;
         try {
-            parsed = new URL(raw);
-        } catch (e) {
-            throw new Error('Некорректный redirect_uri в запросе входа.');
+            // Поддерживаем как абсолютный URL, так и относительный путь.
+            parsed = new URL(raw, window.location.origin);
+        } catch {
+            return '/dashboard';
         }
         if (parsed.origin !== window.location.origin) {
-            throw new Error('redirect_uri должен указывать на текущий домен.');
+            return '/dashboard';
         }
-        return `${parsed.pathname}${parsed.search}`;
+        if (!parsed.pathname.startsWith('/')) {
+            return '/dashboard';
+        }
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
     }
 
     async checkAuth() {

@@ -291,7 +291,7 @@ export class DashboardPage extends PlatformElement {
             },
             {
                 id: 'crm',
-                name: 'CRM',
+                name: 'NetWorkle',
                 logo: '/static/core/assets/service_logos/crm_logo.svg',
                 description: 'Управление контактами и Knowledge Graph',
             },

@@ -313,11 +313,15 @@ export class CRMApp extends PlatformApp {
         await super.firstUpdated();
         
         const crmApi = this.services.get('crmApi');
+        await CRMStore.loadNamespaces(crmApi);
+        const currentNamespace = CRMStore.state.namespaces.current;
+        const namespaceName = typeof currentNamespace === 'string'
+            ? currentNamespace
+            : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
         await Promise.all([
             CRMStore.loadNotes(crmApi),
-            CRMStore.loadEntityTypes(crmApi),
+            CRMStore.loadEntityTypes(crmApi, namespaceName),
             CRMStore.loadRelationshipTypes(crmApi),
-            CRMStore.loadNamespaces(crmApi),
         ]);
     }
     
@@ -505,6 +509,7 @@ export class CRMApp extends PlatformApp {
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
         await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
+        await CRMStore.loadNotes(crmApi);
     }
 
     render() {

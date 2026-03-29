@@ -217,6 +217,13 @@ async def sync_transcribe_recording_task(meeting_id: str, company_id: str, actor
     except Exception as exc:
         failed_meeting = await container.call_meeting_repository.get(meeting_id)
         if failed_meeting is not None:
+            await container.call_meeting_repository.set_export_status(
+                failed_meeting.meeting_id,
+                status="failed",
+                target_namespace=failed_meeting.export_target_namespace,
+            )
+            failed_meeting = await container.call_meeting_repository.get(meeting_id)
+        if failed_meeting is not None:
             failed_payload = CallMeetingRead(
                 meeting_id=failed_meeting.meeting_id,
                 call_id=failed_meeting.call_id,
@@ -314,6 +321,13 @@ async def sync_summarize_transcript_task(meeting_id: str, company_id: str, actor
                 )
     except Exception as exc:
         failed_meeting = await container.call_meeting_repository.get(meeting_id)
+        if failed_meeting is not None:
+            await container.call_meeting_repository.set_export_status(
+                failed_meeting.meeting_id,
+                status="failed",
+                target_namespace=failed_meeting.export_target_namespace,
+            )
+            failed_meeting = await container.call_meeting_repository.get(meeting_id)
         if failed_meeting is not None:
             failed_payload = CallMeetingRead(
                 meeting_id=failed_meeting.meeting_id,

@@ -283,6 +283,9 @@ company_id="acme", namespace="support"   # Поддержка
 company_id="acme", namespace="default"   # По умолчанию
 ```
 
+- UI хранит последний выбранный namespace в `localStorage` с ключом, привязанным к `company_id`, и восстанавливает его при открытии CRM.
+- Если сохраненный namespace больше не существует в списке компании, UI сбрасывает выбор на режим "Все" (без неявной подстановки другого namespace).
+
 **В vector_documents:** фильтрация по `namespace_id` = `{company_id}_{namespace}`
 
 **Access:** можно дать доступ к целому namespace через `AccessGrant`.

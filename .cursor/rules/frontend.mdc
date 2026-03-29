@@ -197,6 +197,19 @@ class MyModal extends GlassModal {
   - `label` (`string`, опционально)
   - событие `change` с `detail.value: boolean`
 
+## Tooltip / Help Hint (`platform-help-hint`)
+
+- Единый платформенный tooltip-компонент: `core/frontend/static/lib/components/platform-help-hint.js` (side-effect import `@platform/lib/components/platform-help-hint.js`).
+- Для контекстной справки возле форм и настроек использовать `platform-help-hint`, а не самодельные `?` кнопки и локальные всплывашки.
+- API компонента:
+  - `text` — основной текст подсказки (обязателен)
+  - `label` — aria-label для кнопки подсказки
+  - `strategy="fixed|local"` — режим позиционирования (`fixed` по умолчанию, `local` для плотных форм/гридов)
+- Поведение:
+  - открытие по hover/focus
+  - закрытие по mouseleave/focusout/Escape
+  - пузырь рендерится с `position: fixed` и z-index из modal-layer, чтобы не обрезаться контейнерами
+
 **Короткие методы notify:**
 - `this.success(message)` — зелёное уведомление
 - `this.error(message)` — красное уведомление

@@ -7,6 +7,7 @@ import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-help-hint.js';
 
 function getDefaultTypeDraft() {
     return {
@@ -37,6 +38,29 @@ function createEmptySchemaFieldRow(defaultType = 'string') {
         extra: {},
     };
 }
+
+const SETTINGS_HINTS = {
+    templateName: 'Человекочитаемое название шаблона. Показывается в карточках и модалках выбора пространства. Хорошее название помогает пользователям быстро выбрать правильный бизнес-контекст.',
+    templateDescription: 'Описание назначения шаблона. Используйте 1-2 короткие фразы: какие сущности ожидаются и для каких задач создано пространство.',
+    templateIcon: 'Иконка нужна для визуальной навигации: отображается в карточках шаблонов и в селекторах. Выбирайте понятный символ, который отражает домен шаблона.',
+    typeId: 'Технический идентификатор типа. Должен быть стабильным и уникальным внутри шаблона. Рекомендуемый формат: snake_case, например lead, candidate_profile, incident_note.',
+    typeName: 'Пользовательское имя типа. Это название увидит пользователь в интерфейсе при работе с сущностями и карточками.',
+    parentType: 'Базовый тип поведения. Обычно note для заметок и task для задач. Если выбрать родителем другой тип шаблона, можно построить иерархию специализированных подтипов.',
+    typeIcon: 'Иконка типа отображается в списках, карточках и подсказках. Подберите визуальный маркер, чтобы тип легко различался в плотном интерфейсе.',
+    typeColor: 'Дополнительный цветовой акцент типа. Можно оставить пустым, если акцент не нужен. Если заполняете, используйте единый стиль палитры команды.',
+    weight: 'Коэффициент важности типа для ранжирования/приоритезации в аналитике. 1.0 — нейтрально. Значение выше усиливает приоритет, ниже — ослабляет.',
+    flagIsEvent: 'Если включено, сущности этого типа трактуются как события во времени (например встреча, звонок, инцидент) и могут использоваться в сценариях таймлайна.',
+    flagCheckDuplicates: 'Если включено, система будет проверять дубликаты при извлечении/создании сущностей этого типа. Отключайте только если дубликаты допустимы по бизнес-логике.',
+    typeDescription: 'Подробное пояснение типа для команды: что хранится в этом типе, какие атрибуты обязательны, в каких процессах используется.',
+    typePrompt: 'Подсказка для AI-извлечения и структурирования данных под этот тип. Опишите, какие факты искать, как называть поля и что считать обязательным.',
+    namespaces: 'Ограничение областей использования типа. Тип будет доступен только в отмеченных пространствах. Это помогает держать данные доменно чистыми.',
+    requiredFields: 'Обязательные атрибуты, без которых запись типа считается неполной. Используйте их для критичных данных, которые нужны в каждом объекте.',
+    optionalFields: 'Дополнительные атрибуты для расширенного контекста. Они не обязательны при создании, но повышают качество аналитики и поиска.',
+    fieldKey: 'Системный ключ атрибута (snake_case). Используется в JSON/интеграциях и должен быть стабильным. Пример: candidate_name, deal_stage, severity.',
+    fieldLabel: 'Отображаемое имя поля для пользователя. Можно писать на русском, так как это подпись в UI, а не технический ключ.',
+    fieldType: 'Тип данных атрибута. От него зависит, как поле будет валидироваться и как его интерпретирует AI/поисковый слой.',
+    fieldEnum: 'Для enum можно выбрать готовый набор значений из backend (enum set) или задать собственный список вручную.',
+};
 
 class TemplateCreateModal extends PlatformModal {
     static properties = {
@@ -205,6 +229,7 @@ export class SettingsPage extends PlatformElement {
             .form-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
             .form-group { display: flex; flex-direction: column; gap: var(--space-2); }
             .form-label { color: var(--text-secondary); font-size: var(--text-sm); font-weight: 500; }
+            .label-with-hint { display: inline-flex; align-items: center; gap: var(--space-2); }
             .form-input, .form-select, .form-textarea { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); background: var(--crm-surface-elevated); color: var(--text-primary); padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
             .form-textarea { min-height: 88px; resize: vertical; }
             .save-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--crm-button-primary-bg); background: var(--crm-button-primary-bg); color: var(--crm-button-primary-text); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); cursor: pointer; width: fit-content; }
@@ -220,6 +245,8 @@ export class SettingsPage extends PlatformElement {
             .toolbar { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
             .split { display: grid; gap: var(--space-3); grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); }
             .row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+            .flag-row { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+            .flag-item { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
             .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: var(--text-xs); }
             .template-card { cursor: pointer; }
             .template-card.active { border-color: var(--crm-selected-stroke); background: var(--crm-selected-bg); }
@@ -679,7 +706,10 @@ export class SettingsPage extends PlatformElement {
                                     Метаданные шаблона
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Название</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>Название</span>
+                                        <platform-help-hint strategy="local" label="Справка: название шаблона" .text=${SETTINGS_HINTS.templateName}></platform-help-hint>
+                                    </label>
                                     <input
                                         class="form-input"
                                         .value=${this._templateDetails.name || ''}
@@ -687,7 +717,10 @@ export class SettingsPage extends PlatformElement {
                                     />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Описание</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>Описание</span>
+                                        <platform-help-hint strategy="local" label="Справка: описание шаблона" .text=${SETTINGS_HINTS.templateDescription}></platform-help-hint>
+                                    </label>
                                     <textarea
                                         class="form-textarea"
                                         .value=${this._templateDetails.description || ''}
@@ -695,7 +728,10 @@ export class SettingsPage extends PlatformElement {
                                     ></textarea>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Иконка</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>Иконка</span>
+                                        <platform-help-hint strategy="local" label="Справка: иконка шаблона" .text=${SETTINGS_HINTS.templateIcon}></platform-help-hint>
+                                    </label>
                                     <platform-icon-picker
                                         .icons=${this._iconOptions}
                                         .value=${this._resolveTemplateIcon(this._templateDetails.icon)}
@@ -743,22 +779,34 @@ export class SettingsPage extends PlatformElement {
                             ${Array.isArray(this._schemaOptions?.field_types) ? '' : html`<div class="schema-empty">Загрузка schema options...</div>`}
                             <div class="form-grid">
                                 <div class="form-group">
-                                    <label class="form-label">type_id *</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>type_id *</span>
+                                        <platform-help-hint strategy="local" label="Справка: type_id" .text=${SETTINGS_HINTS.typeId}></platform-help-hint>
+                                    </label>
                                     <input class="form-input mono" .value=${this._typeDraft.type_id} @input=${(e) => this._onTypeDraftChange('type_id', e.target.value)} />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">name *</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>name *</span>
+                                        <platform-help-hint strategy="local" label="Справка: имя типа" .text=${SETTINGS_HINTS.typeName}></platform-help-hint>
+                                    </label>
                                     <input class="form-input" .value=${this._typeDraft.name} @input=${(e) => this._onTypeDraftChange('name', e.target.value)} />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">parent_type_id</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>parent_type_id</span>
+                                        <platform-help-hint strategy="local" label="Справка: родительский тип" .text=${SETTINGS_HINTS.parentType}></platform-help-hint>
+                                    </label>
                                     <select class="form-select mono" .value=${this._typeDraft.parent_type_id} @change=${(e) => this._onTypeDraftChange('parent_type_id', e.target.value)}>
                                         <option value="">(без родителя)</option>
                                         ${this._getParentTypeOptions().map((typeId) => html`<option value=${typeId}>${typeId}</option>`)}
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Иконка</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>Иконка</span>
+                                        <platform-help-hint strategy="local" label="Справка: иконка типа" .text=${SETTINGS_HINTS.typeIcon}></platform-help-hint>
+                                    </label>
                                     <platform-icon-picker
                                         .icons=${this._iconOptions}
                                         .value=${this._resolveTemplateIcon(this._typeDraft.icon)}
@@ -766,40 +814,61 @@ export class SettingsPage extends PlatformElement {
                                     ></platform-icon-picker>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">color</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>color</span>
+                                        <platform-help-hint strategy="local" label="Справка: цвет типа" .text=${SETTINGS_HINTS.typeColor}></platform-help-hint>
+                                    </label>
                                     <input class="form-input" .value=${this._typeDraft.color} @input=${(e) => this._onTypeDraftChange('color', e.target.value)} />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">weight_coefficient</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>weight_coefficient</span>
+                                        <platform-help-hint strategy="local" label="Справка: коэффициент веса" .text=${SETTINGS_HINTS.weight}></platform-help-hint>
+                                    </label>
                                     <input type="number" step="0.1" min="0" class="form-input mono" .value=${this._typeDraft.weight_coefficient} @input=${(e) => this._onTypeDraftChange('weight_coefficient', e.target.value)} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Флаги</label>
-                                    <div class="row">
-                                        <platform-switch
-                                            size="sm"
-                                            label="is_event"
-                                            .checked=${this._typeDraft.is_event}
-                                            @change=${(e) => this._onTypeDraftChange('is_event', Boolean(e.detail.value))}
-                                        ></platform-switch>
-                                        <platform-switch
-                                            size="sm"
-                                            label="check_duplicates"
-                                            .checked=${this._typeDraft.check_duplicates}
-                                            @change=${(e) => this._onTypeDraftChange('check_duplicates', Boolean(e.detail.value))}
-                                        ></platform-switch>
+                                    <div class="flag-row">
+                                        <div class="flag-item">
+                                            <platform-switch
+                                                size="sm"
+                                                label="is_event"
+                                                .checked=${this._typeDraft.is_event}
+                                                @change=${(e) => this._onTypeDraftChange('is_event', Boolean(e.detail.value))}
+                                            ></platform-switch>
+                                            <platform-help-hint strategy="local" label="Справка: is_event" .text=${SETTINGS_HINTS.flagIsEvent}></platform-help-hint>
+                                        </div>
+                                        <div class="flag-item">
+                                            <platform-switch
+                                                size="sm"
+                                                label="check_duplicates"
+                                                .checked=${this._typeDraft.check_duplicates}
+                                                @change=${(e) => this._onTypeDraftChange('check_duplicates', Boolean(e.detail.value))}
+                                            ></platform-switch>
+                                            <platform-help-hint strategy="local" label="Справка: check_duplicates" .text=${SETTINGS_HINTS.flagCheckDuplicates}></platform-help-hint>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Описание</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>Описание</span>
+                                        <platform-help-hint strategy="local" label="Справка: описание типа" .text=${SETTINGS_HINTS.typeDescription}></platform-help-hint>
+                                    </label>
                                     <textarea class="form-textarea" .value=${this._typeDraft.description} @input=${(e) => this._onTypeDraftChange('description', e.target.value)}></textarea>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Промпт для извлечения</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>Промпт для извлечения</span>
+                                        <platform-help-hint strategy="local" label="Справка: промпт типа" .text=${SETTINGS_HINTS.typePrompt}></platform-help-hint>
+                                    </label>
                                     <textarea class="form-textarea" .value=${this._typeDraft.prompt} @input=${(e) => this._onTypeDraftChange('prompt', e.target.value)}></textarea>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Разрешенные пространства</label>
+                                    <label class="form-label label-with-hint">
+                                        <span>Разрешенные пространства</span>
+                                        <platform-help-hint strategy="local" label="Справка: пространства типа" .text=${SETTINGS_HINTS.namespaces}></platform-help-hint>
+                                    </label>
                                     <div class="namespace-selector">
                                         ${(this._namespaces || []).map((namespace) => {
                                             const checked = (this._typeDraft.namespace_ids || []).includes(namespace.name);
@@ -819,22 +888,26 @@ export class SettingsPage extends PlatformElement {
                             <div class="schema-builder-grid">
                                 <div class="schema-section">
                                     <div class="schema-section-header">
-                                        <span>required_fields</span>
+                                        <span class="label-with-hint">
+                                            <span>required_fields</span>
+                                            <platform-help-hint strategy="local" label="Справка: required_fields" .text=${SETTINGS_HINTS.requiredFields}></platform-help-hint>
+                                        </span>
                                         <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('required_fields_rows')} type="button">+ Поле</button>
                                     </div>
+                                    <div class="hint">key — системный идентификатор, label — название для пользователя, type — тип данных, enum — набор значений.</div>
                                     ${Array.isArray(this._typeDraft.required_fields_rows) && this._typeDraft.required_fields_rows.length > 0
                                         ? this._typeDraft.required_fields_rows.map((row, index) => html`
                                             <div class="schema-field-card">
                                                 <div class="schema-field-row">
                                                     <input
                                                         class="form-input mono"
-                                                        placeholder="key"
+                                                        placeholder="key (например deal_stage)"
                                                         .value=${row.key || ''}
                                                         @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { key: e.target.value })}
                                                     />
                                                     <input
                                                         class="form-input"
-                                                        placeholder="label"
+                                                        placeholder="label (например Стадия сделки)"
                                                         .value=${row.label || ''}
                                                         @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { label: e.target.value })}
                                                     />
@@ -851,7 +924,7 @@ export class SettingsPage extends PlatformElement {
                                                     </select>
                                                     <input
                                                         class="form-input"
-                                                        placeholder="description"
+                                                        placeholder="description (когда и как заполняется поле)"
                                                         .value=${row.description || ''}
                                                         @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { description: e.target.value })}
                                                     />
@@ -887,22 +960,26 @@ export class SettingsPage extends PlatformElement {
                                 </div>
                                 <div class="schema-section">
                                     <div class="schema-section-header">
-                                        <span>optional_fields</span>
+                                        <span class="label-with-hint">
+                                            <span>optional_fields</span>
+                                            <platform-help-hint strategy="local" label="Справка: optional_fields" .text=${SETTINGS_HINTS.optionalFields}></platform-help-hint>
+                                        </span>
                                         <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('optional_fields_rows')} type="button">+ Поле</button>
                                     </div>
+                                    <div class="hint">Для необязательных полей рекомендуйте структуру, но не делайте их блокирующими для сохранения.</div>
                                     ${Array.isArray(this._typeDraft.optional_fields_rows) && this._typeDraft.optional_fields_rows.length > 0
                                         ? this._typeDraft.optional_fields_rows.map((row, index) => html`
                                             <div class="schema-field-card">
                                                 <div class="schema-field-row">
                                                     <input
                                                         class="form-input mono"
-                                                        placeholder="key"
+                                                        placeholder="key (например budget)"
                                                         .value=${row.key || ''}
                                                         @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { key: e.target.value })}
                                                     />
                                                     <input
                                                         class="form-input"
-                                                        placeholder="label"
+                                                        placeholder="label (например Бюджет)"
                                                         .value=${row.label || ''}
                                                         @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { label: e.target.value })}
                                                     />
@@ -919,7 +996,7 @@ export class SettingsPage extends PlatformElement {
                                                     </select>
                                                     <input
                                                         class="form-input"
-                                                        placeholder="description"
+                                                        placeholder="description (что означает поле)"
                                                         .value=${row.description || ''}
                                                         @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { description: e.target.value })}
                                                     />

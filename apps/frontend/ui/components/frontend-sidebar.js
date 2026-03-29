@@ -300,7 +300,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <img src="/static/core/assets/service_logos/crm_logo.svg" alt="" />
                         </span>
-                        <span>CRM</span>
+                        <span>NetWorkle</span>
                         <span class="external-icon">↗</span>
                     </button>
 
