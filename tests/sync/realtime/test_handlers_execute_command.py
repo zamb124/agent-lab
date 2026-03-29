@@ -2029,3 +2029,83 @@ async def test_transcribe_audio_with_chunking_on_413(monkeypatch) -> None:
     )
 
     assert transcript == "Первый чанк\nВторой чанк"
+
+
+@pytest.mark.asyncio
+async def test_transcribe_audio_with_chunking_on_format_error(monkeypatch) -> None:
+    from apps.sync.realtime import tasks as sync_tasks
+
+    settings = SimpleNamespace(
+        stt=SimpleNamespace(
+            cloud_ru=SimpleNamespace(
+                timeout=3.0,
+                language="ru",
+                max_upload_bytes=25165824,
+                chunk_duration_seconds=300,
+                chunk_bitrate_kbps=32,
+                chunk_sample_rate_hz=16000,
+                chunk_channels=1,
+            ),
+        )
+    )
+    monkeypatch.setattr(sync_tasks, "get_settings", lambda: settings)
+
+    class _MockSttClient:
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def transcribe_audio(
+            self,
+            *,
+            audio_bytes: bytes,
+            file_name: str,
+            mime_type: str,
+            language: str | None = None,
+        ) -> STTTranscriptionResult:
+            self._calls += 1
+            if self._calls == 1:
+                raise ValueError(
+                    "STT cloud_ru вернул пустую транскрипцию. "
+                    "content_type=application/json; payload={\"error\": {\"message\": "
+                    "\"Error opening <_io.BytesIO object>: Format not recognised.\"}}"
+                )
+            if self._calls == 2:
+                assert audio_bytes == b"chunk-1"
+                assert file_name == "recording-part-0001.mp3"
+                assert mime_type == "audio/mpeg"
+                return STTTranscriptionResult(
+                    provider="mock",
+                    status=AudioTranscriptionStatus.DONE,
+                    text="Первый чанк",
+                    language=language,
+                )
+            assert self._calls == 3
+            assert audio_bytes == b"chunk-2"
+            assert file_name == "recording-part-0002.mp3"
+            assert mime_type == "audio/mpeg"
+            return STTTranscriptionResult(
+                provider="mock",
+                status=AudioTranscriptionStatus.DONE,
+                text="Второй чанк",
+                language=language,
+            )
+
+    monkeypatch.setattr(sync_tasks.STTClientFactory, "create_client", staticmethod(lambda: _MockSttClient()))
+    monkeypatch.setattr(
+        sync_tasks,
+        "_split_audio_for_stt_chunks",
+        lambda **kwargs: [
+            ("recording-part-0001.mp3", b"chunk-1", "audio/mpeg"),
+            ("recording-part-0002.mp3", b"chunk-2", "audio/mpeg"),
+        ],
+    )
+
+    transcript = await sync_tasks._transcribe_audio_with_chunking(
+        meeting_id="meeting_format_error",
+        audio_bytes=b"source",
+        file_name="recording.mp4",
+        mime_type="video/mp4",
+        language="ru",
+    )
+
+    assert transcript == "Первый чанк\nВторой чанк"

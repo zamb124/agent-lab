@@ -237,6 +237,15 @@ def _validate_stt_result_text(
     return transcript_text
 
 
+def _is_stt_format_not_recognized_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return (
+        "format not recognised" in message
+        or "format not recognized" in message
+        or "error opening <_io.bytesio object>" in message
+    )
+
+
 def _audio_input_extension(file_name: str, mime_type: str) -> str:
     if file_name == "":
         raise ValueError("file_name не может быть пустым.")
@@ -384,6 +393,16 @@ async def _transcribe_audio_with_chunking(
                 meeting_id,
                 file_name,
                 len(audio_bytes),
+            )
+        except ValueError as exc:
+            if not _is_stt_format_not_recognized_error(exc):
+                raise
+            logger.warning(
+                "STT single request returned format error; switching to chunked mode: meeting_id=%s file=%s mime=%s error=%s",
+                meeting_id,
+                file_name,
+                mime_type,
+                str(exc),
             )
 
     chunks = _split_audio_for_stt_chunks(
