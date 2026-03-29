@@ -9,10 +9,17 @@ Note: create_scheduler требует taskiq, поэтому импортиру�
 
 from core.scheduler.models import (
     ContentType,
+    PlatformScheduledTask,
+    PlatformScheduleCreateRequest,
+    PlatformScheduleFilter,
+    PlatformScheduleType,
+    PlatformScheduleUpdateStatusRequest,
     ScheduledTaskInfo,
     ScheduledTaskStatus,
     ScheduleType,
 )
+from core.scheduler.repository import SchedulerTaskRepository
+from core.scheduler.service import SchedulerService
 from core.scheduler.source import get_schedule_source, reset_schedule_source
 
 __all__ = [
@@ -22,5 +29,12 @@ __all__ = [
     "ContentType",
     "ScheduledTaskStatus",
     "ScheduledTaskInfo",
+    "PlatformScheduleType",
+    "PlatformScheduleCreateRequest",
+    "PlatformScheduleUpdateStatusRequest",
+    "PlatformScheduleFilter",
+    "PlatformScheduledTask",
+    "SchedulerTaskRepository",
+    "SchedulerService",
 ]
 

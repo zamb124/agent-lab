@@ -23,6 +23,7 @@ import './pages/api-keys/api-keys-page.js';
 import './pages/billing/billing-page.js';
 import './pages/embed-configs-page.js';
 import './pages/settings/settings-page.js';
+import './pages/scheduler-tasks-page.js';
 
 // Страницы продуктов
 import './pages/products/product-agents-page.js';

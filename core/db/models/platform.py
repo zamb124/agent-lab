@@ -326,6 +326,46 @@ class CalendarIntegrationRecord(Base):
     )
 
 
+class SchedulerTaskRecord(Base):
+    """Служебная таблица задач платформенного scheduler (shared БД)."""
+
+    __tablename__ = "scheduler_tasks"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    schedule_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    target_service: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    task_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    queue_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    schedule_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    cron: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    interval_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True, default="pending")
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_scheduler_tasks_company_status", "company_id", "status"),
+        Index("ix_scheduler_tasks_company_service", "company_id", "target_service"),
+        Index("ix_scheduler_tasks_company_task", "company_id", "task_name"),
+        Index("ix_scheduler_tasks_company_next_run", "company_id", "next_run_at"),
+    )
+
+
 class PushSubscription(Base):
     """Подписка пользователя на push-уведомления."""
 

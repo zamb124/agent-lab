@@ -10,6 +10,7 @@
     python scripts/run.py sync        # Запуск sync сервиса
     python scripts/run.py worker      # Запуск TaskIQ worker
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
+    python scripts/run.py scheduler-api  # Запуск scheduler API
     python scripts/run.py rag-worker  # Запуск RAG worker
     python scripts/run.py sync-worker # Запуск Sync worker
     python scripts/run.py crm-worker  # Запуск CRM worker
@@ -57,6 +58,11 @@ SERVICES = {
         "type": "uvicorn",
         "app": "apps.app_runtime_targets:sync_app",
         "port": "8005",
+    },
+    "scheduler-api": {
+        "type": "uvicorn",
+        "app": "apps.app_runtime_targets:scheduler_app",
+        "port": "8006",
     },
     
     # TaskIQ workers

@@ -90,6 +90,8 @@ ROUTE_RULES: List[RouteRule] = [
     
     # Главная страница
     RouteRule("/", auth_required=False, context_type="anonymous"),
+    RouteRule("/policy", auth_required=False, context_type="anonymous"),
+    RouteRule("/terms", auth_required=False, context_type="anonymous"),
     # Страница входа (redirect после истечения сессии: redirectToAuth() на apex-домене)
     RouteRule("/login", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/login", auth_required=False, context_type="anonymous"),
@@ -124,6 +126,8 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/leads", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/leads", auth_required=False, context_type="anonymous"),
     RouteRule("/api/i18n/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/public/legal", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
     
     # Документация
@@ -185,6 +189,10 @@ ROUTE_RULES: List[RouteRule] = [
     # API фронтенда для настроек
     RouteRule("/api/settings/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/settings/*", context_type="api", auth_required=True),
+
+    # API фронтенда для управления scheduler задачами
+    RouteRule("/api/scheduler/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/scheduler/*", context_type="api", auth_required=True),
     
     # Push Notifications API (публичный ключ без авторизации, подписка с авторизацией)
     RouteRule("/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
@@ -228,6 +236,10 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/embed-configs", context_type="frontend", auth_required=True),
     RouteRule("/settings/*", context_type="frontend", auth_required=True),
     RouteRule("/settings", context_type="frontend", auth_required=True),
+    RouteRule("/scheduler-tasks", context_type="frontend", auth_required=True),
+
+    # Scheduler service API
+    RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),
     
     # UI агентов - статика без авторизации (должна быть перед /flows/ui/*)
     RouteRule("/flows/ui/static/*", auth_required=False, context_type="anonymous"),

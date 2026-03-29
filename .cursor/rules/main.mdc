@@ -24,7 +24,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 | broker | — | TaskIQ брокер фоновых задач |
 | rag_worker | — | TaskIQ worker обработки документов |
 | sync_worker | — | TaskIQ worker realtime команд sync |
-| scheduler | — | TaskIQ планировщик |
+| scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler process |
 
 ## ОБЯЗАТЕЛЬНО: Новое = правка рулов
 

@@ -85,9 +85,17 @@ class ServerConfig(BaseModel):
     frontend_service_url: Optional[str] = None
     rag_service_url: Optional[str] = None
     sync_service_url: Optional[str] = None
+    scheduler_service_url: Optional[str] = None
 
     # Порты по умолчанию для каждого сервиса
-    _default_ports: Dict[str, int] = {"flows": 8001, "frontend": 8002, "crm": 8003, "rag": 8004, "sync": 8005}
+    _default_ports: Dict[str, int] = {
+        "flows": 8001,
+        "frontend": 8002,
+        "crm": 8003,
+        "rag": 8004,
+        "sync": 8005,
+        "scheduler": 8006,
+    }
 
     def get_service_url(self, service: Optional[str] = None) -> str:
         """

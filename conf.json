@@ -25,6 +25,28 @@
     "vapid_private_key": "ВСТАВИТЬ_PRIVATE_ИЗ_ГЕНЕРАТОРА",
     "vapid_email": "ops@твой-домен.ru"
   },
+  "legal": {
+    "company_name_ru": "ООО «Humanitec»",
+    "company_name_en": "Humanitec LLC",
+    "legal_form_ru": "Общество с ограниченной ответственностью",
+    "legal_form_en": "Limited Liability Company",
+    "inn": "0000000000",
+    "ogrn": "0000000000000",
+    "legal_address_ru": "Россия, [укажите юридический адрес]",
+    "legal_address_en": "Russia, [specify legal address]",
+    "contact_email": "legal@humanitec.ru",
+    "support_email": "helpme@humanitec.ru",
+    "dpo_email": "dpo@humanitec.ru",
+    "phone": "+7 (000) 000-00-00",
+    "min_age": 18,
+    "retention_logs": "12 months",
+    "retention_messages": "24 months",
+    "retention_accounts": "5 years after account closure",
+    "cloud_provider": "Yandex Cloud",
+    "cloud_region": "Russian Federation",
+    "analytics_tools": "Internal monitoring and product analytics",
+    "billing_provider": "YooMoney"
+  },
   "auth": {
     "enabled": true,
     "jwt_secret_key": "dev-secret-key-change-in-production",
@@ -285,6 +307,18 @@
         "name": "frontend",
         "host": "0.0.0.0",
         "port": 8002,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": false
+      }
+    },
+    "scheduler": {
+      "service_name": "scheduler",
+      "server": {
+        "name": "scheduler",
+        "host": "0.0.0.0",
+        "port": 8006,
         "debug": true
       },
       "auth": {

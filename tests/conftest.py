@@ -221,6 +221,30 @@ async def _shared_calendar_schema_ready(db_url: str) -> bool:
         await engine.dispose()
 
 
+async def _shared_scheduler_schema_ready(db_url: str) -> bool:
+    """Проверяет наличие таблицы scheduler_tasks в shared схеме."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            scheduler_tasks_table_row = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_name = 'scheduler_tasks'
+                    """
+                )
+            )
+            return (scheduler_tasks_table_row.scalar() or 0) == 1
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_database_before_tests():
     """
@@ -256,6 +280,7 @@ async def setup_database_before_tests():
         await _alembic_version_ready(shared_db_url)
         and await _crm_schema_ready(crm_db_url)
         and await _shared_calendar_schema_ready(shared_db_url)
+        and await _shared_scheduler_schema_ready(shared_db_url)
     ):
         print("БД уже подготовлена (alembic_version есть, одна ревизия), пропуск дропа и миграций.\n")
         yield
@@ -266,6 +291,7 @@ async def setup_database_before_tests():
                 await _alembic_version_ready(shared_db_url)
                 and await _crm_schema_ready(crm_db_url)
                 and await _shared_calendar_schema_ready(shared_db_url)
+                and await _shared_scheduler_schema_ready(shared_db_url)
             ):
                 print("БД подготовлена другим процессом, пропуск.\n")
                 yield

@@ -9,6 +9,14 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 
 TaskIQ - единая система очередей задач для всей платформы. Использует Redis как брокер.
 
+## Единый cron/control-plane (platform scheduler)
+
+- Платформенный API расписаний находится в `apps/scheduler` (`/scheduler/api/v1/schedules*`).
+- Метаданные расписаний хранятся в shared БД (`scheduler_tasks`) с обязательным `company_id`.
+- Company isolation обязательна: любые операции create/list/pause/resume/cancel/run-now выполняются только в рамках текущей компании.
+- Кросс-сервисный доступ из кода только через `core/clients/scheduler_client.py`, не через прямой `httpx`.
+- Для recurring задач в сервисах использовать scheduler API вместо локальных `while True` циклов в `main.py`, если это cron/interval сценарий.
+
 **Компоненты:**
 - **RedisStreamBroker** - брокер сообщений (Redis Streams с consumer groups)
 - **RedisAsyncResultBackend** - хранение результатов

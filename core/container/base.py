@@ -247,6 +247,12 @@ class BaseContainer:
         return ServiceClient()
 
     @lazy
+    def scheduler_client(self):
+        """SchedulerClient для единого cron/control-plane."""
+        from core.clients.scheduler_client import SchedulerClient
+        return SchedulerClient(service_client=self.service_client)
+
+    @lazy
     def calendar_service(self):
         """CalendarService для платформенного календаря"""
         from core.calendar.repositories import CalendarEventSqlRepository, CalendarIntegrationSqlRepository

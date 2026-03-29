@@ -99,8 +99,18 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def schedule_service(self):
+        import os
         from apps.flows.src.services.schedule_service import ScheduleService
-        return ScheduleService(scheduled_task_repository=self.scheduled_task_repository)
+        scheduler_service = None
+        if os.environ.get("TESTING") == "true":
+            from apps.scheduler.container import get_scheduler_container
+
+            scheduler_service = get_scheduler_container().scheduler_service
+        return ScheduleService(
+            scheduler_client=self.scheduler_client,
+            scheduler_service=scheduler_service,
+            scheduled_task_repository=self.scheduled_task_repository,
+        )
 
     @lazy
     def a2a_client(self):
@@ -185,7 +195,10 @@ class FlowContainer(BaseContainer):
     @lazy
     def llm_models_service(self):
         from apps.flows.src.services import LLMModelsService
-        return LLMModelsService(repository=self.llm_model_repository)
+        return LLMModelsService(
+            repository=self.llm_model_repository,
+            scheduler_client=self.scheduler_client,
+        )
 
     @lazy
     def flow_factory(self):

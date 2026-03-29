@@ -273,6 +273,16 @@ export class FrontendSidebar extends PlatformElement {
                         </span>
                         <span class="nav-label">Настройки</span>
                     </button>
+
+                    <button
+                        class="nav-item ${currentView === 'scheduler-tasks' ? 'active' : ''}"
+                        @click=${() => this._navigate('scheduler-tasks')}
+                    >
+                        <span class="nav-icon">
+                            <platform-icon name="clock" size="18"></platform-icon>
+                        </span>
+                        <span class="nav-label">Scheduler</span>
+                    </button>
                 </nav>
 
                 <div class="services-section" data-hide-collapsed>

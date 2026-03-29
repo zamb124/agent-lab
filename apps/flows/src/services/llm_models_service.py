@@ -1,8 +1,6 @@
-"""
-Сервис синхронизации LLM моделей от провайдеров.
-"""
+"""Сервис синхронизации LLM моделей от провайдеров."""
 
-import asyncio
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import httpx
@@ -10,18 +8,33 @@ import httpx
 from apps.flows.config import get_settings
 from core.http import get_httpx_client
 from apps.flows.src.db import LLMModelRepository
+from core.clients import SchedulerClient
 from core.logging import get_logger
+from core.scheduler.models import (
+    PlatformScheduleCreateRequest,
+    PlatformScheduleFilter,
+    PlatformScheduledTask,
+    PlatformScheduleType,
+    ScheduledTaskStatus,
+)
 from apps.flows.src.models import LLMModel
 
 logger = get_logger(__name__)
+
+_LLM_SYNC_TASK_NAME = "sync_llm_models_task"
+_LLM_SYNC_TARGET_SERVICE = "flows"
+_LLM_SYNC_QUEUE_NAME = "default"
+_LLM_SYNC_PAYLOAD_MARKER = "llm_models_background_sync"
 
 
 class LLMModelsService:
     """Сервис для синхронизации и получения списка LLM моделей."""
 
-    def __init__(self, repository: LLMModelRepository):
+    def __init__(self, repository: LLMModelRepository, scheduler_client: SchedulerClient):
         self._repository = repository
-        self._sync_task: Optional[asyncio.Task] = None
+        self._scheduler_client = scheduler_client
+        self._sync_schedule_id: Optional[str] = None
+        self._sync_interval_seconds: int = 60
 
     async def _fetch_bothub_models(self) -> List[str]:
         """
@@ -172,27 +185,75 @@ class LLMModelsService:
         models = await self._repository.list_by_provider(provider)
         return [m.model_id for m in models]
 
-    async def start_background_sync(self, interval: int = 60) -> None:
-        """Запускает фоновую задачу синхронизации ВСЕХ провайдеров."""
-        async def _sync_loop():
-            while True:
-                await asyncio.sleep(interval)
-                try:
-                    await self.sync_all_providers()
-                except Exception as e:
-                    logger.error(f"Ошибка в фоновой синхронизации моделей: {e}")
+    @staticmethod
+    def _is_compatible_background_schedule(task: PlatformScheduledTask, interval: int) -> bool:
+        if task.target_service != _LLM_SYNC_TARGET_SERVICE:
+            return False
+        if task.task_name != _LLM_SYNC_TASK_NAME:
+            return False
+        if task.schedule_type != PlatformScheduleType.INTERVAL:
+            return False
+        if task.interval_seconds != interval:
+            return False
+        return True
 
-        self._sync_task = asyncio.create_task(_sync_loop())
-        logger.info(f"Фоновая синхронизация моделей запущена (интервал: {interval}с)")
+    async def _list_background_schedules(self, interval: int) -> list[PlatformScheduledTask]:
+        schedules = await self._scheduler_client.list_schedules(
+            PlatformScheduleFilter(
+                target_service=_LLM_SYNC_TARGET_SERVICE,
+                task_name=_LLM_SYNC_TASK_NAME,
+                limit=500,
+                offset=0,
+            )
+        )
+        return [task for task in schedules if self._is_compatible_background_schedule(task, interval)]
+
+    @staticmethod
+    def _pick_single_or_raise(tasks: list[PlatformScheduledTask], status: ScheduledTaskStatus) -> PlatformScheduledTask | None:
+        matched = [task for task in tasks if task.status == status]
+        if not matched:
+            return None
+        if len(matched) > 1:
+            task_ids = ", ".join(task.id for task in matched)
+            raise ValueError(f"multiple LLM sync schedules with status={status}: {task_ids}")
+        return matched[0]
+
+    async def start_background_sync(self, interval: int = 60) -> None:
+        """Создает recurring schedule для синхронизации ВСЕХ провайдеров."""
+        if interval <= 0:
+            raise ValueError("interval must be positive")
+        self._sync_interval_seconds = interval
+        schedules = await self._list_background_schedules(interval=interval)
+        pending = self._pick_single_or_raise(schedules, ScheduledTaskStatus.PENDING)
+        if pending is not None:
+            self._sync_schedule_id = pending.id
+            logger.info("Фоновая синхронизация уже запланирована (task_id=%s)", pending.id)
+            return
+        paused = self._pick_single_or_raise(schedules, ScheduledTaskStatus.PAUSED)
+        if paused is not None:
+            resumed = await self._scheduler_client.resume_schedule(paused.id)
+            self._sync_schedule_id = resumed.id
+            logger.info("Фоновая синхронизация возобновлена (task_id=%s)", resumed.id)
+            return
+        request = PlatformScheduleCreateRequest(
+            target_service=_LLM_SYNC_TARGET_SERVICE,
+            task_name=_LLM_SYNC_TASK_NAME,
+            queue_name=_LLM_SYNC_QUEUE_NAME,
+            schedule_type=PlatformScheduleType.INTERVAL,
+            interval_seconds=interval,
+            payload={"system_task": _LLM_SYNC_PAYLOAD_MARKER},
+            timezone="UTC",
+            run_at=datetime.now(timezone.utc),
+        )
+        schedule = await self._scheduler_client.create_schedule(request)
+        self._sync_schedule_id = schedule.id
+        logger.info("Фоновая синхронизация моделей запланирована в scheduler (task_id=%s)", schedule.id)
 
     async def stop_background_sync(self) -> None:
-        """Останавливает фоновую задачу синхронизации."""
-        if self._sync_task:
-            self._sync_task.cancel()
-            try:
-                await self._sync_task
-            except asyncio.CancelledError:
-                pass
-            self._sync_task = None
-            logger.info("Фоновая синхронизация моделей остановлена")
+        """Отменяет recurring schedule синхронизации моделей."""
+        if not self._sync_schedule_id:
+            return
+        await self._scheduler_client.cancel_schedule(self._sync_schedule_id)
+        logger.info("Фоновая синхронизация моделей остановлена (task_id=%s)", self._sync_schedule_id)
+        self._sync_schedule_id = None
 

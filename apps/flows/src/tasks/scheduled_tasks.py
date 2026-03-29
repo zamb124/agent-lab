@@ -3,6 +3,7 @@
 """
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from apps.flows.src.channels.types import PreparedTaskParams
@@ -12,6 +13,7 @@ from core.state import ExecutionState
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.scheduler import get_schedule_source
+from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.models import ScheduledTaskStatus
 from apps.broker.broker import broker
 
@@ -26,6 +28,8 @@ async def execute_scheduled_task(
     user_id: str,
     task_type: str,
     payload: Dict[str, Any],
+    scheduler_task_id: str | None = None,
+    company_id: str | None = None,
 ) -> Dict[str, Any]:
     """
     Выполняет scheduled task.
@@ -63,11 +67,19 @@ async def execute_scheduled_task(
     content = payload.get("content", "")
     tool_args = payload.get("tool_args")
     
+    effective_scheduler_task_id = scheduler_task_id or scheduled_task_id
+    effective_company_id = company_id or "system"
+
+    settings = get_settings()
+    if not settings.database.shared_url:
+        raise ValueError("database.shared_url is required for scheduler metadata updates")
+    scheduler_repo = SchedulerTaskRepository(db_url=settings.database.shared_url)
+
     from core.models.identity_models import User, Company
     
     context = Context(
         user=User(user_id=user_id, name="Scheduler"),
-        active_company=Company(company_id="system", name="System"),
+        active_company=Company(company_id=effective_company_id, name=effective_company_id),
         session_id=session_id,
         flow_id=effective_flow_id,
         channel="scheduler",
@@ -107,6 +119,18 @@ async def execute_scheduled_task(
                 )
         
         logger.info(f"Scheduled task executed: id={scheduled_task_id}")
+        scheduler_status = ScheduledTaskStatus.PENDING
+        if task_info:
+            schedule_type = task_info.schedule_type if isinstance(task_info.schedule_type, str) else task_info.schedule_type.value
+            if schedule_type == "one_time":
+                scheduler_status = ScheduledTaskStatus.EXECUTED
+        await scheduler_repo.update_status(
+            company_id=effective_company_id,
+            schedule_task_id=effective_scheduler_task_id,
+            status=scheduler_status,
+            last_run_at=datetime.now(timezone.utc),
+            error_message=None,
+        )
         return result
         
     except Exception as e:
@@ -116,6 +140,12 @@ async def execute_scheduled_task(
         await scheduled_task_repo.update_status(
             scheduled_task_id,
             ScheduledTaskStatus.FAILED,
+            error_message=str(e),
+        )
+        await scheduler_repo.update_status(
+            company_id=effective_company_id,
+            schedule_task_id=effective_scheduler_task_id,
+            status=ScheduledTaskStatus.FAILED,
             error_message=str(e),
         )
         

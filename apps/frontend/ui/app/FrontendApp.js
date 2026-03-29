@@ -11,6 +11,7 @@ import { SettingsService } from '../services/settings.service.js';
 import { ServicesStatusService } from '../services/services-status.service.js';
 import { EmbedService } from '../services/embed.service.js';
 import { FlowsCatalogService } from '../services/flows-catalog.service.js';
+import { SchedulerTasksService } from '../services/scheduler-tasks.service.js';
 import { FrontendStore } from '../store/frontend.store.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/auth-modal.js';
@@ -35,6 +36,7 @@ export class FrontendApp extends PlatformApp {
             }
             
             landing-page,
+            legal-page,
             select-company-page,
             product-agents-page,
             product-rag-page,
@@ -146,6 +148,7 @@ export class FrontendApp extends PlatformApp {
         this.services.register('servicesStatus', new ServicesStatusService(baseUrl));
         this.services.register('embed', new EmbedService(baseUrl));
         this.services.register('flowsCatalog', new FlowsCatalogService());
+        this.services.register('schedulerTasks', new SchedulerTasksService(baseUrl));
     }
 
     _isKnownRoute(path) {
@@ -155,6 +158,8 @@ export class FrontendApp extends PlatformApp {
             '/frontend/login',
             '/select-company',
             '/join',
+            '/policy',
+            '/terms',
             '/products/agents',
             '/products/rag',
             '/products/crm',
@@ -164,6 +169,7 @@ export class FrontendApp extends PlatformApp {
             '/api-keys',
             '/billing',
             '/embed-configs',
+            '/scheduler-tasks',
         ]);
         if (exact.has(path)) {
             return true;
@@ -222,7 +228,7 @@ export class FrontendApp extends PlatformApp {
         const path = window.location.pathname;
         
         // Публичные страницы без авторизации
-        if (path === '/' || path.startsWith('/products/')) {
+        if (path === '/' || path.startsWith('/products/') || path === '/policy' || path === '/terms') {
             this._isLanding = true;
             this._productPage = path.startsWith('/products/') ? path : null;
             return true;
@@ -268,6 +274,8 @@ export class FrontendApp extends PlatformApp {
                 return html`<embed-configs-page></embed-configs-page>`;
             case 'settings':
                 return html`<settings-page></settings-page>`;
+            case 'scheduler-tasks':
+                return html`<scheduler-tasks-page></scheduler-tasks-page>`;
             default:
                 throw new Error(`Unknown view: ${currentView}`);
         }
@@ -307,6 +315,14 @@ export class FrontendApp extends PlatformApp {
 
             if (path === '/join') {
                 return html`<join-page></join-page>`;
+            }
+
+            if (path === '/policy') {
+                return html`<legal-page docType="policy"></legal-page>`;
+            }
+
+            if (path === '/terms') {
+                return html`<legal-page docType="terms"></legal-page>`;
             }
 
             if (path === '/login' || path === '/frontend/login') {

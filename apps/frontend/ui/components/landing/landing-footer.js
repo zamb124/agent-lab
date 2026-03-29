@@ -179,6 +179,15 @@ export class LandingFooter extends PlatformElement {
         `
     ];
 
+    _legalUrl(pathname) {
+        const params = new URLSearchParams(window.location.search);
+        const lang = params.get('lang');
+        if (lang === 'ru') {
+            return `${pathname}?lang=ru`;
+        }
+        return pathname;
+    }
+
     render() {
         return html`
             <footer class="footer-container">
@@ -199,10 +208,10 @@ export class LandingFooter extends PlatformElement {
                     <p class="footer-copy">© 2025 Humanitec</p>
                     
                     <div class="footer-legal">
-                        <a href="#" class="footer-legal-link">
+                        <a href=${this._legalUrl('/policy')} class="footer-legal-link">
                             Политика конфиденциальности
                         </a>
-                        <a href="#" class="footer-legal-link">
+                        <a href=${this._legalUrl('/terms')} class="footer-legal-link">
                             Пользовательское соглашение
                         </a>
                     </div>

@@ -349,6 +349,196 @@ class TestLlmNodeLLMConfig:
             )
 
 
+class TestLLMModelsServiceSchedulerIdempotency:
+    @staticmethod
+    def _schedule_model(payload: dict):
+        from core.scheduler.models import PlatformScheduledTask
+
+        return PlatformScheduledTask.model_validate(payload)
+
+    @pytest.mark.asyncio
+    async def test_start_background_sync_reuses_existing_pending_schedule(self):
+        from apps.flows.src.services.llm_models_service import LLMModelsService
+
+        repository = MagicMock()
+        scheduler_client = AsyncMock()
+        scheduler_client.list_schedules.return_value = [
+            self._schedule_model({
+                "id": "existing-task",
+                "company_id": "system",
+                "schedule_id": "sched-1",
+                "target_service": "flows",
+                "task_name": "sync_llm_models_task",
+                "queue_name": "default",
+                "schedule_type": "interval",
+                "cron": None,
+                "interval_seconds": 60,
+                "run_at": None,
+                "timezone": "UTC",
+                "payload": {},
+                "status": "pending",
+                "created_by_user_id": "system",
+                "created_at": "2026-03-29T00:00:00+00:00",
+                "updated_at": "2026-03-29T00:00:00+00:00",
+                "last_run_at": None,
+                "next_run_at": None,
+                "error_message": None,
+            })
+        ]
+        service = LLMModelsService(repository, scheduler_client)
+
+        await service.start_background_sync(interval=60)
+
+        scheduler_client.create_schedule.assert_not_called()
+        scheduler_client.resume_schedule.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_background_sync_resumes_paused_schedule(self):
+        from apps.flows.src.services.llm_models_service import LLMModelsService
+
+        repository = MagicMock()
+        scheduler_client = AsyncMock()
+        scheduler_client.list_schedules.return_value = [
+            self._schedule_model({
+                "id": "paused-task",
+                "company_id": "system",
+                "schedule_id": None,
+                "target_service": "flows",
+                "task_name": "sync_llm_models_task",
+                "queue_name": "default",
+                "schedule_type": "interval",
+                "cron": None,
+                "interval_seconds": 60,
+                "run_at": None,
+                "timezone": "UTC",
+                "payload": {},
+                "status": "paused",
+                "created_by_user_id": "system",
+                "created_at": "2026-03-29T00:00:00+00:00",
+                "updated_at": "2026-03-29T00:00:00+00:00",
+                "last_run_at": None,
+                "next_run_at": None,
+                "error_message": None,
+            })
+        ]
+        scheduler_client.resume_schedule.return_value = self._schedule_model({
+            "id": "paused-task",
+            "company_id": "system",
+            "schedule_id": "sched-resumed",
+            "target_service": "flows",
+            "task_name": "sync_llm_models_task",
+            "queue_name": "default",
+            "schedule_type": "interval",
+            "cron": None,
+            "interval_seconds": 60,
+            "run_at": None,
+            "timezone": "UTC",
+            "payload": {},
+            "status": "pending",
+            "created_by_user_id": "system",
+            "created_at": "2026-03-29T00:00:00+00:00",
+            "updated_at": "2026-03-29T00:00:00+00:00",
+            "last_run_at": None,
+            "next_run_at": None,
+            "error_message": None,
+        })
+        service = LLMModelsService(repository, scheduler_client)
+
+        await service.start_background_sync(interval=60)
+
+        scheduler_client.resume_schedule.assert_called_once_with("paused-task")
+        scheduler_client.create_schedule.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_background_sync_raises_on_duplicates(self):
+        from apps.flows.src.services.llm_models_service import LLMModelsService
+
+        repository = MagicMock()
+        scheduler_client = AsyncMock()
+        scheduler_client.list_schedules.return_value = [
+            self._schedule_model({
+                "id": "task-1",
+                "company_id": "system",
+                "schedule_id": "sched-1",
+                "target_service": "flows",
+                "task_name": "sync_llm_models_task",
+                "queue_name": "default",
+                "schedule_type": "interval",
+                "cron": None,
+                "interval_seconds": 60,
+                "run_at": None,
+                "timezone": "UTC",
+                "payload": {},
+                "status": "pending",
+                "created_by_user_id": "system",
+                "created_at": "2026-03-29T00:00:00+00:00",
+                "updated_at": "2026-03-29T00:00:00+00:00",
+                "last_run_at": None,
+                "next_run_at": None,
+                "error_message": None,
+            }),
+            self._schedule_model({
+                "id": "task-2",
+                "company_id": "system",
+                "schedule_id": "sched-2",
+                "target_service": "flows",
+                "task_name": "sync_llm_models_task",
+                "queue_name": "default",
+                "schedule_type": "interval",
+                "cron": None,
+                "interval_seconds": 60,
+                "run_at": None,
+                "timezone": "UTC",
+                "payload": {},
+                "status": "pending",
+                "created_by_user_id": "system",
+                "created_at": "2026-03-29T00:00:00+00:00",
+                "updated_at": "2026-03-29T00:00:00+00:00",
+                "last_run_at": None,
+                "next_run_at": None,
+                "error_message": None,
+            }),
+        ]
+        service = LLMModelsService(repository, scheduler_client)
+
+        with pytest.raises(ValueError, match="multiple LLM sync schedules"):
+            await service.start_background_sync(interval=60)
+
+    @pytest.mark.asyncio
+    async def test_stop_background_sync_cancels_cached_schedule_id(self):
+        from apps.flows.src.services.llm_models_service import LLMModelsService
+
+        repository = MagicMock()
+        scheduler_client = AsyncMock()
+        scheduler_client.cancel_schedule.return_value = self._schedule_model({
+            "id": "existing-task",
+            "company_id": "system",
+            "schedule_id": None,
+            "target_service": "flows",
+            "task_name": "sync_llm_models_task",
+            "queue_name": "default",
+            "schedule_type": "interval",
+            "cron": None,
+            "interval_seconds": 60,
+            "run_at": None,
+            "timezone": "UTC",
+            "payload": {},
+            "status": "cancelled",
+            "created_by_user_id": "system",
+            "created_at": "2026-03-29T00:00:00+00:00",
+            "updated_at": "2026-03-29T00:00:00+00:00",
+            "last_run_at": None,
+            "next_run_at": None,
+            "error_message": None,
+        })
+        service = LLMModelsService(repository, scheduler_client)
+        service._sync_schedule_id = "existing-task"
+
+        await service.stop_background_sync()
+
+        scheduler_client.cancel_schedule.assert_called_once_with("existing-task")
+
+
 class TestLLMModelsServiceRealAPI:
     """
     Реальные тесты синхронизации моделей от провайдеров.
@@ -370,7 +560,7 @@ class TestLLMModelsServiceRealAPI:
             pytest.skip("BotHub API key не настроен в конфиге")
         
         mock_repo = MagicMock(spec=LLMModelRepository)
-        service = LLMModelsService(mock_repo)
+        service = LLMModelsService(mock_repo, AsyncMock())
         
         try:
             models = await service._fetch_bothub_models()
@@ -408,7 +598,7 @@ class TestLLMModelsServiceRealAPI:
             pytest.skip("OpenRouter API key не настроен в конфиге")
         
         mock_repo = MagicMock(spec=LLMModelRepository)
-        service = LLMModelsService(mock_repo)
+        service = LLMModelsService(mock_repo, AsyncMock())
         
         models = await service._fetch_openrouter_models()
         
@@ -446,7 +636,7 @@ class TestLLMModelsServiceRealAPI:
             pytest.skip("OpenAI API key не настроен в конфиге")
         
         mock_repo = MagicMock(spec=LLMModelRepository)
-        service = LLMModelsService(mock_repo)
+        service = LLMModelsService(mock_repo, AsyncMock())
         
         models = await service._fetch_openai_models()
         
@@ -495,7 +685,7 @@ class TestLLMModelsServiceRealAPI:
         # Storage использует PostgreSQL напрямую из settings
         storage = Storage()
         repo = LLMModelRepository(storage)
-        service = LLMModelsService(repo)
+        service = LLMModelsService(repo, AsyncMock())
         
         # Синхронизируем
         count = await service.sync_models()
@@ -536,7 +726,7 @@ class TestLLMModelsServiceRealAPI:
         
         storage = Storage()
         repo = LLMModelRepository(storage)
-        service = LLMModelsService(repo)
+        service = LLMModelsService(repo, AsyncMock())
         
         # Синхронизируем ВСЕ провайдеры
         results = await service.sync_all_providers()

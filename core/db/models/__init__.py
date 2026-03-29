@@ -15,6 +15,7 @@ from core.db.models.platform import (
     PushSubscription,
     CalendarEventRecord,
     CalendarIntegrationRecord,
+    SchedulerTaskRecord,
 )
 from core.db.models.rag import (
     DocumentProcessingStatus,
@@ -32,6 +33,7 @@ __all__ = [
     "PushSubscription",
     "CalendarEventRecord",
     "CalendarIntegrationRecord",
+    "SchedulerTaskRecord",
     "DocumentProcessingStatus",
     "VectorDocument",
 ]

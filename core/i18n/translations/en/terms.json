@@ -1,89 +1,102 @@
 {
   "title": "Terms of Service",
   "updated": "Last updated",
+  "updated_at": "March 29, 2026",
   "section_1": {
-    "title": "General Provisions",
-    "intro": "This Terms of Service (hereinafter — «Agreement») governs the relationship between",
-    "and_user": "and the User when using the Services.",
-    "acceptance": "Use of the Services constitutes full and unconditional acceptance of the terms of this Agreement.",
-    "capacity": "User confirms that they are of legal capacity and have the right to enter into this Agreement."
+    "title": "1. Parties and acceptance",
+    "p1": "These Terms of Service form a legally binding agreement between {{company_name_en}} ({{legal_form_en}}) and the user of Humanitec services.",
+    "p2": "By accessing or using Humanitec website, web application, integrations or bots, you confirm that you have read and accepted these Terms.",
+    "p3": "If you do not agree with these Terms, you must stop using the services."
   },
   "section_2": {
-    "title": "Definitions",
-    "service": "«Services» — website, mobile application, WhatsApp bot and other services provided by the Operator;",
-    "user": "«User» — an individual or legal entity using the Services;",
-    "account": "«Account» — User's personal account in the Services;",
-    "content": "«Content» — any materials posted by the User in the Services (texts, images, files, etc.)."
+    "title": "2. Services scope",
+    "list": [
+      "Humanitec provides a technology platform for AI agents, automation flows and related operational tooling.",
+      "Service functionality may evolve, be improved, restricted or discontinued according to product and legal requirements.",
+      "Some features may require a separate order, plan or additional terms."
+    ]
   },
   "section_3": {
-    "title": "Registration and Account",
-    "registration": "Registration of an account is required to use some features of the Services.",
-    "accuracy": "User undertakes to provide accurate and up-to-date information during registration.",
-    "credentials": "User is responsible for the security of account login credentials.",
-    "unauthorized": "User must immediately notify the Operator of any unauthorized access to the account.",
-    "suspension": "Operator reserves the right to suspend or delete the account in case of violation of the Agreement terms."
+    "title": "3. Eligibility and account",
+    "list": [
+      "You must provide accurate and up-to-date account data.",
+      "You are responsible for credentials, account access and activities performed under your account.",
+      "You must promptly notify support at {{support_email}} if you detect unauthorized access.",
+      "We may suspend or restrict access to protect the platform, users, or legal compliance."
+    ]
   },
   "section_4": {
-    "title": "Use of Services",
-    "intro": "User undertakes to:",
-    "comply": "Comply with applicable law requirements;",
-    "respect": "Respect the rights and interests of other users;",
-    "no_spam": "Not distribute spam, viruses and malware;",
-    "no_illegal": "Not use the Services for illegal activities;",
-    "no_abuse": "Not abuse the functionality of the Services and not overload the infrastructure."
+    "title": "4. Acceptable use",
+    "list": [
+      "You must comply with applicable laws and third-party rights.",
+      "You must not use the service for unlawful, abusive, fraudulent or harmful activities.",
+      "You must not attempt to disrupt infrastructure, bypass security controls or overload platform resources.",
+      "You must not upload or transmit malicious code, malware, or spam."
+    ]
   },
   "section_5": {
-    "title": "Intellectual Property",
-    "ownership": "All rights to the Services and their content belong to the Operator or its partners.",
-    "license": "Operator grants User a limited, non-exclusive, non-transferable license to use the Services.",
-    "user_content": "By posting Content in the Services, User grants Operator a non-exclusive right to use it within the Services operation.",
-    "no_copy": "Copying, modification or distribution of Services materials without written permission is prohibited."
+    "title": "5. Intellectual property",
+    "list": [
+      "The platform, software, design and branding remain property of {{company_name_en}} and/or licensors.",
+      "Subject to these Terms, we grant you a limited, non-exclusive, revocable right to use the services.",
+      "You retain rights to your own lawful input/content; you grant us rights required to operate and support the service."
+    ]
   },
   "section_6": {
-    "title": "Limitation of Liability",
-    "as_is": "Services are provided «as is» without any warranties.",
-    "no_warranty": "Operator does not guarantee uninterrupted operation of the Services and absence of errors.",
-    "no_liability": "Operator is not liable for:",
-    "technical": "Temporary unavailability or failures in the Services;",
-    "data_loss": "Loss of User data due to technical reasons;",
-    "third_party": "Actions of third parties;",
-    "indirect": "Indirect losses, lost profits."
+    "title": "6. Fees and billing",
+    "list": [
+      "Certain features may be paid according to selected plans and published pricing.",
+      "Billing operations may be processed through {{billing_provider}}.",
+      "Unless otherwise required by law or separate written terms, paid amounts are non-refundable for already provided service periods."
+    ]
   },
   "section_7": {
-    "title": "Paid Services",
-    "payment": "Some features of the Services may be paid.",
-    "price": "The cost of services is indicated on the website and may be changed by the Operator.",
-    "refund": "Refunds are made in accordance with applicable law and refund conditions.",
-    "subscription": "With recurring payment subscriptions, charges occur automatically until subscription cancellation."
+    "title": "7. Privacy and data protection",
+    "p1": "Personal data processing is governed by our Privacy Policy available at /policy.",
+    "p2": "You confirm that your use of the service and your data submissions comply with applicable data protection law."
   },
   "section_8": {
-    "title": "Personal Data",
-    "reference": "Processing of User's personal data is carried out in accordance with the",
-    "privacy_policy": "Privacy Policy"
+    "title": "8. Availability and changes",
+    "list": [
+      "Services are provided on an \"as is\" and \"as available\" basis.",
+      "We do not guarantee uninterrupted or error-free operation.",
+      "We may modify services, interfaces and technical requirements where reasonably necessary."
+    ]
   },
   "section_9": {
-    "title": "Changes to Terms",
-    "changes": "Operator reserves the right to change the terms of the Agreement at any time.",
-    "notification": "The new version comes into effect from the moment of publication on the website.",
-    "continued_use": "Continued use of the Services after changes means acceptance of the new terms."
+    "title": "9. Liability limitation",
+    "list": [
+      "To the maximum extent permitted by law, indirect, consequential, special and lost-profit damages are excluded.",
+      "Our total liability for claims related to the services is limited to the amount paid by you for the relevant paid service period giving rise to the claim.",
+      "Nothing in these Terms limits liability that cannot be limited by mandatory law."
+    ]
   },
   "section_10": {
-    "title": "Termination of Use",
-    "termination": "User may terminate use of the Services at any time.",
-    "deletion": "To delete the account, contact support service.",
-    "suspension_right": "Operator reserves the right to suspend access to the Services in case of violation of the Agreement terms."
+    "title": "10. Suspension and termination",
+    "list": [
+      "You may stop using the services at any time.",
+      "We may suspend or terminate access for material breach of these Terms, legal violations, or security risks.",
+      "Provisions by nature intended to survive termination remain effective."
+    ]
   },
   "section_11": {
-    "title": "Applicable Law and Dispute Resolution",
-    "law": "This Agreement is governed by the laws of the Russian Federation.",
-    "disputes": "Disputes are resolved through negotiations, and if no agreement is reached — in court at the location of the Operator.",
-    "претензионный_порядок": "Pre-trial claim procedure is mandatory before going to court (claim response time — 30 days)."
+    "title": "11. Governing law and disputes",
+    "p1": "Unless mandatory law requires otherwise, these Terms are governed by the laws of the Russian Federation.",
+    "p2": "Disputes are resolved through mandatory pre-trial claim procedure (claim response period: 30 calendar days), then by court at the location of the operator where permitted by law."
   },
   "section_12": {
-    "title": "Contact",
-    "support": "For all questions related to the Agreement, contact:",
-    "email": "Email:",
-    "address": "Legal address:"
+    "title": "12. Updates to Terms",
+    "p1": "We may amend these Terms from time to time. The updated version becomes effective upon publication on this page, unless a different effective date is stated.",
+    "p2": "Continued use after publication means acceptance of the updated Terms."
   },
-  "footer": "All rights reserved"
+  "section_13": {
+    "title": "13. Operator details",
+    "list": [
+      "Company: {{company_name_en}} ({{legal_form_en}}).",
+      "Legal address: {{legal_address_en}}.",
+      "General contact: {{contact_email}}.",
+      "Support: {{support_email}}.",
+      "Company identifiers (if applicable): INN {{inn}}, OGRN {{ogrn}}."
+    ]
+  }
 }

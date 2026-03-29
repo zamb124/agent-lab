@@ -19,8 +19,9 @@ from apps.frontend.api.api_keys import router as api_keys_router
 from apps.frontend.api.billing import router as billing_router
 from apps.frontend.api.settings import router as settings_router
 from apps.frontend.api.services import router as services_router
+from apps.frontend.api.scheduler import router as scheduler_router
 from apps.frontend.container import get_frontend_container
-from apps.frontend.config import FrontendSettings
+from apps.frontend.config import FrontendSettings, get_frontend_settings
 from core.app.factory import create_service_app
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ app = create_service_app(
         billing_router,
         settings_router,
         services_router,
+        scheduler_router,
     ],
     title="Platform Management",
     description="Управление платформой: авторизация, компании, биллинг",
@@ -154,6 +156,14 @@ async def get_translations(locale: str) -> JSONResponse:
             continue
     
     return JSONResponse(content=translations)
+
+
+@app.get("/api/public/legal")
+@app.get("/frontend/api/public/legal")
+async def get_public_legal() -> JSONResponse:
+    """Публичные юридические реквизиты для страниц policy/terms."""
+    legal = get_frontend_settings().legal.model_dump()
+    return JSONResponse(content=legal)
 
 
 # SPA fallback (все неизвестные пути → index.html)

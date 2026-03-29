@@ -105,12 +105,25 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
     # Синхронизация LLM моделей от провайдера
     if os.getenv("TESTING") != "true":
         try:
+            scheduler_context = Context(
+                user=User(user_id="system", name="System", groups=["admin"]),
+                host="system",
+                session_id="system-scheduler-sync",
+                channel="system",
+                language=Language.RU,
+                active_company=Company(company_id="system", name="System", subdomain="system"),
+                user_companies=[],
+                trace_id="system:scheduler-sync",
+            )
+            set_context(scheduler_context)
             synced_count = await container.llm_models_service.sync_models()
             logger.info(f"Синхронизировано LLM моделей: {synced_count}")
             # Запуск фоновой синхронизации каждые 60 секунд
             await container.llm_models_service.start_background_sync(interval=60)
         except Exception as e:
             logger.error(f"Ошибка при синхронизации LLM моделей: {e}")
+        finally:
+            clear_context()
     else:
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING=true)")
         from core.clients.llm.factory import get_llm
@@ -138,7 +151,19 @@ async def on_shutdown(app: FastAPI, container):
         logger.warning(f"Error stopping dev polling: {e}")
     
     # Остановка фоновой синхронизации моделей
+    scheduler_context = Context(
+        user=User(user_id="system", name="System", groups=["admin"]),
+        host="system",
+        session_id="system-scheduler-stop",
+        channel="system",
+        language=Language.RU,
+        active_company=Company(company_id="system", name="System", subdomain="system"),
+        user_companies=[],
+        trace_id="system:scheduler-stop",
+    )
+    set_context(scheduler_context)
     await container.llm_models_service.stop_background_sync()
+    clear_context()
     
     # Закрываем Redis с error handling
     try:

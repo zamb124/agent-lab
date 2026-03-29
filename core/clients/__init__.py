@@ -19,6 +19,7 @@ from core.clients.service_client import (
     ServiceClient,
     ServiceClientError,
 )
+from core.clients.scheduler_client import SchedulerClient
 
 __all__ = [
     "NanoBananaClient",
@@ -38,4 +39,5 @@ __all__ = [
     "PaymentResponse",
     "ServiceClient",
     "ServiceClientError",
+    "SchedulerClient",
 ]

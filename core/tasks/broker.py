@@ -67,7 +67,7 @@ def create_scheduler(broker: RedisStreamBroker) -> TaskiqScheduler:
     settings = get_settings()
     broker_url = settings.tasks.broker_url
     
-    schedule_source = ListRedisScheduleSource(url=broker_url, prefix="taskiq_schedules:")
+    schedule_source = ListRedisScheduleSource(url=broker_url, prefix="platform_schedules")
     scheduler = TaskiqScheduler(broker, sources=[schedule_source])
     
     return scheduler
