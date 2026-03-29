@@ -39,6 +39,7 @@ EventType = Literal[
     "call.ended",
     "call.participant_joined",
     "call.participant_left",
+    "call.admin.changed",
     "call.recording.started",
     "call.recording.stopped",
     "call.recording.failed",
@@ -223,6 +224,14 @@ def event_call_participant_left(call_id: str, user_id: str) -> RealtimeEvent:
         type="call.participant_left",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
+    )
+
+
+def event_call_admin_changed(call: CallRead) -> RealtimeEvent:
+    return RealtimeEvent(
+        type="call.admin.changed",
+        channel_id=call.channel_id,
+        payload=call.model_dump(mode="json"),
     )
 
 

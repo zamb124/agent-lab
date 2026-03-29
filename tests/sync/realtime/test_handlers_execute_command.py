@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from apps.sync.db.models import SyncCall, SyncCallParticipant, SyncChannel, SyncSpace
+from apps.sync.db.models import SyncCall, SyncCallParticipant, SyncCallRecording, SyncChannel, SyncSpace
 from apps.sync.models.channels import ChannelCreate, ChannelType, ChannelUpdate
 from apps.sync.models.git import GitProvider, GitResourceKind, GitResourceRefCreate
 from apps.sync.models.messages import (
@@ -22,6 +22,7 @@ from apps.sync.models.messages import (
     MessageEdit,
     TextPlainContent,
 )
+from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.spaces import SpaceCreate, SpaceUpdate
 from apps.sync.models.threads import ThreadCreate
 from apps.sync.realtime.commands import CommandEnvelope
@@ -825,6 +826,417 @@ async def test_git_resources_upsert(
     assert res.ok
     assert res.result is not None
     assert res.result.external_id == "99"
+
+
+@pytest.mark.asyncio
+async def test_call_hangup_auto_stops_recording_for_recording_owner(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    sync_user_repository,
+    monkeypatch,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    from apps.sync.realtime import handlers as handlers_module
+
+    actor_user_id = "u1"
+    other_user_id = "u2"
+    space = SyncSpace(
+        space_id="sp_hangup_owner",
+        company_id=company_id,
+        name="Hangup Owner Space",
+        description=None,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await space_repo.create(space)
+    channel = SyncChannel(
+        channel_id="ch_hangup_owner",
+        company_id=company_id,
+        space_id=space.space_id,
+        type=ChannelType.TOPIC.value,
+        name="calls",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await channel_repo.create(channel)
+    call = SyncCall(
+        call_id="call_hangup_owner",
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="p2p",
+        call_type="video",
+        status="active",
+        livekit_room_name=None,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor_user_id,
+    )
+    await call_repo.create_call(call)
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=actor_user_id,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=other_user_id,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+    recording = SyncCallRecording(
+        recording_id="rec_hangup_owner",
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=call.channel_id,
+        space_id=space.space_id,
+        status="recording",
+        started_by_user_id=actor_user_id,
+        provider_job_id="egress-owner",
+        started_at=datetime.now(tz=UTC),
+    )
+    await call_recording_repo.create(recording)
+
+    helper_calls: list[str] = []
+
+    async def _fake_stop_and_finalize_recording(**kwargs):
+        helper_calls.append(kwargs["recording"].recording_id)
+        return CallRecordingRead(
+            recording_id=kwargs["recording"].recording_id,
+            call_id=kwargs["call"].call_id,
+            channel_id=kwargs["call"].channel_id,
+            space_id=kwargs["recording"].space_id,
+            status="uploaded",
+            provider_job_id=kwargs["recording"].provider_job_id,
+            raw_file_id=None,
+            started_at=kwargs["recording"].started_at,
+            ended_at=datetime.now(tz=UTC),
+            created_at=kwargs["recording"].created_at,
+            error=None,
+        )
+
+    monkeypatch.setattr(handlers_module, "_stop_and_finalize_recording", _fake_stop_and_finalize_recording)
+
+    result = await execute_command(
+        _cmd(
+            actor=actor_user_id,
+            company_id=company_id,
+            typ="call.hangup",
+            payload={"call_id": call.call_id},
+        ),
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        calls=call_repo,
+        call_recordings=call_recording_repo,
+        call_meetings=call_meeting_repo,
+        user_repository=sync_user_repository,
+    )
+    assert result.ok
+    assert helper_calls == ["rec_hangup_owner"]
+    assert any(event.type == "call.recording.stopped" for event in result.events)
+
+
+@pytest.mark.asyncio
+async def test_call_hangup_does_not_stop_recording_for_non_owner(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    sync_user_repository,
+    monkeypatch,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    from apps.sync.realtime import handlers as handlers_module
+
+    owner_user_id = "u1"
+    actor_user_id = "u2"
+    space = SyncSpace(
+        space_id="sp_hangup_non_owner",
+        company_id=company_id,
+        name="Hangup Non Owner Space",
+        description=None,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await space_repo.create(space)
+    channel = SyncChannel(
+        channel_id="ch_hangup_non_owner",
+        company_id=company_id,
+        space_id=space.space_id,
+        type=ChannelType.TOPIC.value,
+        name="calls",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await channel_repo.create(channel)
+    call = SyncCall(
+        call_id="call_hangup_non_owner",
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="p2p",
+        call_type="video",
+        status="active",
+        livekit_room_name=None,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await call_repo.create_call(call)
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=owner_user_id,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=actor_user_id,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+    recording = SyncCallRecording(
+        recording_id="rec_hangup_non_owner",
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=call.channel_id,
+        space_id=space.space_id,
+        status="recording",
+        started_by_user_id=owner_user_id,
+        provider_job_id="egress-non-owner",
+        started_at=datetime.now(tz=UTC),
+    )
+    await call_recording_repo.create(recording)
+
+    helper_calls: list[str] = []
+
+    async def _fake_stop_and_finalize_recording(**kwargs):
+        helper_calls.append(kwargs["recording"].recording_id)
+        return CallRecordingRead(
+            recording_id=kwargs["recording"].recording_id,
+            call_id=kwargs["call"].call_id,
+            channel_id=kwargs["call"].channel_id,
+            space_id=kwargs["recording"].space_id,
+            status="uploaded",
+            provider_job_id=kwargs["recording"].provider_job_id,
+            raw_file_id=None,
+            started_at=kwargs["recording"].started_at,
+            ended_at=datetime.now(tz=UTC),
+            created_at=kwargs["recording"].created_at,
+            error=None,
+        )
+
+    monkeypatch.setattr(handlers_module, "_stop_and_finalize_recording", _fake_stop_and_finalize_recording)
+
+    result = await execute_command(
+        _cmd(
+            actor=actor_user_id,
+            company_id=company_id,
+            typ="call.hangup",
+            payload={"call_id": call.call_id},
+        ),
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        calls=call_repo,
+        call_recordings=call_recording_repo,
+        call_meetings=call_meeting_repo,
+        user_repository=sync_user_repository,
+    )
+    assert result.ok
+    assert helper_calls == []
+    assert all(event.type != "call.recording.stopped" for event in result.events)
+
+
+@pytest.mark.asyncio
+async def test_call_recording_start_forbidden_for_non_admin(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    sync_user_repository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    owner_user_id = "owner_recording"
+    actor_user_id = "member_recording"
+    space = SyncSpace(
+        space_id="sp_recording_admin_only",
+        company_id=company_id,
+        name="Recording Admin Only",
+        description=None,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await space_repo.create(space)
+    channel = SyncChannel(
+        channel_id="ch_recording_admin_only",
+        company_id=company_id,
+        space_id=space.space_id,
+        type=ChannelType.TOPIC.value,
+        name="calls",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await channel_repo.create(channel)
+    await channel_repo.upsert_member(channel.channel_id, owner_user_id, "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel.channel_id, actor_user_id, "member", company_id=company_id)
+    call = SyncCall(
+        call_id="call_recording_admin_only",
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name="room-recording-admin-only",
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await call_repo.create_call(call)
+
+    with pytest.raises(PermissionError, match="Только админ встречи может включать запись"):
+        await execute_command(
+            _cmd(
+                actor=actor_user_id,
+                company_id=company_id,
+                typ="call.recording.start",
+                payload={"call_id": call.call_id},
+            ),
+            spaces=space_repo,
+            channels=channel_repo,
+            threads=thread_repo,
+            messages=message_repo,
+            git_refs=git_ref_repo,
+            calls=call_repo,
+            call_recordings=call_recording_repo,
+            call_meetings=call_meeting_repo,
+            user_repository=sync_user_repository,
+        )
+
+
+@pytest.mark.asyncio
+async def test_call_admin_transfer_updates_call_admin(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    sync_user_repository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    owner_user_id = "owner_transfer"
+    target_user_id = "target_transfer"
+    space = SyncSpace(
+        space_id="sp_transfer_admin",
+        company_id=company_id,
+        name="Transfer Admin Space",
+        description=None,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await space_repo.create(space)
+    channel = SyncChannel(
+        channel_id="ch_transfer_admin",
+        company_id=company_id,
+        space_id=space.space_id,
+        type=ChannelType.TOPIC.value,
+        name="calls",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await channel_repo.create(channel)
+    await channel_repo.upsert_member(channel.channel_id, owner_user_id, "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel.channel_id, target_user_id, "member", company_id=company_id)
+    call = SyncCall(
+        call_id="call_transfer_admin",
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name="room-transfer-admin",
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await call_repo.create_call(call)
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=owner_user_id,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=target_user_id,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+
+    result = await execute_command(
+        _cmd(
+            actor=owner_user_id,
+            company_id=company_id,
+            typ="call.admin.transfer",
+            payload={"call_id": call.call_id, "target_user_id": target_user_id},
+        ),
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        calls=call_repo,
+        call_recordings=call_recording_repo,
+        call_meetings=call_meeting_repo,
+        user_repository=sync_user_repository,
+    )
+    assert result.ok
+    assert result.result is not None
+    assert result.result.created_by_user_id == target_user_id
+    assert any(event.type == "call.admin.changed" for event in result.events)
 
 
 @pytest.mark.asyncio

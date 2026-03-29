@@ -75,6 +75,15 @@ class CallRepository(BaseSyncRepository[SyncCall]):
             )
             await session.commit()
 
+    async def set_call_admin(self, call_id: str, admin_user_id: str) -> None:
+        async with self._db.session() as session:
+            await session.execute(
+                update(SyncCall)
+                .where(SyncCall.call_id == call_id)
+                .values(created_by_user_id=admin_user_id)
+            )
+            await session.commit()
+
     async def add_participant(self, participant: SyncCallParticipant) -> SyncCallParticipant:
         async with self._db.session() as session:
             session.add(participant)

@@ -43,13 +43,16 @@ from apps.sync.models.meetings import CallMeetingRead, CallRecordingRead
 from apps.sync.models.spaces import SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadRead
 from apps.sync.realtime.call_handlers import (
+    _call_read_from_entities,
     handle_call_accept,
     handle_call_decline,
     handle_call_hangup,
     handle_call_invite,
 )
 from apps.sync.realtime.commands import (
+    CallTransferAdminPayload,
     CallMeetingExportToCrmPayload,
+    CallHangupPayload,
     CallRecordingStartPayload,
     CallRecordingStopPayload,
     ChannelsCreatePayload,
@@ -77,6 +80,7 @@ from apps.sync.realtime.events import (
     event_channel_pins_changed,
     event_channel_read_updated,
     event_channel_typing,
+    event_call_admin_changed,
     event_call_export_crm_done,
     event_call_recording_started,
     event_call_recording_stopped,
@@ -139,6 +143,85 @@ def _build_livekit_recording_client() -> LiveKitClient:
         api_key=settings.calls.livekit_api_key,
         api_secret=settings.calls.livekit_api_secret,
     )
+
+
+async def _stop_and_finalize_recording(
+    *,
+    call,
+    recording: SyncCallRecording,
+    company_id: str,
+    actor_user_id: str,
+    call_recordings: CallRecordingRepository,
+    call_meetings: CallMeetingRepository,
+) -> CallRecordingRead:
+    if recording.provider_job_id is None or recording.provider_job_id == "":
+        raise ValueError(
+            f"У записи {recording.recording_id} отсутствует provider_job_id, невозможно остановить egress."
+        )
+    settings = get_settings()
+    if settings.recording_max_duration_seconds <= 0:
+        raise ValueError("recording_max_duration_seconds должен быть больше 0.")
+    if recording.started_at is not None:
+        max_end_at = recording.started_at + timedelta(seconds=settings.recording_max_duration_seconds)
+        logger.info(
+            "call.recording.stop duration check: call_id=%s recording_id=%s started_at=%s max_end_at=%s now=%s",
+            call.call_id,
+            recording.recording_id,
+            recording.started_at.isoformat(),
+            max_end_at.isoformat(),
+            datetime.now(UTC).isoformat(),
+        )
+    livekit_client = _build_livekit_recording_client()
+    logger.info(
+        "call.recording.stop egress stop: call_id=%s recording_id=%s egress_id=%s",
+        call.call_id,
+        recording.recording_id,
+        recording.provider_job_id,
+    )
+    try:
+        await livekit_client.stop_egress(egress_id=recording.provider_job_id)
+    except TwirpError as exc:
+        if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
+            logger.warning(
+                "call.recording.stop egress already finished: call_id=%s recording_id=%s egress_id=%s code=%s message=%s",
+                call.call_id,
+                recording.recording_id,
+                recording.provider_job_id,
+                exc.code,
+                str(exc),
+            )
+        else:
+            raise
+    await call_recordings.mark_status(
+        recording.recording_id,
+        status="uploaded",
+        ended_at=datetime.now(UTC),
+    )
+    updated_recording = await call_recordings.get(recording.recording_id)
+    if updated_recording is None:
+        raise RuntimeError("Запись пропала после обновления.")
+    meeting = await call_meetings.get_by_recording(updated_recording.recording_id, company_id)
+    if meeting is None:
+        meeting = SyncCallMeeting(
+            meeting_id=uuid4().hex,
+            call_id=updated_recording.call_id,
+            recording_id=updated_recording.recording_id,
+            company_id=updated_recording.company_id,
+            channel_id=updated_recording.channel_id,
+            space_id=updated_recording.space_id,
+            summary_json={},
+            export_status="pending",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        await call_meetings.create(meeting)
+    from apps.sync.realtime.tasks import sync_finalize_recording_task
+    await sync_finalize_recording_task.kiq(
+        recording_id=updated_recording.recording_id,
+        company_id=company_id,
+        actor_user_id=actor_user_id,
+    )
+    return _recording_read_from_entity(updated_recording)
 
 
 def _notification_preview_from_message(message: MessageRead) -> str:
@@ -598,11 +681,12 @@ async def execute_command(
         "call.hangup",
         "call.recording.start",
         "call.recording.stop",
+        "call.admin.transfer",
         "call.meeting.export_to_crm",
     ):
         if calls is None:
             raise RuntimeError("CallRepository не передан в execute_command для call.* команд.")
-        if cmd.type in ("call.recording.start", "call.recording.stop", "call.meeting.export_to_crm"):
+        if cmd.type in ("call.hangup", "call.recording.start", "call.recording.stop", "call.admin.transfer", "call.meeting.export_to_crm"):
             if call_recordings is None:
                 raise RuntimeError("CallRecordingRepository не передан в execute_command для call.* команд.")
             if call_meetings is None:
@@ -617,12 +701,30 @@ async def execute_command(
         elif cmd.type == "call.decline":
             out, evs = await handle_call_decline(cmd, calls=calls)
         elif cmd.type == "call.hangup":
+            payload = CallHangupPayload.model_validate(cmd.payload)
+            call = await calls.get_call(payload.call_id, cmd.company_id)
+            active_recording = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
+            auto_stopped_recording_event: RealtimeEvent | None = None
+            if active_recording is not None and active_recording.started_by_user_id == cmd.actor_user_id:
+                stopped_recording = await _stop_and_finalize_recording(
+                    call=call,
+                    recording=active_recording,
+                    company_id=cmd.company_id,
+                    actor_user_id=cmd.actor_user_id,
+                    call_recordings=call_recordings,
+                    call_meetings=call_meetings,
+                )
+                auto_stopped_recording_event = event_call_recording_stopped(stopped_recording)
             out, evs = await handle_call_hangup(cmd, calls=calls)
+            if auto_stopped_recording_event is not None:
+                evs.append(auto_stopped_recording_event)
         elif cmd.type == "call.recording.start":
             payload = CallRecordingStartPayload.model_validate(cmd.payload)
             call = await calls.get_call(payload.call_id, cmd.company_id)
             if call.status == "ended":
                 raise ValueError("Нельзя включить запись завершённого звонка.")
+            if call.created_by_user_id != cmd.actor_user_id:
+                raise PermissionError("Только админ встречи может включать запись.")
             if call.livekit_room_name is None or call.livekit_room_name == "":
                 raise ValueError(f"У звонка {call.call_id} отсутствует livekit_room_name.")
             if not await channels.is_member(call.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
@@ -696,6 +798,7 @@ async def execute_command(
                 channel_id=call.channel_id,
                 space_id=channel_entity.space_id,
                 status="recording",
+                started_by_user_id=cmd.actor_user_id,
                 provider_job_id=provider_job_id,
                 started_at=datetime.now(UTC),
             )
@@ -705,80 +808,44 @@ async def execute_command(
         elif cmd.type == "call.recording.stop":
             payload = CallRecordingStopPayload.model_validate(cmd.payload)
             call = await calls.get_call(payload.call_id, cmd.company_id)
+            if call.created_by_user_id != cmd.actor_user_id:
+                raise PermissionError("Только админ встречи может останавливать запись.")
             if not await channels.is_member(call.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
                 raise PermissionError("Нет доступа к звонку.")
             active = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
             if active is None:
                 raise ValueError("Активная запись не найдена.")
-            if active.provider_job_id is None or active.provider_job_id == "":
-                raise ValueError(
-                    f"У записи {active.recording_id} отсутствует provider_job_id, невозможно остановить egress."
-                )
-            settings = get_settings()
-            if settings.recording_max_duration_seconds <= 0:
-                raise ValueError("recording_max_duration_seconds должен быть больше 0.")
-            if active.started_at is not None:
-                max_end_at = active.started_at + timedelta(seconds=settings.recording_max_duration_seconds)
-                logger.info(
-                    "call.recording.stop duration check: call_id=%s recording_id=%s started_at=%s max_end_at=%s now=%s",
-                    call.call_id,
-                    active.recording_id,
-                    active.started_at.isoformat(),
-                    max_end_at.isoformat(),
-                    datetime.now(UTC).isoformat(),
-                )
-            livekit_client = _build_livekit_recording_client()
-            logger.info(
-                "call.recording.stop egress stop: call_id=%s recording_id=%s egress_id=%s",
-                call.call_id,
-                active.recording_id,
-                active.provider_job_id,
-            )
-            try:
-                await livekit_client.stop_egress(egress_id=active.provider_job_id)
-            except TwirpError as exc:
-                if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
-                    logger.warning(
-                        "call.recording.stop egress already finished: call_id=%s recording_id=%s egress_id=%s code=%s message=%s",
-                        call.call_id,
-                        active.recording_id,
-                        active.provider_job_id,
-                        exc.code,
-                        str(exc),
-                    )
-                else:
-                    raise
-            await call_recordings.mark_status(
-                active.recording_id,
-                status="uploaded",
-                ended_at=datetime.now(UTC),
-            )
-            updated = await call_recordings.get(active.recording_id)
-            if updated is None:
-                raise RuntimeError("Запись пропала после обновления.")
-            meeting = await call_meetings.get_by_recording(updated.recording_id, cmd.company_id)
-            if meeting is None:
-                meeting = SyncCallMeeting(
-                    meeting_id=uuid4().hex,
-                    call_id=updated.call_id,
-                    recording_id=updated.recording_id,
-                    company_id=updated.company_id,
-                    channel_id=updated.channel_id,
-                    space_id=updated.space_id,
-                    summary_json={},
-                    export_status="pending",
-                    created_at=datetime.now(UTC),
-                    updated_at=datetime.now(UTC),
-                )
-                await call_meetings.create(meeting)
-            out = _recording_read_from_entity(updated)
-            from apps.sync.realtime.tasks import sync_finalize_recording_task
-            await sync_finalize_recording_task.kiq(
-                recording_id=updated.recording_id,
+            out = await _stop_and_finalize_recording(
+                call=call,
+                recording=active,
                 company_id=cmd.company_id,
                 actor_user_id=cmd.actor_user_id,
+                call_recordings=call_recordings,
+                call_meetings=call_meetings,
             )
             evs = [event_call_recording_stopped(out)]
+        elif cmd.type == "call.admin.transfer":
+            payload = CallTransferAdminPayload.model_validate(cmd.payload)
+            call = await calls.get_call(payload.call_id, cmd.company_id)
+            if call.created_by_user_id != cmd.actor_user_id:
+                raise PermissionError("Только текущий админ встречи может передавать админку.")
+            if not await channels.is_member(call.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+                raise PermissionError("Нет доступа к звонку.")
+            if not await channels.is_member(call.channel_id, payload.target_user_id, company_id=cmd.company_id):
+                raise ValueError("Новый админ не является участником канала.")
+            if payload.target_user_id.startswith("guest:"):
+                raise ValueError("Нельзя назначить гостя админом встречи.")
+            participants = await calls.list_participants(call.call_id)
+            target_participant = next((item for item in participants if item.user_id == payload.target_user_id), None)
+            if target_participant is None:
+                raise ValueError("Новый админ не найден среди участников звонка.")
+            if target_participant.status != "joined":
+                raise ValueError("Новый админ должен быть активным участником звонка.")
+            await calls.set_call_admin(call.call_id, payload.target_user_id)
+            updated_call = await calls.get_call(call.call_id, cmd.company_id)
+            updated_participants = await calls.list_participants(call.call_id)
+            out = _call_read_from_entities(updated_call, updated_participants)
+            evs = [event_call_admin_changed(out)]
         elif cmd.type == "call.meeting.export_to_crm":
             payload = CallMeetingExportToCrmPayload.model_validate(cmd.payload)
             meeting = await call_meetings.get(payload.meeting_id)

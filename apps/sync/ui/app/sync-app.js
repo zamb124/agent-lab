@@ -505,6 +505,15 @@ export class SyncApp extends PlatformApp {
             }
             return;
         }
+        if (msg.type === 'call.admin.changed') {
+            if (this._activeCall?.call_id === p.call_id) {
+                this._activeCall = { ...this._activeCall, created_by_user_id: p.created_by_user_id };
+            }
+            if (this._incomingCall?.call_id === p.call_id) {
+                this._incomingCall = { ...this._incomingCall };
+            }
+            return;
+        }
         if (msg.type === 'call.recording.stopped') {
             if (this._activeCall?.call_id === p.call_id) {
                 const overlay = this.renderRoot?.querySelector('call-overlay');
@@ -658,6 +667,20 @@ export class SyncApp extends PlatformApp {
         });
     }
 
+    _sendCallTransferAdminWs(callId, targetUserId) {
+        if (typeof callId !== 'string' || callId === '') return;
+        if (typeof targetUserId !== 'string' || targetUserId === '') return;
+        const ws = this.services.get('syncWs');
+        if (!ws) return;
+        const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+            (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        ws.sendJson({
+            id,
+            type: 'call.admin.transfer',
+            payload: { call_id: callId, target_user_id: targetUserId },
+        });
+    }
+
     async _refetchOnReconnect() {
         const syncApi = this.services.get('syncApi');
         await SyncStore.loadChannels(syncApi);
@@ -747,6 +770,8 @@ export class SyncApp extends PlatformApp {
                     channel-id=${this._activeCall.channel_id || ''}
                     mode=${this._activeCall.mode}
                     call-type=${this._activeCall.call_type}
+                    current-user-id=${this.auth?.user?.id || ''}
+                    meeting-admin-user-id=${this._activeCall.created_by_user_id || ''}
                     livekit-url=${this._activeCall.livekit_url || ''}
                     livekit-token=${this._activeCall.livekit_token || ''}
                     .names=${this._buildNamesMap()}
@@ -754,6 +779,7 @@ export class SyncApp extends PlatformApp {
                     @call-hangup-request=${(e) => this._sendCallHangupWs(e.detail?.callId)}
                     @call-recording-start=${(e) => this._sendCallRecordingWs(e.detail?.callId, 'start')}
                     @call-recording-stop=${(e) => this._sendCallRecordingWs(e.detail?.callId, 'stop')}
+                    @call-transfer-admin=${(e) => this._sendCallTransferAdminWs(e.detail?.callId, e.detail?.targetUserId)}
                 ></call-overlay>
             ` : ''}
 

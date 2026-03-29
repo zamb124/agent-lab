@@ -40,6 +40,7 @@ CommandType = Literal[
     "call.hangup",
     "call.recording.start",
     "call.recording.stop",
+    "call.admin.transfer",
     "call.meeting.export_to_crm",
 ]
 
@@ -204,6 +205,11 @@ class CallRecordingStartPayload(BaseModel):
 
 class CallRecordingStopPayload(BaseModel):
     call_id: str
+
+
+class CallTransferAdminPayload(BaseModel):
+    call_id: str
+    target_user_id: str
 
 
 class CallMeetingExportToCrmPayload(BaseModel):

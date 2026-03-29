@@ -617,18 +617,50 @@ async def sync_transcribe_recording_task(meeting_id: str, company_id: str, actor
         )
         if transcript_text.strip() == "":
             raise ValueError(f"Пустой транскрипт для встречи {meeting.meeting_id}.")
+        settings = get_settings()
+        if not settings.s3.enabled:
+            raise ValueError("S3 отключен: сохранение транскрипта недоступно.")
+        default_bucket_key = settings.s3.default_bucket
+        if default_bucket_key == "":
+            raise ValueError("s3.default_bucket не настроен.")
+        if default_bucket_key not in settings.s3.buckets:
+            raise ValueError(f"Конфиг S3 bucket '{default_bucket_key}' не найден.")
+        bucket_config = settings.s3.buckets[default_bucket_key]
+        if not bucket_config.enabled:
+            raise ValueError(f"S3 bucket '{default_bucket_key}' выключен.")
+        real_bucket_name = bucket_config.bucket_name or default_bucket_key
+        if real_bucket_name == "":
+            raise ValueError("Имя S3 bucket для транскрипта не может быть пустым.")
+        transcript_s3_key = f"sync-meetings/{company_id}/{meeting.meeting_id}/transcript.txt"
+        transcript_bytes = transcript_text.encode("utf-8")
+        s3_client = S3ClientFactory.create_client_for_bucket(default_bucket_key)
+        await s3_client.upload_bytes(
+            data=transcript_bytes,
+            key=transcript_s3_key,
+            bucket=real_bucket_name,
+            content_type="text/plain; charset=utf-8",
+        )
+        transcript_storage_url = s3_client.get_public_url(transcript_s3_key, bucket=real_bucket_name)
         transcript_file_id = f"{meeting.meeting_id}-transcript-txt"
         transcript_file = SyncFile(
             file_id=transcript_file_id,
             company_id=company_id,
             original_name=f"{meeting.meeting_id}.txt",
             mime_type="text/plain",
-            size_bytes=len(transcript_text.encode("utf-8")),
-            storage_url=f"sync://meetings/{meeting.meeting_id}/transcript.txt",
+            size_bytes=len(transcript_bytes),
+            storage_url=transcript_storage_url,
             checksum=None,
         )
-        if await container.sync_file_repository.get(transcript_file_id) is None:
+        existing_transcript_file = await container.sync_file_repository.get(transcript_file_id)
+        if existing_transcript_file is None:
             await container.sync_file_repository.create(transcript_file)
+        else:
+            existing_transcript_file.original_name = transcript_file.original_name
+            existing_transcript_file.mime_type = transcript_file.mime_type
+            existing_transcript_file.size_bytes = transcript_file.size_bytes
+            existing_transcript_file.storage_url = transcript_file.storage_url
+            existing_transcript_file.checksum = transcript_file.checksum
+            await container.sync_file_repository.update(existing_transcript_file)
 
         from datetime import UTC, datetime
         from sqlalchemy import update
@@ -794,6 +826,20 @@ async def sync_summarize_transcript_task(meeting_id: str, company_id: str, actor
         after_summary = await container.call_meeting_repository.get(meeting.meeting_id)
         if after_summary is None:
             raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после summary.")
+        auto_export_enabled = False
+        if meeting.space_id is not None:
+            space = await container.space_repository.get(meeting.space_id)
+            if space is not None:
+                auto_export_enabled = bool(space.auto_export_summary_to_crm or space.auto_export_transcript_to_crm)
+        if not auto_export_enabled:
+            await container.call_meeting_repository.set_export_status(
+                meeting.meeting_id,
+                status="done",
+                target_namespace=after_summary.export_target_namespace,
+            )
+            after_summary = await container.call_meeting_repository.get(meeting.meeting_id)
+            if after_summary is None:
+                raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после обновления статуса.")
         summary_payload = CallMeetingRead(
             meeting_id=after_summary.meeting_id,
             call_id=after_summary.call_id,
@@ -810,17 +856,20 @@ async def sync_summarize_transcript_task(meeting_id: str, company_id: str, actor
         )
         await publish_realtime_events([event_call_summary_ready(summary_payload)])
 
-        if meeting.space_id is not None:
+        if auto_export_enabled:
+            if meeting.space_id is None:
+                raise ValueError("space_id обязателен для автоэкспорта встречи.")
             space = await container.space_repository.get(meeting.space_id)
-            if space is not None and (space.auto_export_summary_to_crm or space.auto_export_transcript_to_crm):
-                if space.namespace is None:
-                    raise ValueError("Для автоэкспорта встречи требуется namespace пространства.")
-                await sync_export_meeting_to_crm_task.kiq(
-                    meeting_id=meeting.meeting_id,
-                    company_id=company_id,
-                    actor_user_id=actor_user_id,
-                    namespace=space.namespace,
-                )
+            if space is None:
+                raise ValueError(f"Пространство {meeting.space_id} не найдено для автоэкспорта встречи.")
+            if space.namespace is None:
+                raise ValueError("Для автоэкспорта встречи требуется namespace пространства.")
+            await sync_export_meeting_to_crm_task.kiq(
+                meeting_id=meeting.meeting_id,
+                company_id=company_id,
+                actor_user_id=actor_user_id,
+                namespace=space.namespace,
+            )
     except Exception as exc:
         logger.error(
             "sync_summarize_transcript_task failed: meeting_id=%s error=%s",

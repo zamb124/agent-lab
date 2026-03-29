@@ -79,6 +79,8 @@ class CallOverlay extends PlatformElement {
         channelId:   { type: String, attribute: 'channel-id' },
         mode:        { type: String },
         callType:    { type: String, attribute: 'call-type' },
+        currentUserId: { type: String, attribute: 'current-user-id' },
+        meetingAdminUserId: { type: String, attribute: 'meeting-admin-user-id' },
         livekitUrl:  { type: String, attribute: 'livekit-url' },
         livekitToken: { type: String, attribute: 'livekit-token' },
         identity:    { type: String },
@@ -102,6 +104,7 @@ class CallOverlay extends PlatformElement {
         _copyLinkFeedback: { state: true },
         _recordingStatus: { state: true },
         _recordingError: { state: true },
+        _participantMenuIdentity: { state: true },
     };
 
     static styles = [
@@ -246,11 +249,74 @@ class CallOverlay extends PlatformElement {
             position: absolute;
             bottom: 10px;
             left: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             font-size: 13px;
             color: #fff;
             background: rgba(0,0,0,0.5);
             padding: 3px 10px;
             border-radius: 100px;
+        }
+
+        .participant-admin-crown {
+            display: inline-flex;
+            color: #fbbf24;
+        }
+
+        .tile-action-btn {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.55);
+            color: #fff;
+            z-index: 51;
+            transition: background 0.15s;
+            pointer-events: auto;
+        }
+
+        .tile-action-btn:hover {
+            background: rgba(0,0,0,0.75);
+        }
+
+        .tile-action-menu {
+            position: absolute;
+            top: 46px;
+            left: 8px;
+            min-width: 220px;
+            padding: 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(20, 20, 26, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 60;
+            pointer-events: auto;
+        }
+
+        .tile-action-menu-item {
+            width: 100%;
+            border: none;
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: transparent;
+            color: #fff;
+            text-align: left;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .tile-action-menu-item:hover {
+            background: rgba(255, 255, 255, 0.12);
         }
 
         .local-preview {
@@ -645,6 +711,58 @@ class CallOverlay extends PlatformElement {
             color: #fff;
             font-weight: 700;
         }
+
+        .recording-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #ef4444;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .recording-badge-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8);
+            animation: recording-dot-pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes recording-dot-pulse {
+            0% {
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8);
+            }
+            70% {
+                opacity: 0.45;
+                box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+            }
+            100% {
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            }
+        }
+
+        .ctrl-btn.recording-btn {
+            width: 56px;
+            height: 56px;
+        }
+
+        .ctrl-btn.recording-btn.recording-btn--active {
+            width: 64px;
+            height: 64px;
+            background: #ef4444;
+            color: #fff;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+        }
+
+        .ctrl-btn.recording-btn.recording-btn--active:hover {
+            background: #dc2626;
+        }
     `,
     ];
 
@@ -682,6 +800,7 @@ class CallOverlay extends PlatformElement {
         this._copyLinkFeedback = false;
         this._recordingStatus = 'idle';
         this._recordingError = null;
+        this._participantMenuIdentity = null;
         /** @type {ReturnType<typeof setTimeout> | null} */
         this._copyLinkFeedbackTimerId = null;
     }
@@ -694,6 +813,7 @@ class CallOverlay extends PlatformElement {
         this._devicesMenuOpen = false;
         this._moreMenuOpen = false;
         this._audioQualitySubOpen = false;
+        this._participantMenuIdentity = null;
     }
 
     _pointerClientXY(e) {
@@ -712,7 +832,7 @@ class CallOverlay extends PlatformElement {
     _pointerTargetsMenuChrome(e) {
         const testEl = (el) => {
             if (!(el instanceof Element)) return false;
-            if (el.closest?.('.call-menu') || el.closest?.('.call-menu-flyout')) return true;
+            if (el.closest?.('.call-menu') || el.closest?.('.call-menu-flyout') || el.closest?.('.tile-action-menu')) return true;
             if (el.closest?.('.controls-bar') || el.closest?.('.header') || el.closest?.('.settings-error')) {
                 return true;
             }
@@ -727,14 +847,14 @@ class CallOverlay extends PlatformElement {
     }
 
     _onDocumentPointerDown(e) {
-        if (!this._devicesMenuOpen && !this._moreMenuOpen) return;
+        if (!this._devicesMenuOpen && !this._moreMenuOpen && this._participantMenuIdentity == null) return;
         if (this._pointerTargetsMenuChrome(e)) return;
         this._closeMenus();
     }
 
     _onDocumentKeydown(e) {
         if (e.key !== 'Escape') return;
-        if (this._devicesMenuOpen || this._moreMenuOpen) {
+        if (this._devicesMenuOpen || this._moreMenuOpen || this._participantMenuIdentity != null) {
             this._closeMenus();
             e.preventDefault();
             return;
@@ -772,6 +892,46 @@ class CallOverlay extends PlatformElement {
     _toggleAudioQualitySub(e) {
         e.stopPropagation();
         this._audioQualitySubOpen = !this._audioQualitySubOpen;
+    }
+
+    _isGuestIdentity(identity) {
+        return typeof identity === 'string' && identity.startsWith('guest:');
+    }
+
+    _isMeetingAdminUser(identity) {
+        return typeof identity === 'string' && identity !== '' && identity === this.meetingAdminUserId;
+    }
+
+    _canTransferMeetingAdmin() {
+        return (
+            typeof this.currentUserId === 'string'
+            && this.currentUserId !== ''
+            && this.currentUserId === this.meetingAdminUserId
+        );
+    }
+
+    _toggleParticipantMenu(e, identity) {
+        e.stopPropagation();
+        if (!this._canTransferMeetingAdmin()) return;
+        if (this._participantMenuIdentity === identity) {
+            this._participantMenuIdentity = null;
+            return;
+        }
+        this._participantMenuIdentity = identity;
+    }
+
+    _assignMeetingAdmin(e, identity) {
+        e.stopPropagation();
+        if (!this._canTransferMeetingAdmin()) return;
+        if (typeof identity !== 'string' || identity === '') return;
+        if (this._isGuestIdentity(identity)) return;
+        if (this._isMeetingAdminUser(identity)) return;
+        this._participantMenuIdentity = null;
+        this.dispatchEvent(new CustomEvent('call-transfer-admin', {
+            detail: { callId: this.callId, targetUserId: identity },
+            bubbles: true,
+            composed: true,
+        }));
     }
 
     async _refreshDeviceLists() {
@@ -1317,6 +1477,10 @@ class CallOverlay extends PlatformElement {
 
     _toggleRecording() {
         if (!this.callId) return;
+        if (!this._canTransferMeetingAdmin()) {
+            this._recordingError = 'Только админ встречи может управлять записью.';
+            return;
+        }
         if (this._recordingStatus === 'starting' || this._recordingStatus === 'stopping') return;
         const start = this._recordingStatus === 'idle' || this._recordingStatus === 'failed';
         if (start) {
@@ -1403,6 +1567,7 @@ class CallOverlay extends PlatformElement {
         const gridClass = gridCount === 1 ? 'one' : gridCount === 2 ? 'two' : 'many';
         const participantCount = this._room ? this._sfuParticipantCount() : this._participants.length;
         const screenOn = this._room?.localParticipant?.isScreenShareEnabled === true;
+        const canControlRecording = this._canTransferMeetingAdmin();
 
         return html`
             <div class="header">
@@ -1412,8 +1577,12 @@ class CallOverlay extends PlatformElement {
                 </span>
                 <div style="display:flex;align-items:center;gap:8px;">
                     ${this._recordingStatus !== 'idle' ? html`
-                        <span style="color:${this._recordingStatus === 'recording' ? '#ef4444' : 'rgba(255,255,255,0.7)'};font-size:12px;">
-                            REC ${this._recordingStatus}
+                        <span
+                            class="recording-badge"
+                            style="color:${this._recordingStatus === 'recording' ? '#ef4444' : 'rgba(255,255,255,0.75)'};"
+                        >
+                            ${this._recordingStatus === 'recording' ? html`<span class="recording-badge-dot"></span>` : ''}
+                            REC
                         </span>
                     ` : ''}
                     <span style="opacity:0.5">${participantCount} уч.</span>
@@ -1528,13 +1697,24 @@ class CallOverlay extends PlatformElement {
                         </button>
                     ` : ''}
                     <button
-                        class="ctrl-btn ${this._recordingStatus === 'recording' ? 'active' : ''}"
+                        class="ctrl-btn recording-btn ${this._recordingStatus === 'recording' ? 'recording-btn--active' : ''}"
+                        ?disabled=${!canControlRecording}
                         @click=${this._toggleRecording}
-                        title="Запись встречи"
+                        title="${canControlRecording
+                            ? (this._recordingStatus === 'recording' ? 'Остановить запись' : 'Запись встречи')
+                            : 'Только админ встречи может управлять записью'}"
                     >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="12" r="6"></circle>
-                        </svg>
+                        ${this._recordingStatus === 'recording'
+                            ? html`
+                                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-label="Stop recording">
+                                    <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"></rect>
+                                </svg>
+                            `
+                            : html`
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <circle cx="12" cy="12" r="6"></circle>
+                                </svg>
+                            `}
                     </button>
                     <button class="ctrl-btn hangup" @click=${this._hangup} title="Завершить звонок">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -1623,6 +1803,53 @@ class CallOverlay extends PlatformElement {
         return this.names?.[identity] || identity;
     }
 
+    _renderTileAdminBadge(identity) {
+        if (!this._isMeetingAdminUser(identity)) return html``;
+        return html`
+            <span class="participant-admin-crown" title="Админ встречи">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M3 19h18l-1.5-10-5.5 4-2-6-2 6-5.5-4L3 19z"></path>
+                </svg>
+            </span>
+        `;
+    }
+
+    _renderTileAdminMenu(identity) {
+        if (!this._canTransferMeetingAdmin()) return html``;
+        if (typeof identity !== 'string' || identity === '') return html``;
+        const menuOpen = this._participantMenuIdentity === identity;
+        const canAssign = !this._isGuestIdentity(identity) && !this._isMeetingAdminUser(identity);
+        return html`
+            <button
+                type="button"
+                class="tile-action-btn"
+                title="Меню участника"
+                @click=${(e) => this._toggleParticipantMenu(e, identity)}
+            >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <circle cx="5" cy="12" r="2"></circle>
+                    <circle cx="12" cy="12" r="2"></circle>
+                    <circle cx="19" cy="12" r="2"></circle>
+                </svg>
+            </button>
+            ${menuOpen ? html`
+                <div class="tile-action-menu">
+                    ${canAssign ? html`
+                        <button
+                            type="button"
+                            class="tile-action-menu-item"
+                            @click=${(e) => this._assignMeetingAdmin(e, identity)}
+                        >
+                            Назначить админом встречи
+                        </button>
+                    ` : html`
+                        <div class="tile-action-menu-item">Недоступно для этого участника</div>
+                    `}
+                </div>
+            ` : ''}
+        `;
+    }
+
     _renderTile(item, index) {
         if (this._room) {
             const label = item.isLocal ? 'Вы' : this._resolveDisplayName(item.identity);
@@ -1632,11 +1859,15 @@ class CallOverlay extends PlatformElement {
             const tileKey = item.key;
             return html`
                 <div class="${tileClass}" data-idx=${index} data-tile-key=${tileKey}>
+                    ${this._renderTileAdminMenu(item.identity)}
                     ${hasVideo
                         ? html`<video autoplay playsinline ?muted=${item.isLocal}></video>`
                         : html`<div class="avatar-placeholder">${displayLabel?.[0]?.toUpperCase() ?? '?'}</div>`
                     }
-                    <span class="participant-name">${displayLabel}</span>
+                    <span class="participant-name">
+                        ${this._renderTileAdminBadge(item.identity)}
+                        ${displayLabel}
+                    </span>
                     ${this._tileFullscreenButton(tileKey, hasVideo)}
                 </div>
             `;
@@ -1648,12 +1879,16 @@ class CallOverlay extends PlatformElement {
         const tileKey = `p2p-${index}`;
         return html`
             <div class="participant-tile" data-idx=${index} data-tile-key=${tileKey}>
+                ${this._renderTileAdminMenu(participant.identity)}
                 ${this._tileFullscreenButton(tileKey, hasVideo)}
                 ${hasVideo
                     ? html`<video autoplay playsinline muted></video>`
                     : html`<div class="avatar-placeholder">${label?.[0]?.toUpperCase() ?? '?'}</div>`
                 }
-                <span class="participant-name">${label}</span>
+                <span class="participant-name">
+                    ${this._renderTileAdminBadge(participant.identity)}
+                    ${label}
+                </span>
             </div>
         `;
     }

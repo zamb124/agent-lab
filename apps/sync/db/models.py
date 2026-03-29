@@ -368,6 +368,7 @@ class SyncCallRecording(Base):
         String(64), ForeignKey("sync_spaces.space_id", ondelete="SET NULL"), nullable=True
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="requested")
+    started_by_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     provider_job_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     raw_file_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("sync_files.file_id", ondelete="SET NULL"), nullable=True

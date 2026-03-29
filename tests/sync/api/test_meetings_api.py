@@ -118,7 +118,9 @@ async def test_meetings_list_and_get(
     assert any(item["meeting_id"] == meeting.meeting_id for item in payload)
     listed = next(item for item in payload if item["meeting_id"] == meeting.meeting_id)
     assert listed["transcript_text_storage_url"] == "https://files.example/list/transcript.txt"
-    assert listed["transcript_text_download_url"] == f"/sync/api/v1/files/download/{transcript_file.file_id}"
+    assert listed["transcript_text_download_url"] == (
+        f"/sync/api/v1/meetings/{meeting.meeting_id}/download/transcript"
+    )
 
     details_resp = await sync_client.get(
         f"/sync/api/v1/meetings/{meeting.meeting_id}",
@@ -128,10 +130,12 @@ async def test_meetings_list_and_get(
     details = details_resp.json()
     assert details["meeting"]["meeting_id"] == meeting.meeting_id
     assert details["recording"]["raw_file_storage_url"] == "https://files.example/list/raw.mp4"
-    assert details["recording"]["raw_file_download_url"] == f"/sync/api/v1/files/download/{raw_file.file_id}"
+    assert details["recording"]["raw_file_download_url"] == (
+        f"/sync/api/v1/meetings/{meeting.meeting_id}/download/raw"
+    )
     assert details["meeting"]["transcript_text_storage_url"] == "https://files.example/list/transcript.txt"
     assert details["meeting"]["transcript_text_download_url"] == (
-        f"/sync/api/v1/files/download/{transcript_file.file_id}"
+        f"/sync/api/v1/meetings/{meeting.meeting_id}/download/transcript"
     )
 
 
@@ -250,7 +254,7 @@ async def test_retry_processing_uses_mock_stt_client_and_updates_transcript(
     assert retry_payload["transcript_text_file_id"] != ""
     assert retry_payload["transcript_text_storage_url"] is None
     assert retry_payload["transcript_text_download_url"] == (
-        f"/sync/api/v1/files/download/{retry_payload['transcript_text_file_id']}"
+        f"/sync/api/v1/meetings/{meeting.meeting_id}/download/transcript"
     )
     assert len(stt_client.calls) >= 1
 
