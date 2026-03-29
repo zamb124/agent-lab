@@ -1,6 +1,11 @@
 import { BaseService } from '../lib/services/BaseService.js';
 
 export class CalendarService extends BaseService {
+    getGoogleConnectUrl(returnPath = '/') {
+        const encodedReturnPath = encodeURIComponent(returnPath);
+        return `${this.baseUrl}/api/calendar/integrations/google/start?return_path=${encodedReturnPath}`;
+    }
+
     async listEvents({ startAt, endAt, includeSources = null, limit = 1000 }) {
         return this.post('/api/calendar/events/list', {
             start_at: startAt,

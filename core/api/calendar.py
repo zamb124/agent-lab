@@ -5,10 +5,12 @@ API платформенного календаря.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.calendar.service import CalendarService
 from core.context import get_context
@@ -72,9 +74,31 @@ class CalendarSyncRequest(BaseModel):
     end_at: datetime
 
 
+class CalendarIntegrationPublic(BaseModel):
+    integration_id: str
+    company_id: str
+    user_id: str
+    provider: CalendarProvider
+    settings: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
 class CalendarListResponse(BaseModel):
     events: list[CalendarEvent]
-    integrations: list[CalendarIntegration]
+    integrations: list[CalendarIntegrationPublic]
+
+
+def _to_public_integration(integration: CalendarIntegration) -> CalendarIntegrationPublic:
+    return CalendarIntegrationPublic(
+        integration_id=integration.integration_id,
+        company_id=integration.company_id,
+        user_id=integration.user_id,
+        provider=integration.provider,
+        settings=integration.settings.model_dump(mode="json"),
+        created_at=integration.created_at,
+        updated_at=integration.updated_at,
+    )
 
 
 def _get_calendar_service(request: Request) -> CalendarService:
@@ -92,6 +116,28 @@ def _raise_http_for_calendar_service_error(error: Exception) -> None:
     if isinstance(error, RuntimeError):
         raise HTTPException(status_code=502, detail=message) from error
     raise error
+
+
+def _resolve_callback_path(current_path: str) -> str:
+    if current_path.startswith("/frontend/"):
+        return "/frontend/api/calendar/integrations/google/callback"
+    if current_path.startswith("/flows/"):
+        return "/flows/api/calendar/integrations/google/callback"
+    if current_path.startswith("/crm/"):
+        return "/crm/api/calendar/integrations/google/callback"
+    if current_path.startswith("/sync/"):
+        return "/sync/api/calendar/integrations/google/callback"
+    if current_path.startswith("/rag/"):
+        return "/rag/api/calendar/integrations/google/callback"
+    return "/api/calendar/integrations/google/callback"
+
+
+def _append_query(url: str, params: dict[str, str]) -> str:
+    parsed = urlsplit(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.update(params)
+    next_query = urlencode(query)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, next_query, parsed.fragment))
 
 
 @router.post("/events/list", response_model=CalendarListResponse)
@@ -114,7 +160,8 @@ async def list_calendar_events(payload: CalendarListRequest, service: CalendarSe
         )
     except Exception as error:
         _raise_http_for_calendar_service_error(error)
-    return CalendarListResponse(events=events, integrations=integrations)
+    public_integrations = [_to_public_integration(item) for item in integrations]
+    return CalendarListResponse(events=events, integrations=public_integrations)
 
 
 @router.post("/events", response_model=CalendarEvent)
@@ -165,36 +212,100 @@ async def delete_calendar_event(event_id: str, service: CalendarServiceDep) -> d
     return {"success": True}
 
 
-@router.get("/integrations", response_model=list[CalendarIntegration])
-async def list_calendar_integrations(service: CalendarServiceDep) -> list[CalendarIntegration]:
+@router.get("/integrations", response_model=list[CalendarIntegrationPublic])
+async def list_calendar_integrations(service: CalendarServiceDep) -> list[CalendarIntegrationPublic]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        return await service.list_integrations(
+        integrations = await service.list_integrations(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
+        return [_to_public_integration(item) for item in integrations]
     except Exception as error:
         _raise_http_for_calendar_service_error(error)
 
 
-@router.post("/integrations/connect", response_model=CalendarIntegration)
+@router.post("/integrations/connect", response_model=CalendarIntegrationPublic)
 async def connect_calendar_integration(
     payload: CalendarConnectIntegrationRequest,
     service: CalendarServiceDep,
-) -> CalendarIntegration:
+) -> CalendarIntegrationPublic:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        return await service.connect_integration(
+        integration = await service.connect_integration(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
             payload=payload.model_dump(),
         )
+        return _to_public_integration(integration)
     except Exception as error:
         _raise_http_for_calendar_service_error(error)
+
+
+@router.get("/integrations/google/start")
+async def start_google_calendar_oauth(
+    request: Request,
+    service: CalendarServiceDep,
+    return_path: str = "/",
+) -> RedirectResponse:
+    ctx = get_context()
+    if not ctx or not ctx.user or not ctx.active_company:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not return_path.startswith("/") or return_path.startswith("//"):
+        raise HTTPException(status_code=400, detail="return_path must start with single '/'")
+    callback_path = _resolve_callback_path(request.url.path)
+    protocol = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("host")
+    if not host:
+        raise HTTPException(status_code=400, detail="Host header is required")
+    redirect_uri = f"{protocol}://{host}{callback_path}"
+    try:
+        auth_url = await service.start_google_oauth(
+            user_id=ctx.user.user_id,
+            company_id=ctx.active_company.company_id,
+            redirect_uri=redirect_uri,
+            return_path=return_path,
+        )
+    except Exception as error:
+        _raise_http_for_calendar_service_error(error)
+    return RedirectResponse(url=auth_url)
+
+
+@router.get("/integrations/google/callback")
+async def complete_google_calendar_oauth(
+    service: CalendarServiceDep,
+    state: str,
+    code: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    ctx = get_context()
+    if not ctx or not ctx.user or not ctx.active_company:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if error:
+        raise HTTPException(status_code=400, detail=f"Google OAuth error: {error}")
+    if not code:
+        raise HTTPException(status_code=400, detail="Google OAuth code is required")
+    try:
+        return_path = await service.complete_google_oauth(
+            user_id=ctx.user.user_id,
+            company_id=ctx.active_company.company_id,
+            state=state,
+            code=code,
+        )
+    except Exception as error:
+        _raise_http_for_calendar_service_error(error)
+    redirect_url = _append_query(
+        return_path,
+        {
+            "calendar_provider": "google",
+            "calendar_status": "connected",
+        },
+    )
+    return RedirectResponse(url=redirect_url)
 
 
 @router.delete("/integrations/{provider}")

@@ -255,6 +255,7 @@ class BaseContainer:
             event_repository=CalendarEventSqlRepository(db_url=self.shared_db_url),
             integration_repository=CalendarIntegrationSqlRepository(db_url=self.shared_db_url),
             service_client=self.service_client,
+            storage=self.shared_storage,
         )
     
     @lazy

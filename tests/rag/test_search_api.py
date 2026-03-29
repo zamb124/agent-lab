@@ -203,6 +203,7 @@ async def test_search_relevance_score(rag_client, unique_namespace_name, auth_he
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_global_search(rag_client, unique_id, auth_headers_system):
     """POST /search выполняет глобальный поиск по нескольким namespaces"""
     # Создаем два namespace

@@ -1038,11 +1038,8 @@ export class PlatformCalendarModal extends PlatformModal {
             recurrence: 'none',
         };
         this._integrationForm = {
-            access_token: '',
-            refresh_token: '',
-            expires_at: '',
-            scope: '',
-            token_type: 'Bearer',
+            username: '',
+            app_password: '',
             default_calendar_id: '',
             sync_enabled: true,
             sync_inbound_enabled: true,
@@ -1451,25 +1448,40 @@ export class PlatformCalendarModal extends PlatformModal {
 
     async _saveIntegration() {
         this._saving = true;
-        const expiresAt = this._integrationForm.expires_at.trim();
+        if (this._activeProvider === 'google') {
+            this._saving = false;
+            throw new Error('Google подключается через OAuth-кнопку');
+        }
         const payload = {
             provider: this._activeProvider,
-            access_token: this._integrationForm.access_token.trim(),
-            refresh_token: this._integrationForm.refresh_token.trim() || null,
-            expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-            scope: this._integrationForm.scope.trim() || null,
-            token_type: this._integrationForm.token_type.trim() || null,
+            username: this._integrationForm.username.trim(),
+            access_token: this._integrationForm.app_password.trim(),
+            refresh_token: null,
+            expires_at: null,
+            scope: null,
+            token_type: null,
             default_calendar_id: this._integrationForm.default_calendar_id.trim() || null,
             sync_enabled: Boolean(this._integrationForm.sync_enabled),
             sync_inbound_enabled: Boolean(this._integrationForm.sync_inbound_enabled),
             sync_outbound_enabled: Boolean(this._integrationForm.sync_outbound_enabled),
         };
+        if (!payload.username) {
+            this._saving = false;
+            throw new Error('Username обязателен');
+        }
         if (!payload.access_token) {
-            throw new Error('Access token обязателен');
+            this._saving = false;
+            throw new Error('Пароль приложения обязателен');
         }
         await this.calendarApi.connectIntegration(payload);
         this._saving = false;
         await this._reload();
+    }
+
+    _startGoogleConnect() {
+        const returnPath = `${window.location.pathname}${window.location.search}`;
+        const connectUrl = this.calendarApi.getGoogleConnectUrl(returnPath);
+        window.location.assign(connectUrl);
     }
 
     async _disconnectIntegration(provider) {
@@ -1753,9 +1765,10 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _renderIntegrations() {
         const providers = ['google', 'yandex'];
+        const activeIntegration = this._integrations.find((item) => item.provider === this._activeProvider) || null;
         return html`
             <section class="section">
-                <div class="section-title">Интеграции (персональные токены пользователя)</div>
+                <div class="section-title">Интеграции календаря</div>
                 <div class="integration-tabs">
                     ${providers.map((provider) => html`
                         <button
@@ -1768,39 +1781,66 @@ export class PlatformCalendarModal extends PlatformModal {
                     `)}
                 </div>
 
-                <div class="row">
-                    <label class="form-label">Access token</label>
-                    <input class="form-input" .value=${this._integrationForm.access_token} @input=${(e) => this._integrationForm = { ...this._integrationForm, access_token: e.target.value }} />
-                </div>
-                <div class="row two">
+                ${this._activeProvider === 'google' ? html`
+                    <div class="hint">
+                        Подключение Google выполняется через OAuth. После перехода откроется окно согласия Google.
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-primary" type="button" @click=${() => this._startGoogleConnect()}>
+                            ${activeIntegration ? 'Переподключить Google' : 'Подключить Google'}
+                        </button>
+                        <button class="btn btn-secondary" type="button" @click=${() => this._runSync('google')} ?disabled=${this._syncing || !activeIntegration}>
+                            ${this._syncing ? 'Синхронизация...' : 'Синхронизировать'}
+                        </button>
+                        ${activeIntegration ? html`
+                            <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('google')}>
+                                Отключить
+                            </button>
+                        ` : ''}
+                    </div>
+                ` : html`
                     <div class="row">
-                        <label class="form-label">Refresh token</label>
-                        <input class="form-input" .value=${this._integrationForm.refresh_token} @input=${(e) => this._integrationForm = { ...this._integrationForm, refresh_token: e.target.value }} />
+                        <label class="form-label">Yandex username</label>
+                        <input
+                            class="form-input"
+                            .value=${this._integrationForm.username}
+                            @input=${(e) => this._integrationForm = { ...this._integrationForm, username: e.target.value }}
+                            placeholder="login@yandex.ru"
+                        />
                     </div>
                     <div class="row">
-                        <label class="form-label">Expires at (ISO)</label>
-                        <input class="form-input" .value=${this._integrationForm.expires_at} @input=${(e) => this._integrationForm = { ...this._integrationForm, expires_at: e.target.value }} />
+                        <label class="form-label">Пароль приложения (CalDAV)</label>
+                        <input
+                            class="form-input"
+                            .value=${this._integrationForm.app_password}
+                            @input=${(e) => this._integrationForm = { ...this._integrationForm, app_password: e.target.value }}
+                            placeholder="Пароль приложения Yandex ID"
+                        />
                     </div>
-                </div>
-                <div class="row two">
                     <div class="row">
-                        <label class="form-label">Scope</label>
-                        <input class="form-input" .value=${this._integrationForm.scope} @input=${(e) => this._integrationForm = { ...this._integrationForm, scope: e.target.value }} />
+                        <label class="form-label">Calendar id</label>
+                        <input
+                            class="form-input"
+                            .value=${this._integrationForm.default_calendar_id}
+                            @input=${(e) => this._integrationForm = { ...this._integrationForm, default_calendar_id: e.target.value }}
+                            placeholder="default"
+                        />
                     </div>
-                    <div class="row">
-                        <label class="form-label">Default calendar id</label>
-                        <input class="form-input" .value=${this._integrationForm.default_calendar_id} @input=${(e) => this._integrationForm = { ...this._integrationForm, default_calendar_id: e.target.value }} />
-                    </div>
-                </div>
 
-                <div class="actions">
-                    <button class="btn btn-secondary" type="button" @click=${() => this._runSync(this._activeProvider)} ?disabled=${this._syncing}>
-                        ${this._syncing ? 'Синхронизация...' : 'Синхронизировать'}
-                    </button>
-                    <button class="btn btn-primary" type="button" @click=${this._saveIntegration} ?disabled=${this._saving}>
-                        Сохранить токены
-                    </button>
-                </div>
+                    <div class="actions">
+                        <button class="btn btn-primary" type="button" @click=${this._saveIntegration} ?disabled=${this._saving}>
+                            Сохранить подключение
+                        </button>
+                        <button class="btn btn-secondary" type="button" @click=${() => this._runSync('yandex')} ?disabled=${this._syncing || !activeIntegration}>
+                            ${this._syncing ? 'Синхронизация...' : 'Синхронизировать'}
+                        </button>
+                        ${activeIntegration ? html`
+                            <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('yandex')}>
+                                Отключить
+                            </button>
+                        ` : ''}
+                    </div>
+                `}
 
                 <div class="integration-list">
                     ${this._integrations.map((integration) => html`

@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from core.calendar.service import CalendarService
+
 
 def _range_window() -> tuple[str, str]:
     now = datetime.now(timezone.utc)
@@ -148,3 +150,93 @@ async def test_calendar_rejects_invalid_time_ranges(
         headers=auth_headers_system,
     )
     assert invalid_list_response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_calendar_google_oauth_start_redirects_to_provider(
+    frontend_client,
+    auth_headers_system,
+    monkeypatch,
+) -> None:
+    async def fake_start_google_oauth(
+        self,
+        user_id: str,
+        company_id: str,
+        redirect_uri: str,
+        return_path: str,
+    ) -> str:
+        _ = (self, user_id, company_id, redirect_uri, return_path)
+        return "https://accounts.google.com/o/oauth2/v2/auth?state=test-state"
+
+    monkeypatch.setattr(CalendarService, "start_google_oauth", fake_start_google_oauth)
+
+    response = await frontend_client.get(
+        "/frontend/api/calendar/integrations/google/start",
+        params={"return_path": "/crm/calendar"},
+        headers=auth_headers_system,
+        follow_redirects=False,
+    )
+
+    assert response.status_code in {302, 307}
+    location = response.headers.get("location")
+    assert location == "https://accounts.google.com/o/oauth2/v2/auth?state=test-state"
+
+
+@pytest.mark.asyncio
+async def test_calendar_google_oauth_callback_redirects_to_return_path(
+    frontend_client,
+    auth_headers_system,
+    monkeypatch,
+) -> None:
+    async def fake_complete_google_oauth(
+        self,
+        user_id: str,
+        company_id: str,
+        state: str,
+        code: str,
+    ) -> str:
+        _ = (self, user_id, company_id, state, code)
+        return "/crm/calendar?view=month"
+
+    monkeypatch.setattr(CalendarService, "complete_google_oauth", fake_complete_google_oauth)
+
+    response = await frontend_client.get(
+        "/frontend/api/calendar/integrations/google/callback",
+        params={"state": "state-1", "code": "code-1"},
+        headers=auth_headers_system,
+        follow_redirects=False,
+    )
+
+    assert response.status_code in {302, 307}
+    location = response.headers.get("location")
+    assert location is not None
+    assert "calendar_provider=google" in location
+    assert "calendar_status=connected" in location
+    assert location.startswith("/crm/calendar?view=month")
+
+
+@pytest.mark.asyncio
+async def test_calendar_yandex_connect_requires_username(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    _ = unique_id
+    response = await frontend_client.post(
+        "/frontend/api/calendar/integrations/connect",
+        json={
+            "provider": "yandex",
+            "access_token": "app-password",
+            "refresh_token": None,
+            "expires_at": None,
+            "scope": None,
+            "token_type": None,
+            "default_calendar_id": "default",
+            "sync_enabled": True,
+            "sync_inbound_enabled": True,
+            "sync_outbound_enabled": True,
+        },
+        headers=auth_headers_system,
+    )
+
+    assert response.status_code == 400

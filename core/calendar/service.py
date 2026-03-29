@@ -5,12 +5,18 @@
 from __future__ import annotations
 
 import re
+import secrets
+import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 from uuid import uuid4
 from xml.etree import ElementTree
 
 from core.calendar.repositories import CalendarEventSqlRepository, CalendarIntegrationSqlRepository
 from core.clients.service_client import ServiceClient
+from core.config import get_settings
+from core.db.storage import Storage
 from core.http import get_httpx_client
 from core.models import (
     CalendarEvent,
@@ -22,6 +28,15 @@ from core.models import (
     CalendarIntegrationSettings,
     CalendarProvider,
 )
+
+
+@dataclass(frozen=True)
+class GoogleOAuthConfig:
+    client_id: str
+    client_secret: str
+    auth_url: str
+    token_url: str
+    scope: str
 
 
 def _ensure_utc(value: datetime) -> datetime:
@@ -298,12 +313,151 @@ class CalendarService:
         event_repository: CalendarEventSqlRepository,
         integration_repository: CalendarIntegrationSqlRepository,
         service_client: ServiceClient,
+        storage: Storage,
     ) -> None:
         self._event_repository = event_repository
         self._integration_repository = integration_repository
         self._service_client = service_client
+        self._storage = storage
         self._google_client = GoogleCalendarClient()
         self._yandex_client = YandexCalDavClient()
+
+    def _get_google_oauth_config(self) -> GoogleOAuthConfig:
+        settings = get_settings()
+        provider = settings.auth.providers.get("google")
+        if provider is None or not provider.enabled:
+            raise ValueError("Google OAuth provider is disabled")
+        if not provider.client_id:
+            raise ValueError("Google OAuth client_id is required")
+        if not provider.client_secret:
+            raise ValueError("Google OAuth client_secret is required")
+        if not provider.auth_url:
+            raise ValueError("Google OAuth auth_url is required")
+        if not provider.token_url:
+            raise ValueError("Google OAuth token_url is required")
+        return GoogleOAuthConfig(
+            client_id=provider.client_id,
+            client_secret=provider.client_secret,
+            auth_url=provider.auth_url,
+            token_url=provider.token_url,
+            scope="https://www.googleapis.com/auth/calendar",
+        )
+
+    async def start_google_oauth(
+        self,
+        user_id: str,
+        company_id: str,
+        redirect_uri: str,
+        return_path: str,
+    ) -> str:
+        if not return_path.startswith("/") or return_path.startswith("//"):
+            raise ValueError("return_path must start with single '/'")
+        oauth_config = self._get_google_oauth_config()
+        state = secrets.token_urlsafe(32)
+        state_key = f"calendar_oauth_state:{state}"
+        state_payload = {
+            "provider": CalendarProvider.GOOGLE.value,
+            "user_id": user_id,
+            "company_id": company_id,
+            "redirect_uri": redirect_uri,
+            "return_path": return_path,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await self._storage.set(
+            key=state_key,
+            value=json.dumps(state_payload),
+            ttl=600,
+            force_global=True,
+        )
+        query = urlencode(
+            {
+                "client_id": oauth_config.client_id,
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                "scope": oauth_config.scope,
+                "state": state,
+                "access_type": "offline",
+                "prompt": "consent",
+                "include_granted_scopes": "true",
+            }
+        )
+        return f"{oauth_config.auth_url}?{query}"
+
+    async def complete_google_oauth(self, user_id: str, company_id: str, state: str, code: str) -> str:
+        state_key = f"calendar_oauth_state:{state}"
+        raw_state = await self._storage.get(key=state_key, force_global=True)
+        if raw_state is None:
+            raise ValueError("Calendar OAuth state is invalid or expired")
+        await self._storage.delete(key=state_key, force_global=True)
+        state_payload = json.loads(raw_state)
+        if not isinstance(state_payload, dict):
+            raise ValueError("Calendar OAuth state payload is invalid")
+        if state_payload.get("provider") != CalendarProvider.GOOGLE.value:
+            raise ValueError("Calendar OAuth state provider mismatch")
+        if state_payload.get("user_id") != user_id:
+            raise ValueError("Calendar OAuth state user mismatch")
+        if state_payload.get("company_id") != company_id:
+            raise ValueError("Calendar OAuth state company mismatch")
+        redirect_uri = state_payload.get("redirect_uri")
+        if not isinstance(redirect_uri, str) or redirect_uri == "":
+            raise ValueError("Calendar OAuth state redirect_uri is required")
+        return_path = state_payload.get("return_path")
+        if not isinstance(return_path, str) or not return_path.startswith("/") or return_path.startswith("//"):
+            raise ValueError("Calendar OAuth state return_path is invalid")
+
+        oauth_config = self._get_google_oauth_config()
+        async with get_httpx_client(timeout=30.0) as client:
+            token_response = await client.post(
+                oauth_config.token_url,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                    "client_id": oauth_config.client_id,
+                    "client_secret": oauth_config.client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            token_response.raise_for_status()
+            token_payload = token_response.json()
+        access_token = token_payload.get("access_token")
+        if not isinstance(access_token, str) or access_token == "":
+            raise ValueError("Google OAuth response missing access_token")
+        refresh_token = token_payload.get("refresh_token")
+        if not isinstance(refresh_token, str) or refresh_token == "":
+            raise ValueError("Google OAuth response missing refresh_token")
+        expires_in = token_payload.get("expires_in")
+        expires_at = None
+        if isinstance(expires_in, int) and expires_in > 0:
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        scope = token_payload.get("scope")
+        token_type = token_payload.get("token_type")
+        await self.connect_integration(
+            user_id=user_id,
+            company_id=company_id,
+            payload={
+                "provider": CalendarProvider.GOOGLE.value,
+                "username": None,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "expires_at": expires_at,
+                "scope": scope if isinstance(scope, str) else None,
+                "token_type": token_type if isinstance(token_type, str) else "Bearer",
+                "default_calendar_id": "primary",
+                "sync_enabled": True,
+                "sync_inbound_enabled": True,
+                "sync_outbound_enabled": True,
+            },
+        )
+        now = datetime.now(timezone.utc)
+        await self.run_sync(
+            user_id=user_id,
+            company_id=company_id,
+            start_at=now - timedelta(days=30),
+            end_at=now + timedelta(days=365),
+            provider=CalendarProvider.GOOGLE,
+        )
+        return return_path
 
     async def list_events(
         self,

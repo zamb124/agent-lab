@@ -275,7 +275,7 @@ class SessionWorkerManager:
         # Убиваем процесс
         try:
             os.kill(pid, signal.SIGTERM)
-            time.sleep(2)
+            time.sleep(0.2)
             try:
                 os.kill(pid, 0)  # Проверка что еще жив
                 os.kill(pid, signal.SIGKILL)
@@ -743,6 +743,10 @@ class SessionServerManager:
             try:
                 existing_pid = int(self.pid_path.read_text().strip())
                 os.kill(existing_pid, 0)
+                if not self._wait_for_port(timeout=0.5):
+                    self.pid_path.unlink(missing_ok=True)
+                    self.ref_count_path.unlink(missing_ok=True)
+                    return False
                 return True
             except (OSError, ValueError):
                 self.pid_path.unlink(missing_ok=True)
@@ -815,7 +819,7 @@ class SessionServerManager:
         
         try:
             os.kill(pid, signal.SIGTERM)
-            time.sleep(2)
+            time.sleep(0.2)
             try:
                 os.kill(pid, 0)
                 os.kill(pid, signal.SIGKILL)
