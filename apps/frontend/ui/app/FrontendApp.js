@@ -260,8 +260,11 @@ export class FrontendApp extends PlatformApp {
     
     _renderContent() {
         const { currentView } = this.state.value;
+        const normalizedView = typeof currentView === 'string'
+            ? currentView.trim().replace(/^\/+/, '').replace(/\/+$/, '')
+            : currentView;
 
-        switch (currentView) {
+        switch (normalizedView) {
             case 'dashboard':
                 return html`<dashboard-page></dashboard-page>`;
             case 'team':
@@ -277,7 +280,7 @@ export class FrontendApp extends PlatformApp {
             case 'scheduler-tasks':
                 return html`<scheduler-tasks-page></scheduler-tasks-page>`;
             default:
-                throw new Error(`Unknown view: ${currentView}`);
+                throw new Error(`Unknown view: ${normalizedView}`);
         }
     }
 
