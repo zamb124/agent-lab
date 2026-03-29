@@ -1538,7 +1538,10 @@ class TestTriggerWithOutputActionsE2E:
 # E2E ТЕСТЫ С РЕАЛЬНЫМИ HTTP СЕРВЕРАМИ (БЕЗ МОКОВ)
 # =============================================================================
 
-from aiohttp import web
+import asyncio
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import uvicorn
 
 
 class NotificationServer:
@@ -1552,15 +1555,27 @@ class NotificationServer:
         self.host = host
         self.port = port
         self.received_requests: list = []
-        self._app = web.Application()
-        self._app.router.add_post("/notify", self._handle_notify)
-        self._app.router.add_post("/telegram/{token}/sendMessage", self._handle_telegram_send_message)
-        self._app.router.add_post("/telegram/{token}/sendPhoto", self._handle_telegram_send_photo)
-        self._app.router.add_post("/telegram/{token}/sendDocument", self._handle_telegram_send_document)
-        self._runner = None
-        self._site = None
+        self._app = FastAPI()
+        self._app.add_api_route("/notify", self._handle_notify, methods=["POST"])
+        self._app.add_api_route(
+            "/telegram/{token}/sendMessage",
+            self._handle_telegram_send_message,
+            methods=["POST"],
+        )
+        self._app.add_api_route(
+            "/telegram/{token}/sendPhoto",
+            self._handle_telegram_send_photo,
+            methods=["POST"],
+        )
+        self._app.add_api_route(
+            "/telegram/{token}/sendDocument",
+            self._handle_telegram_send_document,
+            methods=["POST"],
+        )
+        self._server: uvicorn.Server | None = None
+        self._server_task: asyncio.Task | None = None
     
-    async def _handle_notify(self, request: web.Request) -> web.Response:
+    async def _handle_notify(self, request: Request) -> JSONResponse:
         """Обработчик уведомлений для webhook."""
         data = await request.json()
         headers = dict(request.headers)
@@ -1569,18 +1584,17 @@ class NotificationServer:
             "data": data,
             "headers": headers,
         })
-        return web.json_response({"status": "ok"})
+        return JSONResponse({"status": "ok"})
     
-    async def _handle_telegram_send_message(self, request: web.Request) -> web.Response:
+    async def _handle_telegram_send_message(self, token: str, request: Request) -> JSONResponse:
         """Обработчик Telegram sendMessage."""
-        token = request.match_info["token"]
         data = await request.json()
         self.received_requests.append({
             "type": "telegram_send_message",
             "token": token,
             "data": data,
         })
-        return web.json_response({
+        return JSONResponse({
             "ok": True,
             "result": {
                 "message_id": 12345,
@@ -1589,47 +1603,61 @@ class NotificationServer:
             }
         })
     
-    async def _handle_telegram_send_photo(self, request: web.Request) -> web.Response:
+    async def _handle_telegram_send_photo(self, token: str, request: Request) -> JSONResponse:
         """Обработчик Telegram sendPhoto."""
-        token = request.match_info["token"]
         data = await request.json()
         self.received_requests.append({
             "type": "telegram_send_photo",
             "token": token,
             "data": data,
         })
-        return web.json_response({
+        return JSONResponse({
             "ok": True,
             "result": {"message_id": 12346}
         })
     
-    async def _handle_telegram_send_document(self, request: web.Request) -> web.Response:
+    async def _handle_telegram_send_document(self, token: str, request: Request) -> JSONResponse:
         """Обработчик Telegram sendDocument."""
-        token = request.match_info["token"]
         data = await request.json()
         self.received_requests.append({
             "type": "telegram_send_document",
             "token": token,
             "data": data,
         })
-        return web.json_response({
+        return JSONResponse({
             "ok": True,
             "result": {"message_id": 12347}
         })
     
     async def start(self) -> str:
         """Запускает сервер и возвращает base URL."""
-        self._runner = web.AppRunner(self._app)
-        await self._runner.setup()
-        self._site = web.TCPSite(self._runner, self.host, self.port)
-        await self._site.start()
-        actual_port = self._site._server.sockets[0].getsockname()[1]
+        config = uvicorn.Config(
+            self._app,
+            host=self.host,
+            port=self.port,
+            log_level="error",
+            access_log=False,
+        )
+        self._server = uvicorn.Server(config)
+        self._server_task = asyncio.create_task(self._server.serve())
+        while not self._server.started:
+            await asyncio.sleep(0.01)
+        if not self._server.servers:
+            raise RuntimeError("Uvicorn сервер не поднялся.")
+        server = next(iter(self._server.servers))
+        sockets = getattr(server, "sockets", None)
+        if not sockets:
+            raise RuntimeError("Uvicorn не открыл сокеты для test server.")
+        actual_port = sockets[0].getsockname()[1]
         self.port = actual_port
         return f"http://{self.host}:{actual_port}"
     
     async def stop(self):
-        if self._runner:
-            await self._runner.cleanup()
+        if self._server is None:
+            return
+        self._server.should_exit = True
+        if self._server_task is not None:
+            await self._server_task
     
     def clear(self):
         self.received_requests.clear()

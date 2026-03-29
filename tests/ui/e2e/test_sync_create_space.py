@@ -55,10 +55,12 @@ async def test_user_creates_space_with_name_and_description(
         label_en="Create space modal is open",
     )
 
-    text_inputs = modal.locator('input.input:not([type="file"])')
-    await expect(text_inputs).to_have_count(2)
-    await text_inputs.nth(0).fill(space_name)
-    await text_inputs.nth(1).fill(space_description)
+    name_input = modal.locator('label.label:has-text("Название") + input.input')
+    description_input = modal.locator('label.label:has-text("Описание") + input.input')
+    await expect(name_input).to_have_count(1)
+    await expect(description_input).to_have_count(1)
+    await name_input.fill(space_name)
+    await description_input.fill(space_description)
     await scenario.step(
         "Заполнены название и описание",
         ui_page_system,

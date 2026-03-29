@@ -9,3 +9,11 @@ The user opens Sync, clicks «+» next to «Spaces», enters a name and descript
 ## Step 2. Create space modal is open
 
 ![Create space modal is open](screenshots/002.png)
+
+## Step 3. Name and description filled in
+
+![Name and description filled in](screenshots/003.png)
+
+## Step 4. Space appears in the list
+
+![Space appears in the list](screenshots/004.png)

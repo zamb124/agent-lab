@@ -103,8 +103,10 @@ class NanoBananaClient:
                 file_data = json.loads(file_data_json)
                 
                 s3_client = S3ClientFactory.create_client_for_bucket(file_data['s3_bucket'])
-                file_bytes = await s3_client.download_bytes(file_data['s3_key'])
-                await s3_client.close()
+                try:
+                    file_bytes = await s3_client.download_bytes(file_data['s3_key'])
+                finally:
+                    await s3_client.close()
                 
                 if file_bytes:
                     base64_data = base64.b64encode(file_bytes).decode('utf-8')

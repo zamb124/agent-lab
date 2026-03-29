@@ -65,15 +65,16 @@ class BaseRAGProvider(ABC):
         with open(file_path, "rb") as f:
             file_data = f.read()
 
-        await s3_client.upload_bytes(
-            data=file_data,
-            key=s3_key,
-            content_type=self._get_content_type(file_path),
-            public=public,
-        )
-
-        bucket_name = s3_client.bucket_name
-        await s3_client.close()
+        try:
+            await s3_client.upload_bytes(
+                data=file_data,
+                key=s3_key,
+                content_type=self._get_content_type(file_path),
+                public=public,
+            )
+            bucket_name = s3_client.bucket_name
+        finally:
+            await s3_client.close()
 
         logger.info(f"Файл загружен в S3: {s3_key} (public={public})")
         return s3_key, bucket_name, path.name
@@ -88,17 +89,21 @@ class BaseRAGProvider(ABC):
             s3_client = S3ClientFactory.create_client_for_bucket(bucket_config_key)
         else:
             s3_client = S3ClientFactory.create_default_client()
-        file_data = await s3_client.download_bytes(s3_key)
-        filename = Path(s3_key).name
-        bucket_name = s3_client.bucket_name
-        await s3_client.close()
+        try:
+            file_data = await s3_client.download_bytes(s3_key)
+            filename = Path(s3_key).name
+            bucket_name = s3_client.bucket_name
+        finally:
+            await s3_client.close()
         return file_data, bucket_name, filename
 
     async def _generate_signed_url(self, s3_key: str, expiration: int = 3600) -> str:
         """Генерирует временный signed URL для прямого доступа к файлу (внутренний RAG pipeline)."""
         s3_client = S3ClientFactory.create_default_client()
-        signed_url = await s3_client.generate_presigned_url(key=s3_key, expiration=expiration)
-        await s3_client.close()
+        try:
+            signed_url = await s3_client.generate_presigned_url(key=s3_key, expiration=expiration)
+        finally:
+            await s3_client.close()
         return signed_url
 
     async def _upload_bytes_to_s3(
@@ -112,14 +117,15 @@ class BaseRAGProvider(ABC):
         path = Path(filename)
         s3_key = f"rag/{namespace_id}/{uuid.uuid4().hex[:8]}_{path.name}"
 
-        await s3_client.upload_bytes(
-            data=file_data,
-            key=s3_key,
-            content_type=self._get_content_type(filename),
-        )
-
-        bucket_name = s3_client.bucket_name
-        await s3_client.close()
+        try:
+            await s3_client.upload_bytes(
+                data=file_data,
+                key=s3_key,
+                content_type=self._get_content_type(filename),
+            )
+            bucket_name = s3_client.bucket_name
+        finally:
+            await s3_client.close()
 
         logger.info(f"Файл загружен в S3: {s3_key}")
         return s3_key, bucket_name
@@ -140,14 +146,15 @@ class BaseRAGProvider(ABC):
 
         s3_key = f"rag_text/{namespace_id}/{uuid.uuid4().hex[:8]}_{safe_name}.txt"
 
-        await s3_client.upload_bytes(
-            data=text.encode('utf-8'),
-            key=s3_key,
-            content_type="text/plain",
-        )
-
-        bucket_name = s3_client.bucket_name
-        await s3_client.close()
+        try:
+            await s3_client.upload_bytes(
+                data=text.encode('utf-8'),
+                key=s3_key,
+                content_type="text/plain",
+            )
+            bucket_name = s3_client.bucket_name
+        finally:
+            await s3_client.close()
 
         logger.info(f"Текст загружен в S3: {s3_key}")
         return s3_key, bucket_name

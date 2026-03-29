@@ -153,8 +153,10 @@ class FileProcessor:
             return False
 
         s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
-        await s3_client.delete_file(file_record.s3_key)
-        await s3_client.close()
+        try:
+            await s3_client.delete_file(file_record.s3_key)
+        finally:
+            await s3_client.close()
 
         await self.file_repository.delete(file_id)
 

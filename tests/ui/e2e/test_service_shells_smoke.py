@@ -79,7 +79,9 @@ async def test_crm_settings_page_loads(
     await scenario.step("Открыт маршрут /crm/settings", ui_page_system)
     await expect(ui_page_system.locator("crm-app")).to_be_visible(timeout=30_000)
     await expect(ui_page_system.locator("settings-page")).to_be_visible(timeout=30_000)
-    await expect(ui_page_system.get_by_text("Редактор шаблона")).to_be_visible(timeout=30_000)
+    await expect(
+        ui_page_system.get_by_text("Редактировать шаблоны пространств")
+    ).to_be_visible(timeout=30_000)
     await scenario.step("Страница настроек CRM отображена", ui_page_system)
 
 
