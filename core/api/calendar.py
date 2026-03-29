@@ -118,20 +118,6 @@ def _raise_http_for_calendar_service_error(error: Exception) -> None:
     raise error
 
 
-def _resolve_callback_path(current_path: str) -> str:
-    if current_path.startswith("/frontend/"):
-        return "/frontend/api/calendar/integrations/google/callback"
-    if current_path.startswith("/flows/"):
-        return "/flows/api/calendar/integrations/google/callback"
-    if current_path.startswith("/crm/"):
-        return "/crm/api/calendar/integrations/google/callback"
-    if current_path.startswith("/sync/"):
-        return "/sync/api/calendar/integrations/google/callback"
-    if current_path.startswith("/rag/"):
-        return "/rag/api/calendar/integrations/google/callback"
-    return "/api/calendar/integrations/google/callback"
-
-
 def _append_query(url: str, params: dict[str, str]) -> str:
     parsed = urlsplit(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -257,12 +243,11 @@ async def start_google_calendar_oauth(
         raise HTTPException(status_code=401, detail="Authentication required")
     if not return_path.startswith("/") or return_path.startswith("//"):
         raise HTTPException(status_code=400, detail="return_path must start with single '/'")
-    callback_path = _resolve_callback_path(request.url.path)
     protocol = request.headers.get("x-forwarded-proto") or request.url.scheme
     host = request.headers.get("host")
     if not host:
         raise HTTPException(status_code=400, detail="Host header is required")
-    redirect_uri = f"{protocol}://{host}{callback_path}"
+    redirect_uri = f"{protocol}://{host}/auth/callback/google"
     try:
         auth_url = await service.start_google_oauth(
             user_id=ctx.user.user_id,
@@ -282,17 +267,12 @@ async def complete_google_calendar_oauth(
     code: str | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
-    ctx = get_context()
-    if not ctx or not ctx.user or not ctx.active_company:
-        raise HTTPException(status_code=401, detail="Authentication required")
     if error:
         raise HTTPException(status_code=400, detail=f"Google OAuth error: {error}")
     if not code:
         raise HTTPException(status_code=400, detail="Google OAuth code is required")
     try:
         return_path = await service.complete_google_oauth(
-            user_id=ctx.user.user_id,
-            company_id=ctx.active_company.company_id,
             state=state,
             code=code,
         )

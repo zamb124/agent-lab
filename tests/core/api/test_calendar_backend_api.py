@@ -190,12 +190,10 @@ async def test_calendar_google_oauth_callback_redirects_to_return_path(
 ) -> None:
     async def fake_complete_google_oauth(
         self,
-        user_id: str,
-        company_id: str,
         state: str,
         code: str,
     ) -> str:
-        _ = (self, user_id, company_id, state, code)
+        _ = (self, state, code)
         return "/crm/calendar?view=month"
 
     monkeypatch.setattr(CalendarService, "complete_google_oauth", fake_complete_google_oauth)
@@ -213,6 +211,31 @@ async def test_calendar_google_oauth_callback_redirects_to_return_path(
     assert "calendar_provider=google" in location
     assert "calendar_status=connected" in location
     assert location.startswith("/crm/calendar?view=month")
+
+
+@pytest.mark.asyncio
+async def test_auth_google_callback_can_finalize_calendar_integration_state(
+    frontend_client,
+    monkeypatch,
+) -> None:
+    async def fake_complete_google_oauth(self, state: str, code: str) -> str:
+        _ = (self, state, code)
+        return "/crm/calendar"
+
+    monkeypatch.setattr(CalendarService, "complete_google_oauth", fake_complete_google_oauth)
+
+    response = await frontend_client.get(
+        "/auth/callback/google",
+        params={"state": "calendar-state", "code": "calendar-code"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code in {302, 307}
+    location = response.headers.get("location")
+    assert location is not None
+    assert location.startswith("/crm/calendar")
+    assert "calendar_provider=google" in location
+    assert "calendar_status=connected" in location
 
 
 @pytest.mark.asyncio

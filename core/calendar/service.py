@@ -383,7 +383,7 @@ class CalendarService:
         )
         return f"{oauth_config.auth_url}?{query}"
 
-    async def complete_google_oauth(self, user_id: str, company_id: str, state: str, code: str) -> str:
+    async def complete_google_oauth(self, state: str, code: str) -> str:
         state_key = f"calendar_oauth_state:{state}"
         raw_state = await self._storage.get(key=state_key, force_global=True)
         if raw_state is None:
@@ -394,10 +394,12 @@ class CalendarService:
             raise ValueError("Calendar OAuth state payload is invalid")
         if state_payload.get("provider") != CalendarProvider.GOOGLE.value:
             raise ValueError("Calendar OAuth state provider mismatch")
-        if state_payload.get("user_id") != user_id:
-            raise ValueError("Calendar OAuth state user mismatch")
-        if state_payload.get("company_id") != company_id:
-            raise ValueError("Calendar OAuth state company mismatch")
+        user_id = state_payload.get("user_id")
+        if not isinstance(user_id, str) or user_id == "":
+            raise ValueError("Calendar OAuth state user_id is required")
+        company_id = state_payload.get("company_id")
+        if not isinstance(company_id, str) or company_id == "":
+            raise ValueError("Calendar OAuth state company_id is required")
         redirect_uri = state_payload.get("redirect_uri")
         if not isinstance(redirect_uri, str) or redirect_uri == "":
             raise ValueError("Calendar OAuth state redirect_uri is required")

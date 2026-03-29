@@ -10,6 +10,7 @@ from typing import Annotated, Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.config import get_settings
 from core.models import AuthProvider, AuthRequest
@@ -37,6 +38,14 @@ def get_auth_service(request: Request) -> AuthService:
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def _append_query(url: str, params: Dict[str, str]) -> str:
+    parsed = urlsplit(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.update(params)
+    next_query = urlencode(query)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, next_query, parsed.fragment))
 
 
 @router.get("/providers")
@@ -165,6 +174,22 @@ async def auth_callback(
     # Получаем state с оригинальным хостом и redirect_uri
     auth_state = await auth_service._get_auth_state(state)
     if not auth_state:
+        if provider_name == AuthProvider.GOOGLE.value:
+            calendar_service = request.app.state.container.calendar_service
+            try:
+                return_path = await calendar_service.complete_google_oauth(state=state, code=code)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+            except Exception as error:
+                raise HTTPException(status_code=500, detail=str(error)) from error
+            redirect_url = _append_query(
+                return_path,
+                {
+                    "calendar_provider": "google",
+                    "calendar_status": "connected",
+                },
+            )
+            return RedirectResponse(url=redirect_url)
         raise HTTPException(status_code=400, detail="Недействительный state")
     
     original_host = auth_state.get("original_host")
