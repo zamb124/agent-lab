@@ -24,59 +24,14 @@ from apps.frontend.api.scheduler import router as scheduler_router
 from apps.frontend.container import get_frontend_container
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from core.app.factory import create_service_app
+from core.identity.system_bootstrap import ensure_system_admin_membership
 
 logger = logging.getLogger(__name__)
-
-SYSTEM_COMPANY_ID = "system"
-SYSTEM_ADMIN_EMAIL = "zambas124@yandex.ru"
-ADMIN_ROLE = "admin"
-
-
-async def _ensure_system_admin_membership(container: object) -> None:
-    system_company = await container.company_repository.get(SYSTEM_COMPANY_ID)
-    if system_company is None:
-        raise ValueError("System company not found")
-
-    users = await container.user_repository.list_all(limit=10000)
-    matched_users = [user for user in users if SYSTEM_ADMIN_EMAIL in user.emails]
-    if not matched_users:
-        raise ValueError(f"User with email {SYSTEM_ADMIN_EMAIL} not found")
-    if len(matched_users) > 1:
-        matched_user_ids = ", ".join(user.user_id for user in matched_users)
-        raise ValueError(f"Multiple users found for {SYSTEM_ADMIN_EMAIL}: {matched_user_ids}")
-
-    target_user = matched_users[0]
-    company_roles = system_company.members.get(target_user.user_id, [])
-    user_roles = target_user.companies.get(system_company.company_id, [])
-    company_needs_update = ADMIN_ROLE not in company_roles
-    user_needs_update = ADMIN_ROLE not in user_roles
-
-    if not company_needs_update and not user_needs_update:
-        logger.info(
-            "Bootstrap check passed: %s already has admin rights in %s",
-            SYSTEM_ADMIN_EMAIL,
-            system_company.company_id,
-        )
-        return
-
-    if company_needs_update:
-        system_company.members[target_user.user_id] = [*company_roles, ADMIN_ROLE]
-    if user_needs_update:
-        target_user.companies[system_company.company_id] = [*user_roles, ADMIN_ROLE]
-
-    await container.company_repository.set(system_company)
-    await container.user_repository.set(target_user)
-    logger.info(
-        "Bootstrap updated: granted admin role for %s in company %s",
-        SYSTEM_ADMIN_EMAIL,
-        system_company.company_id,
-    )
-
 
 async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> None:
     if os.getenv("TESTING") == "true":
         return
-    await _ensure_system_admin_membership(container)
+    await ensure_system_admin_membership(container)
 
 
 # Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)

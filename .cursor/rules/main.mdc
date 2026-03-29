@@ -196,7 +196,7 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 ### Bootstrap-инварианты платформы
 
-При старте `frontend` обязательно проверяем bootstrap-доступ: пользователь с email `zambas124@yandex.ru` должен иметь роль `admin` в компании `system`; при отсутствии роли обновляем `company.members` и `user.companies`.
+При старте `frontend` обязательно проверяем bootstrap-доступ: компания `system` должна существовать (создаётся автоматически при отсутствии), а пользователь с email `zambas124@yandex.ru` должен иметь роль `admin` в компании `system`; при отсутствии роли обновляем `company.members` и `user.companies`.
 
 ## Управление зависимостями
 

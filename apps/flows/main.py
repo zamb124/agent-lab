@@ -14,6 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from core.app import create_service_app
 from core.tracing.middleware import TracingMiddleware
 from core.context import set_context, clear_context
+from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.models.context_models import Context, Language
 from core.models.identity_models import User, Company
 from core.utils.tokens import get_token_service
@@ -29,24 +30,7 @@ logger = get_logger(__name__)
 
 
 async def _build_scheduler_auth_context(container: object, trace_id: str, session_id: str) -> Context:
-    company = await container.company_repository.get("system")
-    if company is None:
-        companies = await container.company_repository.list_all(limit=1)
-        if not companies:
-            raise ValueError("No companies found for scheduler auth context")
-        company = companies[0]
-
-    actor_user_id = company.owner_user_id
-    if not actor_user_id:
-        member_user_ids = list(company.members.keys())
-        if not member_user_ids:
-            raise ValueError(f"No owner or members for company {company.company_id}")
-        actor_user_id = member_user_ids[0]
-
-    user = await container.user_repository.get(actor_user_id)
-    if user is None:
-        raise ValueError(f"Scheduler auth user not found: {actor_user_id}")
-
+    company, user = await ensure_system_admin_membership(container)
     roles = user.companies.get(company.company_id, [])
     auth_token = get_token_service().create_token(
         user_id=user.user_id,
@@ -185,16 +169,17 @@ async def on_shutdown(app: FastAPI, container):
         logger.warning(f"Error stopping dev polling: {e}")
     
     # Остановка фоновой синхронизации моделей
-    try:
-        scheduler_context = await _build_scheduler_auth_context(
-            container=container,
-            trace_id="system:scheduler-stop",
-            session_id="system-scheduler-stop",
-        )
-        set_context(scheduler_context)
-        await container.llm_models_service.stop_background_sync()
-    finally:
-        clear_context()
+    if os.getenv("TESTING") != "true":
+        try:
+            scheduler_context = await _build_scheduler_auth_context(
+                container=container,
+                trace_id="system:scheduler-stop",
+                session_id="system-scheduler-stop",
+            )
+            set_context(scheduler_context)
+            await container.llm_models_service.stop_background_sync()
+        finally:
+            clear_context()
     
     # Закрываем Redis с error handling
     try:

@@ -28,8 +28,9 @@ const BASE_TIMEZONE_OPTIONS = [
 ];
 
 const EVENT_COLOR_KEY = 'event_color';
-const DEFAULT_EVENT_COLOR = 'mint';
+const DEFAULT_EVENT_COLOR = 'default';
 const EVENT_COLOR_OPTIONS = [
+    { key: 'default', dot: '#a2affb' },
     { key: 'mint', dot: '#34c38f' },
     { key: 'sky', dot: '#4ea8ff' },
     { key: 'violet', dot: '#8f7bff' },
@@ -77,6 +78,12 @@ function startOfMonth(date) {
 
 function endOfMonth(date) {
     return new Date(date.getFullYear(), date.getMonth() + 1, 1, 0, 0, 0, 0);
+}
+
+function isSameDay(left, right) {
+    return left.getFullYear() === right.getFullYear()
+        && left.getMonth() === right.getMonth()
+        && left.getDate() === right.getDate();
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -369,10 +376,26 @@ export class PlatformCalendarModal extends PlatformModal {
                 border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-border-subtle));
             }
 
+            .month-cell.today {
+                border-color: color-mix(in srgb, #ef6f98 45%, var(--glass-border-subtle));
+                background: color-mix(in srgb, #ef6f98 8%, var(--glass-solid-medium));
+            }
+
             .month-cell .date-label {
                 font-size: var(--text-xs);
                 color: var(--text-secondary);
                 font-weight: var(--font-semibold);
+            }
+
+            .month-cell.today .date-label {
+                color: #a7365e;
+                background: color-mix(in srgb, #ef6f98 18%, transparent);
+                border-radius: 999px;
+                width: 22px;
+                height: 22px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
             }
 
             .month-cell-events {
@@ -386,9 +409,9 @@ export class PlatformCalendarModal extends PlatformModal {
             .event-chip {
                 font-size: var(--text-xs);
                 line-height: 1.3;
-                background: color-mix(in srgb, #34c38f 18%, var(--glass-solid-medium));
+                background: color-mix(in srgb, #a2affb 24%, var(--glass-solid-medium));
                 border: none;
-                color: #0b7a59;
+                color: #4f5eb6;
                 border-radius: var(--radius-sm);
                 padding: 8px 10px;
                 cursor: pointer;
@@ -402,6 +425,11 @@ export class PlatformCalendarModal extends PlatformModal {
 
             .event-chip.active {
                 box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 45%, transparent);
+            }
+
+            .event-chip[data-color='default'] {
+                background: color-mix(in srgb, #a2affb 24%, var(--glass-solid-medium));
+                color: #4f5eb6;
             }
 
             .event-chip[data-color='mint'] {
@@ -1394,6 +1422,7 @@ export class PlatformCalendarModal extends PlatformModal {
         const anchor = new Date(this._anchorDate);
         const monthStart = startOfMonth(anchor);
         const firstVisible = startOfWeek(monthStart);
+        const today = new Date();
         const cells = [];
         for (let index = 0; index < 42; index += 1) {
             const date = addDays(firstVisible, index);
@@ -1403,6 +1432,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 iso: toDateInputValue(date),
                 outside: date.getMonth() !== anchor.getMonth(),
                 weekend: day === 0 || day === 6,
+                today: isSameDay(date, today),
                 events: this._eventsForDate(date),
             });
         }
@@ -1920,7 +1950,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 `)}
                 ${cells.map((cell) => html`
                     <article
-                        class="month-cell ${cell.outside ? 'outside' : ''} ${cell.weekend ? 'weekend' : ''}"
+                        class="month-cell ${cell.outside ? 'outside' : ''} ${cell.weekend ? 'weekend' : ''} ${cell.today ? 'today' : ''}"
                         @click=${() => this._openCreateEventDialog(cell.date)}
                     >
                         <div class="date-label">${cell.date.getDate()}</div>

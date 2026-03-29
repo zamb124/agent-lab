@@ -1,11 +1,14 @@
 """FastAPI entrypoint для scheduler control-plane."""
 
+import os
+
 from fastapi import FastAPI
 
 from apps.scheduler.api.v1 import api_v1_router
 from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
 from apps.scheduler.container import get_scheduler_container
 from core.app import create_service_app
+from core.identity.system_bootstrap import ensure_system_company_exists
 from core.logging import get_logger
 from core.scheduler.models import (
     PlatformScheduleCreateRequest,
@@ -21,6 +24,8 @@ SYSTEM_SCHEDULER_COMPANY_ID = "system"
 
 
 async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> None:
+    if os.getenv("TESTING") != "true":
+        await ensure_system_company_exists(container)
     config = settings.calendar_sync
     if not config.enabled:
         logger.info("Calendar scheduler sync is disabled")

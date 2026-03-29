@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.frontend.main import _ensure_system_admin_membership
+from core.identity.system_bootstrap import ensure_system_admin_membership, ensure_system_company_exists
 from core.models.identity_models import Company, User
 
 
@@ -43,7 +43,7 @@ async def test_bootstrap_adds_admin_role_to_system_company_and_user():
         user_repo=_InMemoryRepo({"user-1": user}, "user_id"),
     )
 
-    await _ensure_system_admin_membership(container)
+    await ensure_system_admin_membership(container)
 
     assert "admin" in container.company_repository._entities["system"].members["user-1"]
     assert "admin" in container.user_repository._entities["user-1"].companies["system"]
@@ -59,4 +59,24 @@ async def test_bootstrap_raises_if_target_email_user_missing():
     )
 
     with pytest.raises(ValueError, match="zambas124@yandex.ru"):
-        await _ensure_system_admin_membership(container)
+        await ensure_system_admin_membership(container)
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_creates_system_company_when_missing():
+    user = User(
+        user_id="user-3",
+        name="Viktor",
+        emails=["zambas124@yandex.ru"],
+        companies={},
+    )
+    container = _Container(
+        company_repo=_InMemoryRepo({}, "company_id"),
+        user_repo=_InMemoryRepo({"user-3": user}, "user_id"),
+    )
+
+    company = await ensure_system_company_exists(container)
+
+    assert company.company_id == "system"
+    assert company.subdomain == "system"
+    assert "system" in container.company_repository._entities
