@@ -22,6 +22,7 @@ from core.models import (
     CalendarIntegration,
     CalendarProvider,
 )
+from core.utils.domain import get_host_with_port, is_local
 
 router = APIRouter(tags=["calendar"])
 
@@ -243,11 +244,13 @@ async def start_google_calendar_oauth(
         raise HTTPException(status_code=401, detail="Authentication required")
     if not return_path.startswith("/") or return_path.startswith("//"):
         raise HTTPException(status_code=400, detail="return_path must start with single '/'")
-    protocol = request.headers.get("x-forwarded-proto") or request.url.scheme
-    host = request.headers.get("host")
-    if not host:
+    original_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if not original_host:
         raise HTTPException(status_code=400, detail="Host header is required")
-    redirect_uri = f"{protocol}://{host}/auth/callback/google"
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    protocol = forwarded_proto if forwarded_proto else ("http" if is_local(original_host) else "https")
+    base_host = get_host_with_port(original_host)
+    redirect_uri = f"{protocol}://{base_host}/auth/callback/google"
     try:
         auth_url = await service.start_google_oauth(
             user_id=ctx.user.user_id,
