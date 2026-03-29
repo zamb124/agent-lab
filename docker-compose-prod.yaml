@@ -22,6 +22,7 @@ x-common-env: &common-env
   SERVER__CRM_SERVICE_URL: http://crm:8003
   SERVER__RAG_SERVICE_URL: http://rag:8004
   SERVER__SYNC_SERVICE_URL: http://sync:8005
+  SERVER__SCHEDULER_SERVICE_URL: http://scheduler-api:8006
   AUTH__JWT_SECRET: ${AUTH__JWT_SECRET:-change-me-in-production}
   AUTH__PROVIDERS__YANDEX__CLIENT_ID: ${AUTH_YANDEX_CLIENT_ID}
   AUTH__PROVIDERS__YANDEX__CLIENT_SECRET: ${AUTH_YANDEX_CLIENT_SECRET}
@@ -177,6 +178,8 @@ services:
         condition: service_completed_successfully
       agents:
         condition: service_healthy
+      scheduler-api:
+        condition: service_healthy
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
@@ -230,6 +233,31 @@ services:
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  scheduler-api:
+    <<: *app
+    container_name: agentlab_scheduler_api
+    command: ["python", "-m", "apps.scheduler.main"]
+    ports:
+      - "8006:8006"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - scheduler_api_logs:/app/logs
+    environment:
+      <<: *common-env
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: "8006"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
     restart: unless-stopped
     networks:
       - agentlab-net
@@ -406,6 +434,7 @@ volumes:
   crm_logs:
   rag_logs:
   sync_logs:
+  scheduler_api_logs:
   worker_logs:
   rag_worker_logs:
   sync_worker_logs:
