@@ -9,6 +9,7 @@ from apps.crm.container import CRMContainer
 from apps.crm.dependencies import get_container_dep
 from apps.crm.models.api import (
     NamespaceCreateRequest,
+    NamespaceEditabilityResponse,
     NamespaceListResponse,
     NamespaceResponse,
     NamespaceTemplateCreateRequest,
@@ -21,6 +22,7 @@ from apps.crm.models.api import (
     NamespaceTemplateTypeResponse,
     NamespaceTemplateTypeUpsertRequest,
     NamespaceTemplateUpdateRequest,
+    NamespaceUpdateRequest,
 )
 
 logger = get_logger(__name__)
@@ -55,6 +57,19 @@ SCHEMA_OPTIONS_RESPONSE = NamespaceTemplateSchemaOptionsResponse(
     defaults={"field_type": "string"},
     validation_limits={"max_fields_per_section": 128, "max_enum_values": 64},
 )
+
+
+def _normalize_allowed_type_ids(raw_value: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for raw_item in raw_value:
+        if not isinstance(raw_item, str):
+            raise HTTPException(status_code=422, detail="allowed_type_ids must contain only strings")
+        value = raw_item.strip()
+        if not value:
+            raise HTTPException(status_code=422, detail="allowed_type_ids must not contain empty values")
+        if value not in normalized:
+            normalized.append(value)
+    return normalized
 
 
 @router.get("", response_model=NamespaceListResponse)
@@ -306,4 +321,73 @@ async def create_namespace(
         company_id=namespace.company_id,
         description=namespace.description,
         is_default=namespace.is_default
+    )
+
+
+@router.get("/{namespace_name}/editability", response_model=NamespaceEditabilityResponse)
+async def get_namespace_editability(
+    namespace_name: str,
+    container: CRMContainer = Depends(get_container_dep),
+) -> NamespaceEditabilityResponse:
+    normalized_namespace_name = namespace_name.strip()
+    if not normalized_namespace_name:
+        raise HTTPException(status_code=422, detail="Namespace name is required")
+
+    existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
+    if existing_namespace is None:
+        raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+
+    service = container.namespace_template_service
+    payload = await service.get_namespace_editability(normalized_namespace_name)
+    return NamespaceEditabilityResponse(**payload)
+
+
+@router.put("/{namespace_name}", response_model=NamespaceResponse)
+async def update_namespace(
+    namespace_name: str,
+    request: NamespaceUpdateRequest,
+    container: CRMContainer = Depends(get_container_dep),
+) -> NamespaceResponse:
+    normalized_namespace_name = namespace_name.strip()
+    if not normalized_namespace_name:
+        raise HTTPException(status_code=422, detail="Namespace name is required")
+
+    existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
+    if existing_namespace is None:
+        raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+
+    allowed_type_ids = None
+    if request.allowed_type_ids is not None:
+        allowed_type_ids = _normalize_allowed_type_ids(request.allowed_type_ids)
+        all_types = await container.entity_type_repository.get_all_for_company()
+        all_type_ids = {item.type_id for item in all_types}
+        unknown_type_ids = [item for item in allowed_type_ids if item not in all_type_ids]
+        if unknown_type_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown type_id values: {', '.join(unknown_type_ids)}",
+            )
+
+    editability = await container.namespace_template_service.get_namespace_editability(normalized_namespace_name)
+    current_allowed_type_ids = set(editability["current_allowed_type_ids"])
+    requested_allowed_type_ids = set(allowed_type_ids or []) if allowed_type_ids is not None else None
+    is_allowed_types_changed = (
+        requested_allowed_type_ids is not None and requested_allowed_type_ids != current_allowed_type_ids
+    )
+    if is_allowed_types_changed and not editability["can_update_allowed_types"]:
+        raise HTTPException(status_code=422, detail=editability["lock_reason"])
+
+    service = container.namespace_template_service
+    updated_namespace = await service.update_existing_namespace(
+        namespace_name=normalized_namespace_name,
+        description_is_set="description" in request.model_fields_set,
+        description=request.description,
+        allowed_type_ids=allowed_type_ids,
+    )
+
+    return NamespaceResponse(
+        name=updated_namespace.name,
+        company_id=updated_namespace.company_id,
+        description=updated_namespace.description,
+        is_default=updated_namespace.is_default,
     )

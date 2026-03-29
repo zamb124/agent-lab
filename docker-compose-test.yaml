@@ -98,6 +98,8 @@ services:
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
       - AUTH__PERMISSIONS_ENABLED=false
+      - STT__PROVIDER=mock
+      - STT__MOCK_TRANSCRIPT_TEXT=Тестовая транскрипция docker worker
     command: ["python", "-m", "taskiq", "worker", "apps.broker.worker:broker", "--workers", "2"]
     restart: "no"
     networks:
@@ -198,6 +200,8 @@ services:
       - CALLS__LIVEKIT_URL=ws://livekit-test:7880
       - CALLS__LIVEKIT_API_KEY=devkey
       - CALLS__LIVEKIT_API_SECRET=secret
+      - STT__PROVIDER=mock
+      - STT__MOCK_TRANSCRIPT_TEXT=Тестовая транскрипция docker worker
     command: ["sh", "-c", "test -d /app/test-results || mkdir -p /app/test-results; test -d /app/htmlcov || mkdir -p /app/htmlcov; chmod -R 777 /app/test-results /app/htmlcov 2>/dev/null || true; python -m pytest tests/ -v -n ${PYTEST_WORKERS} --junitxml=/app/test-results/junit.xml --cov=apps --cov=core --cov-report=term-missing --cov-report=html"]
     restart: "no"
     volumes:
@@ -209,17 +213,82 @@ services:
   livekit-test:
     image: livekit/livekit-server:latest
     container_name: agentlab_livekit_test
-    command: --dev --bind 0.0.0.0
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        keys:
+          devkey: secret
+        redis:
+          address: redis-test:6379
+          db: 2
+        rtc:
+          tcp_port: 7882
+          udp_port: 7881
+          use_external_ip: false
+    command: --bind 0.0.0.0
     ports:
       - "7890:7880"
       - "7891:7881/udp"
       - "7892:7882/tcp"
+    depends_on:
+      redis-test:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:7880"]
       interval: 3s
       timeout: 5s
       retries: 20
       start_period: 5s
+    networks:
+      - test-net
+
+  livekit-egress-test:
+    image: livekit/egress:latest
+    container_name: agentlab_livekit_egress_test
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: devkey
+        api_secret: secret
+        ws_url: ws://livekit-test:7880
+        redis:
+          address: redis-test:6379
+          db: 2
+        logging:
+          level: info
+          json: true
+        session_limits:
+          file_output_max_duration: 1h
+    depends_on:
+      redis-test:
+        condition: service_healthy
+      livekit-test:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - test-net
+
+  livekit-cli-test:
+    image: livekit/livekit-cli:latest
+    container_name: agentlab_livekit_cli_test
+    command:
+      [
+        "--url",
+        "ws://livekit-test:7880",
+        "--api-key",
+        "devkey",
+        "--api-secret",
+        "secret",
+        "room",
+        "join",
+        "--identity",
+        "cli-bootstrap",
+        "--publish-demo",
+        "cli-bootstrap-room"
+      ]
+    depends_on:
+      livekit-test:
+        condition: service_healthy
+    restart: "no"
     networks:
       - test-net
 

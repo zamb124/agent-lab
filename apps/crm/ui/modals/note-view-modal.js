@@ -257,7 +257,13 @@ export class NoteViewModal extends PlatformModal {
     }
 
     async _handleSummaryRefresh() {
-        await this._refreshEntitiesFromNote();
+        try {
+            await this._refreshEntitiesFromNote();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка обновления сводки';
+            this.error(message);
+            throw error;
+        }
     }
 
     _handleOpenAnalysisDraft() {
@@ -397,32 +403,38 @@ export class NoteViewModal extends PlatformModal {
         }
         this._savingNote = true;
         try {
-            const crmApi = this.crmApi;
-            if (this.draftMode) {
-                const createdNote = await CRMStore.createNote(crmApi, {
-                    name: noteName.trim(),
-                    description: noteDescription,
-                    entity_subtype: typeof entitySubtype === 'string' && entitySubtype.trim().length > 0
-                        ? entitySubtype.trim()
-                        : null,
-                    note_date: noteDate.trim(),
-                });
-                this.note = createdNote;
-                this.draftMode = false;
-                this.dispatchEvent(new CustomEvent('note-created', {
-                    detail: { noteId: createdNote.entity_id },
-                    bubbles: true,
-                    composed: true,
-                }));
-            } else {
-                await CRMStore.updateNote(crmApi, this.note.entity_id, {
-                    name: noteName.trim(),
-                    description: noteDescription,
-                    entity_subtype: typeof entitySubtype === 'string' && entitySubtype.trim().length > 0
-                        ? entitySubtype.trim()
-                        : null,
-                    note_date: noteDate.trim(),
-                });
+            try {
+                const crmApi = this.crmApi;
+                if (this.draftMode) {
+                    const createdNote = await CRMStore.createNote(crmApi, {
+                        name: noteName.trim(),
+                        description: noteDescription,
+                        entity_subtype: typeof entitySubtype === 'string' && entitySubtype.trim().length > 0
+                            ? entitySubtype.trim()
+                            : null,
+                        note_date: noteDate.trim(),
+                    });
+                    this.note = createdNote;
+                    this.draftMode = false;
+                    this.dispatchEvent(new CustomEvent('note-created', {
+                        detail: { noteId: createdNote.entity_id },
+                        bubbles: true,
+                        composed: true,
+                    }));
+                } else {
+                    await CRMStore.updateNote(crmApi, this.note.entity_id, {
+                        name: noteName.trim(),
+                        description: noteDescription,
+                        entity_subtype: typeof entitySubtype === 'string' && entitySubtype.trim().length > 0
+                            ? entitySubtype.trim()
+                            : null,
+                        note_date: noteDate.trim(),
+                    });
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Ошибка сохранения заметки';
+                this.error(message);
+                throw error;
             }
         } finally {
             this._savingNote = false;

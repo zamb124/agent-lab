@@ -17,6 +17,7 @@ import {
 import '../modals/user-info-modal.js';
 import './message-context-menu.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-audio-message-player.js';
 
 function formatMessageTime(iso) {
     const d = new Date(iso);
@@ -267,6 +268,43 @@ function renderContent(content, host) {
                     </svg>
                 </div>
             </a>
+        `;
+    }
+    if (content.type === 'file/audio') {
+        const {
+            file_id: fileId,
+            filename,
+            duration_ms: durationMs,
+            waveform,
+            transcription_status: transcriptionStatus,
+            transcription_text: transcriptionText,
+            transcription_error: transcriptionError,
+        } = content.data ?? {};
+        if (typeof fileId !== 'string' || fileId === '') {
+            throw new Error('Некорректный file/audio контент.');
+        }
+        const src = `/sync/api/v1/files/download/${fileId}`;
+        const safeDurationMs = typeof durationMs === 'number' && Number.isFinite(durationMs) ? durationMs : 0;
+        const safeWaveform = Array.isArray(waveform) ? waveform : null;
+        const safeStatus = typeof transcriptionStatus === 'string' && transcriptionStatus !== ''
+            ? transcriptionStatus
+            : 'idle';
+        const safeText = typeof transcriptionText === 'string' ? transcriptionText : '';
+        const safeError = typeof transcriptionError === 'string' ? transcriptionError : '';
+        return html`
+            <platform-audio-message-player
+                .src=${src}
+                .fileName=${typeof filename === 'string' ? filename : ''}
+                .durationMs=${safeDurationMs}
+                .waveform=${safeWaveform}
+                .transcriptionStatus=${safeStatus}
+                .transcriptionText=${safeText}
+                .transcriptionError=${safeError}
+                @request-transcription=${(e) => {
+                    e.stopPropagation();
+                    host._requestAudioTranscription();
+                }}
+            ></platform-audio-message-player>
         `;
     }
     if (content.type === 'git/reference') {
@@ -1205,6 +1243,20 @@ export class MessageBubble extends PlatformElement {
             throw new Error('parent_message_id обязателен.');
         }
         this.emit('scroll-to-message', { messageId: pid });
+    }
+
+    async _requestAudioTranscription() {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            throw new Error('channelId обязателен для расшифровки аудио.');
+        }
+        if (typeof this.msg?.id !== 'string' || this.msg.id === '') {
+            throw new Error('message.id обязателен для расшифровки аудио.');
+        }
+        const syncApi = this.services.get('syncApi');
+        const updated = await syncApi.transcribeMessage(this.channelId, this.msg.id);
+        if (updated && typeof updated === 'object' && typeof updated.id === 'string') {
+            SyncStore.upsertMessage(updated);
+        }
     }
 
     _parentPreview() {

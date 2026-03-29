@@ -341,6 +341,9 @@ services:
         port: 7880
         keys:
           ${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}
+        redis:
+          address: redis:6379
+          db: 2
         rtc:
           tcp_port: 7882
           udp_port: 7881
@@ -349,6 +352,31 @@ services:
       - "7880:7880"
       - "7881:7881/udp"
       - "7882:7882/tcp"
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  livekit-egress:
+    image: livekit/egress:latest
+    container_name: agentlab_livekit_egress
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: ${LIVEKIT_API_KEY:-devkey}
+        api_secret: ${LIVEKIT_API_SECRET:-secret}
+        ws_url: ws://livekit:7880
+        redis:
+          address: redis:6379
+          db: 2
+        logging:
+          level: info
+          json: true
+        session_limits:
+          file_output_max_duration: 1h
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
     restart: unless-stopped
     networks:
       - agentlab-net

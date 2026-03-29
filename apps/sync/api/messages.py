@@ -157,3 +157,12 @@ async def pin_message(channel_id: str, body: MessagePinBody) -> dict:
         "messages.pin",
         {"channel_id": channel_id, "message_id": body.message_id, "action": body.action},
     )
+
+
+@router.post("/{channel_id}/messages/{message_id}/transcribe")
+async def transcribe_audio_message(channel_id: str, message_id: str) -> MessageRead:
+    out = await _run_cmd(
+        "messages.transcribe_audio",
+        {"channel_id": channel_id, "message_id": message_id},
+    )
+    return MessageRead.model_validate(out)

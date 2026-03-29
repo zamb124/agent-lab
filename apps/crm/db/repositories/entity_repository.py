@@ -9,7 +9,7 @@ import logging
 from datetime import date
 from typing import Any, Dict, List, Optional, Type
 
-from sqlalchemy import delete, select, and_
+from sqlalchemy import delete, select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
@@ -210,6 +210,50 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 if column is not None:
                     stmt = stmt.where(column == value)
         return stmt
+
+    async def count_by_namespace(
+        self,
+        namespace: str,
+        company_id: Optional[str] = None,
+    ) -> int:
+        """Считает количество сущностей в namespace."""
+        if not namespace:
+            raise ValueError("Namespace is required")
+
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(func.count(CRMEntity.entity_id)).where(
+                CRMEntity.company_id == cid,
+                CRMEntity.namespace == namespace,
+            )
+            result = await session.execute(stmt)
+            value = result.scalar()
+            if value is None:
+                raise ValueError("Entity count query returned empty value")
+            return int(value)
+
+    async def list_used_entity_types_by_namespace(
+        self,
+        namespace: str,
+        company_id: Optional[str] = None,
+    ) -> List[str]:
+        """Возвращает список типов сущностей, используемых в namespace."""
+        if not namespace:
+            raise ValueError("Namespace is required")
+
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = (
+                select(CRMEntity.entity_type)
+                .where(
+                    CRMEntity.company_id == cid,
+                    CRMEntity.namespace == namespace,
+                )
+                .distinct()
+            )
+            result = await session.execute(stmt)
+            type_ids = [item for item in result.scalars().all() if isinstance(item, str) and item.strip()]
+            return sorted(type_ids)
 
     # -- Semantic Search --
 

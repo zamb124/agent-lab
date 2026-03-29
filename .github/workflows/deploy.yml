@@ -203,6 +203,17 @@ jobs:
             docker compose -f docker-compose-prod.yaml up -d \
               agents frontend crm rag sync \
               worker scheduler rag-worker sync-worker \
-              livekit coturn
+              livekit livekit-egress coturn
+
+            _egress_wait=0
+            until [ "$(docker inspect -f '{{.State.Running}}' agentlab_livekit_egress 2>/dev/null || echo false)" = "true" ]; do
+              _egress_wait=$((_egress_wait + 1))
+              if [ "$_egress_wait" -gt 30 ]; then
+                echo "FATAL: livekit-egress не запустился за 60 секунд"
+                docker logs agentlab_livekit_egress --tail 200 2>&1 || true
+                exit 1
+              fi
+              sleep 2
+            done
 
             docker image prune -f

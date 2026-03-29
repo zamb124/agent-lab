@@ -4,6 +4,7 @@ STT клиент с поддержкой провайдеров.
 
 from abc import ABC, abstractmethod
 import json
+import os
 
 from core.config import get_settings
 from core.http import get_httpx_client
@@ -117,6 +118,31 @@ class CloudRuSTTClient(BaseSTTClient):
         return body_text
 
 
+class MockSTTClient(BaseSTTClient):
+    """STT клиент для тестового окружения."""
+
+    def __init__(self, *, transcript_text: str) -> None:
+        if transcript_text == "":
+            raise ValueError("STT mock transcript_text не может быть пустым.")
+        self._transcript_text = transcript_text
+
+    async def transcribe_audio(
+        self,
+        *,
+        audio_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        language: str | None = None,
+    ) -> str:
+        if not audio_bytes:
+            raise ValueError("audio_bytes не может быть пустым.")
+        if file_name == "":
+            raise ValueError("file_name не может быть пустым.")
+        if mime_type == "":
+            raise ValueError("mime_type не может быть пустым.")
+        return self._transcript_text
+
+
 class STTClientFactory:
     """Фабрика STT клиентов по конфигу."""
 
@@ -140,5 +166,8 @@ class STTClientFactory:
                 default_language=config.language,
                 timeout=config.timeout,
             )
+        if provider == "mock":
+            transcript_text = os.getenv("STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция")
+            return MockSTTClient(transcript_text=transcript_text)
 
         raise ValueError(f"Неизвестный STT провайдер: {provider}")

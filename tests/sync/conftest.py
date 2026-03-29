@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 
@@ -170,6 +171,83 @@ def sync_user_repository(sync_database: SyncDatabase):
     return get_sync_container().user_repository
 
 
+@pytest_asyncio.fixture()
+async def livekit_demo_publisher():
+    """Запускает headless demo publisher в комнате LiveKit через livekit-cli контейнер."""
+    processes: list[asyncio.subprocess.Process] = []
+
+    async def _ensure_cli_container_running() -> None:
+        compose_up = await asyncio.create_subprocess_exec(
+            "docker-compose",
+            "-f",
+            "docker-compose-test.yaml",
+            "up",
+            "-d",
+            "livekit-cli-test",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        compose_output, _ = await compose_up.communicate()
+        if compose_up.returncode != 0:
+            raise RuntimeError(
+                "Не удалось поднять livekit-cli-test контейнер: "
+                f"{compose_output.decode('utf-8', errors='replace')}"
+            )
+
+    async def _start(*, room_name: str, settle_seconds: float = 3.0) -> str:
+        if room_name == "":
+            raise ValueError("room_name обязателен для demo publisher.")
+        await _ensure_cli_container_running()
+        identity = f"test-publisher-{uuid.uuid4().hex[:8]}"
+        command = [
+            "docker",
+            "exec",
+            "agentlab_livekit_cli_test",
+            "/lk",
+            "room",
+            "join",
+            "--url",
+            "ws://livekit-test:7880",
+            "--api-key",
+            "devkey",
+            "--api-secret",
+            "secret",
+            "--identity",
+            identity,
+            "--publish-demo",
+            room_name,
+        ]
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        processes.append(process)
+        await asyncio.sleep(settle_seconds)
+        if process.returncode is not None:
+            output = ""
+            if process.stdout is not None:
+                output_bytes = await process.stdout.read()
+                output = output_bytes.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                "Demo publisher завершился до старта egress. "
+                f"room={room_name}, returncode={process.returncode}, output={output}"
+            )
+        return identity
+
+    yield _start
+
+    for process in processes:
+        if process.returncode is not None:
+            continue
+        process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+
+
 @pytest.fixture()
 def mock_sync_recording_source(monkeypatch) -> Callable[[bytes, str], None]:
     """Подменяет скачивание raw-записи в sync pipeline тестовым содержимым."""
@@ -221,6 +299,23 @@ def mock_sync_stt_client(monkeypatch) -> Callable[[str], object]:
 
 
 @pytest.fixture()
+def mock_sync_egress_result(monkeypatch) -> Callable[[str, str], None]:
+    """Подменяет резолв egress результата в sync pipeline."""
+    from apps.sync.realtime import tasks as sync_tasks
+
+    def _apply(
+        egress_id: str = "egress-test-id",
+        source_url: str = "http://recordings.local/egress-test.mp4",
+    ) -> None:
+        async def _stubbed_resolve(*, room_name: str, timeout_seconds: float) -> tuple[str, str]:
+            return egress_id, source_url
+
+        monkeypatch.setattr(sync_tasks, "_resolve_livekit_egress_result", _stubbed_resolve)
+
+    return _apply
+
+
+@pytest.fixture()
 def wait_for_meeting_pipeline_complete(call_meeting_repo):
     """Ожидает завершения meeting pipeline до готового транскрипта и summary."""
 
@@ -235,9 +330,13 @@ def wait_for_meeting_pipeline_complete(call_meeting_repo):
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout_seconds
         latest = await call_meeting_repo.get(meeting_id)
+        poll_index = 0
         while loop.time() < deadline:
+            poll_index += 1
             latest = await call_meeting_repo.get(meeting_id)
             if latest is None:
+                if poll_index % 8 == 0:
+                    print(f"[wait_meeting_pipeline] meeting={meeting_id} status=missing")
                 await asyncio.sleep(0.25)
                 continue
             if latest.company_id != company_id:
@@ -251,6 +350,16 @@ def wait_for_meeting_pipeline_complete(call_meeting_repo):
             namespace_ok = True
             if expected_namespace is not None:
                 namespace_ok = latest.export_target_namespace == expected_namespace
+            if poll_index % 8 == 0:
+                print(
+                    "[wait_meeting_pipeline] "
+                    f"meeting={meeting_id} "
+                    f"recording={latest.recording_id} "
+                    f"export_status={latest.export_status} "
+                    f"has_transcript={has_transcript} "
+                    f"has_summary={has_summary} "
+                    f"namespace={latest.export_target_namespace}"
+                )
             if has_summary and has_transcript and export_ok and namespace_ok:
                 return latest
             await asyncio.sleep(0.25)

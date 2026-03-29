@@ -36,6 +36,15 @@ export function lanePreviewFromMessagePayload(p) {
     if (t === 'mock/image') {
         return '[Изображение]';
     }
+    if (t === 'file/image') {
+        return '[Фото]';
+    }
+    if (t === 'file/document') {
+        return '[Файл]';
+    }
+    if (t === 'file/audio') {
+        return '[Аудио]';
+    }
     if (t === 'git/reference') {
         return '[Git]';
     }

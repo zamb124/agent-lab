@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Optional
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from apps.sync.channel_lane_preview import lane_preview_from_content_row
@@ -29,6 +30,8 @@ from apps.sync.models.channels import ChannelRead, ChannelType, ChannelUpdate
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.messages import (
+    AudioAttachmentContent,
+    AudioTranscriptionStatus,
     MessageContentModel,
     MessageContentType,
     MessageCreate,
@@ -62,6 +65,7 @@ from apps.sync.realtime.commands import (
     MessagesPinPayload,
     MessagesReactPayload,
     MessagesSendPayload,
+    MessagesTranscribeAudioPayload,
     SpacesCreatePayload,
     SpacesUpdatePayload,
     ThreadsCreatePayload,
@@ -89,7 +93,13 @@ from apps.sync.realtime.notification_tasks import (
     deliver_channel_message_notification,
     deliver_sync_mention_notification,
 )
+from core.calls.livekit_client import LiveKitClient
+from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
+from core.logging import get_logger
+from livekit.api.twirp_client import TwirpError, TwirpErrorCode
+
+logger = get_logger(__name__)
 
 
 class CommandExecutionResult:
@@ -97,6 +107,38 @@ class CommandExecutionResult:
         self.ok = ok
         self.result = result
         self.events = events
+
+
+def _normalize_s3_egress_endpoint(endpoint_url: str | None) -> str | None:
+    if endpoint_url is None:
+        return None
+    trimmed = endpoint_url.strip()
+    if trimmed == "":
+        return None
+    parsed = urlparse(trimmed)
+    if parsed.scheme == "":
+        return trimmed
+    if parsed.netloc == "":
+        raise ValueError(f"Некорректный endpoint_url для S3 egress: {endpoint_url}")
+    hostname = parsed.hostname
+    if hostname is None or hostname == "":
+        raise ValueError(f"Некорректный hostname в endpoint_url для S3 egress: {endpoint_url}")
+    if hostname == "localhost" or hostname == "127.0.0.1":
+        hostname = "host.docker.internal"
+    if parsed.port is None:
+        netloc = hostname
+    else:
+        netloc = f"{hostname}:{parsed.port}"
+    return f"{parsed.scheme}://{netloc}"
+
+
+def _build_livekit_recording_client() -> LiveKitClient:
+    settings = get_settings()
+    return LiveKitClient(
+        url=settings.calls.livekit_url,
+        api_key=settings.calls.livekit_api_key,
+        api_secret=settings.calls.livekit_api_secret,
+    )
 
 
 def _notification_preview_from_message(message: MessageRead) -> str:
@@ -261,6 +303,52 @@ async def _normalize_message_create_mentions(
         contents=new_contents,
         mentioned_user_ids=None,
     )
+
+
+def _find_first_audio_content_index(contents: list[MessageContentModel]) -> int | None:
+    sorted_items = sorted(enumerate(contents), key=lambda t: t[1].order)
+    for original_index, content in sorted_items:
+        if content.type == MessageContentType.FILE_AUDIO:
+            return original_index
+    return None
+
+
+def _set_audio_transcription_state(
+    contents: list[MessageContentModel],
+    *,
+    status: AudioTranscriptionStatus,
+    transcription_text: str | None,
+    transcription_error: str | None,
+) -> list[MessageContentModel]:
+    audio_index = _find_first_audio_content_index(contents)
+    if audio_index is None:
+        raise ValueError("В сообщении нет аудиоконтента file/audio.")
+    next_contents: list[MessageContentModel] = []
+    for index, block in enumerate(contents):
+        if index != audio_index:
+            next_contents.append(block)
+            continue
+        if not isinstance(block.data, AudioAttachmentContent):
+            raise ValueError("file/audio: ожидается AudioAttachmentContent.")
+        next_audio = AudioAttachmentContent(
+            file_id=block.data.file_id,
+            filename=block.data.filename,
+            mime_type=block.data.mime_type,
+            size=block.data.size,
+            duration_ms=block.data.duration_ms,
+            waveform=block.data.waveform,
+            transcription_status=status,
+            transcription_text=transcription_text,
+            transcription_error=transcription_error,
+        )
+        next_contents.append(
+            MessageContentModel(
+                type=block.type,
+                data=next_audio,
+                order=block.order,
+            )
+        )
+    return next_contents
 
 
 async def execute_command(
@@ -453,6 +541,51 @@ async def execute_command(
         )
         return CommandExecutionResult(ok=True, result=out, events=evs)
 
+    if cmd.type == "messages.transcribe_audio":
+        if user_repository is None:
+            raise ValueError("user_repository обязателен.")
+        payload = MessagesTranscribeAudioPayload.model_validate(cmd.payload)
+        if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+            raise ValueError("Нет доступа к каналу.")
+        source_message = await messages.get_by_id_for_company(payload.message_id, cmd.company_id)
+        if source_message is None:
+            raise ValueError("Сообщение не найдено.")
+        if source_message.channel_id != payload.channel_id:
+            raise ValueError("Несовпадение канала.")
+        if source_message.deleted_at is not None:
+            raise ValueError("Сообщение удалено.")
+        source_rows = await messages.list_contents(payload.message_id)
+        source_contents = [
+            MessageContentModel.model_validate(
+                {"type": row.type, "data": row.data, "order": row.order}
+            )
+            for row in source_rows
+        ]
+        processing_contents = _set_audio_transcription_state(
+            source_contents,
+            status=AudioTranscriptionStatus.PROCESSING,
+            transcription_text=None,
+            transcription_error=None,
+        )
+        edited_at = datetime.now(tz=UTC)
+        await messages.replace_message_contents(payload.message_id, processing_contents, edited_at)
+        updated_entity = await messages.get_by_id_for_company(payload.message_id, cmd.company_id)
+        if updated_entity is None:
+            raise RuntimeError("Сообщение пропало после запуска расшифровки.")
+        updated_read = await _message_read_from_db(updated_entity, messages, user_repository)
+        from apps.sync.realtime.tasks import sync_transcribe_audio_message_task
+        await sync_transcribe_audio_message_task.kiq(
+            channel_id=payload.channel_id,
+            message_id=payload.message_id,
+            company_id=cmd.company_id,
+            actor_user_id=cmd.actor_user_id,
+        )
+        return CommandExecutionResult(
+            ok=True,
+            result=updated_read,
+            events=[event_message_updated(updated_read)],
+        )
+
     if cmd.type == "git.resources.upsert":
         payload = GitResourcesUpsertPayload.model_validate(cmd.payload)
         ref = await _upsert_git_resource(payload.body, company_id=cmd.company_id, git_refs=git_refs)
@@ -490,6 +623,8 @@ async def execute_command(
             call = await calls.get_call(payload.call_id, cmd.company_id)
             if call.status == "ended":
                 raise ValueError("Нельзя включить запись завершённого звонка.")
+            if call.livekit_room_name is None or call.livekit_room_name == "":
+                raise ValueError(f"У звонка {call.call_id} отсутствует livekit_room_name.")
             if not await channels.is_member(call.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
                 raise PermissionError("Нет доступа к звонку.")
             active = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
@@ -499,13 +634,69 @@ async def execute_command(
             channel_entity = await channels.get(call.channel_id)
             if channel_entity is None:
                 raise ValueError(f"Канал {call.channel_id} не найден.")
+            settings = get_settings()
+            if settings.recording_max_duration_seconds <= 0:
+                raise ValueError("recording_max_duration_seconds должен быть больше 0.")
+            if not settings.s3.enabled:
+                raise ValueError("S3 отключен: запись звонка в S3 недоступна.")
+            default_bucket_key = settings.s3.default_bucket
+            if default_bucket_key == "":
+                raise ValueError("s3.default_bucket не настроен.")
+            if default_bucket_key not in settings.s3.buckets:
+                raise ValueError(f"Конфиг S3 bucket '{default_bucket_key}' не найден.")
+            bucket_config = settings.s3.buckets[default_bucket_key]
+            if not bucket_config.enabled:
+                raise ValueError(f"S3 bucket '{default_bucket_key}' выключен.")
+            if not bucket_config.access_key_id:
+                raise ValueError(f"S3 access_key_id не настроен для bucket '{default_bucket_key}'.")
+            if not bucket_config.secret_access_key:
+                raise ValueError(f"S3 secret_access_key не настроен для bucket '{default_bucket_key}'.")
+            if not bucket_config.region_name:
+                raise ValueError(f"S3 region_name не настроен для bucket '{default_bucket_key}'.")
+            real_bucket_name = bucket_config.bucket_name or default_bucket_key
+            if real_bucket_name == "":
+                raise ValueError("Имя S3 bucket для egress не может быть пустым.")
+            recording_id = uuid4().hex
+            egress_filepath = (
+                f"sync-recordings/{cmd.company_id}/{call.call_id}/{recording_id}.mp4"
+            )
+            livekit_client = _build_livekit_recording_client()
+            logger.info(
+                "call.recording.start egress start: call_id=%s room=%s recording_id=%s filepath=%s bucket=%s",
+                call.call_id,
+                call.livekit_room_name,
+                recording_id,
+                egress_filepath,
+                real_bucket_name,
+            )
+            await livekit_client.create_room(call.livekit_room_name)
+            egress_info = await livekit_client.start_room_composite_egress_to_s3(
+                room_name=call.livekit_room_name,
+                filepath=egress_filepath,
+                s3_access_key=bucket_config.access_key_id,
+                s3_secret_key=bucket_config.secret_access_key,
+                s3_region=bucket_config.region_name,
+                s3_bucket=real_bucket_name,
+                s3_endpoint=_normalize_s3_egress_endpoint(bucket_config.endpoint_url),
+                audio_only=(call.call_type == "audio"),
+            )
+            provider_job_id = getattr(egress_info, "egress_id", None)
+            if not isinstance(provider_job_id, str) or provider_job_id == "":
+                raise RuntimeError("LiveKit не вернул egress_id после старта записи.")
+            logger.info(
+                "call.recording.start egress started: call_id=%s recording_id=%s egress_id=%s",
+                call.call_id,
+                recording_id,
+                provider_job_id,
+            )
             recording = SyncCallRecording(
-                recording_id=uuid4().hex,
+                recording_id=recording_id,
                 call_id=call.call_id,
                 company_id=cmd.company_id,
                 channel_id=call.channel_id,
                 space_id=channel_entity.space_id,
                 status="recording",
+                provider_job_id=provider_job_id,
                 started_at=datetime.now(UTC),
             )
             await call_recordings.create(recording)
@@ -519,6 +710,44 @@ async def execute_command(
             active = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
             if active is None:
                 raise ValueError("Активная запись не найдена.")
+            if active.provider_job_id is None or active.provider_job_id == "":
+                raise ValueError(
+                    f"У записи {active.recording_id} отсутствует provider_job_id, невозможно остановить egress."
+                )
+            settings = get_settings()
+            if settings.recording_max_duration_seconds <= 0:
+                raise ValueError("recording_max_duration_seconds должен быть больше 0.")
+            if active.started_at is not None:
+                max_end_at = active.started_at + timedelta(seconds=settings.recording_max_duration_seconds)
+                logger.info(
+                    "call.recording.stop duration check: call_id=%s recording_id=%s started_at=%s max_end_at=%s now=%s",
+                    call.call_id,
+                    active.recording_id,
+                    active.started_at.isoformat(),
+                    max_end_at.isoformat(),
+                    datetime.now(UTC).isoformat(),
+                )
+            livekit_client = _build_livekit_recording_client()
+            logger.info(
+                "call.recording.stop egress stop: call_id=%s recording_id=%s egress_id=%s",
+                call.call_id,
+                active.recording_id,
+                active.provider_job_id,
+            )
+            try:
+                await livekit_client.stop_egress(egress_id=active.provider_job_id)
+            except TwirpError as exc:
+                if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
+                    logger.warning(
+                        "call.recording.stop egress already finished: call_id=%s recording_id=%s egress_id=%s code=%s message=%s",
+                        call.call_id,
+                        active.recording_id,
+                        active.provider_job_id,
+                        exc.code,
+                        str(exc),
+                    )
+                else:
+                    raise
             await call_recordings.mark_status(
                 active.recording_id,
                 status="uploaded",

@@ -244,4 +244,17 @@ export class SyncAPIService extends BaseService {
             { message_id: messageId, action }
         );
     }
+
+    async transcribeMessage(channelId, messageId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (typeof messageId !== 'string' || messageId === '') {
+            throw new Error('messageId обязателен.');
+        }
+        return this.post(
+            `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/transcribe`,
+            {}
+        );
+    }
 }

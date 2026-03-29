@@ -173,6 +173,10 @@ const baseStore = new BaseStore('crm', {
         templateDetails: null,
         schemaOptions: null,
         current: null,
+        settingsSelected: null,
+        settingsEditability: null,
+        settingsLoading: false,
+        settingsSaving: false,
         grants: [],
         loading: false,
     },
@@ -1167,6 +1171,10 @@ export const CRMStore = {
                 templateDetails: s.namespaces.templateDetails,
                 schemaOptions: s.namespaces.schemaOptions,
                 current: resolvedCurrent,
+                settingsSelected: s.namespaces.settingsSelected,
+                settingsEditability: s.namespaces.settingsEditability,
+                settingsLoading: s.namespaces.settingsLoading,
+                settingsSaving: s.namespaces.settingsSaving,
                 loading: false
             },
             entities: {
@@ -1193,6 +1201,20 @@ export const CRMStore = {
                 list: [],
                 currentEntityId: null,
                 currentEntity: null,
+            }
+        }));
+    },
+
+    setSettingsNamespaceSelection(namespaceName) {
+        if (namespaceName !== null && typeof namespaceName !== 'string') {
+            throw new Error('Namespace name must be string or null');
+        }
+        const normalizedName = typeof namespaceName === 'string' ? namespaceName.trim() : null;
+        baseStore.setState((s) => ({
+            namespaces: {
+                ...s.namespaces,
+                settingsSelected: normalizedName,
+                settingsEditability: null,
             }
         }));
     },
@@ -1324,6 +1346,92 @@ export const CRMStore = {
         }));
 
         return namespace;
+    },
+
+    async loadNamespaceEditability(crmApi, namespaceName) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!namespaceName || typeof namespaceName !== 'string') {
+            throw new Error('Namespace name is required');
+        }
+        const normalizedName = namespaceName.trim();
+        if (!normalizedName) {
+            throw new Error('Namespace name is required');
+        }
+
+        baseStore.setState((s) => ({
+            namespaces: {
+                ...s.namespaces,
+                settingsLoading: true,
+            }
+        }));
+
+        try {
+            const payload = await crmApi.getNamespaceEditability(normalizedName);
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('Namespace editability payload must be object');
+            }
+
+            baseStore.setState((s) => ({
+                namespaces: {
+                    ...s.namespaces,
+                    settingsSelected: normalizedName,
+                    settingsEditability: payload,
+                    settingsLoading: false,
+                }
+            }));
+
+            return payload;
+        } catch (error) {
+            baseStore.setState((s) => ({
+                namespaces: {
+                    ...s.namespaces,
+                    settingsLoading: false,
+                }
+            }));
+            throw error;
+        }
+    },
+
+    async updateExistingNamespace(crmApi, namespaceName, payload) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!namespaceName || typeof namespaceName !== 'string') {
+            throw new Error('Namespace name is required');
+        }
+        const normalizedName = namespaceName.trim();
+        if (!normalizedName) {
+            throw new Error('Namespace name is required');
+        }
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Namespace payload is required');
+        }
+
+        baseStore.setState((s) => ({
+            namespaces: {
+                ...s.namespaces,
+                settingsSaving: true,
+            }
+        }));
+
+        try {
+            const updatedNamespace = await crmApi.updateNamespace(normalizedName, payload);
+            await Promise.all([
+                this.loadNamespaces(crmApi),
+                this.loadEntityTypes(crmApi),
+                this.loadNamespaceEditability(crmApi, normalizedName),
+            ]);
+            return updatedNamespace;
+        } finally {
+            baseStore.setState((s) => ({
+                namespaces: {
+                    ...s.namespaces,
+                    settingsSaving: false,
+                }
+            }));
+        }
     },
 
     getAllowedEntityTypesForCurrentNamespace() {

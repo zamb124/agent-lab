@@ -38,6 +38,12 @@ def lane_preview_from_content_row(content_type: str, data: dict) -> str:
         return "[Код]"
     if content_type == MessageContentType.MOCK_IMAGE.value:
         return "[Изображение]"
+    if content_type == MessageContentType.FILE_IMAGE.value:
+        return "[Фото]"
+    if content_type == MessageContentType.FILE_DOCUMENT.value:
+        return "[Файл]"
+    if content_type == MessageContentType.FILE_AUDIO.value:
+        return "[Аудио]"
     if content_type == MessageContentType.GIT_REFERENCE.value:
         return "[Git]"
     if content_type == MessageContentType.CUSTOM_TOOL_RESPONSE.value:

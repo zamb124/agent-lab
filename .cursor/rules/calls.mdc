@@ -100,7 +100,7 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 | Файл | Содержимое |
 |---|---|
 | `models.py` | `TurnCredentials`, `CallMode`, `SignalType` |
-| `livekit_client.py` | `LiveKitClient` — create_room, delete_room, generate_token. `_api_url()` конвертирует `ws://` → `http://` для Twirp API |
+| `livekit_client.py` | `LiveKitClient` — create_room, delete_room, generate_token, start/stop egress в S3. `_api_url()` конвертирует `ws://` → `http://` для Twirp API |
 | `turn.py` | `generate_turn_credentials()` — HMAC-SHA1, алгоритм coturn REST |
 
 ### CallOverlay SFU (переподключение)
@@ -133,7 +133,16 @@ LiveKit `--dev` mode дефолтные ключи: `devkey` / `secret`.
 | test | 7890 (ext) / 7880 (int) | нет |
 | prod | 7880 | host network |
 
-`make test` запускает `livekit-test` автоматически через `mk/test.mk`.
+`make test` запускает `livekit-test`, `livekit-egress-test` и `livekit-cli-test` автоматически через `mk/test.mk`.
+
+### Headless publisher в тестах
+
+- Для egress E2E без браузера используется `livekit-cli-test` (`livekit/livekit-cli`) как headless участник комнаты.
+- Команда для симуляции медиа-потока: `lk room join --url ws://livekit-test:7880 --api-key devkey --api-secret secret --identity <id> --publish-demo <room>`.
+- Для контейнерного egress endpoint `localhost`/`127.0.0.1` в S3-конфиге нормализуется в `host.docker.internal`, иначе egress внутри контейнера не сможет достучаться до host MinIO.
+- При custom S3 endpoint (`S3Upload.endpoint`) включать `S3Upload.force_path_style = true`, иначе egress может строить virtual-host URL вида `<bucket>.<endpoint>` и падать на DNS в MinIO/локальном окружении.
+- В `docker-compose-prod.yaml` и `docker-compose-test.yaml` для `livekit-egress` должен быть `session_limits.file_output_max_duration: 1h`, чтобы запись не длилась дольше часа даже без клиентского stop.
+- Без опубликованного медиатрэка egress завершится с `Start signal not received`, файл в S3 не появится.
 
 ## БД (sync)
 
@@ -149,6 +158,9 @@ LiveKit `--dev` mode дефолтные ключи: `devkey` / `secret`.
 ## Запись, транскрипт, export
 
 - WS-команды: `call.recording.start`, `call.recording.stop`, `call.meeting.export_to_crm`.
+- `call.recording.start` запускает `RoomCompositeEgress` с `EncodedFileOutput.s3` (primary storage только S3, без локального `/egress/...` как целевого хранилища).
+- `call.recording.stop` останавливает egress строго по `provider_job_id`; если `provider_job_id` отсутствует — команда падает с ошибкой.
+- `sync_finalize_recording_task` резолвит egress-результат по `provider_job_id` и сохраняет `raw_file.storage_url` из `file_results.location`.
 - WS-события: `call.recording.started|stopped|failed`, `call.transcript.ready|failed`, `call.summary.ready|failed`, `call.export.crm.done|failed`.
 - REST:
   - `GET /sync/api/v1/calls/{call_id}/recordings`

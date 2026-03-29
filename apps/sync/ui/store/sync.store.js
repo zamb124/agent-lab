@@ -522,12 +522,12 @@ export const SyncStore = {
         }
         const sp = baseStore.state.spaces.list.find(x => x.id === sid);
         if (!sp) {
-            throw new Error(`channelRowMetaLabel: пространство ${sid} не найдено.`);
+            return 'Пространство недоступно';
         }
         if (typeof sp.name === 'string' && sp.name !== '') {
             return sp.name;
         }
-        throw new Error('channelRowMetaLabel: у пространства нет имени.');
+        return 'Без названия';
     },
 
     /**

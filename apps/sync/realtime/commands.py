@@ -31,6 +31,7 @@ CommandType = Literal[
     "messages.forward",
     "messages.react",
     "messages.pin",
+    "messages.transcribe_audio",
     "git.resources.upsert",
     "call.invite",
     "call.signal",
@@ -159,6 +160,11 @@ class MessagesPinPayload(BaseModel):
     channel_id: str
     message_id: str
     action: Literal["add", "remove"]
+
+
+class MessagesTranscribeAudioPayload(BaseModel):
+    channel_id: str
+    message_id: str
 
 
 class CallInvitePayload(BaseModel):

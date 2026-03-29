@@ -120,6 +120,7 @@ class CRMContainer(BaseContainer):
             template_repo=self.namespace_template_repository,
             entity_type_repo=self.entity_type_repository,
             namespace_repo=self.namespace_repository,
+            entity_repo=self.entity_repository,
         )
     
     @lazy

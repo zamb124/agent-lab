@@ -224,6 +224,23 @@ class NamespaceListResponse(BaseModel):
     company_id: str
 
 
+class NamespaceUpdateRequest(BaseModel):
+    """Обновление существующего namespace."""
+    description: Optional[str] = None
+    allowed_type_ids: Optional[List[str]] = None
+
+
+class NamespaceEditabilityResponse(BaseModel):
+    """Ограничения редактирования namespace."""
+    namespace: str
+    has_entities: bool
+    entity_count: int
+    used_type_ids: List[str]
+    current_allowed_type_ids: List[str]
+    can_update_allowed_types: bool
+    lock_reason: Optional[str] = None
+
+
 class NamespaceTemplateResponse(BaseModel):
     """Шаблон namespace."""
     template_id: str

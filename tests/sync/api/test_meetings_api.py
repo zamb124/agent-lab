@@ -72,7 +72,7 @@ async def test_meetings_list_and_get(
         original_name="meeting.mp4",
         mime_type="video/mp4",
         size_bytes=1024,
-        storage_url="sync://meetings/list/raw.mp4",
+        storage_url="https://files.example/list/raw.mp4",
         checksum=None,
     )
     await file_repo.create(raw_file)
@@ -82,7 +82,7 @@ async def test_meetings_list_and_get(
         original_name="meeting.txt",
         mime_type="text/plain",
         size_bytes=64,
-        storage_url="sync://meetings/list/transcript.txt",
+        storage_url="https://files.example/list/transcript.txt",
         checksum=None,
     )
     await file_repo.create(transcript_file)
@@ -117,7 +117,7 @@ async def test_meetings_list_and_get(
     payload = list_resp.json()
     assert any(item["meeting_id"] == meeting.meeting_id for item in payload)
     listed = next(item for item in payload if item["meeting_id"] == meeting.meeting_id)
-    assert listed["transcript_text_storage_url"] == "sync://meetings/list/transcript.txt"
+    assert listed["transcript_text_storage_url"] == "https://files.example/list/transcript.txt"
     assert listed["transcript_text_download_url"] == f"/sync/api/v1/files/download/{transcript_file.file_id}"
 
     details_resp = await sync_client.get(
@@ -127,9 +127,9 @@ async def test_meetings_list_and_get(
     assert details_resp.status_code == 200
     details = details_resp.json()
     assert details["meeting"]["meeting_id"] == meeting.meeting_id
-    assert details["recording"]["raw_file_storage_url"] == "sync://meetings/list/raw.mp4"
+    assert details["recording"]["raw_file_storage_url"] == "https://files.example/list/raw.mp4"
     assert details["recording"]["raw_file_download_url"] == f"/sync/api/v1/files/download/{raw_file.file_id}"
-    assert details["meeting"]["transcript_text_storage_url"] == "sync://meetings/list/transcript.txt"
+    assert details["meeting"]["transcript_text_storage_url"] == "https://files.example/list/transcript.txt"
     assert details["meeting"]["transcript_text_download_url"] == (
         f"/sync/api/v1/files/download/{transcript_file.file_id}"
     )
@@ -248,11 +248,66 @@ async def test_retry_processing_uses_mock_stt_client_and_updates_transcript(
     assert retry_payload["export_status"] == "pending"
     assert isinstance(retry_payload["transcript_text_file_id"], str)
     assert retry_payload["transcript_text_file_id"] != ""
-    assert retry_payload["transcript_text_storage_url"] == f"sync://meetings/{meeting.meeting_id}/transcript.txt"
+    assert retry_payload["transcript_text_storage_url"] is None
     assert retry_payload["transcript_text_download_url"] == (
         f"/sync/api/v1/files/download/{retry_payload['transcript_text_file_id']}"
     )
     assert len(stt_client.calls) >= 1
+
+
+@pytest.mark.asyncio
+async def test_sync_files_download_proxies_syncfile_storage_url(
+    sync_client,
+    auth_headers_system,
+    monkeypatch,
+    sync_db_clean: None,
+    file_repo,
+) -> None:
+    import core.http as core_http
+
+    class _FakeResponse:
+        def __init__(self) -> None:
+            self.status_code = 200
+            self.content = b"proxied-file-content"
+            self.headers = {"content-type": "video/mp4"}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class _FakeClientContext:
+        async def __aenter__(self) -> "_FakeClientContext":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        async def get(self, url: str):
+            assert url == "http://recordings.local/files/file.mp4"
+            return _FakeResponse()
+
+    def _fake_get_httpx_client(*, timeout: float, **kwargs):
+        return _FakeClientContext()
+
+    monkeypatch.setattr(core_http, "get_httpx_client", _fake_get_httpx_client)
+
+    sync_file = SyncFile(
+        file_id=uuid4().hex,
+        company_id="system",
+        original_name="file.mp4",
+        mime_type="video/mp4",
+        size_bytes=123,
+        storage_url="http://recordings.local/files/file.mp4",
+        checksum=None,
+    )
+    await file_repo.create(sync_file)
+
+    response = await sync_client.get(
+        f"/sync/api/v1/files/download/{sync_file.file_id}",
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 200
+    assert response.content == b"proxied-file-content"
+    assert response.headers["content-type"].startswith("video/mp4")
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 
@@ -21,6 +22,24 @@ from apps.sync.realtime.tasks import sync_transcribe_recording_task
 from core.context import get_context
 
 router = APIRouter()
+
+
+def _is_public_http_url(url: str | None) -> bool:
+    if not isinstance(url, str) or url == "":
+        return False
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = parsed.hostname
+    if not isinstance(host, str) or host == "":
+        return False
+    if host in ("localhost", "127.0.0.1", "::1", "livekit"):
+        return False
+    if host.endswith(".local"):
+        return False
+    if "." not in host:
+        return False
+    return True
 
 
 @router.get("/")
@@ -48,9 +67,10 @@ async def list_meetings(
         transcript_storage_url = None
         transcript_download_url = None
         if row.transcript_text_file_id is not None:
-            transcript_file = await container.file_repository.get(row.transcript_text_file_id)
+            transcript_file = await container.sync_file_repository.get(row.transcript_text_file_id)
             if transcript_file is not None:
-                transcript_storage_url = transcript_file.storage_url
+                if _is_public_http_url(transcript_file.storage_url):
+                    transcript_storage_url = transcript_file.storage_url
                 transcript_download_url = (
                     f"/sync/api/v1/files/download/{transcript_file.file_id}"
                 )
@@ -94,9 +114,10 @@ async def get_meeting(meeting_id: str) -> CallMeetingDetailsRead:
             raw_file_storage_url = None
             raw_file_download_url = None
             if rec.raw_file_id is not None:
-                raw_file = await container.file_repository.get(rec.raw_file_id)
+                raw_file = await container.sync_file_repository.get(rec.raw_file_id)
                 if raw_file is not None:
-                    raw_file_storage_url = raw_file.storage_url
+                    if _is_public_http_url(raw_file.storage_url):
+                        raw_file_storage_url = raw_file.storage_url
                     raw_file_download_url = f"/sync/api/v1/files/download/{raw_file.file_id}"
             recording = CallRecordingRead(
                 recording_id=rec.recording_id,
@@ -116,9 +137,10 @@ async def get_meeting(meeting_id: str) -> CallMeetingDetailsRead:
     transcript_storage_url = None
     transcript_download_url = None
     if row.transcript_text_file_id is not None:
-        transcript_file = await container.file_repository.get(row.transcript_text_file_id)
+        transcript_file = await container.sync_file_repository.get(row.transcript_text_file_id)
         if transcript_file is not None:
-            transcript_storage_url = transcript_file.storage_url
+            if _is_public_http_url(transcript_file.storage_url):
+                transcript_storage_url = transcript_file.storage_url
             transcript_download_url = f"/sync/api/v1/files/download/{transcript_file.file_id}"
     segments_rows = await container.call_speaker_segment_repository.list_for_meeting(meeting_id, company_id)
     segments = [
@@ -171,7 +193,7 @@ async def get_meeting_transcript(meeting_id: str) -> dict[str, str]:
         raise HTTPException(status_code=403, detail="Нет доступа к встрече.")
     if row.transcript_text_file_id is None:
         raise HTTPException(status_code=404, detail="Транскрипт ещё не готов.")
-    file_row = await container.file_repository.get(row.transcript_text_file_id)
+    file_row = await container.sync_file_repository.get(row.transcript_text_file_id)
     if file_row is None:
         raise HTTPException(status_code=404, detail="Файл транскрипта не найден.")
     return {"file_id": file_row.file_id, "storage_url": file_row.storage_url or ""}
@@ -223,9 +245,10 @@ async def retry_meeting_processing(meeting_id: str) -> CallMeetingRead:
     transcript_storage_url = None
     transcript_download_url = None
     if updated.transcript_text_file_id is not None:
-        transcript_file = await container.file_repository.get(updated.transcript_text_file_id)
+        transcript_file = await container.sync_file_repository.get(updated.transcript_text_file_id)
         if transcript_file is not None:
-            transcript_storage_url = transcript_file.storage_url
+            if _is_public_http_url(transcript_file.storage_url):
+                transcript_storage_url = transcript_file.storage_url
             transcript_download_url = f"/sync/api/v1/files/download/{transcript_file.file_id}"
     return CallMeetingRead(
         meeting_id=updated.meeting_id,

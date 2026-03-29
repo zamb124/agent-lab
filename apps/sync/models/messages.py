@@ -31,6 +31,7 @@ class MessageContentType(str, Enum):
     MOCK_IMAGE = "mock/image"
     FILE_IMAGE = "file/image"
     FILE_DOCUMENT = "file/document"
+    FILE_AUDIO = "file/audio"
     GIT_REFERENCE = "git/reference"
     CUSTOM_TOOL_RESPONSE = "custom_tool_response"
 
@@ -79,6 +80,41 @@ class FileAttachmentContent(BaseModel):
     size: int = Field(description="Размер файла в байтах.")
 
 
+class AudioTranscriptionStatus(str, Enum):
+    """Статус расшифровки аудиосообщения."""
+
+    IDLE = "idle"
+    PROCESSING = "processing"
+    DONE = "done"
+    FAILED = "failed"
+
+
+class AudioAttachmentContent(BaseModel):
+    """Вложение аудиосообщения."""
+
+    file_id: str = Field(description="Идентификатор файла в системе.")
+    filename: str = Field(description="Оригинальное имя файла.")
+    mime_type: str = Field(description="MIME-тип аудиофайла.")
+    size: int = Field(description="Размер аудио в байтах.")
+    duration_ms: int = Field(description="Длительность аудио в миллисекундах.")
+    waveform: list[int] | None = Field(
+        default=None,
+        description="Опциональные значения амплитуды для визуализации волны.",
+    )
+    transcription_status: AudioTranscriptionStatus = Field(
+        default=AudioTranscriptionStatus.IDLE,
+        description="Текущий статус расшифровки аудио.",
+    )
+    transcription_text: str | None = Field(
+        default=None,
+        description="Результат распознавания речи.",
+    )
+    transcription_error: str | None = Field(
+        default=None,
+        description="Текст ошибки расшифровки.",
+    )
+
+
 class GitReferenceContent(BaseModel):
     """Блок, ссылающийся на абстрактный Git-ресурс."""
 
@@ -98,6 +134,7 @@ ContentData = Union[
     TextPlainContent,
     CodeBlockContent,
     FileAttachmentContent,
+    AudioAttachmentContent,
     MockImageContent,
     GitReferenceContent,
     CustomToolResponseContent,

@@ -339,6 +339,31 @@ export class CRMAPIService extends BaseService {
         return this.get('/namespaces');
     }
 
+    async getNamespaceEditability(namespaceName) {
+        if (!namespaceName || typeof namespaceName !== 'string') {
+            throw new Error('Namespace name is required');
+        }
+        const normalizedNamespaceName = namespaceName.trim();
+        if (!normalizedNamespaceName) {
+            throw new Error('Namespace name is required');
+        }
+        return this.get(`/namespaces/${encodeURIComponent(normalizedNamespaceName)}/editability`);
+    }
+
+    async updateNamespace(namespaceName, payload) {
+        if (!namespaceName || typeof namespaceName !== 'string') {
+            throw new Error('Namespace name is required');
+        }
+        const normalizedNamespaceName = namespaceName.trim();
+        if (!normalizedNamespaceName) {
+            throw new Error('Namespace name is required');
+        }
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Namespace update payload is required');
+        }
+        return this.put(`/namespaces/${encodeURIComponent(normalizedNamespaceName)}`, payload);
+    }
+
     async getNamespaceTemplates() {
         return this.get('/namespaces/templates');
     }

@@ -64,6 +64,10 @@ export class MessageComposer extends PlatformElement {
         _replyToMessage: { state: true },
         _editMessage: { state: true },
         _editSourceId: { state: true },
+        _isMobile: { state: true },
+        _isRecording: { state: true },
+        _recordingSeconds: { state: true },
+        _isRecordHoldActive: { state: true },
     };
 
     static styles = [
@@ -112,6 +116,10 @@ export class MessageComposer extends PlatformElement {
             .icon-btn:hover {
                 background: var(--glass-solid-medium);
                 color: var(--text-primary);
+            }
+
+            .icon-btn.record-hold-active {
+                transform: scale(1.12);
             }
 
             .icon-btn.send {
@@ -386,6 +394,37 @@ export class MessageComposer extends PlatformElement {
                 padding: var(--space-1) 0;
             }
 
+            .recording-hint {
+                font-size: var(--text-xs);
+                color: rgb(153, 27, 27);
+                padding: var(--space-1) 0;
+            }
+
+            .icon-btn.mic {
+                background: rgba(239, 68, 68, 0.12);
+                border-color: rgba(239, 68, 68, 0.4);
+                color: rgb(185, 28, 28);
+            }
+
+            .icon-btn.mic.recording {
+                background: rgba(239, 68, 68, 0.22);
+                color: rgb(153, 27, 27);
+                animation: rec-pulse 0.9s ease-in-out infinite alternate;
+            }
+
+            .icon-btn.send.recording {
+                animation: rec-pulse 0.9s ease-in-out infinite alternate;
+            }
+
+            @keyframes rec-pulse {
+                from {
+                    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.22);
+                }
+                to {
+                    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.08);
+                }
+            }
+
             .mention-popup {
                 position: absolute;
                 bottom: calc(100% + 8px);
@@ -455,10 +494,26 @@ export class MessageComposer extends PlatformElement {
         this._mentionLoading = false;
         /** user_id выбранные из попапа (не обязательно в формате UUID в тексте). */
         this._mentionPickUserIds = [];
+        this._isMobile = false;
+        this._isRecording = false;
+        this._recordingSeconds = 0;
+        this._isRecordHoldActive = false;
+        this._recordingStartAt = 0;
+        this._recordingChunks = [];
+        this._mediaRecorder = null;
+        this._recordingMimeType = '';
+        this._recordingTickTimer = null;
+        this._recordingStream = null;
+        this._sendHoldTimer = null;
+        this._sendHoldPointerId = null;
+        this._sendHoldTriggered = false;
+        this._boundWindowResize = () => this._updateMobileFlag();
     }
 
     connectedCallback() {
         super.connectedCallback();
+        window.addEventListener('resize', this._boundWindowResize);
+        this._updateMobileFlag();
         this._unsubscribe = SyncStore.subscribe(state => {
             this._focusedThreadId = state.chat.focusedThreadId;
             const reply = state.chat.replyToMessage;
@@ -478,6 +533,7 @@ export class MessageComposer extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        window.removeEventListener('resize', this._boundWindowResize);
         clearTimeout(this._typingDebounceTimer);
         this._typingDebounceTimer = null;
         const ctx = this._lastTypingContext;
@@ -485,6 +541,9 @@ export class MessageComposer extends PlatformElement {
             this._emitTypingWs(false, ctx.channelId, ctx.threadId);
         }
         this._unsubscribe?.();
+        this._clearSendHoldTimer();
+        this._clearRecordingTick();
+        this._stopCaptureTracks();
     }
 
     updated(changedProperties) {
@@ -984,6 +1043,276 @@ export class MessageComposer extends PlatformElement {
         `;
     }
 
+    _updateMobileFlag() {
+        this._isMobile = window.innerWidth <= 767;
+    }
+
+    _clearSendHoldTimer() {
+        if (this._sendHoldTimer !== null) {
+            clearTimeout(this._sendHoldTimer);
+            this._sendHoldTimer = null;
+        }
+    }
+
+    _clearRecordingTick() {
+        if (this._recordingTickTimer !== null) {
+            clearInterval(this._recordingTickTimer);
+            this._recordingTickTimer = null;
+        }
+    }
+
+    _stopCaptureTracks() {
+        if (!this._recordingStream) {
+            return;
+        }
+        this._recordingStream.getTracks().forEach((track) => track.stop());
+        this._recordingStream = null;
+    }
+
+    _canStartHoldRecording() {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            return false;
+        }
+        if (this._uploading || this._isRecording) {
+            return false;
+        }
+        if (this._pendingAttachments.length > 0) {
+            return false;
+        }
+        return this._text.trim() === '';
+    }
+
+    _pickMediaRecorderMimeType() {
+        const variants = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/ogg;codecs=opus',
+            'audio/mp4',
+        ];
+        for (const variant of variants) {
+            if (MediaRecorder.isTypeSupported(variant)) {
+                return variant;
+            }
+        }
+        return '';
+    }
+
+    _formatRecordingSeconds() {
+        const total = Math.max(0, Math.floor(this._recordingSeconds));
+        const mins = Math.floor(total / 60);
+        const secs = total % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    _showRecordingError(message) {
+        const text = typeof message === 'string' && message.trim() !== ''
+            ? message
+            : 'Не удалось запустить запись аудио.';
+        window.dispatchEvent(
+            new CustomEvent(AppEvents.TOAST_SHOW, {
+                detail: {
+                    type: 'error',
+                    message: text,
+                    duration: 5000,
+                },
+            })
+        );
+    }
+
+    async _safeStartRecording() {
+        try {
+            await this._startRecording();
+        } catch (err) {
+            this._sendHoldTriggered = false;
+            const message = err instanceof Error ? err.message : String(err);
+            this._showRecordingError(message);
+        }
+    }
+
+    async _startRecording() {
+        if (!this._canStartHoldRecording()) {
+            return;
+        }
+        const hostname = window.location.hostname.toLowerCase();
+        const isLocalLvhMe = hostname === 'lvh.me' || hostname.endsWith('.lvh.me');
+        const canUseGetUserMedia = Boolean(
+            navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function'
+        );
+        if (!window.isSecureContext && !isLocalLvhMe) {
+            throw new Error('Запись доступна только в HTTPS или localhost.');
+        }
+        if (!canUseGetUserMedia) {
+            if (isLocalLvhMe && window.location.protocol === 'http:') {
+                throw new Error(
+                    'Для http://*.lvh.me браузер блокирует доступ к микрофону. '
+                    + 'Используй HTTPS или добавь origin в chrome://flags/#unsafely-treat-insecure-origin-as-secure.'
+                );
+            }
+            throw new Error('Браузер не поддерживает запись с микрофона.');
+        }
+        this._recordingChunks = [];
+        this._recordingStartAt = Date.now();
+        this._recordingSeconds = 0;
+        this._recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mimeType = this._pickMediaRecorderMimeType();
+        this._recordingMimeType = mimeType !== '' ? mimeType : 'audio/webm';
+        this._mediaRecorder = mimeType !== ''
+            ? new MediaRecorder(this._recordingStream, { mimeType })
+            : new MediaRecorder(this._recordingStream);
+        this._mediaRecorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) {
+                this._recordingChunks.push(event.data);
+            }
+        };
+        this._mediaRecorder.onstop = () => {
+            const durationMs = Date.now() - this._recordingStartAt;
+            const blob = new Blob(this._recordingChunks, { type: this._recordingMimeType });
+            this._recordingChunks = [];
+            this._isRecording = false;
+            this._recordingSeconds = 0;
+            this._clearRecordingTick();
+            this._stopCaptureTracks();
+            this._mediaRecorder = null;
+            void this._sendRecordedAudio(blob, durationMs).catch((err) => {
+                const message = err instanceof Error ? err.message : String(err);
+                this._showRecordingError(message);
+            });
+        };
+        this._mediaRecorder.start();
+        this._isRecording = true;
+        this._recordingTickTimer = setInterval(() => {
+            this._recordingSeconds = Math.floor((Date.now() - this._recordingStartAt) / 1000);
+        }, 250);
+    }
+
+    async _stopRecording() {
+        if (!this._mediaRecorder) {
+            return;
+        }
+        if (this._mediaRecorder.state === 'inactive') {
+            return;
+        }
+        this._mediaRecorder.stop();
+    }
+
+    async _sendRecordedAudio(blob, durationMs) {
+        if (!(blob instanceof Blob) || blob.size === 0) {
+            throw new Error('Записанное аудио пустое.');
+        }
+        if (durationMs < 250) {
+            return;
+        }
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            throw new Error('Канал не выбран.');
+        }
+        const mimeType = blob.type || this._recordingMimeType;
+        if (mimeType === '') {
+            throw new Error('mime_type аудио не определен.');
+        }
+        this._uploading = true;
+        const syncApi = this.services.get('syncApi');
+        try {
+            const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+            const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: mimeType });
+            const uploaded = await syncApi.uploadFile(file);
+            if (!uploaded || typeof uploaded.file_id !== 'string' || uploaded.file_id === '') {
+                throw new Error('Некорректный ответ загрузки аудио.');
+            }
+            const parentId = this._replyToMessage?.id ?? null;
+            const contents = [
+                {
+                    type: 'file/audio',
+                    data: {
+                        file_id: uploaded.file_id,
+                        filename: uploaded.original_name,
+                        mime_type: uploaded.content_type,
+                        size: uploaded.file_size,
+                        duration_ms: durationMs,
+                        waveform: null,
+                        transcription_status: 'idle',
+                        transcription_text: null,
+                        transcription_error: null,
+                    },
+                    order: 0,
+                },
+            ];
+            await syncApi.sendMessage(this.channelId, {
+                thread_id: this._focusedThreadId,
+                parent_message_id: parentId,
+                contents,
+            });
+            SyncStore.clearReplyToMessage();
+            await SyncStore.loadMessages(syncApi, this.channelId);
+        } finally {
+            this._uploading = false;
+        }
+    }
+
+    _onMicPointerDown(e) {
+        if (this._isMobile) {
+            return;
+        }
+        e.preventDefault();
+        this._isRecordHoldActive = true;
+        void this._safeStartRecording();
+    }
+
+    _onMicPointerUp(e) {
+        if (this._isMobile) {
+            return;
+        }
+        e.preventDefault();
+        this._isRecordHoldActive = false;
+        void this._stopRecording();
+    }
+
+    _onSendPointerDown(e) {
+        if (!this._isMobile || !this._canStartHoldRecording()) {
+            return;
+        }
+        this._sendHoldPointerId = e.pointerId;
+        this._isRecordHoldActive = true;
+        this._clearSendHoldTimer();
+        this._sendHoldTimer = setTimeout(() => {
+            this._sendHoldTriggered = true;
+            void this._safeStartRecording();
+        }, 180);
+    }
+
+    _onSendPointerUp(e) {
+        if (!this._isMobile || this._sendHoldPointerId !== e.pointerId) {
+            return;
+        }
+        this._clearSendHoldTimer();
+        this._sendHoldPointerId = null;
+        this._isRecordHoldActive = false;
+        if (this._isRecording) {
+            e.preventDefault();
+            void this._stopRecording();
+        }
+    }
+
+    _onSendPointerCancel(e) {
+        if (!this._isMobile || this._sendHoldPointerId !== e.pointerId) {
+            return;
+        }
+        this._clearSendHoldTimer();
+        this._sendHoldPointerId = null;
+        this._isRecordHoldActive = false;
+        if (this._isRecording) {
+            void this._stopRecording();
+        }
+    }
+
+    _onSendClick(e) {
+        if (this._sendHoldTriggered) {
+            e.preventDefault();
+            this._sendHoldTriggered = false;
+            return;
+        }
+        void this._sendText();
+    }
+
     render() {
         const mentionRows = this._mentionOpen ? this._mentionRowsFiltered() : [];
         return html`
@@ -1004,6 +1333,9 @@ export class MessageComposer extends PlatformElement {
                     </div>
                 ` : ''}
                 ${this._renderAttachmentsStrip()}
+                ${this._isRecording ? html`
+                    <div class="recording-hint">Запись аудио... ${this._formatRecordingSeconds()}</div>
+                ` : ''}
                 <div class="row">
                     <button class="icon-btn" title="Прикрепить файл" @click=${() => { this._attachMenuOpen = !this._attachMenuOpen; this._emojiOpen = false; }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -1033,7 +1365,30 @@ export class MessageComposer extends PlatformElement {
                         </svg>
                     </button>
 
-                    <button class="icon-btn send" title="Отправить" @click=${this._sendText}>
+                    ${!this._isMobile ? html`
+                        <button
+                            class="icon-btn mic ${this._isRecording ? 'recording' : ''} ${this._isRecordHoldActive ? 'record-hold-active' : ''}"
+                            title="Зажмите для записи"
+                            @pointerdown=${this._onMicPointerDown}
+                            @pointerup=${this._onMicPointerUp}
+                            @pointercancel=${this._onMicPointerUp}
+                            @pointerleave=${this._onMicPointerUp}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"></rect>
+                                <path d="M5 11a7 7 0 0014 0M12 18v3M9 21h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                            </svg>
+                        </button>
+                    ` : ''}
+
+                    <button
+                        class="icon-btn send ${this._isMobile && this._isRecording ? 'recording' : ''} ${this._isMobile && this._isRecordHoldActive ? 'record-hold-active' : ''}"
+                        title="Отправить"
+                        @click=${this._onSendClick}
+                        @pointerdown=${this._onSendPointerDown}
+                        @pointerup=${this._onSendPointerUp}
+                        @pointercancel=${this._onSendPointerCancel}
+                    >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                             <path d="M21.2 3.6L10.1 14.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M21.2 3.6l-7.2 19.2-3.3-7.7-7.7-3.3 18.2-8.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>

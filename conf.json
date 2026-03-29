@@ -223,6 +223,7 @@
       }
     },
     "sync": {
+      "recording_max_duration_seconds": 3600,
       "server": {
         "name": "sync",
         "port": 8005
@@ -230,6 +231,7 @@
     },
     "sync_worker": {
       "summary_a2a_timeout_seconds": 3000,
+      "recording_max_duration_seconds": 3600,
       "server": {
         "flows_service_url": "http://agents:8001"
       }

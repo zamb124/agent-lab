@@ -248,3 +248,144 @@ class TestEntityTypes:
         assert details["template_id"] == template_id
         assert any(item["type_id"] == f"type_{unique_id}" for item in details["types"])
 
+    @pytest.mark.asyncio
+    async def test_namespace_editability_and_update_when_empty(self, crm_client, unique_id, auth_headers_system):
+        template_id = f"ops_{unique_id}"
+        namespace_name = f"ops_ns_{unique_id}"
+        type_alpha = f"incident_{unique_id}"
+        type_beta = f"postmortem_{unique_id}"
+
+        create_template_resp = await crm_client.post("/crm/api/v1/namespaces/templates", json={
+            "template_id": template_id,
+            "name": "Operations",
+            "description": "Ops template",
+        }, headers=auth_headers_system)
+        assert create_template_resp.status_code == 201
+
+        create_type_alpha_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
+            "type_id": type_alpha,
+            "name": "Инцидент",
+            "required_fields": {"severity": {"type": "string"}},
+            "optional_fields": {},
+            "namespace_ids": [],
+        }, headers=auth_headers_system)
+        assert create_type_alpha_resp.status_code == 201
+
+        create_type_beta_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
+            "type_id": type_beta,
+            "name": "Постмортем",
+            "required_fields": {"owner": {"type": "string"}},
+            "optional_fields": {},
+            "namespace_ids": [],
+        }, headers=auth_headers_system)
+        assert create_type_beta_resp.status_code == 201
+
+        create_namespace_resp = await crm_client.post("/crm/api/v1/namespaces", json={
+            "name": namespace_name,
+            "description": "Ops namespace",
+            "template_id": template_id,
+        }, headers=auth_headers_system)
+        assert create_namespace_resp.status_code == 201
+
+        editability_resp = await crm_client.get(
+            f"/crm/api/v1/namespaces/{namespace_name}/editability",
+            headers=auth_headers_system,
+        )
+        assert editability_resp.status_code == 200
+        editability = editability_resp.json()
+        assert editability["namespace"] == namespace_name
+        assert editability["entity_count"] == 0
+        assert editability["can_update_allowed_types"] is True
+        assert type_alpha in editability["current_allowed_type_ids"]
+        assert type_beta in editability["current_allowed_type_ids"]
+
+        update_namespace_resp = await crm_client.put(
+            f"/crm/api/v1/namespaces/{namespace_name}",
+            json={
+                "description": "Updated ops namespace",
+                "allowed_type_ids": [type_alpha],
+            },
+            headers=auth_headers_system,
+        )
+        assert update_namespace_resp.status_code == 200
+        assert update_namespace_resp.json()["description"] == "Updated ops namespace"
+
+        types_by_namespace_resp = await crm_client.get(
+            f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
+            headers=auth_headers_system,
+        )
+        assert types_by_namespace_resp.status_code == 200
+        type_ids = [item["type_id"] for item in types_by_namespace_resp.json()]
+        assert type_alpha in type_ids
+        assert type_beta not in type_ids
+
+    @pytest.mark.asyncio
+    async def test_namespace_allowed_types_locked_when_entities_exist(self, crm_client, unique_id, auth_headers_system):
+        template_id = f"sales_{unique_id}"
+        namespace_name = f"sales_ns_{unique_id}"
+        type_lead = f"lead_{unique_id}"
+        type_deal = f"deal_{unique_id}"
+
+        create_template_resp = await crm_client.post("/crm/api/v1/namespaces/templates", json={
+            "template_id": template_id,
+            "name": "Sales",
+            "description": "Sales template",
+        }, headers=auth_headers_system)
+        assert create_template_resp.status_code == 201
+
+        create_type_lead_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
+            "type_id": type_lead,
+            "name": "Лид",
+            "required_fields": {"source": {"type": "string"}},
+            "optional_fields": {},
+            "namespace_ids": [],
+        }, headers=auth_headers_system)
+        assert create_type_lead_resp.status_code == 201
+
+        create_type_deal_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
+            "type_id": type_deal,
+            "name": "Сделка",
+            "required_fields": {"amount": {"type": "number"}},
+            "optional_fields": {},
+            "namespace_ids": [],
+        }, headers=auth_headers_system)
+        assert create_type_deal_resp.status_code == 201
+
+        create_namespace_resp = await crm_client.post("/crm/api/v1/namespaces", json={
+            "name": namespace_name,
+            "description": "Sales namespace",
+            "template_id": template_id,
+        }, headers=auth_headers_system)
+        assert create_namespace_resp.status_code == 201
+
+        create_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": type_lead,
+            "name": f"Lead {unique_id}",
+            "namespace": namespace_name,
+        }, headers=auth_headers_system)
+        assert create_entity_resp.status_code == 200
+
+        editability_resp = await crm_client.get(
+            f"/crm/api/v1/namespaces/{namespace_name}/editability",
+            headers=auth_headers_system,
+        )
+        assert editability_resp.status_code == 200
+        editability = editability_resp.json()
+        assert editability["entity_count"] >= 1
+        assert editability["can_update_allowed_types"] is False
+
+        update_types_resp = await crm_client.put(
+            f"/crm/api/v1/namespaces/{namespace_name}",
+            json={"allowed_type_ids": [type_deal]},
+            headers=auth_headers_system,
+        )
+        assert update_types_resp.status_code == 422
+
+        update_description_resp = await crm_client.put(
+            f"/crm/api/v1/namespaces/{namespace_name}",
+            json={"description": "Sales namespace updated"},
+            headers=auth_headers_system,
+        )
+        assert update_description_resp.status_code == 200
+        assert update_description_resp.json()["description"] == "Sales namespace updated"
+

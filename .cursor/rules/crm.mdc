@@ -315,6 +315,8 @@ company_id="acme", namespace="default"   # По умолчанию
 - `POST /namespaces/templates/{template_id}/types` - создать/обновить тип шаблона
 - `DELETE /namespaces/templates/{template_id}/types/{type_id}` - удалить тип из шаблона
 - `POST /namespaces` - создать namespace из DB-шаблона (`template_id` обязателен)
+- `GET /namespaces/{namespace}/editability` - ограничения редактирования namespace (count/lock/current allowed types)
+- `PUT /namespaces/{namespace}` - редактирование существующего namespace (`description`, `allowed_type_ids`)
 
 **Relationships:**
 - `POST /relationships` - создать связь
@@ -352,6 +354,7 @@ company_id="acme", namespace="default"   # По умолчанию
 - Дедупликация `EntityService._deduplicate_entities` обязана искать кандидатов в том же `namespace`.
 - При создании `namespace` через шаблон: типы из `NamespaceTemplateType` materialize в `EntityType` (если отсутствуют) и получают новый namespace в `namespace_ids`.
 - `NamespaceTemplate` хранит метаданные шаблона включая `icon`; иконка редактируется через Settings UI и используется для визуального выбора шаблона.
+- Для существующего namespace редактирование `allowed_type_ids` запрещено, если в нем уже есть хотя бы одна сущность (`entity_count > 0`); при этом описание namespace можно менять.
 
 **Системные типы:**
 - `note`, `task` - базовые entity types

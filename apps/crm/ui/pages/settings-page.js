@@ -60,6 +60,8 @@ const SETTINGS_HINTS = {
     fieldLabel: 'Отображаемое имя поля для пользователя. Можно писать на русском, так как это подпись в UI, а не технический ключ.',
     fieldType: 'Тип данных атрибута. От него зависит, как поле будет валидироваться и как его интерпретирует AI/поисковый слой.',
     fieldEnum: 'Для enum можно выбрать готовый набор значений из backend (enum set) или задать собственный список вручную.',
+    namespaceDescription: 'Описание текущего пространства. Изменение описания не влияет на существующие сущности и доступно всегда.',
+    namespaceAllowedTypes: 'Типы, которые можно создавать в этом пространстве. Если в пространстве уже есть сущности, изменение списка блокируется до очистки данных.',
 };
 
 class TemplateCreateModal extends PlatformModal {
@@ -201,6 +203,12 @@ export class SettingsPage extends PlatformElement {
         _showTemplateModal: { state: true },
         _iconOptions: { state: true },
         _typeDraft: { state: true },
+        _selectedNamespaceName: { state: true },
+        _selectedNamespaceDraftDescription: { state: true },
+        _selectedNamespaceDraftAllowedTypeIds: { state: true },
+        _selectedNamespaceEditability: { state: true },
+        _namespaceEditorLoading: { state: true },
+        _namespaceEditorSaving: { state: true },
     };
 
     static styles = [
@@ -239,6 +247,13 @@ export class SettingsPage extends PlatformElement {
             .namespace-list { display: grid; gap: var(--space-2); }
             .namespace-row { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); padding: var(--space-3); background: var(--crm-surface-muted); }
             .namespace-name { color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
+            .namespace-card-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+            .namespace-card { border: 1px solid var(--crm-stroke); border-radius: var(--radius-lg); padding: var(--space-3); background: var(--crm-surface-muted); cursor: pointer; transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast); }
+            .namespace-card:hover { border-color: var(--crm-selected-stroke); transform: translateY(-1px); }
+            .namespace-card.active { border-color: var(--crm-selected-stroke); background: var(--crm-selected-bg); }
+            .namespace-card-title { color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-1); }
+            .namespace-lock { border: 1px solid #92400E; border-radius: var(--radius-md); background: #451A03; color: #FDE68A; padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
+            .namespace-ok { border: 1px solid #14532D; border-radius: var(--radius-md); background: #052E16; color: #BBF7D0; padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
             .chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
             .chip { border: 1px solid var(--crm-stroke); border-radius: var(--radius-full); padding: 2px var(--space-2); color: var(--text-secondary); background: var(--crm-surface-elevated); font-size: var(--text-xs); }
             .menu-btn { width: 32px; height: 32px; display: none; align-items: center; justify-content: center; border-radius: var(--radius-md); background: var(--crm-surface-muted); border: 1px solid var(--crm-stroke); color: var(--text-primary); cursor: pointer; }
@@ -267,6 +282,7 @@ export class SettingsPage extends PlatformElement {
             .namespace-selector { display: flex; gap: var(--space-2); flex-wrap: wrap; }
             .namespace-pill { display: inline-flex; align-items: center; gap: var(--space-2); border: 1px solid var(--crm-stroke); border-radius: var(--radius-full); background: var(--crm-surface-elevated); color: var(--text-primary); padding: 4px var(--space-2); font-size: var(--text-xs); cursor: pointer; }
             .namespace-pill.active { border-color: var(--crm-selected-stroke); background: var(--crm-selected-bg); }
+            .namespace-pill:disabled { opacity: 0.5; cursor: not-allowed; }
             .icon-input-wrap { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
             .icon-preview { width: 36px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--crm-stroke); background: var(--crm-surface-elevated); display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
             details { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); background: var(--crm-surface-muted); padding: var(--space-3); }
@@ -287,12 +303,22 @@ export class SettingsPage extends PlatformElement {
         this._showTemplateModal = false;
         this._iconOptions = [];
         this._typeDraft = getDefaultTypeDraft();
+        this._selectedNamespaceName = null;
+        this._selectedNamespaceDraftDescription = '';
+        this._selectedNamespaceDraftAllowedTypeIds = [];
+        this._selectedNamespaceEditability = null;
+        this._namespaceEditorLoading = false;
+        this._namespaceEditorSaving = false;
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._namespaces = state.namespaces.list || [];
             this._templates = state.namespaces.templates || [];
             this._templateDetails = state.namespaces.templateDetails || null;
             this._schemaOptions = state.namespaces.schemaOptions || null;
             this._entityTypes = state.entities.entityTypes || [];
+            this._selectedNamespaceName = state.namespaces.settingsSelected || null;
+            this._selectedNamespaceEditability = state.namespaces.settingsEditability || null;
+            this._namespaceEditorLoading = Boolean(state.namespaces.settingsLoading);
+            this._namespaceEditorSaving = Boolean(state.namespaces.settingsSaving);
         });
     }
 
@@ -319,6 +345,12 @@ export class SettingsPage extends PlatformElement {
                 this._selectedTemplateId = this._templates[0].template_id;
             }
             await CRMStore.loadNamespaceTemplateDetails(crmApi, this._selectedTemplateId);
+        }
+        if (this._namespaces.length > 0) {
+            const selectedNamespaceName = this._selectedNamespaceName && this._namespaces.some((item) => item.name === this._selectedNamespaceName)
+                ? this._selectedNamespaceName
+                : this._namespaces[0].name;
+            await this._selectNamespaceForEditing(selectedNamespaceName);
         }
     }
 
@@ -638,6 +670,56 @@ export class SettingsPage extends PlatformElement {
         await CRMStore.deleteNamespaceTemplateType(crmApi, this._selectedTemplateId, typeId);
     }
 
+    async _selectNamespaceForEditing(namespaceName) {
+        if (!namespaceName || typeof namespaceName !== 'string') {
+            throw new Error('Namespace name is required');
+        }
+        const normalizedName = namespaceName.trim();
+        if (!normalizedName) {
+            throw new Error('Namespace name is required');
+        }
+        const crmApi = this.services.get('crmApi');
+        CRMStore.setSettingsNamespaceSelection(normalizedName);
+        const payload = await CRMStore.loadNamespaceEditability(crmApi, normalizedName);
+        const selectedNamespace = this._namespaces.find((item) => item.name === normalizedName);
+        this._selectedNamespaceDraftDescription = selectedNamespace?.description || '';
+        this._selectedNamespaceDraftAllowedTypeIds = Array.isArray(payload?.current_allowed_type_ids)
+            ? [...payload.current_allowed_type_ids]
+            : [];
+    }
+
+    _toggleNamespaceAllowedType(typeId, enabled) {
+        const normalizedTypeId = typeof typeId === 'string' ? typeId.trim() : '';
+        if (!normalizedTypeId) {
+            throw new Error('Type ID is required');
+        }
+        const current = Array.isArray(this._selectedNamespaceDraftAllowedTypeIds)
+            ? this._selectedNamespaceDraftAllowedTypeIds
+            : [];
+        const next = enabled
+            ? [...new Set([...current, normalizedTypeId])]
+            : current.filter((item) => item !== normalizedTypeId);
+        this._selectedNamespaceDraftAllowedTypeIds = next;
+    }
+
+    async _saveNamespaceSettings() {
+        if (!this._selectedNamespaceName) {
+            throw new Error('Namespace is not selected');
+        }
+        const normalizedAllowedTypeIds = Array.isArray(this._selectedNamespaceDraftAllowedTypeIds)
+            ? this._selectedNamespaceDraftAllowedTypeIds
+                .map((item) => String(item).trim())
+                .filter((item) => item.length > 0)
+            : [];
+        const payload = {
+            description: this._selectedNamespaceDraftDescription.trim() || null,
+            allowed_type_ids: [...new Set(normalizedAllowedTypeIds)],
+        };
+        const crmApi = this.services.get('crmApi');
+        await CRMStore.updateExistingNamespace(crmApi, this._selectedNamespaceName, payload);
+        this.success('Пространство сохранено');
+    }
+
     render() {
         const templateTypes = this._templateDetails?.types || [];
         return html`
@@ -658,7 +740,7 @@ export class SettingsPage extends PlatformElement {
                     <div class="section-header between">
                         <div class="section-header-main">
                             <platform-icon name="folder" size="18"></platform-icon>
-                            Шаблоны
+                            Редактировать шаблоны пространств
                         </div>
                         <button class="save-btn" @click=${this._openTemplateModal}>
                             <platform-icon name="plus" size="14"></platform-icon>
@@ -688,7 +770,7 @@ export class SettingsPage extends PlatformElement {
                 <div class="section">
                     <div class="section-header">
                         <platform-icon name="edit" size="18"></platform-icon>
-                        Редактор шаблона
+                        Редактор выбранного шаблона
                     </div>
                     <div class="toolbar">
                         <span class="chip mono">${this._selectedTemplateId || 'template not selected'}</span>
@@ -1055,18 +1137,82 @@ export class SettingsPage extends PlatformElement {
                 <div class="section">
                     <div class="section-header">
                         <platform-icon name="folder" size="18"></platform-icon>
-                        Пространства и разрешенные типы
+                        Редактировать пространства
                     </div>
-                    <div class="namespace-list">
+                    <div class="namespace-card-grid">
                         ${this._namespaces.map((namespace) => html`
-                            <div class="namespace-row">
-                                <div class="namespace-name">${namespace.name}</div>
+                            <div
+                                class="namespace-card ${namespace.name === this._selectedNamespaceName ? 'active' : ''}"
+                                @click=${() => this._selectNamespaceForEditing(namespace.name)}
+                            >
+                                <div class="namespace-card-title">${namespace.name}</div>
+                                <div class="card-text">${namespace.description || 'Описание не задано'}</div>
                                 <div class="chips">
                                     ${this._resolveAllowedTypes(namespace.name).map((entityType) => html`<span class="chip">${entityType.name}</span>`)}
                                 </div>
                             </div>
                         `)}
                     </div>
+                    ${this._selectedNamespaceName ? html`
+                        <div class="section">
+                            <div class="section-header">
+                                <platform-icon name="edit" size="16"></platform-icon>
+                                Редактор пространства: ${this._selectedNamespaceName}
+                            </div>
+                            ${this._namespaceEditorLoading ? html`<div class="schema-empty">Загрузка ограничений пространства...</div>` : ''}
+                            ${this._selectedNamespaceEditability ? html`
+                                ${this._selectedNamespaceEditability.can_update_allowed_types
+                                    ? html`<div class="namespace-ok">Типы можно редактировать: пространство пока не содержит сущностей.</div>`
+                                    : html`<div class="namespace-lock">${this._selectedNamespaceEditability.lock_reason}</div>`
+                                }
+                            ` : ''}
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label label-with-hint">
+                                        <span>Описание пространства</span>
+                                        <platform-help-hint strategy="local" label="Справка: описание пространства" .text=${SETTINGS_HINTS.namespaceDescription}></platform-help-hint>
+                                    </label>
+                                    <textarea
+                                        class="form-textarea"
+                                        .value=${this._selectedNamespaceDraftDescription}
+                                        @input=${(e) => { this._selectedNamespaceDraftDescription = e.target.value; }}
+                                    ></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label label-with-hint">
+                                        <span>Разрешенные типы</span>
+                                        <platform-help-hint strategy="local" label="Справка: разрешенные типы" .text=${SETTINGS_HINTS.namespaceAllowedTypes}></platform-help-hint>
+                                    </label>
+                                    <div class="namespace-selector">
+                                        ${(this._entityTypes || []).map((entityType) => {
+                                            const checked = (this._selectedNamespaceDraftAllowedTypeIds || []).includes(entityType.type_id);
+                                            const disabled = !this._selectedNamespaceEditability?.can_update_allowed_types;
+                                            return html`
+                                                <button
+                                                    type="button"
+                                                    class="namespace-pill ${checked ? 'active' : ''}"
+                                                    ?disabled=${disabled}
+                                                    @click=${() => this._toggleNamespaceAllowedType(entityType.type_id, !checked)}
+                                                >
+                                                    ${entityType.name}
+                                                </button>
+                                            `;
+                                        })}
+                                    </div>
+                                    ${this._selectedNamespaceEditability ? html`
+                                        <div class="chips">
+                                            <span class="chip">Сущностей: ${this._selectedNamespaceEditability.entity_count}</span>
+                                            ${(this._selectedNamespaceEditability.used_type_ids || []).map((typeId) => html`<span class="chip mono">${typeId}</span>`)}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            <button class="save-btn" ?disabled=${this._namespaceEditorSaving} @click=${this._saveNamespaceSettings}>
+                                <platform-icon name="save" size="14"></platform-icon>
+                                ${this._namespaceEditorSaving ? 'Сохранение...' : 'Сохранить пространство'}
+                            </button>
+                        </div>
+                    ` : html`<div class="card-text">Выберите пространство для редактирования</div>`}
                 </div>
             </div>
             ${this._showTemplateModal ? html`

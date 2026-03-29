@@ -12,10 +12,13 @@ import socket
 import subprocess
 import sys
 import time
+import asyncio
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pytest
+import redis.asyncio as redis_asyncio
 from filelock import FileLock
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
@@ -31,6 +34,44 @@ _SYNC_WORKER_LOCK = "/tmp/platform_test_sync_taskiq_worker.lock"
 _SYNC_WORKER_PID = "/tmp/platform_test_sync_taskiq_worker.pid"
 _CRM_WORKER_LOCK = "/tmp/platform_test_crm_taskiq_worker.lock"
 _CRM_WORKER_PID = "/tmp/platform_test_crm_taskiq_worker.pid"
+
+
+def _force_restart_sync_worker() -> None:
+    subprocess.run(["pkill", "-f", "apps.sync_worker.worker:broker"], capture_output=True, text=True)
+    Path(_SYNC_WORKER_PID).unlink(missing_ok=True)
+    Path(f"{_SYNC_WORKER_PID}.refs").unlink(missing_ok=True)
+    print("🔄 Принудительный перезапуск sync worker: старые процессы и PID-файлы очищены")
+
+
+def _clear_taskiq_stream(stream_name: str, redis_url: str) -> None:
+    parsed = urlparse(redis_url)
+    if parsed.hostname is None or parsed.port is None:
+        raise ValueError(f"Некорректный Redis URL для очистки очереди: {redis_url}")
+    db_part = parsed.path.lstrip("/")
+    db_index = db_part if db_part != "" else "0"
+    async def _reset_stream() -> int:
+        client = redis_asyncio.Redis(
+            host=parsed.hostname,
+            port=parsed.port,
+            db=int(db_index),
+            decode_responses=True,
+        )
+        stream_exists = bool(await client.exists(stream_name))
+        if stream_exists:
+            await client.xtrim(stream_name, maxlen=0, approximate=False)
+        else:
+            await client.xadd(stream_name, {"init": "1"})
+            await client.xtrim(stream_name, maxlen=0, approximate=False)
+
+        groups = await client.xinfo_groups(stream_name)
+        group_names = {str(group["name"]) for group in groups}
+        if "taskiq" not in group_names:
+            await client.xgroup_create(name=stream_name, groupname="taskiq", id="$", mkstream=True)
+        await client.aclose()
+        return 1
+
+    reset_done = asyncio.run(_reset_stream())
+    print(f"🧹 Очистка очереди {stream_name}: reset -> {reset_done}, group=taskiq")
 
 
 class SessionWorkerManager:
@@ -351,6 +392,10 @@ def taskiq_worker():
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
+            "CALLS__LIVEKIT_URL": "ws://localhost:7890",
+            "CALLS__LIVEKIT_PUBLIC_URL": "http://localhost:7890",
+            "CALLS__LIVEKIT_API_KEY": "devkey",
+            "CALLS__LIVEKIT_API_SECRET": "secret",
         },
         cleanup_patterns=[
             "taskiq.*worker",
@@ -422,6 +467,9 @@ def sync_worker():
         yield None
         return
 
+    _force_restart_sync_worker()
+    _clear_taskiq_stream("sync", "redis://localhost:63792/1")
+
     manager = SessionWorkerManager(
         name="SyncTaskIQ",
         lock_file=_SYNC_WORKER_LOCK,
@@ -441,6 +489,19 @@ def sync_worker():
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
+            "CALLS__LIVEKIT_URL": "ws://localhost:7890",
+            "CALLS__LIVEKIT_PUBLIC_URL": "http://localhost:7890",
+            "CALLS__LIVEKIT_API_KEY": "devkey",
+            "CALLS__LIVEKIT_API_SECRET": "secret",
+            "S3__ENABLED": "true",
+            "S3__DEFAULT_BUCKET": "test-bucket",
+            "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
+            "S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID": "minioadmin",
+            "S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY": "minioadmin",
+            "S3__BUCKETS__TEST-BUCKET__REGION_NAME": "us-east-1",
+            "S3__BUCKETS__TEST-BUCKET__PROVIDER": "minio",
+            "STT__PROVIDER": "mock",
+            "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
         },
         cleanup_patterns=[
             "apps.sync_worker.worker",

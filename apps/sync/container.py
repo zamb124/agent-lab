@@ -60,7 +60,7 @@ class SyncContainer(BaseContainer):
         return MessageRepository(db=self.sync_db)
 
     @lazy
-    def file_repository(self):
+    def sync_file_repository(self):
         from apps.sync.db.repositories.file_repository import SyncFileRepository
         return SyncFileRepository(db=self.sync_db)
 
