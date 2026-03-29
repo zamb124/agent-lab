@@ -3,6 +3,7 @@ Frontend Service - FastAPI приложение для управления пл
 """
 import logging
 import json
+import os
 import re
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -73,6 +74,8 @@ async def _ensure_system_admin_membership(container: object) -> None:
 
 
 async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> None:
+    if os.getenv("TESTING") == "true":
+        return
     await _ensure_system_admin_membership(container)
 
 
