@@ -962,6 +962,7 @@ export const SyncStore = {
     selectChannel(spaceId, channelId) {
         baseStore.setState(s => {
             const prevCh = s.chat.selectedChannelId;
+            const channelChanged = prevCh !== channelId;
             const typingPeersByChannel = { ...(s.typingPeersByChannel ?? {}) };
             if (typeof prevCh === 'string' && prevCh !== '' && prevCh !== channelId) {
                 delete typingPeersByChannel[normalizeSyncChannelId(prevCh)];
@@ -977,6 +978,9 @@ export const SyncStore = {
                     pinnedNavigateIndex: 0,
                 },
                 typingPeersByChannel,
+                ui: channelChanged
+                    ? { ...s.ui, meetingsPanelOpen: false }
+                    : s.ui,
             };
         });
     },

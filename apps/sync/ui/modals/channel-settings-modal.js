@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import '@platform/lib/components/platform-switch.js';
 import { SyncStore } from '../store/sync.store.js';
 
 export class ChannelSettingsModal extends PlatformModal {
@@ -47,6 +48,19 @@ export class ChannelSettingsModal extends PlatformModal {
                 color: var(--text-tertiary);
                 margin-bottom: var(--space-1);
                 display: block;
+            }
+
+            .switch-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+            }
+
+            .switch-label {
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                line-height: var(--leading-normal);
             }
 
             .field-input {
@@ -472,28 +486,25 @@ export class ChannelSettingsModal extends PlatformModal {
         }
     }
 
-    async _toggleMute(e) {
+    async _toggleMute(nextMuted) {
         const ch = this.channel;
         if (!ch?.id) {
             return;
         }
-        const target = e.target;
-        if (!(target instanceof HTMLInputElement)) {
+        if (typeof nextMuted !== 'boolean') {
             return;
         }
-        const next = Boolean(target.checked);
         this._savingMute = true;
         this._error = null;
         try {
             const syncApi = this.services.get('syncApi');
             const updated = await syncApi.patchChannelNotificationSettings(ch.id, {
-                notifications_muted: next,
+                notifications_muted: nextMuted,
             });
             SyncStore.mergeChannel(updated);
             this.channel = updated;
         } catch (err) {
             this._error = err instanceof Error ? err.message : String(err);
-            target.checked = !next;
         } finally {
             this._savingMute = false;
         }
@@ -526,14 +537,32 @@ export class ChannelSettingsModal extends PlatformModal {
 
     _companyMember(userId) {
         const list = this._companyMembers.list;
-        if (!Array.isArray(list)) return null;
-        return list.find(x => x.user_id === userId) ?? null;
+        if (Array.isArray(list)) {
+            const member = list.find(x => x.user_id === userId) ?? null;
+            if (member) {
+                return member;
+            }
+        }
+        const authUser = this.auth?.user;
+        if (
+            authUser
+            && typeof authUser.id === 'string'
+            && authUser.id === userId
+        ) {
+            const ownName = typeof authUser.name === 'string' ? authUser.name.trim() : '';
+            return {
+                user_id: userId,
+                name: ownName,
+                avatar_url: typeof authUser.avatar_url === 'string' ? authUser.avatar_url : null,
+            };
+        }
+        return null;
     }
 
     _displayName(userId) {
         const m = this._companyMember(userId);
         if (m && typeof m.name === 'string' && m.name.trim() !== '') {
-            return m.name;
+            return m.name.trim();
         }
         return userId;
     }
@@ -668,17 +697,17 @@ export class ChannelSettingsModal extends PlatformModal {
                 ? html`
                     <div class="field">
                         <label class="field-label">Уведомления</label>
-                        <label
-                            style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);cursor:pointer;color:var(--text-primary);"
-                        >
-                            <input
-                                type="checkbox"
+                        <div class="switch-row">
+                            <span class="switch-label">Не беспокоить (без уведомлений о новых сообщениях)</span>
+                            <platform-switch
                                 .checked=${Boolean(ch.notifications_muted)}
-                                @change=${(e) => this._toggleMute(e)}
-                                ?disabled=${this._savingMute}
-                            />
-                            Не беспокоить (без уведомлений о новых сообщениях)
-                        </label>
+                                .disabled=${this._savingMute}
+                                @change=${(e) => {
+                                    const nextMuted = e.detail.value === true;
+                                    this._toggleMute(nextMuted);
+                                }}
+                            ></platform-switch>
+                        </div>
                     </div>
                 `
                 : ''}

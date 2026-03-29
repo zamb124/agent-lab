@@ -802,7 +802,7 @@ export class SyncApp extends PlatformApp {
             </div>
 
             <div class="main" ?inert=${callUiLocked}>
-                <platform-island padding=${this._mobileShell ? 'none' : 'md'}>
+                <platform-island padding="none">
                     <chat-view></chat-view>
                 </platform-island>
             </div>

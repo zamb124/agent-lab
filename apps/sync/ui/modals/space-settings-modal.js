@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import '@platform/lib/components/platform-switch.js';
 import { SyncStore } from '../store/sync.store.js';
 
 export class SpaceSettingsModal extends PlatformModal {
@@ -108,6 +109,24 @@ export class SpaceSettingsModal extends PlatformModal {
 
             .file-input {
                 display: none;
+            }
+
+            .switch-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                margin-bottom: var(--space-2);
+            }
+
+            .switch-row:last-child {
+                margin-bottom: 0;
+            }
+
+            .switch-label {
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                line-height: var(--leading-normal);
             }
         `,
     ];
@@ -372,26 +391,24 @@ export class SpaceSettingsModal extends PlatformModal {
             </div>
 
             <div class="field">
-                <label class="label">
-                    <input
-                        type="checkbox"
+                <div class="switch-row">
+                    <span class="switch-label">Автоэкспорт транскрипта в CRM</span>
+                    <platform-switch
                         .checked=${this._autoExportTranscriptToCrm}
                         @change=${(e) => {
-                            this._autoExportTranscriptToCrm = e.target.checked;
+                            this._autoExportTranscriptToCrm = e.detail.value === true;
                         }}
-                    />
-                    Автоэкспорт транскрипта в CRM
-                </label>
-                <label class="label">
-                    <input
-                        type="checkbox"
+                    ></platform-switch>
+                </div>
+                <div class="switch-row">
+                    <span class="switch-label">Автоэкспорт summary в CRM</span>
+                    <platform-switch
                         .checked=${this._autoExportSummaryToCrm}
                         @change=${(e) => {
-                            this._autoExportSummaryToCrm = e.target.checked;
+                            this._autoExportSummaryToCrm = e.detail.value === true;
                         }}
-                    />
-                    Автоэкспорт summary в CRM
-                </label>
+                    ></platform-switch>
+                </div>
             </div>
         `;
     }

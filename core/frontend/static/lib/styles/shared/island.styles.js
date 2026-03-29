@@ -41,9 +41,12 @@ export const islandStyles = css`
         backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
         -webkit-backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
         border: 1px solid var(--island-border, var(--glass-border-medium));
-        border-radius: var(--radius-2xl);
+        border-radius: var(--island-radius, var(--radius-2xl));
         box-shadow: var(--island-shadow, var(--glass-shadow-medium)), var(--glass-inner-glow-subtle);
         overflow: hidden;
+        isolation: isolate;
+        background-clip: padding-box;
+        -webkit-mask-image: -webkit-radial-gradient(white, black);
     }
 
     .island-header-glow {
@@ -52,7 +55,7 @@ export const islandStyles = css`
         left: 0;
         right: 0;
         height: 120px;
-        border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+        border-radius: var(--island-radius, var(--radius-2xl)) var(--island-radius, var(--radius-2xl)) 0 0;
         background: linear-gradient(
             180deg,
             rgba(255, 255, 255, 0.08) 0%,

@@ -395,9 +395,43 @@ export class MessageComposer extends PlatformElement {
             }
 
             .recording-hint {
-                font-size: var(--text-xs);
-                color: rgb(153, 27, 27);
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                font-size: var(--text-sm);
+                color: #f87171;
+                font-weight: var(--font-semibold);
                 padding: var(--space-1) 0;
+            }
+
+            .recording-hint-dot {
+                width: 9px;
+                height: 9px;
+                border-radius: 50%;
+                background: #ef4444;
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8);
+                animation: recording-dot-pulse 1.2s ease-in-out infinite;
+                flex-shrink: 0;
+            }
+
+            .recording-hint-time {
+                font-weight: var(--font-bold);
+                letter-spacing: 0.02em;
+            }
+
+            @keyframes recording-dot-pulse {
+                0% {
+                    opacity: 1;
+                    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8);
+                }
+                70% {
+                    opacity: 0.45;
+                    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+                }
+                100% {
+                    opacity: 1;
+                    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+                }
             }
 
             .icon-btn.mic {
@@ -1343,7 +1377,11 @@ export class MessageComposer extends PlatformElement {
                 ` : ''}
                 ${this._renderAttachmentsStrip()}
                 ${this._isRecording ? html`
-                    <div class="recording-hint">Запись аудио... ${this._formatRecordingSeconds()}</div>
+                    <div class="recording-hint">
+                        <span class="recording-hint-dot"></span>
+                        <span>Запись</span>
+                        <span class="recording-hint-time">${this._formatRecordingSeconds()}</span>
+                    </div>
                 ` : ''}
                 <div class="row">
                     <button class="icon-btn" title="Прикрепить файл" @click=${() => { this._attachMenuOpen = !this._attachMenuOpen; this._emojiOpen = false; }}>
