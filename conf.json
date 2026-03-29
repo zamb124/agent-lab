@@ -224,6 +224,11 @@
         "port": 8005
       }
     },
+    "sync_worker": {
+      "server": {
+        "flows_service_url": "http://agents:8001"
+      }
+    },
     "rag": {
       "service_name": "rag",
       "server": {

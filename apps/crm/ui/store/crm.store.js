@@ -94,6 +94,7 @@ const baseStore = new BaseStore('crm', {
         list: [],
         templates: [],
         templateDetails: null,
+        schemaOptions: null,
         current: null,
         grants: [],
         loading: false,
@@ -1054,6 +1055,7 @@ export const CRMStore = {
                 list,
                 templates: s.namespaces.templates,
                 templateDetails: s.namespaces.templateDetails,
+                schemaOptions: s.namespaces.schemaOptions,
                 loading: false
             }
         }));
@@ -1112,6 +1114,29 @@ export const CRMStore = {
             }
         }));
         return details;
+    },
+
+    async loadTemplateSchemaOptions(crmApi) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const schemaOptions = await crmApi.getTemplateSchemaOptions();
+        if (!schemaOptions || typeof schemaOptions !== 'object') {
+            throw new Error('Template schema options must be object');
+        }
+        if (!Array.isArray(schemaOptions.field_types)) {
+            throw new Error('field_types must be array');
+        }
+        if (!Array.isArray(schemaOptions.enum_sets)) {
+            throw new Error('enum_sets must be array');
+        }
+        baseStore.setState((s) => ({
+            namespaces: {
+                ...s.namespaces,
+                schemaOptions,
+            }
+        }));
+        return schemaOptions;
     },
 
     async createNamespaceTemplate(crmApi, payload) {

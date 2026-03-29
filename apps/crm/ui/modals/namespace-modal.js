@@ -6,6 +6,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class NamespaceModal extends PlatformModal {
     static properties = {
@@ -76,6 +77,58 @@ export class NamespaceModal extends PlatformModal {
                 color: var(--text-tertiary);
                 margin-top: var(--space-1);
             }
+
+            .template-grid {
+                display: grid;
+                gap: var(--space-2);
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            }
+
+            .template-card {
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-lg);
+                background: var(--crm-surface-muted);
+                padding: var(--space-3);
+                cursor: pointer;
+                transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast);
+            }
+
+            .template-card:hover {
+                border-color: var(--crm-selected-stroke);
+                transform: translateY(-1px);
+            }
+
+            .template-card.active {
+                border-color: var(--crm-selected-stroke);
+                background: var(--crm-selected-bg);
+            }
+
+            .template-title {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                font-weight: 600;
+                margin-bottom: var(--space-1);
+            }
+
+            .template-description {
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                line-height: 1.4;
+            }
+
+            .template-id {
+                margin-top: var(--space-2);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-full);
+                display: inline-flex;
+                padding: 2px var(--space-2);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            }
         `
     ];
 
@@ -114,6 +167,11 @@ export class NamespaceModal extends PlatformModal {
         this._templateId = e.target.value;
     }
 
+    _resolveTemplateIcon(iconName) {
+        const value = typeof iconName === 'string' ? iconName.trim() : '';
+        return value || 'folder';
+    }
+
     async _onSave() {
         if (!this._name.trim()) {
             this.error('Название обязательно');
@@ -147,15 +205,22 @@ export class NamespaceModal extends PlatformModal {
             <div class="form-grid">
                 <div class="form-group">
                     <label class="form-label">Шаблон *</label>
-                    <select
-                        class="form-select"
-                        .value=${this._templateId}
-                        @change=${this._onTemplateChange}
-                    >
+                    <div class="template-grid">
                         ${this._templates.map((template) => html`
-                            <option value=${template.template_id}>${template.name}</option>
+                            <button
+                                type="button"
+                                class="template-card ${this._templateId === template.template_id ? 'active' : ''}"
+                                @click=${() => { this._templateId = template.template_id; }}
+                            >
+                                <div class="template-title">
+                                    <platform-icon name=${this._resolveTemplateIcon(template.icon)} size="16"></platform-icon>
+                                    ${template.name}
+                                </div>
+                                <div class="template-description">${template.description || 'Без описания'}</div>
+                                <div class="template-id">${template.template_id}</div>
+                            </button>
                         `)}
-                    </select>
+                    </div>
                     <div class="hint">
                         Пространство создается с преднастроенными типами сущностей.
                     </div>

@@ -203,6 +203,20 @@ class TestEntityTypes:
         assert len(types) >= 1
 
     @pytest.mark.asyncio
+    async def test_template_schema_options_endpoint(self, crm_client, auth_headers_system):
+        response = await crm_client.get("/crm/api/v1/namespaces/templates/schema/options", headers=auth_headers_system)
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert isinstance(payload.get("field_types"), list)
+        assert isinstance(payload.get("enum_sets"), list)
+        assert isinstance(payload.get("operators"), list)
+        assert payload.get("defaults", {}).get("field_type") == "string"
+        assert payload.get("validation_limits", {}).get("max_fields_per_section") == 128
+        assert any(item.get("type_id") == "enum" for item in payload["field_types"])
+        assert any(item.get("enum_set_id") == "priority" for item in payload["enum_sets"])
+
+    @pytest.mark.asyncio
     async def test_namespace_template_crud(self, crm_client, unique_id, auth_headers_system):
         template_id = f"tmpl_{unique_id}"
         create_resp = await crm_client.post("/crm/api/v1/namespaces/templates", json={

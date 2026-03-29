@@ -535,7 +535,7 @@ export class CRMApp extends PlatformApp {
             ${this._showNamespaceModal ? html`
                 <namespace-modal
                     .open=${true}
-                    @close=${this._closeNamespaceModal}
+                    @modal-closed=${this._closeNamespaceModal}
                     @saved=${this._onNamespaceSaved}
                 ></namespace-modal>
             ` : ''}
@@ -543,7 +543,7 @@ export class CRMApp extends PlatformApp {
             ${this._showAiModal ? html`
                 <ai-analysis-modal
                     .open=${true}
-                    @close=${this._closeAiModal}
+                    @modal-closed=${this._closeAiModal}
                     @saved=${this._closeAiModal}
                 ></ai-analysis-modal>
             ` : ''}

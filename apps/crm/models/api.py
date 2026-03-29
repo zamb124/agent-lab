@@ -289,6 +289,32 @@ class NamespaceTemplateDetailsResponse(BaseModel):
     entity_type_ids: List[str]
 
 
+class NamespaceTemplateSchemaFieldType(BaseModel):
+    type_id: str
+    label: str
+    supports_enum_values: bool = False
+    supports_enum_set: bool = False
+
+
+class NamespaceTemplateSchemaEnumSet(BaseModel):
+    enum_set_id: str
+    label: str
+    values: List[str]
+
+
+class NamespaceTemplateSchemaOperator(BaseModel):
+    operator_id: str
+    label: str
+
+
+class NamespaceTemplateSchemaOptionsResponse(BaseModel):
+    field_types: List[NamespaceTemplateSchemaFieldType]
+    enum_sets: List[NamespaceTemplateSchemaEnumSet]
+    operators: List[NamespaceTemplateSchemaOperator]
+    defaults: Dict[str, Any] = Field(default_factory=dict)
+    validation_limits: Dict[str, int] = Field(default_factory=dict)
+
+
 class AIExtractedEntity(BaseModel):
     """Entity извлеченная AI (без БД полей)"""
     model_config = {"extra": "allow"}  # Разрешаем дополнительные поля от AI

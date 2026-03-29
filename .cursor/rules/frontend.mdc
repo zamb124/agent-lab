@@ -186,6 +186,17 @@ class MyModal extends GlassModal {
   - time: `HH:mm`
 - Нативные `input[type="date"]`, `input[type="time"]`, `input[type="datetime-local"]` в приложениях платформы не использовать — только `platform-date-picker`.
 
+## Switch (`platform-switch`)
+
+- Общий компонент переключателя: `core/frontend/static/lib/components/platform-switch.js` (side-effect import `@platform/lib/components/platform-switch.js`).
+- Для boolean-полей в формах и тулбарах использовать `platform-switch` вместо нативных `input[type="checkbox"]` в продуктовых экранах.
+- API компонента:
+  - `checked` (`boolean`)
+  - `disabled` (`boolean`)
+  - `size="md|sm"`
+  - `label` (`string`, опционально)
+  - событие `change` с `detail.value: boolean`
+
 **Короткие методы notify:**
 - `this.success(message)` — зелёное уведомление
 - `this.error(message)` — красное уведомление

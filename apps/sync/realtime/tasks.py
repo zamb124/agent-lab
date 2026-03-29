@@ -14,6 +14,8 @@ from apps.sync.realtime.events import (
     event_call_export_crm_done,
     event_call_export_crm_failed,
     event_call_summary_ready,
+    event_call_summary_failed,
+    event_call_transcript_failed,
     event_call_transcript_ready,
 )
 from apps.sync.realtime.publish_events import publish_realtime_events
@@ -125,97 +127,114 @@ async def sync_transcribe_recording_task(meeting_id: str, company_id: str, actor
     meeting = await container.call_meeting_repository.get(meeting_id)
     if meeting is None or meeting.company_id != company_id:
         raise ValueError(f"Встреча {meeting_id} не найдена.")
-    if meeting.recording_id is None:
-        raise ValueError(f"У встречи {meeting_id} отсутствует recording_id.")
-    recording = await container.call_recording_repository.get(meeting.recording_id)
-    if recording is None or recording.company_id != company_id:
-        raise ValueError(f"Запись {meeting.recording_id} не найдена.")
-    if recording.raw_file_id is None:
-        raise ValueError(f"У записи {recording.recording_id} отсутствует raw_file_id.")
-    raw_file = await container.file_repository.get(recording.raw_file_id)
-    if raw_file is None:
-        raise ValueError(f"Файл {recording.raw_file_id} не найден.")
+    try:
+        if meeting.recording_id is None:
+            raise ValueError(f"У встречи {meeting_id} отсутствует recording_id.")
+        recording = await container.call_recording_repository.get(meeting.recording_id)
+        if recording is None or recording.company_id != company_id:
+            raise ValueError(f"Запись {meeting.recording_id} не найдена.")
+        if recording.raw_file_id is None:
+            raise ValueError(f"У записи {recording.recording_id} отсутствует raw_file_id.")
+        raw_file = await container.file_repository.get(recording.raw_file_id)
+        if raw_file is None:
+            raise ValueError(f"Файл {recording.raw_file_id} не найден.")
 
-    transcript_text = await build_call_transcript_text(
-        meeting_id=meeting.meeting_id,
-        source_url=raw_file.storage_url,
-    )
-    if transcript_text.strip() == "":
-        raise ValueError(f"Пустой транскрипт для встречи {meeting.meeting_id}.")
-    transcript_file_id = f"{meeting.meeting_id}-transcript-txt"
-    transcript_file = SyncFile(
-        file_id=transcript_file_id,
-        company_id=company_id,
-        original_name=f"{meeting.meeting_id}.txt",
-        mime_type="text/plain",
-        size_bytes=len(transcript_text.encode("utf-8")),
-        storage_url=f"sync://meetings/{meeting.meeting_id}/transcript.txt",
-        checksum=None,
-    )
-    if await container.file_repository.get(transcript_file_id) is None:
-        await container.file_repository.create(transcript_file)
-
-    from datetime import UTC, datetime
-    from sqlalchemy import update
-    async with container.sync_db.session() as session:
-        await session.execute(
-            update(container.call_meeting_repository.model_class)
-            .where(container.call_meeting_repository.model_class.meeting_id == meeting.meeting_id)
-            .values(
-                transcript_file_id=transcript_file_id,
-                transcript_text_file_id=transcript_file_id,
-                updated_at=datetime.now(UTC),
-            )
+        transcript_text = await build_call_transcript_text(
+            meeting_id=meeting.meeting_id,
+            source_url=raw_file.storage_url,
         )
-        await session.commit()
-    updated_meeting = await container.call_meeting_repository.get(meeting.meeting_id)
-    if updated_meeting is None:
-        raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после записи транскрипта.")
-    await publish_realtime_events(
-        [
-            event_call_transcript_ready(
-                CallMeetingRead(
-                    meeting_id=updated_meeting.meeting_id,
-                    call_id=updated_meeting.call_id,
-                    recording_id=updated_meeting.recording_id,
-                    channel_id=updated_meeting.channel_id,
-                    space_id=updated_meeting.space_id,
-                    transcript_file_id=updated_meeting.transcript_file_id,
-                    transcript_text_file_id=updated_meeting.transcript_text_file_id,
-                    summary_json=updated_meeting.summary_json or {},
-                    export_status=updated_meeting.export_status,
-                    export_target_namespace=updated_meeting.export_target_namespace,
-                    created_at=updated_meeting.created_at,
-                    updated_at=updated_meeting.updated_at,
+        if transcript_text.strip() == "":
+            raise ValueError(f"Пустой транскрипт для встречи {meeting.meeting_id}.")
+        transcript_file_id = f"{meeting.meeting_id}-transcript-txt"
+        transcript_file = SyncFile(
+            file_id=transcript_file_id,
+            company_id=company_id,
+            original_name=f"{meeting.meeting_id}.txt",
+            mime_type="text/plain",
+            size_bytes=len(transcript_text.encode("utf-8")),
+            storage_url=f"sync://meetings/{meeting.meeting_id}/transcript.txt",
+            checksum=None,
+        )
+        if await container.file_repository.get(transcript_file_id) is None:
+            await container.file_repository.create(transcript_file)
+
+        from datetime import UTC, datetime
+        from sqlalchemy import update
+        async with container.sync_db.session() as session:
+            await session.execute(
+                update(container.call_meeting_repository.model_class)
+                .where(container.call_meeting_repository.model_class.meeting_id == meeting.meeting_id)
+                .values(
+                    transcript_file_id=transcript_file_id,
+                    transcript_text_file_id=transcript_file_id,
+                    updated_at=datetime.now(UTC),
                 )
             )
-        ]
-    )
+            await session.commit()
+        updated_meeting = await container.call_meeting_repository.get(meeting.meeting_id)
+        if updated_meeting is None:
+            raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после записи транскрипта.")
+        meeting_payload = CallMeetingRead(
+            meeting_id=updated_meeting.meeting_id,
+            call_id=updated_meeting.call_id,
+            recording_id=updated_meeting.recording_id,
+            channel_id=updated_meeting.channel_id,
+            space_id=updated_meeting.space_id,
+            transcript_file_id=updated_meeting.transcript_file_id,
+            transcript_text_file_id=updated_meeting.transcript_text_file_id,
+            summary_json=updated_meeting.summary_json or {},
+            export_status=updated_meeting.export_status,
+            export_target_namespace=updated_meeting.export_target_namespace,
+            created_at=updated_meeting.created_at,
+            updated_at=updated_meeting.updated_at,
+        )
+        await publish_realtime_events([event_call_transcript_ready(meeting_payload)])
 
-    segments = [
-        SyncCallSpeakerSegment(
-            segment_id=f"{meeting.meeting_id}-seg-1",
+        segments = [
+            SyncCallSpeakerSegment(
+                segment_id=f"{meeting.meeting_id}-seg-1",
+                meeting_id=meeting.meeting_id,
+                company_id=company_id,
+                speaker_identity="system",
+                speaker_type="user",
+                speaker_user_id="system",
+                speaker_guest_name=None,
+                started_ms=0,
+                ended_ms=1500,
+                text="Начат автоматический pipeline транскрипции.",
+            )
+        ]
+        await container.call_speaker_segment_repository.replace_for_meeting(
             meeting_id=meeting.meeting_id,
             company_id=company_id,
-            speaker_identity="system",
-            speaker_type="user",
-            speaker_user_id="system",
-            speaker_guest_name=None,
-            started_ms=0,
-            ended_ms=1500,
-            text="Начат автоматический pipeline транскрипции.",
+            segments=segments,
         )
-    ]
-    await container.call_speaker_segment_repository.replace_for_meeting(
-        meeting_id=meeting.meeting_id,
-        company_id=company_id,
-        segments=segments,
-    )
-    await sync_summarize_transcript_task.kiq(
-        meeting_id=meeting.meeting_id,
-        company_id=company_id,
-        actor_user_id=actor_user_id,
-    )
+        await sync_summarize_transcript_task.kiq(
+            meeting_id=meeting.meeting_id,
+            company_id=company_id,
+            actor_user_id=actor_user_id,
+        )
+    except Exception as exc:
+        failed_meeting = await container.call_meeting_repository.get(meeting_id)
+        if failed_meeting is not None:
+            failed_payload = CallMeetingRead(
+                meeting_id=failed_meeting.meeting_id,
+                call_id=failed_meeting.call_id,
+                recording_id=failed_meeting.recording_id,
+                channel_id=failed_meeting.channel_id,
+                space_id=failed_meeting.space_id,
+                transcript_file_id=failed_meeting.transcript_file_id,
+                transcript_text_file_id=failed_meeting.transcript_text_file_id,
+                summary_json=failed_meeting.summary_json or {},
+                export_status=failed_meeting.export_status,
+                export_target_namespace=failed_meeting.export_target_namespace,
+                created_at=failed_meeting.created_at,
+                updated_at=failed_meeting.updated_at,
+            )
+            await publish_realtime_events(
+                [event_call_transcript_failed(failed_payload, str(exc))]
+            )
+        raise
 
 
 @broker.task
@@ -225,78 +244,95 @@ async def sync_summarize_transcript_task(meeting_id: str, company_id: str, actor
     meeting = await container.call_meeting_repository.get(meeting_id)
     if meeting is None or meeting.company_id != company_id:
         raise ValueError(f"Встреча {meeting_id} не найдена.")
-    if meeting.transcript_text_file_id is None:
-        raise ValueError(f"У встречи {meeting_id} отсутствует transcript_text_file_id.")
-    transcript_file = await container.file_repository.get(meeting.transcript_text_file_id)
-    if transcript_file is None:
-        raise ValueError(f"Файл {meeting.transcript_text_file_id} не найден.")
+    try:
+        if meeting.transcript_text_file_id is None:
+            raise ValueError(f"У встречи {meeting_id} отсутствует transcript_text_file_id.")
+        transcript_file = await container.file_repository.get(meeting.transcript_text_file_id)
+        if transcript_file is None:
+            raise ValueError(f"Файл {meeting.transcript_text_file_id} не найден.")
 
-    settings = get_settings()
-    flows_url = settings.server.get_flows_service_url()
-    if not isinstance(flows_url, str) or flows_url == "":
-        raise ValueError("service_urls.flows не задан.")
-    flows_a2a_url = f"{flows_url.rstrip('/')}/flows/api/v1/crm"
-    auth_headers = _build_interservice_auth_headers(
-        actor_user_id=actor_user_id,
-        company_id=company_id,
-    )
+        settings = get_settings()
+        flows_url = settings.server.get_flows_service_url()
+        if not isinstance(flows_url, str) or flows_url == "":
+            raise ValueError("service_urls.flows не задан.")
+        flows_a2a_url = f"{flows_url.rstrip('/')}/flows/api/v1/crm"
+        auth_headers = _build_interservice_auth_headers(
+            actor_user_id=actor_user_id,
+            company_id=company_id,
+        )
 
-    a2a = A2AClient(timeout=120.0)
-    response = await a2a.send_task(
-        base_url=flows_a2a_url,
-        skill_id="call_summary",
-        content=(
-            "Сформируй структурированное summary по встрече.\n"
-            f"meeting_id={meeting.meeting_id}\n"
-            f"transcript_ref={transcript_file.storage_url}"
-        ),
-        metadata={"meeting_id": meeting.meeting_id, "company_id": company_id},
-        auth_headers=auth_headers,
-    )
+        a2a = A2AClient(timeout=120.0)
+        response = await a2a.send_task(
+            base_url=flows_a2a_url,
+            skill_id="call_summary",
+            content=(
+                "Сформируй структурированное summary по встрече.\n"
+                f"meeting_id={meeting.meeting_id}\n"
+                f"transcript_ref={transcript_file.storage_url}"
+            ),
+            metadata={"meeting_id": meeting.meeting_id, "company_id": company_id},
+            auth_headers=auth_headers,
+        )
 
-    summary = {
-        "short_summary": response.get("response", ""),
-        "decisions": [],
-        "action_items": [],
-        "open_questions": [],
-        "risks": [],
-    }
-    await container.call_meeting_repository.update_summary(meeting.meeting_id, summary)
-    after_summary = await container.call_meeting_repository.get(meeting.meeting_id)
-    if after_summary is None:
-        raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после summary.")
-    await publish_realtime_events(
-        [
-            event_call_summary_ready(
-                CallMeetingRead(
-                    meeting_id=after_summary.meeting_id,
-                    call_id=after_summary.call_id,
-                    recording_id=after_summary.recording_id,
-                    channel_id=after_summary.channel_id,
-                    space_id=after_summary.space_id,
-                    transcript_file_id=after_summary.transcript_file_id,
-                    transcript_text_file_id=after_summary.transcript_text_file_id,
-                    summary_json=after_summary.summary_json or {},
-                    export_status=after_summary.export_status,
-                    export_target_namespace=after_summary.export_target_namespace,
-                    created_at=after_summary.created_at,
-                    updated_at=after_summary.updated_at,
+        summary = {
+            "short_summary": response.get("response", ""),
+            "decisions": [],
+            "action_items": [],
+            "open_questions": [],
+            "risks": [],
+        }
+        await container.call_meeting_repository.update_summary(meeting.meeting_id, summary)
+        after_summary = await container.call_meeting_repository.get(meeting.meeting_id)
+        if after_summary is None:
+            raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после summary.")
+        summary_payload = CallMeetingRead(
+            meeting_id=after_summary.meeting_id,
+            call_id=after_summary.call_id,
+            recording_id=after_summary.recording_id,
+            channel_id=after_summary.channel_id,
+            space_id=after_summary.space_id,
+            transcript_file_id=after_summary.transcript_file_id,
+            transcript_text_file_id=after_summary.transcript_text_file_id,
+            summary_json=after_summary.summary_json or {},
+            export_status=after_summary.export_status,
+            export_target_namespace=after_summary.export_target_namespace,
+            created_at=after_summary.created_at,
+            updated_at=after_summary.updated_at,
+        )
+        await publish_realtime_events([event_call_summary_ready(summary_payload)])
+
+        if meeting.space_id is not None:
+            space = await container.space_repository.get(meeting.space_id)
+            if space is not None and (space.auto_export_summary_to_crm or space.auto_export_transcript_to_crm):
+                if space.namespace is None:
+                    raise ValueError("Для автоэкспорта встречи требуется namespace пространства.")
+                await sync_export_meeting_to_crm_task.kiq(
+                    meeting_id=meeting.meeting_id,
+                    company_id=company_id,
+                    actor_user_id=actor_user_id,
+                    namespace=space.namespace,
                 )
+    except Exception as exc:
+        failed_meeting = await container.call_meeting_repository.get(meeting_id)
+        if failed_meeting is not None:
+            failed_payload = CallMeetingRead(
+                meeting_id=failed_meeting.meeting_id,
+                call_id=failed_meeting.call_id,
+                recording_id=failed_meeting.recording_id,
+                channel_id=failed_meeting.channel_id,
+                space_id=failed_meeting.space_id,
+                transcript_file_id=failed_meeting.transcript_file_id,
+                transcript_text_file_id=failed_meeting.transcript_text_file_id,
+                summary_json=failed_meeting.summary_json or {},
+                export_status=failed_meeting.export_status,
+                export_target_namespace=failed_meeting.export_target_namespace,
+                created_at=failed_meeting.created_at,
+                updated_at=failed_meeting.updated_at,
             )
-        ]
-    )
-
-    if meeting.space_id is not None:
-        space = await container.space_repository.get(meeting.space_id)
-        if space is not None and (space.auto_export_summary_to_crm or space.auto_export_transcript_to_crm):
-            if space.namespace is None:
-                raise ValueError("Для автоэкспорта встречи требуется namespace пространства.")
-            await sync_export_meeting_to_crm_task.kiq(
-                meeting_id=meeting.meeting_id,
-                company_id=company_id,
-                actor_user_id=actor_user_id,
-                namespace=space.namespace,
+            await publish_realtime_events(
+                [event_call_summary_failed(failed_payload, str(exc))]
             )
+        raise
 
 
 @broker.task

@@ -135,6 +135,23 @@ const _svgImageDownload = html`
         <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </svg>`;
 
+/** file_id, которые уже вернули 404/ошибку загрузки, чтобы не дергать download повторно на каждом ререндере. */
+const _unavailableFileIds = new Set();
+
+function markFileUnavailable(fileId) {
+    if (typeof fileId !== 'string' || fileId === '') {
+        throw new Error('markFileUnavailable: fileId обязателен.');
+    }
+    _unavailableFileIds.add(fileId);
+}
+
+function isFileUnavailable(fileId) {
+    if (typeof fileId !== 'string' || fileId === '') {
+        throw new Error('isFileUnavailable: fileId обязателен.');
+    }
+    return _unavailableFileIds.has(fileId);
+}
+
 /**
  * @param {object} content
  * @param {{ _openMentionProfile: (id: string) => void }} host
@@ -160,13 +177,25 @@ function renderContent(content, host) {
     if (content.type === 'mock/image') {
         const fileId = content.data?.file_id;
         if (typeof fileId !== 'string') throw new Error('Некорректный mock/image контент.');
+        if (isFileUnavailable(fileId)) {
+            return html`<div class="file-missing">Файл недоступен (${fileId})</div>`;
+        }
         const src = `/sync/api/v1/files/download/${fileId}`;
         const alt = typeof content.data?.alt_text === 'string' ? content.data.alt_text : '';
         const dlName = alt.trim() !== '' ? alt.trim() : `image-${fileId.slice(0, 12)}`;
         return html`
             <div class="file-image-wrap">
                 <div class="file-image-frame">
-                    <img class="file-image" src=${src} alt=${alt} loading="lazy">
+                    <img
+                        class="file-image"
+                        src=${src}
+                        alt=${alt}
+                        loading="lazy"
+                        @error=${() => {
+                            markFileUnavailable(fileId);
+                            host.requestUpdate();
+                        }}
+                    >
                     <a
                         class="file-image-dl"
                         href=${src}
@@ -182,12 +211,24 @@ function renderContent(content, host) {
     if (content.type === 'file/image') {
         const { file_id: fileId, filename } = content.data ?? {};
         if (typeof fileId !== 'string') throw new Error('Некорректный file/image контент.');
+        if (isFileUnavailable(fileId)) {
+            return html`<div class="file-missing">Файл недоступен (${fileId})</div>`;
+        }
         const src = `/sync/api/v1/files/download/${fileId}`;
         const label = typeof filename === 'string' && filename.trim() !== '' ? filename.trim() : `file-${fileId.slice(0, 12)}`;
         return html`
             <div class="file-image-wrap">
                 <div class="file-image-frame">
-                    <img class="file-image" src=${src} alt=${label} loading="lazy">
+                    <img
+                        class="file-image"
+                        src=${src}
+                        alt=${label}
+                        loading="lazy"
+                        @error=${() => {
+                            markFileUnavailable(fileId);
+                            host.requestUpdate();
+                        }}
+                    >
                     <a
                         class="file-image-dl"
                         href=${src}
@@ -661,6 +702,17 @@ export class MessageBubble extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+            }
+
+            .file-missing {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                border: 1px dashed var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                padding: var(--space-1) var(--space-2);
+                background: var(--glass-solid-subtle);
+                max-width: 320px;
+                overflow-wrap: anywhere;
             }
 
             .file-card {

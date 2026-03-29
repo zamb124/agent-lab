@@ -9,7 +9,7 @@ from core.config.loader import load_merged_config
 
 from apps.sync.config import SyncSettings
 
-set_settings(SyncSettings(**load_merged_config(service_name="sync")))
+set_settings(SyncSettings(**load_merged_config(service_name="sync_worker")))
 
 from apps.sync.realtime.broker import broker
 

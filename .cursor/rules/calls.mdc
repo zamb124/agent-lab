@@ -149,7 +149,7 @@ LiveKit `--dev` mode дефолтные ключи: `devkey` / `secret`.
 ## Запись, транскрипт, export
 
 - WS-команды: `call.recording.start`, `call.recording.stop`, `call.meeting.export_to_crm`.
-- WS-события: `call.recording.started|stopped|failed`, `call.transcript.ready`, `call.summary.ready`, `call.export.crm.done|failed`.
+- WS-события: `call.recording.started|stopped|failed`, `call.transcript.ready|failed`, `call.summary.ready|failed`, `call.export.crm.done|failed`.
 - REST:
   - `GET /sync/api/v1/calls/{call_id}/recordings`
   - `GET /sync/api/v1/meetings`

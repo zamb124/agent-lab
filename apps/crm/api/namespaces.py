@@ -13,6 +13,10 @@ from apps.crm.models.api import (
     NamespaceResponse,
     NamespaceTemplateCreateRequest,
     NamespaceTemplateDetailsResponse,
+    NamespaceTemplateSchemaEnumSet,
+    NamespaceTemplateSchemaFieldType,
+    NamespaceTemplateSchemaOperator,
+    NamespaceTemplateSchemaOptionsResponse,
     NamespaceTemplateResponse,
     NamespaceTemplateTypeResponse,
     NamespaceTemplateTypeUpsertRequest,
@@ -22,6 +26,35 @@ from apps.crm.models.api import (
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/namespaces", tags=["CRM Namespaces"])
+
+SCHEMA_OPTIONS_RESPONSE = NamespaceTemplateSchemaOptionsResponse(
+    field_types=[
+        NamespaceTemplateSchemaFieldType(type_id="string", label="Строка"),
+        NamespaceTemplateSchemaFieldType(type_id="text", label="Текст"),
+        NamespaceTemplateSchemaFieldType(type_id="number", label="Число"),
+        NamespaceTemplateSchemaFieldType(type_id="integer", label="Целое число"),
+        NamespaceTemplateSchemaFieldType(type_id="boolean", label="Булево"),
+        NamespaceTemplateSchemaFieldType(type_id="date", label="Дата"),
+        NamespaceTemplateSchemaFieldType(type_id="datetime", label="Дата и время"),
+        NamespaceTemplateSchemaFieldType(type_id="enum", label="Enum", supports_enum_values=True, supports_enum_set=True),
+        NamespaceTemplateSchemaFieldType(type_id="array", label="Массив"),
+        NamespaceTemplateSchemaFieldType(type_id="object", label="Объект"),
+    ],
+    enum_sets=[
+        NamespaceTemplateSchemaEnumSet(enum_set_id="priority", label="Приоритет", values=["low", "medium", "high", "urgent"]),
+        NamespaceTemplateSchemaEnumSet(enum_set_id="task_status", label="Статус задачи", values=["todo", "in_progress", "blocked", "done"]),
+        NamespaceTemplateSchemaEnumSet(enum_set_id="confidence", label="Уверенность", values=["low", "medium", "high"]),
+        NamespaceTemplateSchemaEnumSet(enum_set_id="yes_no", label="Да/Нет", values=["yes", "no"]),
+    ],
+    operators=[
+        NamespaceTemplateSchemaOperator(operator_id="eq", label="Равно"),
+        NamespaceTemplateSchemaOperator(operator_id="neq", label="Не равно"),
+        NamespaceTemplateSchemaOperator(operator_id="in", label="В списке"),
+        NamespaceTemplateSchemaOperator(operator_id="contains", label="Содержит"),
+    ],
+    defaults={"field_type": "string"},
+    validation_limits={"max_fields_per_section": 128, "max_enum_values": 64},
+)
 
 
 @router.get("", response_model=NamespaceListResponse)
@@ -73,6 +106,15 @@ async def list_namespace_templates(
             )
         )
     return responses
+
+
+@router.get("/templates/schema/options", response_model=NamespaceTemplateSchemaOptionsResponse)
+async def get_template_schema_options(
+    container: CRMContainer = Depends(get_container_dep),
+) -> NamespaceTemplateSchemaOptionsResponse:
+    """Динамические опции конструктора полей для UI."""
+    _ = container
+    return SCHEMA_OPTIONS_RESPONSE
 
 
 @router.post("/templates", response_model=NamespaceTemplateResponse, status_code=201)

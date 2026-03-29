@@ -3,6 +3,7 @@
  * HTML шаблоны для execution panel
  */
 import { html } from 'lit';
+import '@platform/lib/components/platform-switch.js';
 
 export function renderPanel(component) {
     const hasResult = component.result !== null;
@@ -17,14 +18,12 @@ export function renderPanel(component) {
                 <div class="execution-panel-header-top">
                     <span class="execution-panel-title">Запуск агента</span>
                     <div class="execution-panel-actions">
-                    <button
-                        type="button"
-                        class="context-persist-toggle ${component.persistSessionContext ? 'active' : ''}"
-                        role="switch"
-                        aria-checked=${component.persistSessionContext ? 'true' : 'false'}
+                    <platform-switch
+                        size="sm"
+                        .checked=${component.persistSessionContext}
                         aria-label="Один и тот же контекст сессии между запусками"
-                        @click=${component._onPersistToggleClick}
-                    ></button>
+                        @change=${(e) => { component.persistSessionContext = Boolean(e.detail.value); }}
+                    ></platform-switch>
                     <platform-help-hint
                         .text=${component.persistContextHelpText}
                         label="Справка: контекст сессии"

@@ -343,6 +343,10 @@ export class CRMAPIService extends BaseService {
         return this.get('/namespaces/templates');
     }
 
+    async getTemplateSchemaOptions() {
+        return this.get('/namespaces/templates/schema/options');
+    }
+
     async getNamespaceTemplate(templateId) {
         if (!templateId) {
             throw new Error('Template ID is required');

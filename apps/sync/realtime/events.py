@@ -43,7 +43,9 @@ EventType = Literal[
     "call.recording.stopped",
     "call.recording.failed",
     "call.transcript.ready",
+    "call.transcript.failed",
     "call.summary.ready",
+    "call.summary.failed",
     "call.export.crm.done",
     "call.export.crm.failed",
     "user.presence",
@@ -256,11 +258,31 @@ def event_call_transcript_ready(meeting: CallMeetingRead) -> RealtimeEvent:
     )
 
 
+def event_call_transcript_failed(meeting: CallMeetingRead, error: str) -> RealtimeEvent:
+    payload = meeting.model_dump(mode="json")
+    payload["error"] = error
+    return RealtimeEvent(
+        type="call.transcript.failed",
+        channel_id=meeting.channel_id,
+        payload=payload,
+    )
+
+
 def event_call_summary_ready(meeting: CallMeetingRead) -> RealtimeEvent:
     return RealtimeEvent(
         type="call.summary.ready",
         channel_id=meeting.channel_id,
         payload=meeting.model_dump(mode="json"),
+    )
+
+
+def event_call_summary_failed(meeting: CallMeetingRead, error: str) -> RealtimeEvent:
+    payload = meeting.model_dump(mode="json")
+    payload["error"] = error
+    return RealtimeEvent(
+        type="call.summary.failed",
+        channel_id=meeting.channel_id,
+        payload=payload,
     )
 
 

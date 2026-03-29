@@ -519,7 +519,21 @@ export class SyncApp extends PlatformApp {
             }
             return;
         }
-        if (msg.type === 'call.transcript.ready' || msg.type === 'call.summary.ready' || msg.type === 'call.export.crm.done' || msg.type === 'call.export.crm.failed') {
+        if (
+            msg.type === 'call.transcript.ready'
+            || msg.type === 'call.summary.ready'
+            || msg.type === 'call.export.crm.done'
+            || msg.type === 'call.export.crm.failed'
+        ) {
+            return;
+        }
+        if (msg.type === 'call.transcript.failed' || msg.type === 'call.summary.failed') {
+            const errorText = (typeof p.error === 'string' && p.error !== '') ? p.error : 'Ошибка обработки встречи';
+            console.error(`[sync] ${msg.type}: ${errorText}`, p);
+            if (this._activeCall?.call_id === p.call_id) {
+                const overlay = this.renderRoot?.querySelector('call-overlay');
+                overlay?.setRecordingStatus?.('failed', errorText);
+            }
             return;
         }
         if (msg.type === 'call.accepted') {
