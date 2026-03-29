@@ -107,6 +107,7 @@ class CallOverlay extends PlatformElement {
         _recordingStatus: { state: true },
         _recordingError: { state: true },
         _participantMenuIdentity: { state: true },
+        _chatPanelOpen: { state: true },
         _chatInput: { state: true },
         _chatSending: { state: true },
         _chatError: { state: true },
@@ -151,49 +152,89 @@ class CallOverlay extends PlatformElement {
         .video-grid.two   { grid-template-columns: 1fr 1fr; }
         .video-grid.many  { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 
-        .call-main {
+        .call-stage {
             flex: 1;
             min-height: 0;
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 320px;
-            gap: 0;
+            display: flex;
+            position: relative;
         }
 
-        .call-chat {
-            border-left: 1px solid rgba(255,255,255,0.12);
-            background: rgba(10, 10, 15, 0.92);
+        .call-chat-panel {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            bottom: 16px;
+            width: min(360px, calc(100vw - 32px));
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--glass-border-medium);
+            background: var(--glass-solid-medium);
+            backdrop-filter: blur(var(--glass-blur-medium)) saturate(1.3);
+            -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(1.3);
+            box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-subtle);
             display: flex;
             flex-direction: column;
             min-height: 0;
+            z-index: 130;
+            animation: call-menu-in var(--duration-fast) var(--easing-smooth) both;
         }
 
-        .call-chat-header {
-            padding: 12px 14px;
-            font-size: 13px;
-            color: rgba(255,255,255,0.75);
-            border-bottom: 1px solid rgba(255,255,255,0.08);
+        .call-chat-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 12px 10px;
+            border-bottom: 1px solid var(--glass-border-medium);
+            font-size: var(--text-sm);
+            font-weight: var(--font-medium);
+            color: var(--text-primary);
+        }
+
+        .call-chat-panel-title {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .call-chat-panel-close {
+            width: 30px;
+            height: 30px;
+            border-radius: var(--radius-full);
+            border: 1px solid var(--glass-border-medium);
+            background: var(--glass-tint-medium);
+            color: var(--text-primary);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background var(--duration-fast) var(--easing-default);
+        }
+
+        .call-chat-panel-close:hover {
+            background: var(--glass-tint-strong);
         }
 
         .call-chat-list {
             flex: 1;
             min-height: 0;
             overflow-y: auto;
-            padding: 10px;
+            padding: 10px 12px;
             display: flex;
             flex-direction: column;
             gap: 8px;
         }
 
         .call-chat-item {
-            border-radius: 10px;
+            border-radius: var(--radius-md);
             padding: 8px 10px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.08);
+            background: var(--glass-tint-medium);
+            border: 1px solid var(--glass-border-subtle);
         }
 
         .call-chat-item.self {
-            background: rgba(59,130,246,0.2);
-            border-color: rgba(59,130,246,0.36);
+            background: color-mix(in srgb, var(--accent) 24%, transparent);
+            border-color: color-mix(in srgb, var(--accent) 42%, transparent);
         }
 
         .call-chat-item.failed {
@@ -228,13 +269,13 @@ class CallOverlay extends PlatformElement {
 
         .call-chat-state {
             padding: 10px;
-            font-size: 12px;
-            color: rgba(255,255,255,0.6);
+            font-size: var(--text-xs);
+            color: var(--text-secondary);
         }
 
         .call-chat-composer {
-            border-top: 1px solid rgba(255,255,255,0.08);
-            padding: 10px;
+            border-top: 1px solid var(--glass-border-medium);
+            padding: 10px 12px 12px;
             display: flex;
             gap: 8px;
             align-items: flex-end;
@@ -245,29 +286,35 @@ class CallOverlay extends PlatformElement {
             min-height: 36px;
             max-height: 120px;
             resize: vertical;
-            border-radius: 10px;
-            border: 1px solid rgba(255,255,255,0.2);
-            background: rgba(0,0,0,0.25);
-            color: #fff;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border-medium);
+            background: var(--glass-tint-subtle);
+            color: var(--text-primary);
             padding: 8px 10px;
-            font-size: 13px;
+            font-size: var(--text-sm);
             line-height: 1.3;
             outline: none;
         }
 
         .call-chat-input:focus {
-            border-color: rgba(99,102,241,0.9);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-subtle);
         }
 
         .call-chat-send {
             height: 36px;
-            border-radius: 10px;
-            border: 1px solid rgba(255,255,255,0.2);
-            background: rgba(255,255,255,0.1);
-            color: #fff;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border-medium);
+            background: var(--glass-tint-medium);
+            color: var(--text-primary);
             padding: 0 12px;
-            font-size: 12px;
+            font-size: var(--text-xs);
             cursor: pointer;
+            transition: background var(--duration-fast) var(--easing-default);
+        }
+
+        .call-chat-send:hover:not(:disabled) {
+            background: var(--glass-tint-strong);
         }
 
         .call-chat-send:disabled {
@@ -279,19 +326,18 @@ class CallOverlay extends PlatformElement {
             border-top: 1px solid rgba(239,68,68,0.45);
             color: rgba(254,202,202,0.95);
             font-size: 12px;
-            padding: 8px 10px;
+            padding: 8px 12px;
             background: rgba(127,29,29,0.32);
         }
 
         @media (max-width: 640px) {
-            .call-main {
-                grid-template-columns: 1fr;
-                grid-template-rows: minmax(0, 1fr) 220px;
-            }
-
-            .call-chat {
-                border-left: 0;
-                border-top: 1px solid rgba(255,255,255,0.12);
+            .call-chat-panel {
+                top: auto;
+                right: 8px;
+                left: 8px;
+                bottom: 10px;
+                width: auto;
+                max-height: min(60vh, 430px);
             }
 
             .video-grid {
@@ -910,6 +956,12 @@ class CallOverlay extends PlatformElement {
         .ctrl-btn.recording-btn.recording-btn--active:hover {
             background: #dc2626;
         }
+
+        .ctrl-btn.chat-toggle-btn.chat-toggle-btn--active {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: var(--accent-glow);
+        }
     `,
     ];
 
@@ -948,6 +1000,7 @@ class CallOverlay extends PlatformElement {
         this._recordingStatus = 'idle';
         this._recordingError = null;
         this._participantMenuIdentity = null;
+        this._chatPanelOpen = false;
         this._chatInput = '';
         this._chatSending = false;
         this._chatError = null;
@@ -1007,6 +1060,11 @@ class CallOverlay extends PlatformElement {
         if (e.key !== 'Escape') return;
         if (this._devicesMenuOpen || this._moreMenuOpen || this._participantMenuIdentity != null) {
             this._closeMenus();
+            e.preventDefault();
+            return;
+        }
+        if (this._chatPanelOpen) {
+            this._chatPanelOpen = false;
             e.preventDefault();
             return;
         }
@@ -1853,6 +1911,10 @@ class CallOverlay extends PlatformElement {
         void this._sendOverlayChatMessage();
     }
 
+    _toggleChatPanel() {
+        this._chatPanelOpen = !this._chatPanelOpen;
+    }
+
     render() {
         if (this._status === 'error') {
             return html`
@@ -1908,12 +1970,26 @@ class CallOverlay extends PlatformElement {
                 </div>
             </div>
 
-            <div class="call-main">
+            <div class="call-stage">
                 <div class="video-grid ${gridClass}">
                     ${gridItems.map((p, i) => this._renderTile(p, i))}
                 </div>
-                <section class="call-chat">
-                    <div class="call-chat-header">Чат канала</div>
+                ${this._chatPanelOpen ? html`
+                <section class="call-chat-panel">
+                    <div class="call-chat-panel-header">
+                        <span class="call-chat-panel-title">Чат канала</span>
+                        <button
+                            type="button"
+                            class="call-chat-panel-close"
+                            title="Скрыть чат"
+                            @click=${this._toggleChatPanel}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                                <line x1="5" y1="5" x2="19" y2="19"></line>
+                                <line x1="19" y1="5" x2="5" y2="19"></line>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="call-chat-list">
                         ${SyncStore.getCallOverlayLoading(this.channelId)
                             ? html`<div class="call-chat-state">Загрузка сообщений…</div>`
@@ -1956,6 +2032,7 @@ class CallOverlay extends PlatformElement {
                         </button>
                     </div>
                 </section>
+                ` : ''}
             </div>
 
             ${this._mediaSettingsError ? html`
@@ -2079,6 +2156,17 @@ class CallOverlay extends PlatformElement {
                     </button>
                 </div>
                 <div class="controls-slot controls-slot--right">
+                    <button
+                        type="button"
+                        class="ctrl-btn chat-toggle-btn ${this._chatPanelOpen ? 'chat-toggle-btn--active' : ''}"
+                        style="width:48px;height:48px;"
+                        title=${this._chatPanelOpen ? 'Скрыть чат' : 'Показать чат'}
+                        @click=${this._toggleChatPanel}
+                    >
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                    </button>
                     ${this._sfuMediaUiAvailable() ? html`
                         <button
                             type="button"
