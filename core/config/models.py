@@ -148,6 +148,26 @@ class CloudVoiceConfig(BaseModel):
     timeout: int = 30
 
 
+class CloudRuSTTConfig(BaseModel):
+    """Конфигурация cloud.ru STT (Whisper API)."""
+
+    enabled: bool = False
+    api_key: Optional[str] = None
+    base_url: str = "https://foundation-models.api.cloud.ru/v1/audio/transcriptions"
+    model: str = "openai/whisper-large-v3"
+    response_format: str = "text"
+    temperature: float = 0.5
+    language: str = "ru"
+    timeout: float = 120.0
+
+
+class STTConfig(BaseModel):
+    """Конфигурация STT провайдеров."""
+
+    provider: str = "cloud_ru"
+    cloud_ru: CloudRuSTTConfig = Field(default_factory=CloudRuSTTConfig)
+
+
 class TelegramConfig(BaseModel):
     """Конфигурация Telegram ботов"""
 

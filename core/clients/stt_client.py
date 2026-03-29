@@ -1,0 +1,144 @@
+"""
+STT клиент с поддержкой провайдеров.
+"""
+
+from abc import ABC, abstractmethod
+import json
+
+from core.config import get_settings
+from core.http import get_httpx_client
+
+
+class BaseSTTClient(ABC):
+    """Базовый интерфейс STT клиента."""
+
+    @abstractmethod
+    async def transcribe_audio(
+        self,
+        *,
+        audio_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        language: str | None = None,
+    ) -> str:
+        """Возвращает транскрипцию аудио."""
+
+
+class CloudRuSTTClient(BaseSTTClient):
+    """STT клиент cloud.ru foundation-models."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        model: str,
+        response_format: str,
+        temperature: float,
+        default_language: str,
+        timeout: float,
+    ) -> None:
+        if api_key == "":
+            raise ValueError("STT cloud_ru api_key не может быть пустым.")
+        if base_url == "":
+            raise ValueError("STT cloud_ru base_url не может быть пустым.")
+        if model == "":
+            raise ValueError("STT cloud_ru model не может быть пустым.")
+        if response_format == "":
+            raise ValueError("STT cloud_ru response_format не может быть пустым.")
+        if default_language == "":
+            raise ValueError("STT cloud_ru language не может быть пустым.")
+        if timeout <= 0:
+            raise ValueError("STT cloud_ru timeout должен быть больше 0.")
+
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+        self._response_format = response_format
+        self._temperature = temperature
+        self._default_language = default_language
+        self._timeout = timeout
+
+    async def transcribe_audio(
+        self,
+        *,
+        audio_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        language: str | None = None,
+    ) -> str:
+        if not audio_bytes:
+            raise ValueError("audio_bytes не может быть пустым.")
+        if file_name == "":
+            raise ValueError("file_name не может быть пустым.")
+        if mime_type == "":
+            raise ValueError("mime_type не может быть пустым.")
+
+        selected_language = language or self._default_language
+        if selected_language == "":
+            raise ValueError("language не может быть пустым.")
+
+        payload = {
+            "model": self._model,
+            "response_format": self._response_format,
+            "temperature": str(self._temperature),
+            "language": selected_language,
+        }
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+        files = {"file": (file_name, audio_bytes, mime_type)}
+
+        async with get_httpx_client(timeout=self._timeout) as client:
+            response = await client.post(
+                self._base_url,
+                headers=headers,
+                data=payload,
+                files=files,
+            )
+        response.raise_for_status()
+
+        content_type = response.headers.get("content-type", "")
+        body_text = response.text.strip()
+        if "application/json" in content_type:
+            body_json = response.json()
+            transcript = body_json.get("text")
+            if not isinstance(transcript, str) or transcript.strip() == "":
+                raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
+            return transcript.strip()
+
+        if body_text.startswith("{") and body_text.endswith("}"):
+            body_json = json.loads(body_text)
+            transcript = body_json.get("text")
+            if not isinstance(transcript, str) or transcript.strip() == "":
+                raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
+            return transcript.strip()
+
+        if body_text == "":
+            raise ValueError("STT cloud_ru вернул пустой ответ.")
+        return body_text
+
+
+class STTClientFactory:
+    """Фабрика STT клиентов по конфигу."""
+
+    @staticmethod
+    def create_client() -> BaseSTTClient:
+        settings = get_settings()
+        provider = settings.stt.provider
+
+        if provider == "cloud_ru":
+            config = settings.stt.cloud_ru
+            if not config.enabled:
+                raise ValueError("STT провайдер cloud_ru выключен в конфигурации.")
+            if not config.api_key:
+                raise ValueError("STT cloud_ru api_key не настроен.")
+            return CloudRuSTTClient(
+                api_key=config.api_key,
+                base_url=config.base_url,
+                model=config.model,
+                response_format=config.response_format,
+                temperature=config.temperature,
+                default_language=config.language,
+                timeout=config.timeout,
+            )
+
+        raise ValueError(f"Неизвестный STT провайдер: {provider}")

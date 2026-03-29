@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import mimetypes
 from typing import Any
+from urllib.parse import urlparse
 
 from apps.sync.container import get_sync_container
 from apps.sync.db.models import SyncCallSpeakerSegment, SyncFile
@@ -20,7 +22,9 @@ from apps.sync.realtime.events import (
 )
 from apps.sync.realtime.publish_events import publish_realtime_events
 from core.clients.a2a_client import A2AClient
+from core.clients.stt_client import STTClientFactory
 from core.config import get_settings
+from core.http import get_httpx_client
 from core.logging import get_logger
 from core.utils.tokens import get_token_service
 
@@ -29,11 +33,44 @@ logger = get_logger(__name__)
 
 async def build_call_transcript_text(meeting_id: str, source_url: str) -> str:
     """Строит текст транскрипта из источника записи."""
-    return (
-        f"Транскрипт встречи {meeting_id}\n"
-        f"Источник: {source_url}\n"
-        "speaker:user:system: Начат автоматический pipeline транскрипции."
+    if not isinstance(source_url, str) or source_url == "":
+        raise ValueError("source_url обязателен для транскрипции.")
+    if not source_url.startswith("http://") and not source_url.startswith("https://"):
+        raise ValueError(f"Неподдерживаемый source_url для STT: {source_url}")
+
+    parsed = urlparse(source_url)
+    file_name = parsed.path.rsplit("/", 1)[-1]
+    if file_name == "":
+        raise ValueError(f"Не удалось определить имя файла из source_url: {source_url}")
+
+    settings = get_settings()
+    timeout_seconds = settings.stt.cloud_ru.timeout
+    if timeout_seconds <= 0:
+        raise ValueError("stt.cloud_ru.timeout должен быть больше 0.")
+
+    async with get_httpx_client(timeout=timeout_seconds) as client:
+        response = await client.get(source_url)
+    response.raise_for_status()
+    audio_bytes = response.content
+    if not audio_bytes:
+        raise ValueError(f"Получен пустой файл записи для встречи {meeting_id}.")
+
+    response_content_type = response.headers.get("content-type")
+    guessed_mime_type, _ = mimetypes.guess_type(file_name)
+    mime_type = response_content_type or guessed_mime_type
+    if not isinstance(mime_type, str) or mime_type == "":
+        raise ValueError(f"Не удалось определить mime type записи: {file_name}")
+
+    stt_client = STTClientFactory.create_client()
+    transcript_text = await stt_client.transcribe_audio(
+        audio_bytes=audio_bytes,
+        file_name=file_name,
+        mime_type=mime_type,
+        language=settings.stt.cloud_ru.language,
     )
+    if transcript_text.strip() == "":
+        raise ValueError(f"STT вернул пустую транскрипцию для встречи {meeting_id}.")
+    return transcript_text
 
 
 def _build_interservice_auth_headers(actor_user_id: str, company_id: str) -> dict[str, str]:
@@ -44,6 +81,19 @@ def _build_interservice_auth_headers(actor_user_id: str, company_id: str) -> dic
         "X-Company-Id": company_id,
         "X-User-Id": actor_user_id,
     }
+
+
+def _normalize_http_base_url(url: str) -> str:
+    """Нормализует URL источника записи к HTTP(S)."""
+    if not isinstance(url, str) or url == "":
+        raise ValueError("URL источника записи обязателен.")
+    if url.startswith("ws://"):
+        return "http://" + url[len("ws://") :]
+    if url.startswith("wss://"):
+        return "https://" + url[len("wss://") :]
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    raise ValueError(f"Неподдерживаемая схема URL источника записи: {url}")
 
 
 @broker.task
@@ -71,8 +121,9 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
     settings = get_settings()
     provider_job_id = recording.provider_job_id or f"egress-{recording.recording_id}"
     raw_file_id = recording.raw_file_id or recording.recording_id
+    raw_storage_base_url = _normalize_http_base_url(settings.calls.livekit_url)
     raw_storage_url = (
-        f"{settings.calls.livekit_url.rstrip('/')}/egress/{call.livekit_room_name}/{provider_job_id}.mp4"
+        f"{raw_storage_base_url.rstrip('/')}/egress/{call.livekit_room_name}/{provider_job_id}.mp4"
     )
     raw_file = SyncFile(
         file_id=raw_file_id,

@@ -31,6 +31,7 @@ from core.config.models import (
     S3Config,
     LLMConfig,
     PushConfig,
+    STTConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class BaseSettings(PydanticBaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     s3: S3Config = Field(default_factory=S3Config)
     cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
+    stt: STTConfig = Field(default_factory=STTConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
