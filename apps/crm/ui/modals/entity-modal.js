@@ -348,19 +348,26 @@ export class EntityModal extends PlatformModal {
             priority: this._formData.priority,
         };
 
-        const crmApi = this.services.get('crmApi');
+        try {
+            const crmApi = this.services.get('crmApi');
 
-        if (this._isEditing) {
-            await CRMStore.updateEntity(crmApi, this.entityId, data);
-            this.success('Сущность обновлена');
-        } else {
-            await CRMStore.createEntity(crmApi, data);
-            this.success('Сущность создана');
+            if (this._isEditing) {
+                await CRMStore.updateEntity(crmApi, this.entityId, data);
+                this.success('Сущность обновлена');
+            } else {
+                await CRMStore.createEntity(crmApi, data);
+                this.success('Сущность создана');
+            }
+
+            this.dispatchEvent(new CustomEvent('saved'));
+            this.close();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка сохранения сущности';
+            this.error(message);
+            throw error;
+        } finally {
+            this._saving = false;
         }
-
-        this._saving = false;
-        this.dispatchEvent(new CustomEvent('saved'));
-        this.close();
     }
 
     _resolveIconName(iconName) {

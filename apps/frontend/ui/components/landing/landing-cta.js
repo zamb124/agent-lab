@@ -6,7 +6,6 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/glass-button.js';
-import '@platform/lib/components/glass-toast.js';
 
 export class LandingCta extends PlatformElement {
     static styles = [
@@ -136,16 +135,12 @@ export class LandingCta extends PlatformElement {
         showModal: { type: Boolean },
         formData: { type: Object },
         isSubmitting: { type: Boolean },
-        showToast: { type: Boolean },
-        toastMessage: { type: String }
     };
 
     constructor() {
         super();
         this.showModal = false;
         this.isSubmitting = false;
-        this.showToast = false;
-        this.toastMessage = '';
         this.formData = {
             name: '',
             email: '',
@@ -185,13 +180,13 @@ export class LandingCta extends PlatformElement {
         event.preventDefault();
 
         if (!this.formData.name || !this.formData.email) {
-            this._showToast('Пожалуйста, заполните обязательные поля');
+            this.warning('Пожалуйста, заполните обязательные поля');
             return;
         }
 
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(this.formData.email)) {
-            this._showToast('Пожалуйста, введите корректный email');
+            this.warning('Пожалуйста, введите корректный email');
             return;
         }
 
@@ -207,24 +202,16 @@ export class LandingCta extends PlatformElement {
             });
 
             if (response.ok) {
-                this._showToast('Заявка успешно отправлена! Мы свяжемся с вами в ближайшее время.');
+                this.success('Заявка успешно отправлена! Мы свяжемся с вами в ближайшее время.');
                 this._closeModal();
             } else {
-                this._showToast('Произошла ошибка. Попробуйте позже или свяжитесь с нами напрямую.');
+                this.error('Произошла ошибка. Попробуйте позже или свяжитесь с нами напрямую.');
             }
-        } catch (error) {
-            this._showToast('Произошла ошибка. Попробуйте позже или свяжитесь с нами напрямую.');
+        } catch {
+            this.error('Произошла ошибка. Попробуйте позже или свяжитесь с нами напрямую.');
         } finally {
             this.isSubmitting = false;
         }
-    }
-
-    _showToast(message) {
-        this.toastMessage = message;
-        this.showToast = true;
-        setTimeout(() => {
-            this.showToast = false;
-        }, 5000);
     }
 
     render() {
@@ -301,13 +288,6 @@ export class LandingCta extends PlatformElement {
                         </glass-button>
                     </form>
                 </glass-modal>
-            ` : ''}
-            
-            ${this.showToast ? html`
-                <glass-toast
-                    message=${this.toastMessage}
-                    @close=${() => this.showToast = false}
-                ></glass-toast>
             ` : ''}
         `;
     }

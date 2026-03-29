@@ -158,20 +158,26 @@ export class ShareModal extends PlatformModal {
         }
 
         this._saving = true;
+        try {
+            const crmApi = this.services.get('crmApi');
 
-        const crmApi = this.services.get('crmApi');
+            if (this.shareType === 'user') {
+                await CRMStore.grantToUser(crmApi, this.entityId, this._targetId.trim(), this._role);
+                this.success('Доступ предоставлен пользователю');
+            } else {
+                await CRMStore.grantToCompany(crmApi, this.entityId, this._targetId.trim(), this._role);
+                this.success('Доступ предоставлен компании');
+            }
 
-        if (this.shareType === 'user') {
-            await CRMStore.grantToUser(crmApi, this.entityId, this._targetId.trim(), this._role);
-            this.success('Доступ предоставлен пользователю');
-        } else {
-            await CRMStore.grantToCompany(crmApi, this.entityId, this._targetId.trim(), this._role);
-            this.success('Доступ предоставлен компании');
+            this.dispatchEvent(new CustomEvent('shared'));
+            this.close();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка предоставления доступа';
+            this.error(message);
+            throw error;
+        } finally {
+            this._saving = false;
         }
-
-        this._saving = false;
-        this.dispatchEvent(new CustomEvent('shared'));
-        this.close();
     }
 
     renderBody() {

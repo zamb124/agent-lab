@@ -1752,8 +1752,8 @@ class TestWebhookChannelE2E:
         
         requests = server.get_requests("notify")
         assert len(requests) == 1
-        assert requests[0]["headers"].get("Authorization") == "Bearer secret-token-123"
-        assert requests[0]["headers"].get("X-Custom-Header") == "custom-value"
+        assert requests[0]["headers"].get("authorization") == "Bearer secret-token-123"
+        assert requests[0]["headers"].get("x-custom-header") == "custom-value"
     
     @pytest.mark.asyncio
     async def test_webhook_send_notification_for_a2a(self, notification_server):

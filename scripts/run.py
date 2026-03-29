@@ -35,56 +35,56 @@ SERVICES = {
     # FastAPI сервисы (uvicorn)
     "flows": {
         "type": "uvicorn",
-        "app": "apps.flows.main:app",
+        "app": "apps.app_runtime_targets:flows_app",
         "port": "8001",
     },
     "frontend": {
         "type": "uvicorn",
-        "app": "apps.frontend.main:app",
+        "app": "apps.app_runtime_targets:frontend_app",
         "port": "8002",
     },
     "crm": {
         "type": "uvicorn",
-        "app": "apps.crm.main:app",
+        "app": "apps.app_runtime_targets:crm_app",
         "port": "8003",
     },
     "rag": {
         "type": "uvicorn",
-        "app": "apps.rag.main:app",
+        "app": "apps.app_runtime_targets:rag_app",
         "port": "8004",
     },
     "sync": {
         "type": "uvicorn",
-        "app": "apps.sync.main:app",
+        "app": "apps.app_runtime_targets:sync_app",
         "port": "8005",
     },
     
     # TaskIQ workers
     "worker": {
         "type": "taskiq-worker",
-        "broker": "apps.broker.worker:broker",
+        "broker": "apps.app_runtime_targets:flows_taskiq_broker",
         "workers": "1",
     },
     "rag-worker": {
         "type": "taskiq-worker",
-        "broker": "apps.rag_worker.worker:broker",
+        "broker": "apps.app_runtime_targets:rag_taskiq_broker",
         "workers": "1",
     },
     "sync-worker": {
         "type": "taskiq-worker",
-        "broker": "apps.sync_worker.worker:broker",
+        "broker": "apps.app_runtime_targets:sync_taskiq_broker",
         "workers": "1",
     },
     "crm-worker": {
         "type": "taskiq-worker",
-        "broker": "apps.crm_worker.worker:broker",
+        "broker": "apps.app_runtime_targets:crm_taskiq_broker",
         "workers": "1",
     },
     
     # TaskIQ scheduler
     "scheduler": {
         "type": "taskiq-scheduler",
-        "scheduler": "apps.scheduler.scheduler:scheduler",
+        "scheduler": "apps.app_runtime_targets:platform_scheduler",
     },
 }
 

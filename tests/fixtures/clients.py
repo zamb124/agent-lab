@@ -97,6 +97,7 @@ async def crm_client(app, rag_app, rag_service, flows_service, rag_worker):
     
     container = get_crm_container()
     await container.company_init_service.initialize_company("system")
+    await container.company_init_service.initialize_company("company2")
     
     transport = ASGITransport(app=crm_app)
     async with AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=True) as client:
@@ -181,6 +182,7 @@ async def crm_client_http(crm_service, rag_service):
     
     container = get_crm_container()
     await container.company_init_service.initialize_company("system")
+    await container.company_init_service.initialize_company("company2")
     
     async with AsyncClient(base_url="http://localhost:8003") as client:
         yield client

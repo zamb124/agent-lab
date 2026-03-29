@@ -1365,11 +1365,18 @@ export class AIAnalysisModal extends PlatformModal {
 
     async _onSave() {
         this._saving = true;
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.confirmAllSuggestions(crmApi);
-        this._saving = false;
-        this.dispatchEvent(new CustomEvent('saved'));
-        this.close();
+        try {
+            const crmApi = this.services.get('crmApi');
+            await CRMStore.confirmAllSuggestions(crmApi);
+            this.dispatchEvent(new CustomEvent('saved'));
+            this.close();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка сохранения AI-анализа';
+            this.error(message);
+            throw error;
+        } finally {
+            this._saving = false;
+        }
     }
 
     _getConnectionName(item) {

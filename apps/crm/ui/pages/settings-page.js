@@ -145,6 +145,10 @@ class TemplateCreateModal extends PlatformModal {
             }));
             this.close();
             this.success('Шаблон создан');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка создания шаблона';
+            this.error(message);
+            throw error;
         } finally {
             this._saving = false;
         }
@@ -547,27 +551,37 @@ export class SettingsPage extends PlatformElement {
     _openTemplateModal() { this._showTemplateModal = true; }
     _closeTemplateModal() { this._showTemplateModal = false; }
     async _onTemplateCreated(e) {
-        this._showTemplateModal = false;
-        const templateId = e?.detail?.templateId;
-        if (!templateId) {
-            throw new Error('Template ID is required after create');
+        try {
+            this._showTemplateModal = false;
+            const templateId = e?.detail?.templateId;
+            if (!templateId) {
+                throw new Error('Template ID is required after create');
+            }
+            this._selectedTemplateId = templateId;
+            await CRMStore.loadNamespaceTemplateDetails(this.services.get('crmApi'), templateId);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка загрузки шаблона';
+            this.error(message);
         }
-        this._selectedTemplateId = templateId;
-        await CRMStore.loadNamespaceTemplateDetails(this.services.get('crmApi'), templateId);
     }
 
     async _saveTemplateMeta() {
-        if (!this._templateDetails || !this._selectedTemplateId) {
-            throw new Error('Template not selected');
+        try {
+            if (!this._templateDetails || !this._selectedTemplateId) {
+                throw new Error('Template not selected');
+            }
+            const crmApi = this.services.get('crmApi');
+            await CRMStore.updateNamespaceTemplate(crmApi, this._selectedTemplateId, {
+                name: this._templateDetails.name,
+                description: this._templateDetails.description,
+                icon: this._templateDetails.icon || null,
+            });
+            await CRMStore.loadNamespaceTemplateDetails(crmApi, this._selectedTemplateId);
+            this.success('Шаблон обновлен');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка обновления шаблона';
+            this.error(message);
         }
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.updateNamespaceTemplate(crmApi, this._selectedTemplateId, {
-            name: this._templateDetails.name,
-            description: this._templateDetails.description,
-            icon: this._templateDetails.icon || null,
-        });
-        await CRMStore.loadNamespaceTemplateDetails(crmApi, this._selectedTemplateId);
-        this.success('Шаблон обновлен');
     }
 
     _editType(item) {
@@ -590,7 +604,10 @@ export class SettingsPage extends PlatformElement {
 
     _selectTemplate(templateId) {
         this._selectedTemplateId = templateId;
-        CRMStore.loadNamespaceTemplateDetails(this.services.get('crmApi'), templateId);
+        CRMStore.loadNamespaceTemplateDetails(this.services.get('crmApi'), templateId).catch((error) => {
+            const message = error instanceof Error ? error.message : 'Ошибка загрузки шаблона';
+            this.error(message);
+        });
     }
 
     _resolveTemplateIcon(iconName) {
@@ -619,73 +636,88 @@ export class SettingsPage extends PlatformElement {
     }
 
     async _upsertType() {
-        if (!this._selectedTemplateId) {
-            throw new Error('Template not selected');
-        }
-        const typeId = this._typeDraft.type_id.trim();
-        const typeName = this._typeDraft.name.trim();
-        if (!typeId || !typeName) {
-            this.error('type_id и name обязательны');
-            return;
-        }
-        const requiredFields = this._buildSchemaFromRows(this._typeDraft.required_fields_rows, 'required_fields');
-        const optionalFields = this._buildSchemaFromRows(this._typeDraft.optional_fields_rows, 'optional_fields');
-        for (const key of Object.keys(requiredFields)) {
-            if (Object.prototype.hasOwnProperty.call(optionalFields, key)) {
-                throw new Error(`Ключ "${key}" не может быть одновременно required и optional`);
+        try {
+            if (!this._selectedTemplateId) {
+                throw new Error('Template not selected');
             }
+            const typeId = this._typeDraft.type_id.trim();
+            const typeName = this._typeDraft.name.trim();
+            if (!typeId || !typeName) {
+                this.error('type_id и name обязательны');
+                return;
+            }
+            const requiredFields = this._buildSchemaFromRows(this._typeDraft.required_fields_rows, 'required_fields');
+            const optionalFields = this._buildSchemaFromRows(this._typeDraft.optional_fields_rows, 'optional_fields');
+            for (const key of Object.keys(requiredFields)) {
+                if (Object.prototype.hasOwnProperty.call(optionalFields, key)) {
+                    throw new Error(`Ключ "${key}" не может быть одновременно required и optional`);
+                }
+            }
+            const namespaceIds = Array.isArray(this._typeDraft.namespace_ids) ? this._typeDraft.namespace_ids : [];
+            const normalizedNamespaceIds = namespaceIds
+                .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                .filter((item) => item.length > 0);
+            if (normalizedNamespaceIds.length !== namespaceIds.length) {
+                throw new Error('namespace_ids должен содержать только строки');
+            }
+            const crmApi = this.services.get('crmApi');
+            await CRMStore.upsertNamespaceTemplateType(crmApi, this._selectedTemplateId, {
+                type_id: typeId,
+                parent_type_id: this._typeDraft.parent_type_id.trim() || null,
+                name: typeName,
+                description: this._typeDraft.description.trim() || null,
+                prompt: this._typeDraft.prompt.trim() || null,
+                required_fields: requiredFields,
+                optional_fields: optionalFields,
+                namespace_ids: [...new Set(normalizedNamespaceIds)],
+                icon: this._typeDraft.icon.trim() || null,
+                color: this._typeDraft.color.trim() || null,
+                is_event: this._typeDraft.is_event,
+                check_duplicates: this._typeDraft.check_duplicates,
+                weight_coefficient: Number.parseFloat(this._typeDraft.weight_coefficient || '1') || 1,
+            });
+            this._typeDraft = getDefaultTypeDraft();
+            this.success('Тип шаблона сохранен');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка сохранения типа';
+            this.error(message);
         }
-        const namespaceIds = Array.isArray(this._typeDraft.namespace_ids) ? this._typeDraft.namespace_ids : [];
-        const normalizedNamespaceIds = namespaceIds
-            .map((item) => (typeof item === 'string' ? item.trim() : ''))
-            .filter((item) => item.length > 0);
-        if (normalizedNamespaceIds.length !== namespaceIds.length) {
-            throw new Error('namespace_ids должен содержать только строки');
-        }
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.upsertNamespaceTemplateType(crmApi, this._selectedTemplateId, {
-            type_id: typeId,
-            parent_type_id: this._typeDraft.parent_type_id.trim() || null,
-            name: typeName,
-            description: this._typeDraft.description.trim() || null,
-            prompt: this._typeDraft.prompt.trim() || null,
-            required_fields: requiredFields,
-            optional_fields: optionalFields,
-            namespace_ids: [...new Set(normalizedNamespaceIds)],
-            icon: this._typeDraft.icon.trim() || null,
-            color: this._typeDraft.color.trim() || null,
-            is_event: this._typeDraft.is_event,
-            check_duplicates: this._typeDraft.check_duplicates,
-            weight_coefficient: Number.parseFloat(this._typeDraft.weight_coefficient || '1') || 1,
-        });
-        this._typeDraft = getDefaultTypeDraft();
-        this.success('Тип шаблона сохранен');
     }
 
     async _deleteType(typeId) {
-        if (!this._selectedTemplateId) {
-            throw new Error('Template not selected');
+        try {
+            if (!this._selectedTemplateId) {
+                throw new Error('Template not selected');
+            }
+            const crmApi = this.services.get('crmApi');
+            await CRMStore.deleteNamespaceTemplateType(crmApi, this._selectedTemplateId, typeId);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка удаления типа';
+            this.error(message);
         }
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.deleteNamespaceTemplateType(crmApi, this._selectedTemplateId, typeId);
     }
 
     async _selectNamespaceForEditing(namespaceName) {
-        if (!namespaceName || typeof namespaceName !== 'string') {
-            throw new Error('Namespace name is required');
+        try {
+            if (!namespaceName || typeof namespaceName !== 'string') {
+                throw new Error('Namespace name is required');
+            }
+            const normalizedName = namespaceName.trim();
+            if (!normalizedName) {
+                throw new Error('Namespace name is required');
+            }
+            const crmApi = this.services.get('crmApi');
+            CRMStore.setSettingsNamespaceSelection(normalizedName);
+            const payload = await CRMStore.loadNamespaceEditability(crmApi, normalizedName);
+            const selectedNamespace = this._namespaces.find((item) => item.name === normalizedName);
+            this._selectedNamespaceDraftDescription = selectedNamespace?.description || '';
+            this._selectedNamespaceDraftAllowedTypeIds = Array.isArray(payload?.current_allowed_type_ids)
+                ? [...payload.current_allowed_type_ids]
+                : [];
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка загрузки настроек пространства';
+            this.error(message);
         }
-        const normalizedName = namespaceName.trim();
-        if (!normalizedName) {
-            throw new Error('Namespace name is required');
-        }
-        const crmApi = this.services.get('crmApi');
-        CRMStore.setSettingsNamespaceSelection(normalizedName);
-        const payload = await CRMStore.loadNamespaceEditability(crmApi, normalizedName);
-        const selectedNamespace = this._namespaces.find((item) => item.name === normalizedName);
-        this._selectedNamespaceDraftDescription = selectedNamespace?.description || '';
-        this._selectedNamespaceDraftAllowedTypeIds = Array.isArray(payload?.current_allowed_type_ids)
-            ? [...payload.current_allowed_type_ids]
-            : [];
     }
 
     _toggleNamespaceAllowedType(typeId, enabled) {
@@ -703,21 +735,26 @@ export class SettingsPage extends PlatformElement {
     }
 
     async _saveNamespaceSettings() {
-        if (!this._selectedNamespaceName) {
-            throw new Error('Namespace is not selected');
+        try {
+            if (!this._selectedNamespaceName) {
+                throw new Error('Namespace is not selected');
+            }
+            const normalizedAllowedTypeIds = Array.isArray(this._selectedNamespaceDraftAllowedTypeIds)
+                ? this._selectedNamespaceDraftAllowedTypeIds
+                    .map((item) => String(item).trim())
+                    .filter((item) => item.length > 0)
+                : [];
+            const payload = {
+                description: this._selectedNamespaceDraftDescription.trim() || null,
+                allowed_type_ids: [...new Set(normalizedAllowedTypeIds)],
+            };
+            const crmApi = this.services.get('crmApi');
+            await CRMStore.updateExistingNamespace(crmApi, this._selectedNamespaceName, payload);
+            this.success('Пространство сохранено');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка сохранения пространства';
+            this.error(message);
         }
-        const normalizedAllowedTypeIds = Array.isArray(this._selectedNamespaceDraftAllowedTypeIds)
-            ? this._selectedNamespaceDraftAllowedTypeIds
-                .map((item) => String(item).trim())
-                .filter((item) => item.length > 0)
-            : [];
-        const payload = {
-            description: this._selectedNamespaceDraftDescription.trim() || null,
-            allowed_type_ids: [...new Set(normalizedAllowedTypeIds)],
-        };
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.updateExistingNamespace(crmApi, this._selectedNamespaceName, payload);
-        this.success('Пространство сохранено');
     }
 
     render() {

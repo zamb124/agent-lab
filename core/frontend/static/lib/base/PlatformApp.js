@@ -6,6 +6,7 @@ import { PlatformElement } from '../platform-element/index.js';
 import { ServiceRegistry } from '../services/ServiceRegistry.js';
 import { AppEvents } from '../utils/types.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 
 // PWA Install Banner для iOS/Android
 import '../components/pwa-install-banner.js';
@@ -105,6 +106,7 @@ export class PlatformApp extends PlatformElement {
         toast.type = type;
         toast.message = message;
         toast.duration = duration;
+        toast.style.zIndex = String(nextModalLayerZIndex());
         document.body.appendChild(toast);
     }
 

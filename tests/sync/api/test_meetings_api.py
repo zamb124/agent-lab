@@ -268,6 +268,8 @@ async def test_sync_files_download_proxies_syncfile_storage_url(
     file_repo,
 ) -> None:
     import core.http as core_http
+    from apps.sync.container import get_sync_container
+    from core.files.models import FileRecord, FileStatus
 
     class _FakeResponse:
         def __init__(self) -> None:
@@ -294,19 +296,23 @@ async def test_sync_files_download_proxies_syncfile_storage_url(
 
     monkeypatch.setattr(core_http, "get_httpx_client", _fake_get_httpx_client)
 
-    sync_file = SyncFile(
+    file_record = FileRecord(
         file_id=uuid4().hex,
-        company_id="system",
+        provider="test",
         original_name="file.mp4",
-        mime_type="video/mp4",
-        size_bytes=123,
+        s3_key="",
+        s3_bucket="",
+        content_type="video/mp4",
+        file_size=123,
+        status=FileStatus.READY,
+        company_id="system",
+        is_public=True,
         storage_url="http://recordings.local/files/file.mp4",
-        checksum=None,
     )
-    await file_repo.create(sync_file)
+    await get_sync_container().file_repository.set(file_record)
 
     response = await sync_client.get(
-        f"/sync/api/v1/files/download/{sync_file.file_id}",
+        f"/sync/api/v1/files/download/{file_record.file_id}",
         headers=auth_headers_system,
     )
     assert response.status_code == 200

@@ -11,6 +11,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import './platform-icon.js';
 import './glass-toast.js';
 
@@ -274,6 +275,7 @@ export class PlatformNotificationManager extends PlatformElement {
         toast.message = `${notification.title}: ${notification.message}`;
         toast.type = (notification.priority === 'urgent' || notification.priority === 'high') ? 'warning' : 'info';
         toast.duration = 5000;
+        toast.style.zIndex = String(nextModalLayerZIndex());
         document.body.appendChild(toast);
     }
 

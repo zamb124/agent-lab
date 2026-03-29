@@ -346,7 +346,7 @@ class GraphService:
                 }
             }
         """
-        relationship_types = await self._relationship_type_repo.list_all()
+        relationship_types = await self._relationship_type_repo.get_all_for_company(include_system=True)
         
         direction_map = {}
         for rt in relationship_types:

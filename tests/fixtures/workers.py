@@ -398,7 +398,7 @@ def taskiq_worker():
             "CALLS__LIVEKIT_API_SECRET": "secret",
         },
         cleanup_patterns=[
-            "taskiq.*worker",
+            "taskiq.*apps.broker.worker:broker",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
@@ -505,7 +505,7 @@ def sync_worker():
         },
         cleanup_patterns=[
             "apps.sync_worker.worker",
-            "taskiq.*worker",
+            "taskiq.*apps.sync_worker.worker:broker",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
@@ -548,7 +548,7 @@ def crm_worker():
         },
         cleanup_patterns=[
             "apps.crm_worker.worker",
-            "taskiq.*worker",
+            "taskiq.*apps.crm_worker.worker:broker",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],

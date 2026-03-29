@@ -30,6 +30,7 @@ from core.clients.a2a_client import A2AClient
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
+from core.models.identity_models import Namespace
 import json
 from datetime import datetime as dt
 logger = get_logger(__name__)
@@ -90,7 +91,16 @@ class EntityService:
     async def _ensure_namespace_exists(self, namespace: str) -> None:
         existing_namespace = await self._namespace_repo.get(namespace)
         if existing_namespace is None and namespace == "default":
-            await self._namespace_repo.list_all()
+            context = get_context()
+            if context is None or context.active_company is None:
+                raise ValueError("Нет активной компании в контексте")
+            default_namespace = Namespace(
+                name="default",
+                company_id=context.active_company.company_id,
+                description="Основное пространство",
+                is_default=True,
+            )
+            await self._namespace_repo.set(default_namespace)
             existing_namespace = await self._namespace_repo.get(namespace)
         if existing_namespace is None:
             raise ValueError(f"Namespace not found: {namespace}")

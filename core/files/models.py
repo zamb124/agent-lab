@@ -41,6 +41,7 @@ class FileRecord(BaseModel):
     s3_key: str = Field(description="Ключ файла в S3")
     s3_bucket: str = Field(description="Bucket в S3")
     s3_endpoint: Optional[str] = Field(default=None, description="Endpoint URL провайдера")
+    storage_url: Optional[str] = Field(default=None, description="Прямой URL источника файла для proxy-download")
     content_type: str = Field(description="MIME тип файла")
     file_size: int = Field(description="Размер файла в байтах")
     checksum: Optional[str] = Field(default=None, description="MD5 или другая контрольная сумма")

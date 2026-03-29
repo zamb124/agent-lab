@@ -179,25 +179,29 @@ export class NamespaceModal extends PlatformModal {
         }
 
         this._saving = true;
+        try {
+            const crmApi = this.services.get('crmApi');
+            await CRMStore.createNamespace(
+                crmApi,
+                this._name.trim(),
+                this._description.trim() || null,
+                this._templateId
+            );
 
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.createNamespace(
-            crmApi,
-            this._name.trim(),
-            this._description.trim() || null,
-            this._templateId
-        );
-
-        this.success('Пространство создано');
-        this._saving = false;
-        
-        this.dispatchEvent(new CustomEvent('saved', {
-            detail: { name: this._name.trim() },
-            bubbles: true,
-            composed: true,
-        }));
-        
-        this.close();
+            this.success('Пространство создано');
+            this.dispatchEvent(new CustomEvent('saved', {
+                detail: { name: this._name.trim() },
+                bubbles: true,
+                composed: true,
+            }));
+            this.close();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка создания пространства';
+            this.error(message);
+            throw error;
+        } finally {
+            this._saving = false;
+        }
     }
 
     renderBody() {

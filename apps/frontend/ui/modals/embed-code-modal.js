@@ -55,11 +55,17 @@ export class EmbedCodeModal extends PlatformModal {
         this.open = true;
         this._loading = true;
         this.requestUpdate();
-
-        const data = await this.services.get('embed').getCode(embedId);
-        this._code = data.html_code;
-        this._loading = false;
-        this.requestUpdate();
+        try {
+            const data = await this.services.get('embed').getCode(embedId);
+            this._code = data.html_code;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка загрузки кода виджета';
+            this.error(message);
+            throw error;
+        } finally {
+            this._loading = false;
+            this.requestUpdate();
+        }
     }
 
     close() {

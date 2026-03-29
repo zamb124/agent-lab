@@ -418,7 +418,9 @@ export class ChannelSettingsModal extends PlatformModal {
             }
             this._members = rows;
         } catch (e) {
-            this._error = e instanceof Error ? e.message : String(e);
+            const message = e instanceof Error ? e.message : String(e);
+            this._error = message;
+            this.error(message);
         } finally {
             this._loading = false;
         }
@@ -481,6 +483,10 @@ export class ChannelSettingsModal extends PlatformModal {
             SyncStore.sanitizeChatSelectionAfterLoad();
             await SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, created.id);
             this._close();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this._error = message;
+            this.error(message);
         } finally {
             this._savingProfile = false;
         }
@@ -504,7 +510,9 @@ export class ChannelSettingsModal extends PlatformModal {
             SyncStore.mergeChannel(updated);
             this.channel = updated;
         } catch (err) {
-            this._error = err instanceof Error ? err.message : String(err);
+            const message = err instanceof Error ? err.message : String(err);
+            this._error = message;
+            this.error(message);
         } finally {
             this._savingMute = false;
         }
@@ -530,6 +538,10 @@ export class ChannelSettingsModal extends PlatformModal {
             });
             await SyncStore.loadChannels(syncApi);
             this._close();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this._error = message;
+            this.error(message);
         } finally {
             this._savingProfile = false;
         }
@@ -632,16 +644,23 @@ export class ChannelSettingsModal extends PlatformModal {
         if (ids.length === 0) return;
         this._adding = true;
         this._error = null;
-        const syncApi = this.services.get('syncApi');
-        for (const userId of ids) {
-            await syncApi.addChannelMember(channelId, userId, 'member');
+        try {
+            const syncApi = this.services.get('syncApi');
+            for (const userId of ids) {
+                await syncApi.addChannelMember(channelId, userId, 'member');
+            }
+            await SyncStore.loadChannels(syncApi);
+            this._selectedForAdd = {};
+            this._pickOpen = false;
+            this._search = '';
+            await this._loadMembers();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this._error = message;
+            this.error(message);
+        } finally {
+            this._adding = false;
         }
-        await SyncStore.loadChannels(syncApi);
-        this._selectedForAdd = {};
-        this._pickOpen = false;
-        this._search = '';
-        await this._loadMembers();
-        this._adding = false;
     }
 
 

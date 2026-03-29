@@ -686,7 +686,7 @@ async def execute_command(
     ):
         if calls is None:
             raise RuntimeError("CallRepository не передан в execute_command для call.* команд.")
-        if cmd.type in ("call.hangup", "call.recording.start", "call.recording.stop", "call.admin.transfer", "call.meeting.export_to_crm"):
+        if cmd.type in ("call.recording.start", "call.recording.stop", "call.admin.transfer", "call.meeting.export_to_crm"):
             if call_recordings is None:
                 raise RuntimeError("CallRecordingRepository не передан в execute_command для call.* команд.")
             if call_meetings is None:
@@ -702,19 +702,20 @@ async def execute_command(
             out, evs = await handle_call_decline(cmd, calls=calls)
         elif cmd.type == "call.hangup":
             payload = CallHangupPayload.model_validate(cmd.payload)
-            call = await calls.get_call(payload.call_id, cmd.company_id)
-            active_recording = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
             auto_stopped_recording_event: RealtimeEvent | None = None
-            if active_recording is not None and active_recording.started_by_user_id == cmd.actor_user_id:
-                stopped_recording = await _stop_and_finalize_recording(
-                    call=call,
-                    recording=active_recording,
-                    company_id=cmd.company_id,
-                    actor_user_id=cmd.actor_user_id,
-                    call_recordings=call_recordings,
-                    call_meetings=call_meetings,
-                )
-                auto_stopped_recording_event = event_call_recording_stopped(stopped_recording)
+            if call_recordings is not None and call_meetings is not None:
+                call = await calls.get_call(payload.call_id, cmd.company_id)
+                active_recording = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
+                if active_recording is not None and active_recording.started_by_user_id == cmd.actor_user_id:
+                    stopped_recording = await _stop_and_finalize_recording(
+                        call=call,
+                        recording=active_recording,
+                        company_id=cmd.company_id,
+                        actor_user_id=cmd.actor_user_id,
+                        call_recordings=call_recordings,
+                        call_meetings=call_meetings,
+                    )
+                    auto_stopped_recording_event = event_call_recording_stopped(stopped_recording)
             out, evs = await handle_call_hangup(cmd, calls=calls)
             if auto_stopped_recording_event is not None:
                 evs.append(auto_stopped_recording_event)

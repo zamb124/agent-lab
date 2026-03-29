@@ -1,6 +1,7 @@
 .PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-components
 
 WORKERS ?= 3
+PYTEST_COMMAND_TIMEOUT_SECONDS ?= 600
 
 # E2E UI (pytest + Playwright) и старый каталог browser — не гонять в unit/cov без инфраструктуры
 _PYTEST_IGNORE_UI := --ignore=tests/frontend/browser --ignore=tests/ui
@@ -16,7 +17,7 @@ test-down:
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up
 	@echo "Запуск unit/API тестов в $(WORKERS) воркерах..."
-	uv run pytest tests/ -n $(WORKERS) \
+	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ -n $(WORKERS) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration"
 
@@ -39,12 +40,12 @@ test-ui-components:
 # Полный запуск: unit параллельно -> retry упавших -> browser
 test: test-up
 	@echo "=== 1/3 Запуск unit/API тестов в $(WORKERS) воркерах ==="
-	uv run pytest tests/ -n $(WORKERS) \
+	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ -n $(WORKERS) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration" || true
 	@echo ""
 	@echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="
-	uv run pytest tests/ --lf \
+	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ --lf \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration" -v || true
 	@echo ""
@@ -53,11 +54,11 @@ test: test-up
 
 test-all: test-up
 	@echo "=== 1/3 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
-	uv run pytest tests/ -n $(WORKERS) \
+	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ -n $(WORKERS) \
 		$(_PYTEST_IGNORE_UI) || true
 	@echo ""
 	@echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="
-	uv run pytest tests/ --lf \
+	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ --lf \
 		$(_PYTEST_IGNORE_UI) -v || true
 	@echo ""
 	@echo "=== 3/3 Запуск E2E UI (pytest tests/ui/e2e) ==="
@@ -65,14 +66,14 @@ test-all: test-up
 
 test-cov: test-up
 	@echo "Запуск тестов с покрытием в $(WORKERS) воркерах (без browser)..."
-	uv run pytest tests/ -n $(WORKERS) \
+	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ -n $(WORKERS) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration" \
 		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
 
 test-cov-all: test-up
 	@echo "Запуск всех тестов с покрытием..."
-	uv run pytest tests/ -n $(WORKERS) \
+	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ -n $(WORKERS) \
 		$(_PYTEST_IGNORE_UI) \
 		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
 	uv run pytest tests/ui/e2e -v --timeout=180 \
