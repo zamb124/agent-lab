@@ -76,13 +76,6 @@ export class FrontendSidebar extends PlatformElement {
                 display: flex;
             }
 
-            .nav-icon img {
-                width: 20px;
-                height: 20px;
-                display: block;
-                object-fit: contain;
-            }
-
             .nav-label {
                 flex: 1;
             }
@@ -129,16 +122,9 @@ export class FrontendSidebar extends PlatformElement {
                 transform: translateX(4px);
             }
 
-            .service-link .external-icon {
-                margin-left: auto;
-                font-size: 12px;
-                opacity: 0.5;
-            }
-
             /* Collapsed mode */
             :host([collapsed]) .nav-label,
             :host([collapsed]) .section-title,
-            :host([collapsed]) .external-icon,
             :host([collapsed]) .service-link span:not(.nav-icon) {
                 display: none;
             }
@@ -195,10 +181,6 @@ export class FrontendSidebar extends PlatformElement {
     _navigate(view) {
         FrontendStore.setCurrentView(view);
         this.closeMobile();
-    }
-
-    _openExternalService(url) {
-        window.open(url, '_blank');
     }
 
     render() {
@@ -293,42 +275,6 @@ export class FrontendSidebar extends PlatformElement {
                         </span>
                         <span>Humanitec Docs</span>
                     </a>
-                </div>
-
-                <div class="services-section" data-hide-collapsed>
-                    <div class="section-title">Сервисы</div>
-
-                    <button class="service-link" @click=${() => this._openExternalService('/flows')}>
-                        <span class="nav-icon">
-                            <img src="/static/core/assets/service_logos/agents_logo.svg" alt="" />
-                        </span>
-                        <span>Flows</span>
-                        <span class="external-icon">↗</span>
-                    </button>
-
-                    <button class="service-link" @click=${() => this._openExternalService('/crm')}>
-                        <span class="nav-icon">
-                            <img src="/static/core/assets/service_logos/crm_logo.svg" alt="" />
-                        </span>
-                        <span>NetWorkle</span>
-                        <span class="external-icon">↗</span>
-                    </button>
-
-                    <button class="service-link" @click=${() => this._openExternalService('/rag')}>
-                        <span class="nav-icon">
-                            <img src="/static/core/assets/service_logos/rag_logo.svg" alt="" />
-                        </span>
-                        <span>RAG</span>
-                        <span class="external-icon">↗</span>
-                    </button>
-
-                    <button class="service-link" @click=${() => this._openExternalService('/sync')}>
-                        <span class="nav-icon">
-                            <img src="/static/core/assets/service_logos/sync_logo.svg" alt="" />
-                        </span>
-                        <span>Sync</span>
-                        <span class="external-icon">↗</span>
-                    </button>
                 </div>
 
                 <div slot="footer">

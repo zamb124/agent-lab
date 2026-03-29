@@ -23,6 +23,7 @@ export class PlatformUser extends PlatformElement {
         companies: { type: Array },
         _menuOpen: { type: Boolean },
         _companySelectorOpen: { type: Boolean },
+        _appsMenuOpen: { type: Boolean },
         _avatarBroken: { type: Boolean, state: true },
         /** Необязательный тег сценария (docs/scenarios/<service>/<tag>/), если UI привязан к процессу */
         documentationTag: { type: String },
@@ -35,6 +36,7 @@ export class PlatformUser extends PlatformElement {
         this.companies = [];
         this._menuOpen = false;
         this._companySelectorOpen = false;
+        this._appsMenuOpen = false;
         this._avatarBroken = false;
         this.documentationTag = null;
         this._boundRepositionMenu = this._syncCollapsedMenuPosition.bind(this);
@@ -206,7 +208,12 @@ export class PlatformUser extends PlatformElement {
 
     _toggleMenu(e) {
         e.stopPropagation();
-        this._menuOpen = !this._menuOpen;
+        const nextOpen = !this._menuOpen;
+        this._menuOpen = nextOpen;
+        if (!nextOpen) {
+            this._companySelectorOpen = false;
+            this._appsMenuOpen = false;
+        }
         this.requestUpdate();
     }
 
@@ -216,8 +223,95 @@ export class PlatformUser extends PlatformElement {
         if (!inside && this._menuOpen) {
             this._menuOpen = false;
             this._companySelectorOpen = false;
+            this._appsMenuOpen = false;
             this.requestUpdate();
         }
+    }
+
+    _toggleAppsMenu(e) {
+        e.stopPropagation();
+        this._appsMenuOpen = !this._appsMenuOpen;
+        this.requestUpdate();
+    }
+
+    _serviceApps() {
+        return [
+            {
+                id: 'flows',
+                name: 'Flows',
+                logo: '/static/core/assets/service_logos/agents_logo.svg',
+                description: 'Конструктор flow: графы, skills и интеграции',
+            },
+            {
+                id: 'crm',
+                name: 'NetWorkle',
+                logo: '/static/core/assets/service_logos/crm_logo.svg',
+                description: 'Управление контактами и Knowledge Graph',
+            },
+            {
+                id: 'rag',
+                name: 'RAG',
+                logo: '/static/core/assets/service_logos/rag_logo.svg',
+                description: 'Управление документами и поиск',
+            },
+            {
+                id: 'sync',
+                name: 'Sync',
+                logo: '/static/core/assets/service_logos/sync_logo.svg',
+                description: 'Инженерный чат с Git-интеграцией',
+            },
+        ];
+    }
+
+    _openServiceApp(serviceId, event) {
+        event.stopPropagation();
+        const url = this._buildServiceUrl(serviceId);
+        if (this._isStandalonePwaMode()) {
+            window.location.href = url;
+            return;
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
+    _buildServiceUrl(serviceId) {
+        const servicePath = `/${serviceId}`;
+        if (!this._isLocalHost(window.location.hostname)) {
+            return servicePath;
+        }
+
+        const servicePortById = {
+            flows: '8001',
+            frontend: '8002',
+            crm: '8003',
+            rag: '8004',
+            sync: '8005',
+        };
+
+        const targetPort = servicePortById[serviceId];
+        if (!targetPort) {
+            throw new Error(`Неизвестный сервис для перехода: ${serviceId}`);
+        }
+
+        if (window.location.port === targetPort) {
+            return servicePath;
+        }
+
+        return `${window.location.protocol}//${window.location.hostname}:${targetPort}${servicePath}`;
+    }
+
+    _isLocalHost(hostname) {
+        return (
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname.endsWith('.lvh.me')
+        );
+    }
+
+    _isStandalonePwaMode() {
+        const mediaQuery = window.matchMedia('(display-mode: standalone)');
+        const isStandaloneDisplayMode = Boolean(mediaQuery && mediaQuery.matches);
+        const isStandaloneIosMode = window.navigator.standalone === true;
+        return isStandaloneDisplayMode || isStandaloneIosMode;
     }
 
     _getUserInitials() {
@@ -482,6 +576,29 @@ export class PlatformUser extends PlatformElement {
 
                 ${this._menuOpen ? html`
                     <div class="user-menu">
+                        <button class="menu-item apps-item" @click=${this._toggleAppsMenu}>
+                            <img class="apps-menu-logo" src="/static/core/assets/service_logos/agents_logo.svg" alt="" />
+                            <span>Apps</span>
+                            <platform-icon name="chevron-right" size="12" class="expand-icon ${this._appsMenuOpen ? 'open' : ''}"></platform-icon>
+                        </button>
+
+                        ${this._appsMenuOpen ? html`
+                            <div class="apps-grid">
+                                ${this._serviceApps().map((service) => html`
+                                    <button class="app-card" @click=${(event) => this._openServiceApp(service.id, event)}>
+                                        <span class="app-card-header">
+                                            <img class="app-logo" src="${service.logo}" alt="" />
+                                            <platform-icon name="arrow-right" size="16" class="app-go-icon"></platform-icon>
+                                        </span>
+                                        <span class="app-card-name">${service.name}</span>
+                                        <span class="app-card-description">${service.description}</span>
+                                    </button>
+                                `)}
+                            </div>
+                        ` : ''}
+
+                        <div class="menu-divider"></div>
+
                         <button class="menu-item" @click=${this._openProfileModal}>
                             <platform-icon name="user" size="18" class="menu-icon"></platform-icon>
                             <span>Профиль</span>
@@ -490,10 +607,9 @@ export class PlatformUser extends PlatformElement {
                         ${hasMultipleCompanies ? html`
                             <div class="menu-divider"></div>
                             <button class="menu-item company-selector" @click=${this._toggleCompanySelector}>
-                                <platform-icon name="box" size="18" class="menu-icon"></platform-icon>
-                                <span class="menu-label">
-                                    <span class="label-text">Компания</span>
-                                    <span class="company-name">${currentCompanyName}</span>
+                                <platform-icon name="building-one" size="18" class="menu-icon company-building-icon"></platform-icon>
+                                <span class="company-name company-name-inline">
+                                    <span>${currentCompanyName}</span>
                                 </span>
                                 <platform-icon name="chevron-right" size="12" class="expand-icon ${this._companySelectorOpen ? 'open' : ''}"></platform-icon>
                             </button>
@@ -505,7 +621,10 @@ export class PlatformUser extends PlatformElement {
                                             class="company-item ${company.company_id === (this.user.active_company_id || this.user.company_id) ? 'active' : ''}"
                                             @click=${(e) => this._switchCompany(company.company_id, e)}
                                         >
-                                            <span>${company.name}</span>
+                                            <span class="company-item-name">
+                                                <platform-icon name="building-one" size="14" class="company-building-icon"></platform-icon>
+                                                <span>${company.name}</span>
+                                            </span>
                                             ${company.company_id === (this.user.active_company_id || this.user.company_id) ? html`
                                                 <platform-icon name="check" size="14" class="check-icon"></platform-icon>
                                             ` : ''}
@@ -709,7 +828,9 @@ export class PlatformUser extends PlatformElement {
                 box-shadow: var(--glass-shadow-medium), 0 8px 32px rgba(0,0,0,0.2);
                 z-index: 1000;
                 animation: slideUp 0.2s ease;
-                overflow: hidden;
+                max-height: min(70vh, calc(var(--app-vh, 100vh) - 24px));
+                overflow-x: hidden;
+                overflow-y: auto;
             }
 
             @keyframes slideUp {
@@ -754,6 +875,32 @@ export class PlatformUser extends PlatformElement {
                 justify-content: space-between;
             }
 
+            .menu-item.apps-item {
+                background: var(--accent-subtle);
+                color: var(--accent);
+                border: 1px solid var(--accent);
+                border-radius: var(--radius-lg);
+                margin: var(--space-2);
+                width: calc(100% - var(--space-4));
+            }
+
+            .menu-item.apps-item .menu-icon,
+            .menu-item.apps-item .expand-icon {
+                color: var(--accent);
+            }
+
+            .menu-item.apps-item:hover {
+                background: var(--accent-subtle);
+            }
+
+            .apps-menu-logo {
+                width: 18px;
+                height: 18px;
+                min-width: 18px;
+                display: block;
+                object-fit: contain;
+            }
+
             .menu-icon {
                 min-width: 20px;
                 display: flex;
@@ -762,22 +909,24 @@ export class PlatformUser extends PlatformElement {
                 color: var(--text-secondary);
             }
 
-            .menu-label {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
-            }
-
-            .label-text {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-            }
-
             .company-name {
                 font-size: var(--text-sm);
                 color: var(--text-primary);
                 font-weight: var(--font-medium);
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+            }
+
+            .company-name-inline {
+                flex: 1;
+            }
+
+            .company-building-icon {
+                color: var(--text-tertiary);
+                flex-shrink: 0;
+                filter: grayscale(1) saturate(0) brightness(0.75);
+                opacity: 0.9;
             }
 
             .expand-icon {
@@ -797,6 +946,73 @@ export class PlatformUser extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-1);
+                margin: 0 var(--space-2) var(--space-2);
+                border-left: 2px solid var(--glass-border-medium);
+                padding-left: var(--space-3);
+                border-radius: 0 var(--radius-md) var(--radius-md) 0;
+            }
+
+            .apps-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr);
+                gap: var(--space-2);
+                padding: 0 var(--space-2) var(--space-2);
+            }
+
+            .app-card {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                padding: var(--space-2);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-medium);
+                text-align: left;
+                cursor: pointer;
+                color: var(--text-primary);
+                transition: all var(--duration-fast);
+            }
+
+            .app-card:hover {
+                border-color: var(--border-default);
+                background: var(--glass-solid-strong);
+                transform: translateY(-1px);
+            }
+
+            .app-card-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+            }
+
+            .app-logo {
+                width: 20px;
+                height: 20px;
+                object-fit: contain;
+                display: block;
+            }
+
+            .app-go-icon {
+                color: var(--text-tertiary);
+            }
+
+            .app-card-name {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+
+            .app-card-description {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                line-height: 1.4;
+            }
+
+            @media (min-width: 380px) {
+                .apps-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
             }
 
             .company-item {
@@ -811,6 +1027,13 @@ export class PlatformUser extends PlatformElement {
                 font-size: var(--text-sm);
                 color: var(--text-primary);
                 transition: all var(--duration-fast);
+            }
+
+            .company-item-name {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
             }
 
             .company-item:hover {
