@@ -258,11 +258,26 @@ export class FrontendApp extends PlatformApp {
         return await this.auth.validateToken();
     }
     
+    _normalizeCurrentView(currentView) {
+        const normalizedView = String(currentView ?? '')
+            .trim()
+            .replace(/^\/+/, '')
+            .replace(/\/+$/, '')
+            .split('?')[0]
+            .split('#')[0]
+            .replace(/_/g, '-')
+            .toLowerCase();
+
+        if (!normalizedView) {
+            throw new Error('currentView must be a non-empty string');
+        }
+
+        return normalizedView;
+    }
+
     _renderContent() {
         const { currentView } = this.state.value;
-        const normalizedView = typeof currentView === 'string'
-            ? currentView.trim().replace(/^\/+/, '').replace(/\/+$/, '')
-            : currentView;
+        const normalizedView = this._normalizeCurrentView(currentView);
 
         switch (normalizedView) {
             case 'dashboard':
