@@ -9,6 +9,14 @@ import { CRMPanel } from './crm-panel.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 
+function getLocalIsoDate() {
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 export class NotesList extends CRMPanel {
     static styles = [
         CRMPanel.panelStyles,
@@ -232,7 +240,7 @@ export class NotesList extends CRMPanel {
         await CRMStore.createNote(crmApi, {
             name: 'Новая заметка',
             description: '',
-            note_date: new Date().toISOString().split('T')[0]
+            note_date: getLocalIsoDate(),
         });
         
         this.success('Заметка создана');

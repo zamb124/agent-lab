@@ -5,6 +5,14 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 
+function getLocalIsoDate() {
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 export class NoteContent extends PlatformElement {
     static properties = {
         note: { type: Object },
@@ -972,7 +980,7 @@ export class NoteContent extends PlatformElement {
                     ? this._getText(this.noteSubtypes[0]?.type_id, 'meeting')
                     : 'meeting';
                 this._draftSubtype = noteSubtype || fallbackSubtype;
-                this._draftNoteDate = noteDate || new Date().toISOString().slice(0, 10);
+                this._draftNoteDate = noteDate || getLocalIsoDate();
             }
         }
     }

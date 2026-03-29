@@ -7,6 +7,8 @@ set_settings(SyncSettings(**load_merged_config(service_name="sync"))): так д
 create_service_app в main и загрузчик apps.sync_worker.worker.
 """
 
+from pydantic import Field
+
 from core.config import BaseSettings
 
 
@@ -18,4 +20,7 @@ class SyncSettings(BaseSettings):
     (корневой conf.json + conf.local.json, плюс слой services.sync при merge).
     """
 
-    pass
+    summary_a2a_timeout_seconds: float = Field(
+        default=3000.0,
+        description="Таймаут A2A вызова summary в flows (секунды).",
+    )

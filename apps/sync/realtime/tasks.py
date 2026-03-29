@@ -268,7 +268,10 @@ async def sync_summarize_transcript_task(meeting_id: str, company_id: str, actor
             company_id=company_id,
         )
 
-        a2a = A2AClient(timeout=120.0)
+        a2a_timeout_seconds = settings.summary_a2a_timeout_seconds
+        if a2a_timeout_seconds <= 0:
+            raise ValueError("summary_a2a_timeout_seconds должен быть больше 0.")
+        a2a = A2AClient(timeout=a2a_timeout_seconds)
         response = await a2a.send_task(
             base_url=flows_a2a_url,
             skill_id="call_summary",

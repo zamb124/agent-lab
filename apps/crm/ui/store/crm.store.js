@@ -8,6 +8,14 @@ const LAST_NAMESPACE_STORAGE_KEY = 'crm:last-namespace-by-company';
 const ALL_NAMESPACES_SENTINEL = '__ALL__';
 
 function getTodayIsoDate() {
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getUtcTodayIsoDate() {
     return new Date().toISOString().slice(0, 10);
 }
 
@@ -310,6 +318,13 @@ export const CRMStore = {
     getDailyNotesDate() {
         const value = baseStore.state.ui.dailyNotesDate;
         assertIsoDate(value, 'ui.dailyNotesDate');
+        // Миграция legacy-значения: раньше дата инициализировалась через UTC.
+        const utcToday = getUtcTodayIsoDate();
+        const localToday = getTodayIsoDate();
+        if (value === utcToday && utcToday !== localToday) {
+            this.setDailyNotesDate(localToday);
+            return localToday;
+        }
         return value;
     },
 

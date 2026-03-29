@@ -14,6 +14,7 @@ globs:
 - **Изоляция**: `company_id` во всех таблицах, из `get_context()` автоматически
 - **Auth**: платформенный `AuthMiddleware` + `get_context()`
 - **Конфиг**: один глобальный `core.config.get_settings()`. HTTP-сервис Sync грузит `services.sync` через `set_settings(SyncSettings(**load_merged_config(service_name="sync")))` в `main.py`; Sync worker грузит `services.sync_worker` через `apps.sync_worker.worker`. Отдельного `get_sync_settings()` нет.
+- Для длительных вызовов summary в flows используется `summary_a2a_timeout_seconds` (в `SyncSettings`, дефолт 3000с; можно переопределять в `services.sync` и/или `services.sync_worker`).
 - **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket
 - **Деплой**: в production-образе обязателен `uv pip install ... --group sync` (`websockets` в `pyproject.toml`). Иначе uvicorn не поднимает WebSocket (`No supported WebSocket library`), клиент получает 404 на `GET /sync/ws` из-за SPA-fallback в `main.py` для пути `ws`
 - **TaskIQ broker**: один инстанс в `apps/sync/realtime/broker.py` — и `handle_command.kiq()`, и `taskiq worker apps.sync_worker.worker:broker` (реэкспорт из того же модуля)

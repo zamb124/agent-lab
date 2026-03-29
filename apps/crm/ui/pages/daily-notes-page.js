@@ -189,6 +189,17 @@ export class DailyNotesPage extends PlatformElement {
                 min-height: 24px;
             }
 
+            .note-tags-row::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 56px;
+                height: 24px;
+                background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, var(--crm-surface) 42%);
+                pointer-events: none;
+            }
+
             .note-tags {
                 display: flex;
                 flex-wrap: nowrap;
@@ -528,11 +539,9 @@ export class DailyNotesPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._notes = Array.isArray(CRMStore.state.entities.notes) ? CRMStore.state.entities.notes : [];
         this._selectedDate = CRMStore.getDailyNotesDate();
         this._currentNamespace = CRMStore.state.namespaces.current;
         this._unsubscribe = CRMStore.subscribe((state) => {
-            this._notes = Array.isArray(state.entities.notes) ? state.entities.notes : [];
             this._selectedDate = state.ui.dailyNotesDate;
             const previousNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
             this._currentNamespace = state.namespaces.current;
@@ -709,11 +718,12 @@ export class DailyNotesPage extends PlatformElement {
     async _reloadNotesForSelectedDate() {
         const crmApi = this.services.get('crmApi');
         this._noteEntitiesByNoteId = {};
-        await CRMStore.loadNotes(crmApi, {
+        const notes = await CRMStore.loadNotes(crmApi, {
             dateFrom: this._selectedDate,
             dateTo: this._selectedDate,
             limit: 300,
         });
+        this._notes = Array.isArray(notes) ? notes : [];
     }
 
     async _onCreateNote() {
@@ -977,6 +987,7 @@ export class DailyNotesPage extends PlatformElement {
         modal.showModal();
         modal.addEventListener('close', () => modal.remove());
         modal.addEventListener('note-created', async () => {
+            await this._reloadNotesForSelectedDate();
             await this._loadVisibleNoteEntities();
             await this._loadDailySummary();
         });

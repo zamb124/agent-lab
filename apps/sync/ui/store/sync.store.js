@@ -236,6 +236,33 @@ export const SyncStore = {
         }));
     },
 
+    upsertMeeting(meeting) {
+        if (!meeting || typeof meeting !== 'object') {
+            throw new Error('upsertMeeting: meeting обязателен.');
+        }
+        if (typeof meeting.meeting_id !== 'string' || meeting.meeting_id === '') {
+            throw new Error('upsertMeeting: meeting.meeting_id обязателен.');
+        }
+        baseStore.setState((s) => {
+            const list = s.meetings.list;
+            const idx = list.findIndex((m) => m.meeting_id === meeting.meeting_id);
+            const nextList = idx === -1
+                ? [meeting, ...list]
+                : list.map((m, i) => (i === idx ? meeting : m));
+            const selected = s.meetings.selected;
+            const nextSelected = selected && selected.meeting_id === meeting.meeting_id
+                ? meeting
+                : selected;
+            return {
+                meetings: {
+                    ...s.meetings,
+                    list: nextList,
+                    selected: nextSelected,
+                },
+            };
+        });
+    },
+
     setMeetingsFilters(filters) {
         if (!filters || typeof filters !== 'object') {
             throw new Error('filters обязателен.');

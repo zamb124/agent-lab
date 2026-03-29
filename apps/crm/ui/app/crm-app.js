@@ -318,8 +318,13 @@ export class CRMApp extends PlatformApp {
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
+        const selectedDate = CRMStore.getDailyNotesDate();
         await Promise.all([
-            CRMStore.loadNotes(crmApi),
+            CRMStore.loadNotes(crmApi, {
+                dateFrom: selectedDate,
+                dateTo: selectedDate,
+                limit: 300,
+            }),
             CRMStore.loadEntityTypes(crmApi, namespaceName),
             CRMStore.loadRelationshipTypes(crmApi),
         ]);
@@ -494,9 +499,14 @@ export class CRMApp extends PlatformApp {
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
+        const selectedDate = CRMStore.getDailyNotesDate();
         await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
-        await CRMStore.loadNotes(crmApi);
+        await CRMStore.loadNotes(crmApi, {
+            dateFrom: selectedDate,
+            dateTo: selectedDate,
+            limit: 300,
+        });
     }
 
     async _onNamespaceSaved(e) {
@@ -507,9 +517,14 @@ export class CRMApp extends PlatformApp {
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
+        const selectedDate = CRMStore.getDailyNotesDate();
         await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
-        await CRMStore.loadNotes(crmApi);
+        await CRMStore.loadNotes(crmApi, {
+            dateFrom: selectedDate,
+            dateTo: selectedDate,
+            limit: 300,
+        });
     }
 
     render() {

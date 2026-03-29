@@ -525,9 +525,11 @@ export class SyncApp extends PlatformApp {
             || msg.type === 'call.export.crm.done'
             || msg.type === 'call.export.crm.failed'
         ) {
+            SyncStore.upsertMeeting(p);
             return;
         }
         if (msg.type === 'call.transcript.failed' || msg.type === 'call.summary.failed') {
+            SyncStore.upsertMeeting(p);
             const errorText = (typeof p.error === 'string' && p.error !== '') ? p.error : 'Ошибка обработки встречи';
             console.error(`[sync] ${msg.type}: ${errorText}`, p);
             if (this._activeCall?.call_id === p.call_id) {

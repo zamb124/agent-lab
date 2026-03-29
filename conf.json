@@ -225,6 +225,7 @@
       }
     },
     "sync_worker": {
+      "summary_a2a_timeout_seconds": 3000,
       "server": {
         "flows_service_url": "http://agents:8001"
       }
