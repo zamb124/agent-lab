@@ -205,6 +205,7 @@ async def list_call_recordings(call_id: str) -> list[CallRecordingRead]:
             call_id=r.call_id,
             channel_id=r.channel_id,
             space_id=r.space_id,
+            started_by_user_id=r.started_by_user_id,
             status=r.status,
             provider_job_id=r.provider_job_id,
             raw_file_id=r.raw_file_id,

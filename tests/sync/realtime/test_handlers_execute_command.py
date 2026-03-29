@@ -1148,6 +1148,113 @@ async def test_call_recording_start_forbidden_for_non_admin(
 
 
 @pytest.mark.asyncio
+async def test_call_recording_stop_allowed_for_recording_starter_non_admin(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    sync_user_repository,
+    monkeypatch,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    from apps.sync.realtime import handlers as handlers_module
+
+    owner_user_id = "owner_recording_stop"
+    actor_user_id = "member_recording_stop"
+    space = SyncSpace(
+        space_id="sp_recording_stop_starter",
+        company_id=company_id,
+        name="Recording Stop Starter",
+        description=None,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await space_repo.create(space)
+    channel = SyncChannel(
+        channel_id="ch_recording_stop_starter",
+        company_id=company_id,
+        space_id=space.space_id,
+        type=ChannelType.TOPIC.value,
+        name="calls",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await channel_repo.create(channel)
+    await channel_repo.upsert_member(channel.channel_id, owner_user_id, "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel.channel_id, actor_user_id, "member", company_id=company_id)
+    call = SyncCall(
+        call_id="call_recording_stop_starter",
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name="room-recording-stop-starter",
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=owner_user_id,
+    )
+    await call_repo.create_call(call)
+    recording = SyncCallRecording(
+        recording_id="rec_recording_stop_starter",
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=call.channel_id,
+        space_id=space.space_id,
+        status="recording",
+        started_by_user_id=actor_user_id,
+        provider_job_id="egress-recording-stop-starter",
+        started_at=datetime.now(tz=UTC),
+    )
+    await call_recording_repo.create(recording)
+
+    async def _fake_stop_and_finalize_recording(**kwargs):
+        return CallRecordingRead(
+            recording_id=kwargs["recording"].recording_id,
+            call_id=kwargs["call"].call_id,
+            channel_id=kwargs["call"].channel_id,
+            space_id=kwargs["recording"].space_id,
+            started_by_user_id=kwargs["recording"].started_by_user_id,
+            status="uploaded",
+            provider_job_id=kwargs["recording"].provider_job_id,
+            raw_file_id=None,
+            started_at=kwargs["recording"].started_at,
+            ended_at=datetime.now(tz=UTC),
+            created_at=kwargs["recording"].created_at,
+            error=None,
+        )
+
+    monkeypatch.setattr(handlers_module, "_stop_and_finalize_recording", _fake_stop_and_finalize_recording)
+
+    result = await execute_command(
+        _cmd(
+            actor=actor_user_id,
+            company_id=company_id,
+            typ="call.recording.stop",
+            payload={"call_id": call.call_id},
+        ),
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        calls=call_repo,
+        call_recordings=call_recording_repo,
+        call_meetings=call_meeting_repo,
+        user_repository=sync_user_repository,
+    )
+    assert result.ok
+    assert result.result is not None
+    assert result.result.status == "uploaded"
+    assert any(event.type == "call.recording.stopped" for event in result.events)
+
+
+@pytest.mark.asyncio
 async def test_call_admin_transfer_updates_call_admin(
     space_repo,
     channel_repo,
@@ -1574,6 +1681,62 @@ async def test_download_recording_bytes_404_then_success(monkeypatch) -> None:
         "http://livekit:7880/egress/room/egress.mp4",
     ]
     assert sleep_calls == [3.0]
+
+
+@pytest.mark.asyncio
+async def test_download_recording_bytes_rejects_text_error_payload(monkeypatch) -> None:
+    from apps.sync.realtime import tasks as sync_tasks
+
+    class _FakeResponse:
+        def __init__(self, status_code: int, content: bytes, content_type: str | None) -> None:
+            self.status_code = status_code
+            self.content = content
+            self.headers: dict[str, str] = {}
+            if content_type is not None:
+                self.headers["content-type"] = content_type
+
+        def raise_for_status(self) -> None:
+            raise RuntimeError(f"Unexpected raise_for_status for status={self.status_code}")
+
+    class _FakeClientContext:
+        def __init__(self, response: _FakeResponse) -> None:
+            self._response = response
+
+        async def __aenter__(self) -> "_FakeClientContext":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        async def get(self, url: str) -> _FakeResponse:
+            return self._response
+
+    def _fake_get_httpx_client(*, timeout: float, **kwargs) -> _FakeClientContext:
+        return _FakeClientContext(
+            response=_FakeResponse(
+                status_code=200,
+                content=b"Error opening <_io.BytesIO object>: Format not recognised.",
+                content_type="text/plain; charset=utf-8",
+            )
+        )
+
+    monkeypatch.setattr(sync_tasks, "get_httpx_client", _fake_get_httpx_client)
+
+    with pytest.raises(ValueError, match="неподдерживаемый content-type"):
+        await sync_tasks._download_recording_bytes(
+            source_url="http://livekit:7880/egress/room/egress.mp4",
+            timeout_seconds=5.0,
+        )
+
+
+def test_extract_transcript_from_json_payload_ignores_error_payload() -> None:
+    from core.clients.stt_client import _extract_transcript_from_json_payload
+
+    payload = {
+        "error": "Error opening <_io.BytesIO object>: Format not recognised.",
+        "status": "failed",
+    }
+    assert _extract_transcript_from_json_payload(payload) is None
 
 
 @pytest.mark.asyncio

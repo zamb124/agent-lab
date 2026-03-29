@@ -25,6 +25,9 @@ def _extract_transcript_from_json_payload(payload: object) -> str | None:
                 found = _extract_transcript_from_json_payload(payload[key])
                 if found is not None:
                     return found
+        error_keys = ("error", "errors", "error_message", "exception")
+        if any(key in payload for key in error_keys):
+            return None
         container_keys = (
             "result",
             "data",
@@ -43,7 +46,9 @@ def _extract_transcript_from_json_payload(payload: object) -> str | None:
                 found = _extract_transcript_from_json_payload(payload[key])
                 if found is not None:
                     return found
-        for value in payload.values():
+        for key, value in payload.items():
+            if key in error_keys:
+                continue
             if isinstance(value, dict) or isinstance(value, list):
                 found = _extract_transcript_from_json_payload(value)
                 if found is not None:
@@ -63,6 +68,26 @@ def _short_json(value: object, *, limit: int = 1200) -> str:
     if len(serialized) <= limit:
         return serialized
     return serialized[:limit] + "...(truncated)"
+
+
+def _looks_like_stt_error_text(text: str) -> bool:
+    normalized = text.strip().lower()
+    if normalized == "":
+        return False
+    if normalized.startswith("error opening <_io.bytesio object>"):
+        return True
+    if normalized.startswith("error:") or normalized.startswith("error "):
+        return True
+    error_markers = (
+        "format not recognised",
+        "invalid data found when processing input",
+        "moov atom not found",
+        "ffmpeg error",
+    )
+    for marker in error_markers:
+        if marker in normalized:
+            return True
+    return False
 
 
 class BaseSTTClient(ABC):
@@ -219,6 +244,11 @@ class CloudRuSTTClient(BaseSTTClient):
 
         if body_text == "":
             raise ValueError("STT cloud_ru вернул пустой ответ.")
+        if _looks_like_stt_error_text(body_text):
+            raise ValueError(
+                "STT cloud_ru вернул текст ошибки вместо транскрипции: "
+                f"{body_text[:300]}"
+            )
         return STTTranscriptionResult(
             provider="cloud_ru",
             status=AudioTranscriptionStatus.DONE,

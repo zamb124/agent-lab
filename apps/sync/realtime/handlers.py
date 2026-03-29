@@ -808,13 +808,17 @@ async def execute_command(
         elif cmd.type == "call.recording.stop":
             payload = CallRecordingStopPayload.model_validate(cmd.payload)
             call = await calls.get_call(payload.call_id, cmd.company_id)
-            if call.created_by_user_id != cmd.actor_user_id:
-                raise PermissionError("Только админ встречи может останавливать запись.")
             if not await channels.is_member(call.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
                 raise PermissionError("Нет доступа к звонку.")
             active = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
             if active is None:
                 raise ValueError("Активная запись не найдена.")
+            is_meeting_admin = call.created_by_user_id == cmd.actor_user_id
+            is_recording_starter = active.started_by_user_id == cmd.actor_user_id
+            if not is_meeting_admin and not is_recording_starter:
+                raise PermissionError(
+                    "Останавливать запись может только админ встречи или пользователь, который её запустил."
+                )
             out = await _stop_and_finalize_recording(
                 call=call,
                 recording=active,
@@ -922,6 +926,7 @@ def _recording_read_from_entity(recording) -> CallRecordingRead:
         call_id=recording.call_id,
         channel_id=recording.channel_id,
         space_id=recording.space_id,
+        started_by_user_id=recording.started_by_user_id,
         status=recording.status,
         provider_job_id=recording.provider_job_id,
         raw_file_id=recording.raw_file_id,

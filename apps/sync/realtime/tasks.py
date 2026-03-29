@@ -44,6 +44,69 @@ from core.utils.tokens import get_token_service
 logger = get_logger(__name__)
 
 
+def _normalize_mime_type(raw_mime_type: str | None) -> str | None:
+    if raw_mime_type is None:
+        return None
+    if raw_mime_type == "":
+        return None
+    return raw_mime_type.split(";", 1)[0].strip().lower()
+
+
+def _looks_like_text_error_payload(payload: bytes) -> str | None:
+    if len(payload) == 0:
+        return "пустое тело ответа"
+    probe = payload[:4096]
+    try:
+        text = probe.decode("utf-8", errors="ignore").strip()
+    except UnicodeDecodeError:
+        return None
+    if text == "":
+        return None
+    normalized = text.lower()
+    error_markers = (
+        "error opening <_io.bytesio object>",
+        "format not recognised",
+        "<html",
+        "<!doctype html",
+        "<?xml",
+        "<error>",
+        "<code>nosuchkey</code>",
+        "accessdenied",
+        "\"error\"",
+        "\"errors\"",
+    )
+    for marker in error_markers:
+        if marker in normalized:
+            compact = " ".join(text.split())
+            snippet = compact[:200]
+            return f"вместо медиаданных получен текст ошибки: {snippet}"
+    return None
+
+
+def _validate_recording_media_payload(
+    *,
+    payload: bytes,
+    response_content_type: str | None,
+    source_url: str,
+) -> None:
+    normalized_mime_type = _normalize_mime_type(response_content_type)
+    if normalized_mime_type is not None:
+        if (
+            not normalized_mime_type.startswith("audio/")
+            and not normalized_mime_type.startswith("video/")
+            and normalized_mime_type != "application/octet-stream"
+        ):
+            raise ValueError(
+                "Источник записи вернул неподдерживаемый content-type: "
+                f"{normalized_mime_type}. source_url={source_url}"
+            )
+    error_description = _looks_like_text_error_payload(payload)
+    if error_description is not None:
+        raise ValueError(
+            f"Источник записи вернул невалидный файл ({error_description}). source_url={source_url}"
+        )
+
+
 async def _download_recording_bytes(*, source_url: str, timeout_seconds: float) -> tuple[bytes, str | None]:
     """Скачивает запись с коротким ожиданием появления файла после stop recording."""
     wait_timeout_seconds = 90.0
@@ -70,6 +133,11 @@ async def _download_recording_bytes(*, source_url: str, timeout_seconds: float) 
         if response.status_code == 200:
             if not response.content:
                 raise ValueError("Источник записи вернул пустое тело.")
+            _validate_recording_media_payload(
+                payload=response.content,
+                response_content_type=response.headers.get("content-type"),
+                source_url=source_url,
+            )
             return response.content, response.headers.get("content-type")
         if response.status_code != 404:
             response.raise_for_status()
@@ -138,6 +206,11 @@ async def _try_download_recording_bytes_from_s3(source_url: str) -> tuple[bytes,
         finally:
             await s3_client.close()
         content_type, _ = mimetypes.guess_type(object_key)
+        _validate_recording_media_payload(
+            payload=payload,
+            response_content_type=content_type,
+            source_url=source_url,
+        )
         return payload, content_type
 
     return None

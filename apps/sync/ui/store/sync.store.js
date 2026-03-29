@@ -20,6 +20,14 @@ function _clearAllMessageDeleteTimers() {
 
 const MESSAGE_DELETE_ANIM_MS = 580;
 
+function _emptyOverlayChannelState() {
+    return {
+        list: [],
+        pending: {},
+        loading: false,
+    };
+}
+
 /** UUID канала в событиях и в UI должны совпадать; сравнение без учёта регистра. */
 function normalizeSyncChannelId(channelId) {
     if (typeof channelId !== 'string' || channelId === '') {
@@ -53,6 +61,9 @@ const baseStore = new BaseStore('sync', {
         list: [],
         pending: {},
         loading: false,
+    },
+    callOverlayChat: {
+        channels: {},
     },
     meetings: {
         list: [],
@@ -216,6 +227,182 @@ export const SyncStore = {
         baseStore.setState(s => ({
             messages: { ...s.messages, loading },
         }));
+    },
+
+    _getOverlayChannelState(source, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        const current = source.callOverlayChat.channels[norm];
+        return current ?? _emptyOverlayChannelState();
+    },
+
+    setCallOverlayMessages(channelId, list) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (!Array.isArray(list)) {
+            throw new Error('list должен быть массивом.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => {
+            const channels = { ...s.callOverlayChat.channels };
+            channels[norm] = {
+                ..._emptyOverlayChannelState(),
+                ...this._getOverlayChannelState(s, channelId),
+                list,
+                pending: {},
+                loading: false,
+            };
+            return { callOverlayChat: { ...s.callOverlayChat, channels } };
+        });
+    },
+
+    setCallOverlayLoading(channelId, loading) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => {
+            const channels = { ...s.callOverlayChat.channels };
+            channels[norm] = {
+                ..._emptyOverlayChannelState(),
+                ...this._getOverlayChannelState(s, channelId),
+                loading: !!loading,
+            };
+            return { callOverlayChat: { ...s.callOverlayChat, channels } };
+        });
+    },
+
+    upsertCallOverlayMessage(channelId, message) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (!message || typeof message !== 'object') {
+            throw new Error('message обязателен.');
+        }
+        if (typeof message.id !== 'string' || message.id === '') {
+            throw new Error('message.id обязателен.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => {
+            const current = this._getOverlayChannelState(s, channelId);
+            const idx = current.list.findIndex((m) => m.id === message.id);
+            const list = idx === -1
+                ? [...current.list, message]
+                : current.list.map((m, i) => (i === idx ? message : m));
+            const channels = { ...s.callOverlayChat.channels };
+            channels[norm] = { ...current, list };
+            return { callOverlayChat: { ...s.callOverlayChat, channels } };
+        });
+    },
+
+    addCallOverlayPending(channelId, commandId, message) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (typeof commandId !== 'string' || commandId === '') {
+            throw new Error('commandId обязателен.');
+        }
+        if (!message || typeof message !== 'object') {
+            throw new Error('message обязателен.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => {
+            const current = this._getOverlayChannelState(s, channelId);
+            const channels = { ...s.callOverlayChat.channels };
+            channels[norm] = {
+                ...current,
+                pending: { ...current.pending, [commandId]: message },
+            };
+            return { callOverlayChat: { ...s.callOverlayChat, channels } };
+        });
+    },
+
+    resolveCallOverlayPending(channelId, commandId, confirmedMessage) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (typeof commandId !== 'string' || commandId === '') {
+            throw new Error('commandId обязателен.');
+        }
+        if (!confirmedMessage || typeof confirmedMessage !== 'object') {
+            throw new Error('confirmedMessage обязателен.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => {
+            const current = this._getOverlayChannelState(s, channelId);
+            const pending = { ...current.pending };
+            delete pending[commandId];
+            const idx = current.list.findIndex((m) => m.id === confirmedMessage.id);
+            const list = idx === -1
+                ? [...current.list, confirmedMessage]
+                : current.list.map((m, i) => (i === idx ? confirmedMessage : m));
+            const channels = { ...s.callOverlayChat.channels };
+            channels[norm] = { ...current, list, pending };
+            return { callOverlayChat: { ...s.callOverlayChat, channels } };
+        });
+    },
+
+    failCallOverlayPending(channelId, commandId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (typeof commandId !== 'string' || commandId === '') {
+            throw new Error('commandId обязателен.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => {
+            const current = this._getOverlayChannelState(s, channelId);
+            const pendingMsg = current.pending[commandId];
+            if (!pendingMsg) {
+                return s;
+            }
+            const channels = { ...s.callOverlayChat.channels };
+            channels[norm] = {
+                ...current,
+                pending: {
+                    ...current.pending,
+                    [commandId]: { ...pendingMsg, status: 'failed' },
+                },
+            };
+            return { callOverlayChat: { ...s.callOverlayChat, channels } };
+        });
+    },
+
+    getCallOverlayDisplayMessages(channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            return [];
+        }
+        const current = this._getOverlayChannelState(baseStore.state, channelId);
+        const pending = Object.values(current.pending);
+        const merged = [...current.list, ...pending];
+        merged.sort((a, b) => a.sent_at.localeCompare(b.sent_at));
+        return merged;
+    },
+
+    getCallOverlayLoading(channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            return false;
+        }
+        const current = this._getOverlayChannelState(baseStore.state, channelId);
+        return current.loading;
+    },
+
+    async loadCallOverlayMessages(syncApi, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        this.setCallOverlayLoading(channelId, true);
+        try {
+            const items = await syncApi.getMessages(channelId);
+            this.setCallOverlayMessages(channelId, items);
+            return items;
+        } catch (e) {
+            this.setCallOverlayLoading(channelId, false);
+            throw e;
+        }
     },
 
     setMeetings(list) {

@@ -17,6 +17,7 @@ class CallRecordingRead(BaseModel):
     call_id: str
     channel_id: str
     space_id: str | None = None
+    started_by_user_id: str | None = None
     status: RecordingStatus
     provider_job_id: str | None = None
     raw_file_id: str | None = None

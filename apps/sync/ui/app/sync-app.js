@@ -300,6 +300,20 @@ export class SyncApp extends PlatformApp {
             throw new Error(`${msg.type}: payload обязателен.`);
         }
 
+        if (
+            msg.type === 'message.created'
+            && this._activeCall
+            && typeof this._activeCall.channel_id === 'string'
+            && this._activeCall.channel_id !== ''
+            && typeof p.channel_id === 'string'
+        ) {
+            const activeCallNorm = SyncStore.normalizeSyncChannelId(this._activeCall.channel_id);
+            const payloadNorm = SyncStore.normalizeSyncChannelId(p.channel_id);
+            if (activeCallNorm === payloadNorm) {
+                SyncStore.upsertCallOverlayMessage(this._activeCall.channel_id, p);
+            }
+        }
+
         if (msg.type === 'channel.member_added') {
             const authUser = this.auth?.user;
             const myId = authUser?.id;
@@ -500,6 +514,10 @@ export class SyncApp extends PlatformApp {
         }
         if (msg.type === 'call.recording.started') {
             if (this._activeCall?.call_id === p.call_id) {
+                this._activeCall = {
+                    ...this._activeCall,
+                    recording_started_by_user_id: p.started_by_user_id || '',
+                };
                 const overlay = this.renderRoot?.querySelector('call-overlay');
                 overlay?.setRecordingStatus?.('recording');
             }
@@ -516,6 +534,10 @@ export class SyncApp extends PlatformApp {
         }
         if (msg.type === 'call.recording.stopped') {
             if (this._activeCall?.call_id === p.call_id) {
+                this._activeCall = {
+                    ...this._activeCall,
+                    recording_started_by_user_id: '',
+                };
                 const overlay = this.renderRoot?.querySelector('call-overlay');
                 overlay?.setRecordingStatus?.('idle');
             }
@@ -523,6 +545,10 @@ export class SyncApp extends PlatformApp {
         }
         if (msg.type === 'call.recording.failed') {
             if (this._activeCall?.call_id === p.call_id) {
+                this._activeCall = {
+                    ...this._activeCall,
+                    recording_started_by_user_id: '',
+                };
                 const overlay = this.renderRoot?.querySelector('call-overlay');
                 overlay?.setRecordingStatus?.('failed', p.error || 'Ошибка записи');
             }
@@ -599,12 +625,30 @@ export class SyncApp extends PlatformApp {
     async _openCallOverlay(callData) {
         this._activeCall = callData;
         this._incomingCall = null;
+        const syncApi = this.services.get('syncApi');
+        const pending = [syncApi.get(`/calls/${callData.call_id}/recordings`)];
         if (callData.mode === 'sfu') {
-            const syncApi = this.services.get('syncApi');
-            const tokenData = await syncApi.get(`/calls/${callData.call_id}/token`);
-            // Пока ждали токен — звонок мог завершиться. Не перезаписываем если уже null.
-            if (!this._activeCall || this._activeCall.call_id !== callData.call_id) return;
-            this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
+            pending.push(syncApi.get(`/calls/${callData.call_id}/token`));
+        }
+        const [recordingsData, tokenData] = await Promise.all(pending);
+        if (!this._activeCall || this._activeCall.call_id !== callData.call_id) return;
+        const recordings = Array.isArray(recordingsData) ? recordingsData : [];
+        const activeRecording = recordings.find((item) =>
+            item
+            && (item.status === 'requested' || item.status === 'recording')
+        );
+        const nextCallData = {
+            ...callData,
+            recording_started_by_user_id: activeRecording?.started_by_user_id || '',
+        };
+        if (callData.mode === 'sfu') {
+            nextCallData.livekit_token = tokenData.token;
+            nextCallData.livekit_url = tokenData.livekit_url;
+        }
+        this._activeCall = nextCallData;
+        const overlay = this.renderRoot?.querySelector('call-overlay');
+        if (overlay && activeRecording) {
+            overlay.setRecordingStatus('recording');
         }
     }
 
@@ -772,6 +816,7 @@ export class SyncApp extends PlatformApp {
                     call-type=${this._activeCall.call_type}
                     current-user-id=${this.auth?.user?.id || ''}
                     meeting-admin-user-id=${this._activeCall.created_by_user_id || ''}
+                    recording-started-by-user-id=${this._activeCall.recording_started_by_user_id || ''}
                     livekit-url=${this._activeCall.livekit_url || ''}
                     livekit-token=${this._activeCall.livekit_token || ''}
                     .names=${this._buildNamesMap()}

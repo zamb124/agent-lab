@@ -11,6 +11,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
+import { SyncStore } from '../store/sync.store.js';
 
 const LS_CAMERA_KEY = 'humanitec.sync.call.camera_enabled';
 const LS_AUDIO_NS_KEY = 'humanitec.sync.call.audio_noise_suppression';
@@ -81,6 +82,7 @@ class CallOverlay extends PlatformElement {
         callType:    { type: String, attribute: 'call-type' },
         currentUserId: { type: String, attribute: 'current-user-id' },
         meetingAdminUserId: { type: String, attribute: 'meeting-admin-user-id' },
+        recordingStartedByUserId: { type: String, attribute: 'recording-started-by-user-id' },
         livekitUrl:  { type: String, attribute: 'livekit-url' },
         livekitToken: { type: String, attribute: 'livekit-token' },
         identity:    { type: String },
@@ -105,6 +107,9 @@ class CallOverlay extends PlatformElement {
         _recordingStatus: { state: true },
         _recordingError: { state: true },
         _participantMenuIdentity: { state: true },
+        _chatInput: { state: true },
+        _chatSending: { state: true },
+        _chatError: { state: true },
     };
 
     static styles = [
@@ -146,7 +151,149 @@ class CallOverlay extends PlatformElement {
         .video-grid.two   { grid-template-columns: 1fr 1fr; }
         .video-grid.many  { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 
+        .call-main {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 320px;
+            gap: 0;
+        }
+
+        .call-chat {
+            border-left: 1px solid rgba(255,255,255,0.12);
+            background: rgba(10, 10, 15, 0.92);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .call-chat-header {
+            padding: 12px 14px;
+            font-size: 13px;
+            color: rgba(255,255,255,0.75);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .call-chat-list {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .call-chat-item {
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .call-chat-item.self {
+            background: rgba(59,130,246,0.2);
+            border-color: rgba(59,130,246,0.36);
+        }
+
+        .call-chat-item.failed {
+            border-color: rgba(239,68,68,0.45);
+        }
+
+        .call-chat-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 4px;
+            font-size: 11px;
+            color: rgba(255,255,255,0.58);
+        }
+
+        .call-chat-author {
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .call-chat-text {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: rgba(255,255,255,0.92);
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .call-chat-state {
+            padding: 10px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .call-chat-composer {
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .call-chat-input {
+            flex: 1;
+            min-height: 36px;
+            max-height: 120px;
+            resize: vertical;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.25);
+            color: #fff;
+            padding: 8px 10px;
+            font-size: 13px;
+            line-height: 1.3;
+            outline: none;
+        }
+
+        .call-chat-input:focus {
+            border-color: rgba(99,102,241,0.9);
+        }
+
+        .call-chat-send {
+            height: 36px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 0 12px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .call-chat-send:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        .call-chat-error {
+            border-top: 1px solid rgba(239,68,68,0.45);
+            color: rgba(254,202,202,0.95);
+            font-size: 12px;
+            padding: 8px 10px;
+            background: rgba(127,29,29,0.32);
+        }
+
         @media (max-width: 640px) {
+            .call-main {
+                grid-template-columns: 1fr;
+                grid-template-rows: minmax(0, 1fr) 220px;
+            }
+
+            .call-chat {
+                border-left: 0;
+                border-top: 1px solid rgba(255,255,255,0.12);
+            }
+
             .video-grid {
                 display: flex;
                 flex-direction: column;
@@ -801,6 +948,10 @@ class CallOverlay extends PlatformElement {
         this._recordingStatus = 'idle';
         this._recordingError = null;
         this._participantMenuIdentity = null;
+        this._chatInput = '';
+        this._chatSending = false;
+        this._chatError = null;
+        this._storeUnsubscribe = null;
         /** @type {ReturnType<typeof setTimeout> | null} */
         this._copyLinkFeedbackTimerId = null;
     }
@@ -907,6 +1058,15 @@ class CallOverlay extends PlatformElement {
             typeof this.currentUserId === 'string'
             && this.currentUserId !== ''
             && this.currentUserId === this.meetingAdminUserId
+        );
+    }
+
+    _canStopRecording() {
+        if (this._canTransferMeetingAdmin()) return true;
+        return (
+            typeof this.currentUserId === 'string'
+            && this.currentUserId !== ''
+            && this.currentUserId === this.recordingStartedByUserId
         );
     }
 
@@ -1156,6 +1316,9 @@ class CallOverlay extends PlatformElement {
         document.addEventListener('touchstart', this._onDocumentPointerDown, false);
         document.addEventListener('keydown', this._onDocumentKeydown, true);
         this._durationInterval = setInterval(() => this._duration++, 1000);
+        this._storeUnsubscribe = SyncStore.subscribe(() => {
+            this.requestUpdate();
+        });
         if (this.mode !== 'sfu' && this.mode) {
             try {
                 await this._connectP2P();
@@ -1178,6 +1341,8 @@ class CallOverlay extends PlatformElement {
         document.removeEventListener('keydown', this._onDocumentKeydown, true);
         this._sfuSessionFinished = true;
         clearInterval(this._durationInterval);
+        this._storeUnsubscribe?.();
+        this._storeUnsubscribe = null;
         this._cleanup();
     }
 
@@ -1477,19 +1642,23 @@ class CallOverlay extends PlatformElement {
 
     _toggleRecording() {
         if (!this.callId) return;
-        if (!this._canTransferMeetingAdmin()) {
-            this._recordingError = 'Только админ встречи может управлять записью.';
-            return;
-        }
         if (this._recordingStatus === 'starting' || this._recordingStatus === 'stopping') return;
         const start = this._recordingStatus === 'idle' || this._recordingStatus === 'failed';
         if (start) {
+            if (!this._canTransferMeetingAdmin()) {
+                this._recordingError = 'Только админ встречи может включать запись.';
+                return;
+            }
             this._recordingStatus = 'starting';
             this.dispatchEvent(new CustomEvent('call-recording-start', {
                 bubbles: true,
                 composed: true,
                 detail: { callId: this.callId },
             }));
+            return;
+        }
+        if (!this._canStopRecording()) {
+            this._recordingError = 'Остановить запись может админ встречи или пользователь, который её запустил.';
             return;
         }
         this._recordingStatus = 'stopping';
@@ -1547,6 +1716,143 @@ class CallOverlay extends PlatformElement {
         return `${m}:${s}`;
     }
 
+    _overlayChatMessages() {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            return [];
+        }
+        return SyncStore.getCallOverlayDisplayMessages(this.channelId);
+    }
+
+    _chatSenderName(message) {
+        const sender = message?.sender;
+        if (sender && typeof sender === 'object') {
+            if (typeof sender.display_name === 'string' && sender.display_name.trim() !== '') {
+                return sender.display_name.trim();
+            }
+            if (typeof sender.user_id === 'string' && sender.user_id !== '') {
+                return sender.user_id;
+            }
+            if (typeof sender.id === 'string' && sender.id !== '') {
+                return sender.id;
+            }
+        }
+        return 'Участник';
+    }
+
+    _chatText(message) {
+        const contents = Array.isArray(message?.contents) ? message.contents : [];
+        const textBlock = contents.find(
+            (item) => item?.type === 'text/plain' && item?.data && typeof item.data.body === 'string',
+        );
+        return textBlock?.data?.body ?? '';
+    }
+
+    _isOwnMessage(message) {
+        const sender = message?.sender;
+        if (!sender || typeof sender !== 'object') {
+            return false;
+        }
+        const senderId = typeof sender.user_id === 'string' && sender.user_id !== ''
+            ? sender.user_id
+            : sender.id;
+        return typeof this.currentUserId === 'string'
+            && this.currentUserId !== ''
+            && senderId === this.currentUserId;
+    }
+
+    _messageTimeText(message) {
+        if (typeof message?.sent_at !== 'string' || message.sent_at === '') {
+            return '';
+        }
+        const dt = new Date(message.sent_at);
+        if (Number.isNaN(dt.getTime())) {
+            return '';
+        }
+        return dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    async _loadOverlayChat() {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            this._chatError = 'Для звонка не задан channel_id.';
+            return;
+        }
+        const syncApi = this.services.get('syncApi');
+        if (!syncApi) {
+            this._chatError = 'Не удалось получить сервис сообщений.';
+            return;
+        }
+        this._chatError = null;
+        try {
+            await SyncStore.loadCallOverlayMessages(syncApi, this.channelId);
+        } catch (e) {
+            this._chatError = e instanceof Error ? e.message : String(e);
+        }
+    }
+
+    _buildOverlayPendingMessage(commandId, text) {
+        const senderId = this.currentUserId;
+        if (typeof senderId !== 'string' || senderId === '') {
+            throw new Error('currentUserId обязателен для отправки сообщения.');
+        }
+        const senderName = this.names?.[senderId] || 'Вы';
+        return {
+            id: `pending:${commandId}`,
+            channel_id: this.channelId,
+            thread_id: null,
+            parent_message_id: null,
+            sender: { user_id: senderId, id: senderId, display_name: senderName, avatar_url: null },
+            status: 'pending',
+            sent_at: new Date().toISOString(),
+            edited_at: null,
+            contents: [{ type: 'text/plain', data: { body: text }, order: 0 }],
+        };
+    }
+
+    async _sendOverlayChatMessage() {
+        const text = this._chatInput.trim();
+        if (text === '') {
+            return;
+        }
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            this._chatError = 'Не удалось отправить: channel_id отсутствует.';
+            return;
+        }
+        const syncApi = this.services.get('syncApi');
+        if (!syncApi) {
+            this._chatError = 'Не удалось получить сервис сообщений.';
+            return;
+        }
+        const commandId = typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+        const pendingMessage = this._buildOverlayPendingMessage(commandId, text);
+        this._chatInput = '';
+        this._chatSending = true;
+        this._chatError = null;
+        SyncStore.addCallOverlayPending(this.channelId, commandId, pendingMessage);
+        try {
+            const sent = await syncApi.sendMessage(this.channelId, {
+                thread_id: null,
+                parent_message_id: null,
+                contents: [{ type: 'text/plain', data: { body: text }, order: 0 }],
+            });
+            SyncStore.resolveCallOverlayPending(this.channelId, commandId, sent);
+        } catch (e) {
+            SyncStore.failCallOverlayPending(this.channelId, commandId);
+            this._chatError = e instanceof Error ? e.message : String(e);
+        } finally {
+            this._chatSending = false;
+        }
+    }
+
+    _onChatInputKeydown(e) {
+        if (e.key !== 'Enter' || e.shiftKey) {
+            return;
+        }
+        e.preventDefault();
+        void this._sendOverlayChatMessage();
+    }
+
     render() {
         if (this._status === 'error') {
             return html`
@@ -1567,7 +1873,9 @@ class CallOverlay extends PlatformElement {
         const gridClass = gridCount === 1 ? 'one' : gridCount === 2 ? 'two' : 'many';
         const participantCount = this._room ? this._sfuParticipantCount() : this._participants.length;
         const screenOn = this._room?.localParticipant?.isScreenShareEnabled === true;
-        const canControlRecording = this._canTransferMeetingAdmin();
+        const canControlRecording = this._recordingStatus === 'recording'
+            ? this._canStopRecording()
+            : this._canTransferMeetingAdmin();
 
         return html`
             <div class="header">
@@ -1600,8 +1908,54 @@ class CallOverlay extends PlatformElement {
                 </div>
             </div>
 
-            <div class="video-grid ${gridClass}">
-                ${gridItems.map((p, i) => this._renderTile(p, i))}
+            <div class="call-main">
+                <div class="video-grid ${gridClass}">
+                    ${gridItems.map((p, i) => this._renderTile(p, i))}
+                </div>
+                <section class="call-chat">
+                    <div class="call-chat-header">Чат канала</div>
+                    <div class="call-chat-list">
+                        ${SyncStore.getCallOverlayLoading(this.channelId)
+                            ? html`<div class="call-chat-state">Загрузка сообщений…</div>`
+                            : this._overlayChatMessages().length === 0
+                                ? html`<div class="call-chat-state">Пока нет сообщений.</div>`
+                                : this._overlayChatMessages().map((message) => {
+                                    const text = this._chatText(message);
+                                    if (text === '') {
+                                        return html``;
+                                    }
+                                    const own = this._isOwnMessage(message);
+                                    return html`
+                                        <article class="call-chat-item ${own ? 'self' : ''} ${message.status === 'failed' ? 'failed' : ''}">
+                                            <div class="call-chat-meta">
+                                                <span class="call-chat-author">${this._chatSenderName(message)}</span>
+                                                <span>${this._messageTimeText(message)}</span>
+                                            </div>
+                                            <p class="call-chat-text">${text}</p>
+                                        </article>
+                                    `;
+                                })}
+                    </div>
+                    ${this._chatError ? html`<div class="call-chat-error">${this._chatError}</div>` : ''}
+                    <div class="call-chat-composer">
+                        <textarea
+                            class="call-chat-input"
+                            .value=${this._chatInput}
+                            @input=${(e) => { this._chatInput = e.target.value; }}
+                            @keydown=${this._onChatInputKeydown}
+                            placeholder="Введите сообщение"
+                            rows="2"
+                        ></textarea>
+                        <button
+                            type="button"
+                            class="call-chat-send"
+                            ?disabled=${this._chatSending || this._chatInput.trim() === ''}
+                            @click=${() => void this._sendOverlayChatMessage()}
+                        >
+                            ${this._chatSending ? '...' : 'Отправить'}
+                        </button>
+                    </div>
+                </section>
             </div>
 
             ${this._mediaSettingsError ? html`
@@ -1702,7 +2056,9 @@ class CallOverlay extends PlatformElement {
                         @click=${this._toggleRecording}
                         title="${canControlRecording
                             ? (this._recordingStatus === 'recording' ? 'Остановить запись' : 'Запись встречи')
-                            : 'Только админ встречи может управлять записью'}"
+                            : (this._recordingStatus === 'recording'
+                                ? 'Остановить запись может админ встречи или пользователь, который её запустил'
+                                : 'Только админ встречи может включать запись')}"
                     >
                         ${this._recordingStatus === 'recording'
                             ? html`
@@ -1894,6 +2250,10 @@ class CallOverlay extends PlatformElement {
     }
 
     updated(changedProps) {
+        if (changedProps.has('channelId')) {
+            this._chatError = null;
+            void this._loadOverlayChat();
+        }
         // SFU: один раз при появлении токена. После hangup токен не сбрасываем — без _sfuSessionFinished был бы reconnect.
         if (
             (this.mode === 'sfu' || !this.mode)

@@ -801,7 +801,7 @@ export class ChatView extends PlatformElement {
         const raw = typeof crypto.randomUUID === 'function'
             ? crypto.randomUUID().replace(/-/g, '')
             : `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-        return `_meet_${raw.slice(0, 20)}`;
+        return `meet_${raw.slice(0, 20)}`;
     }
 
     _startCallWithChannel(channelId) {
