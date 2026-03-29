@@ -194,6 +194,10 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 `get_context()` для доступа к user, company_id, trace_id. Репозитории берут company_id из контекста автоматически.
 
+### Bootstrap-инварианты платформы
+
+При старте `frontend` обязательно проверяем bootstrap-доступ: пользователь с email `zambas124@yandex.ru` должен иметь роль `admin` в компании `system`; при отсутствии роли обновляем `company.members` и `user.companies`.
+
 ## Управление зависимостями
 
 UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
