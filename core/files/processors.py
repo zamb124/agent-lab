@@ -13,7 +13,7 @@ from pathlib import Path
 
 from core.files.s3_client import S3ClientFactory, S3Client
 from core.files.models import FileMetadata, AudioMetadata, FileStatus
-from core.clients.cloud_voice import CloudVoiceClientFactory
+from core.clients.stt_client import BaseSTTClient, STTClientFactory
 
 if TYPE_CHECKING:
     from core.files.file_repository import FileRepository
@@ -233,20 +233,17 @@ class AudioProcessor:
     def __init__(
         self,
         file_repository: "FileRepository",
-        storage=None,
         bucket_name: Optional[str] = None,
     ):
         """
         Args:
             file_repository: FileRepository для работы с записями о файлах
-            storage: Storage для CloudVoice (кэширование токенов)
             bucket_name: Имя S3 бакета
         """
         self.file_repository = file_repository
-        self._storage = storage
         self.bucket_name = bucket_name
         self._s3_client: Optional[S3Client] = None
-        self._voice_client = None
+        self._stt_client: Optional[BaseSTTClient] = None
 
     async def _get_s3_client(self) -> S3Client:
         """Получает S3 клиент"""
@@ -258,13 +255,11 @@ class AudioProcessor:
 
         return self._s3_client
 
-    async def _get_voice_client(self):
-        """Получает Cloud Voice клиент"""
-        if self._voice_client is None:
-            if self._storage is None:
-                raise RuntimeError("Storage не установлен для CloudVoice")
-            self._voice_client = CloudVoiceClientFactory.create_client(self._storage)
-        return self._voice_client
+    async def _get_stt_client(self) -> BaseSTTClient:
+        """Получает STT клиент."""
+        if self._stt_client is None:
+            self._stt_client = STTClientFactory.create_client()
+        return self._stt_client
 
     @staticmethod
     def extract_audio_info_from_message(message: str) -> List[Dict[str, Any]]:
@@ -367,8 +362,13 @@ class AudioProcessor:
 
         if auto_recognize:
             logger.info("Запускаем распознавание речи...")
-            voice_client = await self._get_voice_client()
-            transcription = await voice_client.recognize_audio(data, language="ru-RU")
+            stt_client = await self._get_stt_client()
+            transcription = await stt_client.transcribe_audio(
+                audio_bytes=data,
+                file_name=original_name,
+                mime_type=content_type,
+                language="ru",
+            )
             transcription_status = "completed"
             logger.info(f"Распознан текст: {transcription[:100]}...")
 
@@ -409,21 +409,18 @@ class AudioProcessor:
 _default_file_processor: Optional[FileProcessor] = None
 _default_audio_processor: Optional[AudioProcessor] = None
 _default_file_repository = None
-_default_storage = None
 
 
-def initialize_default_processors(file_repository, storage=None) -> None:
+def initialize_default_processors(file_repository) -> None:
     """
     Инициализирует дефолтные процессоры с заданным file_repository.
     Вызывается при старте приложения в lifespan.
     
     Args:
         file_repository: FileRepository из контейнера приложения
-        storage: Storage для CloudVoice (опционально)
     """
-    global _default_file_repository, _default_storage
+    global _default_file_repository
     _default_file_repository = file_repository
-    _default_storage = storage
 
 
 async def get_default_file_processor() -> FileProcessor:
@@ -459,7 +456,6 @@ async def get_default_audio_processor() -> AudioProcessor:
             )
         _default_audio_processor = AudioProcessor(
             file_repository=_default_file_repository,
-            storage=_default_storage
         )
     
     return _default_audio_processor

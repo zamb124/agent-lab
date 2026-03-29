@@ -115,7 +115,7 @@
   "stt": {
     "provider": "cloud_ru",
     "cloud_ru": {
-      "enabled": false,
+      "enabled": true,
       "api_key": "",
       "base_url": "https://foundation-models.api.cloud.ru/v1/audio/transcriptions",
       "model": "openai/whisper-large-v3",
