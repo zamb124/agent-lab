@@ -12,6 +12,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { SyncStore } from '../store/sync.store.js';
+import { hueFromString } from '../utils/sync-hue.js';
 
 const LS_CAMERA_KEY = 'humanitec.sync.call.camera_enabled';
 const LS_AUDIO_NS_KEY = 'humanitec.sync.call.audio_noise_suppression';
@@ -230,6 +231,32 @@ class CallOverlay extends PlatformElement {
             padding: 8px 10px;
             background: var(--glass-tint-medium);
             border: 1px solid var(--glass-border-subtle);
+        }
+
+        .call-chat-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .call-chat-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: rgba(255,255,255,0.96);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
+            margin-top: 1px;
+        }
+
+        .call-chat-content {
+            min-width: 0;
+            flex: 1;
         }
 
         .call-chat-item.self {
@@ -564,6 +591,7 @@ class CallOverlay extends PlatformElement {
             flex: 0 0 auto;
             justify-content: flex-end;
             position: relative;
+            gap: 8px;
         }
 
         .call-menu {
@@ -1108,23 +1136,48 @@ class CallOverlay extends PlatformElement {
     }
 
     _isMeetingAdminUser(identity) {
-        return typeof identity === 'string' && identity !== '' && identity === this.meetingAdminUserId;
+        const candidateIdentity = this._normalizedIdentity(identity);
+        const meetingAdminIdentity = this._normalizedIdentity(this.meetingAdminUserId);
+        return candidateIdentity !== '' && candidateIdentity === meetingAdminIdentity;
+    }
+
+    _normalizedIdentity(value) {
+        if (typeof value !== 'string') return '';
+        const trimmed = value.trim();
+        return trimmed === '' ? '' : trimmed;
+    }
+
+    _currentIdentityCandidates() {
+        const candidates = new Set();
+        const currentUserIdentity = this._normalizedIdentity(this.currentUserId);
+        if (currentUserIdentity !== '') {
+            candidates.add(currentUserIdentity);
+        }
+        const providedIdentity = this._normalizedIdentity(this.identity);
+        if (providedIdentity !== '') {
+            candidates.add(providedIdentity);
+        }
+        const localParticipantIdentity = this._normalizedIdentity(this._room?.localParticipant?.identity);
+        if (localParticipantIdentity !== '') {
+            candidates.add(localParticipantIdentity);
+        }
+        return candidates;
     }
 
     _canTransferMeetingAdmin() {
-        return (
-            typeof this.currentUserId === 'string'
-            && this.currentUserId !== ''
-            && this.currentUserId === this.meetingAdminUserId
+        const meetingAdminIdentity = this._normalizedIdentity(this.meetingAdminUserId);
+        if (meetingAdminIdentity === '') return false;
+        return Array.from(this._currentIdentityCandidates()).some(
+            (identity) => identity === meetingAdminIdentity
         );
     }
 
     _canStopRecording() {
         if (this._canTransferMeetingAdmin()) return true;
-        return (
-            typeof this.currentUserId === 'string'
-            && this.currentUserId !== ''
-            && this.currentUserId === this.recordingStartedByUserId
+        const startedByIdentity = this._normalizedIdentity(this.recordingStartedByUserId);
+        if (startedByIdentity === '') return false;
+        return Array.from(this._currentIdentityCandidates()).some(
+            (identity) => identity === startedByIdentity
         );
     }
 
@@ -1797,6 +1850,31 @@ class CallOverlay extends PlatformElement {
         return 'Участник';
     }
 
+    _chatSenderIdentity(message) {
+        const sender = message?.sender;
+        if (sender && typeof sender === 'object') {
+            if (typeof sender.user_id === 'string' && sender.user_id !== '') {
+                return sender.user_id;
+            }
+            if (typeof sender.id === 'string' && sender.id !== '') {
+                return sender.id;
+            }
+        }
+        return this._chatSenderName(message);
+    }
+
+    _chatSenderInitial(message) {
+        const senderName = this._chatSenderName(message).trim();
+        if (senderName === '') return '?';
+        return senderName.slice(0, 1).toUpperCase();
+    }
+
+    _chatSenderAvatarStyle(message) {
+        const senderIdentity = this._chatSenderIdentity(message);
+        const hue = hueFromString(senderIdentity);
+        return `background:hsl(${hue} 48% 42%)`;
+    }
+
     _chatText(message) {
         const contents = Array.isArray(message?.contents) ? message.contents : [];
         const textBlock = contents.find(
@@ -2003,11 +2081,18 @@ class CallOverlay extends PlatformElement {
                                     const own = this._isOwnMessage(message);
                                     return html`
                                         <article class="call-chat-item ${own ? 'self' : ''} ${message.status === 'failed' ? 'failed' : ''}">
-                                            <div class="call-chat-meta">
-                                                <span class="call-chat-author">${this._chatSenderName(message)}</span>
-                                                <span>${this._messageTimeText(message)}</span>
+                                            <div class="call-chat-row">
+                                                <span class="call-chat-avatar" style=${this._chatSenderAvatarStyle(message)}>
+                                                    ${this._chatSenderInitial(message)}
+                                                </span>
+                                                <div class="call-chat-content">
+                                                    <div class="call-chat-meta">
+                                                        <span class="call-chat-author">${this._chatSenderName(message)}</span>
+                                                        <span>${this._messageTimeText(message)}</span>
+                                                    </div>
+                                                    <p class="call-chat-text">${text}</p>
+                                                </div>
                                             </div>
-                                            <p class="call-chat-text">${text}</p>
                                         </article>
                                     `;
                                 })}

@@ -8,6 +8,7 @@ FROM python:3.13-slim AS base-with-core
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
+    ffmpeg \
     tesseract-ocr \
     poppler-utils \
     libgl1 \
