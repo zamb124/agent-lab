@@ -16,7 +16,6 @@ from core.config.models import (
     ServerConfig,
     WorkerConfig,
     LoggingConfig,
-    CloudVoiceConfig,
     TelegramConfig,
     WhatsAppConfig,
     NanoBananaConfig,
@@ -57,7 +56,6 @@ class BaseSettings(PydanticBaseSettings):
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     s3: S3Config = Field(default_factory=S3Config)
-    cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
     stt: STTConfig = Field(default_factory=STTConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)

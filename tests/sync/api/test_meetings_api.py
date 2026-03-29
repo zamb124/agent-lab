@@ -28,6 +28,7 @@ async def test_meetings_list_and_get(
     call_repo,
     call_recording_repo,
     call_meeting_repo,
+    file_repo,
 ) -> None:
     company_id = "system"
     user_id = system_user_id
@@ -65,6 +66,26 @@ async def test_meetings_list_and_get(
         created_by_user_id=user_id,
     )
     await call_repo.create_call(call)
+    raw_file = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting.mp4",
+        mime_type="video/mp4",
+        size_bytes=1024,
+        storage_url="sync://meetings/list/raw.mp4",
+        checksum=None,
+    )
+    await file_repo.create(raw_file)
+    transcript_file = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting.txt",
+        mime_type="text/plain",
+        size_bytes=64,
+        storage_url="sync://meetings/list/transcript.txt",
+        checksum=None,
+    )
+    await file_repo.create(transcript_file)
     recording = SyncCallRecording(
         recording_id=uuid4().hex,
         call_id=call.call_id,
@@ -72,7 +93,122 @@ async def test_meetings_list_and_get(
         channel_id=channel.channel_id,
         space_id=space.space_id,
         status="uploaded",
-        raw_file_id=None,
+        raw_file_id=raw_file.file_id,
+        created_at=datetime.now(UTC),
+    )
+    await call_recording_repo.create(recording)
+    meeting = SyncCallMeeting(
+        meeting_id=uuid4().hex,
+        call_id=call.call_id,
+        recording_id=recording.recording_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        transcript_text_file_id=transcript_file.file_id,
+        summary_json={"short_summary": "ok"},
+        export_status="pending",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await call_meeting_repo.create(meeting)
+
+    list_resp = await sync_client.get("/sync/api/v1/meetings/", headers=auth_headers_system)
+    assert list_resp.status_code == 200
+    payload = list_resp.json()
+    assert any(item["meeting_id"] == meeting.meeting_id for item in payload)
+    listed = next(item for item in payload if item["meeting_id"] == meeting.meeting_id)
+    assert listed["transcript_text_storage_url"] == "sync://meetings/list/transcript.txt"
+    assert listed["transcript_text_download_url"] == f"/sync/api/v1/files/download/{transcript_file.file_id}"
+
+    details_resp = await sync_client.get(
+        f"/sync/api/v1/meetings/{meeting.meeting_id}",
+        headers=auth_headers_system,
+    )
+    assert details_resp.status_code == 200
+    details = details_resp.json()
+    assert details["meeting"]["meeting_id"] == meeting.meeting_id
+    assert details["recording"]["raw_file_storage_url"] == "sync://meetings/list/raw.mp4"
+    assert details["recording"]["raw_file_download_url"] == f"/sync/api/v1/files/download/{raw_file.file_id}"
+    assert details["meeting"]["transcript_text_storage_url"] == "sync://meetings/list/transcript.txt"
+    assert details["meeting"]["transcript_text_download_url"] == (
+        f"/sync/api/v1/files/download/{transcript_file.file_id}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_retry_processing_uses_mock_stt_client_and_updates_transcript(
+    sync_client,
+    auth_headers_system,
+    monkeypatch,
+    sync_db_clean: None,
+    system_user_id: str,
+    space_repo,
+    channel_repo,
+    call_repo,
+    call_recording_repo,
+    call_meeting_repo,
+    file_repo,
+    mock_sync_recording_source,
+    mock_sync_stt_client,
+) -> None:
+    from apps.sync.api import meetings as meetings_api
+    from apps.sync.realtime import tasks as sync_tasks
+
+    company_id = "system"
+    user_id = system_user_id
+    space = SyncSpace(
+        space_id=uuid4().hex,
+        company_id=company_id,
+        name="Retry Space",
+        description=None,
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+    )
+    await space_repo.create(space)
+    channel = SyncChannel(
+        channel_id=uuid4().hex,
+        company_id=company_id,
+        space_id=space.space_id,
+        type="topic",
+        name="retry",
+        is_private=False,
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+        pinned_message_ids=[],
+    )
+    await channel_repo.create(channel)
+    await channel_repo.upsert_member(channel.channel_id, user_id, "owner", company_id=company_id)
+    call = SyncCall(
+        call_id=uuid4().hex,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name=f"call-{uuid4().hex[:8]}",
+        created_at=datetime.now(UTC),
+        created_by_user_id=user_id,
+    )
+    await call_repo.create_call(call)
+    raw_file = SyncFile(
+        file_id=uuid4().hex,
+        company_id=company_id,
+        original_name="meeting.mp4",
+        mime_type="video/mp4",
+        size_bytes=1024,
+        storage_url="http://recordings.local/retry/raw.mp4",
+        checksum=None,
+    )
+    await file_repo.create(raw_file)
+    recording = SyncCallRecording(
+        recording_id=uuid4().hex,
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=channel.channel_id,
+        space_id=space.space_id,
+        status="uploaded",
+        raw_file_id=raw_file.file_id,
+        provider_job_id="egress-retry",
         created_at=datetime.now(UTC),
     )
     await call_recording_repo.create(recording)
@@ -84,24 +220,39 @@ async def test_meetings_list_and_get(
         channel_id=channel.channel_id,
         space_id=space.space_id,
         summary_json={},
-        export_status="pending",
+        export_status="failed",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
     await call_meeting_repo.create(meeting)
 
-    list_resp = await sync_client.get("/sync/api/v1/meetings/", headers=auth_headers_system)
-    assert list_resp.status_code == 200
-    payload = list_resp.json()
-    assert any(item["meeting_id"] == meeting.meeting_id for item in payload)
+    mock_sync_recording_source(b"RIFF_retry_audio", "audio/wav")
+    stt_client = mock_sync_stt_client("Тестовый retry transcript")
 
-    details_resp = await sync_client.get(
-        f"/sync/api/v1/meetings/{meeting.meeting_id}",
+    async def _no_summary_kiq(**kwargs):
+        return None
+
+    async def _run_transcribe_kiq(**kwargs):
+        await sync_tasks.sync_transcribe_recording_task(**kwargs)
+
+    monkeypatch.setattr(sync_tasks.sync_summarize_transcript_task, "kiq", _no_summary_kiq)
+    monkeypatch.setattr(meetings_api.sync_transcribe_recording_task, "kiq", _run_transcribe_kiq)
+
+    retry_resp = await sync_client.post(
+        f"/sync/api/v1/meetings/{meeting.meeting_id}/retry-processing",
         headers=auth_headers_system,
     )
-    assert details_resp.status_code == 200
-    details = details_resp.json()
-    assert details["meeting"]["meeting_id"] == meeting.meeting_id
+    assert retry_resp.status_code == 200
+    retry_payload = retry_resp.json()
+    assert retry_payload["meeting_id"] == meeting.meeting_id
+    assert retry_payload["export_status"] == "pending"
+    assert isinstance(retry_payload["transcript_text_file_id"], str)
+    assert retry_payload["transcript_text_file_id"] != ""
+    assert retry_payload["transcript_text_storage_url"] == f"sync://meetings/{meeting.meeting_id}/transcript.txt"
+    assert retry_payload["transcript_text_download_url"] == (
+        f"/sync/api/v1/files/download/{retry_payload['transcript_text_file_id']}"
+    )
+    assert len(stt_client.calls) >= 1
 
 
 @pytest.mark.asyncio

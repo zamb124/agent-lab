@@ -148,12 +148,11 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | `YOOMONEY_CLIENT_SECRET` | `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_SECRET` |
 | `YOOMONEY_ACCESS_TOKEN` | `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCESS_TOKEN` |
 
-### Cloud Voice / Nano Banana (опционально)
+### STT / Nano Banana (опционально)
 
 | Secret | ENV переменная |
 |---|---|
-| `CLOUD_VOICE_SECRET_KEY` | `CLOUD_VOICE__SECRET_KEY` |
-| `CLOUD_VOICE_CLIENT_ID` | `CLOUD_VOICE__CLIENT_ID` |
+| `STT_CLOUD_RU_API_KEY` | `STT__CLOUD_RU__API_KEY` |
 | `NANO_BANANA_API_KEY` | `NANO_BANANA__API_KEY` |
 
 ## OAuth Callback URLs

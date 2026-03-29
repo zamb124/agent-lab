@@ -118,7 +118,7 @@ uv run taskiq worker apps.broker.worker:broker
 │   └── conftest.py     # Фикстуры pytest
 │
     ├── core/                 # Ядро системы (Framework-agnostic)
-    │   ├── clients/           # Клиенты внешних сервисов (S3, CloudVoice)
+    │   ├── clients/           # Клиенты внешних сервисов (S3, STT)
     │   ├── config/            # Модуль конфигурации
     │   ├── container/         # DI контейнеры
     │   ├── db/                # Работа с БД
@@ -184,7 +184,7 @@ uv run taskiq worker apps.broker.worker:broker
 
 ### Core System (core/)
 Базовые компоненты, не зависящие от бизнес-логики:
-- **clients/** - Клиенты внешних сервисов (S3, CloudVoice, etc).
+- **clients/** - Клиенты внешних сервисов (S3, STT, etc).
 - **tasks/** - Брокер и планировщик задач (TaskIQ).
 - **db/** - Базовые классы для работы с БД.
 

@@ -6,34 +6,8 @@
 
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from enum import Enum
-
-
-class CloudVoiceTokenConfig(BaseModel):
-    """Конфигурация токенов Cloud Voice API"""
-    
-    client_id: str = Field(description="Идентификатор клиента Cloud Voice API")
-    access_token: str = Field(description="Токен доступа к API")
-    refresh_token: str = Field(description="Токен для обновления access_token")
-    expires_at: datetime = Field(description="Время когда истекает access_token")
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="Время создания токена"
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="Время последнего обновления токена"
-    )
-    
-    def is_expired(self) -> bool:
-        """Проверяет истек ли access_token"""
-        return datetime.now(timezone.utc) >= self.expires_at
-    
-    def is_refresh_expired(self, refresh_ttl_days: int = 30) -> bool:
-        """Проверяет истек ли refresh_token"""
-        refresh_expires_at = self.created_at + timedelta(days=refresh_ttl_days)
-        return datetime.now(timezone.utc) >= refresh_expires_at
 
 
 class FileStatus(str, Enum):
@@ -157,7 +131,7 @@ class AudioRecord(FileRecord):
     )
     recognition_qid: Optional[str] = Field(
         default=None,
-        description="ID запроса к сервису распознавания речи"
+        description="ID запроса к STT сервису"
     )
 
 

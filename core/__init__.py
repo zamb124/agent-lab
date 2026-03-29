@@ -14,7 +14,7 @@ Core - общая инфраструктура Humanitec.
 - container/    - DI контейнер (BaseContainer)
 - variables/    - Переменные компаний (резолюция @var:key)
 - files/        - Файлы и S3 (S3Client, FileProcessor)
-- clients/      - Клиенты (LLM, NanoBanana, CloudVoice, Payment)
+- clients/      - Клиенты (LLM, NanoBanana, STT, Payment)
 - utils/        - Утилиты (tokens, slug)
 - middleware/   - Middleware
 - identity/     - Идентификация
@@ -42,7 +42,7 @@ from core.variables import VariablesService, VariableResolver, get_state, set_st
 from core.billing import BillingService
 from core.payments import PaymentService, PaymentSyncService
 from core.files import S3Client, FileProcessor, AudioProcessor, FileMetadata
-from core.clients import get_llm, NanoBananaClient, CloudVoiceClient, PaymentProviderFactory
+from core.clients import get_llm, NanoBananaClient, PaymentProviderFactory
 from core.identity import AuthService
 from core.i18n import get_translation_manager, t
 from core.utils import get_token_service, generate_slug
@@ -86,7 +86,6 @@ __all__ = [
     "FileMetadata",
     "get_llm",
     "NanoBananaClient",
-    "CloudVoiceClient",
     "PaymentProviderFactory",
     "get_translation_manager",
     "t",

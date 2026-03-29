@@ -171,19 +171,51 @@ def sync_user_repository(sync_database: SyncDatabase):
 
 
 @pytest.fixture()
-def deterministic_stt_transcript(monkeypatch) -> Callable[[str], None]:
-    """Подменяет генерацию транскрипта в sync pipeline детерминированным STT-текстом."""
+def mock_sync_recording_source(monkeypatch) -> Callable[[bytes, str], None]:
+    """Подменяет скачивание raw-записи в sync pipeline тестовым содержимым."""
     from apps.sync.realtime import tasks as sync_tasks
 
-    def _apply(transcript_body: str) -> None:
-        async def _stubbed_builder(meeting_id: str, source_url: str) -> str:
-            return (
-                f"Транскрипт встречи {meeting_id}\n"
-                f"Источник: {source_url}\n"
-                f"{transcript_body}"
-            )
+    def _apply(audio_bytes: bytes = b"fake-audio-bytes", content_type: str = "audio/wav") -> None:
+        async def _stubbed_download(*, source_url: str, timeout_seconds: float) -> tuple[bytes, str]:
+            return audio_bytes, content_type
 
-        monkeypatch.setattr(sync_tasks, "build_call_transcript_text", _stubbed_builder)
+        monkeypatch.setattr(sync_tasks, "_download_recording_bytes", _stubbed_download)
+
+    return _apply
+
+
+@pytest.fixture()
+def mock_sync_stt_client(monkeypatch) -> Callable[[str], object]:
+    """Подменяет STTClientFactory в sync pipeline и возвращает объект-клиент для проверок."""
+    from apps.sync.realtime import tasks as sync_tasks
+
+    class _MockSTTClient:
+        def __init__(self, transcript_text: str) -> None:
+            self._transcript_text = transcript_text
+            self.calls: list[dict[str, str]] = []
+
+        async def transcribe_audio(
+            self,
+            *,
+            audio_bytes: bytes,
+            file_name: str,
+            mime_type: str,
+            language: str | None = None,
+        ) -> str:
+            self.calls.append(
+                {
+                    "file_name": file_name,
+                    "mime_type": mime_type,
+                    "language": language or "",
+                    "size": str(len(audio_bytes)),
+                }
+            )
+            return self._transcript_text
+
+    def _apply(transcript_text: str) -> _MockSTTClient:
+        client = _MockSTTClient(transcript_text=transcript_text)
+        monkeypatch.setattr(sync_tasks.STTClientFactory, "create_client", staticmethod(lambda: client))
+        return client
 
     return _apply
 

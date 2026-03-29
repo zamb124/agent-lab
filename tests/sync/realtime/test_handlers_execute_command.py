@@ -833,7 +833,8 @@ async def test_call_recording_start_stop_flow(
     call_recording_repo,
     call_meeting_repo,
     sync_user_repository,
-    deterministic_stt_transcript,
+    mock_sync_recording_source,
+    mock_sync_stt_client,
     wait_for_meeting_pipeline_complete,
     sync_db_clean: None,
     system_user_id: str,
@@ -850,14 +851,22 @@ async def test_call_recording_start_stop_flow(
         await sync_tasks.sync_transcribe_recording_task(**kwargs)
 
     async def _run_summarize_kiq(**kwargs):
-        await sync_tasks.sync_summarize_transcript_task(**kwargs)
+        meeting_id = kwargs["meeting_id"]
+        await call_meeting_repo.update_summary(
+            meeting_id,
+            {"short_summary": "Тестовое summary после STT"},
+        )
 
     monkeypatch.setattr(sync_tasks.sync_finalize_recording_task, "kiq", _run_finalize_kiq)
     monkeypatch.setattr(sync_tasks.sync_transcribe_recording_task, "kiq", _run_transcribe_kiq)
     monkeypatch.setattr(sync_tasks.sync_summarize_transcript_task, "kiq", _run_summarize_kiq)
-    deterministic_stt_transcript(
+    mock_sync_recording_source(
+        b"RIFF_fake_audio",
+        "audio/wav",
+    )
+    stt_client = mock_sync_stt_client(
         f"speaker:user:{actor_user_id}: Курьер опоздал на 20 минут.\n"
-        "speaker:guest:guest:anon: Подтверждаю, звонок состоялся поздно."
+        "speaker:guest:guest:anon: Подтверждаю, звонок состоялся поздно.",
     )
     sp = SyncSpace(
         space_id="sp_call_rec",
@@ -963,6 +972,7 @@ async def test_call_recording_start_stop_flow(
     assert completed_meeting.transcript_text_file_id is not None
     assert completed_meeting.summary_json is not None
     assert "short_summary" in completed_meeting.summary_json
+    assert len(stt_client.calls) >= 1
 
 
 @pytest.mark.asyncio

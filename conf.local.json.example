@@ -42,9 +42,18 @@
       "http://YOUR_PROXY_USER:YOUR_PROXY_PASSWORD@YOUR_PROXY_HOST:YOUR_PROXY_PORT"
     ]
   },
-  "cloud_voice": {
-    "secret_key": "YOUR_CLOUD_VOICE_SECRET_KEY",
-    "client_id": "YOUR_CLOUD_VOICE_CLIENT_ID"
+  "stt": {
+    "provider": "cloud_ru",
+    "cloud_ru": {
+      "enabled": true,
+      "api_key": "YOUR_CLOUD_RU_STT_API_KEY",
+      "base_url": "https://foundation-models.api.cloud.ru/v1/audio/transcriptions",
+      "model": "openai/whisper-large-v3",
+      "response_format": "text",
+      "temperature": 0.5,
+      "language": "ru",
+      "timeout": 120.0
+    }
   },
   "nano_banana": {
     "api_key": "YOUR_NANO_BANANA_API_KEY"

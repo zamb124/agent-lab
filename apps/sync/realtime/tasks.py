@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 from typing import Any
 from urllib.parse import urlparse
@@ -31,6 +32,35 @@ from core.utils.tokens import get_token_service
 logger = get_logger(__name__)
 
 
+async def _download_recording_bytes(*, source_url: str, timeout_seconds: float) -> tuple[bytes, str | None]:
+    """Скачивает запись с коротким ожиданием появления файла после stop recording."""
+    wait_timeout_seconds = 90.0
+    poll_interval_seconds = 3.0
+    elapsed_seconds = 0.0
+    last_status_code: int | None = None
+
+    while True:
+        async with get_httpx_client(timeout=timeout_seconds) as client:
+            response = await client.get(source_url)
+        last_status_code = response.status_code
+        if response.status_code == 200:
+            if not response.content:
+                raise ValueError("Источник записи вернул пустое тело.")
+            return response.content, response.headers.get("content-type")
+        if response.status_code != 404:
+            response.raise_for_status()
+        if elapsed_seconds >= wait_timeout_seconds:
+            break
+        await asyncio.sleep(poll_interval_seconds)
+        elapsed_seconds += poll_interval_seconds
+
+    raise RuntimeError(
+        "Файл записи не появился после остановки звонка. "
+        f"source_url={source_url}, last_status={last_status_code}. "
+        "Проверьте egress-пайплайн LiveKit и путь выгрузки записи."
+    )
+
+
 async def build_call_transcript_text(meeting_id: str, source_url: str) -> str:
     """Строит текст транскрипта из источника записи."""
     if not isinstance(source_url, str) or source_url == "":
@@ -48,14 +78,11 @@ async def build_call_transcript_text(meeting_id: str, source_url: str) -> str:
     if timeout_seconds <= 0:
         raise ValueError("stt.cloud_ru.timeout должен быть больше 0.")
 
-    async with get_httpx_client(timeout=timeout_seconds) as client:
-        response = await client.get(source_url)
-    response.raise_for_status()
-    audio_bytes = response.content
-    if not audio_bytes:
-        raise ValueError(f"Получен пустой файл записи для встречи {meeting_id}.")
+    audio_bytes, response_content_type = await _download_recording_bytes(
+        source_url=source_url,
+        timeout_seconds=timeout_seconds,
+    )
 
-    response_content_type = response.headers.get("content-type")
     guessed_mime_type, _ = mimetypes.guess_type(file_name)
     mime_type = response_content_type or guessed_mime_type
     if not isinstance(mime_type, str) or mime_type == "":

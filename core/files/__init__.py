@@ -8,7 +8,6 @@ from core.files.models import (
     FileResponse,
     AudioRecord,
     FileStatus,
-    CloudVoiceTokenConfig,
     FileMetadata,
     AudioMetadata,
 )
@@ -33,7 +32,6 @@ __all__ = [
     "FileResponse",
     "AudioRecord",
     "FileStatus",
-    "CloudVoiceTokenConfig",
     "FileMetadata",
     "AudioMetadata",
     "FileProcessor",

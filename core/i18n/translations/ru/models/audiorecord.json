@@ -57,8 +57,8 @@
       "description": "Уверенность распознавания от 0.0 до 1.0"
     },
     "recognition_qid": {
-      "title": "QID Cloud Voice",
-      "description": "ID запроса к Cloud Voice API"
+      "title": "QID STT",
+      "description": "ID запроса к STT API"
     },
     "metadata": {
       "title": "Метаданные",

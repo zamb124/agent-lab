@@ -136,18 +136,6 @@ class WorkerConfig(BaseModel):
     poll_timeout: int = 600
 
 
-class CloudVoiceConfig(BaseModel):
-    """Конфигурация Cloud Voice API"""
-
-    enabled: bool = False
-    secret_key: Optional[str] = None
-    client_id: Optional[str] = None
-    auth_url: str = "https://mcs.mail.ru/auth/oauth/v1/token"
-    asr_url: str = "https://voice.mcs.mail.ru/asr"
-    tts_url: str = "https://voice.mcs.mail.ru/tts"
-    timeout: int = 30
-
-
 class CloudRuSTTConfig(BaseModel):
     """Конфигурация cloud.ru STT (Whisper API)."""
 

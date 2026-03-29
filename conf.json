@@ -103,15 +103,6 @@
     "proxies": [],
     "connect_timeout": 10.0
   },
-  "cloud_voice": {
-    "enabled": true,
-    "secret_key": "YOUR_CLOUD_VOICE_SECRET_KEY",
-    "client_id": "YOUR_CLOUD_VOICE_CLIENT_ID",
-    "auth_url": "https://mcs.mail.ru/auth/oauth/v1/token",
-    "asr_url": "https://voice.mcs.mail.ru/asr",
-    "tts_url": "https://voice.mcs.mail.ru/tts",
-    "timeout": 30
-  },
   "stt": {
     "provider": "cloud_ru",
     "cloud_ru": {
