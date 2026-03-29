@@ -67,6 +67,13 @@ export class SyncAPIService extends BaseService {
         return this.post(`/meetings/${encodeURIComponent(meetingId)}/export/crm`, { namespace });
     }
 
+    async retryMeetingProcessing(meetingId) {
+        if (typeof meetingId !== 'string' || meetingId === '') {
+            throw new Error('meetingId обязателен.');
+        }
+        return this.post(`/meetings/${encodeURIComponent(meetingId)}/retry-processing`, {});
+    }
+
     async getCallRecordings(callId) {
         if (typeof callId !== 'string' || callId === '') {
             throw new Error('callId обязателен.');

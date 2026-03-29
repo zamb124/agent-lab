@@ -17,6 +17,7 @@ from apps.sync.models.meetings import (
 )
 from apps.sync.realtime.command_dispatch import dispatch_sync_command
 from apps.sync.realtime.commands import CommandEnvelope
+from apps.sync.realtime.tasks import sync_transcribe_recording_task
 from core.context import get_context
 
 router = APIRouter()
@@ -44,6 +45,15 @@ async def list_meetings(
     for row in rows:
         if not await container.channel_repository.is_member(row.channel_id, user_id, company_id=company_id):
             continue
+        transcript_storage_url = None
+        transcript_download_url = None
+        if row.transcript_text_file_id is not None:
+            transcript_file = await container.file_repository.get(row.transcript_text_file_id)
+            if transcript_file is not None:
+                transcript_storage_url = transcript_file.storage_url
+                transcript_download_url = (
+                    f"/sync/api/v1/files/download/{transcript_file.file_id}"
+                )
         visible.append(
             CallMeetingRead(
                 meeting_id=row.meeting_id,
@@ -53,6 +63,8 @@ async def list_meetings(
                 space_id=row.space_id,
                 transcript_file_id=row.transcript_file_id,
                 transcript_text_file_id=row.transcript_text_file_id,
+                transcript_text_storage_url=transcript_storage_url,
+                transcript_text_download_url=transcript_download_url,
                 summary_json=row.summary_json or {},
                 export_status=row.export_status,
                 export_target_namespace=row.export_target_namespace,
@@ -79,6 +91,13 @@ async def get_meeting(meeting_id: str) -> CallMeetingDetailsRead:
     if row.recording_id is not None:
         rec = await container.call_recording_repository.get(row.recording_id)
         if rec is not None and rec.company_id == company_id:
+            raw_file_storage_url = None
+            raw_file_download_url = None
+            if rec.raw_file_id is not None:
+                raw_file = await container.file_repository.get(rec.raw_file_id)
+                if raw_file is not None:
+                    raw_file_storage_url = raw_file.storage_url
+                    raw_file_download_url = f"/sync/api/v1/files/download/{raw_file.file_id}"
             recording = CallRecordingRead(
                 recording_id=rec.recording_id,
                 call_id=rec.call_id,
@@ -87,11 +106,20 @@ async def get_meeting(meeting_id: str) -> CallMeetingDetailsRead:
                 status=rec.status,
                 provider_job_id=rec.provider_job_id,
                 raw_file_id=rec.raw_file_id,
+                raw_file_storage_url=raw_file_storage_url,
+                raw_file_download_url=raw_file_download_url,
                 started_at=rec.started_at,
                 ended_at=rec.ended_at,
                 created_at=rec.created_at,
                 error=rec.error,
             )
+    transcript_storage_url = None
+    transcript_download_url = None
+    if row.transcript_text_file_id is not None:
+        transcript_file = await container.file_repository.get(row.transcript_text_file_id)
+        if transcript_file is not None:
+            transcript_storage_url = transcript_file.storage_url
+            transcript_download_url = f"/sync/api/v1/files/download/{transcript_file.file_id}"
     segments_rows = await container.call_speaker_segment_repository.list_for_meeting(meeting_id, company_id)
     segments = [
         CallSpeakerSegmentRead(
@@ -117,6 +145,8 @@ async def get_meeting(meeting_id: str) -> CallMeetingDetailsRead:
             space_id=row.space_id,
             transcript_file_id=row.transcript_file_id,
             transcript_text_file_id=row.transcript_text_file_id,
+            transcript_text_storage_url=transcript_storage_url,
+            transcript_text_download_url=transcript_download_url,
             summary_json=row.summary_json or {},
             export_status=row.export_status,
             export_target_namespace=row.export_target_namespace,
@@ -161,4 +191,56 @@ async def export_meeting_to_crm(meeting_id: str, body: ExportMeetingToCrmRequest
     if not out.get("ok"):
         raise RuntimeError(f"Command failed: {out.get('error_detail')}")
     return CallMeetingRead.model_validate(out["result"])
+
+
+@router.post("/{meeting_id}/retry-processing")
+async def retry_meeting_processing(meeting_id: str) -> CallMeetingRead:
+    context = get_context()
+    company_id = context.active_company.company_id
+    user_id = context.user.user_id
+    container = get_sync_container()
+    row = await container.call_meeting_repository.get(meeting_id)
+    if row is None or row.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Встреча не найдена.")
+    if not await container.channel_repository.is_member(row.channel_id, user_id, company_id=company_id):
+        raise HTTPException(status_code=403, detail="Нет доступа к встрече.")
+    if row.recording_id is None:
+        raise HTTPException(status_code=400, detail="Для встречи отсутствует запись.")
+
+    await container.call_meeting_repository.set_export_status(
+        row.meeting_id,
+        status="pending",
+        target_namespace=row.export_target_namespace,
+    )
+    await sync_transcribe_recording_task.kiq(
+        meeting_id=row.meeting_id,
+        company_id=company_id,
+        actor_user_id=user_id,
+    )
+    updated = await container.call_meeting_repository.get(row.meeting_id)
+    if updated is None:
+        raise RuntimeError("Встреча не найдена после постановки retry.")
+    transcript_storage_url = None
+    transcript_download_url = None
+    if updated.transcript_text_file_id is not None:
+        transcript_file = await container.file_repository.get(updated.transcript_text_file_id)
+        if transcript_file is not None:
+            transcript_storage_url = transcript_file.storage_url
+            transcript_download_url = f"/sync/api/v1/files/download/{transcript_file.file_id}"
+    return CallMeetingRead(
+        meeting_id=updated.meeting_id,
+        call_id=updated.call_id,
+        recording_id=updated.recording_id,
+        channel_id=updated.channel_id,
+        space_id=updated.space_id,
+        transcript_file_id=updated.transcript_file_id,
+        transcript_text_file_id=updated.transcript_text_file_id,
+        transcript_text_storage_url=transcript_storage_url,
+        transcript_text_download_url=transcript_download_url,
+        summary_json=updated.summary_json or {},
+        export_status=updated.export_status,
+        export_target_namespace=updated.export_target_namespace,
+        created_at=updated.created_at,
+        updated_at=updated.updated_at,
+    )
 

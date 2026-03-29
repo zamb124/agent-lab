@@ -861,6 +861,23 @@ export class ChatView extends PlatformElement {
         await SyncStore.loadMeetings(syncApi);
     }
 
+    async _selectMeeting(meetingId) {
+        if (typeof meetingId !== 'string' || meetingId === '') {
+            throw new Error('meetingId обязателен.');
+        }
+        const syncApi = this.services.get('syncApi');
+        const details = await syncApi.getMeeting(meetingId);
+        if (!details || typeof details !== 'object' || !details.meeting) {
+            throw new Error('Некорректный ответ details встречи.');
+        }
+        const selected = {
+            ...details.meeting,
+            recording: details.recording ?? null,
+            segments: Array.isArray(details.segments) ? details.segments : [],
+        };
+        SyncStore.setMeetingSelected(selected);
+    }
+
     render() {
         const { selectedChannelId, focusedThreadId } = this._chat;
         const selectedChannel = this._selectedChannel();
@@ -1094,7 +1111,9 @@ export class ChatView extends PlatformElement {
                                     <button
                                         type="button"
                                         class="header-more-item"
-                                        @click=${() => SyncStore.setMeetingSelected(m)}
+                                        @click=${async () => {
+        await this._selectMeeting(m.meeting_id);
+    }}
                                     >
                                         <span>Встреча ${m.meeting_id.slice(0, 8)}</span>
                                         <span class="header-subtitle">${m.export_status}</span>
@@ -1108,6 +1127,43 @@ export class ChatView extends PlatformElement {
                                     <div class="header-subtitle">recording_id: ${meetingsState.selected.recording_id || '—'}</div>
                                     <div class="header-subtitle">transcript_file_id: ${meetingsState.selected.transcript_text_file_id || '—'}</div>
                                     <div class="header-subtitle">export_status: ${meetingsState.selected.export_status}</div>
+                                    ${meetingsState.selected.recording?.raw_file_id ? html`
+                                        <div class="header-subtitle" style="margin-top:var(--space-2);">raw_file_id: ${meetingsState.selected.recording.raw_file_id}</div>
+                                        ${meetingsState.selected.recording.raw_file_storage_url ? html`
+                                            <a
+                                                class="header-subtitle"
+                                                href=${meetingsState.selected.recording.raw_file_storage_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >raw (S3)</a>
+                                        ` : ''}
+                                        ${meetingsState.selected.recording.raw_file_download_url ? html`
+                                            <a
+                                                class="header-subtitle"
+                                                href=${meetingsState.selected.recording.raw_file_download_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >raw (download)</a>
+                                        ` : ''}
+                                    ` : ''}
+                                    ${meetingsState.selected.transcript_text_file_id ? html`
+                                        ${meetingsState.selected.transcript_text_storage_url ? html`
+                                            <a
+                                                class="header-subtitle"
+                                                href=${meetingsState.selected.transcript_text_storage_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >transcript (S3)</a>
+                                        ` : ''}
+                                        ${meetingsState.selected.transcript_text_download_url ? html`
+                                            <a
+                                                class="header-subtitle"
+                                                href=${meetingsState.selected.transcript_text_download_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >transcript (download)</a>
+                                        ` : ''}
+                                    ` : ''}
                                     <button
                                         type="button"
                                         class="back-btn"
@@ -1116,9 +1172,23 @@ export class ChatView extends PlatformElement {
                                             const syncApi = this.services.get('syncApi');
                                             await syncApi.exportMeetingToCrm(meetingsState.selected.meeting_id, null);
                                             await this._loadMeetings();
+                                            await this._selectMeeting(meetingsState.selected.meeting_id);
                                         }}
                                     >
                                         Экспортировать в CRM сейчас
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="back-btn"
+                                        style="margin-top:var(--space-2);"
+                                        @click=${async () => {
+                                            const syncApi = this.services.get('syncApi');
+                                            await syncApi.retryMeetingProcessing(meetingsState.selected.meeting_id);
+                                            await this._loadMeetings();
+                                            await this._selectMeeting(meetingsState.selected.meeting_id);
+                                        }}
+                                    >
+                                        Повторить обработку
                                     </button>
                                 ` : html`
                                     <div class="header-subtitle">Выберите встречу слева</div>

@@ -385,8 +385,8 @@ export class NoteViewModal extends PlatformModal {
             throw new Error('Note description must be string');
         }
         const entitySubtype = detail.entitySubtype;
-        if (typeof entitySubtype !== 'string' || entitySubtype.trim().length === 0) {
-            throw new Error('Note subtype is required');
+        if (entitySubtype !== null && typeof entitySubtype !== 'string') {
+            throw new Error('Note subtype must be string or null');
         }
         const noteDate = detail.noteDate;
         if (typeof noteDate !== 'string' || noteDate.trim().length === 0) {
@@ -402,7 +402,9 @@ export class NoteViewModal extends PlatformModal {
                 const createdNote = await CRMStore.createNote(crmApi, {
                     name: noteName.trim(),
                     description: noteDescription,
-                    entity_subtype: entitySubtype.trim(),
+                    entity_subtype: typeof entitySubtype === 'string' && entitySubtype.trim().length > 0
+                        ? entitySubtype.trim()
+                        : null,
                     note_date: noteDate.trim(),
                 });
                 this.note = createdNote;
@@ -416,7 +418,9 @@ export class NoteViewModal extends PlatformModal {
                 await CRMStore.updateNote(crmApi, this.note.entity_id, {
                     name: noteName.trim(),
                     description: noteDescription,
-                    entity_subtype: entitySubtype.trim(),
+                    entity_subtype: typeof entitySubtype === 'string' && entitySubtype.trim().length > 0
+                        ? entitySubtype.trim()
+                        : null,
                     note_date: noteDate.trim(),
                 });
             }

@@ -730,7 +730,7 @@ export class DailyNotesPage extends PlatformElement {
         const draftNote = {
             entity_id: `draft-${Date.now()}`,
             entity_type: 'note',
-            entity_subtype: 'meeting',
+            entity_subtype: null,
             name: '',
             description: '',
             note_date: this._selectedDate,

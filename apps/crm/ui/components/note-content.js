@@ -976,10 +976,7 @@ export class NoteContent extends PlatformElement {
             if (this.editable) {
                 this._draftTitle = noteName;
                 this._draftText = noteDescription;
-                const fallbackSubtype = Array.isArray(this.noteSubtypes) && this.noteSubtypes.length > 0
-                    ? this._getText(this.noteSubtypes[0]?.type_id, 'meeting')
-                    : 'meeting';
-                this._draftSubtype = noteSubtype || fallbackSubtype;
+                this._draftSubtype = noteSubtype;
                 this._draftNoteDate = noteDate || getLocalIsoDate();
             }
         }
@@ -1273,9 +1270,6 @@ export class NoteContent extends PlatformElement {
             throw new Error('Название заметки не может быть пустым');
         }
         const subtype = this._draftSubtype.trim();
-        if (subtype.length === 0) {
-            throw new Error('Подтип заметки не выбран');
-        }
         const noteDate = this._draftNoteDate.trim();
         if (noteDate.length === 0) {
             throw new Error('Дата заметки не выбрана');
@@ -1284,7 +1278,7 @@ export class NoteContent extends PlatformElement {
             noteId: this.note.entity_id,
             name: title,
             description: this._draftText,
-            entitySubtype: subtype,
+            entitySubtype: subtype.length > 0 ? subtype : null,
             noteDate,
         });
     }
@@ -1415,7 +1409,7 @@ export class NoteContent extends PlatformElement {
                                         .value=${this._draftSubtype}
                                         @change=${this._onSubtypeChange}
                                     >
-                                        <option value="" disabled>Выберите тип заметки</option>
+                                        <option value="">Без подтипа</option>
                                         ${noteSubtypeOptions.map((item) => html`
                                             <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
                                         `)}

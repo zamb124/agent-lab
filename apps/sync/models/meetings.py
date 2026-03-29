@@ -20,6 +20,8 @@ class CallRecordingRead(BaseModel):
     status: RecordingStatus
     provider_job_id: str | None = None
     raw_file_id: str | None = None
+    raw_file_storage_url: str | None = None
+    raw_file_download_url: str | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
     created_at: datetime
@@ -47,6 +49,8 @@ class CallMeetingRead(BaseModel):
     space_id: str | None = None
     transcript_file_id: str | None = None
     transcript_text_file_id: str | None = None
+    transcript_text_storage_url: str | None = None
+    transcript_text_download_url: str | None = None
     summary_json: dict[str, Any] = Field(default_factory=dict)
     export_status: ExportStatus
     export_target_namespace: str | None = None
