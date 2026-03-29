@@ -6,7 +6,10 @@ from abc import ABC, abstractmethod
 import json
 import os
 
+from pydantic import BaseModel, Field
+
 from core.config import get_settings
+from core.files.models import AudioTranscriptionStatus
 from core.http import get_httpx_client
 
 
@@ -16,10 +19,33 @@ def _extract_transcript_from_json_payload(payload: object) -> str | None:
         text = payload.strip()
         return text if text != "" else None
     if isinstance(payload, dict):
-        direct_keys = ("text", "transcript", "transcription", "result")
+        direct_keys = ("text", "transcript", "transcription")
         for key in direct_keys:
             if key in payload:
                 found = _extract_transcript_from_json_payload(payload[key])
+                if found is not None:
+                    return found
+        container_keys = (
+            "result",
+            "data",
+            "message",
+            "output",
+            "content",
+            "segments",
+            "alternatives",
+            "choices",
+            "chunks",
+            "hypotheses",
+            "items",
+        )
+        for key in container_keys:
+            if key in payload:
+                found = _extract_transcript_from_json_payload(payload[key])
+                if found is not None:
+                    return found
+        for value in payload.values():
+            if isinstance(value, dict) or isinstance(value, list):
+                found = _extract_transcript_from_json_payload(value)
                 if found is not None:
                     return found
         return None
@@ -43,8 +69,26 @@ class BaseSTTClient(ABC):
         file_name: str,
         mime_type: str,
         language: str | None = None,
-    ) -> str:
-        """Возвращает транскрипцию аудио."""
+    ) -> "STTTranscriptionResult":
+        """Возвращает нормализованный результат транскрипции аудио."""
+
+
+class STTTranscriptionResult(BaseModel):
+    """Единый нормализованный DTO результата STT."""
+
+    provider: str = Field(description="Идентификатор STT провайдера.")
+    status: AudioTranscriptionStatus = Field(
+        description="Статус обработки транскрипции."
+    )
+    text: str = Field(description="Распознанный текст.")
+    error: str | None = Field(
+        default=None,
+        description="Ошибка обработки транскрипции.",
+    )
+    language: str | None = Field(
+        default=None,
+        description="Язык, использованный для распознавания.",
+    )
 
 
 class CloudRuSTTClient(BaseSTTClient):
@@ -89,7 +133,7 @@ class CloudRuSTTClient(BaseSTTClient):
         file_name: str,
         mime_type: str,
         language: str | None = None,
-    ) -> str:
+    ) -> STTTranscriptionResult:
         if not audio_bytes:
             raise ValueError("audio_bytes не может быть пустым.")
         if file_name == "":
@@ -126,25 +170,45 @@ class CloudRuSTTClient(BaseSTTClient):
             transcript = _extract_transcript_from_json_payload(body_json)
             if transcript is None:
                 raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
-            return transcript
+            return STTTranscriptionResult(
+                provider="cloud_ru",
+                status=AudioTranscriptionStatus.DONE,
+                text=transcript,
+                language=selected_language,
+            )
 
         if body_text.startswith("{") and body_text.endswith("}"):
             body_json = json.loads(body_text)
             transcript = _extract_transcript_from_json_payload(body_json)
             if transcript is None:
                 raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
-            return transcript
+            return STTTranscriptionResult(
+                provider="cloud_ru",
+                status=AudioTranscriptionStatus.DONE,
+                text=transcript,
+                language=selected_language,
+            )
 
         if body_text.startswith("[") and body_text.endswith("]"):
             body_json = json.loads(body_text)
             transcript = _extract_transcript_from_json_payload(body_json)
             if transcript is None:
                 raise ValueError("STT cloud_ru вернул пустую транскрипцию.")
-            return transcript
+            return STTTranscriptionResult(
+                provider="cloud_ru",
+                status=AudioTranscriptionStatus.DONE,
+                text=transcript,
+                language=selected_language,
+            )
 
         if body_text == "":
             raise ValueError("STT cloud_ru вернул пустой ответ.")
-        return body_text
+        return STTTranscriptionResult(
+            provider="cloud_ru",
+            status=AudioTranscriptionStatus.DONE,
+            text=body_text,
+            language=selected_language,
+        )
 
 
 class MockSTTClient(BaseSTTClient):
@@ -162,14 +226,19 @@ class MockSTTClient(BaseSTTClient):
         file_name: str,
         mime_type: str,
         language: str | None = None,
-    ) -> str:
+    ) -> STTTranscriptionResult:
         if not audio_bytes:
             raise ValueError("audio_bytes не может быть пустым.")
         if file_name == "":
             raise ValueError("file_name не может быть пустым.")
         if mime_type == "":
             raise ValueError("mime_type не может быть пустым.")
-        return self._transcript_text
+        return STTTranscriptionResult(
+            provider="mock",
+            status=AudioTranscriptionStatus.DONE,
+            text=self._transcript_text,
+            language=language,
+        )
 
 
 class STTClientFactory:

@@ -27,6 +27,7 @@ from apps.sync.models.threads import ThreadCreate
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.handlers import execute_command
 from apps.sync.realtime.tasks import handle_command
+from core.clients.stt_client import STTTranscriptionResult
 from core.models.identity_models import User
 
 
@@ -1309,12 +1310,17 @@ async def test_sync_transcribe_audio_message_task_marks_done(
             file_name: str,
             mime_type: str,
             language: str | None = None,
-        ) -> str:
+        ) -> STTTranscriptionResult:
             assert audio_bytes == b"voice-bytes"
             assert file_name == "voice.webm"
             assert mime_type == "audio/webm"
             assert language == "ru"
-            return "Привет из аудио"
+            return STTTranscriptionResult(
+                provider="mock",
+                status=AudioTranscriptionStatus.DONE,
+                text="Привет из аудио",
+                language="ru",
+            )
 
     class _Resp:
         status_code = 200

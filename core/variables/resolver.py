@@ -38,7 +38,12 @@ class VarResolver:
     _VAR_TOKEN_PATTERN = re.compile(r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)")
 
     @classmethod
-    def resolve_ref(cls, value: str, variables: Dict[str, Any]) -> Any:
+    def resolve_ref(
+        cls,
+        value: str,
+        variables: Dict[str, Any],
+        _visited: Optional[set[str]] = None,
+    ) -> Any:
         """Резолвит только полную ссылку формата @var:path."""
         if not isinstance(value, str):
             raise VariableResolutionError(
@@ -49,10 +54,23 @@ class VarResolver:
             raise VariableResolutionError(
                 f"Invalid @var reference format: '{value}'"
             )
-        return cls._resolve_path(match.group(1), variables)
+        path = match.group(1)
+        visited = set() if _visited is None else set(_visited)
+        if path in visited:
+            raise VariableResolutionError(
+                f"Circular @var reference detected: '@var:{path}'"
+            )
+        visited.add(path)
+        resolved = cls._resolve_path(path, variables)
+        return cls.resolve_deep(resolved, variables, visited)
 
     @classmethod
-    def resolve_text(cls, value: str, variables: Dict[str, Any]) -> str:
+    def resolve_text(
+        cls,
+        value: str,
+        variables: Dict[str, Any],
+        _visited: Optional[set[str]] = None,
+    ) -> str:
         """
         Резолвит все @var:path токены в строке.
         Если любой токен неразрешим, бросает VariableResolutionError.
@@ -62,26 +80,43 @@ class VarResolver:
                 f"Text for @var resolution must be string, got {type(value).__name__}"
             )
 
+        visited = set() if _visited is None else set(_visited)
+
         def replace_var(match: re.Match) -> str:
-            resolved = cls._resolve_path(match.group(1), variables)
+            ref_path = match.group(1)
+            resolved = cls.resolve_ref(f"@var:{ref_path}", variables, visited)
             return str(resolved)
 
-        return cls._VAR_TOKEN_PATTERN.sub(replace_var, value)
+        resolved_text = value
+        while "@var:" in resolved_text:
+            updated_text = cls._VAR_TOKEN_PATTERN.sub(replace_var, resolved_text)
+            if updated_text == resolved_text:
+                break
+            resolved_text = updated_text
+        return resolved_text
 
     @classmethod
-    def resolve_deep(cls, value: Any, variables: Dict[str, Any]) -> Any:
+    def resolve_deep(
+        cls,
+        value: Any,
+        variables: Dict[str, Any],
+        _visited: Optional[set[str]] = None,
+    ) -> Any:
         """
         Рекурсивно резолвит @var во всех строках dict/list.
         """
         if isinstance(value, dict):
-            return {k: cls.resolve_deep(v, variables) for k, v in value.items()}
+            return {
+                key: cls.resolve_deep(item, variables, _visited)
+                for key, item in value.items()
+            }
         if isinstance(value, list):
-            return [cls.resolve_deep(item, variables) for item in value]
+            return [cls.resolve_deep(item, variables, _visited) for item in value]
         if isinstance(value, str):
             if cls._VAR_REF_PATTERN.match(value):
-                return cls.resolve_ref(value, variables)
+                return cls.resolve_ref(value, variables, _visited)
             if "@var:" in value:
-                return cls.resolve_text(value, variables)
+                return cls.resolve_text(value, variables, _visited)
             return value
         return value
 

@@ -1,8 +1,8 @@
 {
   "fields": {
-    "audio_id": {
-      "title": "ID аудио",
-      "description": "Уникальный ID аудиофайла в системе"
+    "file_id": {
+      "title": "ID файла",
+      "description": "Уникальный ID файла в системе"
     },
     "provider": {
       "title": "Провайдер",
@@ -32,9 +32,9 @@
       "title": "Размер файла",
       "description": "Размер аудиофайла в байтах"
     },
-    "duration": {
+    "duration_ms": {
       "title": "Длительность",
-      "description": "Длительность аудио в секундах"
+      "description": "Длительность аудио в миллисекундах"
     },
     "checksum": {
       "title": "Контрольная сумма",
@@ -48,17 +48,21 @@
       "title": "Загрузил",
       "description": "ID пользователя который загрузил"
     },
-    "recognition_text": {
-      "title": "Распознанный текст",
+    "transcription_status": {
+      "title": "Статус расшифровки",
+      "description": "Состояние распознавания аудио: idle, processing, done или failed"
+    },
+    "transcription_text": {
+      "title": "Текст расшифровки",
       "description": "Результат распознавания речи"
     },
-    "recognition_confidence": {
-      "title": "Уверенность распознавания",
-      "description": "Уверенность распознавания от 0.0 до 1.0"
+    "transcription_error": {
+      "title": "Ошибка расшифровки",
+      "description": "Текст ошибки STT, если распознавание завершилось неуспешно"
     },
-    "recognition_qid": {
-      "title": "QID STT",
-      "description": "ID запроса к STT API"
+    "transcription_provider": {
+      "title": "Провайдер STT",
+      "description": "Идентификатор STT-провайдера, выполнившего расшифровку"
     },
     "metadata": {
       "title": "Метаданные",

@@ -12,7 +12,12 @@ from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
 
 from core.files.s3_client import S3ClientFactory, S3Client
-from core.files.models import FileMetadata, AudioMetadata, FileStatus
+from core.files.models import (
+    AudioMetadata,
+    AudioTranscriptionStatus,
+    FileMetadata,
+    FileStatus,
+)
 from core.clients.stt_client import BaseSTTClient, STTClientFactory
 
 if TYPE_CHECKING:
@@ -264,48 +269,16 @@ class AudioProcessor:
     @staticmethod
     def extract_audio_info_from_message(message: str) -> List[Dict[str, Any]]:
         """
-        Извлекает информацию об аудиофайлах из сообщения агента.
+        Legacy AUDIO-теги удалены из платформы.
 
         Args:
-            message: Сообщение которое может содержать аудио
+            message: Текст сообщения
 
         Returns:
-            Список словарей с информацией об аудиофайлах
+            Всегда пустой список, т.к. [AUDIO] формат больше не поддерживается.
         """
-        audios = []
-        
-        # Паттерн для полного формата: [AUDIO]...ID: audio_id...[/AUDIO]
-        full_pattern = r"\[AUDIO\].*?ID:\s*([a-zA-Z0-9_]+).*?\[/AUDIO\]"
-        
-        # Паттерн для упрощенного формата: [AUDIO]audio_id[/AUDIO]
-        simple_pattern = r"\[AUDIO\]([a-zA-Z0-9_]+)\[/AUDIO\]"
-        
-        # Сначала ищем полный формат
-        for match in re.finditer(full_pattern, message, re.DOTALL):
-            audio_id = match.group(1).strip()
-            audio_info = {
-                "name": f"audio_{audio_id[:8]}.ogg",
-                "audio_id": audio_id,
-                "url": f"/api/v1/files/download/audio/{audio_id}",
-                "content_type": "audio/ogg; codecs=opus",
-                "size": "unknown",
-            }
-            audios.append(audio_info)
-        
-        # Если не нашли полный формат, ищем упрощенный
-        if not audios:
-            for match in re.finditer(simple_pattern, message):
-                audio_id = match.group(1).strip()
-                audio_info = {
-                    "name": f"audio_{audio_id[:8]}.ogg",
-                    "audio_id": audio_id,
-                    "url": f"/api/v1/files/download/audio/{audio_id}",
-                    "content_type": "audio/ogg; codecs=opus",
-                    "size": "unknown",
-                }
-                audios.append(audio_info)
-
-        return audios
+        _ = message
+        return []
 
     async def close(self):
         """Закрывает клиенты"""
@@ -357,20 +330,22 @@ class AudioProcessor:
             public=public,
         )
 
-        transcription = None
-        transcription_status = "pending"
+        transcription_text = None
+        stt_result = None
+        transcription_status = AudioTranscriptionStatus.IDLE
 
         if auto_recognize:
             logger.info("Запускаем распознавание речи...")
             stt_client = await self._get_stt_client()
-            transcription = await stt_client.transcribe_audio(
+            stt_result = await stt_client.transcribe_audio(
                 audio_bytes=data,
                 file_name=original_name,
                 mime_type=content_type,
                 language="ru",
             )
-            transcription_status = "completed"
-            logger.info(f"Распознан текст: {transcription[:100]}...")
+            transcription_text = stt_result.text
+            transcription_status = stt_result.status
+            logger.info(f"Распознан текст: {transcription_text[:100]}...")
 
         audio_record = AudioMetadata(
             file_id=file_id,
@@ -385,7 +360,10 @@ class AudioProcessor:
             status=FileStatus.READY,
             metadata=metadata or {},
             tags=tags or [],
-            transcription=transcription,
+            transcription_status=transcription_status,
+            transcription_text=transcription_text,
+            transcription_error=stt_result.error if stt_result is not None else None,
+            transcription_provider=stt_result.provider if stt_result is not None else None,
         )
 
         await self.file_repository.set(audio_record)

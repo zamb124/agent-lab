@@ -35,6 +35,8 @@ from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.meeting_repository import CallMeetingRepository, CallRecordingRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
+from core.clients.stt_client import STTTranscriptionResult
+from core.files.models import AudioTranscriptionStatus
 
 from sqlalchemy import text
 
@@ -279,7 +281,7 @@ def mock_sync_stt_client(monkeypatch) -> Callable[[str], object]:
             file_name: str,
             mime_type: str,
             language: str | None = None,
-        ) -> str:
+        ) -> STTTranscriptionResult:
             self.calls.append(
                 {
                     "file_name": file_name,
@@ -288,7 +290,12 @@ def mock_sync_stt_client(monkeypatch) -> Callable[[str], object]:
                     "size": str(len(audio_bytes)),
                 }
             )
-            return self._transcript_text
+            return STTTranscriptionResult(
+                provider="mock",
+                status=AudioTranscriptionStatus.DONE,
+                text=self._transcript_text,
+                language=language,
+            )
 
     def _apply(transcript_text: str) -> _MockSTTClient:
         client = _MockSTTClient(transcript_text=transcript_text)

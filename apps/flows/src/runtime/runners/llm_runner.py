@@ -418,6 +418,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             should_yield = False
                                 
                                 if should_yield:
+                                    await emitter.emit(event)
                                     yield event
 
                                 if isinstance(event, TaskStatusUpdateEvent):

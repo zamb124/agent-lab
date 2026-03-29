@@ -91,18 +91,22 @@ async def _build_task_from_events(
                                 reasoning_parts.append(part.root.text)
                             else:
                                 reasoning_parts = [part.root.text]
-                        else:
+                        elif artifact_name == "response":
                             if event.append:
                                 response_parts.append(part.root.text)
                             else:
                                 response_parts = [part.root.text]
-                    elif hasattr(part.root, "data"):
-                        artifacts_dict[artifact_name] = event.artifact
         elif isinstance(event, TaskStatusUpdateEvent):
             if event.final:
                 final_status = event.status
 
     response_text = "".join(response_parts)
+    if not response_text and final_status and final_status.message and final_status.message.parts:
+        response_text = "".join(
+            part.root.text
+            for part in final_status.message.parts
+            if hasattr(part.root, "text")
+        )
 
     if reasoning_parts:
         reasoning_text = "".join(reasoning_parts)
@@ -124,9 +128,7 @@ async def _build_task_from_events(
             name="response",
             parts=[Part(root=DataPart(data={"res": json.dumps(json_data, ensure_ascii=False)}))],
         )
-    elif response_text:
-        # Текстовый артефакт нужен всегда, иначе A2A-ответ без DataPart и без reasoning
-        # не содержит parts — CRM и другие клиенты получают пустой parse.
+    elif response_text and reasoning_parts:
         artifacts_dict["response"] = Artifact(
             artifactId=str(uuid.uuid4()),
             name="response",
@@ -168,7 +170,7 @@ async def _build_task_from_events(
             agent_message = agent_message.model_copy(update={"task_id": task_id})
         history.append(agent_message)
 
-    # Когда есть artifacts, не дублируем ответ в status.message
+    # Когда есть artifacts (response/reasoning), не дублируем ответ в status.message
     # Исключение: input_required - там message содержит вопрос к пользователю
     if artifacts and final_status.message and final_status.state != TaskState.input_required:
         timestamp = final_status.timestamp or datetime.now(timezone.utc).isoformat()

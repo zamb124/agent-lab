@@ -1,8 +1,8 @@
 {
   "fields": {
-    "audio_id": {
-      "title": "Audio ID",
-      "description": "Unique audio file ID in system"
+    "file_id": {
+      "title": "File ID",
+      "description": "Unique file ID in system"
     },
     "provider": {
       "title": "Provider",
@@ -32,9 +32,9 @@
       "title": "File Size",
       "description": "Audio file size in bytes"
     },
-    "duration": {
+    "duration_ms": {
       "title": "Duration",
-      "description": "Audio duration in seconds"
+      "description": "Audio duration in milliseconds"
     },
     "checksum": {
       "title": "Checksum",
@@ -48,17 +48,21 @@
       "title": "Uploaded By",
       "description": "User ID who uploaded"
     },
-    "recognition_text": {
-      "title": "Recognized Text",
+    "transcription_status": {
+      "title": "Transcription Status",
+      "description": "Audio transcription state: idle, processing, done, or failed"
+    },
+    "transcription_text": {
+      "title": "Transcription Text",
       "description": "Speech recognition result"
     },
-    "recognition_confidence": {
-      "title": "Recognition Confidence",
-      "description": "Recognition confidence from 0.0 to 1.0"
+    "transcription_error": {
+      "title": "Transcription Error",
+      "description": "STT error message when transcription fails"
     },
-    "recognition_qid": {
-      "title": "STT QID",
-      "description": "STT API request ID"
+    "transcription_provider": {
+      "title": "STT Provider",
+      "description": "Identifier of the STT provider that processed the audio"
     },
     "metadata": {
       "title": "Metadata",

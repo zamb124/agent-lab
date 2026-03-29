@@ -173,11 +173,9 @@ class Flow:
                     if await self._check_breakpoint(state, node_id, node_type, emitter):
                         return state
 
-                # Emit node_start для всех нод
                 for node_id in current_nodes:
                     node_type = self.nodes[node_id].config.get("type", "function")
                     logger.debug(f"Flow {self.flow_id}: executing node '{node_id}' (type={node_type})")
-                    await emitter.emit_node_start(node_id, node_type)
 
                 # Выполнение всех нод текущего уровня
                 async def _run(node_id: str) -> ExecutionState:
@@ -194,19 +192,13 @@ class Flow:
                     logger.info(f"Flow {self.flow_id}: interrupt at '{node_id}': {e.question}")
                     state.interrupt = InterruptData(question=e.question)
                     state.current_nodes = current_nodes
-                    await emitter.emit_node_complete(node_id, f"interrupt: {e.question[:100]}")
                     return state
                 except Exception as e:
-                    for node_id in current_nodes:
-                        await emitter.emit_node_error(node_id, str(e))
                     raise
 
-                # Emit node_complete и record calls для всех нод
                 for node_id in current_nodes:
                     node = self.nodes[node_id]
                     node_type = node.config.get("type", "function")
-                    result_preview = str(state.response)[:200] if state.response else ""
-                    await emitter.emit_node_complete(node_id, result_preview)
                     self._record_node_call(state, node_id, node_type)
 
                 # Проверка interrupt

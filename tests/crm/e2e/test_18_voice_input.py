@@ -30,9 +30,11 @@ class TestVoiceInput:
         assert response.status_code == 200
         result = response.json()
         
-        assert "text" in result or "transcription" in result
-        transcription = result.get("text") or result.get("transcription")
+        assert "text" in result
+        assert "stt" in result
+        transcription = result["text"]
         assert len(transcription) > 0
+        assert result["stt"]["status"] == "done"
     
     @pytest.mark.asyncio
     async def test_voice_to_note_full_pipeline(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
@@ -105,6 +107,7 @@ class TestVoiceInput:
         
         assert response.status_code == 200
         result = response.json()
-        transcription = result.get("text") or result.get("transcription")
+        assert "stt" in result
+        transcription = result["text"]
         assert "русском" in transcription or len(transcription) > 0
 

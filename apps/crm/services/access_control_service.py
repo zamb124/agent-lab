@@ -131,7 +131,10 @@ class AccessControlService:
     ) -> Dict[str, Any]:
         """Фильтрация по EntityType.public_fields"""
         
-        entity_type = await self._entity_type_repo.get(entity.entity_type)
+        entity_type = await self._entity_type_repo.get_by_type_id(
+            entity.entity_type,
+            company_id=entity.company_id,
+        )
         
         # Возвращаем ТОЛЬКО публичные поля
         result = {

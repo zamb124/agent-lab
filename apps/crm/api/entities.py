@@ -5,13 +5,14 @@ API для работы с entities.
 """
 
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from apps.crm.models.api import EntityCreate, EntityUpdate, EntityResponse, AIAnalyzeRequest, AIAnalyzeResponse, SearchMentionsRequest, RelationshipResponse
 from apps.crm.db.models import CRMEntity
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.access_control_service import AccessControlService
 from apps.crm.dependencies import get_entity_service, get_access_control_service
+from core.clients.stt_client import STTClientFactory
 from core.context import get_context
 from core.websocket.publisher import notify_user, Notification, NotificationType
 
@@ -246,12 +247,35 @@ async def get_entity_card(
 
 
 @router.post("/voice-input")
-async def voice_input():
-    """Голосовой ввод заметок (stub)"""
+async def voice_input(
+    file: UploadFile = File(...),
+    language: str | None = Query(default=None),
+):
+    """Голосовой ввод заметок с единым STT-контрактом."""
+    file_name = file.filename or "voice-input"
+    mime_type = file.content_type or "application/octet-stream"
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Пустой аудиофайл.")
+
+    stt_client = STTClientFactory.create_client()
+    stt_result = await stt_client.transcribe_audio(
+        audio_bytes=audio_bytes,
+        file_name=file_name,
+        mime_type=mime_type,
+        language=language,
+    )
+    if stt_result.status.value != "done":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Неуспешный статус STT: {stt_result.status.value}",
+        )
+    if stt_result.text.strip() == "":
+        raise HTTPException(status_code=422, detail="STT вернул пустую транскрипцию.")
+
     return {
-        "entity_id": "stub_voice_entity",
-        "transcription": "Stub transcription",
-        "note": "Stub note"
+        "text": stt_result.text,
+        "stt": stt_result.model_dump(),
     }
 
 

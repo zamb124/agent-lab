@@ -20,6 +20,15 @@ class FileStatus(str, Enum):
     DELETED = "deleted"
 
 
+class AudioTranscriptionStatus(str, Enum):
+    """Канонический статус транскрипции аудио."""
+
+    IDLE = "idle"
+    PROCESSING = "processing"
+    DONE = "done"
+    FAILED = "failed"
+
+
 class FileRecord(BaseModel):
     """
     Запись о файле в системе (shared модель).
@@ -69,16 +78,11 @@ class FileRecord(BaseModel):
         Same-origin URL для доступа к файлу через API.
 
         Если сервис задал download_url при загрузке — возвращает его.
-        Иначе возвращает путь agents-сервиса (для обратной совместимости).
+        Иначе возвращает путь /api/v1/files/download/{file_id}.
         """
         if self.download_url:
             return self.download_url
         return f"/api/v1/files/download/{self.file_id}"
-
-    @property
-    def audio_id(self) -> str:
-        """Алиас для file_id для обратной совместимости с AudioRecord"""
-        return self.file_id
 
 
 class FileResponse(BaseModel):
@@ -118,20 +122,52 @@ class AudioRecord(FileRecord):
     Наследуется от FileRecord, добавляя специфичные для аудио поля.
     """
 
-    duration: Optional[float] = Field(default=None, description="Длительность аудио в секундах")
-    transcription: Optional[str] = Field(default=None, description="Текстовая расшифровка аудио")
+    duration_ms: Optional[int] = Field(default=None, description="Длительность аудио в миллисекундах")
     language: Optional[str] = Field(default=None, description="Язык аудио (ru, en, ...)")
     sample_rate: Optional[int] = Field(default=None, description="Частота дискретизации в Гц")
     channels: Optional[int] = Field(default=None, description="Количество аудио каналов (1, 2)")
     audio_format: Optional[str] = Field(default=None, description="Формат аудио (mp3, wav, ogg)")
-    recognition_text: Optional[str] = Field(default=None, description="Текст, распознанный из аудио")
-    recognition_confidence: Optional[float] = Field(
-        default=None,
-        description="Уверенность в правильности распознавания (0.0-1.0)"
+    transcription_status: AudioTranscriptionStatus = Field(
+        default=AudioTranscriptionStatus.IDLE,
+        description="Текущий статус расшифровки аудио."
     )
-    recognition_qid: Optional[str] = Field(
+    transcription_text: Optional[str] = Field(
         default=None,
-        description="ID запроса к STT сервису"
+        description="Результат распознавания речи."
+    )
+    transcription_error: Optional[str] = Field(
+        default=None,
+        description="Текст ошибки расшифровки."
+    )
+    transcription_provider: Optional[str] = Field(
+        default=None,
+        description="Идентификатор STT-провайдера, обработавшего аудио."
+    )
+
+
+class AudioAttachmentContent(BaseModel):
+    """Канонический payload аудио-вложения для сообщений сервисов."""
+
+    file_id: str = Field(description="Идентификатор файла в системе.")
+    filename: str = Field(description="Оригинальное имя файла.")
+    mime_type: str = Field(description="MIME-тип аудиофайла.")
+    size: int = Field(description="Размер аудио в байтах.")
+    duration_ms: int = Field(description="Длительность аудио в миллисекундах.")
+    waveform: list[int] | None = Field(
+        default=None,
+        description="Опциональные значения амплитуды для визуализации волны.",
+    )
+    transcription_status: AudioTranscriptionStatus = Field(
+        default=AudioTranscriptionStatus.IDLE,
+        description="Текущий статус расшифровки аудио.",
+    )
+    transcription_text: str | None = Field(
+        default=None,
+        description="Результат распознавания речи.",
+    )
+    transcription_error: str | None = Field(
+        default=None,
+        description="Текст ошибки расшифровки.",
     )
 
 

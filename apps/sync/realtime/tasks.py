@@ -172,12 +172,18 @@ async def build_call_transcript_text(meeting_id: str, source_url: str) -> str:
         raise ValueError(f"Не удалось определить mime type записи: {file_name}")
 
     stt_client = STTClientFactory.create_client()
-    transcript_text = await stt_client.transcribe_audio(
+    transcript_result = await stt_client.transcribe_audio(
         audio_bytes=audio_bytes,
         file_name=file_name,
         mime_type=mime_type,
         language=settings.stt.cloud_ru.language,
     )
+    if transcript_result.status != AudioTranscriptionStatus.DONE:
+        raise ValueError(
+            "STT вернул неуспешный статус транскрипции "
+            f"для встречи {meeting_id}: {transcript_result.status.value}."
+        )
+    transcript_text = transcript_result.text
     if transcript_text.strip() == "":
         raise ValueError(f"STT вернул пустую транскрипцию для встречи {meeting_id}.")
     return transcript_text
@@ -1059,12 +1065,18 @@ async def sync_transcribe_audio_message_task(
             raise ValueError("Файл аудиосообщения пустой.")
 
         stt_client = STTClientFactory.create_client()
-        transcript_text = await stt_client.transcribe_audio(
+        transcript_result = await stt_client.transcribe_audio(
             audio_bytes=response.content,
             file_name=audio_info.filename,
             mime_type=audio_info.mime_type,
             language=settings.stt.cloud_ru.language,
         )
+        if transcript_result.status != AudioTranscriptionStatus.DONE:
+            raise ValueError(
+                "STT вернул неуспешный статус транскрипции "
+                f"для аудиосообщения {message_id}: {transcript_result.status.value}."
+            )
+        transcript_text = transcript_result.text
         if transcript_text.strip() == "":
             raise ValueError("STT вернул пустую транскрипцию аудиосообщения.")
 
