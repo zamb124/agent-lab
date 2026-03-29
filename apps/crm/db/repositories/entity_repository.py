@@ -7,7 +7,7 @@
 
 import logging
 from datetime import date
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from sqlalchemy import delete, select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
 from core.context import get_context
-from core.db.models import VectorDocument
 from core.rag import RAGRepository
 
 logger = logging.getLogger(__name__)
@@ -275,38 +274,86 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         3. Фильтрует по company_id, entity_type и т.д.
         4. Сортирует по cosine distance
         """
-        cid = company_id or self._get_company_id()
+        scored_entities = await self.search_with_similarity(
+            query=query,
+            entity_type=entity_type,
+            entity_subtype=entity_subtype,
+            namespace=namespace,
+            filters=filters,
+            limit=limit,
+            company_id=company_id,
+        )
+        return [entity for entity, _ in scored_entities]
 
-        embedding_service = self._rag.provider._embedding_service
-        query_embedding = await embedding_service.generate_embedding(query)
+    async def search_with_similarity(
+        self,
+        query: str,
+        entity_type: Optional[str] = None,
+        entity_subtype: Optional[str] = None,
+        namespace: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 10,
+        company_id: Optional[str] = None,
+    ) -> List[Tuple[CRMEntity, float]]:
+        """
+        Семантический поиск entities с возвратом similarity (0.0-1.0)
+        через RAG index + выборку сущностей из CRM БД.
+        """
+        cid = company_id or self._get_company_id()
+        resolved_namespace = namespace or "default"
+        search_filters: Dict[str, Any] = {"company_id": cid}
+        if entity_type:
+            search_filters["entity_type"] = entity_type
+
+        # Берем больше chunk-результатов, чтобы после дедупа по document_id
+        # сохранить достаточное число кандидатов.
+        search_results = await self._rag.search(
+            namespace_id=resolved_namespace,
+            query=query,
+            limit=max(limit * 4, limit),
+            filters=search_filters,
+        )
+        if not search_results:
+            logger.info(f"search_with_similarity('{query[:50]}...') -> 0 entities")
+            return []
+
+        score_by_document_id: Dict[str, float] = {}
+        for item in search_results:
+            if item.document_id not in score_by_document_id:
+                score_by_document_id[item.document_id] = item.score
+
+        ordered_document_ids = list(score_by_document_id.keys())
 
         async with self._db.session() as session:
-            distance_expr = VectorDocument.embedding.cosine_distance(query_embedding)
-
-            stmt = (
-                select(CRMEntity)
-                .join(VectorDocument, CRMEntity.entity_id == VectorDocument.document_id)
-                .where(CRMEntity.company_id == cid)
-                .where(VectorDocument.embedding.isnot(None))
-                .order_by(distance_expr)
-                .limit(limit)
+            stmt = select(CRMEntity).where(
+                CRMEntity.company_id == cid,
+                CRMEntity.entity_id.in_(ordered_document_ids),
             )
-
             if entity_type:
                 stmt = stmt.where(CRMEntity.entity_type == entity_type)
             if entity_subtype:
                 stmt = stmt.where(CRMEntity.entity_subtype == entity_subtype)
             if namespace:
                 stmt = stmt.where(CRMEntity.namespace == namespace)
-
             if filters:
                 stmt = self._apply_filters(stmt, filters)
-
             result = await session.execute(stmt)
-            entities = list(result.scalars().all())
+            matched_entities = list(result.scalars().all())
 
-        logger.info(f"search('{query[:50]}...') -> {len(entities)} entities")
-        return entities
+        entities_by_id = {entity.entity_id: entity for entity in matched_entities}
+        scored_entities: List[Tuple[CRMEntity, float]] = []
+        for document_id in ordered_document_ids:
+            entity = entities_by_id.get(document_id)
+            if entity is None:
+                continue
+            score = score_by_document_id[document_id]
+            normalized_similarity = max(0.0, min(1.0, float(score)))
+            scored_entities.append((entity, normalized_similarity))
+            if len(scored_entities) >= limit:
+                break
+
+        logger.info(f"search_with_similarity('{query[:50]}...') -> {len(scored_entities)} entities")
+        return scored_entities
 
     # -- Convenience methods --
 

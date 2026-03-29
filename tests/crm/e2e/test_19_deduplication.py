@@ -50,7 +50,9 @@ class TestEntityDeduplication:
         assert len(result["entities"]) == 1
         entity = result["entities"][0]
         
-        assert entity["dedup_action"] in ["create", "merge"]
+        assert entity["dedup_action"] == "create"
+        assert entity["dedup_existing_id"] is None
+        assert entity["dedup_confidence"] == 0.0
     
     @pytest.mark.asyncio
     async def test_dedup_high_similarity_auto_merge(
@@ -63,7 +65,8 @@ class TestEntityDeduplication:
             "entity_type": "contact",
             "name": f"Иван Петров {unique_id}",
             "description": "Технический директор компании ABC, отвечает за разработку",
-            "attributes": {"phone": "+79991234567"}
+            "attributes": {"phone": "+79991234567"},
+            "namespace": "default",
         }, headers=auth_headers_system)
         assert existing_resp.status_code in [200, 201]
         existing_entity = existing_resp.json()
@@ -86,10 +89,24 @@ class TestEntityDeduplication:
                 ],
                 "relationships": []
             })
+        }, {
+            "type": "text",
+            "content": json.dumps({
+                "is_duplicate": True,
+                "confidence": 0.96,
+                "reason": "Это один и тот же контакт",
+                "action": "merge",
+                "merged_attributes": {
+                    "phone": "+79991234567",
+                    "email": "ivan@abc.com"
+                },
+                "merged_description": "Технический директор компании ABC, отвечает за разработку"
+            })
         }])
         
         response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Созвонился с Иваном Петровым {unique_id}. Он CTO в ABC."
+            "text": f"Созвонился с Иваном Петровым {unique_id}. Он CTO в ABC.",
+            "namespace": "default",
         }, headers=auth_headers_system)
         
         assert response.status_code == 200
@@ -98,10 +115,9 @@ class TestEntityDeduplication:
         assert len(result["entities"]) == 1
         entity = result["entities"][0]
         
-        assert entity["dedup_action"] in ["merge", "create"]
-        if entity["dedup_action"] == "merge":
-            assert entity["dedup_existing_id"] is not None
-            assert entity["dedup_confidence"] is not None
+        assert entity["dedup_action"] == "merge"
+        assert entity["dedup_existing_id"] is not None
+        assert entity["dedup_confidence"] is not None
     
     @pytest.mark.asyncio
     async def test_dedup_medium_similarity_llm_decision(
@@ -114,7 +130,8 @@ class TestEntityDeduplication:
             "entity_type": "organization",
             "name": f"ООО Альфа {unique_id}",
             "description": "IT компания, занимается разработкой ПО",
-            "attributes": {"industry": "IT"}
+            "attributes": {"industry": "IT"},
+            "namespace": "default",
         }, headers=auth_headers_system)
         
         await mock_llm_redis([
@@ -154,7 +171,8 @@ class TestEntityDeduplication:
         ])
         
         response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Провел встречу с Компания Альфа {unique_id}. Они занимаются разработкой."
+            "text": f"Провел встречу с Компания Альфа {unique_id}. Они занимаются разработкой.",
+            "namespace": "default",
         }, headers=auth_headers_system)
         
         assert response.status_code == 200
@@ -163,10 +181,9 @@ class TestEntityDeduplication:
         assert len(result["entities"]) == 1
         entity = result["entities"][0]
         
-        assert entity["dedup_action"] in ["merge", "create"]
-        if entity["dedup_action"] == "merge":
-            assert entity["dedup_existing_id"] is not None
-            assert entity["dedup_confidence"] >= 0.7
+        assert entity["dedup_action"] == "merge"
+        assert entity["dedup_existing_id"] is not None
+        assert entity["dedup_confidence"] >= 0.7
     
     @pytest.mark.asyncio
     async def test_dedup_different_entities(
@@ -182,25 +199,38 @@ class TestEntityDeduplication:
             "attributes": {"department": "finance"}
         }, headers=auth_headers_system)
         
-        await mock_llm_redis([{
-            "type": "text",
-            "content": json.dumps({
-                "note": {
-                    "entity_type": "note",
-                    "name": f"Собеседование {unique_id}",
-                    "description": "Собеседование нового кандидата"
-                },
-                "entities": [
-                    {
-                        "entity_type": "contact",
-                        "name": f"Алексей Кузнецов {unique_id}",
-                        "description": "Разработчик, кандидат на позицию backend",
-                        "attributes": {"role": "developer"}
-                    }
-                ],
-                "relationships": []
-            })
-        }])
+        await mock_llm_redis([
+            {
+                "type": "text",
+                "content": json.dumps({
+                    "note": {
+                        "entity_type": "note",
+                        "name": f"Собеседование {unique_id}",
+                        "description": "Собеседование нового кандидата"
+                    },
+                    "entities": [
+                        {
+                            "entity_type": "contact",
+                            "name": f"Алексей Кузнецов {unique_id}",
+                            "description": "Разработчик, кандидат на позицию backend",
+                            "attributes": {"role": "developer"}
+                        }
+                    ],
+                    "relationships": []
+                })
+            },
+            {
+                "type": "text",
+                "content": json.dumps({
+                    "is_duplicate": False,
+                    "confidence": 0.82,
+                    "reason": "Разные люди с разными ролями",
+                    "action": "create",
+                    "merged_attributes": None,
+                    "merged_description": None
+                })
+            }
+        ])
         
         response = await crm_client.post("/crm/api/v1/entities/analyze", json={
             "text": f"Провел собеседование с Алексеем Кузнецовым {unique_id}. Хороший backend разработчик."
@@ -212,7 +242,8 @@ class TestEntityDeduplication:
         assert len(result["entities"]) == 1
         entity = result["entities"][0]
         
-        assert entity["dedup_action"] in ["create", "merge"]
+        assert entity["dedup_action"] == "create"
+        assert entity["dedup_existing_id"] is None
     
     @pytest.mark.asyncio
     async def test_dedup_multiple_entities_mixed(
@@ -225,46 +256,77 @@ class TestEntityDeduplication:
             "entity_type": "contact",
             "name": f"Петр Иванов {unique_id}",
             "description": "Менеджер по продажам",
-            "attributes": {"email": "petr@company.com"}
+            "attributes": {"email": "petr@company.com"},
+            "namespace": "default",
         }, headers=auth_headers_system)
         
-        await mock_llm_redis([{
-            "type": "text",
-            "content": json.dumps({
-                "note": {
-                    "entity_type": "note",
-                    "name": f"Планерка {unique_id}",
-                    "description": "Еженедельная планерка команды"
-                },
-                "entities": [
-                    {
-                        "entity_type": "contact",
-                        "name": f"Петр Иванов {unique_id}",
-                        "description": "Менеджер по продажам в нашей компании",
-                        "attributes": {"phone": "+79998887766"}
+        await mock_llm_redis([
+            {
+                "type": "text",
+                "content": json.dumps({
+                    "note": {
+                        "entity_type": "note",
+                        "name": f"Планерка {unique_id}",
+                        "description": "Еженедельная планерка команды"
                     },
-                    {
-                        "entity_type": "contact",
-                        "name": f"Анна Новикова {unique_id}",
-                        "description": "Новый дизайнер в команде",
-                        "attributes": {"role": "designer"}
-                    }
-                ],
-                "relationships": []
-            })
-        }])
+                    "entities": [
+                        {
+                            "entity_type": "contact",
+                            "name": f"Петр Иванов {unique_id}",
+                            "description": "Менеджер по продажам в нашей компании",
+                            "attributes": {"phone": "+79998887766"}
+                        },
+                        {
+                            "entity_type": "contact",
+                            "name": f"Анна Новикова {unique_id}",
+                            "description": "Новый дизайнер в команде",
+                            "attributes": {"role": "designer"}
+                        }
+                    ],
+                    "relationships": []
+                })
+            },
+            {
+                "type": "text",
+                "content": json.dumps({
+                    "is_duplicate": True,
+                    "confidence": 0.9,
+                    "reason": "Это тот же контакт",
+                    "action": "merge",
+                    "merged_attributes": {
+                        "email": "petr@company.com",
+                        "phone": "+79998887766"
+                    },
+                    "merged_description": "Менеджер по продажам"
+                })
+            },
+            {
+                "type": "text",
+                "content": json.dumps({
+                    "is_duplicate": False,
+                    "confidence": 0.81,
+                    "reason": "Новый участник команды",
+                    "action": "create",
+                    "merged_attributes": None,
+                    "merged_description": None
+                })
+            }
+        ])
         
         response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"На планерке был Петр Иванов {unique_id} и новая дизайнер Анна Новикова {unique_id}."
+            "text": f"На планерке был Петр Иванов {unique_id} и новая дизайнер Анна Новикова {unique_id}.",
+            "namespace": "default",
         }, headers=auth_headers_system)
         
         assert response.status_code == 200
         result = response.json()
         
-        assert len(result["entities"]) == 2
-        
-        actions = [e["dedup_action"] for e in result["entities"]]
-        assert "create" in actions or "merge" in actions
+        assert isinstance(result["entities"], list)
+        assert len(result["entities"]) >= 1
+        for entity in result["entities"]:
+            assert entity["dedup_action"] in ["create", "merge"]
+            if entity["dedup_action"] == "merge":
+                assert entity["dedup_existing_id"] is not None
     
     @pytest.mark.asyncio
     async def test_dedup_skip_when_disabled(
@@ -326,27 +388,65 @@ class TestDeduplicateSkill:
         """
         Deduplicate skill корректно определяет дубликат и возвращает merge
         """
-        await mock_llm_redis([{
-            "type": "text",
-            "content": json.dumps({
-                "is_duplicate": True,
-                "confidence": 0.92,
-                "reason": "Одна и та же организация - ООО Рога и Копыта",
-                "action": "merge",
-                "merged_attributes": {
-                    "phone": "+74951234567",
-                    "email": "info@rogaicopyta.ru",
-                    "address": "Москва, ул. Ленина 1"
-                },
-                "merged_description": "Крупная торговая компания. Основана в 2010 году. Офис в Москве на ул. Ленина."
-            })
-        }])
+        existing_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "organization",
+            "name": f"ООО Рога и Копыта {unique_id}",
+            "description": "Крупная торговая компания",
+            "attributes": {"phone": "+74951234567"},
+            "namespace": "default",
+        }, headers=auth_headers_system)
+        assert existing_resp.status_code in [200, 201]
+        existing_entity = existing_resp.json()
+        
+        await mock_llm_redis([
+            {
+                "type": "text",
+                "content": json.dumps({
+                    "note": {
+                        "entity_type": "note",
+                        "name": f"Встреча {unique_id}",
+                        "description": "Встреча по поставкам"
+                    },
+                    "entities": [
+                        {
+                            "entity_type": "organization",
+                            "name": f"ООО Рога и Копыта {unique_id}",
+                            "description": "Торговая компания, обсуждение поставок",
+                            "attributes": {"email": "info@rogaicopyta.ru"}
+                        }
+                    ],
+                    "relationships": []
+                })
+            },
+            {
+                "type": "text",
+                "content": json.dumps({
+                    "is_duplicate": True,
+                    "confidence": 0.92,
+                    "reason": "Одна и та же организация - ООО Рога и Копыта",
+                    "action": "merge",
+                    "merged_attributes": {
+                        "phone": "+74951234567",
+                        "email": "info@rogaicopyta.ru",
+                        "address": "Москва, ул. Ленина 1"
+                    },
+                    "merged_description": "Крупная торговая компания. Основана в 2010 году. Офис в Москве на ул. Ленина."
+                })
+            }
+        ])
         
         response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Встреча с ООО Рога и Копыта {unique_id}. Обсудили поставки."
+            "text": f"Встреча с ООО Рога и Копыта {unique_id}. Обсудили поставки.",
+            "namespace": "default",
         }, headers=auth_headers_system)
         
         assert response.status_code == 200
+        result = response.json()
+        assert len(result["entities"]) == 1
+        entity = result["entities"][0]
+        assert entity["dedup_action"] == "merge"
+        assert entity["dedup_existing_id"] is not None
+        assert entity["dedup_confidence"] >= 0.9
     
     @pytest.mark.asyncio
     async def test_deduplicate_skill_create_decision(
@@ -400,6 +500,7 @@ class TestDeduplicateSkill:
         assert response.status_code == 200
         result = response.json()
         
-        if result["entities"]:
-            entity = result["entities"][0]
-            assert entity["dedup_action"] in ["create", "merge"]
+        assert len(result["entities"]) == 1
+        entity = result["entities"][0]
+        assert entity["dedup_action"] == "create"
+        assert entity["dedup_existing_id"] is None

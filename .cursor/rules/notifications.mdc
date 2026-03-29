@@ -2,135 +2,59 @@
 alwaysApply: false
 description: "Система уведомлений уведомления notification notifications"
 ---
-# Система уведомлений
+# Система нотификаций (канон)
 
-## Архитектура
+## Единый поток
 
-```
-Worker/Service → Redis Pub/Sub → NotificationManager → WebSocket → Browser
-```
+`Service/Worker/Task -> notify_user(...) -> Redis (platform:notifications) -> WS /{service}/ws/notifications -> platform-notification-manager -> toast + badge`
 
-**Принципы:**
-- **Ephemeral** — уведомления не хранятся в БД, только real-time доставка
-- **User-centric** — группировка по `user_id`, один пользователь = множество WebSocket соединений
-- **Platform-wide** — автоматически работает во всех сервисах через `core/app/factory.py`
-- **No mocks** — тесты только с реальными WebSocket, Redis, PostgreSQL
+## Backend: как отправлять
 
-## Отправка уведомления
+Только через `core.websocket.publisher.notify_user`.
 
 ```python
-from core.websocket.publisher import notify_user, Notification, NotificationType
+from core.websocket.publisher import Notification, NotificationType, notify_user
 
 await notify_user(
     user_id="user_123",
     notification=Notification(
-        type=NotificationType.ACCESS_REQUEST,  # + SYNC_NEW_MESSAGE (sync чат)
-        title="Новый запрос доступа",
-        message="Пользователь John запросил доступ",
-        service="crm",          # "crm" | "rag" | "flows"
-        priority="high",        # "low" | "normal" | "high" | "urgent"
-        action_url="/crm/access-requests/req_456",
-        data={"request_id": "req_456"}
-    )
+        type=NotificationType.SYSTEM,
+        title="Готово",
+        message="Операция завершена",
+        service="crm",
+        priority="normal",
+        action_url="/crm/tasks/task_1",
+        data={"task_id": "task_1"},
+    ),
 )
 ```
 
-Вызывай из любого места: service, worker, TaskIQ task, endpoint.
+Разрешено вызывать из service/worker/TaskIQ/endpoint.  
+Хранить уведомления в БД нельзя: канал только real-time.
 
-## Frontend
+## Frontend: как показывать
 
-```html
-<platform-notification-manager></platform-notification-manager>
-```
+- Локальные UI-тосты: `this.success/error/warning/info` или `this.notify.*` (через `PlatformElement`).
+- Кросс-сервисные нотификации: через `<platform-notification-manager></platform-notification-manager>`.
+- Не рендерить `glass-toast` вручную в приложениях.
 
-Компонент автоматически: подключается к `/{service}/ws/notifications`, показывает toast, обновляет badge, переподключается при разрыве, отправляет heartbeat каждые 30 сек.
+## События в браузере
 
-```html
-<!-- Отключить toast -->
-<platform-notification-manager show-toasts="false"></platform-notification-manager>
-```
+Актуальные события от менеджера:
 
-JavaScript события:
+- `notification-received` — `CustomEvent` на самом компоненте
+- `platform-notification-received` — `CustomEvent` на `window`
 
-```javascript
-document.addEventListener('platform-notification', (e) => {
-    const notification = e.detail;
-    if (notification.priority === 'urgent') showModalNotification(notification);
-    e.preventDefault(); // отменить стандартный toast
-});
-document.addEventListener('platform-ws-connected', () => { /* ... */ });
-document.addEventListener('platform-ws-disconnected', () => { /* ... */ });
-```
+`platform-notification` и `platform-ws-connected/disconnected` не использовать.
 
-## Компоненты
+## Z-index (обязательно)
 
-### NotificationManager (`core/websocket/manager.py`)
+- Toast должен быть выше открытых модалок.
+- При создании `glass-toast` использовать динамический слой: `nextModalLayerZIndex()` из `core/frontend/static/lib/utils/modal-z-stack.js`.
+- Фиксированный `--z-toast` без динамического подъема для runtime-показа запрещен.
 
-```python
-class NotificationManager:
-    _connections: Dict[str, Set[WebSocket]]  # user_id -> Set[WebSocket]
+## Запрещено
 
-    async def connect(websocket, user_id)
-    async def disconnect(websocket, user_id)
-    async def send_to_user(user_id, notification)  # во ВСЕ соединения пользователя
-    async def publish(user_id, notification)        # опубликовать в Redis
-```
-
-### WebSocket Router (`core/websocket/router.py`)
-
-Монтируется автоматически: `/{service}/ws/notifications`. Аутентификация через cookie. Heartbeat: `ping` → `pong`.
-
-### Автоматическая интеграция (`core/app/factory.py`)
-
-```python
-async def lifespan(app: FastAPI):
-    await notification_manager.start_redis_listener(settings.database.redis_url)
-    yield
-    await notification_manager.stop_redis_listener()
-
-app.include_router(ws_router, tags=["websocket"])
-```
-
-## Масштабирование
-
-Система автоматически работает с множественными инстансами FastAPI — каждый инстанс слушает канал `platform:notifications` в Redis и отправляет уведомления только своим подключённым клиентам.
-
-## Тестирование
-
-```python
-# Unit тест
-async def test_multiple_connections(notification_manager_instance):
-    manager = notification_manager_instance
-    await manager.connect(ws1, "user_123")
-    await manager.connect(ws2, "user_123")
-    await manager.send_to_user("user_123", {"type": "test"})
-    assert ws1.sent_messages == [{"type": "test"}]
-    assert ws2.sent_messages == [{"type": "test"}]
-
-# E2E тест
-async def test_notification_flow(crm_client, crm_service):
-    port = crm_service.port  # не хардкодить порт!
-    async with websockets.connect(
-        f"ws://localhost:{port}/ws/notifications",
-        extra_headers={"Cookie": f"session_id={session_id}"}
-    ) as ws:
-        await crm_client.post("/crm/api/v1/access-requests", ...)
-        message = await asyncio.wait_for(ws.recv(), timeout=5)
-        notification = json.loads(message)
-        assert notification["type"] == "access_request"
-```
-
-## Правила
-
-```python
-# ПРАВИЛЬНО
-await notify_user(user_id, Notification(...))
-
-# ЗАПРЕЩЕНО
-@patch('core.websocket.manager.NotificationManager')   # нет моков
-ws_url = "ws://localhost:8000/ws/notifications"         # нет хардкода портов
-await db.notifications.insert(notification)             # нет персистентности
-await notification_manager.send_to_all(notification)    # нет broadcast всем
-```
-
-Мониторинг: `GET /{service}/ws/stats` — количество подключённых пользователей и соединений.
+- Хардкод WS URL и портов.
+- Локальные самописные toast-механизмы в `apps/*/ui`.
+- Broadcast уведомлений всем пользователям.

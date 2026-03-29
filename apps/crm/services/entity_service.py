@@ -1272,14 +1272,14 @@ class EntityService:
         
         for entity in extracted_entities:
             search_query = f"{entity.name} {entity.description or ''}"
-            candidates = await self._entity_repo.search(
+            scored_candidates = await self._entity_repo.search_with_similarity(
                 query=search_query,
                 entity_type=entity.entity_type,
                 namespace=namespace,
                 limit=3
             )
             
-            if not candidates:
+            if not scored_candidates:
                 results.append(DeduplicateResult(
                     is_duplicate=False,
                     confidence=0.0,
@@ -1288,8 +1288,7 @@ class EntityService:
                 ))
                 continue
             
-            top_candidate = candidates[0]
-            similarity = top_candidate.relevance
+            top_candidate, similarity = scored_candidates[0]
             
             if similarity > 0.95:
                 merged_attrs = {**(top_candidate.attributes or {}), **(entity.attributes or {})}
