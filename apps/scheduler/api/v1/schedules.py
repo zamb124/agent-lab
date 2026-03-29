@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from apps.scheduler.dependencies import ContainerDep
 from core.context import get_context
 from core.scheduler.models import (
+    PlatformRedisScheduleSnapshot,
     PlatformScheduledTask,
     PlatformScheduleCreateRequest,
     PlatformScheduleFilter,
@@ -101,5 +102,17 @@ async def run_schedule_now(schedule_task_id: str, container: ContainerDep) -> Pl
     company_id = _company_id_from_context()
     try:
         return await container.scheduler_service.run_now(company_id=company_id, schedule_task_id=schedule_task_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/schedules/{schedule_task_id}/redis", response_model=PlatformRedisScheduleSnapshot)
+async def get_schedule_redis_snapshot(schedule_task_id: str, container: ContainerDep) -> PlatformRedisScheduleSnapshot:
+    company_id = _company_id_from_context()
+    try:
+        return await container.scheduler_service.get_redis_snapshot(
+            company_id=company_id,
+            schedule_task_id=schedule_task_id,
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

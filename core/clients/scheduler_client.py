@@ -6,6 +6,7 @@ from typing import Optional
 
 from core.clients.service_client import ServiceClient
 from core.scheduler.models import (
+    PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
     PlatformScheduleFilter,
     PlatformScheduledTask,
@@ -69,3 +70,10 @@ class SchedulerClient:
             f"/scheduler/api/v1/schedules/{schedule_task_id}/run-now",
         )
         return PlatformScheduledTask.model_validate(response)
+
+    async def get_schedule_redis_snapshot(self, schedule_task_id: str) -> PlatformRedisScheduleSnapshot:
+        response = await self._service_client.get(
+            "scheduler",
+            f"/scheduler/api/v1/schedules/{schedule_task_id}/redis",
+        )
+        return PlatformRedisScheduleSnapshot.model_validate(response)

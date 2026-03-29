@@ -9,6 +9,7 @@ Note: create_scheduler требует taskiq, поэтому импортиру�
 
 from core.scheduler.models import (
     ContentType,
+    PlatformRedisScheduleSnapshot,
     PlatformScheduledTask,
     PlatformScheduleCreateRequest,
     PlatformScheduleFilter,
@@ -34,6 +35,7 @@ __all__ = [
     "PlatformScheduleUpdateStatusRequest",
     "PlatformScheduleFilter",
     "PlatformScheduledTask",
+    "PlatformRedisScheduleSnapshot",
     "SchedulerTaskRepository",
     "SchedulerService",
 ]

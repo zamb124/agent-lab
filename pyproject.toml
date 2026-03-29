@@ -91,6 +91,7 @@ core = [
     "opentelemetry-instrumentation-asyncpg>=0.59b0",
     "gunicorn>=21.2.0",
     "pgvector>=0.3.6",
+    "croniter>=6.2.2",
 ]
 
 agents = [

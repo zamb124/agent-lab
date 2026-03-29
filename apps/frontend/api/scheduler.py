@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from apps.frontend.dependencies import ContainerDep
-from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduledTask, ScheduledTaskStatus
+from core.scheduler.models import (
+    PlatformRedisScheduleSnapshot,
+    PlatformScheduleCreateRequest,
+    PlatformScheduledTask,
+    ScheduledTaskStatus,
+)
 
 router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
 
@@ -60,3 +65,8 @@ async def cancel_schedule(schedule_task_id: str, container: ContainerDep) -> Pla
 @router.post("/schedules/{schedule_task_id}/run-now", response_model=PlatformScheduledTask)
 async def run_now_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
     return await container.scheduler_client.run_schedule_now(schedule_task_id)
+
+
+@router.get("/schedules/{schedule_task_id}/redis", response_model=PlatformRedisScheduleSnapshot)
+async def get_schedule_redis_snapshot(schedule_task_id: str, container: ContainerDep) -> PlatformRedisScheduleSnapshot:
+    return await container.scheduler_client.get_schedule_redis_snapshot(schedule_task_id)

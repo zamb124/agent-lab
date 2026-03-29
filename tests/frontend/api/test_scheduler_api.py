@@ -41,6 +41,24 @@ class TestFrontendSchedulerApi:
             "error_message": None,
         }
 
+    @staticmethod
+    def _redis_snapshot_payload() -> dict:
+        return {
+            "schedule_task_id": "task-1",
+            "company_id": "system",
+            "schedule_id": "sched-1",
+            "exists_in_redis": True,
+            "status": "pending",
+            "task_name": "sync_llm_models_task",
+            "cron": None,
+            "interval_seconds": 60,
+            "run_at": None,
+            "taskiq_task_id": None,
+            "kwargs": {"scheduler_task_id": "task-1", "company_id": "system"},
+            "labels": {},
+            "missing_reason": None,
+        }
+
     async def test_list_schedules(self, frontend_client_with_auth, frontend_container, monkeypatch):
         async def _list(filters):
             return [self._task_payload()]
@@ -144,6 +162,19 @@ class TestFrontendSchedulerApi:
         assert response.status_code == 200
         payload = response.json()
         assert payload["status"] == "cancelled"
+
+    async def test_get_schedule_redis_snapshot(self, frontend_client_with_auth, frontend_container, monkeypatch):
+        async def _get_redis_snapshot(task_id: str):
+            assert task_id == "task-1"
+            return self._redis_snapshot_payload()
+
+        monkeypatch.setattr(frontend_container.scheduler_client, "get_schedule_redis_snapshot", _get_redis_snapshot)
+
+        response = await frontend_client_with_auth.get("/frontend/api/scheduler/schedules/task-1/redis")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["schedule_task_id"] == "task-1"
+        assert payload["exists_in_redis"] is True
 
 
 @pytest.mark.asyncio

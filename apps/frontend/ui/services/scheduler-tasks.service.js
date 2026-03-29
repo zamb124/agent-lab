@@ -31,4 +31,8 @@ export class SchedulerTasksService extends BaseService {
     async runNow(taskId) {
         return this.post(`/api/scheduler/schedules/${taskId}/run-now`);
     }
+
+    async getRedisSnapshot(taskId) {
+        return this.get(`/api/scheduler/schedules/${taskId}/redis`);
+    }
 }
