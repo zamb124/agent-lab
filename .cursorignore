@@ -1,2 +1,6 @@
 # Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
 *.env
+
+# Секреты и ключи — не индексировать и не подставлять в контекст AI
+/conf.json
+/conf.local.json

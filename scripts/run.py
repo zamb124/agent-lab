@@ -15,10 +15,13 @@
     python scripts/run.py sync-worker # Запуск Sync worker
     python scripts/run.py crm-worker  # Запуск CRM worker
     python scripts/run.py all         # Все сервисы параллельно (make app)
+    python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах 8001–8006
+    python scripts/run.py kill-ports  # только освободить порты HTTP-сервисов
 
 Конфигурация загружается из conf.json и conf.local.json.
 Переменные окружения имеют приоритет над конфигами.
 """
+import os
 import signal
 import sys
 import subprocess
@@ -138,6 +141,39 @@ def build_command(service: str) -> list[str]:
     raise ValueError(f"Неизвестный тип сервиса: {service_type}")
 
 
+def _uvicorn_ports() -> list[str]:
+    return [
+        cfg["port"]
+        for cfg in SERVICES.values()
+        if cfg["type"] == "uvicorn"
+    ]
+
+
+def kill_ports() -> None:
+    """Завершает процессы, слушающие порты HTTP-сервисов (uvicorn)."""
+    ports = _uvicorn_ports()
+    killed: list[tuple[str, int]] = []
+    for port in ports:
+        listed = subprocess.run(
+            ["lsof", "-ti", f":{port}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if listed.returncode != 0 or not listed.stdout.strip():
+            continue
+        for pid_str in listed.stdout.strip().split():
+            pid = int(pid_str)
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                continue
+            killed.append((port, pid))
+    if killed:
+        for port, pid in killed:
+            print(f"Освобождён порт {port}: завершён PID {pid}", flush=True)
+
+
 def _prefix_stream(stream, prefix: str) -> None:
     for line in iter(stream.readline, ""):
         sys.stdout.write(f"{prefix}{line}")
@@ -214,18 +250,25 @@ def run_all() -> None:
 def main() -> None:
     if len(sys.argv) < 2:
         print("Использование: python scripts/run.py <service>")
-        print(f"Доступные сервисы: {', '.join(SERVICES.keys())}, all")
+        print(f"Доступные сервисы: {', '.join(SERVICES.keys())}, all, kill-ports")
         sys.exit(1)
 
     service = sys.argv[1]
 
+    if service == "kill-ports":
+        kill_ports()
+        return
+
     if service == "all":
+        rest = sys.argv[2:]
+        if "--kill" in rest or os.environ.get("APP_KILL") == "1":
+            kill_ports()
         run_all()
         return
 
     if service not in SERVICES:
         print(f"Неизвестный сервис: {service}")
-        print(f"Доступные: {', '.join(SERVICES.keys())}, all")
+        print(f"Доступные: {', '.join(SERVICES.keys())}, all, kill-ports")
         sys.exit(1)
 
     cmd = build_command(service)

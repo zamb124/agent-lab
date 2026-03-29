@@ -231,6 +231,7 @@ help:
 	@echo ""
 	@echo "Локальные процессы (без Docker), все сервисы:"
 	@echo "  make app             - flows, frontend, crm, rag, sync, workers, scheduler (см. scripts/run.py all)"
+	@echo "  make app APP_KILL=1  - то же, сначала kill -9 по PID на портах 8001–8006 (зависший uvicorn)"
 	@echo "  MinIO Console (dev): http://localhost:19011 (minioadmin/minioadmin)"
 	@echo ""
 	@echo "Testing (порты: 54322, 63792, 19002-19012) - ТОЛЬКО для автотестов:"
