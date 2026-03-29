@@ -43,6 +43,8 @@ export class SchedulerTasksPage extends PlatformElement {
                 border-top: 1px solid var(--border-subtle);
                 text-align: left;
                 font-size: var(--text-sm);
+                color: var(--text-primary);
+                vertical-align: middle;
             }
 
             th {
@@ -51,9 +53,16 @@ export class SchedulerTasksPage extends PlatformElement {
                 border-top: none;
             }
 
-            .actions {
-                display: flex;
-                gap: var(--space-2);
+            td code {
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+                    monospace;
+                font-size: 12px;
+            }
+
+            .schedule-secondary {
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                margin-top: 4px;
             }
 
             button {
@@ -66,8 +75,112 @@ export class SchedulerTasksPage extends PlatformElement {
             }
 
             .status {
-                text-transform: uppercase;
                 font-size: var(--text-xs);
+                display: inline-flex;
+                align-items: center;
+                border-radius: 999px;
+                padding: 2px 8px;
+                border: 1px solid var(--border-default);
+            }
+
+            .status.pending {
+                background: rgba(59, 130, 246, 0.12);
+                color: #1d4ed8;
+            }
+
+            .status.paused {
+                background: rgba(245, 158, 11, 0.12);
+                color: #b45309;
+            }
+
+            .status.executed {
+                background: rgba(16, 185, 129, 0.12);
+                color: #047857;
+            }
+
+            .status.cancelled {
+                background: rgba(107, 114, 128, 0.12);
+                color: #4b5563;
+            }
+
+            .status.failed {
+                background: rgba(239, 68, 68, 0.12);
+                color: #b91c1c;
+            }
+
+            .actions-cell {
+                width: 56px;
+            }
+
+            .actions-menu {
+                position: relative;
+                display: inline-block;
+            }
+
+            .actions-trigger {
+                width: 34px;
+                height: 34px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 18px;
+                line-height: 1;
+                font-weight: 700;
+            }
+
+            .actions-dropdown {
+                position: absolute;
+                right: 0;
+                top: calc(100% + 6px);
+                min-width: 170px;
+                border: 1px solid var(--border-default);
+                background: var(--glass-solid-medium);
+                border-radius: var(--radius-md);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+                overflow: hidden;
+                z-index: 20;
+                backdrop-filter: blur(10px);
+            }
+
+            .menu-item {
+                width: 100%;
+                border: none;
+                border-radius: 0;
+                border-bottom: 1px solid var(--border-subtle);
+                background: transparent;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 12px;
+                text-align: left;
+            }
+
+            .menu-item:last-child {
+                border-bottom: none;
+            }
+
+            .menu-item:hover {
+                background: var(--glass-solid-subtle);
+            }
+
+            .menu-item svg {
+                width: 16px;
+                height: 16px;
+                stroke: currentColor;
+                fill: none;
+                stroke-width: 2;
+                flex-shrink: 0;
+            }
+
+            .menu-item svg.play-icon {
+                fill: currentColor;
+                stroke: none;
+            }
+
+            .empty {
+                padding: var(--space-6);
+                color: var(--text-secondary);
             }
         `,
     ];
@@ -77,6 +190,7 @@ export class SchedulerTasksPage extends PlatformElement {
         loading: { state: true },
         statusFilter: { state: true },
         serviceFilter: { state: true },
+        openMenuTaskId: { state: true },
     };
 
     constructor() {
@@ -85,20 +199,87 @@ export class SchedulerTasksPage extends PlatformElement {
         this.loading = false;
         this.statusFilter = '';
         this.serviceFilter = '';
+        this.openMenuTaskId = null;
+        this._handleDocumentClick = this._handleDocumentClick.bind(this);
     }
 
     async connectedCallback() {
         super.connectedCallback();
+        document.addEventListener('click', this._handleDocumentClick);
         await this._load();
+    }
+
+    disconnectedCallback() {
+        document.removeEventListener('click', this._handleDocumentClick);
+        super.disconnectedCallback();
+    }
+
+    _handleDocumentClick(event) {
+        if (!event.target.closest('.actions-menu')) {
+            this.openMenuTaskId = null;
+        }
+    }
+
+    _normalizeTask(task) {
+        const normalizedTask = {
+            id: task.id,
+            target_service: task.target_service,
+            task_name: task.task_name,
+            status: task.status,
+            schedule_type: task.schedule_type,
+            cron: task.cron,
+            interval_seconds: task.interval_seconds,
+            run_at: task.run_at,
+            next_run_at: task.next_run_at,
+        };
+        return normalizedTask;
+    }
+
+    _formatDate(value) {
+        if (!value) {
+            return '—';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            throw new Error(`Invalid date value: ${value}`);
+        }
+        return date.toLocaleString('ru-RU', { hour12: false });
+    }
+
+    _formatSchedule(task) {
+        if (task.schedule_type === 'cron') {
+            return `CRON: ${task.cron}`;
+        }
+        if (task.schedule_type === 'interval') {
+            return `Каждые ${task.interval_seconds} сек.`;
+        }
+        if (task.schedule_type === 'one_time') {
+            return `Один раз: ${this._formatDate(task.run_at)}`;
+        }
+        throw new Error(`Unknown schedule_type: ${task.schedule_type}`);
+    }
+
+    _toggleActionsMenu(taskId, event) {
+        event.stopPropagation();
+        this.openMenuTaskId = this.openMenuTaskId === taskId ? null : taskId;
     }
 
     async _load() {
         this.loading = true;
         try {
-            this.tasks = await this.services.get('schedulerTasks').list({
+            const response = await this.services.get('schedulerTasks').list({
                 status: this.statusFilter || undefined,
                 target_service: this.serviceFilter || undefined,
             });
+            if (Array.isArray(response)) {
+                this.tasks = response.map((task) => this._normalizeTask(task));
+                return;
+            }
+            if (response && Array.isArray(response.items)) {
+                this.tasks = response.items.map((task) => this._normalizeTask(task));
+                return;
+            }
+            throw new Error('Scheduler list response must be array');
         } finally {
             this.loading = false;
         }
@@ -117,6 +298,7 @@ export class SchedulerTasksPage extends PlatformElement {
         } else {
             throw new Error(`Unknown action: ${action}`);
         }
+        this.openMenuTaskId = null;
         await this._load();
     }
 
@@ -205,30 +387,90 @@ export class SchedulerTasksPage extends PlatformElement {
                                   </tr>
                               </thead>
                               <tbody>
-                                  ${this.tasks.map(
-                                      (task) => html`
-                                          <tr>
-                                              <td>${task.id}</td>
-                                              <td>${task.target_service}</td>
-                                              <td>${task.task_name}</td>
-                                              <td class="status">${task.status}</td>
-                                              <td>
-                                                  ${task.schedule_type}
-                                                  ${task.cron ? html`<div>${task.cron}</div>` : ''}
-                                                  ${task.interval_seconds ? html`<div>${task.interval_seconds}s</div>` : ''}
-                                                  ${task.run_at ? html`<div>${task.run_at}</div>` : ''}
-                                              </td>
-                                              <td>
-                                                  <div class="actions">
-                                                      <button @click=${() => this._executeAction('run-now', task.id)}>Run now</button>
-                                                      <button @click=${() => this._executeAction('pause', task.id)}>Pause</button>
-                                                      <button @click=${() => this._executeAction('resume', task.id)}>Resume</button>
-                                                      <button @click=${() => this._executeAction('cancel', task.id)}>Cancel</button>
-                                                  </div>
-                                              </td>
-                                          </tr>
-                                      `,
-                                  )}
+                                  ${this.tasks.length === 0
+                                      ? html`
+                                            <tr>
+                                                <td class="empty" colspan="6">Задач пока нет.</td>
+                                            </tr>
+                                        `
+                                      : this.tasks.map(
+                                            (task) => html`
+                                                <tr>
+                                                    <td><code>${task.id}</code></td>
+                                                    <td>${task.target_service}</td>
+                                                    <td>${task.task_name}</td>
+                                                    <td>
+                                                        <span class="status ${task.status}">${task.status}</span>
+                                                    </td>
+                                                    <td>
+                                                        ${this._formatSchedule(task)}
+                                                        <div class="schedule-secondary">
+                                                            Следующий запуск: ${this._formatDate(task.next_run_at)}
+                                                        </div>
+                                                    </td>
+                                                    <td class="actions-cell">
+                                                        <div class="actions-menu">
+                                                            <button
+                                                                class="actions-trigger"
+                                                                title="Действия"
+                                                                @click=${(event) => this._toggleActionsMenu(task.id, event)}
+                                                            >
+                                                                ...
+                                                            </button>
+                                                            ${this.openMenuTaskId === task.id
+                                                                ? html`
+                                                                      <div class="actions-dropdown">
+                                                                          <button
+                                                                              class="menu-item"
+                                                                              @click=${() => this._executeAction('run-now', task.id)}
+                                                                          >
+                                                                              <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                                                  <polygon points="8 5 19 12 8 19 8 5"></polygon>
+                                                                              </svg>
+                                                                              Run now
+                                                                          </button>
+                                                                          ${task.status === 'paused'
+                                                                              ? html`
+                                                                                    <button
+                                                                                        class="menu-item"
+                                                                                        @click=${() => this._executeAction('resume', task.id)}
+                                                                                    >
+                                                                                        <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                                                            <polygon points="8 5 19 12 8 19 8 5"></polygon>
+                                                                                        </svg>
+                                                                                        Resume
+                                                                                    </button>
+                                                                                `
+                                                                              : html`
+                                                                                    <button
+                                                                                        class="menu-item"
+                                                                                        @click=${() => this._executeAction('pause', task.id)}
+                                                                                    >
+                                                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                                                            <rect x="6" y="5" width="4" height="14"></rect>
+                                                                                            <rect x="14" y="5" width="4" height="14"></rect>
+                                                                                        </svg>
+                                                                                        Pause
+                                                                                    </button>
+                                                                                `}
+                                                                          <button
+                                                                              class="menu-item"
+                                                                              @click=${() => this._executeAction('cancel', task.id)}
+                                                                          >
+                                                                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                                                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                                                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                                              </svg>
+                                                                              Cancel
+                                                                          </button>
+                                                                      </div>
+                                                                  `
+                                                                : ''}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            `,
+                                        )}
                               </tbody>
                           </table>
                       </div>
