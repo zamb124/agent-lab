@@ -532,6 +532,16 @@ export class MessageBubble extends PlatformElement {
                 background: rgba(16, 185, 129, 0.16);
             }
 
+            .bubble.own.bubble--audio {
+                border-color: rgba(16, 185, 129, 0.35);
+                background: rgba(16, 185, 129, 0.16);
+            }
+
+            :host-context([data-theme="dark"]) .bubble.own.bubble--audio {
+                border-color: rgba(100, 116, 139, 0.42);
+                background: rgba(51, 65, 85, 0.3);
+            }
+
             .bubble.other {
                 border-color: rgba(56, 189, 248, 0.28);
                 background: rgba(147, 197, 253, 0.35);
@@ -1344,6 +1354,7 @@ export class MessageBubble extends PlatformElement {
         if (!this.msg) return html``;
         const { msg, isOwn, canFocusThread, flashActive, deleting } = this;
         const sorted = [...(msg.contents ?? [])].sort((a, b) => a.order - b.order);
+        const isAudioOnlyBubble = sorted.length === 1 && sorted[0]?.type === 'file/audio';
         const fwdMeta = this._forwardedMeta();
         const hasEdited = Boolean(msg.edited_at);
         const hasHeaderEnd = this._isPinned() || canFocusThread;
@@ -1367,7 +1378,7 @@ export class MessageBubble extends PlatformElement {
                     </div>
                 ` : ''}
                 ${isOwn ? '' : this._renderAvatarSlot()}
-                <div class="bubble ${isOwn ? 'own' : 'other'} ${fwdMeta ? 'bubble--forwarded' : ''}">
+                <div class="bubble ${isOwn ? 'own' : 'other'} ${fwdMeta ? 'bubble--forwarded' : ''} ${isAudioOnlyBubble ? 'bubble--audio' : ''}">
                     ${fwdMeta ? html`
                         <span class="forwarded-corner" title=${fwdMeta.tip}>
                             <platform-icon name="share" size="12"></platform-icon>

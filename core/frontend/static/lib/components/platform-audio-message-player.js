@@ -45,7 +45,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
 
             .row {
                 display: flex;
-                align-items: center;
+                align-items: flex-start;
                 gap: 8px;
             }
 
@@ -73,7 +73,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                 min-width: 0;
                 display: flex;
                 flex-direction: column;
-                gap: 4px;
+                gap: 3px;
             }
 
             .wave {
@@ -101,6 +101,13 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                 font-size: 12px;
                 color: rgba(6, 95, 70, 0.95);
                 white-space: nowrap;
+                line-height: 1.15;
+            }
+
+            .time-row {
+                display: flex;
+                justify-content: flex-end;
+                min-height: 14px;
             }
 
             input[type='range'] {
@@ -112,6 +119,9 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: flex-end;
+                align-self: flex-start;
+                padding-top: 0;
+                margin-top: 1px;
             }
 
             .transcribe-btn {
@@ -328,8 +338,10 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                             .value=${current}
                             @input=${this._seek}
                         />
+                        <div class="time-row">
+                            <span class="time">${formatDuration(current)} / ${formatDuration(duration)}</span>
+                        </div>
                     </div>
-                    <span class="time">${formatDuration(current)} / ${formatDuration(duration)}</span>
                     <div class="actions">
                         <button
                             type="button"

@@ -39,12 +39,14 @@ export class ChatView extends PlatformElement {
 
             @media (max-width: 767px) {
                 :host {
-                    padding-left: var(--space-4);
-                    padding-right: var(--space-4);
+                    padding-left: 0;
+                    padding-right: 0;
                 }
             }
 
             .chat-header {
+                position: relative;
+                z-index: 120;
                 display: flex;
                 flex-direction: column;
                 align-items: stretch;
@@ -282,6 +284,7 @@ export class ChatView extends PlatformElement {
 
             .header-more-wrap {
                 position: relative;
+                isolation: isolate;
             }
 
             .header-more-menu {
@@ -291,14 +294,38 @@ export class ChatView extends PlatformElement {
                 min-width: 200px;
                 padding: var(--space-2);
                 border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-medium);
-                background: var(--glass-solid-strong);
-                backdrop-filter: blur(var(--glass-blur-medium));
-                box-shadow: var(--glass-shadow-subtle);
+                border: 1px solid var(--glass-border-strong);
+                background: #1e2a47 !important;
+                background-color: #1e2a47 !important;
+                background-image: none !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                opacity: 1;
+                box-shadow: var(--glass-shadow-strong);
                 z-index: 80;
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
+                isolation: isolate;
+                overflow: hidden;
+            }
+
+            .header-more-menu::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: #1e2a47;
+                z-index: -1;
+                pointer-events: none;
+            }
+
+            :host-context([data-theme="light"]) .header-more-menu {
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+            }
+
+            :host-context([data-theme="light"]) .header-more-menu::before {
+                background: #ffffff;
             }
 
             .header-more-menu-status {
@@ -377,6 +404,8 @@ export class ChatView extends PlatformElement {
             }
 
             .content {
+                position: relative;
+                z-index: 1;
                 flex: 1 1 auto;
                 min-height: 0;
                 overflow: hidden;
@@ -537,6 +566,10 @@ export class ChatView extends PlatformElement {
             }
 
             @media (max-width: 767px) {
+                .header-more-menu {
+                    background: var(--bg-surface, #1e2a47);
+                }
+
                 .meetings-overlay {
                     padding: var(--space-1);
                 }
