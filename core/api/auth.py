@@ -104,11 +104,11 @@ async def start_auth(
         # Определяем префикс сервиса из текущего пути запроса
         current_path = request.url.path
         if current_path.startswith("/frontend/"):
-            callback_path = "/frontend/api/auth/callback"
+            callback_path = f"/frontend/api/auth/callback/{provider_name}"
         elif current_path.startswith("/flows/"):
-            callback_path = "/flows/api/auth/callback"
+            callback_path = f"/flows/api/auth/callback/{provider_name}"
         else:
-            callback_path = "/api/auth/callback"
+            callback_path = f"/api/auth/callback/{provider_name}"
         
         redirect_uri = f"{protocol}://{base_host}{callback_path}"
     
