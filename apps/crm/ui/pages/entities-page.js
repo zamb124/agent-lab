@@ -1,6 +1,7 @@
 /**
- * Entities Page - Страница сущностей в стиле daily-notes
- * Toolbar (title + search + filters + CTA) -> Cards Grid + Detail Panel
+ * Entities Page - Страница сущностей
+ * Desktop: Toolbar + Cards Grid + Detail Panel (grid 1fr 380px)
+ * Mobile: Menu btn + Toolbar + Tabs (Список / Карточка)
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -8,19 +9,19 @@ import { CRMStore } from '../store/crm.store.js';
 import '../components/entity-card.js';
 import '../modals/entity-modal.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-date-picker.js';
 
 export class EntitiesPage extends PlatformElement {
     static properties = {
         _entities: { state: true },
         _entityTypes: { state: true },
         _currentEntityId: { state: true },
-        _currentEntity: { state: true },
         _loading: { state: true },
         _query: { state: true },
         _selectedType: { state: true },
         _selectedStatus: { state: true },
         _currentNamespace: { state: true },
+        _isMobile: { state: true },
+        _mobileTab: { state: true },
         _debounceTimer: { state: true },
     };
 
@@ -36,10 +37,24 @@ export class EntitiesPage extends PlatformElement {
                 overflow: hidden;
             }
 
+            /* === HEADER === */
+
+            .page-toolbar {
+                flex-shrink: 0;
+                padding-bottom: var(--space-2);
+            }
+
             .section-label {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
                 margin-bottom: var(--space-1);
+            }
+
+            .top-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                margin-bottom: var(--space-3);
             }
 
             .title {
@@ -51,28 +66,13 @@ export class EntitiesPage extends PlatformElement {
                 font-weight: 700;
                 color: var(--text-primary);
                 margin: 0;
+                white-space: nowrap;
             }
 
-            .page-header {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                margin-bottom: var(--space-3);
-            }
-
-            .top-row {
-                display: grid;
-                grid-template-columns: auto minmax(260px, 1fr) auto;
-                align-items: center;
-                gap: var(--space-3);
-                margin-bottom: var(--space-4);
-            }
-
-            .toolbar-actions {
-                display: flex;
-                align-items: center;
-                margin-left: auto;
-                gap: var(--space-2);
+            .entities-count {
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                font-weight: 400;
             }
 
             .search-box {
@@ -83,8 +83,9 @@ export class EntitiesPage extends PlatformElement {
                 border-radius: var(--radius-full);
                 border: 1px solid var(--crm-stroke);
                 background: var(--crm-surface-muted);
-                min-height: 44px;
-                width: 100%;
+                min-height: 40px;
+                flex: 1;
+                min-width: 0;
             }
 
             .search-input {
@@ -92,46 +93,48 @@ export class EntitiesPage extends PlatformElement {
                 border: none;
                 background: transparent;
                 color: var(--text-primary);
-                font-size: var(--text-base);
+                font-size: var(--text-sm);
                 outline: none;
             }
 
             .cta-btn {
-                min-height: 44px;
+                min-height: 40px;
                 border: none;
                 border-radius: var(--radius-full);
                 background: var(--crm-daily-notes-cta-bg);
                 color: var(--text-inverse);
-                font-size: var(--text-lg);
+                font-size: var(--text-base);
                 font-weight: 500;
-                padding: 0 var(--space-6);
+                padding: 0 var(--space-5);
                 cursor: pointer;
                 transition: background var(--duration-fast);
                 white-space: nowrap;
+                flex-shrink: 0;
             }
 
             .cta-btn:hover {
                 background: var(--crm-daily-notes-cta-hover);
             }
 
+            /* === FILTERS === */
+
             .filters-row {
                 display: flex;
                 flex-wrap: wrap;
                 align-items: center;
                 gap: var(--space-2);
-                margin-bottom: var(--space-4);
             }
 
             .filter-chip {
                 display: inline-flex;
                 align-items: center;
-                gap: var(--space-1);
-                padding: var(--space-2) var(--space-3);
+                gap: 4px;
+                padding: 6px 12px;
                 border-radius: var(--radius-full);
                 border: 1px solid var(--crm-stroke);
                 background: var(--crm-surface-muted);
                 color: var(--text-secondary);
-                font-size: var(--text-sm);
+                font-size: 13px;
                 font-weight: 500;
                 cursor: pointer;
                 transition: all var(--duration-fast);
@@ -151,7 +154,7 @@ export class EntitiesPage extends PlatformElement {
 
             .filter-divider {
                 width: 1px;
-                height: 24px;
+                height: 20px;
                 background: var(--crm-stroke);
                 flex-shrink: 0;
             }
@@ -159,13 +162,13 @@ export class EntitiesPage extends PlatformElement {
             .clear-filters-btn {
                 display: inline-flex;
                 align-items: center;
-                gap: var(--space-1);
-                padding: var(--space-1) var(--space-2);
+                gap: 4px;
+                padding: 4px 8px;
                 border: none;
                 border-radius: var(--radius-md);
                 background: transparent;
                 color: var(--text-tertiary);
-                font-size: var(--text-xs);
+                font-size: 12px;
                 cursor: pointer;
             }
 
@@ -173,17 +176,18 @@ export class EntitiesPage extends PlatformElement {
                 color: var(--text-primary);
             }
 
+            /* === DESKTOP LAYOUT === */
+
             .layout {
                 display: grid;
                 grid-template-columns: 1fr 380px;
                 gap: var(--space-4);
-                width: 100%;
                 flex: 1;
                 min-height: 0;
                 overflow: hidden;
             }
 
-            .main-column {
+            .list-panel {
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
@@ -195,25 +199,34 @@ export class EntitiesPage extends PlatformElement {
                 overflow-y: auto;
                 overflow-x: hidden;
                 min-height: 0;
-                padding-right: var(--space-2);
+                padding: var(--space-1);
             }
 
             .cards-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                gap: var(--space-4);
+                gap: var(--space-3);
                 align-content: start;
             }
+
+            .detail-panel {
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                overflow: hidden;
+            }
+
+            /* === CARDS === */
 
             .entity-card-item {
                 border: 1px solid var(--crm-stroke);
                 background: var(--crm-surface);
                 border-radius: 16px;
-                padding: 20px;
+                padding: 16px;
                 display: flex;
                 flex-direction: column;
-                gap: 12px;
-                min-height: 160px;
+                gap: 10px;
+                min-height: 130px;
                 cursor: pointer;
                 transition: border-color var(--duration-fast), background var(--duration-fast);
             }
@@ -231,12 +244,12 @@ export class EntitiesPage extends PlatformElement {
             .card-header {
                 display: flex;
                 align-items: center;
-                gap: 12px;
+                gap: 10px;
             }
 
             .card-type-icon {
-                width: 40px;
-                height: 40px;
+                width: 36px;
+                height: 36px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -245,8 +258,8 @@ export class EntitiesPage extends PlatformElement {
             }
 
             .card-title {
-                font-size: 18px;
-                line-height: 22px;
+                font-size: 15px;
+                line-height: 20px;
                 font-weight: 700;
                 color: var(--text-primary);
                 margin: 0;
@@ -260,8 +273,8 @@ export class EntitiesPage extends PlatformElement {
             .card-description {
                 margin: 0;
                 color: var(--text-secondary);
-                font-size: 14px;
-                line-height: 20px;
+                font-size: 13px;
+                line-height: 18px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 display: -webkit-box;
@@ -273,7 +286,7 @@ export class EntitiesPage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                gap: 12px;
+                gap: 8px;
                 margin-top: auto;
             }
 
@@ -282,9 +295,9 @@ export class EntitiesPage extends PlatformElement {
                 align-items: center;
                 gap: 4px;
                 padding: 0 10px;
-                min-height: 24px;
-                font-size: 12px;
-                border-radius: 14px;
+                min-height: 22px;
+                font-size: 11px;
+                border-radius: 12px;
                 font-weight: 500;
                 border: none;
                 white-space: nowrap;
@@ -292,7 +305,7 @@ export class EntitiesPage extends PlatformElement {
 
             .card-meta {
                 color: var(--text-tertiary);
-                font-size: 12px;
+                font-size: 11px;
             }
 
             .card-tags {
@@ -306,9 +319,9 @@ export class EntitiesPage extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 padding: 0 8px;
-                min-height: 22px;
+                min-height: 20px;
                 font-size: 11px;
-                border-radius: 11px;
+                border-radius: 10px;
                 background: var(--crm-surface-tint);
                 color: var(--text-secondary);
                 white-space: nowrap;
@@ -319,13 +332,6 @@ export class EntitiesPage extends PlatformElement {
                 height: 8px;
                 border-radius: 50%;
                 flex-shrink: 0;
-            }
-
-            .detail-panel {
-                display: flex;
-                flex-direction: column;
-                min-height: 0;
-                overflow: hidden;
             }
 
             .empty {
@@ -340,29 +346,180 @@ export class EntitiesPage extends PlatformElement {
                 gap: var(--space-2);
             }
 
-            .entities-count {
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-                font-weight: 400;
+            /* === MOBILE === */
+
+            .mobile-tabs {
+                display: none;
             }
 
             @media (max-width: 1279px) {
                 .layout {
                     grid-template-columns: 1fr;
                 }
-                .detail-panel {
-                    min-height: 300px;
+            }
+
+            @media (max-width: 767px) {
+                :host {
+                    overflow: hidden;
                 }
-                .top-row {
-                    grid-template-columns: 1fr;
-                    align-items: stretch;
+
+                .mobile-tabs {
+                    display: flex;
+                    gap: var(--space-2);
+                    padding: var(--space-2) var(--space-3);
+                    flex-shrink: 0;
                 }
-                .toolbar-actions {
-                    margin-left: 0;
-                    justify-content: flex-start;
+
+                .mobile-tab {
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: var(--space-1);
+                    padding: var(--space-2);
+                    border-radius: var(--radius-md);
+                    background: transparent;
+                    border: 1px solid var(--crm-stroke);
+                    color: var(--text-secondary);
+                    font-size: var(--text-sm);
+                    font-weight: 500;
+                    cursor: pointer;
+                    white-space: nowrap;
+                    transition: all var(--duration-fast);
                 }
+
+                .mobile-tab:hover {
+                    background: var(--crm-surface);
+                    color: var(--text-primary);
+                }
+
+                .mobile-tab.active {
+                    background: var(--crm-selected-bg);
+                    border-color: var(--crm-selected-stroke);
+                    color: var(--text-primary);
+                }
+
+                .mobile-tab:disabled {
+                    opacity: 0.4;
+                    cursor: default;
+                }
+
+                .page-toolbar {
+                    padding: var(--space-2) var(--space-3);
+                    flex-shrink: 0;
+                    max-width: 100%;
+                    overflow: hidden;
+                    box-sizing: border-box;
+                }
+
+                .section-label {
+                    display: none;
+                }
+
                 .title {
-                    font-size: 32px;
+                    display: none;
+                }
+
+                .top-row {
+                    flex-direction: column;
+                    gap: var(--space-2);
+                    margin-bottom: var(--space-2);
+                }
+
+                .search-box {
+                    display: none;
+                }
+
+                .cta-btn {
+                    display: none;
+                }
+
+                .filters-row {
+                    gap: 6px;
+                    overflow-x: auto;
+                    flex-wrap: nowrap;
+                    scrollbar-width: none;
+                    -webkit-overflow-scrolling: touch;
+                    padding-bottom: 2px;
+                }
+
+                .filters-row::-webkit-scrollbar {
+                    display: none;
+                }
+
+                .filter-chip {
+                    padding: 5px 10px;
+                    font-size: 12px;
+                    flex-shrink: 0;
+                }
+
+                .layout {
+                    grid-template-columns: 1fr;
+                    flex: 1;
+                    min-height: 0;
+                    max-width: 100%;
+                    overflow: hidden;
+                }
+
+                .list-panel,
+                .detail-panel {
+                    display: none;
+                }
+
+                .list-panel.mobile-active {
+                    display: flex;
+                    flex: 1;
+                    min-height: 0;
+                }
+
+                .detail-panel.mobile-active {
+                    display: flex;
+                    flex: 1;
+                    min-height: 0;
+                    overflow-y: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+
+                .cards-scroll {
+                    padding: var(--space-2) var(--space-3);
+                    max-width: 100%;
+                    box-sizing: border-box;
+                }
+
+                .cards-grid {
+                    grid-template-columns: 1fr;
+                    gap: var(--space-2);
+                    max-width: 100%;
+                }
+
+                .entity-card-item {
+                    padding: 14px;
+                    min-height: 0;
+                    gap: 8px;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    max-width: 100%;
+                    box-sizing: border-box;
+                }
+
+                .card-type-icon {
+                    width: 32px;
+                    height: 32px;
+                }
+
+                .card-title {
+                    font-size: 14px;
+                    line-height: 18px;
+                }
+
+                .card-description {
+                    font-size: 12px;
+                    line-height: 16px;
+                    -webkit-line-clamp: 1;
+                }
+
+                .card-footer {
+                    gap: 6px;
                 }
             }
         `,
@@ -373,22 +530,23 @@ export class EntitiesPage extends PlatformElement {
         this._entities = [];
         this._entityTypes = [];
         this._currentEntityId = null;
-        this._currentEntity = null;
         this._loading = false;
         this._query = '';
         this._selectedType = null;
         this._selectedStatus = null;
         this._currentNamespace = null;
+        this._isMobile = false;
+        this._mobileTab = 'list';
         this._debounceTimer = null;
 
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._entities = state.entities.list;
             this._entityTypes = state.entities.entityTypes;
             this._currentEntityId = state.entities.currentEntityId;
-            this._currentEntity = state.entities.currentEntity;
             this._loading = state.entities.entitiesLoading;
             this._selectedType = state.entities.filters.entity_type;
             this._selectedStatus = state.entities.filters.status;
+            this._isMobile = state.ui.isMobile;
 
             const prevNs = this._currentNamespace;
             this._currentNamespace = state.namespaces.current;
@@ -464,6 +622,13 @@ export class EntitiesPage extends PlatformElement {
 
     _onSelectEntity(entityId) {
         CRMStore.setCurrentEntity(entityId);
+        if (this._isMobile) {
+            this._mobileTab = 'card';
+        }
+    }
+
+    _onMobileTab(tab) {
+        this._mobileTab = tab;
     }
 
     _onCreateEntity() {
@@ -540,67 +705,91 @@ export class EntitiesPage extends PlatformElement {
             { id: 'archived', label: 'Архив' },
         ];
 
-        return html`
-            <div class="section-label">Сущности</div>
-            <div class="top-row">
-                <div class="title">
-                    Сущности
-                    <span class="entities-count">(${this._entities.length})</span>
-                </div>
-                <label class="search-box">
-                    <platform-icon name="search" size="16"></platform-icon>
-                    <input
-                        class="search-input"
-                        type="text"
-                        placeholder="Поиск по имени или описанию"
-                        .value=${this._query}
-                        @input=${this._onSearchInput}
-                    />
-                </label>
-                <div class="toolbar-actions">
-                    <button class="cta-btn" type="button" @click=${this._onCreateEntity}>
-                        Создать сущность
-                    </button>
-                </div>
-            </div>
+        const listActive = !this._isMobile || this._mobileTab === 'list';
+        const cardActive = !this._isMobile || this._mobileTab === 'card';
 
-            <div class="filters-row">
-                ${baseTypes.map((type) => html`
+        return html`
+            ${this._isMobile ? html`
+                <div class="mobile-tabs">
                     <button
-                        class="filter-chip ${this._selectedType === type.type_id ? 'active' : ''}"
+                        class="mobile-tab ${this._mobileTab === 'list' ? 'active' : ''}"
                         type="button"
-                        @click=${() => this._onTypeSelect(type.type_id)}
+                        @click=${() => this._onMobileTab('list')}
                     >
-                        <platform-icon name="${this._resolveIconName(type.icon)}" size="14"></platform-icon>
-                        ${type.name}
+                        <platform-icon name="list" size="14"></platform-icon>
+                        Список
                     </button>
-                `)}
-                ${baseTypes.length > 0 ? html`<div class="filter-divider"></div>` : ''}
-                ${statuses.map((s) => html`
                     <button
-                        class="filter-chip ${this._selectedStatus === s.id ? 'active' : ''}"
+                        class="mobile-tab ${this._mobileTab === 'card' ? 'active' : ''}"
                         type="button"
-                        @click=${() => this._onStatusSelect(s.id)}
+                        @click=${() => this._onMobileTab('card')}
+                        ?disabled=${!this._currentEntityId}
                     >
-                        ${s.label}
+                        <platform-icon name="file" size="14"></platform-icon>
+                        Карточка
                     </button>
-                `)}
-                ${this._hasActiveFilters() ? html`
-                    <button class="clear-filters-btn" type="button" @click=${this._onClearFilters}>
-                        <platform-icon name="close" size="12"></platform-icon>
-                        Сбросить
-                    </button>
-                ` : ''}
-            </div>
+                </div>
+            ` : ''}
+
+            ${listActive ? html`
+                <div class="page-toolbar">
+                    ${!this._isMobile ? html`<div class="section-label">Сущности</div>` : ''}
+                    <div class="top-row">
+                        <div class="title">
+                            Сущности
+                            <span class="entities-count">(${this._entities.length})</span>
+                        </div>
+                        <label class="search-box">
+                            <platform-icon name="search" size="14"></platform-icon>
+                            <input
+                                class="search-input"
+                                type="text"
+                                placeholder="Поиск"
+                                .value=${this._query}
+                                @input=${this._onSearchInput}
+                            />
+                        </label>
+                        <button class="cta-btn" type="button" @click=${this._onCreateEntity}>Создать</button>
+                    </div>
+                    <div class="filters-row">
+                        ${baseTypes.map((type) => html`
+                            <button
+                                class="filter-chip ${this._selectedType === type.type_id ? 'active' : ''}"
+                                type="button"
+                                @click=${() => this._onTypeSelect(type.type_id)}
+                            >
+                                <platform-icon name="${this._resolveIconName(type.icon)}" size="14"></platform-icon>
+                                ${type.name}
+                            </button>
+                        `)}
+                        ${baseTypes.length > 0 ? html`<div class="filter-divider"></div>` : ''}
+                        ${statuses.map((s) => html`
+                            <button
+                                class="filter-chip ${this._selectedStatus === s.id ? 'active' : ''}"
+                                type="button"
+                                @click=${() => this._onStatusSelect(s.id)}
+                            >
+                                ${s.label}
+                            </button>
+                        `)}
+                        ${this._hasActiveFilters() ? html`
+                            <button class="clear-filters-btn" type="button" @click=${this._onClearFilters}>
+                                <platform-icon name="close" size="12"></platform-icon>
+                                Сбросить
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            ` : ''}
 
             <div class="layout">
-                <section class="main-column">
+                <section class="list-panel ${listActive ? 'mobile-active' : ''}">
                     <div class="cards-scroll">
                         ${this._loading ? html`
                             <div class="empty">Загрузка...</div>
                         ` : this._entities.length === 0 ? html`
                             <div class="empty">
-                                <platform-icon name="database" size="48"></platform-icon>
+                                <platform-icon name="database" size="40"></platform-icon>
                                 <span>Нет сущностей</span>
                                 <span style="font-size: var(--text-sm)">Создайте первую или измените фильтры</span>
                             </div>
@@ -612,7 +801,7 @@ export class EntitiesPage extends PlatformElement {
                     </div>
                 </section>
 
-                <aside class="detail-panel">
+                <aside class="detail-panel ${cardActive ? 'mobile-active' : ''}">
                     <entity-card .entityId=${this._currentEntityId}></entity-card>
                 </aside>
             </div>
@@ -631,19 +820,12 @@ export class EntitiesPage extends PlatformElement {
                 @click=${() => this._onSelectEntity(entity.entity_id)}
             >
                 <div class="card-header">
-                    <div
-                        class="card-type-icon"
-                        style="background: ${bgColor}; color: ${typeConfig.color};"
-                    >
-                        <platform-icon name="${typeConfig.icon}" size="20"></platform-icon>
+                    <div class="card-type-icon" style="background: ${bgColor}; color: ${typeConfig.color};">
+                        <platform-icon name="${typeConfig.icon}" size="18"></platform-icon>
                     </div>
                     <h3 class="card-title">${entity.name}</h3>
                     ${entity.status ? html`
-                        <span
-                            class="card-status-dot"
-                            style="background: ${this._getStatusColor(entity.status)}"
-                            title="${entity.status}"
-                        ></span>
+                        <span class="card-status-dot" style="background: ${this._getStatusColor(entity.status)}" title="${entity.status}"></span>
                     ` : ''}
                 </div>
                 ${entity.description ? html`
@@ -655,10 +837,7 @@ export class EntitiesPage extends PlatformElement {
                     </div>
                 ` : ''}
                 <div class="card-footer">
-                    <span
-                        class="card-type-badge"
-                        style="background: ${bgColor}; color: ${typeConfig.color};"
-                    >${typeConfig.label}</span>
+                    <span class="card-type-badge" style="background: ${bgColor}; color: ${typeConfig.color};">${typeConfig.label}</span>
                     <span class="card-meta">${this._formatDate(entity.created_at)}</span>
                 </div>
             </article>

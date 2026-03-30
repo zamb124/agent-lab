@@ -328,6 +328,22 @@ export class GlassModal extends PlatformElement {
                     border-radius: var(--radius-2xl, 24px);
                 }
 
+                .modal.full {
+                    width: min(95vw, 100% - 1rem);
+                    max-width: min(95vw, 100% - 1rem);
+                    height: min(92vh, 100dvh - 1rem);
+                    max-height: min(92vh, 100dvh - 1rem);
+                }
+
+                .modal.fullscreen {
+                    width: 100%;
+                    max-width: 100%;
+                    height: 100dvh;
+                    max-height: 100dvh;
+                    border-radius: 0;
+                    margin: 0;
+                }
+
                 .modal::before {
                     left: var(--space-3, 12px);
                     right: var(--space-3, 12px);
@@ -352,6 +368,10 @@ export class GlassModal extends PlatformElement {
                     border-radius: var(--radius-xl, 20px);
                 }
 
+                .modal.fullscreen {
+                    border-radius: 0;
+                }
+
                 .modal-header {
                     padding: var(--space-2, 8px) var(--space-2, 8px) 0 var(--space-2, 8px);
                 }
@@ -363,6 +383,7 @@ export class GlassModal extends PlatformElement {
                 .modal-actions {
                     padding: var(--space-2, 8px);
                     padding-top: 0;
+                    padding-bottom: max(var(--space-2, 8px), env(safe-area-inset-bottom, 0px));
                     flex-direction: column;
                 }
 

@@ -275,7 +275,7 @@ export const CRMStore = {
         }
         
         const [, view, id] = match;
-        const validViews = ['notes', 'entities', 'graph', 'tasks', 'calendar', 'settings', 'templates', 'spaces'];
+        const validViews = ['notes', 'entities', 'graph', 'tasks', 'settings', 'templates', 'spaces'];
         
         if (!validViews.includes(view)) {
             history.replaceState({}, '', '/crm/notes');

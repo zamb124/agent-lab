@@ -32,6 +32,7 @@ export class NoteViewModal extends PlatformModal {
         css`
             .note-view-shell {
                 display: flex;
+                flex-direction: column;
                 height: 100%;
                 min-height: 0;
                 overflow-y: auto;
@@ -46,7 +47,11 @@ export class NoteViewModal extends PlatformModal {
 
             @media (max-width: 767px) {
                 .note-view-shell {
-                    padding: 4px 0 8px;
+                    padding: 0;
+                }
+
+                .note-graph-section {
+                    display: none;
                 }
             }
         `,
@@ -582,7 +587,7 @@ export class NoteViewModal extends PlatformModal {
                 ></note-content>
 
                 ${this.note?.entity_id ? html`
-                    <div style="padding: 0 var(--space-4) var(--space-4);">
+                    <div class="note-graph-section" style="padding: 0 var(--space-4) var(--space-4);">
                         <mini-graph-preview
                             .entityId=${this.note.entity_id}
                             .maxDepth=${2}

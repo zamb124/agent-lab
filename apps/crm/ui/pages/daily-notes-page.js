@@ -20,6 +20,8 @@ export class DailyNotesPage extends PlatformElement {
         _summaryGeneratedAt: { state: true },
         _loadingSummary: { state: true },
         _summaryRevalidating: { state: true },
+        _isMobile: { state: true },
+        _summaryOpen: { state: true },
     };
 
     static styles = [
@@ -28,7 +30,9 @@ export class DailyNotesPage extends PlatformElement {
             :host {
                 display: flex;
                 flex-direction: column;
+                box-sizing: border-box;
                 width: 100%;
+                max-width: 100%;
                 height: 100%;
                 min-height: 0;
                 overflow: hidden;
@@ -39,6 +43,8 @@ export class DailyNotesPage extends PlatformElement {
                 grid-template-columns: 1fr 350px;
                 gap: var(--space-4);
                 width: 100%;
+                max-width: 100%;
+                min-width: 0;
                 flex: 1;
                 min-height: 0;
                 overflow: hidden;
@@ -47,6 +53,7 @@ export class DailyNotesPage extends PlatformElement {
             .main-column {
                 display: flex;
                 flex-direction: column;
+                min-width: 0;
                 min-height: 0;
                 overflow: hidden;
             }
@@ -156,6 +163,8 @@ export class DailyNotesPage extends PlatformElement {
                 overflow-y: auto;
                 overflow-x: hidden;
                 min-height: 0;
+                min-width: 0;
+                max-width: 100%;
                 padding-right: var(--space-2);
             }
 
@@ -164,6 +173,9 @@ export class DailyNotesPage extends PlatformElement {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 24px;
                 align-content: start;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
             }
 
             .note-card {
@@ -175,6 +187,10 @@ export class DailyNotesPage extends PlatformElement {
                 flex-direction: column;
                 gap: 16px;
                 min-height: 222px;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
                 cursor: pointer;
                 transition: border-color var(--duration-fast), background var(--duration-fast);
             }
@@ -187,6 +203,8 @@ export class DailyNotesPage extends PlatformElement {
             .note-tags-row {
                 position: relative;
                 min-height: 24px;
+                min-width: 0;
+                max-width: 100%;
             }
 
             .note-tags-row::after {
@@ -256,6 +274,9 @@ export class DailyNotesPage extends PlatformElement {
                 font-weight: 700;
                 color: var(--text-primary);
                 margin: 0;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .note-text {
@@ -263,6 +284,9 @@ export class DailyNotesPage extends PlatformElement {
                 color: var(--text-primary);
                 font-size: 16px;
                 line-height: 20px;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .note-footer {
@@ -271,6 +295,7 @@ export class DailyNotesPage extends PlatformElement {
                 justify-content: space-between;
                 gap: 16px;
                 min-height: 32px;
+                min-width: 0;
                 margin-top: auto;
             }
 
@@ -490,6 +515,14 @@ export class DailyNotesPage extends PlatformElement {
                 color: var(--text-tertiary);
             }
 
+            .summary-fab {
+                display: none;
+            }
+
+            .summary-overlay {
+                display: none;
+            }
+
             @media (max-width: 1279px) {
                 .layout {
                     grid-template-columns: 1fr;
@@ -517,6 +550,122 @@ export class DailyNotesPage extends PlatformElement {
                     width: 100%;
                 }
             }
+
+            @media (max-width: 767px) {
+                :host {
+                    padding: var(--space-2) var(--space-3) 0;
+                }
+
+                .section-label {
+                    display: none;
+                }
+
+                .title {
+                    display: none;
+                }
+
+                .top-row {
+                    display: flex;
+                    flex-direction: column;
+                    gap: var(--space-2);
+                    margin-bottom: var(--space-3);
+                }
+
+                .title-settings {
+                    display: none;
+                }
+
+                .search-box {
+                    display: none;
+                }
+
+                .cta-btn {
+                    display: none;
+                }
+
+                .toolbar-actions {
+                    flex-direction: row;
+                    gap: var(--space-2);
+                }
+
+                .date-input {
+                    flex: 1;
+                    min-width: 0;
+                    width: 100%;
+                }
+
+                .cards-grid {
+                    grid-template-columns: 1fr;
+                    gap: var(--space-3);
+                }
+
+                .note-card {
+                    min-height: 160px;
+                    padding: 16px;
+                }
+
+                .summary-panel {
+                    display: none;
+                }
+
+                .summary-fab {
+                    display: flex;
+                    position: fixed;
+                    bottom: calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+                    right: var(--space-4);
+                    width: 52px;
+                    height: 52px;
+                    border-radius: 50%;
+                    border: none;
+                    background: var(--accent-gradient);
+                    color: var(--text-inverse);
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    box-shadow: 0 4px 16px rgba(153, 166, 249, 0.4);
+                    z-index: 1200;
+                    transition: transform var(--duration-fast);
+                }
+
+                .summary-fab:hover {
+                    transform: scale(1.08);
+                }
+
+                .summary-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.55);
+                    backdrop-filter: blur(6px);
+                    -webkit-backdrop-filter: blur(6px);
+                    z-index: 1300;
+                    display: flex;
+                    align-items: flex-end;
+                    justify-content: center;
+                    padding: var(--space-3);
+                    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+                    isolation: isolate;
+                }
+
+                .summary-overlay .summary-panel {
+                    display: flex;
+                    position: relative;
+                    z-index: 1;
+                    width: 100%;
+                    max-width: min(100%, 100vw - 2 * var(--space-3));
+                    max-height: 70vh;
+                    box-sizing: border-box;
+                    background: var(--crm-surface);
+                    border: 1px solid var(--crm-stroke);
+                    border-radius: var(--radius-xl) var(--radius-xl) var(--radius-lg) var(--radius-lg);
+                    box-shadow: var(--glass-shadow-strong, 0 12px 40px rgba(0, 0, 0, 0.25));
+                    animation: summary-slide-up 0.2s ease-out;
+                }
+
+                @keyframes summary-slide-up {
+                    from { transform: translateY(100%); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
+                }
+            }
         `,
     ];
 
@@ -533,16 +682,22 @@ export class DailyNotesPage extends PlatformElement {
         this._summaryGeneratedAt = '';
         this._loadingSummary = false;
         this._summaryRevalidating = false;
+        this._isMobile = false;
+        this._summaryOpen = false;
         this._unsubscribe = null;
         this._onPlatformNotification = this._onPlatformNotification.bind(this);
+        this._onMobileSearch = this._onMobileSearch.bind(this);
     }
 
     connectedCallback() {
         super.connectedCallback();
         this._selectedDate = CRMStore.getDailyNotesDate();
         this._currentNamespace = CRMStore.state.namespaces.current;
+        this._isMobile = CRMStore.state.ui.isMobile;
+        window.addEventListener('crm-mobile-search', this._onMobileSearch);
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._selectedDate = state.ui.dailyNotesDate;
+            this._isMobile = state.ui.isMobile;
             const previousNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
             this._currentNamespace = state.namespaces.current;
             const nextNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
@@ -562,6 +717,11 @@ export class DailyNotesPage extends PlatformElement {
         super.disconnectedCallback();
         this._unsubscribe?.();
         window.removeEventListener('platform-notification-received', this._onPlatformNotification);
+        window.removeEventListener('crm-mobile-search', this._onMobileSearch);
+    }
+
+    _onMobileSearch(event) {
+        this._query = event.detail?.query || '';
     }
 
     _getCurrentNamespaceName() {
@@ -993,6 +1153,46 @@ export class DailyNotesPage extends PlatformElement {
         });
     }
 
+    _renderSummaryContent(summaryTags) {
+        return html`
+            <div class="summary-header">
+                <h3 class="summary-title">
+                    <span class="summary-title-icon">
+                        <platform-icon name="ai" size="24" colored></platform-icon>
+                    </span>
+                    <span class="summary-title-text">Daily summary</span>
+                </h3>
+                <button class="summary-refresh-btn" type="button" title="Обновить" @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
+                    <platform-icon
+                        class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
+                        name="refresh"
+                        size="18"
+                    ></platform-icon>
+                </button>
+            </div>
+            <div class="summary-meta">
+                ${this._loadingSummary
+                    ? 'Генерация...'
+                    : this._summaryRevalidating
+                        ? this._summaryGeneratedAt
+                            ? `Обновляется... последнее в ${this._summaryGeneratedAt}`
+                            : 'Обновляется...'
+                        : this._summaryGeneratedAt
+                            ? `Сгенерировано в ${this._summaryGeneratedAt}`
+                            : 'Нет summary'}
+            </div>
+            <p class="summary-text">${this._summaryText}</p>
+            <div class="summary-tags">
+                ${summaryTags.map((tag, index) => html`
+                    <span class="summary-chip ${this._getSummaryChipTone(index)}">
+                        <platform-icon name="file" size="14"></platform-icon>
+                        ${tag}
+                    </span>
+                `)}
+            </div>
+        `;
+    }
+
     render() {
         const filteredNotes = this._getFilteredNotes();
         const summaryTags = this._summaryEntities;
@@ -1098,43 +1298,23 @@ export class DailyNotesPage extends PlatformElement {
                 </section>
 
                 <aside class="summary-panel">
-                    <div class="summary-header">
-                        <h3 class="summary-title">
-                            <span class="summary-title-icon">
-                                <platform-icon name="ai" size="24" colored></platform-icon>
-                            </span>
-                            <span class="summary-title-text">Daily summary</span>
-                        </h3>
-                        <button class="summary-refresh-btn" type="button" title="Обновить" @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
-                            <platform-icon
-                                class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
-                                name="refresh"
-                                size="18"
-                            ></platform-icon>
-                        </button>
-                    </div>
-                    <div class="summary-meta">
-                        ${this._loadingSummary
-                            ? 'Генерация...'
-                            : this._summaryRevalidating
-                                ? this._summaryGeneratedAt
-                                    ? `Обновляется... последнее в ${this._summaryGeneratedAt}`
-                                    : 'Обновляется...'
-                                : this._summaryGeneratedAt
-                                    ? `Сгенерировано в ${this._summaryGeneratedAt}`
-                                    : 'Нет summary'}
-                    </div>
-                    <p class="summary-text">${this._summaryText}</p>
-                    <div class="summary-tags">
-                        ${summaryTags.map((tag, index) => html`
-                            <span class="summary-chip ${this._getSummaryChipTone(index)}">
-                                <platform-icon name="file" size="14"></platform-icon>
-                                ${tag}
-                            </span>
-                        `)}
-                    </div>
+                    ${this._renderSummaryContent(summaryTags)}
                 </aside>
             </div>
+
+            ${this._isMobile ? html`
+                <button class="summary-fab" type="button" @click=${() => { this._summaryOpen = true; }} title="Daily summary">
+                    <platform-icon name="ai" size="24" colored></platform-icon>
+                </button>
+            ` : ''}
+
+            ${this._isMobile && this._summaryOpen ? html`
+                <div class="summary-overlay" @click=${(e) => { if (e.target === e.currentTarget) this._summaryOpen = false; }}>
+                    <aside class="summary-panel">
+                        ${this._renderSummaryContent(summaryTags)}
+                    </aside>
+                </div>
+            ` : ''}
         `;
     }
 }

@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
+import { EntityTypeForm } from '../components/entity-type-form.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 
@@ -23,6 +24,8 @@ export class SpacesPage extends PlatformElement {
         _namespaceEditorSaving: { state: true },
         _editingTypeId: { state: true },
         _editingTypeDraft: { state: true },
+        _showCreateForm: { state: true },
+        _createSaving: { state: true },
     };
 
     static styles = [
@@ -84,6 +87,8 @@ export class SpacesPage extends PlatformElement {
         this._namespaceEditorSaving = false;
         this._editingTypeId = null;
         this._editingTypeDraft = null;
+        this._showCreateForm = false;
+        this._createSaving = false;
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._namespaces = state.namespaces.list || [];
             this._entityTypes = state.entities.entityTypes || [];
@@ -185,17 +190,56 @@ export class SpacesPage extends PlatformElement {
         this._editingTypeDraft = null;
     }
 
-    async _saveEditType() {
+    _openCreateForm() {
+        this._showCreateForm = true;
+        this._editingTypeId = null;
+        this._editingTypeDraft = null;
+    }
+
+    _closeCreateForm() {
+        this._showCreateForm = false;
+    }
+
+    async _onTypeCreated(e) {
         try {
-            if (!this._editingTypeId || !this._editingTypeDraft) {
-                throw new Error('No type selected for editing');
+            const { type_id, payload } = e.detail;
+            if (!type_id || !payload) {
+                throw new Error('type_id and payload are required');
+            }
+            this._createSaving = true;
+            const crmApi = this.services.get('crmApi');
+            const namespaceIds = this._selectedNamespaceName
+                ? [this._selectedNamespaceName]
+                : ['default'];
+            await crmApi.createEntityType({
+                type_id,
+                ...payload,
+                namespace_ids: namespaceIds,
+            });
+            await CRMStore.loadEntityTypes(crmApi);
+            this._selectedNamespaceDraftAllowedTypeIds = [
+                ...new Set([...this._selectedNamespaceDraftAllowedTypeIds, type_id]),
+            ];
+            await this._saveNamespaceSettings();
+            await CRMStore.loadNamespaceEditability(crmApi, this._selectedNamespaceName);
+            this._showCreateForm = false;
+            this.success('Тип создан и добавлен в пространство');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка создания типа';
+            this.error(message);
+        } finally {
+            this._createSaving = false;
+        }
+    }
+
+    async _onTypeEdited(e) {
+        try {
+            const { type_id, payload } = e.detail;
+            if (!type_id || !payload) {
+                throw new Error('type_id and payload are required');
             }
             const crmApi = this.services.get('crmApi');
-            await crmApi.updateEntityType(this._editingTypeId, {
-                name: this._editingTypeDraft.name.trim() || null,
-                description: this._editingTypeDraft.description.trim() || null,
-                prompt: this._editingTypeDraft.prompt.trim() || null,
-            });
+            await crmApi.updateEntityType(type_id, payload);
             await CRMStore.loadEntityTypes(crmApi);
             this._editingTypeId = null;
             this._editingTypeDraft = null;
@@ -254,43 +298,28 @@ export class SpacesPage extends PlatformElement {
             return '';
         }
         return html`
-            <div class="type-edit-card">
-                <div class="type-edit-header">
-                    <div class="type-edit-title">
-                        <platform-icon name="edit" size="14"></platform-icon>
-                        Редактирование типа: <span class="mono">${this._editingTypeId}</span>
-                    </div>
-                    <button class="save-btn soft-btn" @click=${this._cancelEditType}>Отмена</button>
-                </div>
-                <div class="hint">type_id неизменяем. Можно редактировать название, описание и промпт.</div>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label class="form-label">Название</label>
-                        <input class="form-input" .value=${this._editingTypeDraft.name}
-                            @input=${(e) => { this._editingTypeDraft = { ...this._editingTypeDraft, name: e.target.value }; }} />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label label-with-hint">
-                            <span>Описание</span>
-                            <platform-help-hint strategy="local" label="Справка: описание типа" .text=${SPACES_HINTS.typeDescription}></platform-help-hint>
-                        </label>
-                        <textarea class="form-textarea" .value=${this._editingTypeDraft.description}
-                            @input=${(e) => { this._editingTypeDraft = { ...this._editingTypeDraft, description: e.target.value }; }}></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label label-with-hint">
-                            <span>Промпт для извлечения</span>
-                            <platform-help-hint strategy="local" label="Справка: промпт типа" .text=${SPACES_HINTS.typePrompt}></platform-help-hint>
-                        </label>
-                        <textarea class="form-textarea" .value=${this._editingTypeDraft.prompt}
-                            @input=${(e) => { this._editingTypeDraft = { ...this._editingTypeDraft, prompt: e.target.value }; }}></textarea>
-                    </div>
-                </div>
-                <button class="save-btn" @click=${this._saveEditType}>
-                    <platform-icon name="save" size="14"></platform-icon>
-                    Сохранить тип
-                </button>
-            </div>
+            <entity-type-form
+                mode="edit"
+                type-id=${this._editingTypeId}
+                .draft=${{ ...this._editingTypeDraft }}
+                @type-saved=${this._onTypeEdited}
+                @type-cancel=${this._cancelEditType}
+            ></entity-type-form>
+        `;
+    }
+
+    _renderCreateForm() {
+        if (!this._showCreateForm) {
+            return '';
+        }
+        return html`
+            <entity-type-form
+                mode="create"
+                .draft=${EntityTypeForm.defaultDraft()}
+                .saving=${this._createSaving}
+                @type-saved=${this._onTypeCreated}
+                @type-cancel=${this._closeCreateForm}
+            ></entity-type-form>
         `;
     }
 
@@ -408,11 +437,20 @@ export class SpacesPage extends PlatformElement {
                     </div>
 
                     <div class="section">
-                        <div class="section-header">
-                            <platform-icon name="list" size="16"></platform-icon>
-                            Типы в пространстве
+                        <div class="section-header" style="justify-content: space-between;">
+                            <div style="display: inline-flex; align-items: center; gap: var(--space-2);">
+                                <platform-icon name="list" size="16"></platform-icon>
+                                Типы в пространстве
+                            </div>
+                            ${!this._showCreateForm ? html`
+                                <button class="save-btn" @click=${this._openCreateForm}>
+                                    <platform-icon name="plus" size="14"></platform-icon>
+                                    Добавить тип
+                                </button>
+                            ` : ''}
                         </div>
                         <div class="hint">Можно редактировать название, описание и промпт. Идентификатор (type_id) неизменяем.</div>
+                        ${this._renderCreateForm()}
                         ${this._renderAllowedTypeCards()}
                         ${this._renderTypeEditor()}
                     </div>

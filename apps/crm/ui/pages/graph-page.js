@@ -485,7 +485,7 @@ export class GraphPage extends PlatformElement {
                 .legend-overlay {
                     left: 8px;
                     bottom: 8px;
-                    width: calc(100% - 96px);
+                    width: calc(100% - 60px);
                     padding: 6px 8px;
                 }
 
@@ -496,8 +496,53 @@ export class GraphPage extends PlatformElement {
                 .advanced-drawer {
                     right: 8px;
                     bottom: 8px;
+                    width: 36px;
+                    max-width: 36px;
+                    max-height: 36px;
+                    overflow: hidden;
+                    border-radius: var(--radius-lg);
+                    padding: 0;
+                }
+
+                .advanced-drawer > summary {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 36px;
+                    height: 36px;
+                    padding: 0;
+                    font-size: 0;
+                    color: var(--text-secondary);
+                    border-bottom: none;
+                }
+
+                .advanced-drawer > summary::after {
+                    content: '!';
+                    font-size: 16px;
+                    font-weight: 700;
+                    color: var(--text-secondary);
+                }
+
+                .advanced-drawer[open] {
+                    width: calc(100% - 16px);
                     max-width: calc(100% - 16px);
-                    max-height: min(36vh, 320px);
+                    max-height: min(50vh, 400px);
+                    border-radius: 12px;
+                    overflow: auto;
+                    z-index: 20;
+                }
+
+                .advanced-drawer[open] > summary {
+                    width: 100%;
+                    height: auto;
+                    padding: 10px 12px;
+                    font-size: 13px;
+                    justify-content: flex-start;
+                    border-bottom: 1px solid var(--glass-border-subtle);
+                }
+
+                .advanced-drawer[open] > summary::after {
+                    content: none;
                 }
 
                 .section-grid {
@@ -889,6 +934,13 @@ export class GraphPage extends PlatformElement {
 
     _hideContextMenu() {
         this._contextMenu = null;
+    }
+
+    _onCanvasStageClick(event) {
+        const advancedDrawer = this.renderRoot?.querySelector('.advanced-drawer');
+        if (advancedDrawer && advancedDrawer.open && !event.composedPath().includes(advancedDrawer)) {
+            advancedDrawer.open = false;
+        }
     }
 
     _openEntityModal(entityId) {
@@ -1885,7 +1937,7 @@ export class GraphPage extends PlatformElement {
         ];
         return html`
             <div class="canvas-layout">
-                <section class="canvas-stage">
+                <section class="canvas-stage" @click=${this._onCanvasStageClick}>
                     <graph-canvas
                         .graphNodes=${visibleGraph.nodes}
                         .graphEdges=${visibleGraph.edges}

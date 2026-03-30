@@ -155,12 +155,25 @@ class AttachmentService:
                     service="rag",
                     path=f"/rag/api/v1/documents/{doc_id}/status"
                 )
-                
+                if not isinstance(response, dict):
+                    raise ValueError(f"RAG document status must be dict, got {type(response)}")
+                display_name = (
+                    response.get("filename")
+                    or response.get("document_name")
+                )
+                extra = response.get("extra_metadata")
+                if not display_name and isinstance(extra, dict):
+                    candidate = extra.get("filename")
+                    if isinstance(candidate, str) and candidate.strip():
+                        display_name = candidate.strip()
+                if not display_name:
+                    display_name = "unknown"
+
                 attachments.append({
                     "document_id": doc_id,
-                    "filename": response.get("filename", "unknown"),
+                    "filename": display_name,
                     "status": response.get("status", "unknown"),
-                    "metadata": response.get("metadata", {})
+                    "metadata": extra if isinstance(extra, dict) else {},
                 })
             except Exception as e:
                 logger.warning(f"Failed to get attachment info: {doc_id}, error: {e}")

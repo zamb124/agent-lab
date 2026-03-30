@@ -192,6 +192,118 @@ export class NoteContent extends PlatformElement {
                 color: #ff885c;
             }
 
+            .attach-dropdown {
+                position: relative;
+            }
+
+            .attach-header-btn {
+                position: relative;
+            }
+
+            .attach-count-badge {
+                position: absolute;
+                top: -2px;
+                right: -2px;
+                min-width: 18px;
+                height: 18px;
+                padding: 0 5px;
+                border-radius: 9px;
+                background: #99a6f9;
+                color: #222222;
+                font-size: 11px;
+                font-weight: 600;
+                line-height: 18px;
+                text-align: center;
+                pointer-events: none;
+                box-sizing: border-box;
+            }
+
+            .attach-dropdown-panel {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                margin-top: 0;
+                min-width: 260px;
+                max-width: min(320px, 92vw);
+                max-height: 240px;
+                overflow-y: auto;
+                padding: 8px;
+                border-radius: 12px;
+                background: var(--crm-surface-elevated);
+                border: 1px solid var(--crm-stroke);
+                box-shadow: 0 8px 24px rgba(34, 34, 34, 0.12);
+                z-index: 40;
+                opacity: 0;
+                visibility: hidden;
+                transform: translateY(-4px);
+                transition: opacity var(--duration-fast), visibility var(--duration-fast), transform var(--duration-fast);
+                pointer-events: none;
+            }
+
+            .attach-dropdown:hover .attach-dropdown-panel {
+                opacity: 1;
+                visibility: visible;
+                transform: translateY(0);
+                pointer-events: auto;
+            }
+
+            .attach-dropdown-empty {
+                padding: 8px 10px;
+                font-size: 13px;
+                line-height: 18px;
+                color: rgba(34, 34, 34, 0.45);
+            }
+
+            .attach-dropdown-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 6px 8px;
+                border-radius: 8px;
+                min-height: 32px;
+            }
+
+            .attach-dropdown-row:hover {
+                background: rgba(34, 34, 34, 0.05);
+            }
+
+            .attach-dropdown-name {
+                min-width: 0;
+                flex: 1;
+                font-size: 13px;
+                line-height: 18px;
+                color: var(--text-primary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .attach-dropdown-remove {
+                flex-shrink: 0;
+                width: 28px;
+                height: 28px;
+                border: none;
+                border-radius: 8px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: transparent;
+                color: rgba(34, 34, 34, 0.35);
+            }
+
+            .attach-dropdown-remove:hover {
+                background: rgba(255, 136, 92, 0.15);
+                color: #ff885c;
+            }
+
+            .attach-dropdown-remove:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
             .round-btn.analysis-draft {
                 background: rgba(255, 136, 92, 0.18);
                 color: var(--crm-button-secondary-bg);
@@ -835,7 +947,7 @@ export class NoteContent extends PlatformElement {
                 .note-actions {
                     width: 100%;
                     display: grid;
-                    grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr);
+                    grid-template-columns: 44px 44px 44px minmax(0, 1fr) minmax(0, 1fr);
                     gap: 10px;
                     justify-content: stretch;
                     align-items: center;
@@ -920,7 +1032,7 @@ export class NoteContent extends PlatformElement {
 
             @media (max-width: 420px) {
                 .note-actions {
-                    grid-template-columns: 1fr 1fr;
+                    grid-template-columns: repeat(3, 1fr);
                 }
 
                 .round-btn {
@@ -930,6 +1042,7 @@ export class NoteContent extends PlatformElement {
 
                 .cancel-btn,
                 .edit-btn {
+                    grid-column: 1 / -1;
                     width: 100%;
                 }
 
@@ -1169,7 +1282,10 @@ export class NoteContent extends PlatformElement {
     }
 
     _getAttachmentName(attachment) {
-        return this._getText(attachment?.filename, this._getText(attachment?.document_id, 'Файл'));
+        return this._getText(
+            attachment?.filename,
+            this._getText(attachment?.document_name, this._getText(attachment?.document_id, 'Файл')),
+        );
     }
 
     _getAttachmentStatus(attachment) {
@@ -1433,6 +1549,39 @@ export class NoteContent extends PlatformElement {
                             ` : ''}
                         </div>
                         <div class="note-actions">
+                            <div class="attach-dropdown">
+                                <button
+                                    class="round-btn attach-header-btn"
+                                    type="button"
+                                    title="Вложения: добавить файл"
+                                    aria-label=${`Вложения, файлов: ${attachments.length}. Нажмите, чтобы добавить файл.`}
+                                    ?disabled=${this.draftMode || this.processingAttachment}
+                                    @click=${this._openFilePicker}
+                                >
+                                    <platform-icon name="paperclip" size="20"></platform-icon>
+                                    <span class="attach-count-badge" aria-hidden="true">${attachments.length}</span>
+                                </button>
+                                <div class="attach-dropdown-panel" role="tooltip" @click=${(e) => e.stopPropagation()}>
+                                    ${attachments.length === 0 ? html`
+                                        <div class="attach-dropdown-empty">Нет вложений</div>
+                                    ` : attachments.map((attachment) => html`
+                                        <div class="attach-dropdown-row">
+                                            <span class="attach-dropdown-name" title=${this._getAttachmentName(attachment)}>
+                                                ${this._getAttachmentName(attachment)}
+                                            </span>
+                                            <button
+                                                class="attach-dropdown-remove"
+                                                type="button"
+                                                title="Удалить файл"
+                                                ?disabled=${this.processingAttachment || this.draftMode}
+                                                @click=${() => this._emitDeleteAttachment(attachment)}
+                                            >
+                                                <platform-icon name="close" size="16"></platform-icon>
+                                            </button>
+                                        </div>
+                                    `)}
+                                </div>
+                            </div>
                             <button
                                 class="round-btn"
                                 type="button"

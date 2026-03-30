@@ -2041,7 +2041,7 @@ export class PlatformCalendarModal extends PlatformModal {
                             <div class="event-compose-attachments">
                                 ${this._eventAttachments.map((attachment) => html`
                                     <div class="event-compose-attachment">
-                                        <platform-icon class="event-compose-attachment-icon" name="attachment" size="14"></platform-icon>
+                                        <platform-icon class="event-compose-attachment-icon" name="paperclip" size="14"></platform-icon>
                                         <a
                                             class="event-compose-attachment-link"
                                             href=${attachment.url}

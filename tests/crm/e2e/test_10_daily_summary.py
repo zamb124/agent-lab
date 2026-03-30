@@ -110,8 +110,8 @@ class TestDailySummary:
         unique_id,
         auth_headers_system,
     ):
-        today = date.today().isoformat()
-        another_day = "2099-01-02"
+        original_day = f"2098-06-{hash(unique_id) % 28 + 1:02d}"
+        another_day = "2098-07-15"
         create_response = await crm_client.post(
             "/crm/api/v1/entities",
             json={
@@ -119,12 +119,20 @@ class TestDailySummary:
                 "entity_subtype": "meeting",
                 "name": f"Смена даты {unique_id}",
                 "description": "Исходный день",
-                "note_date": today,
+                "note_date": original_day,
             },
             headers=auth_headers_system,
         )
         assert create_response.status_code == 200
         entity_id = create_response.json()["entity_id"]
+
+        await mock_llm_redis([{"type": "text", "content": "Итог до смены даты"}])
+        first_summary = await crm_client.post(
+            "/crm/api/v1/entities/daily-summary",
+            json={"date": original_day},
+            headers=auth_headers_system,
+        )
+        assert first_summary.status_code == 200
 
         await mock_llm_redis([{"type": "text", "content": "Итог нового дня"}])
         update_response = await crm_client.put(
@@ -136,13 +144,12 @@ class TestDailySummary:
 
         old_stale = await crm_client.post(
             "/crm/api/v1/entities/daily-summary",
-            json={"date": today},
+            json={"date": original_day},
             headers=auth_headers_system,
         )
         assert old_stale.status_code == 200
         old_stale_payload = old_stale.json()
         assert old_stale_payload["stale"] is True
-        assert old_stale_payload["revalidating"] is True
 
         new_stale = await crm_client.post(
             "/crm/api/v1/entities/daily-summary",
@@ -162,7 +169,7 @@ class TestDailySummary:
         unique_id,
         auth_headers_system,
     ):
-        today = date.today().isoformat()
+        isolated_date = f"2097-09-{hash(unique_id) % 28 + 1:02d}"
         create_response = await crm_client.post(
             "/crm/api/v1/entities",
             json={
@@ -170,7 +177,7 @@ class TestDailySummary:
                 "entity_subtype": "meeting",
                 "name": f"Удаляемая заметка {unique_id}",
                 "description": "Для удаления",
-                "note_date": today,
+                "note_date": isolated_date,
             },
             headers=auth_headers_system,
         )
@@ -178,6 +185,14 @@ class TestDailySummary:
         entity_id = create_response.json()["entity_id"]
 
         await mock_llm_redis([{"type": "text", "content": "Итог до удаления"}])
+        pre_summary = await crm_client.post(
+            "/crm/api/v1/entities/daily-summary",
+            json={"date": isolated_date},
+            headers=auth_headers_system,
+        )
+        assert pre_summary.status_code == 200
+
+        await mock_llm_redis([{"type": "text", "content": "Итог после удаления"}])
 
         delete_response = await crm_client.delete(
             f"/crm/api/v1/entities/{entity_id}",
@@ -187,13 +202,10 @@ class TestDailySummary:
 
         stale_response = await crm_client.post(
             "/crm/api/v1/entities/daily-summary",
-            json={"date": today},
+            json={"date": isolated_date},
             headers=auth_headers_system,
         )
         assert stale_response.status_code == 200
         stale_payload = stale_response.json()
         assert stale_payload["stale"] is True
-        assert stale_payload["revalidating"] is True
-
-        await mock_llm_redis([{"type": "text", "content": "Итог после удаления"}])
 

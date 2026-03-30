@@ -6,13 +6,23 @@ import { CRMStore } from '../store/crm.store.js';
 import '../modals/entity-modal.js';
 import '@platform/lib/components/platform-icon.js';
 
-const TASK_STATUS = ['todo', 'in_progress', 'done'];
+const TASK_STATUSES = [
+    { id: 'todo', label: 'Новая' },
+    { id: 'in_progress', label: 'В работе' },
+    { id: 'done', label: 'Готово' },
+];
+
+const TASK_DND_MIME = 'application/x-crm-task-id';
 
 export class TasksPage extends PlatformElement {
     static properties = {
         _tasks: { state: true },
         _loading: { state: true },
         _filter: { state: true },
+        _isMobile: { state: true },
+        _activeStatus: { state: true },
+        _dragOverStatus: { state: true },
+        _draggingTaskId: { state: true },
     };
 
     static styles = [
@@ -24,52 +34,147 @@ export class TasksPage extends PlatformElement {
                 flex-direction: column;
                 width: 100%;
                 height: 100%;
-                background: var(--crm-surface);
-                border: 1px solid var(--crm-stroke-strong);
-                border-radius: var(--radius-2xl);
+                min-height: 0;
                 overflow: hidden;
             }
 
-            .toolbar {
+            .page-toolbar {
+                flex-shrink: 0;
+                padding-bottom: var(--space-2);
+            }
+
+            .section-label {
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                margin-bottom: var(--space-1);
+            }
+
+            .top-row {
                 display: flex;
-                justify-content: space-between;
                 align-items: center;
                 gap: var(--space-3);
-                padding: var(--space-4);
-                border-bottom: 1px solid var(--crm-stroke);
-                background: var(--crm-surface-tint);
-                flex-wrap: wrap;
+                margin-bottom: var(--space-3);
             }
 
             .title {
+                font-size: 42px;
+                line-height: 1;
+                font-weight: 700;
+                color: var(--text-primary);
+                margin: 0;
+                white-space: nowrap;
+            }
+
+            .search-box {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                font-size: var(--text-base);
-                font-weight: var(--font-semibold);
+                padding: 0 var(--space-3);
+                border-radius: var(--radius-full);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                min-height: 40px;
+                flex: 1;
+                min-width: 0;
+            }
+
+            .search-input {
+                width: 100%;
+                border: none;
+                background: transparent;
                 color: var(--text-primary);
+                font-size: var(--text-sm);
+                outline: none;
             }
 
             .toolbar-actions {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                flex-shrink: 0;
             }
 
-            .search {
-                min-width: 220px;
-                padding: var(--space-2) var(--space-3);
-                background: var(--crm-surface-muted);
+            .icon-btn-toolbar {
+                width: 40px;
+                height: 40px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-full);
                 border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                color: var(--text-primary);
-                font-size: var(--text-sm);
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+                flex-shrink: 0;
+                padding: 0;
             }
 
-            .search:focus {
-                outline: none;
-                border-color: var(--crm-selected-stroke);
+            .icon-btn-toolbar:hover {
+                background: var(--crm-surface);
+                color: var(--text-primary);
             }
+
+            .cta-btn {
+                min-height: 40px;
+                border: none;
+                border-radius: var(--radius-full);
+                background: var(--crm-daily-notes-cta-bg);
+                color: var(--text-inverse);
+                font-size: var(--text-base);
+                font-weight: 500;
+                padding: 0 var(--space-5);
+                cursor: pointer;
+                transition: background var(--duration-fast);
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+
+            .cta-btn:hover {
+                background: var(--crm-daily-notes-cta-hover);
+            }
+
+            /* === STATUS TABS === */
+
+            .status-tabs {
+                display: flex;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+            }
+
+            .status-tab {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 14px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all var(--duration-fast);
+                white-space: nowrap;
+            }
+
+            .status-tab:hover {
+                background: var(--crm-surface);
+                color: var(--text-primary);
+            }
+
+            .status-tab.active {
+                background: var(--crm-selected-bg);
+                border-color: var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
+            }
+
+            .status-count {
+                font-size: 11px;
+                color: var(--text-tertiary);
+            }
+
+            /* === BOARD (desktop) === */
 
             .board {
                 flex: 1;
@@ -77,7 +182,6 @@ export class TasksPage extends PlatformElement {
                 display: grid;
                 grid-template-columns: repeat(3, minmax(0, 1fr));
                 gap: var(--space-3);
-                padding: var(--space-4);
                 overflow: auto;
             }
 
@@ -101,7 +205,7 @@ export class TasksPage extends PlatformElement {
 
             .column-title {
                 font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
+                font-weight: 600;
                 color: var(--text-primary);
             }
 
@@ -121,21 +225,84 @@ export class TasksPage extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
+                transition: background var(--duration-fast), box-shadow var(--duration-fast), outline-color var(--duration-fast);
             }
+
+            .column-body.dnd-target {
+                outline: 2px dashed var(--crm-selected-stroke);
+                outline-offset: -2px;
+                background: color-mix(in srgb, var(--crm-selected-bg) 55%, transparent);
+                box-shadow: inset 0 0 0 1px var(--crm-selected-stroke);
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .column-body {
+                    transition: none;
+                }
+            }
+
+            /* === TASK CARDS === */
 
             .task-card {
                 border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
+                border-radius: 16px;
                 background: var(--crm-surface);
-                padding: var(--space-3);
-                display: grid;
-                gap: var(--space-2);
+                padding: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                cursor: pointer;
+                transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast), opacity var(--duration-fast), box-shadow var(--duration-fast);
+            }
+
+            .task-card:hover {
+                border-color: var(--crm-stroke-strong);
+                background: var(--crm-surface-elevated);
+            }
+
+            .task-card[draggable='true'] {
+                cursor: grab;
+            }
+
+            .task-card[draggable='true']:active {
+                cursor: grabbing;
+            }
+
+            .task-card.dnd-dragging {
+                opacity: 0.55;
+                transform: scale(0.98);
+                box-shadow: var(--glass-shadow-medium, 0 8px 24px rgba(0, 0, 0, 0.12));
+            }
+
+            .task-header {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .task-icon {
+                width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-lg);
+                background: rgba(255, 152, 0, 0.15);
+                color: #FF9800;
+                flex-shrink: 0;
             }
 
             .task-name {
-                font-size: var(--text-sm);
+                font-size: 15px;
+                line-height: 20px;
+                font-weight: 700;
                 color: var(--text-primary);
-                font-weight: var(--font-medium);
+                margin: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                flex: 1;
+                min-width: 0;
                 background: transparent;
                 border: none;
                 padding: 0;
@@ -147,26 +314,65 @@ export class TasksPage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                font-size: var(--text-xs);
+                font-size: 11px;
                 color: var(--text-tertiary);
             }
 
-            .task-actions {
+            .task-footer {
                 display: flex;
-                gap: var(--space-2);
-                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                margin-top: auto;
+            }
+
+            .task-priority {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 0 10px;
+                min-height: 22px;
+                font-size: 11px;
+                border-radius: 12px;
+                font-weight: 500;
+                border: none;
+                white-space: nowrap;
+                background: var(--crm-surface-tint);
+                color: var(--text-secondary);
+            }
+
+            .task-move-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 4px 12px;
+                min-height: 26px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--crm-selected-stroke);
+                background: var(--crm-selected-bg);
+                color: var(--crm-selected-text);
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all var(--duration-fast);
+            }
+
+            .task-move-btn:hover {
+                background: var(--crm-daily-notes-cta-bg);
+                border-color: var(--crm-daily-notes-cta-bg);
+                color: var(--text-inverse);
             }
 
             .empty {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                flex-direction: column;
-                gap: var(--space-2);
                 color: var(--text-tertiary);
-                text-align: center;
                 padding: var(--space-6);
+                text-align: center;
             }
+
+            /* === MOBILE === */
 
             @media (max-width: 1023px) {
                 .board {
@@ -175,26 +381,80 @@ export class TasksPage extends PlatformElement {
             }
 
             @media (max-width: 767px) {
-                :host {
+                .page-toolbar {
+                    padding: var(--space-2) var(--space-3);
+                    max-width: 100%;
+                    box-sizing: border-box;
+                    overflow: hidden;
+                }
+
+                .section-label,
+                .title,
+                .cta-btn {
+                    display: none;
+                }
+
+                .top-row {
+                    margin-bottom: var(--space-2);
+                }
+
+                .search-box {
+                    min-height: 36px;
+                }
+
+                .toolbar-actions {
+                    display: none;
+                }
+
+                .status-tabs {
+                    gap: 6px;
+                    margin-bottom: var(--space-2);
+                }
+
+                .status-tab {
+                    flex: 1;
+                    justify-content: center;
+                    padding: 6px 8px;
+                    font-size: 12px;
+                }
+
+                .board {
+                    grid-template-columns: 1fr;
+                    padding: 0 var(--space-3);
+                    gap: 0;
+                }
+
+                .board .column {
+                    display: none;
+                }
+
+                .board .column.mobile-active {
+                    display: flex;
+                    background: transparent;
                     border: none;
                     border-radius: 0;
                 }
 
-                .toolbar {
-                    padding: var(--space-3);
+                .board .column.mobile-active .column-header {
+                    display: none;
                 }
 
-                .search {
-                    min-width: 0;
-                    width: 100%;
+                .board .column.mobile-active .column-body {
+                    padding: var(--space-1) 0;
                 }
 
-                .toolbar-actions {
-                    width: 100%;
+                .task-card {
+                    padding: 14px;
+                    border-radius: 12px;
                 }
 
-                .board {
-                    padding: var(--space-3);
+                .task-icon {
+                    width: 32px;
+                    height: 32px;
+                }
+
+                .task-name {
+                    font-size: 14px;
                 }
             }
         `,
@@ -205,10 +465,43 @@ export class TasksPage extends PlatformElement {
         this._tasks = [];
         this._loading = false;
         this._filter = '';
+        this._isMobile = false;
+        this._activeStatus = 'todo';
+        this._dragOverStatus = null;
+        this._draggingTaskId = null;
+
+        this._unsubscribe = CRMStore.subscribe((state) => {
+            this._isMobile = state.ui.isMobile;
+        });
+
+        this._onTasksCreate = this._onTasksCreate.bind(this);
+        this._onTasksRefresh = this._onTasksRefresh.bind(this);
+        this._suppressTaskClick = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener('tasks-create', this._onTasksCreate);
+        window.addEventListener('tasks-refresh', this._onTasksRefresh);
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._unsubscribe?.();
+        window.removeEventListener('tasks-create', this._onTasksCreate);
+        window.removeEventListener('tasks-refresh', this._onTasksRefresh);
     }
 
     async firstUpdated() {
         await this._loadTasks();
+    }
+
+    _onTasksCreate() {
+        this._createTask();
+    }
+
+    _onTasksRefresh() {
+        this._loadTasks();
     }
 
     async _loadTasks() {
@@ -239,6 +532,101 @@ export class TasksPage extends PlatformElement {
         await this._loadTasks();
     }
 
+    _scheduleClearSuppressTaskClick() {
+        this._suppressTaskClick = true;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                this._suppressTaskClick = false;
+            });
+        });
+    }
+
+    _onTaskDragStart(e, task) {
+        if (this._isMobile) {
+            return;
+        }
+        this._draggingTaskId = task.entity_id;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData(TASK_DND_MIME, task.entity_id);
+        e.dataTransfer.setData('text/plain', task.entity_id);
+        const card = e.currentTarget;
+        card.classList.add('dnd-dragging');
+    }
+
+    _onTaskDragEnd(e) {
+        const card = e.currentTarget;
+        card.classList.remove('dnd-dragging');
+        this._draggingTaskId = null;
+        this._dragOverStatus = null;
+        this._scheduleClearSuppressTaskClick();
+    }
+
+    _onColumnDragOver(e, targetStatus) {
+        if (this._isMobile || !this._draggingTaskId) {
+            return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (this._dragOverStatus !== targetStatus) {
+            this._dragOverStatus = targetStatus;
+        }
+    }
+
+    _onColumnDragEnter(e, targetStatus) {
+        if (this._isMobile || !this._draggingTaskId) {
+            return;
+        }
+        e.preventDefault();
+        this._dragOverStatus = targetStatus;
+    }
+
+    _onColumnDragLeave(e) {
+        if (this._isMobile || !this._draggingTaskId) {
+            return;
+        }
+        const col = e.currentTarget;
+        const related = e.relatedTarget;
+        if (related && col.contains(related)) {
+            return;
+        }
+        this._dragOverStatus = null;
+    }
+
+    async _onColumnDrop(e, targetStatus) {
+        if (this._isMobile) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        this._dragOverStatus = null;
+        const rawId = e.dataTransfer.getData(TASK_DND_MIME) || e.dataTransfer.getData('text/plain');
+        const taskId = typeof rawId === 'string' ? rawId.trim() : '';
+        if (!taskId) {
+            this._draggingTaskId = null;
+            return;
+        }
+        const task = this._tasks.find((t) => t.entity_id === taskId);
+        this._draggingTaskId = null;
+        if (!task) {
+            return;
+        }
+        const from = this._taskStatus(task);
+        if (from === targetStatus) {
+            return;
+        }
+        await this._moveTask(task, targetStatus);
+    }
+
+    _onTaskCardClick(task, e) {
+        if (this._suppressTaskClick) {
+            return;
+        }
+        if (e.target.closest('.task-move-btn')) {
+            return;
+        }
+        this._openTask(task.entity_id);
+    }
+
     async _createTask() {
         const crmApi = this.crmApi;
         const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
@@ -256,7 +644,7 @@ export class TasksPage extends PlatformElement {
 
     _taskStatus(task) {
         const status = task.attributes?.status;
-        if (TASK_STATUS.includes(status)) {
+        if (['todo', 'in_progress', 'done'].includes(status)) {
             return status;
         }
         return 'todo';
@@ -274,34 +662,22 @@ export class TasksPage extends PlatformElement {
         });
     }
 
-    _columnTitle(status) {
-        if (status === 'todo') {
-            return 'К выполнению';
-        }
-        if (status === 'in_progress') {
-            return 'В работе';
-        }
-        return 'Готово';
-    }
-
     _nextStatus(status) {
-        if (status === 'todo') {
-            return 'in_progress';
-        }
-        if (status === 'in_progress') {
-            return 'done';
-        }
+        if (status === 'todo') return 'in_progress';
+        if (status === 'in_progress') return 'done';
         return 'todo';
     }
 
     _nextStatusLabel(status) {
-        if (status === 'todo') {
-            return 'В работу';
-        }
-        if (status === 'in_progress') {
-            return 'Завершить';
-        }
-        return 'Вернуть в todo';
+        if (status === 'todo') return 'В работу';
+        if (status === 'in_progress') return 'Готово';
+        return 'Вернуть';
+    }
+
+    _nextStatusIcon(status) {
+        if (status === 'todo') return 'play';
+        if (status === 'in_progress') return 'check';
+        return 'refresh';
     }
 
     render() {
@@ -313,64 +689,91 @@ export class TasksPage extends PlatformElement {
         };
 
         return html`
-            <div class="toolbar">
-                <div class="title">
-                    <platform-icon name="checklist" size="18"></platform-icon>
-                    <span>Задачи</span>
+            <div class="page-toolbar">
+                <div class="section-label">Задачи</div>
+                <div class="top-row">
+                    <div class="title">Задачи</div>
+                    <label class="search-box">
+                        <platform-icon name="search" size="14"></platform-icon>
+                        <input
+                            class="search-input"
+                            type="text"
+                            placeholder="Поиск"
+                            .value=${this._filter}
+                            @input=${(e) => { this._filter = e.target.value; }}
+                        />
+                    </label>
+                    <div class="toolbar-actions">
+                        <button class="icon-btn-toolbar" type="button" @click=${this._loadTasks} title="Обновить">
+                            <platform-icon name="refresh" size="16"></platform-icon>
+                        </button>
+                        <button class="cta-btn" type="button" @click=${this._createTask}>Создать</button>
+                    </div>
                 </div>
-                <div class="toolbar-actions">
-                    <input
-                        class="search"
-                        type="text"
-                        placeholder="Поиск задач..."
-                        .value=${this._filter}
-                        @input=${(event) => {
-                            this._filter = event.target.value;
-                        }}
-                    />
-                    <button class="btn btn-secondary" type="button" @click=${this._loadTasks}>
-                        Обновить
-                    </button>
-                    <button class="btn btn-primary" type="button" @click=${this._createTask}>
-                        Создать задачу
-                    </button>
+                <div class="status-tabs">
+                    ${TASK_STATUSES.map((s) => html`
+                        <button
+                            class="status-tab ${this._activeStatus === s.id ? 'active' : ''}"
+                            type="button"
+                            @click=${() => { this._activeStatus = s.id; }}
+                        >
+                            ${s.label}
+                            <span class="status-count">${tasksByStatus[s.id].length}</span>
+                        </button>
+                    `)}
                 </div>
             </div>
 
             <div class="board">
-                ${TASK_STATUS.map((status) => html`
-                    <section class="column">
-                        <div class="column-header">
-                            <div class="column-title">${this._columnTitle(status)}</div>
-                            <div class="column-count">${tasksByStatus[status].length}</div>
-                        </div>
-                        <div class="column-body">
-                            ${this._loading ? html`
-                                <div class="empty">Загрузка задач...</div>
-                            ` : tasksByStatus[status].length === 0 ? html`
-                                <div class="empty">Нет задач</div>
-                            ` : tasksByStatus[status].map((task) => {
-                                const nextStatus = this._nextStatus(status);
-                                return html`
-                                    <article class="task-card">
-                                        <button class="task-name" type="button" @click=${() => this._openTask(task.entity_id)}>
-                                            ${task.name}
-                                        </button>
-                                        <div class="task-meta">
-                                            <span>${task.priority || 'medium'}</span>
-                                            <span>${task.due_date || 'без дедлайна'}</span>
+                ${TASK_STATUSES.map((s) => {
+                    const isActive = !this._isMobile || this._activeStatus === s.id;
+                    const statusTasks = tasksByStatus[s.id];
+                    return html`
+                        <section class="column ${isActive ? 'mobile-active' : ''}">
+                            <div class="column-header">
+                                <div class="column-title">${s.label}</div>
+                                <div class="column-count">${statusTasks.length}</div>
+                            </div>
+                            <div
+                                class="column-body ${this._dragOverStatus === s.id ? 'dnd-target' : ''}"
+                                @dragover=${(e) => this._onColumnDragOver(e, s.id)}
+                                @dragenter=${(e) => this._onColumnDragEnter(e, s.id)}
+                                @dragleave=${this._onColumnDragLeave}
+                                @drop=${(e) => this._onColumnDrop(e, s.id)}
+                            >
+                                ${this._loading ? html`
+                                    <div class="empty">Загрузка...</div>
+                                ` : statusTasks.length === 0 ? html`
+                                    <div class="empty">Нет задач</div>
+                                ` : statusTasks.map((task) => html`
+                                    <article
+                                        class="task-card"
+                                        ?draggable=${!this._isMobile}
+                                        @dragstart=${(e) => this._onTaskDragStart(e, task)}
+                                        @dragend=${this._onTaskDragEnd}
+                                        @click=${(e) => this._onTaskCardClick(task, e)}
+                                    >
+                                        <div class="task-header">
+                                            <div class="task-icon">
+                                                <platform-icon name="checklist" size="18"></platform-icon>
+                                            </div>
+                                            <button class="task-name" type="button" draggable="false" @click=${(e) => { e.stopPropagation(); this._onTaskCardClick(task, e); }}>
+                                                ${task.name}
+                                            </button>
                                         </div>
-                                        <div class="task-actions">
-                                            <button class="btn btn-secondary" type="button" @click=${() => this._moveTask(task, nextStatus)}>
-                                                ${this._nextStatusLabel(status)}
+                                        <div class="task-footer">
+                                            <span class="task-priority">${task.priority || 'medium'}${task.due_date ? ` \u00b7 ${task.due_date}` : ''}</span>
+                                            <button class="task-move-btn" type="button" draggable="false" @click=${(e) => { e.stopPropagation(); this._moveTask(task, this._nextStatus(s.id)); }}>
+                                                <platform-icon name="${this._nextStatusIcon(s.id)}" size="12"></platform-icon>
+                                                ${this._nextStatusLabel(s.id)}
                                             </button>
                                         </div>
                                     </article>
-                                `;
-                            })}
-                        </div>
-                    </section>
-                `)}
+                                `)}
+                            </div>
+                        </section>
+                    `;
+                })}
             </div>
         `;
     }

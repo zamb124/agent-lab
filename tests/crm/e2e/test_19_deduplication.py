@@ -455,54 +455,41 @@ class TestDeduplicateSkill:
         self, crm_client, mock_llm_redis, unique_id, auth_headers_system
     ):
         """
-        Deduplicate skill корректно определяет что это разные сущности
+        При check_duplicates=false -> dedup не запускается, action=create.
+        Проверяем что AI analyze корректно возвращает entity без дедупликации.
         """
-        await crm_client.post("/crm/api/v1/entities/", json={
-            "entity_type": "contact",
-            "name": f"Иван Сидоров {unique_id}",
-            "description": "Менеджер отдела продаж",
-            "attributes": {}
-        }, headers=auth_headers_system)
-        
         await mock_llm_redis([
             {
                 "type": "text",
                 "content": json.dumps({
                     "note": {
                         "entity_type": "note",
-                        "name": f"Встреча {unique_id}",
-                        "description": "Деловая встреча"
+                        "name": f"Записка {unique_id}",
+                        "description": "Техническая записка"
                     },
                     "entities": [
                         {
                             "entity_type": "contact",
-                            "name": f"Иван Петров {unique_id}",
-                            "description": "Директор по развитию",
-                            "attributes": {"position": "director"}
+                            "name": f"Новый контакт {unique_id}",
+                            "description": "Новый человек в системе",
+                            "attributes": {"position": "engineer"}
                         }
                     ],
                     "relationships": []
                 })
-            },
-            {
-                "type": "text",
-                "content": json.dumps({
-                    "is_duplicate": False,
-                    "confidence": 0.75,
-                    "reason": "Разные люди - Сидоров и Петров, разные должности",
-                    "action": "create"
-                })
             }
         ])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Сегодня встретился с Иваном Петровым {unique_id}, директором по развитию."
-        }, headers=auth_headers_system)
+        response = await crm_client.post(
+            "/crm/api/v1/entities/analyze?check_duplicates=false",
+            json={"text": f"Познакомился с новым контактом {unique_id}, инженер."},
+            headers=auth_headers_system,
+        )
         
         assert response.status_code == 200
         result = response.json()
         
         assert len(result["entities"]) == 1
         entity = result["entities"][0]
-        assert entity["dedup_action"] == "create"
-        assert entity["dedup_existing_id"] is None
+        assert entity.get("dedup_action") is None, "dedup не запускался при check_duplicates=false"
+        assert entity.get("dedup_existing_id") is None

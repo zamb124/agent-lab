@@ -404,15 +404,6 @@ export class CRMSidebar extends PlatformElement {
                         <span class="nav-label">Задачи</span>
                     </button>
                     <button
-                        class="nav-item ${this._currentView === 'calendar' ? 'active' : ''}"
-                        @click=${() => this._navigate('calendar')}
-                    >
-                        <div class="nav-icon-wrapper calendar">
-                            <platform-icon name="calendar" size="18"></platform-icon>
-                        </div>
-                        <span class="nav-label">Календарь</span>
-                    </button>
-                    <button
                         class="nav-item ${['settings', 'templates', 'spaces'].includes(this._currentView) ? 'active' : ''}"
                         @click=${() => this._navigate('settings')}
                     >

@@ -531,7 +531,7 @@ export class CRMAPIService extends BaseService {
         }
         const formData = new FormData();
         formData.append('file', file);
-        return this.postFormData(`/entities/${entityId}/attachments`, formData);
+        return this.post(`/entities/${entityId}/attachments`, formData);
     }
 
     async deleteAttachment(entityId, attachmentId) {
