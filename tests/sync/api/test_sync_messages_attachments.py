@@ -74,7 +74,7 @@ async def test_http_send_message_file_document_list_round_trip(
         headers=auth_headers_system,
     )
     assert lr.status_code == 200
-    msgs = lr.json()
+    msgs = lr.json()["items"]
     assert len(msgs) == 1
     assert len(msgs[0]["contents"]) == 1
     c0 = msgs[0]["contents"][0]
@@ -140,7 +140,7 @@ async def test_http_send_message_file_image_with_text_plain(
         headers=auth_headers_system,
     )
     assert lr.status_code == 200
-    msgs = lr.json()
+    msgs = lr.json()["items"]
     assert len(msgs) == 1
     contents = msgs[0]["contents"]
     assert len(contents) == 2
@@ -214,7 +214,7 @@ async def test_http_send_message_two_file_attachments_one_message(
         headers=auth_headers_system,
     )
     assert lr.status_code == 200
-    msgs = lr.json()
+    msgs = lr.json()["items"]
     assert len(msgs) == 1
     contents = msgs[0]["contents"]
     assert len(contents) == 2

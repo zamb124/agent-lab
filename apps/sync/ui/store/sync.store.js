@@ -19,12 +19,22 @@ function _clearAllMessageDeleteTimers() {
 }
 
 const MESSAGE_DELETE_ANIM_MS = 580;
+const MESSAGES_PAGE_SIZE = 20;
+
+function _emptyPaginationState() {
+    return {
+        olderCursor: null,
+        hasMoreOlder: false,
+        loadingOlder: false,
+    };
+}
 
 function _emptyOverlayChannelState() {
     return {
         list: [],
         pending: {},
         loading: false,
+        pagination: _emptyPaginationState(),
     };
 }
 
@@ -62,6 +72,7 @@ const baseStore = new BaseStore('sync', {
         pending: {},
         loading: false,
     },
+    messagePaginationByChannel: {},
     callOverlayChat: {
         channels: {},
     },
@@ -229,6 +240,117 @@ export const SyncStore = {
         }));
     },
 
+    _getMessagePaginationState(source, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        return source.messagePaginationByChannel[norm] ?? _emptyPaginationState();
+    },
+
+    _setMessagePaginationState(channelId, pagination) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (!pagination || typeof pagination !== 'object') {
+            throw new Error('pagination обязателен.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => ({
+            messagePaginationByChannel: {
+                ...s.messagePaginationByChannel,
+                [norm]: {
+                    ...this._getMessagePaginationState(s, channelId),
+                    ...pagination,
+                },
+            },
+        }));
+    },
+
+    _applyMessagePage(channelId, payload) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('payload обязателен.');
+        }
+        if (!Array.isArray(payload.items)) {
+            throw new Error('payload.items должен быть массивом.');
+        }
+        baseStore.setState((s) => ({
+            messages: { ...s.messages, list: payload.items, loading: false, pending: {} },
+            messagePaginationByChannel: {
+                ...s.messagePaginationByChannel,
+                [normalizeSyncChannelId(channelId)]: {
+                    olderCursor: payload.next_cursor ?? null,
+                    hasMoreOlder: typeof payload.next_cursor === 'string' && payload.next_cursor !== '',
+                    loadingOlder: false,
+                },
+            },
+            ui: { ...s.ui, deletingMessageIds: [] },
+        }));
+    },
+
+    canLoadOlderMessages(channelId) {
+        const p = this._getMessagePaginationState(baseStore.state, channelId);
+        return p.hasMoreOlder && !p.loadingOlder;
+    },
+
+    getMessageHistoryState(channelId) {
+        const p = this._getMessagePaginationState(baseStore.state, channelId);
+        return {
+            olderCursor: p.olderCursor,
+            hasMoreOlder: p.hasMoreOlder,
+            loadingOlder: p.loadingOlder,
+        };
+    },
+
+    async loadOlderMessages(syncApi, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        const current = this._getMessagePaginationState(baseStore.state, channelId);
+        if (!current.hasMoreOlder) {
+            return [];
+        }
+        if (current.loadingOlder) {
+            return [];
+        }
+        if (typeof current.olderCursor !== 'string' || current.olderCursor === '') {
+            throw new Error('olderCursor обязателен для загрузки старой истории.');
+        }
+        this._setMessagePaginationState(channelId, { loadingOlder: true });
+        try {
+            const payload = await syncApi.getMessages(channelId, {
+                limit: MESSAGES_PAGE_SIZE,
+                before: current.olderCursor,
+            });
+            baseStore.setState((s) => {
+                const ids = new Set(s.messages.list.map((m) => m.id));
+                const older = payload.items.filter((m) => !ids.has(m.id));
+                return {
+                    messages: {
+                        ...s.messages,
+                        list: [...older, ...s.messages.list],
+                    },
+                    messagePaginationByChannel: {
+                        ...s.messagePaginationByChannel,
+                        [normalizeSyncChannelId(channelId)]: {
+                            ...this._getMessagePaginationState(s, channelId),
+                            olderCursor: payload.next_cursor ?? null,
+                            hasMoreOlder: typeof payload.next_cursor === 'string' && payload.next_cursor !== '',
+                            loadingOlder: false,
+                        },
+                    },
+                };
+            });
+            return payload.items;
+        } catch (e) {
+            this._setMessagePaginationState(channelId, { loadingOlder: false });
+            throw e;
+        }
+    },
+
     _getOverlayChannelState(source, channelId) {
         if (typeof channelId !== 'string' || channelId === '') {
             throw new Error('channelId обязателен.');
@@ -390,15 +512,98 @@ export const SyncStore = {
         return current.loading;
     },
 
+    getCallOverlayHistoryState(channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            return _emptyPaginationState();
+        }
+        const current = this._getOverlayChannelState(baseStore.state, channelId);
+        return {
+            olderCursor: current.pagination?.olderCursor ?? null,
+            hasMoreOlder: !!current.pagination?.hasMoreOlder,
+            loadingOlder: !!current.pagination?.loadingOlder,
+        };
+    },
+
+    async loadOlderCallOverlayMessages(syncApi, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        const history = this.getCallOverlayHistoryState(channelId);
+        if (!history.hasMoreOlder || history.loadingOlder) {
+            return [];
+        }
+        if (typeof history.olderCursor !== 'string' || history.olderCursor === '') {
+            throw new Error('olderCursor обязателен для загрузки истории оверлея.');
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => {
+            const channels = { ...s.callOverlayChat.channels };
+            const current = this._getOverlayChannelState(s, channelId);
+            channels[norm] = {
+                ...current,
+                pagination: { ...current.pagination, loadingOlder: true },
+            };
+            return { callOverlayChat: { ...s.callOverlayChat, channels } };
+        });
+        try {
+            const payload = await syncApi.getMessages(channelId, {
+                limit: MESSAGES_PAGE_SIZE,
+                before: history.olderCursor,
+            });
+            baseStore.setState((s) => {
+                const channels = { ...s.callOverlayChat.channels };
+                const current = this._getOverlayChannelState(s, channelId);
+                const ids = new Set(current.list.map((m) => m.id));
+                const older = payload.items.filter((m) => !ids.has(m.id));
+                channels[norm] = {
+                    ...current,
+                    list: [...older, ...current.list],
+                    pagination: {
+                        olderCursor: payload.next_cursor ?? null,
+                        hasMoreOlder: typeof payload.next_cursor === 'string' && payload.next_cursor !== '',
+                        loadingOlder: false,
+                    },
+                };
+                return { callOverlayChat: { ...s.callOverlayChat, channels } };
+            });
+            return payload.items;
+        } catch (e) {
+            baseStore.setState((s) => {
+                const channels = { ...s.callOverlayChat.channels };
+                const current = this._getOverlayChannelState(s, channelId);
+                channels[norm] = {
+                    ...current,
+                    pagination: { ...current.pagination, loadingOlder: false },
+                };
+                return { callOverlayChat: { ...s.callOverlayChat, channels } };
+            });
+            throw e;
+        }
+    },
+
     async loadCallOverlayMessages(syncApi, channelId) {
         if (typeof channelId !== 'string' || channelId === '') {
             throw new Error('channelId обязателен.');
         }
         this.setCallOverlayLoading(channelId, true);
         try {
-            const items = await syncApi.getMessages(channelId);
-            this.setCallOverlayMessages(channelId, items);
-            return items;
+            const payload = await syncApi.getMessages(channelId, { limit: MESSAGES_PAGE_SIZE });
+            this.setCallOverlayMessages(channelId, payload.items);
+            const norm = normalizeSyncChannelId(channelId);
+            baseStore.setState((s) => {
+                const channels = { ...s.callOverlayChat.channels };
+                const current = channels[norm] ?? _emptyOverlayChannelState();
+                channels[norm] = {
+                    ...current,
+                    pagination: {
+                        olderCursor: payload.next_cursor ?? null,
+                        hasMoreOlder: typeof payload.next_cursor === 'string' && payload.next_cursor !== '',
+                        loadingOlder: false,
+                    },
+                };
+                return { callOverlayChat: { ...s.callOverlayChat, channels } };
+            });
+            return payload.items;
         } catch (e) {
             this.setCallOverlayLoading(channelId, false);
             throw e;
@@ -1355,11 +1560,11 @@ export const SyncStore = {
 
     async loadMessages(syncApi, channelId) {
         baseStore.setState(s => ({ messages: { ...s.messages, loading: true } }));
-        const items = await syncApi.getMessages(channelId);
-        this.setMessages(items);
+        const payload = await syncApi.getMessages(channelId, { limit: MESSAGES_PAGE_SIZE });
+        this._applyMessagePage(channelId, payload);
         await syncApi.markChannelRead(channelId);
         this.patchChannelFields(channelId, { unread_count: 0, mention_unread_count: 0 });
-        return items;
+        return payload.items;
     },
 
     async selectChannelAndLoadMessages(syncApi, spaceId, channelId) {

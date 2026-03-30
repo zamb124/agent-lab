@@ -1925,6 +1925,36 @@ class CallOverlay extends PlatformElement {
         }
     }
 
+    async _loadOlderOverlayHistory(listEl) {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            return;
+        }
+        const history = SyncStore.getCallOverlayHistoryState(this.channelId);
+        if (!history.hasMoreOlder || history.loadingOlder) {
+            return;
+        }
+        const syncApi = this.services.get('syncApi');
+        if (!syncApi) {
+            throw new Error('syncApi сервис не найден.');
+        }
+        const prevHeight = listEl.scrollHeight;
+        const prevTop = listEl.scrollTop;
+        await SyncStore.loadOlderCallOverlayMessages(syncApi, this.channelId);
+        await this.updateComplete;
+        const nextHeight = listEl.scrollHeight;
+        const delta = nextHeight - prevHeight;
+        if (delta > 0) {
+            listEl.scrollTop = prevTop + delta;
+        }
+    }
+
+    _onOverlayChatScroll(e) {
+        const listEl = e.target;
+        if (listEl.scrollTop <= 60) {
+            void this._loadOlderOverlayHistory(listEl);
+        }
+    }
+
     _buildOverlayPendingMessage(commandId, text) {
         const senderId = this.currentUserId;
         if (typeof senderId !== 'string' || senderId === '') {
@@ -2016,6 +2046,7 @@ class CallOverlay extends PlatformElement {
         const canControlRecording = this._recordingStatus === 'recording'
             ? this._canStopRecording()
             : this._canTransferMeetingAdmin();
+        const overlayHistory = SyncStore.getCallOverlayHistoryState(this.channelId);
 
         return html`
             <div class="header">
@@ -2068,7 +2099,10 @@ class CallOverlay extends PlatformElement {
                             </svg>
                         </button>
                     </div>
-                    <div class="call-chat-list">
+                    <div class="call-chat-list" @scroll=${this._onOverlayChatScroll}>
+                        ${overlayHistory.loadingOlder
+                            ? html`<div class="call-chat-state">Подгружаем историю…</div>`
+                            : ''}
                         ${SyncStore.getCallOverlayLoading(this.channelId)
                             ? html`<div class="call-chat-state">Загрузка сообщений…</div>`
                             : this._overlayChatMessages().length === 0

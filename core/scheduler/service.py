@@ -74,10 +74,20 @@ class SchedulerService:
             return interval
         raise ValueError(f"unsupported interval type from redis schedule: {type(interval)}")
 
+    @staticmethod
+    def _build_task_labels(task: PlatformScheduledTask) -> dict[str, str]:
+        if not task.queue_name:
+            raise ValueError(f"queue_name is required for scheduled task: {task.task_name}")
+        return {"queue_name": task.queue_name}
+
     async def _create_schedule(self, task: PlatformScheduledTask) -> str:
         source = get_schedule_source(self._redis_url)
         await source.startup()
-        kicker = AsyncKicker(task_name=task.task_name, broker=self._broker, labels={})
+        kicker = AsyncKicker(
+            task_name=task.task_name,
+            broker=self._broker,
+            labels=self._build_task_labels(task),
+        )
 
         if task.schedule_type == PlatformScheduleType.CRON:
             if not task.cron:
@@ -241,7 +251,11 @@ class SchedulerService:
         task = await self.get(company_id, schedule_task_id)
         if task.status not in (ScheduledTaskStatus.PENDING, ScheduledTaskStatus.PAUSED):
             raise ValueError(f"cannot run-now task with status={self._status_value(task.status)}")
-        kicker = AsyncKicker(task_name=task.task_name, broker=self._broker, labels={})
+        kicker = AsyncKicker(
+            task_name=task.task_name,
+            broker=self._broker,
+            labels=self._build_task_labels(task),
+        )
         await kicker.kiq(**task.payload)
         next_run_at = task.next_run_at
         if task.schedule_type in (PlatformScheduleType.CRON, PlatformScheduleType.INTERVAL):

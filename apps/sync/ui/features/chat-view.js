@@ -768,12 +768,12 @@ export class ChatView extends PlatformElement {
         const i = this._chat.pinnedNavigateIndex % ids.length;
         const targetId = ids[i];
         SyncStore.setPinnedNavigateIndex((i + 1) % ids.length);
-        this.updateComplete.then(() => {
+        this.updateComplete.then(async () => {
             const ml = this._messageListEl();
             if (!ml) {
                 throw new Error('message-list не найден.');
             }
-            ml.scrollToMessageId(targetId);
+            await ml.scrollToMessageId(targetId);
             SyncStore.flashMessageHighlight(targetId);
         }).catch((err) => {
             const text = err instanceof Error ? err.message : String(err);

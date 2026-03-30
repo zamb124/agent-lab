@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import uuid
+from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from apps.sync.container import get_sync_container
 from apps.sync.db.models import SyncMessage
 from apps.sync.message_read_helpers import message_read_from_entity
-from apps.sync.models.common import PaginationRequest, UserBrief
+from apps.sync.models.common import PaginationRequest, PaginationResponse, UserBrief
 from apps.sync.models.messages import MessageContentModel, MessageCreate, MessageEdit, MessageRead
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
@@ -19,6 +22,35 @@ from core.context import get_context
 from core.models.identity_models import User
 
 router = APIRouter()
+MESSAGES_DEFAULT_LIMIT = 20
+
+
+def _encode_message_cursor(*, sent_at: datetime, message_id: str) -> str:
+    payload = {"sent_at": sent_at.isoformat(), "message_id": message_id}
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    return encoded.rstrip("=")
+
+
+def _decode_message_cursor(cursor: str) -> tuple[datetime, str]:
+    padded = cursor + ("=" * ((4 - len(cursor) % 4) % 4))
+    try:
+        raw = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+        payload = json.loads(raw)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail="Некорректный формат cursor.") from error
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Некорректный формат cursor payload.")
+    sent_at_raw = payload.get("sent_at")
+    message_id = payload.get("message_id")
+    if not isinstance(sent_at_raw, str) or sent_at_raw == "":
+        raise HTTPException(status_code=400, detail="cursor.sent_at обязателен.")
+    if not isinstance(message_id, str) or message_id == "":
+        raise HTTPException(status_code=400, detail="cursor.message_id обязателен.")
+    try:
+        sent_at = datetime.fromisoformat(sent_at_raw)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail="cursor.sent_at должен быть ISO datetime.") from error
+    return sent_at, message_id
 
 
 class MessageForwardBody(BaseModel):
@@ -60,24 +92,67 @@ async def _message_read_from_entity(
 @router.get("/{channel_id}/messages")
 async def list_messages(
     channel_id: str,
+    request: Request,
     pagination: PaginationRequest = Depends(),
-) -> list[MessageRead]:
+) -> PaginationResponse[MessageRead]:
     """Сообщения канала: полная модель с отправителем и контентом (как в MessageRead / WS)."""
     context = get_context()
     container = get_sync_container()
-    rows = await container.message_repository.list_by_channel(
-        channel_id,
-        limit=pagination.limit,
+
+    if pagination.before is not None and pagination.after is not None:
+        raise HTTPException(status_code=400, detail="Нельзя одновременно передавать before и after.")
+
+    limit = pagination.limit
+    if "limit" not in request.query_params:
+        limit = MESSAGES_DEFAULT_LIMIT
+
+    before_sent_at: datetime | None = None
+    before_message_id: str | None = None
+    if pagination.before is not None:
+        before_sent_at, before_message_id = _decode_message_cursor(pagination.before)
+
+    after_sent_at: datetime | None = None
+    after_message_id: str | None = None
+    if pagination.after is not None:
+        after_sent_at, after_message_id = _decode_message_cursor(pagination.after)
+
+    window = await container.message_repository.list_by_channel_cursor(
+        channel_id=channel_id,
+        limit=limit,
+        before_sent_at=before_sent_at,
+        before_message_id=before_message_id,
+        after_sent_at=after_sent_at,
+        after_message_id=after_message_id,
         company_id=context.active_company.company_id,
     )
+    rows = window.rows
     if not rows:
-        return []
+        return PaginationResponse[MessageRead](
+            items=[],
+            next_cursor=None,
+            prev_cursor=None,
+        )
 
     user_ids = list({m.sender_user_id for m in rows})
     users_by_id = await container.user_repository.get_many(user_ids)
 
     chronological = list(reversed(rows))
-    return [await _message_read_from_entity(container, m, users_by_id) for m in chronological]
+    items = [await _message_read_from_entity(container, m, users_by_id) for m in chronological]
+
+    oldest = chronological[0]
+    newest = chronological[-1]
+    next_cursor = None
+    if window.has_more_older:
+        next_cursor = _encode_message_cursor(sent_at=oldest.sent_at, message_id=oldest.message_id)
+    prev_cursor = None
+    if window.has_more_newer:
+        prev_cursor = _encode_message_cursor(sent_at=newest.sent_at, message_id=newest.message_id)
+
+    return PaginationResponse[MessageRead](
+        items=items,
+        next_cursor=next_cursor,
+        prev_cursor=prev_cursor,
+    )
 
 
 @router.post("/{channel_id}/messages", status_code=201)

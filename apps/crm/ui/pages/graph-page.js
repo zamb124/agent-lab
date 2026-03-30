@@ -12,6 +12,9 @@ const GRAPH_PRESETS = {
     readable: { charge: -120, linkWidth: 1.5, nodeRelSize: 6 },
     presentation: { charge: -180, linkWidth: 2.2, nodeRelSize: 7 },
 };
+const GRAPH_WORLD_RADIUS = 220;
+const MIN_CAMERA_DISTANCE = 760;
+const ADAPTIVE_LABEL_DISTANCE = 900;
 
 export class GraphPage extends PlatformElement {
     static properties = {
@@ -63,6 +66,11 @@ export class GraphPage extends PlatformElement {
         _namespaceTemplateIdInput: { state: true },
         _namespaceDescriptionInput: { state: true },
         _isFullscreen: { state: true },
+        _defaultOverviewActive: { state: true },
+        _showSidePanel: { state: true },
+        _canvasPathState: { state: true },
+        _canvasPathHint: { state: true },
+        _labelMode: { state: true },
     };
 
     static styles = [
@@ -169,7 +177,7 @@ export class GraphPage extends PlatformElement {
             .workspace {
                 flex: 1;
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) 420px;
+                grid-template-columns: minmax(0, 1fr) 320px;
                 min-height: 0;
                 gap: var(--space-3);
                 padding: var(--space-4);
@@ -185,6 +193,10 @@ export class GraphPage extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
+            }
+
+            .control-panel.hidden {
+                display: none;
             }
 
             .panel-header {
@@ -358,6 +370,18 @@ export class GraphPage extends PlatformElement {
                 font-size: var(--text-xs);
             }
 
+            .canvas-hint {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-1) var(--space-2);
+                border-radius: var(--radius-full);
+                background: var(--crm-surface-tint-strong);
+                border: 1px solid var(--crm-stroke);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+            }
+
             @media (max-width: 1199px) {
                 .workspace {
                     grid-template-columns: 1fr;
@@ -397,7 +421,7 @@ export class GraphPage extends PlatformElement {
         this._entities = [];
         this._relationships = [];
         this._selectedRootId = '';
-        this._maxDepth = 2;
+        this._maxDepth = 5;
         this._loading = false;
         this._graphNodes = [];
         this._graphEdges = [];
@@ -442,6 +466,11 @@ export class GraphPage extends PlatformElement {
         this._namespaceTemplateIdInput = '';
         this._namespaceDescriptionInput = '';
         this._isFullscreen = false;
+        this._defaultOverviewActive = true;
+        this._showSidePanel = false;
+        this._canvasPathState = 'idle';
+        this._canvasPathHint = 'Режим обзора';
+        this._labelMode = 'adaptive';
         this._graphInstance = null;
         this._onSearchQueryInput = this._onSearchQueryInput.bind(this);
         this._onModeChange = this._onModeChange.bind(this);
@@ -487,6 +516,13 @@ export class GraphPage extends PlatformElement {
         this._createNamespaceNative = this._createNamespaceNative.bind(this);
         this._loadNamespaceOverviewNative = this._loadNamespaceOverviewNative.bind(this);
         this._toggleFullscreen = this._toggleFullscreen.bind(this);
+        this._fitGraphToViewport = this._fitGraphToViewport.bind(this);
+        this._toggleSidePanel = this._toggleSidePanel.bind(this);
+        this._startCanvasPathPicking = this._startCanvasPathPicking.bind(this);
+        this._resetCanvasPathPicking = this._resetCanvasPathPicking.bind(this);
+        this._swapCanvasPathEndpoints = this._swapCanvasPathEndpoints.bind(this);
+        this._onCanvasNodeClick = this._onCanvasNodeClick.bind(this);
+        this._toggleLabelMode = this._toggleLabelMode.bind(this);
     }
 
     async firstUpdated() {
@@ -581,8 +617,13 @@ export class GraphPage extends PlatformElement {
             id: node.entity_id || node.id,
             name: node.name || node.label || node.entity_id || node.id,
             color: this._nodeColor(node),
-            size: node.level === 0 ? 9 : 6,
+            size: node.level === 0 ? 2.2 : 1.4,
         }));
+        if (nodes.length === 1) {
+            nodes[0].x = 0;
+            nodes[0].y = 0;
+            nodes[0].z = 0;
+        }
         const links = this._graphEdges.map((edge) => {
             const source = edge.source_id || edge.source_entity_id || edge.source;
             const target = edge.target_id || edge.target_entity_id || edge.target;
@@ -615,34 +656,153 @@ export class GraphPage extends PlatformElement {
             .backgroundColor('rgba(0,0,0,0)')
             .cooldownTicks(120)
             .warmupTicks(80)
-            .nodeLabel((node) => `${node.name} (${node.entity_type || 'entity'})`)
+            .showNavInfo(false)
+            .nodeLabel((node) => {
+                if (!this._shouldShowNodeLabel(node)) {
+                    return '';
+                }
+                return node.name || node.id || '';
+            })
             .nodeColor((node) => node.color)
             .nodeVal((node) => node.size)
-            .linkLabel((link) => `${link.relation_type} (${link.directed ? 'directed' : 'undirected'})`)
+            .linkLabel((link) => {
+                if (!this._shouldShowLinkLabel(link)) {
+                    return '';
+                }
+                return link.relation_type || link.id || '';
+            })
             .linkColor((link) => (link.highlighted ? '#ff6b6b' : '#9ba3bf'))
             .linkWidth((link) => {
                 if (link.highlighted) {
                     return 4;
                 }
-                return GRAPH_PRESETS[this._graphPreset].linkWidth;
+                if (this._isLinkNearSelectedNode(link)) {
+                    return 2.8;
+                }
+                return GRAPH_PRESETS[this._graphPreset].linkWidth + 0.6;
+            })
+            .linkOpacity((link) => {
+                if (link.highlighted || link.id === this._selectedEdgeId) {
+                    return 0.95;
+                }
+                if (this._isLinkNearSelectedNode(link)) {
+                    return 0.65;
+                }
+                return 0.3;
             })
             .linkDirectionalArrowLength((link) => (link.directed ? 3 : 0))
             .linkDirectionalArrowRelPos(1)
             .linkDirectionalParticles((link) => (link.highlighted ? 4 : 0))
             .linkDirectionalParticleWidth(3)
-            .onNodeClick((node) => {
-                this._selectedNodeId = node.id;
-                this._attachmentEntityId = node.id;
-                this._onOpenEntity(node.id);
-            })
-            .onNodeHover((node) => {
-                this._selectedNodeId = node?.id || '';
-            })
+            .enableNodeDrag(true)
+            .onNodeClick((node, event) => this._onCanvasNodeClick(node, event))
+            .onNodeHover(() => {})
             .onLinkClick((link) => {
                 this._selectedEdgeId = link.id;
+            })
+            .onNodeDragEnd((node) => {
+                node.fx = node.x;
+                node.fy = node.y;
+                node.fz = node.z;
+            })
+            .onEngineStop(() => {
+                if (!this._graphInstance) {
+                    return;
+                }
+                const currentGraphData = this._graphInstance.graphData();
+                if (!currentGraphData || !Array.isArray(currentGraphData.nodes)) {
+                    return;
+                }
+                if (currentGraphData.nodes.length <= 1) {
+                    this._applySingleNodeCamera();
+                    return;
+                }
+                this._fitGraphToViewport(300, 70);
             });
         this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this._graphPreset].charge);
+        this._graphInstance.d3VelocityDecay(0.5);
+        this._graphInstance.d3Force('box', this._createBoundingForce(GRAPH_WORLD_RADIUS));
         this._graphInstance.nodeRelSize(GRAPH_PRESETS[this._graphPreset].nodeRelSize);
+    }
+
+    _createBoundingForce(worldRadius) {
+        let nodes = [];
+        const force = (alpha) => {
+            const restoringStrength = 0.12 * alpha;
+            nodes.forEach((node) => {
+                const hasCoordinates = [node.x, node.y, node.z].every((value) => typeof value === 'number' && Number.isFinite(value));
+                if (!hasCoordinates) {
+                    return;
+                }
+                const distance = Math.sqrt((node.x ** 2) + (node.y ** 2) + (node.z ** 2));
+                if (distance <= worldRadius || distance === 0) {
+                    return;
+                }
+                const overshoot = distance - worldRadius;
+                const nx = node.x / distance;
+                const ny = node.y / distance;
+                const nz = node.z / distance;
+                const pull = overshoot * restoringStrength;
+                if (typeof node.vx !== 'number' || !Number.isFinite(node.vx)) {
+                    node.vx = 0;
+                }
+                if (typeof node.vy !== 'number' || !Number.isFinite(node.vy)) {
+                    node.vy = 0;
+                }
+                if (typeof node.vz !== 'number' || !Number.isFinite(node.vz)) {
+                    node.vz = 0;
+                }
+                node.vx -= nx * pull;
+                node.vy -= ny * pull;
+                node.vz -= nz * pull;
+            });
+        };
+        force.initialize = (simNodes) => {
+            nodes = simNodes;
+        };
+        return force;
+    }
+
+    _fitGraphToViewport(durationMs = 260, paddingPx = 90) {
+        if (!this._graphInstance) {
+            return;
+        }
+        this._graphInstance.zoomToFit(durationMs, paddingPx);
+        requestAnimationFrame(() => {
+            this._enforceMinCameraDistance(MIN_CAMERA_DISTANCE);
+        });
+    }
+
+    _enforceMinCameraDistance(minDistance) {
+        if (!this._graphInstance) {
+            return;
+        }
+        const position = this._graphInstance.cameraPosition();
+        if (!position) {
+            return;
+        }
+        const distance = Math.sqrt((position.x ** 2) + (position.y ** 2) + (position.z ** 2));
+        if (!Number.isFinite(distance) || distance >= minDistance) {
+            return;
+        }
+        if (distance === 0) {
+            this._graphInstance.cameraPosition({ x: 0, y: 0, z: minDistance }, { x: 0, y: 0, z: 0 }, 180);
+            return;
+        }
+        const scale = minDistance / distance;
+        this._graphInstance.cameraPosition(
+            { x: position.x * scale, y: position.y * scale, z: position.z * scale },
+            { x: 0, y: 0, z: 0 },
+            180,
+        );
+    }
+
+    _applySingleNodeCamera() {
+        if (!this._graphInstance) {
+            return;
+        }
+        this._graphInstance.centerAt(0, 0, 0);
+        this._graphInstance.cameraPosition({ x: 0, y: 0, z: MIN_CAMERA_DISTANCE }, { x: 0, y: 0, z: 0 }, 220);
     }
 
     _syncGraph() {
@@ -650,9 +810,33 @@ export class GraphPage extends PlatformElement {
             return;
         }
         const graphData = this._buildGraphDataForScene();
+        if (graphData.nodes.length === 1) {
+            const singleNode = graphData.nodes[0];
+            singleNode.x = 0;
+            singleNode.y = 0;
+            singleNode.z = 0;
+            singleNode.fx = 0;
+            singleNode.fy = 0;
+            singleNode.fz = 0;
+        }
         this._graphInstance.graphData(graphData);
         this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this._graphPreset].charge);
         this._graphInstance.nodeRelSize(GRAPH_PRESETS[this._graphPreset].nodeRelSize);
+        if (graphData.nodes.length === 0) {
+            return;
+        }
+        if (graphData.nodes.length === 1) {
+            if (this._graphInstance) {
+                this._applySingleNodeCamera();
+            }
+            return;
+        }
+        requestAnimationFrame(() => {
+            if (!this._graphInstance) {
+                return;
+            }
+            this._fitGraphToViewport(260, 90);
+        });
     }
 
     _assertOfflineVendorSetup() {
@@ -681,6 +865,145 @@ export class GraphPage extends PlatformElement {
 
     _toggleFullscreen() {
         this._isFullscreen = !this._isFullscreen;
+    }
+
+    _toggleSidePanel() {
+        this._showSidePanel = !this._showSidePanel;
+    }
+
+    _toggleLabelMode() {
+        this._labelMode = this._labelMode === 'adaptive' ? 'minimal' : 'adaptive';
+        if (!this._graphInstance) {
+            return;
+        }
+        this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
+        this._graphInstance.linkThreeObject(this._graphInstance.linkThreeObject());
+    }
+
+    _startCanvasPathPicking() {
+        this._canvasPathState = 'pick_source';
+        this._canvasPathHint = 'Кликни на первую сущность (source)';
+        this._viewMode = 'path';
+        this._shortestPathEdges = [];
+        this._pathSourceId = '';
+        this._pathTargetId = '';
+        this._showSidePanel = false;
+    }
+
+    async _resetCanvasPathPicking() {
+        this._canvasPathState = 'idle';
+        this._canvasPathHint = 'Режим обзора';
+        this._pathSourceId = '';
+        this._pathTargetId = '';
+        this._shortestPathEdges = [];
+        await this._rebuildGraphByMode();
+    }
+
+    async _swapCanvasPathEndpoints() {
+        if (!this._pathSourceId || !this._pathTargetId) {
+            throw new Error('Нужно выбрать source и target');
+        }
+        const sourceId = this._pathSourceId;
+        this._pathSourceId = this._pathTargetId;
+        this._pathTargetId = sourceId;
+        await this._buildPathGraph();
+    }
+
+    _shouldShowNodeLabel(node) {
+        if (this._labelMode !== 'adaptive') {
+            return false;
+        }
+        const isImportant = node.id === this._selectedNodeId
+            || node.id === this._pathSourceId
+            || node.id === this._pathTargetId;
+        if (isImportant) {
+            return true;
+        }
+        if (this._graphNodes.length <= 80) {
+            return true;
+        }
+        const distance = this._getCameraDistance();
+        if (distance < ADAPTIVE_LABEL_DISTANCE && this._graphNodes.length <= 220) {
+            return true;
+        }
+        return false;
+    }
+
+    _shouldShowLinkLabel(link) {
+        if (this._labelMode !== 'adaptive') {
+            return false;
+        }
+        if (link.id === this._selectedEdgeId || link.highlighted) {
+            return true;
+        }
+        if (this._graphEdges.length <= 70 && this._getCameraDistance() < ADAPTIVE_LABEL_DISTANCE * 0.9) {
+            return true;
+        }
+        return false;
+    }
+
+    _getLinkEndpointId(endpoint) {
+        if (typeof endpoint === 'string') {
+            return endpoint;
+        }
+        if (endpoint && typeof endpoint === 'object') {
+            return endpoint.id || endpoint.entity_id || '';
+        }
+        return '';
+    }
+
+    _isLinkNearSelectedNode(link) {
+        if (!this._selectedNodeId) {
+            return false;
+        }
+        const sourceId = this._getLinkEndpointId(link.source);
+        const targetId = this._getLinkEndpointId(link.target);
+        return sourceId === this._selectedNodeId || targetId === this._selectedNodeId;
+    }
+
+    _getCameraDistance() {
+        if (!this._graphInstance) {
+            return MIN_CAMERA_DISTANCE;
+        }
+        const position = this._graphInstance.cameraPosition();
+        if (!position) {
+            return MIN_CAMERA_DISTANCE;
+        }
+        const distance = Math.sqrt((position.x ** 2) + (position.y ** 2) + (position.z ** 2));
+        if (!Number.isFinite(distance) || distance <= 0) {
+            return MIN_CAMERA_DISTANCE;
+        }
+        return distance;
+    }
+
+    _onCanvasNodeClick(node, event) {
+        this._selectedNodeId = node.id;
+        this._attachmentEntityId = node.id;
+        if (event?.altKey) {
+            this._onOpenEntity(node.id);
+            return;
+        }
+        if (this._canvasPathState === 'pick_source') {
+            this._pathSourceId = node.id;
+            this._pathTargetId = '';
+            this._canvasPathState = 'pick_target';
+            this._canvasPathHint = 'Кликни на вторую сущность (target)';
+            return;
+        }
+        if (this._canvasPathState === 'pick_target') {
+            if (node.id === this._pathSourceId) {
+                throw new Error('Source и target должны быть разными');
+            }
+            this._pathTargetId = node.id;
+            this._canvasPathState = 'built';
+            this._canvasPathHint = 'Маршрут построен';
+            this._buildPathGraph().catch((error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.error(`Ошибка построения маршрута: ${message}`);
+            });
+            return;
+        }
+        this._canvasPathHint = 'Режим обзора';
     }
 
     _getNativeOperationIds() {
@@ -960,6 +1283,7 @@ export class GraphPage extends PlatformElement {
         if (!this._selectedNodeId) {
             throw new Error('Select node before expand action');
         }
+        this._defaultOverviewActive = false;
         this._selectedRootId = this._selectedNodeId;
         this._maxDepth = Math.min(this._maxDepth + 1, 5);
         await this._rebuildGraphByMode();
@@ -1020,6 +1344,10 @@ export class GraphPage extends PlatformElement {
         if (!VIEW_MODES.includes(this._viewMode)) {
             throw new Error(`Unsupported graph mode: ${this._viewMode}`);
         }
+        if (this._viewMode === 'influence' && this._defaultOverviewActive) {
+            await this._buildLatestEntitiesInfluenceGraph();
+            return;
+        }
         if (!this._selectedRootId) {
             this._graphNodes = [];
             this._graphEdges = [];
@@ -1034,6 +1362,54 @@ export class GraphPage extends PlatformElement {
             return;
         }
         await this._buildPathGraph();
+    }
+
+    async _buildLatestEntitiesInfluenceGraph() {
+        const seedEntities = this._entities.slice(0, 20);
+        if (seedEntities.length === 0) {
+            this._graphNodes = [];
+            this._graphEdges = [];
+            this._shortestPathEdges = [];
+            return;
+        }
+        const relationshipType = this._getRelationshipFilter();
+        const params = { max_depth: this._maxDepth };
+        if (relationshipType) {
+            params.relationship_types = relationshipType;
+        }
+        const responses = await Promise.all(
+            seedEntities.map((entity) => this.crmApi.getInfluenceGraph(entity.entity_id, params)),
+        );
+        const nodeMap = new Map();
+        const edgeMap = new Map();
+        for (const response of responses) {
+            if (!response || typeof response !== 'object') {
+                throw new Error('Influence graph response must be object');
+            }
+            if (!Array.isArray(response.nodes) || !Array.isArray(response.edges)) {
+                throw new Error('Influence graph response must contain nodes and edges arrays');
+            }
+            response.nodes.forEach((node) => {
+                const nodeId = node.entity_id || node.id;
+                if (!nodeId) {
+                    throw new Error('Graph node must have entity_id or id');
+                }
+                if (!nodeMap.has(nodeId)) {
+                    nodeMap.set(nodeId, node);
+                    return;
+                }
+                const existingNode = nodeMap.get(nodeId);
+                if (existingNode.access === false && node.access !== false) {
+                    nodeMap.set(nodeId, node);
+                }
+            });
+            response.edges.forEach((edge) => {
+                edgeMap.set(this._getEdgeId(edge), edge);
+            });
+        }
+        this._shortestPathEdges = [];
+        this._graphNodes = Array.from(nodeMap.values());
+        this._graphEdges = Array.from(edgeMap.values());
     }
 
     _getRelationshipFilter() {
@@ -1117,6 +1493,7 @@ export class GraphPage extends PlatformElement {
     }
 
     async _buildPathGraph() {
+        this._defaultOverviewActive = false;
         if (!this._pathSourceId || !this._pathTargetId) {
             throw new Error('Both source and target entities are required');
         }
@@ -1167,6 +1544,8 @@ export class GraphPage extends PlatformElement {
         });
         this._graphNodes = nodes;
         this._graphEdges = response.edges;
+        this._canvasPathState = 'built';
+        this._canvasPathHint = 'Маршрут построен';
     }
 
     _onOpenEntity(entityId) {
@@ -1180,10 +1559,18 @@ export class GraphPage extends PlatformElement {
 
     _onModeChange(event) {
         this._viewMode = event.target.value;
+        if (this._viewMode !== 'influence') {
+            this._defaultOverviewActive = false;
+        }
+        if (this._viewMode !== 'path') {
+            this._canvasPathState = 'idle';
+            this._canvasPathHint = 'Режим обзора';
+        }
         this._rebuildGraphByMode();
     }
 
     _onRootChange(event) {
+        this._defaultOverviewActive = false;
         this._selectedRootId = event.target.value;
         this._pathSourceId = event.target.value;
         this._rebuildGraphByMode();
@@ -1230,6 +1617,7 @@ export class GraphPage extends PlatformElement {
         if (!Array.isArray(entities) || entities.length === 0) {
             throw new Error('Search returned no entities');
         }
+        this._defaultOverviewActive = false;
         this._selectedRootId = entities[0].entity_id;
         this._pathSourceId = entities[0].entity_id;
         await this._rebuildGraphByMode();
@@ -1394,12 +1782,6 @@ export class GraphPage extends PlatformElement {
                     </select>
                 </div>
                 <div class="toolbar-control">
-                    <span class="toolbar-label">Корень</span>
-                    <select class="toolbar-select" .value=${this._selectedRootId} @change=${this._onRootChange}>
-                        ${this._entities.map((entity) => html`<option value=${entity.entity_id}>${entity.name}</option>`)}
-                    </select>
-                </div>
-                <div class="toolbar-control">
                     <span class="toolbar-label">Глубина</span>
                     <select class="toolbar-select" .value=${String(this._maxDepth)} @change=${this._onDepthChange}>
                         <option value="1">1</option>
@@ -1426,6 +1808,12 @@ export class GraphPage extends PlatformElement {
                 />
                 <button class="btn btn-secondary" type="button" @click=${this._onSearchEntity}>Найти</button>
                 <button class="btn btn-secondary" type="button" @click=${this._loadGraphData}>Обновить</button>
+                <button class="btn btn-secondary" type="button" @click=${this._toggleLabelMode}>
+                    ${this._labelMode === 'adaptive' ? 'Лейблы: adaptive' : 'Лейблы: minimal'}
+                </button>
+                <button class="btn btn-secondary" type="button" @click=${this._toggleSidePanel}>
+                    ${this._showSidePanel ? 'Скрыть панель' : 'Показать панель'}
+                </button>
                 <button class="btn btn-secondary" type="button" @click=${this._toggleFullscreen}>
                     ${this._isFullscreen ? 'Выйти из fullscreen' : 'Fullscreen графа'}
                 </button>
@@ -1457,6 +1845,13 @@ export class GraphPage extends PlatformElement {
                         <div class="row">
                             <span class="node-pill">node: ${this._selectedNodeId || '—'}</span>
                             <span class="node-pill">edge: ${this._selectedEdgeId || '—'}</span>
+                            <span class="canvas-hint">${this._canvasPathHint}</span>
+                            <button class="btn btn-secondary" type="button" @click=${this._startCanvasPathPicking}>Построить маршрут</button>
+                            <button class="btn btn-secondary" type="button" @click=${this._swapCanvasPathEndpoints}>Поменять точки</button>
+                            <button class="btn btn-secondary" type="button" @click=${this._resetCanvasPathPicking}>Сбросить маршрут</button>
+                            <button class="btn btn-secondary" type="button" @click=${() => this._fitGraphToViewport(250, 80)}>
+                                Вписать граф
+                            </button>
                             <button class="btn btn-secondary" type="button" @click=${this._toggleFullscreen}>
                                 ${this._isFullscreen ? 'Обычный вид' : 'Fullscreen'}
                             </button>
@@ -1466,14 +1861,14 @@ export class GraphPage extends PlatformElement {
                     <div class="legend">${this._renderLegend()}</div>
                 </section>
 
-                <section class="control-panel">
+                <section class="control-panel ${this._showSidePanel ? '' : 'hidden'}">
                     <div class="panel-header">
                         <div class="panel-title">Панель действий</div>
                     </div>
                     <div class="control-body">
                         <div class="section">
                             <div class="section-title">Быстрая навигация по графу</div>
-                            <div class="small">1) Выбери режим, 2) отфильтруй связи, 3) используй действия ниже.</div>
+                            <div class="small">Работаем с канвой: кликни по узлам для выбора и маршрута.</div>
                             <div class="section-grid">
                                 <select class="toolbar-select" .value=${this._relationshipTypeFilter} @change=${this._onRelationshipTypeFilterChange}>
                                     <option value="">Все типы связей</option>
@@ -1486,18 +1881,8 @@ export class GraphPage extends PlatformElement {
                                 </select>
                             </div>
                             <div class="section-grid">
-                                <select class="toolbar-select" .value=${this._pathSourceId} @change=${this._onPathSourceChange}>
-                                    ${this._entities.map((entity) => html`<option value=${entity.entity_id}>from: ${entity.name}</option>`)}
-                                </select>
-                                <select class="toolbar-select" .value=${this._pathTargetId} @change=${this._onPathTargetChange}>
-                                    ${this._entities.map((entity) => html`<option value=${entity.entity_id}>to: ${entity.name}</option>`)}
-                                </select>
-                            </div>
-                            <div class="section-grid">
                                 <input class="toolbar-input" type="number" min="1" max="20" .value=${String(this._pathMaxDepth)} @input=${this._onPathDepthChange} />
-                                <button class="btn btn-secondary" type="button" ?disabled=${this._findingPath} @click=${this._buildPathGraph}>
-                                    ${this._findingPath ? 'Поиск...' : 'Построить path'}
-                                </button>
+                                <div class="small">Маршрут: нажми \"Построить маршрут\" в хедере канвы и кликни 2 узла</div>
                             </div>
                             <div class="row">
                                 <button class="btn btn-secondary" type="button" @click=${this._focusSelectedNode}>Фокус на выбранном узле</button>

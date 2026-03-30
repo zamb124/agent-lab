@@ -161,7 +161,7 @@ async def test_http_list_threads_and_messages(
         headers=auth_headers_system,
     )
     assert mr.status_code == 200
-    assert mr.json() == []
+    assert mr.json()["items"] == []
 
 
 @pytest.mark.asyncio
@@ -212,8 +212,8 @@ async def test_http_send_message_and_mark_read_flow(
         headers=auth_headers_system,
     )
     assert lr.status_code == 200
-    assert len(lr.json()) == 1
-    assert lr.json()[0]["id"] == mid
+    assert len(lr.json()["items"]) == 1
+    assert lr.json()["items"][0]["id"] == mid
 
 
 @pytest.mark.asyncio
@@ -243,3 +243,103 @@ async def test_http_git_upsert(
     )
     assert gr.status_code == 200
     assert gr.json()["external_id"] == "ext_http"
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(20)
+async def test_http_messages_default_limit_and_cursor_pagination(
+    sync_client,
+    auth_headers_system,
+    sync_db_clean: None,
+) -> None:
+    pr = await sync_client.post(
+        "/sync/api/v1/spaces/",
+        headers=auth_headers_system,
+        json={"name": "Paginated", "description": None},
+    )
+    assert pr.status_code == 201
+    space_id = pr.json()["id"]
+    cr = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=auth_headers_system,
+        json={
+            "space_id": space_id,
+            "type": "topic",
+            "name": "paginated-channel",
+            "is_private": False,
+        },
+    )
+    assert cr.status_code == 201
+    channel_id = cr.json()["id"]
+
+    for idx in range(25):
+        sr = await sync_client.post(
+            f"/sync/api/v1/channels/{channel_id}/messages",
+            headers=auth_headers_system,
+            json={
+                "thread_id": None,
+                "parent_message_id": None,
+                "contents": [
+                    {"type": "text/plain", "data": {"body": f"m{idx:02d}"}, "order": 0},
+                ],
+            },
+        )
+        assert sr.status_code == 201
+
+    first_page = await sync_client.get(
+        f"/sync/api/v1/channels/{channel_id}/messages",
+        headers=auth_headers_system,
+    )
+    assert first_page.status_code == 200
+    payload = first_page.json()
+    assert isinstance(payload["items"], list)
+    assert len(payload["items"]) == 20
+    assert isinstance(payload["next_cursor"], str)
+    first_body = payload["items"][0]["contents"][0]["data"]["body"]
+    last_body = payload["items"][-1]["contents"][0]["data"]["body"]
+    assert first_body == "m05"
+    assert last_body == "m24"
+
+    second_page = await sync_client.get(
+        f"/sync/api/v1/channels/{channel_id}/messages?before={payload['next_cursor']}&limit=20",
+        headers=auth_headers_system,
+    )
+    assert second_page.status_code == 200
+    payload2 = second_page.json()
+    assert len(payload2["items"]) == 5
+    assert payload2["next_cursor"] is None
+    assert payload2["items"][0]["contents"][0]["data"]["body"] == "m00"
+    assert payload2["items"][-1]["contents"][0]["data"]["body"] == "m04"
+
+
+@pytest.mark.asyncio
+async def test_http_messages_invalid_cursor_returns_400(
+    sync_client,
+    auth_headers_system,
+    sync_db_clean: None,
+) -> None:
+    pr = await sync_client.post(
+        "/sync/api/v1/spaces/",
+        headers=auth_headers_system,
+        json={"name": "BadCursor", "description": None},
+    )
+    assert pr.status_code == 201
+    space_id = pr.json()["id"]
+    cr = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=auth_headers_system,
+        json={
+            "space_id": space_id,
+            "type": "topic",
+            "name": "bad-cursor-channel",
+            "is_private": False,
+        },
+    )
+    assert cr.status_code == 201
+    channel_id = cr.json()["id"]
+
+    response = await sync_client.get(
+        f"/sync/api/v1/channels/{channel_id}/messages?before=not_base64",
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 400

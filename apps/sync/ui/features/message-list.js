@@ -105,6 +105,8 @@ export class MessageList extends PlatformElement {
         _peerReadAtByChannel: { state: true },
         _selectedChannelType: { state: true },
         _skeletonPlan: { state: true },
+        _hasMoreOlder: { state: true },
+        _loadingOlder: { state: true },
     };
 
     static styles = [
@@ -255,6 +257,9 @@ export class MessageList extends PlatformElement {
         this._selectedChannelType = null;
         this._skeletonPlan = [];
         this._wasLoading = false;
+        this._hasMoreOlder = false;
+        this._loadingOlder = false;
+        this._lastScrollTop = 0;
     }
 
     _regenerateSkeletonPlan() {
@@ -298,6 +303,14 @@ export class MessageList extends PlatformElement {
                 ? state.ui.deletingMessageIds
                 : [];
             this._peerReadAtByChannel = state.peerReadAtByChannel ?? {};
+            if (this.channelId) {
+                const history = SyncStore.getMessageHistoryState(this.channelId);
+                this._hasMoreOlder = history.hasMoreOlder;
+                this._loadingOlder = history.loadingOlder;
+            } else {
+                this._hasMoreOlder = false;
+                this._loadingOlder = false;
+            }
             this._syncCurrentUserId();
             this._scrollIfSticky();
         });
@@ -324,13 +337,49 @@ export class MessageList extends PlatformElement {
         if (changed.has('channelId') && this._loading) {
             this._regenerateSkeletonPlan();
         }
+        if (changed.has('channelId')) {
+            // При переключении канала всегда стартуем из нижней точки ленты.
+            this._stickToBottom = true;
+            this._lastScrollTop = 0;
+        }
         this._scrollIfSticky();
     }
 
     _onScroll(e) {
         const el = e.target;
+        const scrolledUp = el.scrollTop < this._lastScrollTop;
+        this._lastScrollTop = el.scrollTop;
         const atBottom = el.scrollHeight - (el.scrollTop + el.clientHeight) <= 40;
-        this._stickToBottom = atBottom;
+        if (scrolledUp) {
+            // Пользователь явно пошёл в историю: отключаем автоприлипание к низу.
+            this._stickToBottom = false;
+        } else {
+            this._stickToBottom = atBottom;
+        }
+        if (scrolledUp && el.scrollTop <= 60) {
+            void this._loadOlderOnTop(el);
+        }
+    }
+
+    async _loadOlderOnTop(listEl) {
+        if (!this.channelId || this._loading || !this._hasMoreOlder || this._loadingOlder) {
+            return;
+        }
+        const syncApi = this.services.get('syncApi');
+        if (!syncApi) {
+            throw new Error('syncApi сервис не найден.');
+        }
+        const prevHeight = listEl.scrollHeight;
+        const prevTop = listEl.scrollTop;
+        this._stickToBottom = false;
+        await SyncStore.loadOlderMessages(syncApi, this.channelId);
+        await this.updateComplete;
+        const nextHeight = listEl.scrollHeight;
+        const delta = nextHeight - prevHeight;
+        if (delta > 0) {
+            listEl.scrollTop = prevTop + delta;
+            this._lastScrollTop = listEl.scrollTop;
+        }
     }
 
     _scrollIfSticky() {
@@ -339,6 +388,7 @@ export class MessageList extends PlatformElement {
         if (el) {
             requestAnimationFrame(() => {
                 el.scrollTop = el.scrollHeight;
+                this._lastScrollTop = el.scrollTop;
             });
         }
     }
@@ -347,7 +397,7 @@ export class MessageList extends PlatformElement {
      * Прокрутка к сообщению по id (якорь для закрепов).
      * @param {string} messageId
      */
-    scrollToMessageId(messageId) {
+    async scrollToMessageId(messageId) {
         if (typeof messageId !== 'string' || messageId === '') {
             throw new Error('messageId обязателен.');
         }
@@ -355,24 +405,50 @@ export class MessageList extends PlatformElement {
         if (!list) {
             throw new Error('Список сообщений не готов.');
         }
-        const bubble = list.querySelector(`message-bubble[data-msg-id="${CSS.escape(messageId)}"]`);
-        if (!bubble) {
-            throw new Error(
-                `Сообщение ${messageId} не найдено в ленте (возможно не загружено или в другом треде).`
-            );
+        const syncApi = this.services.get('syncApi');
+        if (!syncApi) {
+            throw new Error('syncApi сервис не найден.');
+        }
+        let bubble = list.querySelector(`message-bubble[data-msg-id="${CSS.escape(messageId)}"]`);
+        let pagesLoaded = 0;
+        while (!bubble) {
+            if (!this.channelId) {
+                throw new Error('Канал не выбран.');
+            }
+            const history = SyncStore.getMessageHistoryState(this.channelId);
+            if (!history.hasMoreOlder) {
+                throw new Error(`Сообщение ${messageId} не найдено в доступной истории.`);
+            }
+            const prevHeight = list.scrollHeight;
+            const prevTop = list.scrollTop;
+            const older = await SyncStore.loadOlderMessages(syncApi, this.channelId);
+            if (!Array.isArray(older) || older.length === 0) {
+                throw new Error(`Сообщение ${messageId} не найдено в доступной истории.`);
+            }
+            pagesLoaded += 1;
+            if (pagesLoaded > 300) {
+                throw new Error('Превышен лимит дозагрузки истории для перехода к сообщению.');
+            }
+            await this.updateComplete;
+            const nextHeight = list.scrollHeight;
+            const delta = nextHeight - prevHeight;
+            if (delta > 0) {
+                list.scrollTop = prevTop + delta;
+            }
+            bubble = list.querySelector(`message-bubble[data-msg-id="${CSS.escape(messageId)}"]`);
         }
         bubble.scrollIntoView({ block: 'center', behavior: 'smooth' });
         this._stickToBottom = false;
     }
 
-    _onScrollToMessage(e) {
+    async _onScrollToMessage(e) {
         const id = e.detail?.messageId;
         if (typeof id !== 'string' || id === '') {
             this.error('messageId обязателен.');
             return;
         }
         try {
-            this.scrollToMessageId(id);
+            await this.scrollToMessageId(id);
             SyncStore.flashMessageHighlight(id);
         } catch (err) {
             const text = err instanceof Error ? err.message : String(err);
@@ -429,6 +505,12 @@ export class MessageList extends PlatformElement {
         return html`
             <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
                 ${filtered.length === 0 ? html`<div class="empty-text">Сообщений пока нет.</div>` : ''}
+                ${this._loadingOlder ? html`
+                    <div class="messages-loading-bar" aria-live="polite">
+                        <glass-spinner size="sm"></glass-spinner>
+                        <span class="messages-loading-label">Подгружаем историю…</span>
+                    </div>
+                ` : ''}
                 ${items.map((item) => {
                     if (item.kind === 'day') {
                         return html`

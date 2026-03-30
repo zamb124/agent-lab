@@ -194,8 +194,46 @@ export class SyncAPIService extends BaseService {
         });
     }
 
-    async getMessages(channelId, limit = 100) {
-        return this.get(`/channels/${encodeURIComponent(channelId)}/messages?limit=${limit}`);
+    /**
+     * @param {string} channelId
+     * @param {{ limit?: number, before?: string | null, after?: string | null }} [pagination]
+     * @returns {Promise<{items: object[], next_cursor: string | null, prev_cursor: string | null}>}
+     */
+    async getMessages(channelId, pagination = {}) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error('channelId обязателен.');
+        }
+        const search = new URLSearchParams();
+        const limit = pagination.limit ?? 20;
+        if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1) {
+            throw new Error('limit должен быть целым числом >= 1.');
+        }
+        search.set('limit', String(limit));
+        if (pagination.before !== undefined && pagination.before !== null) {
+            if (typeof pagination.before !== 'string' || pagination.before === '') {
+                throw new Error('before должен быть непустой строкой.');
+            }
+            search.set('before', pagination.before);
+        }
+        if (pagination.after !== undefined && pagination.after !== null) {
+            if (typeof pagination.after !== 'string' || pagination.after === '') {
+                throw new Error('after должен быть непустой строкой.');
+            }
+            search.set('after', pagination.after);
+        }
+        if (search.has('before') && search.has('after')) {
+            throw new Error('Нельзя одновременно передавать before и after.');
+        }
+        const payload = await this.get(
+            `/channels/${encodeURIComponent(channelId)}/messages?${search.toString()}`
+        );
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Некорректный ответ messages: ожидается объект пагинации.');
+        }
+        if (!Array.isArray(payload.items)) {
+            throw new Error('Некорректный ответ messages: items должен быть массивом.');
+        }
+        return payload;
     }
 
     async sendMessage(channelId, messageCreate) {

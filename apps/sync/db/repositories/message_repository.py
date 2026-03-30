@@ -3,9 +3,10 @@
 import json
 import logging
 from datetime import datetime
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Type
 
-from sqlalchemy import and_, func, or_, select, text, update
+from sqlalchemy import and_, func, or_, select, text, tuple_, update
 from sqlalchemy import delete as sql_delete
 
 from apps.sync.channel_lane_preview import ChannelLaneSummary, lane_preview_from_content_row
@@ -14,6 +15,15 @@ from apps.sync.db.models import SyncChannelMember, SyncMessage, SyncMessageConte
 from apps.sync.models.messages import MessageContentModel
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MessageCursorWindow:
+    """Окно сообщений для курсорной пагинации."""
+
+    rows: list[SyncMessage]
+    has_more_older: bool
+    has_more_newer: bool
 
 
 class MessageRepository(BaseSyncRepository[SyncMessage]):
@@ -78,6 +88,100 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def list_by_channel_cursor(
+        self,
+        *,
+        channel_id: str,
+        limit: int,
+        before_sent_at: datetime | None,
+        before_message_id: str | None,
+        after_sent_at: datetime | None,
+        after_message_id: str | None,
+        company_id: str,
+    ) -> MessageCursorWindow:
+        """Курсорная выборка сообщений основной ленты канала."""
+        if limit < 1:
+            raise ValueError("limit должен быть >= 1.")
+        if before_sent_at is not None and before_message_id is None:
+            raise ValueError("before_message_id обязателен при before_sent_at.")
+        if before_sent_at is None and before_message_id is not None:
+            raise ValueError("before_sent_at обязателен при before_message_id.")
+        if after_sent_at is not None and after_message_id is None:
+            raise ValueError("after_message_id обязателен при after_sent_at.")
+        if after_sent_at is None and after_message_id is not None:
+            raise ValueError("after_sent_at обязателен при after_message_id.")
+        if before_sent_at is not None and after_sent_at is not None:
+            raise ValueError("Нельзя одновременно передавать before и after.")
+
+        async with self._db.session() as session:
+            base_conditions = [
+                SyncMessage.company_id == company_id,
+                SyncMessage.channel_id == channel_id,
+                SyncMessage.thread_id.is_(None),
+                SyncMessage.deleted_at.is_(None),
+            ]
+
+            fetch_limit = limit + 1
+
+            if before_sent_at is not None:
+                stmt = (
+                    select(SyncMessage)
+                    .where(
+                        *base_conditions,
+                        tuple_(SyncMessage.sent_at, SyncMessage.message_id)
+                        < tuple_(before_sent_at, before_message_id),
+                    )
+                    .order_by(SyncMessage.sent_at.desc(), SyncMessage.message_id.desc())
+                    .limit(fetch_limit)
+                )
+                result = await session.execute(stmt)
+                all_rows = list(result.scalars().all())
+                has_more_older = len(all_rows) > limit
+                rows = all_rows[:limit]
+                return MessageCursorWindow(
+                    rows=rows,
+                    has_more_older=has_more_older,
+                    has_more_newer=True,
+                )
+
+            if after_sent_at is not None:
+                stmt = (
+                    select(SyncMessage)
+                    .where(
+                        *base_conditions,
+                        tuple_(SyncMessage.sent_at, SyncMessage.message_id)
+                        > tuple_(after_sent_at, after_message_id),
+                    )
+                    .order_by(SyncMessage.sent_at.asc(), SyncMessage.message_id.asc())
+                    .limit(fetch_limit)
+                )
+                result = await session.execute(stmt)
+                all_rows = list(result.scalars().all())
+                has_more_newer = len(all_rows) > limit
+                asc_rows = all_rows[:limit]
+                rows = list(reversed(asc_rows))
+                return MessageCursorWindow(
+                    rows=rows,
+                    has_more_older=True,
+                    has_more_newer=has_more_newer,
+                )
+
+            stmt = (
+                select(SyncMessage)
+                .where(*base_conditions)
+                .order_by(SyncMessage.sent_at.desc(), SyncMessage.message_id.desc())
+                .limit(fetch_limit)
+            )
+            result = await session.execute(stmt)
+            all_rows = list(result.scalars().all())
+            has_more_older = len(all_rows) > limit
+            rows = all_rows[:limit]
+            return MessageCursorWindow(
+                rows=rows,
+                has_more_older=has_more_older,
+                has_more_newer=False,
+            )
 
     async def get_thread_root(self, message_id: str) -> Optional[SyncMessage]:
         """Находит корневое сообщение треда через рекурсивный CTE."""

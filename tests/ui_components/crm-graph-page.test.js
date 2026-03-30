@@ -11,28 +11,55 @@ import {
 import '../../apps/crm/ui/pages/graph-page.js';
 
 function createForceGraphMock() {
+  const cameraState = { x: 0, y: 0, z: 1000 };
   const api = {
     _destructor: () => {},
     backgroundColor: () => api,
     cooldownTicks: () => api,
     warmupTicks: () => api,
+    showNavInfo: () => api,
     nodeLabel: () => api,
+    nodeThreeObject: () => api,
+    nodeThreeObjectExtend: () => api,
+    nodePositionUpdate: () => api,
     nodeColor: () => api,
     nodeVal: () => api,
     linkLabel: () => api,
     linkColor: () => api,
+    linkOpacity: () => api,
     linkWidth: () => api,
+    linkThreeObject: () => api,
+    linkThreeObjectExtend: () => api,
+    linkPositionUpdate: () => api,
     linkDirectionalArrowLength: () => api,
     linkDirectionalArrowRelPos: () => api,
     linkDirectionalParticles: () => api,
     linkDirectionalParticleWidth: () => api,
+    enableNodeDrag: () => api,
     onNodeClick: () => api,
     onNodeHover: () => api,
     onLinkClick: () => api,
+    onNodeDragEnd: () => api,
+    onEngineTick: () => api,
+    onEngineStop: () => api,
     d3Force: () => ({ strength: () => api }),
+    d3VelocityDecay: () => api,
     nodeRelSize: () => api,
     graphData: () => api,
-    cameraPosition: () => api,
+    cameraPosition: (...args) => {
+      if (args.length === 0) {
+        return cameraState;
+      }
+      const [nextPosition] = args;
+      if (nextPosition && typeof nextPosition === 'object') {
+        cameraState.x = nextPosition.x;
+        cameraState.y = nextPosition.y;
+        cameraState.z = nextPosition.z;
+      }
+      return api;
+    },
+    centerAt: () => api,
+    zoomToFit: () => api,
   };
   return api;
 }
@@ -106,6 +133,23 @@ describe('crm graph page', () => {
       deleteNamespaceTemplateType: async () => ({}),
       deleteAttachment: async () => ({}),
     });
+    window.THREE = {
+      CanvasTexture: class {
+        constructor() {
+          this.needsUpdate = false;
+        }
+      },
+      SpriteMaterial: class {
+        constructor() {}
+      },
+      Sprite: class {
+        constructor() {
+          this.position = { set: () => {} };
+          this.scale = { set: () => {} };
+          this.visible = true;
+        }
+      },
+    };
     window.ForceGraph3D = () => () => createForceGraphMock();
     const vendorScript = document.createElement('script');
     vendorScript.src = '/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js';
@@ -115,6 +159,7 @@ describe('crm graph page', () => {
   afterEach(() => {
     document.querySelectorAll('script[src*="3d-force-graph.min.js"]').forEach((script) => script.remove());
     delete window.ForceGraph3D;
+    delete window.THREE;
     teardownPlatformServices();
   });
 
@@ -151,5 +196,15 @@ describe('crm graph page', () => {
     expect(fullscreenButton).to.exist;
     fullscreenButton.click();
     await waitUntil(() => el.shadowRoot.querySelector('.layout').classList.contains('fullscreen'));
+  });
+
+  it('запускает canvas режим выбора маршрута', async () => {
+    const el = await fixture(html`<graph-page></graph-page>`);
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    const pathButton = Array.from(el.shadowRoot.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Построить маршрут'));
+    expect(pathButton).to.exist;
+    pathButton.click();
+    expect(el._canvasPathState).to.equal('pick_source');
   });
 });
