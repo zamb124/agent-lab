@@ -657,19 +657,23 @@ export class GraphPage extends PlatformElement {
             .cooldownTicks(120)
             .warmupTicks(80)
             .showNavInfo(false)
-            .nodeLabel((node) => {
-                if (!this._shouldShowNodeLabel(node)) {
-                    return '';
-                }
-                return node.name || node.id || '';
-            })
+            .nodeLabel(() => '')
             .nodeColor((node) => node.color)
             .nodeVal((node) => node.size)
-            .linkLabel((link) => {
-                if (!this._shouldShowLinkLabel(link)) {
-                    return '';
+            .linkLabel(() => '')
+            .nodeThreeObject((node) => {
+                const sprite = this._createTextSprite(node.name || node.id || '', '#f0f4ff', 24);
+                sprite.visible = this._shouldShowNodeLabel(node);
+                return sprite;
+            })
+            .nodeThreeObjectExtend(true)
+            .nodePositionUpdate((labelSprite, coords, node) => {
+                if (!labelSprite || !coords) {
+                    return false;
                 }
-                return link.relation_type || link.id || '';
+                labelSprite.visible = this._shouldShowNodeLabel(node);
+                labelSprite.position.set(coords.x, coords.y + 12, coords.z);
+                return true;
             })
             .linkColor((link) => (link.highlighted ? '#ff6b6b' : '#9ba3bf'))
             .linkWidth((link) => {
@@ -689,6 +693,25 @@ export class GraphPage extends PlatformElement {
                     return 0.65;
                 }
                 return 0.3;
+            })
+            .linkThreeObjectExtend(true)
+            .linkThreeObject((link) => {
+                const sprite = this._createTextSprite(link.relation_type || 'related', '#d4dae8', 20);
+                sprite.visible = this._shouldShowLinkLabel(link);
+                return sprite;
+            })
+            .linkPositionUpdate((sprite, { start, end }, link) => {
+                if (!sprite || !start || !end) {
+                    return false;
+                }
+                sprite.visible = this._shouldShowLinkLabel(link);
+                const middlePosition = {
+                    x: start.x + ((end.x - start.x) / 2),
+                    y: start.y + ((end.y - start.y) / 2),
+                    z: start.z + ((end.z - start.z) / 2),
+                };
+                sprite.position.set(middlePosition.x, middlePosition.y, middlePosition.z);
+                return true;
             })
             .linkDirectionalArrowLength((link) => (link.directed ? 3 : 0))
             .linkDirectionalArrowRelPos(1)
@@ -974,6 +997,37 @@ export class GraphPage extends PlatformElement {
             return MIN_CAMERA_DISTANCE;
         }
         return distance;
+    }
+
+    _createTextSprite(text, color = '#d7dbee', fontSize = 24) {
+        if (!window.THREE || typeof window.THREE.CanvasTexture !== 'function') {
+            throw new Error('THREE runtime is required for canvas labels');
+        }
+        const labelText = typeof text === 'string' && text.trim().length > 0 ? text : 'entity';
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) {
+            throw new Error('2D canvas context is required for text labels');
+        }
+        context.font = `600 ${fontSize}px Inter, sans-serif`;
+        const textWidth = Math.max(24, Math.ceil(context.measureText(labelText).width));
+        canvas.width = textWidth + 24;
+        canvas.height = fontSize + 18;
+        context.font = `600 ${fontSize}px Inter, sans-serif`;
+        context.fillStyle = 'rgba(12, 15, 23, 0.8)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = color;
+        context.fillText(labelText, 12, fontSize);
+        const texture = new window.THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        const material = new window.THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false,
+        });
+        const sprite = new window.THREE.Sprite(material);
+        sprite.scale.set(canvas.width * 0.11, canvas.height * 0.11, 1);
+        return sprite;
     }
 
     _onCanvasNodeClick(node, event) {

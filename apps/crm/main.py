@@ -65,6 +65,15 @@ if vendor_3d_force_graph_path.exists():
     )
     logger.info(f"3d-force-graph vendor смонтирован: {vendor_3d_force_graph_path}")
 
+vendor_three_path = Path(__file__).parent.parent.parent / "node_modules" / "three" / "build"
+if vendor_three_path.exists():
+    app.mount(
+        "/crm/ui/vendor/three",
+        StaticFiles(directory=vendor_three_path),
+        name="crm_ui_vendor_three",
+    )
+    logger.info(f"three vendor смонтирован: {vendor_three_path}")
+
 
 @app.get("/crm")
 @app.get("/crm/")
