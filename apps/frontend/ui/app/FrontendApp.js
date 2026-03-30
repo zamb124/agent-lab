@@ -128,6 +128,37 @@ export class FrontendApp extends PlatformApp {
         }));
     }
 
+    /**
+     * Персистентный ui.currentView и URL расходятся: сайдбар меняет только store.
+     * При заходе по /dashboard в store мог остаться другой таб (например scheduler-tasks),
+     * плюс при откате деплоя старый бандл без case для нового view падает с Unknown view.
+     */
+    static _VIEW_BY_PATH = new Map([
+        ['/dashboard', 'dashboard'],
+        ['/team', 'team'],
+        ['/api-keys', 'api-keys'],
+        ['/billing', 'billing'],
+        ['/embed-configs', 'embed-configs'],
+        ['/settings', 'settings'],
+        ['/scheduler-tasks', 'scheduler-tasks'],
+    ]);
+
+    _syncCurrentViewFromPathname() {
+        const path = window.location.pathname;
+        let view = FrontendApp._VIEW_BY_PATH.get(path);
+        if (!view && path.startsWith('/settings/')) {
+            view = 'settings';
+        }
+        if (view) {
+            FrontendStore.setCurrentView(view);
+        }
+    }
+
+    connectedCallback() {
+        this._syncCurrentViewFromPathname();
+        super.connectedCallback();
+    }
+
     setupStore() {
         return FrontendStore;
     }
