@@ -7,6 +7,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
 import {
@@ -978,6 +979,7 @@ export class MessageBubble extends PlatformElement {
         this.deleting = false;
         this.peerReadAt = null;
         this.channelType = null;
+        this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
         this._profileOpen = false;
         this._profileUser = null;
         this._menuOpen = false;
@@ -1015,6 +1017,7 @@ export class MessageBubble extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._avatarRetry.cancel();
         this._unsubCompanyMembers?.();
         this._unsubCompanyMembers = null;
         this._endLongPressGesture();
@@ -1049,9 +1052,13 @@ export class MessageBubble extends PlatformElement {
         const initials = initialsForAvatar(sender.display_name ?? '');
         const hue = hueFromUserId(sender.user_id);
         const initialsStyle = `background: hsl(${hue} 48% 42%);`;
-        const face = sender.avatar_url
+        const originalUrl = sender.avatar_url ?? null;
+        const src = this._avatarRetry.currentSrc(originalUrl);
+        const face = src
             ? html`
-                <img class="avatar-img" src=${sender.avatar_url} alt=${shortName} />
+                <img class="avatar-img" src=${src} alt=${shortName}
+                    @load=${() => this._avatarRetry.onLoad()}
+                    @error=${() => this._avatarRetry.onError(originalUrl)} />
             `
             : html`
                 <span class="avatar-initials" style=${initialsStyle}>${initials}</span>

@@ -122,6 +122,16 @@ export class CRMAPIService extends BaseService {
         }
         return this.post('/entity-types', data);
     }
+
+    async updateEntityType(typeId, data) {
+        if (!typeId) {
+            throw new Error('Type ID is required');
+        }
+        if (!data) {
+            throw new Error('Entity type update data is required');
+        }
+        return this.put(`/entity-types/${encodeURIComponent(typeId)}`, data);
+    }
     
     async getRelationships(params = {}) {
         return this.get('/relationships', params);
@@ -171,7 +181,7 @@ export class CRMAPIService extends BaseService {
         }
         return this.post('/relationships/types/', data);
     }
-    
+
     async getInfluenceGraph(entityId, params = {}) {
         if (!entityId) {
             throw new Error('Entity ID is required');

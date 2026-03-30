@@ -65,9 +65,10 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
         self
     ) -> List[RelationshipType]:
         """
-        Получает типы связей с промптами для AI из контекста.
+        Типы связей с заполненным prompt для AI-анализа.
         
-        Исключает "linked" (создается парсером, не AI).
+        Фильтр: company_id из контекста + prompt IS NOT NULL.
+        Типы без промпта (linked, child_of, blocked_by, duplicates) не попадают в AI.
         """
         company_id = self._get_company_id()
         async with self._db.session() as session:

@@ -39,7 +39,7 @@ function createEmptySchemaFieldRow(defaultType = 'string') {
     };
 }
 
-const SETTINGS_HINTS = {
+const TEMPLATE_HINTS = {
     templateName: 'Человекочитаемое название шаблона. Показывается в карточках и модалках выбора пространства. Хорошее название помогает пользователям быстро выбрать правильный бизнес-контекст.',
     templateDescription: 'Описание назначения шаблона. Используйте 1-2 короткие фразы: какие сущности ожидаются и для каких задач создано пространство.',
     templateIcon: 'Иконка нужна для визуальной навигации: отображается в карточках шаблонов и в селекторах. Выбирайте понятный символ, который отражает домен шаблона.',
@@ -60,8 +60,6 @@ const SETTINGS_HINTS = {
     fieldLabel: 'Отображаемое имя поля для пользователя. Можно писать на русском, так как это подпись в UI, а не технический ключ.',
     fieldType: 'Тип данных атрибута. От него зависит, как поле будет валидироваться и как его интерпретирует AI/поисковый слой.',
     fieldEnum: 'Для enum можно выбрать готовый набор значений из backend (enum set) или задать собственный список вручную.',
-    namespaceDescription: 'Описание текущего пространства. Изменение описания не влияет на существующие сущности и доступно всегда.',
-    namespaceAllowedTypes: 'Типы, которые можно создавать в этом пространстве. Если в пространстве уже есть сущности, изменение списка блокируется до очистки данных.',
 };
 
 class TemplateCreateModal extends PlatformModal {
@@ -196,23 +194,16 @@ class TemplateCreateModal extends PlatformModal {
 
 customElements.define('template-create-modal', TemplateCreateModal);
 
-export class SettingsPage extends PlatformElement {
+export class TemplatesPage extends PlatformElement {
     static properties = {
         _namespaces: { state: true },
         _templates: { state: true },
         _templateDetails: { state: true },
         _schemaOptions: { state: true },
-        _entityTypes: { state: true },
         _selectedTemplateId: { state: true },
         _showTemplateModal: { state: true },
         _iconOptions: { state: true },
         _typeDraft: { state: true },
-        _selectedNamespaceName: { state: true },
-        _selectedNamespaceDraftDescription: { state: true },
-        _selectedNamespaceDraftAllowedTypeIds: { state: true },
-        _selectedNamespaceEditability: { state: true },
-        _namespaceEditorLoading: { state: true },
-        _namespaceEditorSaving: { state: true },
     };
 
     static styles = [
@@ -228,13 +219,7 @@ export class SettingsPage extends PlatformElement {
             .section-header.between { justify-content: space-between; }
             .section-header-main { display: inline-flex; align-items: center; gap: var(--space-2); }
             .grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-            .card {
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                padding: var(--space-3);
-                background: var(--crm-surface-muted);
-                transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast);
-            }
+            .card { border: 1px solid var(--crm-stroke); border-radius: var(--radius-lg); padding: var(--space-3); background: var(--crm-surface-muted); transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast); }
             .card:hover { border-color: var(--crm-selected-stroke); transform: translateY(-1px); }
             .card-title { color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-1); }
             .card-text { color: var(--text-secondary); font-size: var(--text-sm); }
@@ -248,18 +233,6 @@ export class SettingsPage extends PlatformElement {
             .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
             .soft-btn { border-color: var(--crm-stroke); background: var(--crm-surface-elevated); color: var(--text-primary); }
             .danger-btn { border-color: #B91C1C; background: #7F1D1D; color: #FEE2E2; }
-            .namespace-list { display: grid; gap: var(--space-2); }
-            .namespace-row { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); padding: var(--space-3); background: var(--crm-surface-muted); }
-            .namespace-name { color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
-            .namespace-card-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-            .namespace-card { border: 1px solid var(--crm-stroke); border-radius: var(--radius-lg); padding: var(--space-3); background: var(--crm-surface-muted); cursor: pointer; transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast); }
-            .namespace-card:hover { border-color: var(--crm-selected-stroke); transform: translateY(-1px); }
-            .namespace-card.active { border-color: var(--crm-selected-stroke); background: var(--crm-selected-bg); }
-            .namespace-card-title { color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-1); }
-            .namespace-lock { border: 1px solid #92400E; border-radius: var(--radius-md); background: #451A03; color: #FDE68A; padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
-            .namespace-ok { border: 1px solid #14532D; border-radius: var(--radius-md); background: #052E16; color: #BBF7D0; padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
-            .chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
-            .chip { border: 1px solid var(--crm-stroke); border-radius: var(--radius-full); padding: 2px var(--space-2); color: var(--text-secondary); background: var(--crm-surface-elevated); font-size: var(--text-xs); }
             .menu-btn { width: 32px; height: 32px; display: none; align-items: center; justify-content: center; border-radius: var(--radius-md); background: var(--crm-surface-muted); border: 1px solid var(--crm-stroke); color: var(--text-primary); cursor: pointer; }
             .toolbar { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
             .split { display: grid; gap: var(--space-3); grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); }
@@ -275,6 +248,8 @@ export class SettingsPage extends PlatformElement {
             .type-card { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); padding: var(--space-3); background: var(--crm-surface-muted); display: flex; flex-direction: column; gap: var(--space-2); }
             .type-title { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; }
             .hint { color: var(--text-tertiary); font-size: var(--text-xs); }
+            .chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+            .chip { border: 1px solid var(--crm-stroke); border-radius: var(--radius-full); padding: 2px var(--space-2); color: var(--text-secondary); background: var(--crm-surface-elevated); font-size: var(--text-xs); }
             .schema-builder-grid { display: grid; gap: var(--space-3); grid-template-columns: 1fr 1fr; }
             .schema-section { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); background: var(--crm-surface-muted); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
             .schema-section-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
@@ -289,6 +264,8 @@ export class SettingsPage extends PlatformElement {
             .namespace-pill:disabled { opacity: 0.5; cursor: not-allowed; }
             .icon-input-wrap { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
             .icon-preview { width: 36px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--crm-stroke); background: var(--crm-surface-elevated); display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+            .back-btn { display: inline-flex; align-items: center; gap: var(--space-2); background: none; border: none; color: var(--text-secondary); font-size: var(--text-sm); cursor: pointer; padding: 0; transition: color var(--duration-fast); }
+            .back-btn:hover { color: var(--text-primary); }
             details { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); background: var(--crm-surface-muted); padding: var(--space-3); }
             details > summary { cursor: pointer; color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
             @media (max-width: 980px) { .split { grid-template-columns: 1fr; } .schema-builder-grid { grid-template-columns: 1fr; } }
@@ -302,27 +279,15 @@ export class SettingsPage extends PlatformElement {
         this._templates = [];
         this._templateDetails = null;
         this._schemaOptions = null;
-        this._entityTypes = [];
         this._selectedTemplateId = 'sales';
         this._showTemplateModal = false;
         this._iconOptions = [];
         this._typeDraft = getDefaultTypeDraft();
-        this._selectedNamespaceName = null;
-        this._selectedNamespaceDraftDescription = '';
-        this._selectedNamespaceDraftAllowedTypeIds = [];
-        this._selectedNamespaceEditability = null;
-        this._namespaceEditorLoading = false;
-        this._namespaceEditorSaving = false;
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._namespaces = state.namespaces.list || [];
             this._templates = state.namespaces.templates || [];
             this._templateDetails = state.namespaces.templateDetails || null;
             this._schemaOptions = state.namespaces.schemaOptions || null;
-            this._entityTypes = state.entities.entityTypes || [];
-            this._selectedNamespaceName = state.namespaces.settingsSelected || null;
-            this._selectedNamespaceEditability = state.namespaces.settingsEditability || null;
-            this._namespaceEditorLoading = Boolean(state.namespaces.settingsLoading);
-            this._namespaceEditorSaving = Boolean(state.namespaces.settingsSaving);
         });
     }
 
@@ -342,19 +307,12 @@ export class SettingsPage extends PlatformElement {
             CRMStore.loadNamespaces(crmApi),
             CRMStore.loadNamespaceTemplates(crmApi),
             CRMStore.loadTemplateSchemaOptions(crmApi),
-            CRMStore.loadEntityTypes(crmApi),
         ]);
         if (this._templates.length > 0) {
             if (!this._templates.some((template) => template.template_id === this._selectedTemplateId)) {
                 this._selectedTemplateId = this._templates[0].template_id;
             }
             await CRMStore.loadNamespaceTemplateDetails(crmApi, this._selectedTemplateId);
-        }
-        if (this._namespaces.length > 0) {
-            const selectedNamespaceName = this._selectedNamespaceName && this._namespaces.some((item) => item.name === this._selectedNamespaceName)
-                ? this._selectedNamespaceName
-                : this._namespaces[0].name;
-            await this._selectNamespaceForEditing(selectedNamespaceName);
         }
     }
 
@@ -541,13 +499,6 @@ export class SettingsPage extends PlatformElement {
         }
     }
 
-    _resolveAllowedTypes(namespaceName) {
-        return this._entityTypes.filter((entityType) => {
-            const namespaceIds = Array.isArray(entityType.namespace_ids) ? entityType.namespace_ids : [];
-            return namespaceIds.includes(namespaceName);
-        });
-    }
-
     _openTemplateModal() { this._showTemplateModal = true; }
     _closeTemplateModal() { this._showTemplateModal = false; }
     async _onTemplateCreated(e) {
@@ -697,71 +648,15 @@ export class SettingsPage extends PlatformElement {
         }
     }
 
-    async _selectNamespaceForEditing(namespaceName) {
-        try {
-            if (!namespaceName || typeof namespaceName !== 'string') {
-                throw new Error('Namespace name is required');
-            }
-            const normalizedName = namespaceName.trim();
-            if (!normalizedName) {
-                throw new Error('Namespace name is required');
-            }
-            const crmApi = this.services.get('crmApi');
-            CRMStore.setSettingsNamespaceSelection(normalizedName);
-            const payload = await CRMStore.loadNamespaceEditability(crmApi, normalizedName);
-            const selectedNamespace = this._namespaces.find((item) => item.name === normalizedName);
-            this._selectedNamespaceDraftDescription = selectedNamespace?.description || '';
-            this._selectedNamespaceDraftAllowedTypeIds = Array.isArray(payload?.current_allowed_type_ids)
-                ? [...payload.current_allowed_type_ids]
-                : [];
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка загрузки настроек пространства';
-            this.error(message);
-        }
-    }
-
-    _toggleNamespaceAllowedType(typeId, enabled) {
-        const normalizedTypeId = typeof typeId === 'string' ? typeId.trim() : '';
-        if (!normalizedTypeId) {
-            throw new Error('Type ID is required');
-        }
-        const current = Array.isArray(this._selectedNamespaceDraftAllowedTypeIds)
-            ? this._selectedNamespaceDraftAllowedTypeIds
-            : [];
-        const next = enabled
-            ? [...new Set([...current, normalizedTypeId])]
-            : current.filter((item) => item !== normalizedTypeId);
-        this._selectedNamespaceDraftAllowedTypeIds = next;
-    }
-
-    async _saveNamespaceSettings() {
-        try {
-            if (!this._selectedNamespaceName) {
-                throw new Error('Namespace is not selected');
-            }
-            const normalizedAllowedTypeIds = Array.isArray(this._selectedNamespaceDraftAllowedTypeIds)
-                ? this._selectedNamespaceDraftAllowedTypeIds
-                    .map((item) => String(item).trim())
-                    .filter((item) => item.length > 0)
-                : [];
-            const payload = {
-                description: this._selectedNamespaceDraftDescription.trim() || null,
-                allowed_type_ids: [...new Set(normalizedAllowedTypeIds)],
-            };
-            const crmApi = this.services.get('crmApi');
-            await CRMStore.updateExistingNamespace(crmApi, this._selectedNamespaceName, payload);
-            this.success('Пространство сохранено');
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка сохранения пространства';
-            this.error(message);
-        }
-    }
-
     render() {
         const templateTypes = this._templateDetails?.types || [];
         return html`
             <div class="container">
                 <div class="section">
+                    <button class="back-btn" @click=${() => CRMStore.setCurrentView('settings')}>
+                        <platform-icon name="arrow-left" size="14"></platform-icon>
+                        Настройки
+                    </button>
                     <div class="hero">
                         <div>
                             <div class="hero-title">
@@ -769,15 +664,15 @@ export class SettingsPage extends PlatformElement {
                                     <platform-icon name="menu" size="18"></platform-icon>
                                 </button>
                                 <platform-icon name="settings" size="18"></platform-icon>
-                                Настройки CRM
+                                Шаблоны пространств
                             </div>
-                            <div class="hero-subtitle">Настройка шаблонов пространств, типов сущностей и параметров извлечения.</div>
+                            <div class="hero-subtitle">Управление шаблонами для создания новых пространств и типами сущностей в них.</div>
                         </div>
                     </div>
                     <div class="section-header between">
                         <div class="section-header-main">
                             <platform-icon name="folder" size="18"></platform-icon>
-                            Редактировать шаблоны пространств
+                            Шаблоны
                         </div>
                         <button class="save-btn" @click=${this._openTemplateModal}>
                             <platform-icon name="plus" size="14"></platform-icon>
@@ -827,35 +722,23 @@ export class SettingsPage extends PlatformElement {
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>Название</span>
-                                        <platform-help-hint strategy="local" label="Справка: название шаблона" .text=${SETTINGS_HINTS.templateName}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: название шаблона" .text=${TEMPLATE_HINTS.templateName}></platform-help-hint>
                                     </label>
-                                    <input
-                                        class="form-input"
-                                        .value=${this._templateDetails.name || ''}
-                                        @input=${(e) => { this._templateDetails = { ...this._templateDetails, name: e.target.value }; }}
-                                    />
+                                    <input class="form-input" .value=${this._templateDetails.name || ''} @input=${(e) => { this._templateDetails = { ...this._templateDetails, name: e.target.value }; }} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>Описание</span>
-                                        <platform-help-hint strategy="local" label="Справка: описание шаблона" .text=${SETTINGS_HINTS.templateDescription}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: описание шаблона" .text=${TEMPLATE_HINTS.templateDescription}></platform-help-hint>
                                     </label>
-                                    <textarea
-                                        class="form-textarea"
-                                        .value=${this._templateDetails.description || ''}
-                                        @input=${(e) => { this._templateDetails = { ...this._templateDetails, description: e.target.value }; }}
-                                    ></textarea>
+                                    <textarea class="form-textarea" .value=${this._templateDetails.description || ''} @input=${(e) => { this._templateDetails = { ...this._templateDetails, description: e.target.value }; }}></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>Иконка</span>
-                                        <platform-help-hint strategy="local" label="Справка: иконка шаблона" .text=${SETTINGS_HINTS.templateIcon}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: иконка шаблона" .text=${TEMPLATE_HINTS.templateIcon}></platform-help-hint>
                                     </label>
-                                    <platform-icon-picker
-                                        .icons=${this._iconOptions}
-                                        .value=${this._resolveTemplateIcon(this._templateDetails.icon)}
-                                        @change=${(e) => { this._templateDetails = { ...this._templateDetails, icon: e.detail.value }; }}
-                                    ></platform-icon-picker>
+                                    <platform-icon-picker .icons=${this._iconOptions} .value=${this._resolveTemplateIcon(this._templateDetails.icon)} @change=${(e) => { this._templateDetails = { ...this._templateDetails, icon: e.detail.value }; }}></platform-icon-picker>
                                 </div>
                                 <div class="chips">
                                     <span class="chip mono">${this._templateDetails.template_id}</span>
@@ -900,21 +783,21 @@ export class SettingsPage extends PlatformElement {
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>type_id *</span>
-                                        <platform-help-hint strategy="local" label="Справка: type_id" .text=${SETTINGS_HINTS.typeId}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: type_id" .text=${TEMPLATE_HINTS.typeId}></platform-help-hint>
                                     </label>
                                     <input class="form-input mono" .value=${this._typeDraft.type_id} @input=${(e) => this._onTypeDraftChange('type_id', e.target.value)} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>name *</span>
-                                        <platform-help-hint strategy="local" label="Справка: имя типа" .text=${SETTINGS_HINTS.typeName}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: имя типа" .text=${TEMPLATE_HINTS.typeName}></platform-help-hint>
                                     </label>
                                     <input class="form-input" .value=${this._typeDraft.name} @input=${(e) => this._onTypeDraftChange('name', e.target.value)} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>parent_type_id</span>
-                                        <platform-help-hint strategy="local" label="Справка: родительский тип" .text=${SETTINGS_HINTS.parentType}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: родительский тип" .text=${TEMPLATE_HINTS.parentType}></platform-help-hint>
                                     </label>
                                     <select class="form-select mono" .value=${this._typeDraft.parent_type_id} @change=${(e) => this._onTypeDraftChange('parent_type_id', e.target.value)}>
                                         <option value="">(без родителя)</option>
@@ -924,25 +807,21 @@ export class SettingsPage extends PlatformElement {
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>Иконка</span>
-                                        <platform-help-hint strategy="local" label="Справка: иконка типа" .text=${SETTINGS_HINTS.typeIcon}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: иконка типа" .text=${TEMPLATE_HINTS.typeIcon}></platform-help-hint>
                                     </label>
-                                    <platform-icon-picker
-                                        .icons=${this._iconOptions}
-                                        .value=${this._resolveTemplateIcon(this._typeDraft.icon)}
-                                        @change=${(e) => this._onTypeDraftChange('icon', e.detail.value)}
-                                    ></platform-icon-picker>
+                                    <platform-icon-picker .icons=${this._iconOptions} .value=${this._resolveTemplateIcon(this._typeDraft.icon)} @change=${(e) => this._onTypeDraftChange('icon', e.detail.value)}></platform-icon-picker>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>color</span>
-                                        <platform-help-hint strategy="local" label="Справка: цвет типа" .text=${SETTINGS_HINTS.typeColor}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: цвет типа" .text=${TEMPLATE_HINTS.typeColor}></platform-help-hint>
                                     </label>
                                     <input class="form-input" .value=${this._typeDraft.color} @input=${(e) => this._onTypeDraftChange('color', e.target.value)} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>weight_coefficient</span>
-                                        <platform-help-hint strategy="local" label="Справка: коэффициент веса" .text=${SETTINGS_HINTS.weight}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: коэффициент веса" .text=${TEMPLATE_HINTS.weight}></platform-help-hint>
                                     </label>
                                     <input type="number" step="0.1" min="0" class="form-input mono" .value=${this._typeDraft.weight_coefficient} @input=${(e) => this._onTypeDraftChange('weight_coefficient', e.target.value)} />
                                 </div>
@@ -950,53 +829,39 @@ export class SettingsPage extends PlatformElement {
                                     <label class="form-label">Флаги</label>
                                     <div class="flag-row">
                                         <div class="flag-item">
-                                            <platform-switch
-                                                size="sm"
-                                                label="is_event"
-                                                .checked=${this._typeDraft.is_event}
-                                                @change=${(e) => this._onTypeDraftChange('is_event', Boolean(e.detail.value))}
-                                            ></platform-switch>
-                                            <platform-help-hint strategy="local" label="Справка: is_event" .text=${SETTINGS_HINTS.flagIsEvent}></platform-help-hint>
+                                            <platform-switch size="sm" label="is_event" .checked=${this._typeDraft.is_event} @change=${(e) => this._onTypeDraftChange('is_event', Boolean(e.detail.value))}></platform-switch>
+                                            <platform-help-hint strategy="local" label="Справка: is_event" .text=${TEMPLATE_HINTS.flagIsEvent}></platform-help-hint>
                                         </div>
                                         <div class="flag-item">
-                                            <platform-switch
-                                                size="sm"
-                                                label="check_duplicates"
-                                                .checked=${this._typeDraft.check_duplicates}
-                                                @change=${(e) => this._onTypeDraftChange('check_duplicates', Boolean(e.detail.value))}
-                                            ></platform-switch>
-                                            <platform-help-hint strategy="local" label="Справка: check_duplicates" .text=${SETTINGS_HINTS.flagCheckDuplicates}></platform-help-hint>
+                                            <platform-switch size="sm" label="check_duplicates" .checked=${this._typeDraft.check_duplicates} @change=${(e) => this._onTypeDraftChange('check_duplicates', Boolean(e.detail.value))}></platform-switch>
+                                            <platform-help-hint strategy="local" label="Справка: check_duplicates" .text=${TEMPLATE_HINTS.flagCheckDuplicates}></platform-help-hint>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>Описание</span>
-                                        <platform-help-hint strategy="local" label="Справка: описание типа" .text=${SETTINGS_HINTS.typeDescription}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: описание типа" .text=${TEMPLATE_HINTS.typeDescription}></platform-help-hint>
                                     </label>
                                     <textarea class="form-textarea" .value=${this._typeDraft.description} @input=${(e) => this._onTypeDraftChange('description', e.target.value)}></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>Промпт для извлечения</span>
-                                        <platform-help-hint strategy="local" label="Справка: промпт типа" .text=${SETTINGS_HINTS.typePrompt}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: промпт типа" .text=${TEMPLATE_HINTS.typePrompt}></platform-help-hint>
                                     </label>
                                     <textarea class="form-textarea" .value=${this._typeDraft.prompt} @input=${(e) => this._onTypeDraftChange('prompt', e.target.value)}></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>Разрешенные пространства</span>
-                                        <platform-help-hint strategy="local" label="Справка: пространства типа" .text=${SETTINGS_HINTS.namespaces}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label="Справка: пространства типа" .text=${TEMPLATE_HINTS.namespaces}></platform-help-hint>
                                     </label>
                                     <div class="namespace-selector">
                                         ${(this._namespaces || []).map((namespace) => {
                                             const checked = (this._typeDraft.namespace_ids || []).includes(namespace.name);
                                             return html`
-                                                <button
-                                                    type="button"
-                                                    class="namespace-pill ${checked ? 'active' : ''}"
-                                                    @click=${() => this._toggleTypeNamespace(namespace.name, !checked)}
-                                                >
+                                                <button type="button" class="namespace-pill ${checked ? 'active' : ''}" @click=${() => this._toggleTypeNamespace(namespace.name, !checked)}>
                                                     ${namespace.name}
                                                 </button>
                                             `;
@@ -1009,7 +874,7 @@ export class SettingsPage extends PlatformElement {
                                     <div class="schema-section-header">
                                         <span class="label-with-hint">
                                             <span>required_fields</span>
-                                            <platform-help-hint strategy="local" label="Справка: required_fields" .text=${SETTINGS_HINTS.requiredFields}></platform-help-hint>
+                                            <platform-help-hint strategy="local" label="Справка: required_fields" .text=${TEMPLATE_HINTS.requiredFields}></platform-help-hint>
                                         </span>
                                         <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('required_fields_rows')} type="button">+ Поле</button>
                                     </div>
@@ -1018,55 +883,22 @@ export class SettingsPage extends PlatformElement {
                                         ? this._typeDraft.required_fields_rows.map((row, index) => html`
                                             <div class="schema-field-card">
                                                 <div class="schema-field-row">
-                                                    <input
-                                                        class="form-input mono"
-                                                        placeholder="key (например deal_stage)"
-                                                        .value=${row.key || ''}
-                                                        @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { key: e.target.value })}
-                                                    />
-                                                    <input
-                                                        class="form-input"
-                                                        placeholder="label (например Стадия сделки)"
-                                                        .value=${row.label || ''}
-                                                        @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { label: e.target.value })}
-                                                    />
+                                                    <input class="form-input mono" placeholder="key (например deal_stage)" .value=${row.key || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { key: e.target.value })} />
+                                                    <input class="form-input" placeholder="label (например Стадия сделки)" .value=${row.label || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { label: e.target.value })} />
                                                 </div>
                                                 <div class="schema-field-row">
-                                                    <select
-                                                        class="form-select"
-                                                        .value=${row.type || this._getDefaultFieldType()}
-                                                        @change=${(e) => this._updateSchemaRow('required_fields_rows', index, { type: e.target.value })}
-                                                    >
-                                                        ${(this._schemaOptions?.field_types || []).map((typeItem) => html`
-                                                            <option value=${typeItem.type_id}>${typeItem.label}</option>
-                                                        `)}
+                                                    <select class="form-select" .value=${row.type || this._getDefaultFieldType()} @change=${(e) => this._updateSchemaRow('required_fields_rows', index, { type: e.target.value })}>
+                                                        ${(this._schemaOptions?.field_types || []).map((typeItem) => html`<option value=${typeItem.type_id}>${typeItem.label}</option>`)}
                                                     </select>
-                                                    <input
-                                                        class="form-input"
-                                                        placeholder="description (когда и как заполняется поле)"
-                                                        .value=${row.description || ''}
-                                                        @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { description: e.target.value })}
-                                                    />
+                                                    <input class="form-input" placeholder="description (когда и как заполняется поле)" .value=${row.description || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { description: e.target.value })} />
                                                 </div>
                                                 ${this._isEnumType(row.type) ? html`
                                                     <div class="schema-field-row">
-                                                        <select
-                                                            class="form-select"
-                                                            .value=${row.enum_set_id || ''}
-                                                            @change=${(e) => this._updateSchemaRow('required_fields_rows', index, { enum_set_id: e.target.value })}
-                                                        >
+                                                        <select class="form-select" .value=${row.enum_set_id || ''} @change=${(e) => this._updateSchemaRow('required_fields_rows', index, { enum_set_id: e.target.value })}>
                                                             <option value="">Локальные values</option>
-                                                            ${(this._schemaOptions?.enum_sets || []).map((setItem) => html`
-                                                                <option value=${setItem.enum_set_id}>${setItem.label}</option>
-                                                            `)}
+                                                            ${(this._schemaOptions?.enum_sets || []).map((setItem) => html`<option value=${setItem.enum_set_id}>${setItem.label}</option>`)}
                                                         </select>
-                                                        <input
-                                                            class="form-input"
-                                                            placeholder="values: high, medium, low"
-                                                            .value=${row.enum_values_text || ''}
-                                                            ?disabled=${Boolean(row.enum_set_id)}
-                                                            @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { enum_values_text: e.target.value })}
-                                                        />
+                                                        <input class="form-input" placeholder="values: high, medium, low" .value=${row.enum_values_text || ''} ?disabled=${Boolean(row.enum_set_id)} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { enum_values_text: e.target.value })} />
                                                     </div>
                                                 ` : ''}
                                                 <div class="schema-field-inline">
@@ -1081,7 +913,7 @@ export class SettingsPage extends PlatformElement {
                                     <div class="schema-section-header">
                                         <span class="label-with-hint">
                                             <span>optional_fields</span>
-                                            <platform-help-hint strategy="local" label="Справка: optional_fields" .text=${SETTINGS_HINTS.optionalFields}></platform-help-hint>
+                                            <platform-help-hint strategy="local" label="Справка: optional_fields" .text=${TEMPLATE_HINTS.optionalFields}></platform-help-hint>
                                         </span>
                                         <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('optional_fields_rows')} type="button">+ Поле</button>
                                     </div>
@@ -1090,55 +922,22 @@ export class SettingsPage extends PlatformElement {
                                         ? this._typeDraft.optional_fields_rows.map((row, index) => html`
                                             <div class="schema-field-card">
                                                 <div class="schema-field-row">
-                                                    <input
-                                                        class="form-input mono"
-                                                        placeholder="key (например budget)"
-                                                        .value=${row.key || ''}
-                                                        @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { key: e.target.value })}
-                                                    />
-                                                    <input
-                                                        class="form-input"
-                                                        placeholder="label (например Бюджет)"
-                                                        .value=${row.label || ''}
-                                                        @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { label: e.target.value })}
-                                                    />
+                                                    <input class="form-input mono" placeholder="key (например budget)" .value=${row.key || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { key: e.target.value })} />
+                                                    <input class="form-input" placeholder="label (например Бюджет)" .value=${row.label || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { label: e.target.value })} />
                                                 </div>
                                                 <div class="schema-field-row">
-                                                    <select
-                                                        class="form-select"
-                                                        .value=${row.type || this._getDefaultFieldType()}
-                                                        @change=${(e) => this._updateSchemaRow('optional_fields_rows', index, { type: e.target.value })}
-                                                    >
-                                                        ${(this._schemaOptions?.field_types || []).map((typeItem) => html`
-                                                            <option value=${typeItem.type_id}>${typeItem.label}</option>
-                                                        `)}
+                                                    <select class="form-select" .value=${row.type || this._getDefaultFieldType()} @change=${(e) => this._updateSchemaRow('optional_fields_rows', index, { type: e.target.value })}>
+                                                        ${(this._schemaOptions?.field_types || []).map((typeItem) => html`<option value=${typeItem.type_id}>${typeItem.label}</option>`)}
                                                     </select>
-                                                    <input
-                                                        class="form-input"
-                                                        placeholder="description (что означает поле)"
-                                                        .value=${row.description || ''}
-                                                        @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { description: e.target.value })}
-                                                    />
+                                                    <input class="form-input" placeholder="description (что означает поле)" .value=${row.description || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { description: e.target.value })} />
                                                 </div>
                                                 ${this._isEnumType(row.type) ? html`
                                                     <div class="schema-field-row">
-                                                        <select
-                                                            class="form-select"
-                                                            .value=${row.enum_set_id || ''}
-                                                            @change=${(e) => this._updateSchemaRow('optional_fields_rows', index, { enum_set_id: e.target.value })}
-                                                        >
+                                                        <select class="form-select" .value=${row.enum_set_id || ''} @change=${(e) => this._updateSchemaRow('optional_fields_rows', index, { enum_set_id: e.target.value })}>
                                                             <option value="">Локальные values</option>
-                                                            ${(this._schemaOptions?.enum_sets || []).map((setItem) => html`
-                                                                <option value=${setItem.enum_set_id}>${setItem.label}</option>
-                                                            `)}
+                                                            ${(this._schemaOptions?.enum_sets || []).map((setItem) => html`<option value=${setItem.enum_set_id}>${setItem.label}</option>`)}
                                                         </select>
-                                                        <input
-                                                            class="form-input"
-                                                            placeholder="values: high, medium, low"
-                                                            .value=${row.enum_values_text || ''}
-                                                            ?disabled=${Boolean(row.enum_set_id)}
-                                                            @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { enum_values_text: e.target.value })}
-                                                        />
+                                                        <input class="form-input" placeholder="values: high, medium, low" .value=${row.enum_values_text || ''} ?disabled=${Boolean(row.enum_set_id)} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { enum_values_text: e.target.value })} />
                                                     </div>
                                                 ` : ''}
                                                 <div class="schema-field-inline">
@@ -1170,87 +969,6 @@ export class SettingsPage extends PlatformElement {
                         </div>
                     ` : html`<div class="card-text">Выберите шаблон для редактирования</div>`}
                 </div>
-
-                <div class="section">
-                    <div class="section-header">
-                        <platform-icon name="folder" size="18"></platform-icon>
-                        Редактировать пространства
-                    </div>
-                    <div class="namespace-card-grid">
-                        ${this._namespaces.map((namespace) => html`
-                            <div
-                                class="namespace-card ${namespace.name === this._selectedNamespaceName ? 'active' : ''}"
-                                @click=${() => this._selectNamespaceForEditing(namespace.name)}
-                            >
-                                <div class="namespace-card-title">${namespace.name}</div>
-                                <div class="card-text">${namespace.description || 'Описание не задано'}</div>
-                                <div class="chips">
-                                    ${this._resolveAllowedTypes(namespace.name).map((entityType) => html`<span class="chip">${entityType.name}</span>`)}
-                                </div>
-                            </div>
-                        `)}
-                    </div>
-                    ${this._selectedNamespaceName ? html`
-                        <div class="section">
-                            <div class="section-header">
-                                <platform-icon name="edit" size="16"></platform-icon>
-                                Редактор пространства: ${this._selectedNamespaceName}
-                            </div>
-                            ${this._namespaceEditorLoading ? html`<div class="schema-empty">Загрузка ограничений пространства...</div>` : ''}
-                            ${this._selectedNamespaceEditability ? html`
-                                ${this._selectedNamespaceEditability.can_update_allowed_types
-                                    ? html`<div class="namespace-ok">Типы можно редактировать: пространство пока не содержит сущностей.</div>`
-                                    : html`<div class="namespace-lock">${this._selectedNamespaceEditability.lock_reason}</div>`
-                                }
-                            ` : ''}
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label class="form-label label-with-hint">
-                                        <span>Описание пространства</span>
-                                        <platform-help-hint strategy="local" label="Справка: описание пространства" .text=${SETTINGS_HINTS.namespaceDescription}></platform-help-hint>
-                                    </label>
-                                    <textarea
-                                        class="form-textarea"
-                                        .value=${this._selectedNamespaceDraftDescription}
-                                        @input=${(e) => { this._selectedNamespaceDraftDescription = e.target.value; }}
-                                    ></textarea>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label label-with-hint">
-                                        <span>Разрешенные типы</span>
-                                        <platform-help-hint strategy="local" label="Справка: разрешенные типы" .text=${SETTINGS_HINTS.namespaceAllowedTypes}></platform-help-hint>
-                                    </label>
-                                    <div class="namespace-selector">
-                                        ${(this._entityTypes || []).map((entityType) => {
-                                            const checked = (this._selectedNamespaceDraftAllowedTypeIds || []).includes(entityType.type_id);
-                                            const disabled = !this._selectedNamespaceEditability?.can_update_allowed_types;
-                                            return html`
-                                                <button
-                                                    type="button"
-                                                    class="namespace-pill ${checked ? 'active' : ''}"
-                                                    ?disabled=${disabled}
-                                                    @click=${() => this._toggleNamespaceAllowedType(entityType.type_id, !checked)}
-                                                >
-                                                    ${entityType.name}
-                                                </button>
-                                            `;
-                                        })}
-                                    </div>
-                                    ${this._selectedNamespaceEditability ? html`
-                                        <div class="chips">
-                                            <span class="chip">Сущностей: ${this._selectedNamespaceEditability.entity_count}</span>
-                                            ${(this._selectedNamespaceEditability.used_type_ids || []).map((typeId) => html`<span class="chip mono">${typeId}</span>`)}
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            </div>
-                            <button class="save-btn" ?disabled=${this._namespaceEditorSaving} @click=${this._saveNamespaceSettings}>
-                                <platform-icon name="save" size="14"></platform-icon>
-                                ${this._namespaceEditorSaving ? 'Сохранение...' : 'Сохранить пространство'}
-                            </button>
-                        </div>
-                    ` : html`<div class="card-text">Выберите пространство для редактирования</div>`}
-                </div>
             </div>
             ${this._showTemplateModal ? html`
                 <template-create-modal
@@ -1263,4 +981,4 @@ export class SettingsPage extends PlatformElement {
     }
 }
 
-customElements.define('settings-page', SettingsPage);
+customElements.define('templates-page', TemplatesPage);

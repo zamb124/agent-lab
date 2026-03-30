@@ -483,6 +483,7 @@ class EntityService:
         query: str,
         entity_type: Optional[str] = None,
         entity_subtype: Optional[str] = None,
+        namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
         
@@ -493,6 +494,7 @@ class EntityService:
             query=query,
             entity_type=entity_type,
             entity_subtype=entity_subtype,
+            namespace=namespace,
             filters=filters,
             limit=limit,
             
@@ -1262,16 +1264,6 @@ class EntityService:
             "updated_at": entity.updated_at.isoformat() if entity.updated_at else None,
         }
 
-    def _parse_explicit_links(self, text: str) -> List[str]:
-        """
-        Парсит явные ссылки @entity:id из текста.
-        
-        Создает связи типа "linked" (НЕ через AI!)
-        """
-        pattern = r'@entity:([a-f0-9-]+)'
-        matches = re.findall(pattern, text)
-        return matches
-    
     async def _deduplicate_entities(
         self,
         extracted_entities: List[AIExtractedEntity],

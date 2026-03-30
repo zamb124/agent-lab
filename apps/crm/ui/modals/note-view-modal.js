@@ -5,6 +5,7 @@ import './entity-modal.js';
 import './share-modal.js';
 import './ai-analysis-modal.js';
 import '../components/note-content.js';
+import '../components/mini-graph-preview.js';
 
 export class NoteViewModal extends PlatformModal {
     static properties = {
@@ -579,6 +580,17 @@ export class NoteViewModal extends PlatformModal {
                     @cancel-edit-note=${this._handleCancelEdit}
                     @save-note=${this._handleSaveNote}
                 ></note-content>
+
+                ${this.note?.entity_id ? html`
+                    <div style="padding: 0 var(--space-4) var(--space-4);">
+                        <mini-graph-preview
+                            .entityId=${this.note.entity_id}
+                            .maxDepth=${2}
+                            height="200px"
+                            @entity-open=${this._openEntityModal}
+                        ></mini-graph-preview>
+                    </div>
+                ` : ''}
             </div>
         `;
     }

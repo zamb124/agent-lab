@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '../../modals/edit-team-member-modal.js';
 import '@platform/lib/components/layout/page-header.js';
@@ -210,10 +211,26 @@ export class TeamPage extends PlatformElement {
     constructor() {
         super();
         this._canManageTeam = false;
+        this._avatarRetries = new Map();
         this.state = this.use((s) => ({
             members: s.entities.team.members,
             loading: s.entities.team.loading,
         }));
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback?.();
+        for (const ctrl of this._avatarRetries.values()) {
+            ctrl.cancel();
+        }
+        this._avatarRetries.clear();
+    }
+
+    _getAvatarRetry(memberId) {
+        if (!this._avatarRetries.has(memberId)) {
+            this._avatarRetries.set(memberId, createAvatarRetry(() => this.requestUpdate()));
+        }
+        return this._avatarRetries.get(memberId);
     }
 
     _computeCanManageTeam() {
@@ -279,12 +296,17 @@ export class TeamPage extends PlatformElement {
 
     _renderMemberCard(member) {
         const initials = this._getInitials(member.name);
+        const retry = this._getAvatarRetry(member.user_id);
+        const originalUrl = member.avatar_url ?? null;
+        const avatarSrc = retry.currentSrc(originalUrl);
         
         return html`
             <div class="member-card">
                 <div class="member-avatar">
-                    ${member.avatar_url
-                        ? html`<img src=${member.avatar_url} alt="" />`
+                    ${avatarSrc
+                        ? html`<img src=${avatarSrc} alt=""
+                            @load=${() => retry.onLoad()}
+                            @error=${() => retry.onError(originalUrl)} />`
                         : initials}
                 </div>
                 

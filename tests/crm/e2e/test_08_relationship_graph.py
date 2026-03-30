@@ -42,7 +42,7 @@ async def ensure_relationship_types(crm_client, auth_headers_system):
         standard_types = [
             {"type_id": "manages", "name": "Manages", "is_directed": True, "inverse_type_id": "reports_to"},
             {"type_id": "reports_to", "name": "Reports To", "is_directed": True, "inverse_type_id": "manages"},
-            {"type_id": "knows", "name": "Knows", "is_directed": True},
+            {"type_id": "related_to", "name": "Related To", "is_directed": False},
             {"type_id": "mentors", "name": "Mentors", "is_directed": True},
             {"type_id": "works_on", "name": "Works On", "is_directed": True},
             {"type_id": "works_with", "name": "Works With", "is_directed": True},
@@ -240,9 +240,9 @@ class TestInfluenceGraph:
         c_id = await create_entity(crm_client, "contact", f"PersonC {unique_id}", auth_headers_system)
         
         # Создаем цикл
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, c_id, a_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, c_id, a_id, "mentions", auth_headers_system)
         
         # Строим граф - BFS не должен зациклиться
         response = await crm_client.get(
@@ -425,9 +425,9 @@ class TestDepthLimits:
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         d_id = await create_entity(crm_client, "contact", f"D {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, c_id, d_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, c_id, d_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{a_id}/influence-graph?max_depth=1",
@@ -450,9 +450,9 @@ class TestDepthLimits:
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         d_id = await create_entity(crm_client, "contact", f"D {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, c_id, d_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, c_id, d_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{a_id}/influence-graph?max_depth=2",
@@ -475,9 +475,9 @@ class TestDepthLimits:
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         d_id = await create_entity(crm_client, "contact", f"D {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, c_id, d_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, c_id, d_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{a_id}/influence-graph?max_depth=5",
@@ -499,8 +499,8 @@ class TestShortestPath:
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_system)
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system, weight=1.0)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_system, weight=1.0)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system, weight=1.0)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_system, weight=1.0)
         
         response = await crm_client.get(
             f"/crm/api/v1/relationships/path/?from={a_id}&to={c_id}",
@@ -522,10 +522,10 @@ class TestShortestPath:
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         
         # Прямой путь с большим весом
-        await create_relationship(crm_client, a_id, c_id, "knows", auth_headers_system, weight=5.0)
+        await create_relationship(crm_client, a_id, c_id, "mentions", auth_headers_system, weight=5.0)
         # Путь через B с меньшим весом
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system, weight=1.0)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_system, weight=1.0)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system, weight=1.0)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_system, weight=1.0)
         
         response = await crm_client.get(
             f"/crm/api/v1/relationships/path/?from={a_id}&to={c_id}",
@@ -548,8 +548,8 @@ class TestShortestPath:
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         d_id = await create_entity(crm_client, "contact", f"D {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, c_id, d_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, c_id, d_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/relationships/path/?from={a_id}&to={d_id}",
@@ -637,7 +637,7 @@ class TestShortestPath:
         
         # Создаем цепочку A→B→C→D→E
         for i in range(4):
-            await create_relationship(crm_client, entities[i], entities[i+1], "knows", auth_headers_system)
+            await create_relationship(crm_client, entities[i], entities[i+1], "mentions", auth_headers_system)
         
         # Путь от A до E с max_depth=3 (требуется 4 шага)
         response = await crm_client.get(
@@ -659,9 +659,9 @@ class TestRelatedEntities:
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         d_id = await create_entity(crm_client, "contact", f"D {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, a_id, c_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, d_id, a_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, a_id, c_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, d_id, a_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{a_id}/related?direction=outgoing",
@@ -684,9 +684,9 @@ class TestRelatedEntities:
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         d_id = await create_entity(crm_client, "contact", f"D {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, a_id, c_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, d_id, a_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, a_id, c_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, d_id, a_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{a_id}/related?direction=incoming",
@@ -708,9 +708,9 @@ class TestRelatedEntities:
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_system)
         d_id = await create_entity(crm_client, "contact", f"D {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, a_id, c_id, "knows", auth_headers_system)
-        await create_relationship(crm_client, d_id, a_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, a_id, c_id, "mentions", auth_headers_system)
+        await create_relationship(crm_client, d_id, a_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{a_id}/related?direction=both",
@@ -756,8 +756,8 @@ class TestAccessControl:
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2, namespace=ns)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_company2)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_company2)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_company2)
         
         # Делаем только A публичной
         await create_public_grant(crm_client, a_id, auth_headers_company2)
@@ -795,8 +795,8 @@ class TestAccessControl:
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2, namespace=ns)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_company2)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_company2)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_company2)
         
         # Делаем A и C публичными
         await create_public_grant(crm_client, a_id, auth_headers_company2)
@@ -832,7 +832,7 @@ class TestCrossCompanyAccess:
         a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2, namespace=ns)
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_company2)
         await create_public_grant(crm_client, a_id, auth_headers_company2)
         
         # System user видит relationship (но B как placeholder)
@@ -862,8 +862,8 @@ class TestCrossCompanyAccess:
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2, namespace=ns)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_company2)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_company2)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_company2)
         
         # Даем system user доступ к A и C (но НЕ к B)
         response = await crm_client.post(
@@ -914,7 +914,7 @@ class TestCrossCompanyAccess:
         
         # Создаем цепочку
         for i in range(4):
-            await create_relationship(crm_client, entities[i], entities[i+1], "knows", auth_headers_company2)
+            await create_relationship(crm_client, entities[i], entities[i+1], "mentions", auth_headers_company2)
         
         # Даем namespace grant
         response = await crm_client.post(
@@ -949,8 +949,8 @@ class TestCrossCompanyAccess:
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
         c_id = await create_entity(crm_client, "contact", f"C {unique_id}", auth_headers_company2, namespace=ns)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2, weight=1.0)
-        await create_relationship(crm_client, b_id, c_id, "knows", auth_headers_company2, weight=1.0)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_company2, weight=1.0)
+        await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_company2, weight=1.0)
         
         # Public grants для A и C
         await create_public_grant(crm_client, a_id, auth_headers_company2)
@@ -978,7 +978,7 @@ class TestCrossCompanyAccess:
         related_ids = []
         for i in range(3):
             r_id = await create_entity(crm_client, "contact", f"Related{i} {unique_id}", auth_headers_company2, namespace=ns)
-            await create_relationship(crm_client, hub_id, r_id, "knows", auth_headers_company2)
+            await create_relationship(crm_client, hub_id, r_id, "mentions", auth_headers_company2)
             related_ids.append(r_id)
         
         # Public grant для hub
@@ -1009,7 +1009,7 @@ class TestPerformance:
         
         # Создаем цепочку A→B→C→D→E→F
         for i in range(5):
-            await create_relationship(crm_client, entities[i], entities[i+1], "knows", auth_headers_system)
+            await create_relationship(crm_client, entities[i], entities[i+1], "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{entities[0]}/influence-graph?max_depth=5",
@@ -1035,7 +1035,7 @@ class TestPerformance:
         for i in range(20):
             neighbor_id = await create_entity(crm_client, "contact", f"Neighbor{i} {unique_id}", auth_headers_system)
             neighbor_ids.append(neighbor_id)
-            await create_relationship(crm_client, root_id, neighbor_id, "knows", auth_headers_system)
+            await create_relationship(crm_client, root_id, neighbor_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{root_id}/influence-graph?max_depth=1",
@@ -1175,7 +1175,7 @@ class TestEdgeCases:
         a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_system)
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
         
         # max_depth=0 должен вернуть только root
         response = await crm_client.get(
@@ -1221,7 +1221,7 @@ class TestSameCompanyRegression:
         a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_system)
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_system)
         
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_system)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_system)
         
         response = await crm_client.get(
             f"/crm/api/v1/entities/{a_id}/influence-graph",
@@ -1241,7 +1241,7 @@ class TestSameCompanyRegression:
         # Company2 создает relationship
         a_id = await create_entity(crm_client, "contact", f"A {unique_id}", auth_headers_company2, namespace=ns)
         b_id = await create_entity(crm_client, "contact", f"B {unique_id}", auth_headers_company2, namespace=ns)
-        await create_relationship(crm_client, a_id, b_id, "knows", auth_headers_company2)
+        await create_relationship(crm_client, a_id, b_id, "mentions", auth_headers_company2)
         
         # System user НЕ видит через API
         response = await crm_client.get(

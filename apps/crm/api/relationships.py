@@ -14,8 +14,7 @@ from apps.crm.db.repositories.relationship_type_repository import RelationshipTy
 from apps.crm.services.graph_service import GraphService
 from apps.crm.container import get_crm_container
 from apps.crm.dependencies import get_graph_service
-from apps.crm.db.models import Relationship
-from apps.crm.db.models import RelationshipType
+from apps.crm.db.models import Relationship, RelationshipType
 from core.context import get_context
 from core.logging import get_logger
 
@@ -70,12 +69,21 @@ async def get_relationship(
 @router.post("", response_model=RelationshipResponse)
 async def create_relationship(
     data: RelationshipCreate,
-    repo: RelationshipRepository = Depends(get_relationship_repo)
+    repo: RelationshipRepository = Depends(get_relationship_repo),
+    type_repo: RelationshipTypeRepository = Depends(get_relationship_type_repo),
 ):
     """Создать новую связь"""
 
     context = get_context()
     company_id = context.active_company.company_id
+
+    all_types = await type_repo.get_all_for_company(include_system=True)
+    valid_type_ids = {t.type_id for t in all_types}
+    if data.relationship_type not in valid_type_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown relationship_type: {data.relationship_type}",
+        )
 
     relationship = Relationship(
         relationship_id=str(uuid.uuid4()),
@@ -120,7 +128,7 @@ async def create_relationship_type(
     data: RelationshipTypeCreate,
     repo: RelationshipTypeRepository = Depends(get_relationship_type_repo)
 ):
-    """Создать новый тип связи"""
+    """Создать кастомный тип связи (скрыт из UI, доступен по API)"""
 
     rel_type = RelationshipType(
         type_id=data.type_id,

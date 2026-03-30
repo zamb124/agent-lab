@@ -60,6 +60,7 @@ async def search_entities(
     query: str = Query(...),
     entity_type: Optional[str] = Query(None),
     entity_subtype: Optional[str] = Query(None),
+    namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
     limit: int = Query(10, le=100),
     service: EntityService = Depends(get_entity_service)
 ):
@@ -68,6 +69,7 @@ async def search_entities(
         query=query,
         entity_type=entity_type,
         entity_subtype=entity_subtype,
+        namespace=namespace,
         limit=limit
     )
     return [EntityResponse.model_validate(e) for e in entities]
@@ -164,8 +166,11 @@ async def list_entities(
     entity_type: Optional[str] = Query(None),
     entity_subtype: Optional[str] = Query(None),
     namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
+    status: Optional[str] = Query(None, description="Фильтр по статусу (active, archived, ...)"),
+    priority: Optional[str] = Query(None, description="Фильтр по приоритету (low, medium, high, urgent)"),
     tags: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, description="Подстрока для поиска по name/description"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
@@ -175,10 +180,16 @@ async def list_entities(
 ):
     """Получить список entities с фильтрацией"""
     filters = {}
+    if status:
+        filters["status"] = status
+    if priority:
+        filters["priority"] = priority
     if tags:
         filters["tags"] = {"$contains": tags}
     if user_id:
         filters["user_id"] = user_id
+    if search:
+        filters["search"] = search
     if date_from:
         filters["note_date"] = {"$gte": date_from}
     if date_to:

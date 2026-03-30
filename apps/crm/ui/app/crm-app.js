@@ -15,7 +15,9 @@ import '../pages/entities-page.js';
 import '../pages/graph-page.js';
 import '../pages/tasks-page.js';
 import '../pages/calendar-page.js';
-import '../pages/settings-page.js';
+import '../pages/settings-hub-page.js';
+import '../pages/templates-page.js';
+import '../pages/spaces-page.js';
 import '../modals/entity-modal.js';
 import '../modals/ai-analysis-modal.js';
 import '../modals/share-modal.js';
@@ -47,6 +49,14 @@ export class CRMApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
+                --accent: var(--crm-button-primary-bg);
+                --accent-hover: var(--crm-button-primary-hover);
+                --accent-active: var(--crm-button-primary-hover);
+                --accent-subtle: rgba(153, 166, 249, 0.18);
+                --accent-glow: 0 0 24px rgba(153, 166, 249, 0.35);
+                --accent-gradient: linear-gradient(135deg, #99A6F9 0%, #8794F0 100%);
+                --border-focus: var(--crm-button-primary-bg);
+                --focus-ring: 0 0 0 3px rgba(153, 166, 249, 0.4);
                 --btn-primary-bg: var(--crm-button-primary-bg);
                 --btn-primary-hover-bg: var(--crm-button-primary-hover);
                 --btn-primary-text: var(--crm-button-primary-text);
@@ -382,7 +392,15 @@ export class CRMApp extends PlatformApp {
         }
 
         if (this._currentView === 'settings') {
-            return html`<settings-page></settings-page>`;
+            return html`<settings-hub-page></settings-hub-page>`;
+        }
+
+        if (this._currentView === 'templates') {
+            return html`<templates-page></templates-page>`;
+        }
+
+        if (this._currentView === 'spaces') {
+            return html`<spaces-page></spaces-page>`;
         }
         
         return this._renderPlaceholder(this._currentView);
@@ -451,7 +469,8 @@ export class CRMApp extends PlatformApp {
             graph: 'Граф связей',
             tasks: 'Задачи',
             calendar: 'Календарь',
-            settings: 'Настройки',
+            templates: 'Шаблоны',
+            spaces: 'Пространства',
         };
         
         const viewName = viewNames[view] || view;
@@ -472,7 +491,8 @@ export class CRMApp extends PlatformApp {
             graph: 'network',
             tasks: 'checklist',
             calendar: 'calendar',
-            settings: 'settings',
+            templates: 'settings',
+            spaces: 'folder',
         };
         return icons[view] || 'folder';
     }

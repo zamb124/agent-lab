@@ -427,8 +427,11 @@ class GraphService:
         undirected_ids: Set[str] = set()
         
         for rel in relationships:
-            rel_info = direction_map.get(rel.relationship_type, {})
-            is_directed = rel_info.get("is_directed", True)
+            rel_info = direction_map.get(rel.relationship_type)
+            if not rel_info:
+                logger.warning(f"Unknown relationship_type in get_related_entities: {rel.relationship_type}")
+                continue
+            is_directed = rel_info["is_directed"]
             
             if rel.source_entity_id == entity_id:
                 if is_directed:
@@ -590,8 +593,10 @@ class GraphService:
         """Строит список GraphEdge из relationships"""
         edges = []
         for rel in relationships:
-            rel_info = direction_map.get(rel.relationship_type, {})
-            is_directed = rel_info.get("is_directed", True)
+            rel_info = direction_map.get(rel.relationship_type)
+            if not rel_info:
+                logger.warning(f"Unknown relationship_type in _build_edges: {rel.relationship_type}")
+                continue
             
             edges.append(GraphEdge(
                 edge_id=rel.relationship_id,
@@ -599,7 +604,7 @@ class GraphService:
                 target_id=rel.target_entity_id,
                 relationship_type=rel.relationship_type,
                 weight=rel.weight,
-                is_directed=is_directed,
+                is_directed=rel_info["is_directed"],
                 attributes=rel.attributes
             ))
         

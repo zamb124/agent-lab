@@ -9,7 +9,7 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type
 
-from sqlalchemy import delete, select, and_, func
+from sqlalchemy import delete, select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
@@ -215,7 +215,15 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     def _apply_filters(self, stmt, filters: Dict[str, Any]):
         """Применяет фильтры к SQL-запросу."""
         for key, value in filters.items():
-            if key == "tags":
+            if key == "search":
+                pattern = f"%{value}%"
+                stmt = stmt.where(
+                    or_(
+                        CRMEntity.name.ilike(pattern),
+                        CRMEntity.description.ilike(pattern),
+                    )
+                )
+            elif key == "tags":
                 if isinstance(value, dict) and "$contains" in value:
                     tag = value["$contains"]
                     stmt = stmt.where(CRMEntity.tags.contains([tag]))

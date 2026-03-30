@@ -34,8 +34,10 @@ function createForceGraphMock() {
     linkPositionUpdate: () => api,
     linkDirectionalArrowLength: () => api,
     linkDirectionalArrowRelPos: () => api,
+    linkDirectionalArrowColor: () => api,
     linkDirectionalParticles: () => api,
     linkDirectionalParticleWidth: () => api,
+    linkDirectionalParticleSpeed: () => api,
     enableNodeDrag: () => api,
     onNodeClick: () => api,
     onNodeHover: () => api,
@@ -212,8 +214,9 @@ describe('crm graph page', () => {
         currentEntity: null,
         currentEntityRelated: [],
         relationships: [],
-        filters: { namespace: 'default', entity_type: null, entity_subtype: null, date_from: null, date_to: null, tags: [], search: '', user_id: null },
+        filters: { namespace: 'default', entity_type: null, entity_subtype: null, status: null, priority: null, date_from: null, date_to: null, tags: [], search: '', user_id: null },
         entitiesLoading: false,
+        cardLoading: false,
       },
     });
     window.ForceGraph3D = () => () => createForceGraphMock();
@@ -231,7 +234,7 @@ describe('crm graph page', () => {
 
   it('инициализирует 3D граф и показывает матрицу покрытия', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-canvas')));
     await waitUntil(() => el._graphNodes.length > 0);
     const content = el.shadowRoot.textContent;
     expect(content).to.contain('Матрица покрытия API');
@@ -241,10 +244,10 @@ describe('crm graph page', () => {
 
   it('поддерживает graph режимы influence/related/path', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('.mode-pills')));
-    const modePills = el.shadowRoot.querySelectorAll('.mode-pill');
-    const modes = Array.from(modePills).map((pill) => pill.textContent.trim());
-    expect(modes).to.deep.equal(['influence', 'related', 'path']);
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-search-pill')));
+    const searchPill = el.shadowRoot.querySelector('graph-search-pill');
+    expect(searchPill).to.exist;
+    expect(searchPill.modes).to.deep.equal(['influence', 'related', 'path']);
   });
 
   it('использует офлайн vendor script для 3d-force-graph', async () => {
@@ -256,7 +259,7 @@ describe('crm graph page', () => {
 
   it('не показывает fullscreen toggle в canvas-first UI', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-canvas')));
     const fullscreenButton = Array.from(el.shadowRoot.querySelectorAll('button'))
       .find((button) => button.textContent.includes('Fullscreen'));
     expect(fullscreenButton).to.not.exist;
@@ -264,25 +267,22 @@ describe('crm graph page', () => {
 
   it('рендерит правую икон-панель с tooltip', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
-    const iconButtons = el.shadowRoot.querySelectorAll('.icon-toolbar .icon-btn');
-    expect(iconButtons.length).to.be.greaterThan(6);
-    const fitButton = Array.from(iconButtons).find((button) => button.getAttribute('title') === 'Вписать граф');
-    expect(fitButton).to.exist;
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-toolbar')));
+    const toolbar = el.shadowRoot.querySelector('graph-toolbar');
+    expect(toolbar).to.exist;
+    expect(toolbar.actions.length).to.be.greaterThan(6);
   });
 
-  it('запускает canvas режим выбора маршрута через иконку', async () => {
+  it('запускает canvas режим выбора маршрута через toolbar action', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
-    const pathButton = el.shadowRoot.querySelector('.icon-toolbar .icon-btn[title="Режим выбора маршрута"]');
-    expect(pathButton).to.exist;
-    pathButton.click();
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-toolbar')));
+    el._onToolbarAction('path_mode');
     expect(el._canvasPathState).to.equal('pick_source');
   });
 
   it('не падает при выборе одинаковых source и target', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-canvas')));
     el._canvasPathState = 'pick_target';
     el._pathSourceId = 'entity-1';
     el._onCanvasNodeClick({ id: 'entity-1' });
@@ -292,7 +292,7 @@ describe('crm graph page', () => {
 
   it('фильтрует видимый граф по левому поиску', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-canvas')));
     el._entitySearchQuery = 'Entity Two';
     await el.updateComplete;
     const snapshot = el._getVisibleGraphSnapshot();
@@ -302,7 +302,7 @@ describe('crm graph page', () => {
 
   it('формирует timeline query params для backend фильтра', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-canvas')));
     el._timelineStartPercent = 50;
     el._timelineEndPercent = 100;
     await el.updateComplete;
@@ -313,7 +313,7 @@ describe('crm graph page', () => {
 
   it('не очищает сцену если путь не найден', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('graph-canvas')));
     await waitUntil(() => el._graphNodes.length > 0);
     el.crmApi.getShortestPath = async () => ({
       path: [],

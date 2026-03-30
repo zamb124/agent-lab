@@ -14,6 +14,7 @@ import { PlatformElement } from '../platform-element/index.js';
 import { AppEvents } from '../utils/types.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
+import { createAvatarRetry } from '../utils/avatar-retry.js';
 import './platform-icon.js';
 
 export class PlatformUser extends PlatformElement {
@@ -24,7 +25,7 @@ export class PlatformUser extends PlatformElement {
         _menuOpen: { type: Boolean },
         _companySelectorOpen: { type: Boolean },
         _appsMenuOpen: { type: Boolean },
-        _avatarBroken: { type: Boolean, state: true },
+        _avatarRetryTick: { type: Number, state: true },
         /** Необязательный тег сценария (docs/scenarios/<service>/<tag>/), если UI привязан к процессу */
         documentationTag: { type: String },
     };
@@ -37,7 +38,7 @@ export class PlatformUser extends PlatformElement {
         this._menuOpen = false;
         this._companySelectorOpen = false;
         this._appsMenuOpen = false;
-        this._avatarBroken = false;
+        this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
         this.documentationTag = null;
         this._boundRepositionMenu = this._syncCollapsedMenuPosition.bind(this);
         this._boundDocumentClick = (e) => this._handleDocumentClick(e);
@@ -70,6 +71,7 @@ export class PlatformUser extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._avatarRetry.cancel();
         document.removeEventListener('click', this._boundDocumentClick);
         window.removeEventListener('storage', this._boundCompanySwitchStorage);
         window.removeEventListener('focus', this._boundWindowFocus);
@@ -150,7 +152,7 @@ export class PlatformUser extends PlatformElement {
         try {
             const userData = await this.auth.get('/api/auth/me');
             this.user = userData;
-            this._avatarBroken = false;
+            this._avatarRetry.reset();
             await this._loadCompanies();
             this._ensureCompanyAlignment();
             await this._loadServiceAttrs();
@@ -329,20 +331,18 @@ export class PlatformUser extends PlatformElement {
         return trimmed !== '' ? trimmed : null;
     }
 
-    _onAvatarError() {
-        this._avatarBroken = true;
-    }
-
     _renderAvatar() {
-        const url = this._avatarDisplayUrl();
-        if (url && !this._avatarBroken) {
+        const originalUrl = this._avatarDisplayUrl();
+        const src = this._avatarRetry.currentSrc(originalUrl);
+        if (src) {
             return html`
                 <div class="user-avatar has-image" aria-hidden="true">
                     <img
                         class="avatar-img"
-                        src=${url}
+                        src=${src}
                         alt=""
-                        @error=${this._onAvatarError}
+                        @load=${() => this._avatarRetry.onLoad()}
+                        @error=${() => this._avatarRetry.onError(originalUrl)}
                     />
                 </div>
             `;

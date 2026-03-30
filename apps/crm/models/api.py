@@ -245,6 +245,9 @@ class NamespaceEditabilityResponse(BaseModel):
     used_type_ids: List[str]
     current_allowed_type_ids: List[str]
     can_update_allowed_types: bool
+    can_add_types: bool
+    locked_type_ids: List[str]
+    removable_type_ids: List[str]
     lock_reason: Optional[str] = None
 
 

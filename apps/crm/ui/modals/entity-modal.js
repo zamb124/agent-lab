@@ -28,6 +28,17 @@ export class EntityModal extends PlatformModal {
         formStyles,
         buttonStyles,
         css`
+            :host {
+                --accent: var(--crm-button-primary-bg);
+                --accent-hover: var(--crm-button-primary-hover);
+                --accent-active: var(--crm-button-primary-hover);
+                --accent-subtle: rgba(153, 166, 249, 0.18);
+                --accent-glow: 0 0 24px rgba(153, 166, 249, 0.35);
+                --accent-gradient: linear-gradient(135deg, #99A6F9 0%, #8794F0 100%);
+                --border-focus: var(--crm-button-primary-bg);
+                --focus-ring: 0 0 0 3px rgba(153, 166, 249, 0.4);
+            }
+
             .form-grid {
                 display: grid;
                 gap: var(--space-4);

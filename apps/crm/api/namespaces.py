@@ -369,13 +369,15 @@ async def update_namespace(
             )
 
     editability = await container.namespace_template_service.get_namespace_editability(normalized_namespace_name)
-    current_allowed_type_ids = set(editability["current_allowed_type_ids"])
-    requested_allowed_type_ids = set(allowed_type_ids or []) if allowed_type_ids is not None else None
-    is_allowed_types_changed = (
-        requested_allowed_type_ids is not None and requested_allowed_type_ids != current_allowed_type_ids
-    )
-    if is_allowed_types_changed and not editability["can_update_allowed_types"]:
-        raise HTTPException(status_code=422, detail=editability["lock_reason"])
+    if allowed_type_ids is not None:
+        locked_type_ids = set(editability["locked_type_ids"])
+        requested_set = set(allowed_type_ids)
+        missing_locked = locked_type_ids - requested_set
+        if missing_locked:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Нельзя убрать типы с существующими сущностями: {', '.join(sorted(missing_locked))}",
+            )
 
     service = container.namespace_template_service
     updated_namespace = await service.update_existing_namespace(

@@ -3,6 +3,14 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
+import '../modals/entity-modal.js';
+import '../components/graph-canvas.js';
+import '../components/graph-timeline.js';
+import '../components/graph-toolbar.js';
+import '../components/graph-context-menu.js';
+import '../components/graph-legend.js';
+import '../components/graph-search-pill.js';
+import '../components/mini-graph-preview.js';
 
 const VIEW_MODES = ['influence', 'related', 'path'];
 
@@ -52,14 +60,6 @@ function _resolvePanelVisibility() {
     return resolved;
 }
 
-const GRAPH_PRESETS = {
-    dense: { charge: -60, linkWidth: 0.8, nodeRelSize: 5 },
-    readable: { charge: -120, linkWidth: 1.5, nodeRelSize: 6 },
-    presentation: { charge: -180, linkWidth: 2.2, nodeRelSize: 7 },
-};
-const GRAPH_WORLD_RADIUS = 220;
-const MIN_CAMERA_DISTANCE = 760;
-const ADAPTIVE_LABEL_DISTANCE = 900;
 
 export class GraphPage extends PlatformElement {
     static properties = {
@@ -121,6 +121,7 @@ export class GraphPage extends PlatformElement {
         _timelineMinTimestamp: { state: true },
         _timelineMaxTimestamp: { state: true },
         _panelVisibility: { state: true },
+        _contextMenu: { state: true },
     };
 
     static styles = [
@@ -138,51 +139,8 @@ export class GraphPage extends PlatformElement {
                 overflow: hidden;
             }
 
-            .layout {
-                display: flex;
-                flex-direction: column;
-                width: 100%;
-                height: 100%;
-                min-height: 0;
-            }
-
-            .toolbar {
-                display: flex;
-                align-items: center;
-                gap: var(--space-3);
-                padding: var(--space-4);
-                border-bottom: 1px solid var(--crm-stroke);
-                background: var(--crm-surface-tint);
-                flex-wrap: wrap;
-            }
-
-            .toolbar-title {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                font-size: var(--text-base);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin-right: var(--space-2);
-            }
-
-            .toolbar-control {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                flex-wrap: wrap;
-            }
-
-            .toolbar-label {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-            }
-
             .toolbar-select,
             .toolbar-input,
-            .json-input,
             .textarea {
                 min-width: 160px;
                 padding: var(--space-2) var(--space-3);
@@ -191,118 +149,6 @@ export class GraphPage extends PlatformElement {
                 background: var(--crm-surface-muted);
                 color: var(--text-primary);
                 font-size: var(--text-sm);
-            }
-
-            .toolbar-input {
-                min-width: 220px;
-            }
-
-            .stats {
-                display: grid;
-                grid-template-columns: repeat(4, minmax(0, 1fr));
-                gap: var(--space-3);
-                padding: var(--space-4);
-                border-bottom: 1px solid var(--crm-stroke);
-            }
-
-            .stat-card {
-                padding: var(--space-3);
-                background: var(--crm-surface-muted);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-            }
-
-            .stat-label {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                margin-bottom: var(--space-1);
-            }
-
-            .stat-value {
-                font-size: var(--text-xl);
-                color: var(--text-primary);
-                font-weight: var(--font-semibold);
-            }
-
-            .workspace {
-                flex: 1;
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) 320px;
-                min-height: 0;
-                gap: var(--space-3);
-                padding: var(--space-4);
-                overflow: hidden;
-            }
-
-            .graph-panel,
-            .control-panel {
-                min-height: 0;
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface-muted);
-                border-radius: var(--radius-lg);
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
-            }
-
-            .control-panel.hidden {
-                display: none;
-            }
-
-            .panel-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-2);
-                padding: var(--space-3);
-                border-bottom: 1px solid var(--crm-stroke);
-            }
-
-            .panel-title {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-            }
-
-            .graph-canvas {
-                flex: 1;
-                min-height: 0;
-                position: relative;
-                background: radial-gradient(circle at top, rgba(130, 130, 180, 0.18), rgba(20, 20, 35, 0.75));
-            }
-
-            .legend {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                flex-wrap: wrap;
-                padding: var(--space-2) var(--space-3);
-                border-top: 1px solid var(--crm-stroke);
-                background: var(--crm-surface);
-            }
-
-            .legend-item {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-            }
-
-            .legend-dot {
-                width: 10px;
-                height: 10px;
-                border-radius: 50%;
-            }
-
-            .control-body {
-                flex: 1;
-                min-height: 0;
-                overflow: auto;
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-                padding: var(--space-3);
             }
 
             .section {
@@ -391,46 +237,7 @@ export class GraphPage extends PlatformElement {
                 gap: var(--space-2);
             }
 
-            .layout.fullscreen .toolbar,
-            .layout.fullscreen .stats,
-            .layout.fullscreen .control-panel {
-                display: none;
-            }
 
-            .layout.fullscreen .workspace {
-                grid-template-columns: 1fr;
-                padding: 0;
-                gap: 0;
-                height: 100%;
-            }
-
-            .layout.fullscreen .graph-panel {
-                border: none;
-                border-radius: 0;
-            }
-
-            .node-pill {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-1);
-                padding: var(--space-1) var(--space-2);
-                border-radius: var(--radius-full);
-                background: var(--crm-surface-tint-strong);
-                border: 1px solid var(--crm-stroke);
-                font-size: var(--text-xs);
-            }
-
-            .canvas-hint {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-1) var(--space-2);
-                border-radius: var(--radius-full);
-                background: var(--crm-surface-tint-strong);
-                border: 1px solid var(--crm-stroke);
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-            }
 
             .canvas-layout {
                 width: 100%;
@@ -478,233 +285,17 @@ export class GraphPage extends PlatformElement {
                 display: none !important;
             }
 
-            .toolbar-separator {
-                width: 20px;
-                height: 2px;
-                background: var(--accent);
-                opacity: 0.4;
-                border-radius: 1px;
-                margin: 4px auto;
-            }
 
-            .icon-btn.toggle-btn {
-                border-style: dashed;
-                border-color: var(--glass-border-medium);
-            }
-
-            .icon-btn.toggle-btn.active {
-                border-style: solid;
-                border-color: var(--accent);
-            }
-
-            .overlay-search {
+            graph-search-pill {
                 position: absolute;
                 z-index: 12;
                 top: 20px;
                 left: 20px;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                pointer-events: none;
             }
 
-            .search-pill {
-                display: flex;
-                align-items: center;
-                gap: 0;
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: 999px;
-                overflow: hidden;
-                pointer-events: auto;
-                backdrop-filter: blur(6px);
-            }
-
-            .search-pill input {
-                border: none;
-                background: transparent;
-                color: var(--text-primary);
-                font-size: 13px;
-                padding: 8px 14px;
-                width: 180px;
-                outline: none;
-            }
-
-            .search-pill input::placeholder {
-                color: var(--text-tertiary);
-            }
-
-            .search-pill .pill-icon-btn {
-                width: 32px;
-                height: 32px;
-                border: none;
-                background: transparent;
-                color: var(--text-secondary);
-                cursor: pointer;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                flex-shrink: 0;
-            }
-
-            .search-pill .pill-icon-btn:hover {
-                color: var(--text-primary);
-            }
-
-            .search-pill .pill-icon-btn svg {
-                width: 14px;
-                height: 14px;
-                fill: none;
-                stroke: currentColor;
-                stroke-width: 2;
-                stroke-linecap: round;
-                stroke-linejoin: round;
-            }
-
-            .mode-pills {
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                pointer-events: auto;
-            }
-
-            .mode-pill {
-                display: inline-flex;
-                align-items: center;
-                padding: 5px 10px;
-                border-radius: 999px;
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                backdrop-filter: blur(6px);
-                color: var(--text-secondary);
-                font-size: 12px;
-                cursor: pointer;
-                transition: background 0.14s, color 0.14s;
-            }
-
-            .mode-pill:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-
-            .mode-pill.active {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--text-primary);
-            }
-
-            .timeline-overlay {
+            graph-timeline {
                 top: 60px;
                 left: 16px;
-                width: 56px;
-                padding: 8px 4px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 8px;
-            }
-
-            .timeline-title {
-                font-size: 9px;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.06em;
-            }
-
-            .timeline-sliders {
-                position: relative;
-                width: 28px;
-                height: 220px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .timeline-track {
-                position: absolute;
-                width: 3px;
-                height: 100%;
-                border-radius: 2px;
-                background: var(--glass-border-medium);
-            }
-
-            .timeline-track-active {
-                position: absolute;
-                width: 3px;
-                border-radius: 2px;
-                background: var(--accent);
-                opacity: 0.55;
-            }
-
-            .timeline-slider {
-                position: absolute;
-                width: 220px;
-                height: 28px;
-                margin: 0;
-                transform: rotate(-90deg);
-                transform-origin: center center;
-                background: transparent;
-                pointer-events: none;
-                -webkit-appearance: none;
-                appearance: none;
-            }
-
-            .timeline-slider::-webkit-slider-runnable-track {
-                background: transparent;
-                height: 4px;
-            }
-
-            .timeline-slider::-webkit-slider-thumb {
-                pointer-events: auto;
-                -webkit-appearance: none;
-                appearance: none;
-                width: 16px;
-                height: 16px;
-                border-radius: 50%;
-                background: #7fd6ff;
-                cursor: pointer;
-                border: 2px solid rgba(255, 255, 255, 0.6);
-                margin-top: -6px;
-                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-            }
-
-            .timeline-slider.start {
-                z-index: 2;
-            }
-
-            .timeline-slider.end {
-                z-index: 1;
-            }
-
-            .timeline-slider.end::-webkit-slider-thumb {
-                background: #f2c94c;
-            }
-
-            .timeline-label {
-                font-size: 8px;
-                color: var(--text-tertiary);
-                text-align: center;
-                line-height: 1.2;
-            }
-
-            .timeline-reset-icon {
-                width: 24px;
-                height: 24px;
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: 6px;
-                background: var(--glass-solid-subtle);
-                color: var(--text-tertiary);
-                cursor: pointer;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                pointer-events: auto;
-                transition: background 0.14s;
-            }
-
-            .timeline-reset-icon:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
             }
 
             .overlay-meta {
@@ -727,80 +318,21 @@ export class GraphPage extends PlatformElement {
                 color: var(--text-secondary);
             }
 
-            .icon-toolbar {
+            graph-toolbar {
                 position: absolute;
                 top: 16px;
                 right: 16px;
                 z-index: 14;
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-                padding: 6px;
-                border-radius: 12px;
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                backdrop-filter: blur(6px);
-                pointer-events: auto;
-                max-height: calc(100% - 32px);
-                overflow-y: auto;
-                scrollbar-width: none;
             }
 
-            .icon-toolbar::-webkit-scrollbar {
-                display: none;
-            }
-
-            .icon-btn {
-                width: 28px;
-                height: 28px;
-                border-radius: 7px;
-                border: 1px solid var(--glass-border-medium);
-                background: var(--glass-solid-medium);
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: background 0.16s ease, transform 0.16s ease;
-            }
-
-            .icon-btn:hover {
-                background: var(--glass-solid-strong);
-                color: var(--text-primary);
-                transform: translateY(-1px);
-            }
-
-            .icon-btn.active {
-                border-color: var(--accent);
-                background: var(--accent-subtle);
-                color: var(--text-primary);
-            }
-
-            .icon-btn svg {
-                width: 14px;
-                height: 14px;
-                fill: none;
-                stroke: currentColor;
-                stroke-width: 1.8;
-                stroke-linecap: round;
-                stroke-linejoin: round;
-            }
-
-            .legend-overlay {
+            graph-legend {
                 left: 16px;
                 bottom: 16px;
-                padding: 10px;
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                width: min(420px, calc(100% - 100px));
             }
 
-            .legend-row {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                flex-wrap: wrap;
+            graph-context-menu {
+                position: absolute;
+                z-index: 20;
             }
 
             .empty-search-state {
@@ -1010,7 +542,7 @@ export class GraphPage extends PlatformElement {
         this._relationshipFormId = '';
         this._relationshipSourceId = '';
         this._relationshipTargetId = '';
-        this._relationshipType = 'knows';
+        this._relationshipType = 'related_to';
         this._grantEntityId = '';
         this._grantNamespace = 'default';
         this._grantUserId = '';
@@ -1035,12 +567,9 @@ export class GraphPage extends PlatformElement {
         this._timelineMinTimestamp = 0;
         this._timelineMaxTimestamp = 0;
         this._panelVisibility = _resolvePanelVisibility();
-        this._graphInstance = null;
-        this._autoFitPending = false;
+        this._contextMenu = null;
         this._timelineReloadTimer = null;
         this._entityTypePaletteNamespace = '';
-        this._lastClickNodeId = '';
-        this._lastClickTimestamp = 0;
         this._onSearchQueryInput = this._onSearchQueryInput.bind(this);
         this._onModeChange = this._onModeChange.bind(this);
         this._onRootChange = this._onRootChange.bind(this);
@@ -1085,65 +614,26 @@ export class GraphPage extends PlatformElement {
         this._createNamespaceNative = this._createNamespaceNative.bind(this);
         this._loadNamespaceOverviewNative = this._loadNamespaceOverviewNative.bind(this);
         this._toggleFullscreen = this._toggleFullscreen.bind(this);
-        this._fitGraphToViewport = this._fitGraphToViewport.bind(this);
         this._toggleSidePanel = this._toggleSidePanel.bind(this);
         this._startCanvasPathPicking = this._startCanvasPathPicking.bind(this);
         this._resetCanvasPathPicking = this._resetCanvasPathPicking.bind(this);
         this._swapCanvasPathEndpoints = this._swapCanvasPathEndpoints.bind(this);
         this._onCanvasNodeClick = this._onCanvasNodeClick.bind(this);
         this._toggleLabelMode = this._toggleLabelMode.bind(this);
-        this._onTimelineStartInput = this._onTimelineStartInput.bind(this);
-        this._onTimelineEndInput = this._onTimelineEndInput.bind(this);
         this._resetTimelineFilter = this._resetTimelineFilter.bind(this);
     }
 
     async firstUpdated() {
-        this._assertOfflineVendorSetup();
         await this._loadGraphData();
-        this._initGraph();
-        this._syncGraph();
-        this._themeChangeHandler = () => this._applyThemeToCanvas();
-        window.addEventListener('theme-change', this._themeChangeHandler);
     }
 
-    updated(changedProperties) {
-        if (
-            changedProperties.has('_graphNodes')
-            || changedProperties.has('_graphEdges')
-            || changedProperties.has('_shortestPathEdges')
-            || changedProperties.has('_graphPreset')
-            || changedProperties.has('_entitySearchQuery')
-            || changedProperties.has('_timelineStartPercent')
-            || changedProperties.has('_timelineEndPercent')
-        ) {
-            this._syncGraph();
-        }
-    }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        if (this._themeChangeHandler) {
-            window.removeEventListener('theme-change', this._themeChangeHandler);
-            this._themeChangeHandler = null;
-        }
         if (this._timelineReloadTimer) {
             clearTimeout(this._timelineReloadTimer);
             this._timelineReloadTimer = null;
         }
-        if (this._graphInstance) {
-            this._graphInstance._destructor();
-            this._graphInstance = null;
-        }
-    }
-
-    _applyThemeToCanvas() {
-        if (!this._graphInstance) {
-            return;
-        }
-        const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
-        this._graphInstance.backgroundColor(canvasBg);
-        this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
-        this._graphInstance.linkThreeObject(this._graphInstance.linkThreeObject());
     }
 
     _getRelationshipTypes() {
@@ -1152,6 +642,21 @@ export class GraphPage extends PlatformElement {
             throw new Error('relationshipTypes must be array');
         }
         return relationshipTypes;
+    }
+
+    _getRelationshipTypeColors() {
+        const colorsByType = new Map();
+        this._getRelationshipTypes().forEach((item) => {
+            const typeId = typeof item?.type_id === 'string' ? item.type_id.trim() : '';
+            if (!typeId) {
+                return;
+            }
+            const colorValue = typeof item.color === 'string' ? item.color.trim() : '';
+            if (colorValue) {
+                colorsByType.set(typeId, colorValue);
+            }
+        });
+        return colorsByType;
     }
 
     _getNamespaceName() {
@@ -1351,302 +856,6 @@ export class GraphPage extends PlatformElement {
         };
     }
 
-    _buildGraphDataForScene() {
-        const visibleGraph = this._getVisibleGraphSnapshot();
-        const highlightedEdgeIds = new Set(this._shortestPathEdges.map((edge) => this._getEdgeId(edge)));
-        const nodes = visibleGraph.nodes.map((node) => ({
-            ...node,
-            id: node.entity_id || node.id,
-            name: node.name || node.label || node.entity_id || node.id,
-            color: this._nodeColor(node),
-            size: node.level === 0 ? 2.2 : 1.4,
-        }));
-        if (nodes.length === 1) {
-            nodes[0].x = 0;
-            nodes[0].y = 0;
-            nodes[0].z = 0;
-        }
-        const links = visibleGraph.edges.map((edge) => {
-            const source = edge.source_id || edge.source_entity_id || edge.source;
-            const target = edge.target_id || edge.target_entity_id || edge.target;
-            const edgeId = this._getEdgeId(edge);
-            const relationType = edge.relationship_type || edge.type || 'related';
-            const directed = this._isEdgeDirected(edge);
-            return {
-                ...edge,
-                id: edgeId,
-                source,
-                target,
-                relation_type: relationType,
-                directed,
-                path_kind: edge.path_kind || null,
-                highlighted: highlightedEdgeIds.has(edgeId),
-            };
-        });
-        return { nodes, links };
-    }
-
-    _initGraph() {
-        const factory = window.ForceGraph3D;
-        if (typeof factory !== 'function') {
-            throw new Error('ForceGraph3D is not available in window');
-        }
-        const container = this.renderRoot?.querySelector('#graph-canvas');
-        if (!container) {
-            throw new Error('Graph canvas is not available');
-        }
-        const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
-        this._graphInstance = factory()(container)
-            .backgroundColor(canvasBg)
-            .cooldownTicks(120)
-            .warmupTicks(80)
-            .showNavInfo(false)
-            .nodeLabel(() => '')
-            .nodeColor((node) => node.color)
-            .nodeVal((node) => node.size)
-            .linkLabel(() => '')
-            .nodeThreeObject((node) => {
-                const labelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#f0f4ff';
-                const sprite = this._createTextSprite(node.name || node.id || '', labelColor, 24);
-                if (!sprite) {
-                    return null;
-                }
-                sprite.visible = this._shouldShowNodeLabel(node);
-                sprite.position.set(0, (node.size || 1.6) * 1.9, 0);
-                return sprite;
-            })
-            .nodeThreeObjectExtend(true)
-            .linkColor((link) => {
-                if (link.path_kind === 'directed') {
-                    return '#41d36d';
-                }
-                if (link.path_kind === 'undirected') {
-                    return '#f2c94c';
-                }
-                if (link.path_kind === 'both') {
-                    return '#9adf5d';
-                }
-                if (link.highlighted) {
-                    return '#ff6b6b';
-                }
-                return '#9ba3bf';
-            })
-            .linkWidth((link) => {
-                if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
-                    return 4;
-                }
-                if (link.highlighted) {
-                    return 4;
-                }
-                if (this._isLinkNearSelectedNode(link)) {
-                    return 2.8;
-                }
-                return GRAPH_PRESETS[this._graphPreset].linkWidth + 0.6;
-            })
-            .linkOpacity((link) => {
-                if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
-                    return 0.95;
-                }
-                if (link.highlighted || link.id === this._selectedEdgeId) {
-                    return 0.95;
-                }
-                if (this._isLinkNearSelectedNode(link)) {
-                    return 0.65;
-                }
-                return 0.3;
-            })
-            .linkThreeObjectExtend(true)
-            .linkThreeObject((link) => {
-                const linkLabelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
-                const sprite = this._createTextSprite(link.relation_type || 'related', linkLabelColor, 20);
-                if (!sprite) {
-                    return null;
-                }
-                sprite.visible = this._shouldShowLinkLabel(link);
-                return sprite;
-            })
-            .linkPositionUpdate((sprite, { start, end }, link) => {
-                if (!sprite || !start || !end) {
-                    return false;
-                }
-                sprite.visible = this._shouldShowLinkLabel(link);
-                const middlePosition = {
-                    x: start.x + ((end.x - start.x) / 2),
-                    y: start.y + ((end.y - start.y) / 2),
-                    z: start.z + ((end.z - start.z) / 2),
-                };
-                sprite.position.set(middlePosition.x, middlePosition.y, middlePosition.z);
-                return true;
-            })
-            .linkDirectionalArrowLength((link) => {
-                if (link.path_kind === 'undirected') {
-                    return 0;
-                }
-                return link.directed ? 3 : 0;
-            })
-            .linkDirectionalArrowRelPos(1)
-            .linkDirectionalParticles((link) => (link.highlighted ? 4 : 0))
-            .linkDirectionalParticleWidth(3)
-            .enableNodeDrag(true)
-            .onNodeClick((node, event) => this._onCanvasNodeClick(node, event))
-            .onNodeHover(() => {})
-            .onLinkClick((link) => {
-                this._selectedEdgeId = link.id;
-            })
-            .onNodeDragEnd((node) => {
-                node.fx = node.x;
-                node.fy = node.y;
-                node.fz = node.z;
-            })
-            .onEngineStop(() => {
-                if (!this._graphInstance) {
-                    return;
-                }
-                const currentGraphData = this._graphInstance.graphData();
-                if (!currentGraphData || !Array.isArray(currentGraphData.nodes)) {
-                    return;
-                }
-                if (currentGraphData.nodes.length <= 1) {
-                    this._autoFitPending = false;
-                    this._applySingleNodeCamera();
-                    return;
-                }
-                if (this._autoFitPending) {
-                    this._autoFitPending = false;
-                    this._fitGraphToViewport(300, 90);
-                }
-            });
-        this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this._graphPreset].charge);
-        this._graphInstance.d3VelocityDecay(0.5);
-        this._graphInstance.d3Force('box', this._createBoundingForce(GRAPH_WORLD_RADIUS));
-        this._graphInstance.nodeRelSize(GRAPH_PRESETS[this._graphPreset].nodeRelSize);
-    }
-
-    _createBoundingForce(worldRadius) {
-        let nodes = [];
-        const force = (alpha) => {
-            const restoringStrength = 0.12 * alpha;
-            nodes.forEach((node) => {
-                const hasCoordinates = [node.x, node.y, node.z].every((value) => typeof value === 'number' && Number.isFinite(value));
-                if (!hasCoordinates) {
-                    return;
-                }
-                const distance = Math.sqrt((node.x ** 2) + (node.y ** 2) + (node.z ** 2));
-                if (distance <= worldRadius || distance === 0) {
-                    return;
-                }
-                const overshoot = distance - worldRadius;
-                const nx = node.x / distance;
-                const ny = node.y / distance;
-                const nz = node.z / distance;
-                const pull = overshoot * restoringStrength;
-                if (typeof node.vx !== 'number' || !Number.isFinite(node.vx)) {
-                    node.vx = 0;
-                }
-                if (typeof node.vy !== 'number' || !Number.isFinite(node.vy)) {
-                    node.vy = 0;
-                }
-                if (typeof node.vz !== 'number' || !Number.isFinite(node.vz)) {
-                    node.vz = 0;
-                }
-                node.vx -= nx * pull;
-                node.vy -= ny * pull;
-                node.vz -= nz * pull;
-            });
-        };
-        force.initialize = (simNodes) => {
-            nodes = simNodes;
-        };
-        return force;
-    }
-
-    _fitGraphToViewport(durationMs = 260, paddingPx = 90) {
-        if (!this._graphInstance) {
-            return;
-        }
-        this._graphInstance.zoomToFit(durationMs, paddingPx);
-        requestAnimationFrame(() => {
-            this._enforceMinCameraDistance(MIN_CAMERA_DISTANCE);
-        });
-    }
-
-    _enforceMinCameraDistance(minDistance) {
-        if (!this._graphInstance) {
-            return;
-        }
-        const position = this._graphInstance.cameraPosition();
-        if (!position) {
-            return;
-        }
-        const distance = Math.sqrt((position.x ** 2) + (position.y ** 2) + (position.z ** 2));
-        if (!Number.isFinite(distance) || distance >= minDistance) {
-            return;
-        }
-        if (distance === 0) {
-            this._graphInstance.cameraPosition({ x: 0, y: 0, z: minDistance }, { x: 0, y: 0, z: 0 }, 180);
-            return;
-        }
-        const scale = minDistance / distance;
-        this._graphInstance.cameraPosition(
-            { x: position.x * scale, y: position.y * scale, z: position.z * scale },
-            { x: 0, y: 0, z: 0 },
-            180,
-        );
-    }
-
-    _applySingleNodeCamera() {
-        if (!this._graphInstance) {
-            return;
-        }
-        this._graphInstance.cameraPosition({ x: 0, y: 0, z: MIN_CAMERA_DISTANCE }, { x: 0, y: 0, z: 0 }, 220);
-    }
-
-    _syncGraph() {
-        if (!this._graphInstance) {
-            return;
-        }
-        const graphData = this._buildGraphDataForScene();
-        if (graphData.nodes.length === 1) {
-            const singleNode = graphData.nodes[0];
-            singleNode.x = 0;
-            singleNode.y = 0;
-            singleNode.z = 0;
-            singleNode.fx = 0;
-            singleNode.fy = 0;
-            singleNode.fz = 0;
-            this._autoFitPending = false;
-        }
-        this._graphInstance.graphData(graphData);
-        this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this._graphPreset].charge);
-        this._graphInstance.nodeRelSize(GRAPH_PRESETS[this._graphPreset].nodeRelSize);
-        if (graphData.nodes.length === 0) {
-            return;
-        }
-        if (graphData.nodes.length === 1) {
-            if (this._graphInstance) {
-                this._applySingleNodeCamera();
-            }
-            return;
-        }
-        this._autoFitPending = true;
-    }
-
-    _assertOfflineVendorSetup() {
-        const expectedSrc = '/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js';
-        const hasExpectedScript = Array.from(document.scripts).some((script) => {
-            if (typeof script.src !== 'string') {
-                return false;
-            }
-            return script.src.includes(expectedSrc);
-        });
-        if (!hasExpectedScript) {
-            throw new Error(`Offline vendor script is required: ${expectedSrc}`);
-        }
-        if (typeof window.ForceGraph3D !== 'function') {
-            throw new Error('ForceGraph3D is not loaded from offline vendor script');
-        }
-    }
-
     _onSimpleInput(event) {
         const fieldName = event.target.dataset.field;
         if (!fieldName) {
@@ -1667,23 +876,58 @@ export class GraphPage extends PlatformElement {
         this._entitySearchQuery = '';
     }
 
+    _showContextMenu(screenX, screenY, nodeId, edgeId) {
+        const container = this.renderRoot?.querySelector('.canvas-stage');
+        if (!container) {
+            return;
+        }
+        const rect = container.getBoundingClientRect();
+        const posX = Math.min(screenX - rect.left, rect.width - 180);
+        const posY = Math.min(screenY - rect.top, rect.height - 120);
+        this._contextMenu = { x: posX, y: posY, nodeId, edgeId };
+    }
+
+    _hideContextMenu() {
+        this._contextMenu = null;
+    }
+
+    _openEntityModal(entityId) {
+        this._hideContextMenu();
+        const entity = this._resolveEntityById(entityId);
+        const modal = document.createElement('entity-modal');
+        if (entity) {
+            modal.entityId = entityId;
+            modal.entity = entity;
+        } else {
+            modal.entityId = entityId;
+        }
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('saved', async () => {
+            await this._loadGraphData();
+        });
+    }
+
+    _setPathSourceFromContext(nodeId) {
+        this._hideContextMenu();
+        this._pathSourceId = nodeId;
+        this._canvasPathState = 'pick_target';
+        this._canvasPathHint = 'Кликни на вторую сущность (target)';
+        this._viewMode = 'path';
+    }
+
+    _focusNodeFromContext(nodeId) {
+        this._hideContextMenu();
+        this._selectedNodeId = nodeId;
+        this._focusSelectedNode();
+    }
+
     _togglePanel(panelId) {
         const nextVisibility = { ...this._panelVisibility };
         nextVisibility[panelId] = !nextVisibility[panelId];
         this._panelVisibility = nextVisibility;
         _savePanelVisibility(nextVisibility);
-    }
-
-    _onTimelineStartInput(event) {
-        const value = Number(event.target.value);
-        this._timelineStartPercent = Math.max(0, Math.min(this._timelineEndPercent, value));
-        this._scheduleTimelineReload();
-    }
-
-    _onTimelineEndInput(event) {
-        const value = Number(event.target.value);
-        this._timelineEndPercent = Math.min(100, Math.max(this._timelineStartPercent, value));
-        this._scheduleTimelineReload();
     }
 
     _resetTimelineFilter() {
@@ -1748,7 +992,8 @@ export class GraphPage extends PlatformElement {
 
     async _onToolbarAction(actionId) {
         if (actionId === 'fit') {
-            this._fitGraphToViewport(250, 80);
+            const canvas = this.renderRoot?.querySelector('graph-canvas');
+            if (canvas) { canvas.fitToViewport(); }
             return;
         }
         if (actionId === 'path_mode') {
@@ -1788,11 +1033,6 @@ export class GraphPage extends PlatformElement {
 
     _toggleLabelMode() {
         this._labelMode = this._labelMode === 'adaptive' ? 'minimal' : 'adaptive';
-        if (!this._graphInstance) {
-            return;
-        }
-        this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
-        this._graphInstance.linkThreeObject(this._graphInstance.linkThreeObject());
     }
 
     _startCanvasPathPicking() {
@@ -1825,72 +1065,6 @@ export class GraphPage extends PlatformElement {
         await this._buildPathGraph();
     }
 
-    _shouldShowNodeLabel(node) {
-        if (this._labelMode !== 'adaptive') {
-            return false;
-        }
-        const isImportant = node.id === this._selectedNodeId
-            || node.id === this._pathSourceId
-            || node.id === this._pathTargetId;
-        if (isImportant) {
-            return true;
-        }
-        if (this._graphNodes.length <= 80) {
-            return true;
-        }
-        const distance = this._getCameraDistance();
-        if (distance < ADAPTIVE_LABEL_DISTANCE && this._graphNodes.length <= 220) {
-            return true;
-        }
-        return false;
-    }
-
-    _shouldShowLinkLabel(link) {
-        if (this._labelMode !== 'adaptive') {
-            return false;
-        }
-        if (link.id === this._selectedEdgeId || link.highlighted) {
-            return true;
-        }
-        if (this._graphEdges.length <= 16 && this._getCameraDistance() < ADAPTIVE_LABEL_DISTANCE * 0.82) {
-            return true;
-        }
-        return false;
-    }
-
-    _getLinkEndpointId(endpoint) {
-        if (typeof endpoint === 'string') {
-            return endpoint;
-        }
-        if (endpoint && typeof endpoint === 'object') {
-            return endpoint.id || endpoint.entity_id || '';
-        }
-        return '';
-    }
-
-    _isLinkNearSelectedNode(link) {
-        if (!this._selectedNodeId) {
-            return false;
-        }
-        const sourceId = this._getLinkEndpointId(link.source);
-        const targetId = this._getLinkEndpointId(link.target);
-        return sourceId === this._selectedNodeId || targetId === this._selectedNodeId;
-    }
-
-    _getCameraDistance() {
-        if (!this._graphInstance) {
-            return MIN_CAMERA_DISTANCE;
-        }
-        const position = this._graphInstance.cameraPosition();
-        if (!position) {
-            return MIN_CAMERA_DISTANCE;
-        }
-        const distance = Math.sqrt((position.x ** 2) + (position.y ** 2) + (position.z ** 2));
-        if (!Number.isFinite(distance) || distance <= 0) {
-            return MIN_CAMERA_DISTANCE;
-        }
-        return distance;
-    }
 
     _mergePathEdgesByKind(directedEdges, undirectedEdges) {
         const merged = new Map();
@@ -1910,56 +1084,10 @@ export class GraphPage extends PlatformElement {
         return Array.from(merged.values());
     }
 
-    _createTextSprite(text, color = '#f2f5ff', fontSize = 22, maxLength = 28) {
-        if (!window.THREE || typeof window.THREE.CanvasTexture !== 'function' || typeof window.THREE.Sprite !== 'function') {
-            return null;
-        }
-        const baseText = typeof text === 'string' && text.trim().length > 0 ? text.trim() : 'entity';
-        const labelText = baseText.length > maxLength ? `${baseText.slice(0, maxLength - 1)}…` : baseText;
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        if (!context) {
-            return null;
-        }
-        context.font = `700 ${fontSize}px Inter, sans-serif`;
-        const textWidth = Math.max(24, Math.ceil(context.measureText(labelText).width));
-        canvas.width = textWidth + 18;
-        canvas.height = fontSize + 12;
-        context.font = `700 ${fontSize}px Inter, sans-serif`;
-        context.fillStyle = color;
-        context.textBaseline = 'middle';
-        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-        context.shadowColor = isDark ? 'rgba(5, 7, 12, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-        context.shadowBlur = 6;
-        context.lineWidth = 4;
-        context.strokeStyle = isDark ? 'rgba(5, 7, 12, 0.92)' : 'rgba(255, 255, 255, 0.92)';
-        context.strokeText(labelText, 8, canvas.height / 2);
-        context.fillText(labelText, 8, canvas.height / 2);
-        const texture = new window.THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        const material = new window.THREE.SpriteMaterial({
-            map: texture,
-            transparent: true,
-            depthTest: false,
-            depthWrite: false,
-        });
-        const sprite = new window.THREE.Sprite(material);
-        sprite.scale.set(canvas.width * 0.07, canvas.height * 0.07, 1);
-        sprite.renderOrder = 999;
-        return sprite;
-    }
 
     _onCanvasNodeClick(node, event) {
         this._selectedNodeId = node.id;
         this._attachmentEntityId = node.id;
-        const now = Date.now();
-        const isDoubleClick = this._lastClickNodeId === node.id && (now - this._lastClickTimestamp) < 380;
-        this._lastClickNodeId = node.id;
-        this._lastClickTimestamp = now;
-        if (isDoubleClick) {
-            this._flyToNode(node);
-            return;
-        }
         if (event?.altKey) {
             this._onOpenEntity(node.id);
             return;
@@ -1989,20 +1117,6 @@ export class GraphPage extends PlatformElement {
         this._canvasPathHint = 'Режим обзора';
     }
 
-    _flyToNode(node) {
-        if (!this._graphInstance) {
-            return;
-        }
-        const nodeX = node.x || 0;
-        const nodeY = node.y || 0;
-        const nodeZ = node.z || 0;
-        const flyDistance = 120;
-        this._graphInstance.cameraPosition(
-            { x: nodeX, y: nodeY, z: nodeZ + flyDistance },
-            { x: nodeX, y: nodeY, z: nodeZ },
-            800,
-        );
-    }
 
     _getNativeOperationIds() {
         return new Set([
@@ -2266,15 +1380,11 @@ export class GraphPage extends PlatformElement {
         if (!this._selectedNodeId) {
             throw new Error('Select node before focus action');
         }
-        const node = this._buildGraphDataForScene().nodes.find((item) => item.id === this._selectedNodeId);
-        if (!node) {
-            throw new Error(`Selected node not found in scene: ${this._selectedNodeId}`);
+        const canvas = this.renderRoot?.querySelector('graph-canvas');
+        if (!canvas) {
+            throw new Error('graph-canvas element is not available');
         }
-        this._graphInstance.cameraPosition(
-            { x: node.x || 0, y: node.y || 0, z: (node.z || 0) + 80 },
-            { x: node.x || 0, y: node.y || 0, z: node.z || 0 },
-            1200,
-        );
+        canvas.flyToNode({ id: this._selectedNodeId });
     }
 
     async _expandFromSelected() {
@@ -2641,7 +1751,7 @@ export class GraphPage extends PlatformElement {
             { id: 'getDailySummary', label: 'Entities: daily summary', method: 'getDailySummary', args: '["2026-03-29",{"forceRebuild":false}]' },
             { id: 'getRelationships', label: 'Relationships: list', method: 'getRelationships', args: '[{"limit":500}]' },
             { id: 'getRelationship', label: 'Relationships: get by id', method: 'getRelationship', args: '["relationship_id"]' },
-            { id: 'createRelationship', label: 'Relationships: create', method: 'createRelationship', args: '[{"source_entity_id":"source","target_entity_id":"target","relationship_type":"knows","weight":1.0}]' },
+            { id: 'createRelationship', label: 'Relationships: create', method: 'createRelationship', args: '[{"source_entity_id":"source","target_entity_id":"target","relationship_type":"related_to","weight":1.0}]' },
             { id: 'deleteRelationship', label: 'Relationships: delete', method: 'deleteRelationship', args: '["relationship_id"]' },
             { id: 'getRelationshipTypes', label: 'Relationships: list types', method: 'getRelationshipTypes', args: '[]' },
             { id: 'createRelationshipType', label: 'Relationships: create type', method: 'createRelationshipType', args: '[{"type_id":"new_rel","name":"New Relation","is_directed":true}]' },
@@ -2747,77 +1857,15 @@ export class GraphPage extends PlatformElement {
         await this._executeNativeAction('upload attachment', () => this.crmApi.uploadAttachment(this._attachmentEntityId, this._attachmentFile));
     }
 
-    _renderLegend(visibleNodes = []) {
-        const colorsByType = this._getNamespaceEntityTypeColors();
-        const visibleTypes = Array.from(new Set(
-            visibleNodes
-                .map((node) => (typeof node.entity_type === 'string' ? node.entity_type.trim() : ''))
-                .filter((typeId) => typeId.length > 0 && typeId !== 'hidden'),
-        ));
-        return html`
-            ${visibleTypes.map((typeId) => html`
-                <div class="legend-item"><span class="legend-dot" style="background:${colorsByType.get(typeId)}"></span>${typeId}</div>
-            `)}
-            <div class="legend-item"><span class="legend-dot" style="background:#7f7f8f"></span> Hidden</div>
-            <div class="legend-item"><span class="legend-dot" style="background:#41d36d"></span> Path directed</div>
-            <div class="legend-item"><span class="legend-dot" style="background:#f2c94c"></span> Path undirected</div>
-        `;
-    }
-
-    _renderToolbarIcon(actionId) {
-        if (actionId === 'fit') {
-            return html`<svg viewBox="0 0 24 24"><path d="M8 3H3v5"/><path d="M3 3l6 6"/><path d="M16 3h5v5"/><path d="M21 3l-6 6"/><path d="M8 21H3v-5"/><path d="M3 21l6-6"/><path d="M16 21h5v-5"/><path d="M21 21l-6-6"/></svg>`;
-        }
-        if (actionId === 'path_mode') {
-            return html`<svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M7 17c4-6 5-9 10-10"/></svg>`;
-        }
-        if (actionId === 'swap_path') {
-            return html`<svg viewBox="0 0 24 24"><path d="M4 7h14"/><path d="M14 3l4 4-4 4"/><path d="M20 17H6"/><path d="M10 13l-4 4 4 4"/></svg>`;
-        }
-        if (actionId === 'reset_path') {
-            return html`<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M7 6l1 14h8l1-14"/></svg>`;
-        }
-        if (actionId === 'depth_plus') {
-            return html`<svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M12 4v16"/></svg>`;
-        }
-        if (actionId === 'depth_minus') {
-            return html`<svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg>`;
-        }
-        if (actionId === 'filter_rel_type') {
-            return html`<svg viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M7 12h10"/><path d="M10 19h4"/></svg>`;
-        }
-        if (actionId === 'labels_mode') {
-            return html`<svg viewBox="0 0 24 24"><path d="M4 18l4-12h2l4 12"/><path d="M6 13h6"/><path d="M16 8h4"/><path d="M18 8v10"/></svg>`;
-        }
-        if (actionId === 'reset_view') {
-            return html`<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>`;
-        }
-        if (actionId === 'toggle_search') {
-            return html`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>`;
-        }
-        if (actionId === 'toggle_timeline') {
-            return html`<svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7l4-4 4 4"/><path d="M8 17l4 4 4-4"/></svg>`;
-        }
-        if (actionId === 'toggle_legend') {
-            return html`<svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h6"/></svg>`;
-        }
-        if (actionId === 'toggle_meta') {
-            return html`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 12v4"/></svg>`;
-        }
-        throw new Error(`Unknown icon action: ${actionId}`);
-    }
-
     render() {
         const operations = this._getBackendOperations();
         const coverageMatrix = this._getCoverageMatrix();
         const coveredNativeCount = coverageMatrix.filter((item) => item.status === 'covered_by_native_ui').length;
         const coveredJsonCount = coverageMatrix.filter((item) => item.status === 'covered_by_json_runner_only').length;
         const uncoveredCount = coverageMatrix.filter((item) => item.status === 'not_covered').length;
-        const relationshipTypes = this._getRelationshipTypes();
         const visibleGraph = this._getVisibleGraphSnapshot();
-        const timelineSpan = Math.max(1, this._timelineMaxTimestamp - this._timelineMinTimestamp);
-        const timelineFromTimestamp = this._timelineMinTimestamp + (timelineSpan * (this._timelineStartPercent / 100));
-        const timelineToTimestamp = this._timelineMinTimestamp + (timelineSpan * (this._timelineEndPercent / 100));
+        const entityTypeColors = this._getNamespaceEntityTypeColors();
+        const relTypeColors = this._getRelationshipTypeColors();
         const toolbarActions = [
             { id: 'fit', label: 'Вписать граф' },
             { id: 'path_mode', label: 'Режим выбора маршрута' },
@@ -2829,67 +1877,54 @@ export class GraphPage extends PlatformElement {
             { id: 'labels_mode', label: 'Переключить режим лейблов' },
             { id: 'reset_view', label: 'Сбросить вид' },
         ];
+        const toolbarToggles = [
+            { id: 'search', label: 'Показать/скрыть поиск', active: this._panelVisibility.search },
+            { id: 'timeline', label: 'Показать/скрыть timeline', active: this._panelVisibility.timeline },
+            { id: 'legend', label: 'Показать/скрыть легенду', active: this._panelVisibility.legend },
+            { id: 'meta', label: 'Показать/скрыть статистику', active: this._panelVisibility.meta },
+        ];
         return html`
             <div class="canvas-layout">
                 <section class="canvas-stage">
-                    <div id="graph-canvas" class="graph-canvas"></div>
+                    <graph-canvas
+                        .graphNodes=${visibleGraph.nodes}
+                        .graphEdges=${visibleGraph.edges}
+                        .shortestPathEdges=${this._shortestPathEdges}
+                        .graphPreset=${this._graphPreset}
+                        .labelMode=${this._labelMode}
+                        .selectedNodeId=${this._selectedNodeId}
+                        .selectedEdgeId=${this._selectedEdgeId}
+                        .pathSourceId=${this._pathSourceId}
+                        .pathTargetId=${this._pathTargetId}
+                        .nodeColorFn=${(node) => this._nodeColor(node)}
+                        .edgeDirectedFn=${(edge) => this._isEdgeDirected(edge)}
+                        .relationshipTypeColors=${relTypeColors}
+                        @node-click=${(e) => this._onCanvasNodeClick(e.detail.node, e.detail.event)}
+                        @node-dblclick=${(e) => { const canvas = this.renderRoot?.querySelector('graph-canvas'); if (canvas) { canvas.flyToNode(e.detail.node); } }}
+                        @node-contextmenu=${(e) => this._showContextMenu(e.detail.screenX, e.detail.screenY, e.detail.node?.id, null)}
+                        @canvas-click=${() => this._hideContextMenu()}
+                        @link-click=${(e) => { this._selectedEdgeId = e.detail.link?.id || ''; }}
+                    ></graph-canvas>
 
-                    <div class="overlay-search ${this._panelVisibility.search ? '' : 'panel-hidden'}">
-                        <div class="search-pill">
-                            <input
-                                type="text"
-                                .value=${this._entitySearchQuery}
-                                placeholder="Фильтр..."
-                                @input=${this._onSearchQueryInput}
-                                @keydown=${(e) => e.key === 'Escape' && this._clearCanvasSearchFilter()}
-                            />
-                            ${this._entitySearchQuery.trim()
-                                ? html`<button class="pill-icon-btn" type="button" title="Очистить" @click=${this._clearCanvasSearchFilter}><svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button>`
-                                : html`<button class="pill-icon-btn" type="button" title="Обновить граф" @click=${this._loadGraphData}><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg></button>`
-                            }
-                        </div>
-                        <div class="mode-pills">
-                            ${VIEW_MODES.map((mode) => html`
-                                <button class="mode-pill ${this._viewMode === mode ? 'active' : ''}" type="button" @click=${() => { this._viewMode = mode; if (mode !== 'influence') { this._defaultOverviewActive = false; } if (mode !== 'path') { this._canvasPathState = 'idle'; this._canvasPathHint = 'Режим обзора'; } this._rebuildGraphByMode(); }}>
-                                    ${mode === 'influence' ? 'influence' : mode === 'related' ? 'related' : 'path'}
-                                </button>
-                            `)}
-                        </div>
-                    </div>
+                    <graph-search-pill
+                        class="${this._panelVisibility.search ? '' : 'panel-hidden'}"
+                        .query=${this._entitySearchQuery}
+                        .viewMode=${this._viewMode}
+                        .modes=${VIEW_MODES}
+                        @search-input=${(e) => { this._entitySearchQuery = e.detail.query; }}
+                        @search-clear=${this._clearCanvasSearchFilter}
+                        @mode-change=${(e) => { this._viewMode = e.detail.mode; if (e.detail.mode !== 'influence') { this._defaultOverviewActive = false; } if (e.detail.mode !== 'path') { this._canvasPathState = 'idle'; this._canvasPathHint = 'Режим обзора'; } this._rebuildGraphByMode(); }}
+                        @refresh=${this._loadGraphData}
+                    ></graph-search-pill>
 
-                    <div class="overlay-card timeline-overlay ${this._panelVisibility.timeline ? '' : 'panel-hidden'}">
-                        <div class="timeline-title">Timeline</div>
-                        <div class="timeline-label">${this._formatTimelineLabel(this._timelineMaxTimestamp)}</div>
-                        <div class="timeline-sliders">
-                            <div class="timeline-track"></div>
-                            <div
-                                class="timeline-track-active"
-                                style="top:${100 - this._timelineEndPercent}%;bottom:${this._timelineStartPercent}%"
-                            ></div>
-                            <input
-                                class="timeline-slider start"
-                                type="range"
-                                min="0"
-                                max="100"
-                                step="1"
-                                .value=${String(this._timelineStartPercent)}
-                                @input=${this._onTimelineStartInput}
-                            />
-                            <input
-                                class="timeline-slider end"
-                                type="range"
-                                min="0"
-                                max="100"
-                                step="1"
-                                .value=${String(this._timelineEndPercent)}
-                                @input=${this._onTimelineEndInput}
-                            />
-                        </div>
-                        <div class="timeline-label">${this._formatTimelineLabel(this._timelineMinTimestamp)}</div>
-                        <button class="pill-icon-btn timeline-reset-icon" type="button" title="Сброс timeline" @click=${this._resetTimelineFilter}>
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>
-                        </button>
-                    </div>
+                    <graph-timeline
+                        class="overlay-card ${this._panelVisibility.timeline ? '' : 'panel-hidden'}"
+                        .minTimestamp=${this._timelineMinTimestamp}
+                        .maxTimestamp=${this._timelineMaxTimestamp}
+                        .startPercent=${this._timelineStartPercent}
+                        .endPercent=${this._timelineEndPercent}
+                        @timeline-change=${(e) => { this._timelineStartPercent = e.detail.startPercent; this._timelineEndPercent = e.detail.endPercent; this._scheduleTimelineReload(); }}
+                    ></graph-timeline>
 
                     <div class="overlay-card overlay-meta ${this._panelVisibility.meta ? '' : 'panel-hidden'}">
                         <span class="meta-pill">режим: ${this._viewMode}</span>
@@ -2898,37 +1933,41 @@ export class GraphPage extends PlatformElement {
                         <span class="meta-pill">связей: ${visibleGraph.edges.length}</span>
                     </div>
 
-                    <div class="icon-toolbar">
-                        ${toolbarActions.map((action) => html`
-                            <button
-                                class="icon-btn ${action.id === 'labels_mode' && this._labelMode === 'adaptive' ? 'active' : ''}"
-                                type="button"
-                                title=${action.label}
-                                aria-label=${action.label}
-                                @click=${() => this._onToolbarAction(action.id)}
-                            >
-                                ${this._renderToolbarIcon(action.id)}
-                            </button>
-                        `)}
-                        <div class="toolbar-separator"></div>
-                        <button class="icon-btn toggle-btn ${this._panelVisibility.search ? 'active' : ''}" type="button" title="Показать/скрыть поиск" @click=${() => this._togglePanel('search')}>${this._renderToolbarIcon('toggle_search')}</button>
-                        <button class="icon-btn toggle-btn ${this._panelVisibility.timeline ? 'active' : ''}" type="button" title="Показать/скрыть timeline" @click=${() => this._togglePanel('timeline')}>${this._renderToolbarIcon('toggle_timeline')}</button>
-                        <button class="icon-btn toggle-btn ${this._panelVisibility.legend ? 'active' : ''}" type="button" title="Показать/скрыть легенду" @click=${() => this._togglePanel('legend')}>${this._renderToolbarIcon('toggle_legend')}</button>
-                        <button class="icon-btn toggle-btn ${this._panelVisibility.meta ? 'active' : ''}" type="button" title="Показать/скрыть статистику" @click=${() => this._togglePanel('meta')}>${this._renderToolbarIcon('toggle_meta')}</button>
-                    </div>
+                    <graph-toolbar
+                        .actions=${toolbarActions}
+                        .toggles=${toolbarToggles}
+                        .labelMode=${this._labelMode}
+                        @toolbar-action=${(e) => this._onToolbarAction(e.detail.actionId)}
+                        @panel-toggle=${(e) => this._togglePanel(e.detail.panelId)}
+                    ></graph-toolbar>
 
-                    <div class="overlay-card legend-overlay ${this._panelVisibility.legend ? '' : 'panel-hidden'}">
-                        <div class="legend-row">${this._renderLegend(visibleGraph.nodes)}</div>
-                        <div class="legend-row">
-                            <span class="canvas-hint">${this._canvasPathHint}</span>
-                            <span class="node-pill">node: ${this._selectedNodeId || '—'}</span>
-                            <span class="node-pill">edge: ${this._selectedEdgeId || '—'}</span>
-                        </div>
-                    </div>
+                    <graph-legend
+                        class="overlay-card ${this._panelVisibility.legend ? '' : 'panel-hidden'}"
+                        .nodes=${visibleGraph.nodes}
+                        .entityTypeColors=${entityTypeColors}
+                        .canvasHint=${this._canvasPathHint}
+                        .selectedNodeId=${this._selectedNodeId}
+                        .selectedEdgeId=${this._selectedEdgeId}
+                    ></graph-legend>
 
                     ${visibleGraph.isFiltered && visibleGraph.isEmpty ? html`
                         <div class="empty-search-state">По текущему фильтру совпадений нет</div>
                     ` : ''}
+
+                    <graph-context-menu
+                        .x=${this._contextMenu?.x || 0}
+                        .y=${this._contextMenu?.y || 0}
+                        .nodeId=${this._contextMenu?.nodeId || ''}
+                        .edgeId=${this._contextMenu?.edgeId || ''}
+                        .visible=${this._contextMenu !== null}
+                        @ctx-action=${(e) => {
+                            const { action, nodeId } = e.detail;
+                            if (action === 'open-entity') { this._openEntityModal(nodeId); }
+                            if (action === 'focus') { this._focusNodeFromContext(nodeId); }
+                            if (action === 'path-from') { this._setPathSourceFromContext(nodeId); }
+                            if (action === 'graph-from') { this._hideContextMenu(); this._defaultOverviewActive = false; this._selectedRootId = nodeId; this._rebuildGraphByMode(); }
+                        }}
+                    ></graph-context-menu>
 
                     <details class="advanced-drawer">
                         <summary>Advanced операции и диагностика</summary>

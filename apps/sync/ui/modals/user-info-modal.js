@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
 import '../features/sync-channel-row.js';
@@ -145,9 +146,15 @@ export class UserInfoModal extends PlatformModal {
         this.size = 'xl';
         this.profileUser = null;
         this.sender = null;
+        this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
         this._sharedChannels = [];
         this._channelsLoading = false;
         this._channelsError = null;
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback?.();
+        this._avatarRetry.cancel();
     }
 
     _effectiveUser() {
@@ -239,7 +246,8 @@ export class UserInfoModal extends PlatformModal {
             return html``;
         }
         const name = this._displayName();
-        const avatarUrl = typeof u.avatar_url === 'string' && u.avatar_url !== '' ? u.avatar_url : null;
+        const originalAvatarUrl = typeof u.avatar_url === 'string' && u.avatar_url !== '' ? u.avatar_url : null;
+        const avatarSrc = this._avatarRetry.currentSrc(originalAvatarUrl);
         const initials = name.trim().slice(0, 2).toUpperCase() || '?';
         const hue = hueFromString(this._userId());
         const roles = this._rolesFromStore();
@@ -248,8 +256,10 @@ export class UserInfoModal extends PlatformModal {
         return html`
             <div class="body-wrap">
                 <div class="profile-head">
-                    ${avatarUrl
-                        ? html`<img class="profile-avatar" src=${avatarUrl} alt="" />`
+                    ${avatarSrc
+                        ? html`<img class="profile-avatar" src=${avatarSrc} alt=""
+                              @load=${() => this._avatarRetry.onLoad()}
+                              @error=${() => this._avatarRetry.onError(originalAvatarUrl)} />`
                         : html`<span
                               class="profile-avatar-initials"
                               style=${`background:hsl(${hue} 48% 42%)`}

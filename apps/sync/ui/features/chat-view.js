@@ -7,6 +7,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
 import { mentionDisplayLabel } from '../utils/sync-mention-text.js';
@@ -535,6 +536,7 @@ export class ChatView extends PlatformElement {
 
     constructor() {
         super();
+        this._headerAvatarRetry = createAvatarRetry(() => this.requestUpdate());
         const s = SyncStore.state;
         this._chat = s.chat;
         this._channels = s.channels;
@@ -583,6 +585,7 @@ export class ChatView extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._headerAvatarRetry.cancel();
         document.removeEventListener('pointerdown', this._boundDocPointerHeaderMore, true);
         window.removeEventListener('resize', this._boundWindowResize);
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
@@ -693,13 +696,20 @@ export class ChatView extends PlatformElement {
         if (!channel) {
             return html``;
         }
+        const originalUrl = channel.type === 'direct' && channel.peer
+            ? (typeof channel.peer.avatar_url === 'string' && channel.peer.avatar_url !== '' ? channel.peer.avatar_url : null)
+            : (typeof channel.avatar_url === 'string' && channel.avatar_url !== '' ? channel.avatar_url : null);
+        const src = this._headerAvatarRetry.currentSrc(originalUrl);
+
         if (channel.type === 'direct' && channel.peer) {
             const p = channel.peer;
             const label = SyncStore.channelDisplayTitle(channel);
             const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
             const hue = hueFromString(p.user_id);
-            const inner = typeof p.avatar_url === 'string' && p.avatar_url !== ''
-                ? html`<img class="header-entity-img" src=${p.avatar_url} alt="" />`
+            const inner = src
+                ? html`<img class="header-entity-img" src=${src} alt=""
+                    @load=${() => this._headerAvatarRetry.onLoad()}
+                    @error=${() => this._headerAvatarRetry.onError(originalUrl)} />`
                 : html`
                     <span class="header-entity-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
                 `;
@@ -718,11 +728,10 @@ export class ChatView extends PlatformElement {
                 </button>
             `;
         }
-        const chUrl = typeof channel.avatar_url === 'string' && channel.avatar_url !== ''
-            ? channel.avatar_url
-            : null;
-        if (chUrl) {
-            return html`<img class="header-entity-img" src=${chUrl} alt="" />`;
+        if (src) {
+            return html`<img class="header-entity-img" src=${src} alt=""
+                @load=${() => this._headerAvatarRetry.onLoad()}
+                @error=${() => this._headerAvatarRetry.onError(originalUrl)} />`;
         }
         const title = SyncStore.channelDisplayTitle(channel);
         const initial = (title.trim().slice(0, 1) || '?').toUpperCase();

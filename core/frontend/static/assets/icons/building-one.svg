@@ -1,1 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><svg width="22" height="22" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M11 14L25 4V44H11V14Z" fill="#2F88FF" stroke="#333" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 13L39 23V44" stroke="#333" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 44H44" stroke="#333" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 21h18"></path>
+    <path d="M5 21V7l8-4v18"></path>
+    <path d="M13 13h6v8"></path>
+    <line x1="8" y1="9" x2="10" y2="9"></line>
+    <line x1="8" y1="13" x2="10" y2="13"></line>
+    <line x1="8" y1="17" x2="10" y2="17"></line>
+    <line x1="16" y1="17" x2="16" y2="17.01"></line>
+</svg>

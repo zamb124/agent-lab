@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
 
@@ -193,6 +194,7 @@ export class SyncDirectMemberRow extends PlatformElement {
         this.member = null;
         this.active = false;
         this.iconOnly = false;
+        this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
         const s = SyncStore.state;
         this._peerPresenceByUserId = s.peerPresenceByUserId ?? {};
         this._typingPeersByChannel = s.typingPeersByChannel ?? {};
@@ -208,6 +210,7 @@ export class SyncDirectMemberRow extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._avatarRetry.cancel();
         this._unsubscribe?.();
     }
 
@@ -218,8 +221,12 @@ export class SyncDirectMemberRow extends PlatformElement {
     }
 
     _memberAvatar(member) {
-        if (member.avatar_url) {
-            return html`<img class="peer-avatar" src=${member.avatar_url} alt="" />`;
+        const originalUrl = member.avatar_url ?? null;
+        const src = this._avatarRetry.currentSrc(originalUrl);
+        if (src) {
+            return html`<img class="peer-avatar" src=${src} alt=""
+                @load=${() => this._avatarRetry.onLoad()}
+                @error=${() => this._avatarRetry.onError(originalUrl)} />`;
         }
         const label = typeof member.name === 'string' ? member.name : member.user_id;
         const initial = (label.trim().slice(0, 1) || '?').toUpperCase();

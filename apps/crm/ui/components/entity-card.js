@@ -1,6 +1,7 @@
 /**
  * Entity Card - Детальная карточка сущности
  * Показывает: данные, связанные entities, attachments, grants panel
+ * Граф связей загружается лениво по кнопке пользователя
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -21,6 +22,7 @@ export class EntityCard extends PlatformElement {
         _pendingAccessRequests: { state: true },
         _requestsLoading: { state: true },
         _processingRequestId: { state: true },
+        _graphVisible: { state: true },
     };
 
     static styles = [
@@ -122,10 +124,38 @@ export class EntityCard extends PlatformElement {
                 border-color: var(--crm-button-primary-hover);
             }
 
+            .icon-btn {
+                width: 36px;
+                height: 36px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+                padding: 0;
+                flex-shrink: 0;
+            }
+
+            .icon-btn:hover {
+                background: var(--crm-surface);
+                color: var(--text-primary);
+                border-color: var(--accent-subtle);
+            }
+
             .content {
                 height: calc(100% - 85px);
                 overflow-y: auto;
                 padding: var(--space-4);
+                animation: card-fade-in 0.15s ease-out;
+            }
+
+            @keyframes card-fade-in {
+                from { opacity: 0; transform: translateY(4px); }
+                to { opacity: 1; transform: translateY(0); }
             }
 
             .section {
@@ -227,19 +257,7 @@ export class EntityCard extends PlatformElement {
                 height: 100%;
                 color: var(--text-tertiary);
                 text-align: center;
-            }
-
-            .empty-icon {
-                width: 80px;
-                height: 80px;
-                margin-bottom: var(--space-4);
-                opacity: 0.6;
-            }
-            
-            .empty-icon img {
-                width: 100%;
-                height: 100%;
-                object-fit: contain;
+                gap: var(--space-2);
             }
 
             .tags-list {
@@ -256,17 +274,25 @@ export class EntityCard extends PlatformElement {
                 color: var(--text-secondary);
             }
 
-            .request-access-section {
-                padding: var(--space-4);
+            .show-graph-btn {
+                width: 100%;
+                padding: var(--space-3);
                 background: var(--crm-surface-muted);
+                border: 1px dashed var(--crm-stroke);
                 border-radius: var(--radius-lg);
-                text-align: center;
-            }
-
-            .request-access-section p {
-                margin: 0 0 var(--space-3) 0;
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+                transition: all var(--duration-fast);
+            }
+
+            .show-graph-btn:hover {
+                border-color: var(--accent-subtle);
+                color: var(--text-primary);
             }
 
             .requests-list {
@@ -327,10 +353,6 @@ export class EntityCard extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            :host-context([data-theme="light"]) {
-                background: var(--crm-surface);
-            }
-            
             @media (max-width: 767px) {
                 :host {
                     border-radius: 0;
@@ -352,12 +374,13 @@ export class EntityCard extends PlatformElement {
         this._pendingAccessRequests = [];
         this._requestsLoading = false;
         this._processingRequestId = '';
+        this._graphVisible = false;
 
         this._unsubscribe = CRMStore.subscribe(state => {
             this._entity = state.entities.currentEntity;
             this._relatedEntities = state.entities.currentEntityRelated || [];
             this._entityTypes = state.entities.entityTypes || [];
-            this._loading = state.entities.entitiesLoading;
+            this._loading = state.entities.cardLoading || false;
         });
     }
 
@@ -367,17 +390,20 @@ export class EntityCard extends PlatformElement {
     }
 
     updated(changedProperties) {
-        if (changedProperties.has('entityId') && this.entityId) {
-            this._loadEntityCard();
+        if (changedProperties.has('entityId')) {
+            this._graphVisible = false;
+            if (this.entityId) {
+                this._loadEntityCard();
+            }
         }
     }
 
     async _loadEntityCard() {
         if (!this.entityId) return;
-        
+
         const crmApi = this.crmApi;
         const card = await CRMStore.loadEntityCard(crmApi, this.entityId);
-        
+
         const currentUser = this.auth?.user;
         this._isOwner = currentUser && card.entity?.user_id === currentUser.user_id;
         if (this._isOwner) {
@@ -459,7 +485,7 @@ export class EntityCard extends PlatformElement {
         const entityType = this._entityTypes.find(t => t.type_id === typeId);
         if (entityType) {
             return {
-                icon: entityType.icon || 'file',
+                icon: this._resolveIconName(entityType.icon),
                 color: entityType.color || 'var(--text-tertiary)',
                 label: entityType.name || typeId,
             };
@@ -468,11 +494,13 @@ export class EntityCard extends PlatformElement {
     }
 
     _hexToRgba(hex, alpha) {
-        if (!hex) return `rgba(148, 163, 184, ${alpha})`;
-        const cleanHex = hex.replace('#', '');
-        const r = parseInt(cleanHex.substring(0, 2), 16);
-        const g = parseInt(cleanHex.substring(2, 4), 16);
-        const b = parseInt(cleanHex.substring(4, 6), 16);
+        if (!hex || hex.startsWith('var(')) {
+            return `rgba(148, 163, 184, ${alpha})`;
+        }
+        const clean = hex.replace('#', '');
+        const r = parseInt(clean.substring(0, 2), 16);
+        const g = parseInt(clean.substring(2, 4), 16);
+        const b = parseInt(clean.substring(4, 6), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
@@ -510,6 +538,12 @@ export class EntityCard extends PlatformElement {
         CRMStore.setCurrentEntity(entityId);
     }
 
+    async _onShowGraph() {
+        this._graphVisible = true;
+        await this.updateComplete;
+        await import('./mini-graph-preview.js');
+    }
+
     _renderAttributes(attributes) {
         if (!attributes || Object.keys(attributes).length === 0) {
             return '';
@@ -542,7 +576,7 @@ export class EntityCard extends PlatformElement {
                     ${this._relatedEntities.map(entity => {
                         const typeConfig = this._getEntityTypeConfig(entity);
                         const bgColor = this._hexToRgba(typeConfig.color, 0.15);
-                        
+
                         return html`
                             <button
                                 class="related-item"
@@ -553,7 +587,7 @@ export class EntityCard extends PlatformElement {
                                     class="related-icon"
                                     style="background: ${bgColor}; color: ${typeConfig.color};"
                                 >
-                                    <platform-icon name="${this._resolveIconName(typeConfig.icon)}" size="18"></platform-icon>
+                                    <platform-icon name="${typeConfig.icon}" size="18"></platform-icon>
                                 </div>
                                 <div class="related-name">${entity.name}</div>
                                 <div class="related-type">${typeConfig.label}</div>
@@ -561,6 +595,34 @@ export class EntityCard extends PlatformElement {
                         `;
                     })}
                 </div>
+            </div>
+        `;
+    }
+
+    _renderGraph() {
+        if (!this.entityId) return '';
+
+        if (!this._graphVisible) {
+            return html`
+                <div class="section">
+                    <div class="section-title">Граф связей</div>
+                    <button class="show-graph-btn" type="button" @click=${this._onShowGraph}>
+                        <platform-icon name="link" size="16"></platform-icon>
+                        Показать граф связей
+                    </button>
+                </div>
+            `;
+        }
+
+        return html`
+            <div class="section">
+                <div class="section-title">Граф связей</div>
+                <mini-graph-preview
+                    .entityId=${this.entityId}
+                    .maxDepth=${2}
+                    height="200px"
+                    @entity-open=${(e) => this._onRelatedClick(e.detail.entityId)}
+                ></mini-graph-preview>
             </div>
         `;
     }
@@ -622,12 +684,10 @@ export class EntityCard extends PlatformElement {
         if (!this.entityId) {
             return html`
                 <div class="empty-state">
-                    <div class="empty-icon">
-                        <platform-icon name="book-open" size="56"></platform-icon>
-                    </div>
+                    <platform-icon name="book-open" size="56"></platform-icon>
                     <div>Выберите сущность</div>
-                    <div style="margin-top: var(--space-2); font-size: var(--text-sm);">
-                        из списка или фильтров
+                    <div style="font-size: var(--text-sm);">
+                        из списка слева
                     </div>
                 </div>
             `;
@@ -656,7 +716,7 @@ export class EntityCard extends PlatformElement {
                     class="header-icon"
                     style="background: ${bgColor}; color: ${typeConfig.color};"
                 >
-                    <platform-icon name="${this._resolveIconName(typeConfig.icon)}" size="22"></platform-icon>
+                    <platform-icon name="${typeConfig.icon}" size="22"></platform-icon>
                 </div>
 
                 <div class="header-content">
@@ -666,14 +726,12 @@ export class EntityCard extends PlatformElement {
 
                 <div class="header-actions">
                     ${this._isOwner ? html`
-                        <button class="action-btn" @click=${this._onEdit}>
+                        <button class="icon-btn" @click=${this._onEdit} title="Редактировать">
                             <platform-icon name="edit" size="16"></platform-icon>
-                            Редактировать
                         </button>
                     ` : html`
-                        <button class="action-btn primary" @click=${this._onRequestAccess}>
-                            <platform-icon name="access-request" size="16"></platform-icon>
-                            Запросить доступ
+                        <button class="icon-btn" @click=${this._onRequestAccess} title="Запросить доступ">
+                            <platform-icon name="lock" size="16"></platform-icon>
                         </button>
                     `}
                 </div>
@@ -701,6 +759,9 @@ export class EntityCard extends PlatformElement {
                 ${this._renderAttributes(this._entity.attributes)}
 
                 ${this._renderRelated()}
+
+                ${this._renderGraph()}
+
                 ${this._renderPendingAccessRequests()}
 
                 ${this._isOwner ? html`

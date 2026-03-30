@@ -63,7 +63,7 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
 
 **PostgreSQL:**
 - `EntityType` - типы сущностей runtime (минимальное ядро: `note`, `task`; остальное создается из template)
-- `RelationshipType` - типы связей (mentions, linked, manages, reports_to)
+- `RelationshipType` - типы связей (11 системных: mentions, linked, related_to, parent_of, child_of, assigned_to, belongs_to, follows_up, blocks, blocked_by, duplicates)
 - `Relationship` - связи между entities (source → target, weight, metadata)
 - `AccessGrant` - права доступа (public, user, company, с ролями viewer/editor/admin)
 - `NamespaceTemplate` - шаблоны пространств (DB editable)
@@ -304,7 +304,7 @@ company_id="acme", namespace="default"   # По умолчанию
 - `GET /entity-types/by-namespace/{namespace}` - типы, разрешенные в namespace
 - `POST /entity-types` - создать тип
 - `GET /relationships/types/` - список типов связей
-- `POST /relationships/types/` - создать тип связи
+- `POST /relationships/types/` - создать кастомный тип связи (скрыт из UI, доступен по API)
 
 **Namespaces & Templates:**
 - `GET /namespaces/templates` - список шаблонов из БД
@@ -353,12 +353,13 @@ company_id="acme", namespace="default"   # По умолчанию
 - `AI analyze` работает в контексте `namespace` и использует только разрешенные в нем типы.
 - Дедупликация `EntityService._deduplicate_entities` обязана искать кандидатов в том же `namespace`.
 - При создании `namespace` через шаблон: типы из `NamespaceTemplateType` materialize в `EntityType` (если отсутствуют) и получают новый namespace в `namespace_ids`.
-- `NamespaceTemplate` хранит метаданные шаблона включая `icon`; иконка редактируется через Settings UI и используется для визуального выбора шаблона.
-- Для существующего namespace редактирование `allowed_type_ids` запрещено, если в нем уже есть хотя бы одна сущность (`entity_count > 0`); при этом описание namespace можно менять.
+- `NamespaceTemplate` хранит метаданные шаблона включая `icon`; иконка редактируется через UI шаблонов (`/crm/templates`) и используется для визуального выбора шаблона.
+- Для существующего namespace: добавлять новые типы можно всегда; удалять тип можно только если у него нет сущностей в этом namespace (`locked_type_ids`). Описание namespace можно менять всегда. `type_id` неизменяем.
+- UI настроек CRM: `/crm/settings` -- хаб с карточками разделов; `/crm/templates` -- CRUD шаблонов; `/crm/spaces` -- настройка пространств с гранулярными ограничениями. Каждый под-раздел имеет кнопку "Назад" к хабу.
 
 **Системные типы:**
 - `note`, `task` - базовые entity types
-- `mentions`, `linked` - базовые relationship types
+- `mentions`, `linked`, `related_to`, `parent_of`, `child_of`, `assigned_to`, `belongs_to`, `follows_up`, `blocks`, `blocked_by`, `duplicates` - системные relationship types (кастомные можно создавать по API, но скрыты из UI). AI использует типы с заполненным `prompt` (все кроме `linked`, `child_of`, `blocked_by`, `duplicates`). При `POST /relationships` `relationship_type` валидируется — несуществующий тип возвращает 422.
 
 ## Cascade удаление
 

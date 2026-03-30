@@ -136,7 +136,7 @@ class CompanyInitService:
                     description=template.get('description'),
                     prompt=template.get('prompt'),
                     is_directed=template.get('is_directed', True),
-                    inverse_type_id=None,
+                    inverse_type_id=template.get('inverse_type_id'),
                     icon=template.get('icon'),
                     color=template.get('color'),
                     is_system=True,
@@ -150,6 +150,7 @@ class CompanyInitService:
             existing.description = template.get("description")
             existing.prompt = template.get("prompt")
             existing.is_directed = template.get("is_directed", True)
+            existing.inverse_type_id = template.get("inverse_type_id")
             existing.icon = template.get("icon")
             existing.color = template.get("color")
             existing.is_system = True
