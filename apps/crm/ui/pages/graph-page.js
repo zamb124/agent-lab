@@ -443,7 +443,7 @@ export class GraphPage extends PlatformElement {
                 width: 100%;
                 height: 100%;
                 min-height: 560px;
-                background: radial-gradient(circle at top, rgba(130, 130, 180, 0.18), rgba(20, 20, 35, 0.75));
+                background: var(--bg-secondary);
             }
 
             .canvas-stage .graph-canvas {
@@ -454,11 +454,11 @@ export class GraphPage extends PlatformElement {
             .overlay-card {
                 position: absolute;
                 z-index: 12;
-                background: rgba(16, 20, 31, 0.58);
-                border: 1px solid rgba(156, 166, 191, 0.22);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
                 border-radius: 14px;
                 backdrop-filter: blur(6px);
-                color: #eef2ff;
+                color: var(--text-primary);
                 transition: opacity 0.18s ease, transform 0.18s ease;
                 pointer-events: none;
             }
@@ -481,19 +481,20 @@ export class GraphPage extends PlatformElement {
             .toolbar-separator {
                 width: 20px;
                 height: 2px;
-                background: rgba(127, 214, 255, 0.4);
+                background: var(--accent);
+                opacity: 0.4;
                 border-radius: 1px;
                 margin: 4px auto;
             }
 
             .icon-btn.toggle-btn {
                 border-style: dashed;
-                border-color: rgba(156, 166, 191, 0.3);
+                border-color: var(--glass-border-medium);
             }
 
             .icon-btn.toggle-btn.active {
                 border-style: solid;
-                border-color: rgba(127, 214, 255, 0.6);
+                border-color: var(--accent);
             }
 
             .overlay-search {
@@ -511,8 +512,8 @@ export class GraphPage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: 0;
-                background: rgba(16, 20, 31, 0.62);
-                border: 1px solid rgba(156, 166, 191, 0.28);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
                 border-radius: 999px;
                 overflow: hidden;
                 pointer-events: auto;
@@ -522,7 +523,7 @@ export class GraphPage extends PlatformElement {
             .search-pill input {
                 border: none;
                 background: transparent;
-                color: #eef2ff;
+                color: var(--text-primary);
                 font-size: 13px;
                 padding: 8px 14px;
                 width: 180px;
@@ -530,7 +531,7 @@ export class GraphPage extends PlatformElement {
             }
 
             .search-pill input::placeholder {
-                color: rgba(200, 210, 240, 0.5);
+                color: var(--text-tertiary);
             }
 
             .search-pill .pill-icon-btn {
@@ -538,7 +539,7 @@ export class GraphPage extends PlatformElement {
                 height: 32px;
                 border: none;
                 background: transparent;
-                color: rgba(200, 210, 240, 0.7);
+                color: var(--text-secondary);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
@@ -547,7 +548,7 @@ export class GraphPage extends PlatformElement {
             }
 
             .search-pill .pill-icon-btn:hover {
-                color: #eef2ff;
+                color: var(--text-primary);
             }
 
             .search-pill .pill-icon-btn svg {
@@ -572,31 +573,31 @@ export class GraphPage extends PlatformElement {
                 align-items: center;
                 padding: 5px 10px;
                 border-radius: 999px;
-                border: 1px solid rgba(156, 166, 191, 0.28);
-                background: rgba(16, 20, 31, 0.52);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
                 backdrop-filter: blur(6px);
-                color: rgba(200, 210, 240, 0.75);
+                color: var(--text-secondary);
                 font-size: 12px;
                 cursor: pointer;
                 transition: background 0.14s, color 0.14s;
             }
 
             .mode-pill:hover {
-                background: rgba(40, 52, 80, 0.8);
-                color: #eef2ff;
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
             }
 
             .mode-pill.active {
-                background: rgba(46, 86, 125, 0.85);
-                border-color: rgba(127, 214, 255, 0.55);
-                color: #eef2ff;
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+                color: var(--text-primary);
             }
 
             .timeline-overlay {
-                top: 160px;
+                top: 60px;
                 left: 16px;
-                width: 94px;
-                padding: 10px 8px;
+                width: 56px;
+                padding: 8px 4px;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
@@ -604,8 +605,8 @@ export class GraphPage extends PlatformElement {
             }
 
             .timeline-title {
-                font-size: 11px;
-                color: #d5dff9;
+                font-size: 9px;
+                color: var(--text-secondary);
                 text-transform: uppercase;
                 letter-spacing: 0.06em;
             }
@@ -624,14 +625,15 @@ export class GraphPage extends PlatformElement {
                 width: 3px;
                 height: 100%;
                 border-radius: 2px;
-                background: rgba(156, 166, 191, 0.35);
+                background: var(--glass-border-medium);
             }
 
             .timeline-track-active {
                 position: absolute;
                 width: 3px;
                 border-radius: 2px;
-                background: rgba(127, 214, 255, 0.55);
+                background: var(--accent);
+                opacity: 0.55;
             }
 
             .timeline-slider {
@@ -679,8 +681,8 @@ export class GraphPage extends PlatformElement {
             }
 
             .timeline-label {
-                font-size: 10px;
-                color: #d0dbf8;
+                font-size: 8px;
+                color: var(--text-tertiary);
                 text-align: center;
                 line-height: 1.2;
             }
@@ -688,10 +690,10 @@ export class GraphPage extends PlatformElement {
             .timeline-reset-icon {
                 width: 24px;
                 height: 24px;
-                border: 1px solid rgba(156, 166, 191, 0.3);
+                border: 1px solid var(--glass-border-subtle);
                 border-radius: 6px;
-                background: rgba(27, 34, 52, 0.7);
-                color: rgba(200, 210, 240, 0.7);
+                background: var(--glass-solid-subtle);
+                color: var(--text-tertiary);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
@@ -701,8 +703,8 @@ export class GraphPage extends PlatformElement {
             }
 
             .timeline-reset-icon:hover {
-                background: rgba(58, 75, 113, 0.95);
-                color: #eef2ff;
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
             }
 
             .overlay-meta {
@@ -720,9 +722,9 @@ export class GraphPage extends PlatformElement {
                 align-items: center;
                 padding: 4px 8px;
                 border-radius: 999px;
-                border: 1px solid rgba(156, 166, 191, 0.4);
-                background: rgba(27, 34, 52, 0.9);
-                color: #d8deef;
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
             }
 
             .icon-toolbar {
@@ -735,8 +737,8 @@ export class GraphPage extends PlatformElement {
                 gap: 4px;
                 padding: 6px;
                 border-radius: 12px;
-                background: rgba(16, 20, 31, 0.58);
-                border: 1px solid rgba(156, 166, 191, 0.22);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
                 backdrop-filter: blur(6px);
                 pointer-events: auto;
                 max-height: calc(100% - 32px);
@@ -752,24 +754,26 @@ export class GraphPage extends PlatformElement {
                 width: 28px;
                 height: 28px;
                 border-radius: 7px;
-                border: 1px solid rgba(156, 166, 191, 0.4);
-                background: rgba(27, 34, 52, 0.86);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-medium);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                color: #e7ecff;
+                color: var(--text-secondary);
                 cursor: pointer;
                 transition: background 0.16s ease, transform 0.16s ease;
             }
 
             .icon-btn:hover {
-                background: rgba(58, 75, 113, 0.95);
+                background: var(--glass-solid-strong);
+                color: var(--text-primary);
                 transform: translateY(-1px);
             }
 
             .icon-btn.active {
-                border-color: rgba(127, 214, 255, 0.8);
-                background: rgba(46, 86, 125, 0.95);
+                border-color: var(--accent);
+                background: var(--accent-subtle);
+                color: var(--text-primary);
             }
 
             .icon-btn svg {
@@ -807,9 +811,9 @@ export class GraphPage extends PlatformElement {
                 transform: translate(-50%, -50%);
                 padding: 12px 16px;
                 border-radius: 12px;
-                border: 1px solid rgba(194, 112, 112, 0.56);
-                background: rgba(54, 23, 28, 0.84);
-                color: #f7d7d7;
+                border: 1px solid var(--crm-danger-stroke);
+                background: var(--crm-danger-bg);
+                color: var(--text-primary);
                 font-size: 13px;
                 backdrop-filter: blur(8px);
             }
@@ -819,12 +823,13 @@ export class GraphPage extends PlatformElement {
                 right: 16px;
                 bottom: 16px;
                 z-index: 15;
-                width: min(720px, calc(100% - 32px));
+                width: auto;
+                max-width: min(720px, calc(100% - 32px));
                 max-height: min(58vh, 540px);
                 overflow: auto;
-                border: 1px solid rgba(156, 166, 191, 0.22);
+                border: 1px solid var(--glass-border-subtle);
                 border-radius: 12px;
-                background: rgba(13, 17, 27, 0.72);
+                background: var(--glass-solid-subtle);
                 backdrop-filter: blur(6px);
                 pointer-events: auto;
             }
@@ -835,8 +840,8 @@ export class GraphPage extends PlatformElement {
                 padding: 10px 12px;
                 font-size: 13px;
                 font-weight: 600;
-                border-bottom: 1px solid rgba(156, 166, 191, 0.3);
-                color: #dbe4ff;
+                border-bottom: 1px solid var(--glass-border-subtle);
+                color: var(--text-primary);
             }
 
             .advanced-drawer > summary::-webkit-details-marker {
@@ -863,8 +868,7 @@ export class GraphPage extends PlatformElement {
                 }
 
                 .timeline-overlay {
-                    top: auto;
-                    bottom: 56px;
+                    top: 60px;
                     left: 16px;
                 }
 
@@ -881,7 +885,7 @@ export class GraphPage extends PlatformElement {
                 }
 
                 .advanced-drawer {
-                    width: min(480px, calc(100% - 32px));
+                    max-width: min(480px, calc(100% - 32px));
                     max-height: min(40vh, 380px);
                 }
             }
@@ -932,19 +936,18 @@ export class GraphPage extends PlatformElement {
                 }
 
                 .timeline-overlay {
-                    top: auto;
-                    bottom: 48px;
+                    top: 52px;
                     left: 8px;
-                    width: 72px;
-                    padding: 6px;
+                    width: 48px;
+                    padding: 4px;
                 }
 
                 .timeline-sliders {
-                    height: 120px;
+                    height: 100px;
                 }
 
                 .timeline-slider {
-                    width: 120px;
+                    width: 100px;
                 }
 
                 .legend-overlay {
@@ -961,7 +964,7 @@ export class GraphPage extends PlatformElement {
                 .advanced-drawer {
                     right: 8px;
                     bottom: 8px;
-                    width: calc(100% - 16px);
+                    max-width: calc(100% - 16px);
                     max-height: min(36vh, 320px);
                 }
 
@@ -1099,6 +1102,8 @@ export class GraphPage extends PlatformElement {
         await this._loadGraphData();
         this._initGraph();
         this._syncGraph();
+        this._themeChangeHandler = () => this._applyThemeToCanvas();
+        window.addEventListener('theme-change', this._themeChangeHandler);
     }
 
     updated(changedProperties) {
@@ -1117,6 +1122,10 @@ export class GraphPage extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        if (this._themeChangeHandler) {
+            window.removeEventListener('theme-change', this._themeChangeHandler);
+            this._themeChangeHandler = null;
+        }
         if (this._timelineReloadTimer) {
             clearTimeout(this._timelineReloadTimer);
             this._timelineReloadTimer = null;
@@ -1125,6 +1134,16 @@ export class GraphPage extends PlatformElement {
             this._graphInstance._destructor();
             this._graphInstance = null;
         }
+    }
+
+    _applyThemeToCanvas() {
+        if (!this._graphInstance) {
+            return;
+        }
+        const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
+        this._graphInstance.backgroundColor(canvasBg);
+        this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
+        this._graphInstance.linkThreeObject(this._graphInstance.linkThreeObject());
     }
 
     _getRelationshipTypes() {
@@ -1376,8 +1395,9 @@ export class GraphPage extends PlatformElement {
         if (!container) {
             throw new Error('Graph canvas is not available');
         }
+        const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
         this._graphInstance = factory()(container)
-            .backgroundColor('rgba(0,0,0,0)')
+            .backgroundColor(canvasBg)
             .cooldownTicks(120)
             .warmupTicks(80)
             .showNavInfo(false)
@@ -1386,7 +1406,8 @@ export class GraphPage extends PlatformElement {
             .nodeVal((node) => node.size)
             .linkLabel(() => '')
             .nodeThreeObject((node) => {
-                const sprite = this._createTextSprite(node.name || node.id || '', '#f0f4ff', 24);
+                const labelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#f0f4ff';
+                const sprite = this._createTextSprite(node.name || node.id || '', labelColor, 24);
                 if (!sprite) {
                     return null;
                 }
@@ -1436,7 +1457,8 @@ export class GraphPage extends PlatformElement {
             })
             .linkThreeObjectExtend(true)
             .linkThreeObject((link) => {
-                const sprite = this._createTextSprite(link.relation_type || 'related', '#d4dae8', 20);
+                const linkLabelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
+                const sprite = this._createTextSprite(link.relation_type || 'related', linkLabelColor, 20);
                 if (!sprite) {
                     return null;
                 }
@@ -1906,10 +1928,11 @@ export class GraphPage extends PlatformElement {
         context.font = `700 ${fontSize}px Inter, sans-serif`;
         context.fillStyle = color;
         context.textBaseline = 'middle';
-        context.shadowColor = 'rgba(5, 7, 12, 0.95)';
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        context.shadowColor = isDark ? 'rgba(5, 7, 12, 0.95)' : 'rgba(255, 255, 255, 0.95)';
         context.shadowBlur = 6;
         context.lineWidth = 4;
-        context.strokeStyle = 'rgba(5, 7, 12, 0.92)';
+        context.strokeStyle = isDark ? 'rgba(5, 7, 12, 0.92)' : 'rgba(255, 255, 255, 0.92)';
         context.strokeText(labelText, 8, canvas.height / 2);
         context.fillText(labelText, 8, canvas.height / 2);
         const texture = new window.THREE.CanvasTexture(canvas);
