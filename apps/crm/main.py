@@ -56,6 +56,15 @@ if crm_ui_path.exists():
     app.mount("/crm/ui/static", StaticFiles(directory=crm_ui_path, html=True), name="crm_ui")
     logger.info(f"CRM UI смонтирован: {crm_ui_path}")
 
+vendor_3d_force_graph_path = Path(__file__).parent.parent.parent / "node_modules" / "3d-force-graph" / "dist"
+if vendor_3d_force_graph_path.exists():
+    app.mount(
+        "/crm/ui/vendor/3d-force-graph",
+        StaticFiles(directory=vendor_3d_force_graph_path),
+        name="crm_ui_vendor_3d_force_graph",
+    )
+    logger.info(f"3d-force-graph vendor смонтирован: {vendor_3d_force_graph_path}")
+
 
 @app.get("/crm")
 @app.get("/crm/")

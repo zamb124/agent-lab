@@ -23,7 +23,7 @@ globs:
 - Передача админа встречи выполняется командой `call.admin.transfer`; новый админ должен быть зарегистрированным `joined` участником звонка (гостей назначать нельзя).
 - **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket
 - **Деплой**: в production-образе обязателен `uv pip install ... --group sync` (`websockets` в `pyproject.toml`). Иначе uvicorn не поднимает WebSocket (`No supported WebSocket library`), клиент получает 404 на `GET /sync/ws` из-за SPA-fallback в `main.py` для пути `ws`
-- **TaskIQ broker**: один инстанс в `apps/sync/realtime/broker.py` — и `handle_command.kiq()`, и `taskiq worker apps.sync_worker.worker:broker` (реэкспорт из того же модуля)
+- **TaskIQ broker**: один инстанс в `apps/sync/realtime/broker.py` — и `handle_command.kiq()`, и `taskiq worker apps.sync_worker.worker:worker_app` (реэкспорт из того же модуля)
 - **UI**: Lit в `apps/sync/ui/` — тот же канон, что у остальных SPA: **`main.mdc` (раздел про фронтенд)** и **`frontend.mdc`**; отступления без правки рулов запрещены. Проверка: **`make check-ui-canon`**.
 
 ## Вход с консоли (frontend)

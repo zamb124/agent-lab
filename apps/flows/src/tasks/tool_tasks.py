@@ -14,12 +14,12 @@ from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.container import get_container
 from core.logging import get_logger
 
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="execute_tool", queue_name="default")
+@broker.task(task_name="execute_tool", queue_name="flows_worker")
 async def execute_tool(
     tool_id_or_config: Any,
     args: Dict[str, Any],

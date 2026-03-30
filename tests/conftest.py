@@ -73,7 +73,7 @@ core.rag.factory._default_rag_provider = None
 from taskiq_redis import RedisStreamBroker, RedisAsyncResultBackend
 from core.tasks.session_lock import session_lock_middleware
 from core.config import get_settings
-import apps.broker.broker as platform_broker_module
+import apps.flows_worker.broker as platform_broker_module
 
 # Получаем settings с тестовыми env переменными
 test_settings = get_settings()
@@ -82,10 +82,10 @@ result_backend = RedisAsyncResultBackend(
     result_ex_time=3600
 )
 
-# Создаем broker с тестовыми настройками и queue_name="default" (как в задачах)
+# Создаем broker с тестовыми настройками и queue_name="flows_worker" (как в задачах flows)
 test_broker = RedisStreamBroker(
     url=test_settings.tasks.broker_url,
-    queue_name="default"
+    queue_name="flows_worker"
 ).with_result_backend(result_backend).with_middlewares(session_lock_middleware)
 
 print(f"🔧 TEST BROKER CREATED: url={test_settings.tasks.broker_url}, queue_name=default, broker_id={id(test_broker)}")

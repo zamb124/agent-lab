@@ -2,8 +2,11 @@
 Фабрика для создания TaskIQ brokers с общими настройками.
 
 Конкретные brokers создаются в:
-- apps/broker/broker.py - для платформенных задач (agents, crm)
+- apps/flows_worker/broker.py - для задач сервиса flows
+- apps/idle_worker/broker.py - для общеплатформенных idle-задач
 - apps/rag_worker/broker.py - для RAG задач
+- apps/sync/realtime/broker.py - для sync realtime задач
+- apps/crm_worker/broker.py - для CRM задач
 """
 
 import asyncio

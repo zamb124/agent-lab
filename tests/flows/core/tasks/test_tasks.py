@@ -10,7 +10,7 @@ import pytest
 
 from core.context import set_context
 
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.eval_task import execute_inline_code
 from apps.flows.src.tasks.tool_tasks import execute_tool

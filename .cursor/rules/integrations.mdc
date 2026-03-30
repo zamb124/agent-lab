@@ -13,7 +13,7 @@ alwaysApply: false
 - SessionLockMiddleware (FIFO per session)
 
 ```python
-from core.tasks import broker, scheduler, schedule_source
+from apps.flows_worker.broker import broker
 
 @broker.task(retry_on_error=True, max_retries=3)
 async def my_task(param: str) -> str:
@@ -168,7 +168,7 @@ external_flow = await container.flow_discovery.register_agent(
 
 ## КРИТИЧНЫЕ ПРАВИЛА
 
-1. **TaskIQ:** Все задачи через `core.tasks.broker`, FIFO per session автоматически
+1. **TaskIQ:** Задачи регистрируются на брокере своего worker-модуля (`apps.flows_worker.broker`, `apps.idle_worker.broker`, `apps.rag_worker.broker`, `apps.sync.realtime.broker`, `apps.crm_worker.broker`); FIFO per session автоматически
 2. **Streaming:** LLM ТОЛЬКО через `.stream()`, события через Redis Pub/Sub
 3. **HTTP:** Межсервисное ТОЛЬКО через `ServiceClient`, внешнее через `get_httpx_client`
 4. **A2A типы:** Используй типы из `a2a-sdk`, НЕ создавай свои

@@ -3,7 +3,7 @@ TaskIQ tasks infrastructure.
 
 Содержит session_lock middleware и фабрики для создания brokers.
 
-ВАЖНО: broker и scheduler импортируются напрямую из apps.broker.broker,
+ВАЖНО: broker и scheduler импортируются напрямую из apps.flows_worker.broker,
 НЕ из core.tasks (чтобы избежать circular import).
 """
 

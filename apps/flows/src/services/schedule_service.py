@@ -110,7 +110,7 @@ class ScheduleService:
         request = PlatformScheduleCreateRequest(
             target_service="flows",
             task_name="execute_scheduled_task",
-            queue_name="scheduled",
+            queue_name="flows_worker",
             schedule_type=schedule_type,
             cron=cron,
             interval_seconds=interval_seconds,

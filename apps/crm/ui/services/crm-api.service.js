@@ -136,6 +136,13 @@ export class CRMAPIService extends BaseService {
         }
         return this.delete(`/relationships/${relationshipId}`);
     }
+
+    async getRelationship(relationshipId) {
+        if (!relationshipId) {
+            throw new Error('Relationship ID is required');
+        }
+        return this.get(`/relationships/${relationshipId}`);
+    }
     
     async getRelationshipTypes() {
         const response = await this.get('/relationships/types/');
@@ -166,6 +173,13 @@ export class CRMAPIService extends BaseService {
             throw new Error('Entity ID is required');
         }
         return this.get(`/entities/${entityId}/influence-graph`, params);
+    }
+
+    async getRelatedEntities(entityId, params = {}) {
+        if (!entityId) {
+            throw new Error('Entity ID is required');
+        }
+        return this.get(`/entities/${entityId}/related`, params);
     }
     
     async getShortestPath(sourceId, targetId, params = {}) {

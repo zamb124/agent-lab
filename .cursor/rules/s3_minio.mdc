@@ -134,7 +134,7 @@ docker exec agentlab_minio_dev date -u
 
 **Итог:** на проде и в нормальном CI проблема почти не встречается, если **везде включён NTP**. На локальном dev с Docker Desktop единственный «плавающий» участок — **VM Docker vs хост**; от этого спасает перезапуск Docker/MinIO и обновление Docker Desktop, а не настройка репозитория.
 
-**Что сделано в репозитории (не «магия», а удобство):** цель `make dev-minio-restart` — перезапустить только сервис `minio` в `docker-compose-dev.yaml` (контейнер `agentlab_minio_dev`). Одной правкой `docker-compose` расхождение **хост ↔ контейнер** не убрать: это не баг YAML. **Тесты** (`docker-compose-test`, контейнер `tests-runner`) и MinIO живут в одной Docker-сети и делят одно время VM — там skew между «хостом ноутбука» и MinIO не возникает. **Прод**: NTP на серверах, не фича приложения.
+**Что сделано в репозитории (не «магия», а удобство):** цель `make dev-minio-restart` — перезапустить только сервис `minio` в `docker-compose-dev.yaml` (контейнер `agentlab_minio_dev`). Одной правкой `docker-compose` расхождение **хост ↔ контейнер** не убрать: это не баг YAML. **Тесты** (`docker-compose-test`, контейнер `tests_runner`) и MinIO живут в одной Docker-сети и делят одно время VM — там skew между «хостом ноутбука» и MinIO не возникает. **Прод**: NTP на серверах, не фича приложения.
 
 **Автоподстройка SigV4:** при создании S3-клиента (`S3ClientFactory.create_client`) вызывается `core/files/s3_sigv4_clock.py`: по HTTP `Date` с `endpoint_url` (сначала `GET …/minio/health/live`, затем `HEAD /`) вычисляется сдвиг и подменяется `botocore.compat.get_current_datetime` на время процесса. Снимает типичный `RequestTimeTooSkewed` dev (Mac ↔ MinIO). Если endpoint недоступен при старте клиента — подстройки нет, остаётся NTP и `make dev-minio-restart`. Один сдвиг на процесс — не смешивать в одном процессе два endpoint с принципиально разным временем без перезапуска.
 
@@ -269,7 +269,7 @@ def skip_if_s3_disabled():
 make test
 
 # Или через docker-compose напрямую
-docker-compose -f docker-compose-test.yaml up --build tests-runner
+docker-compose -f docker-compose-test.yaml up --build tests_runner
 ```
 
 ## MinIO Console

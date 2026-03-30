@@ -48,7 +48,7 @@ async def _ensure_reconcile_schedule() -> None:
 
 
 async def crm_worker_startup(state: TaskiqState) -> None:
-    setup_logging(service_name="crm-worker")
+    setup_logging(service_name="crm_worker")
     settings = get_settings()
     await notification_manager.start_redis_listener(settings.database.redis_url)
     await _ensure_reconcile_schedule()

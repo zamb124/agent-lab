@@ -5,6 +5,14 @@ import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 
+const VIEW_MODES = ['influence', 'related', 'path'];
+
+const GRAPH_PRESETS = {
+    dense: { charge: -60, linkWidth: 0.8, nodeRelSize: 5 },
+    readable: { charge: -120, linkWidth: 1.5, nodeRelSize: 6 },
+    presentation: { charge: -180, linkWidth: 2.2, nodeRelSize: 7 },
+};
+
 export class GraphPage extends PlatformElement {
     static properties = {
         _entities: { state: true },
@@ -19,6 +27,42 @@ export class GraphPage extends PlatformElement {
         _shortestPathEdges: { state: true },
         _findingPath: { state: true },
         _entitySearchQuery: { state: true },
+        _viewMode: { state: true },
+        _relatedDirection: { state: true },
+        _relationshipTypeFilter: { state: true },
+        _pathMaxDepth: { state: true },
+        _selectedNodeId: { state: true },
+        _selectedEdgeId: { state: true },
+        _graphPreset: { state: true },
+        _backendOperationId: { state: true },
+        _backendOperationArgs: { state: true },
+        _backendOperationResult: { state: true },
+        _backendLoading: { state: true },
+        _attachmentEntityId: { state: true },
+        _attachmentFile: { state: true },
+        _entityFormId: { state: true },
+        _entityFormName: { state: true },
+        _entityFormType: { state: true },
+        _entityFormNamespace: { state: true },
+        _entityFormDescription: { state: true },
+        _relationshipFormId: { state: true },
+        _relationshipSourceId: { state: true },
+        _relationshipTargetId: { state: true },
+        _relationshipType: { state: true },
+        _grantEntityId: { state: true },
+        _grantNamespace: { state: true },
+        _grantUserId: { state: true },
+        _grantCompanyId: { state: true },
+        _grantRole: { state: true },
+        _grantId: { state: true },
+        _accessRequestEntityId: { state: true },
+        _accessRequestId: { state: true },
+        _accessRequestMessage: { state: true },
+        _accessRequestDepth: { state: true },
+        _namespaceNameInput: { state: true },
+        _namespaceTemplateIdInput: { state: true },
+        _namespaceDescriptionInput: { state: true },
+        _isFullscreen: { state: true },
     };
 
     static styles = [
@@ -34,6 +78,14 @@ export class GraphPage extends PlatformElement {
                 border: 1px solid var(--crm-stroke-strong);
                 border-radius: var(--radius-2xl);
                 overflow: hidden;
+            }
+
+            .layout {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                height: 100%;
+                min-height: 0;
             }
 
             .toolbar {
@@ -60,6 +112,7 @@ export class GraphPage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                flex-wrap: wrap;
             }
 
             .toolbar-label {
@@ -69,8 +122,11 @@ export class GraphPage extends PlatformElement {
                 letter-spacing: 0.04em;
             }
 
-            .toolbar-select {
-                min-width: 180px;
+            .toolbar-select,
+            .toolbar-input,
+            .json-input,
+            .textarea {
+                min-width: 160px;
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--crm-stroke);
@@ -79,26 +135,13 @@ export class GraphPage extends PlatformElement {
                 font-size: var(--text-sm);
             }
 
-            .refresh-btn {
-                padding: var(--space-2) var(--space-4);
-                min-height: 36px;
-                font-size: var(--text-sm);
-                border-radius: var(--radius-md);
-            }
-
-            .toolbar-search {
+            .toolbar-input {
                 min-width: 220px;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface-muted);
-                color: var(--text-primary);
-                font-size: var(--text-sm);
             }
 
             .stats {
                 display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
+                grid-template-columns: repeat(4, minmax(0, 1fr));
                 gap: var(--space-3);
                 padding: var(--space-4);
                 border-bottom: 1px solid var(--crm-stroke);
@@ -123,51 +166,25 @@ export class GraphPage extends PlatformElement {
                 font-weight: var(--font-semibold);
             }
 
-            .content {
+            .workspace {
                 flex: 1;
                 display: grid;
-                grid-template-columns: 1fr 1fr;
-                grid-template-rows: minmax(0, 1fr) auto;
+                grid-template-columns: minmax(0, 1fr) 420px;
                 min-height: 0;
                 gap: var(--space-3);
                 padding: var(--space-4);
-                overflow: auto;
-            }
-
-            .path-panel {
-                grid-column: 1 / -1;
-            }
-
-            .path-toolbar {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-                gap: var(--space-2);
-                margin-bottom: var(--space-3);
-            }
-
-            .path-select {
-                min-width: 0;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface);
-                color: var(--text-primary);
-            }
-
-            .path-list {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
-
-            .panel {
-                background: var(--crm-surface-muted);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
                 overflow: hidden;
+            }
+
+            .graph-panel,
+            .control-panel {
+                min-height: 0;
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                border-radius: var(--radius-lg);
                 display: flex;
                 flex-direction: column;
-                min-height: 0;
+                overflow: hidden;
             }
 
             .panel-header {
@@ -185,78 +202,170 @@ export class GraphPage extends PlatformElement {
                 color: var(--text-primary);
             }
 
-            .panel-count {
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                background: var(--crm-surface-tint-strong);
-                border-radius: var(--radius-full);
-                padding: var(--space-1) var(--space-2);
-            }
-
-            .panel-body {
+            .graph-canvas {
                 flex: 1;
                 min-height: 0;
-                overflow: auto;
-                padding: var(--space-2);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
+                position: relative;
+                background: radial-gradient(circle at top, rgba(130, 130, 180, 0.18), rgba(20, 20, 35, 0.75));
             }
 
-            .node-item,
-            .edge-item {
-                display: grid;
-                gap: var(--space-1);
-                padding: var(--space-3);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
+            .legend {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+                padding: var(--space-2) var(--space-3);
+                border-top: 1px solid var(--crm-stroke);
                 background: var(--crm-surface);
             }
 
-            .node-item {
-                cursor: pointer;
+            .legend-item {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
             }
 
-            .node-item:hover {
-                border-color: var(--crm-selected-stroke);
+            .legend-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
             }
 
-            .node-name {
+            .control-body {
+                flex: 1;
+                min-height: 0;
+                overflow: auto;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-3);
+            }
+
+            .section {
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-md);
+                background: var(--crm-surface);
+                padding: var(--space-3);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+
+            .section-title {
                 font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
                 color: var(--text-primary);
-                font-weight: var(--font-medium);
             }
 
-            .node-meta,
-            .edge-meta {
+            .section-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: var(--space-2);
+            }
+
+            .textarea {
+                width: 100%;
+                min-height: 96px;
+                resize: vertical;
+                font-family: monospace;
+                line-height: 1.4;
+            }
+
+            .result-box {
+                font-family: monospace;
+                font-size: var(--text-xs);
+                white-space: pre-wrap;
+                word-break: break-word;
+                padding: var(--space-3);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-md);
+                background: var(--crm-surface-muted);
+                max-height: 220px;
+                overflow: auto;
+            }
+
+            .small {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
             }
 
-            .edge-relation {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
+            .row {
+                display: flex;
+                gap: var(--space-2);
+                flex-wrap: wrap;
             }
 
-            .empty {
+            .section-collapsible {
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-md);
+                background: var(--crm-surface);
+                overflow: hidden;
+            }
+
+            .section-collapsible > summary {
+                list-style: none;
+                cursor: pointer;
+                padding: var(--space-3);
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+                border-bottom: 1px solid var(--crm-stroke);
+            }
+
+            .section-collapsible > summary::-webkit-details-marker {
+                display: none;
+            }
+
+            .section-collapsible[open] > summary {
+                background: var(--crm-surface-tint);
+            }
+
+            .section-collapsible-content {
+                padding: var(--space-3);
                 display: flex;
-                align-items: center;
-                justify-content: center;
                 flex-direction: column;
                 gap: var(--space-2);
-                color: var(--text-tertiary);
-                text-align: center;
-                padding: var(--space-8);
             }
 
-            @media (max-width: 1023px) {
-                .content {
+            .layout.fullscreen .toolbar,
+            .layout.fullscreen .stats,
+            .layout.fullscreen .control-panel {
+                display: none;
+            }
+
+            .layout.fullscreen .workspace {
+                grid-template-columns: 1fr;
+                padding: 0;
+                gap: 0;
+                height: 100%;
+            }
+
+            .layout.fullscreen .graph-panel {
+                border: none;
+                border-radius: 0;
+            }
+
+            .node-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                padding: var(--space-1) var(--space-2);
+                border-radius: var(--radius-full);
+                background: var(--crm-surface-tint-strong);
+                border: 1px solid var(--crm-stroke);
+                font-size: var(--text-xs);
+            }
+
+            @media (max-width: 1199px) {
+                .workspace {
                     grid-template-columns: 1fr;
-                    grid-template-rows: auto;
+                    overflow: auto;
                 }
 
-                .stats {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                .graph-panel {
+                    min-height: 440px;
                 }
             }
 
@@ -266,20 +375,17 @@ export class GraphPage extends PlatformElement {
                     border-radius: 0;
                 }
 
-                .toolbar {
+                .toolbar,
+                .stats,
+                .workspace {
                     padding: var(--space-3);
                 }
 
                 .stats {
-                    padding: var(--space-3);
-                    grid-template-columns: 1fr;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
                 }
 
-                .content {
-                    padding: var(--space-3);
-                }
-
-                .path-toolbar {
+                .section-grid {
                     grid-template-columns: 1fr;
                 }
             }
@@ -300,153 +406,806 @@ export class GraphPage extends PlatformElement {
         this._shortestPathEdges = [];
         this._findingPath = false;
         this._entitySearchQuery = '';
+        this._viewMode = 'influence';
+        this._relatedDirection = 'both';
+        this._relationshipTypeFilter = '';
+        this._pathMaxDepth = 10;
+        this._selectedNodeId = '';
+        this._selectedEdgeId = '';
+        this._graphPreset = 'readable';
+        this._backendOperationId = 'getEntities';
+        this._backendOperationArgs = '[{"limit":100}]';
+        this._backendOperationResult = '';
+        this._backendLoading = false;
+        this._attachmentEntityId = '';
+        this._attachmentFile = null;
+        this._entityFormId = '';
+        this._entityFormName = '';
+        this._entityFormType = 'contact';
+        this._entityFormNamespace = 'default';
+        this._entityFormDescription = '';
+        this._relationshipFormId = '';
+        this._relationshipSourceId = '';
+        this._relationshipTargetId = '';
+        this._relationshipType = 'knows';
+        this._grantEntityId = '';
+        this._grantNamespace = 'default';
+        this._grantUserId = '';
+        this._grantCompanyId = '';
+        this._grantRole = 'viewer';
+        this._grantId = '';
+        this._accessRequestEntityId = '';
+        this._accessRequestId = '';
+        this._accessRequestMessage = '';
+        this._accessRequestDepth = 1;
+        this._namespaceNameInput = '';
+        this._namespaceTemplateIdInput = '';
+        this._namespaceDescriptionInput = '';
+        this._isFullscreen = false;
+        this._graphInstance = null;
+        this._onSearchQueryInput = this._onSearchQueryInput.bind(this);
+        this._onModeChange = this._onModeChange.bind(this);
+        this._onRootChange = this._onRootChange.bind(this);
+        this._onDepthChange = this._onDepthChange.bind(this);
+        this._onPathDepthChange = this._onPathDepthChange.bind(this);
+        this._onRelationshipTypeFilterChange = this._onRelationshipTypeFilterChange.bind(this);
+        this._onRelatedDirectionChange = this._onRelatedDirectionChange.bind(this);
+        this._onPathSourceChange = this._onPathSourceChange.bind(this);
+        this._onPathTargetChange = this._onPathTargetChange.bind(this);
+        this._onPresetChange = this._onPresetChange.bind(this);
+        this._onSearchEntity = this._onSearchEntity.bind(this);
+        this._onBackendOperationChange = this._onBackendOperationChange.bind(this);
+        this._onBackendArgsInput = this._onBackendArgsInput.bind(this);
+        this._injectSelectedNodeToArgs = this._injectSelectedNodeToArgs.bind(this);
+        this._runBackendOperation = this._runBackendOperation.bind(this);
+        this._onAttachmentEntityIdInput = this._onAttachmentEntityIdInput.bind(this);
+        this._onAttachmentFileChange = this._onAttachmentFileChange.bind(this);
+        this._uploadAttachment = this._uploadAttachment.bind(this);
+        this._loadGraphData = this._loadGraphData.bind(this);
+        this._buildPathGraph = this._buildPathGraph.bind(this);
+        this._focusSelectedNode = this._focusSelectedNode.bind(this);
+        this._expandFromSelected = this._expandFromSelected.bind(this);
+        this._isolateSelectedNeighborhood = this._isolateSelectedNeighborhood.bind(this);
+        this._revealNextLevel = this._revealNextLevel.bind(this);
+        this._onSimpleInput = this._onSimpleInput.bind(this);
+        this._createEntityNative = this._createEntityNative.bind(this);
+        this._updateEntityNative = this._updateEntityNative.bind(this);
+        this._deleteEntityNative = this._deleteEntityNative.bind(this);
+        this._createRelationshipNative = this._createRelationshipNative.bind(this);
+        this._deleteRelationshipNative = this._deleteRelationshipNative.bind(this);
+        this._grantEntityUserNative = this._grantEntityUserNative.bind(this);
+        this._grantEntityCompanyNative = this._grantEntityCompanyNative.bind(this);
+        this._grantEntityPublicNative = this._grantEntityPublicNative.bind(this);
+        this._grantNamespaceUserNative = this._grantNamespaceUserNative.bind(this);
+        this._grantNamespaceCompanyNative = this._grantNamespaceCompanyNative.bind(this);
+        this._grantNamespacePublicNative = this._grantNamespacePublicNative.bind(this);
+        this._revokeGrantNative = this._revokeGrantNative.bind(this);
+        this._createAccessRequestNative = this._createAccessRequestNative.bind(this);
+        this._listAccessRequestsNative = this._listAccessRequestsNative.bind(this);
+        this._approveAccessRequestNative = this._approveAccessRequestNative.bind(this);
+        this._rejectAccessRequestNative = this._rejectAccessRequestNative.bind(this);
+        this._createNamespaceNative = this._createNamespaceNative.bind(this);
+        this._loadNamespaceOverviewNative = this._loadNamespaceOverviewNative.bind(this);
+        this._toggleFullscreen = this._toggleFullscreen.bind(this);
     }
 
     async firstUpdated() {
+        this._assertOfflineVendorSetup();
         await this._loadGraphData();
+        this._initGraph();
+        this._syncGraph();
+    }
+
+    updated(changedProperties) {
+        if (
+            changedProperties.has('_graphNodes')
+            || changedProperties.has('_graphEdges')
+            || changedProperties.has('_shortestPathEdges')
+            || changedProperties.has('_graphPreset')
+        ) {
+            this._syncGraph();
+        }
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._graphInstance) {
+            this._graphInstance._destructor();
+            this._graphInstance = null;
+        }
+    }
+
+    _getRelationshipTypes() {
+        const relationshipTypes = CRMStore.state.entities.relationshipTypes;
+        if (!Array.isArray(relationshipTypes)) {
+            throw new Error('relationshipTypes must be array');
+        }
+        return relationshipTypes;
+    }
+
+    _getNamespaceName() {
+        return resolveObjectName(CRMStore.state.namespaces.current, null);
+    }
+
+    _getEntityMap() {
+        return new Map(this._entities.map((entity) => [entity.entity_id, entity]));
+    }
+
+    _getEdgeId(edge) {
+        const edgeId = edge.edge_id || edge.relationship_id || edge.id;
+        if (typeof edgeId === 'string' && edgeId.trim().length > 0) {
+            return edgeId;
+        }
+        const sourceId = edge.source_id || edge.source_entity_id || edge.source;
+        const targetId = edge.target_id || edge.target_entity_id || edge.target;
+        const relationType = edge.relationship_type || edge.type || 'related';
+        return `${sourceId}:${targetId}:${relationType}`;
+    }
+
+    _resolveEntityById(entityId) {
+        return this._entities.find((entity) => entity.entity_id === entityId) || null;
+    }
+
+    _nodeColor(node) {
+        if (node.access === false) {
+            return '#7f7f8f';
+        }
+        if (node.entity_type === 'note') {
+            return '#ffb457';
+        }
+        if (node.entity_type === 'contact') {
+            return '#7ac7ff';
+        }
+        if (node.entity_type === 'task') {
+            return '#8ce9a2';
+        }
+        return '#bca8ff';
+    }
+
+    _isEdgeDirected(edge) {
+        if (typeof edge.is_directed === 'boolean') {
+            return edge.is_directed;
+        }
+        const relationTypeId = edge.relationship_type || edge.type;
+        const relationshipType = this._getRelationshipTypes().find((item) => item.type_id === relationTypeId);
+        if (!relationshipType) {
+            return true;
+        }
+        return relationshipType.is_directed !== false;
+    }
+
+    _buildGraphDataForScene() {
+        const highlightedEdgeIds = new Set(this._shortestPathEdges.map((edge) => this._getEdgeId(edge)));
+        const nodes = this._graphNodes.map((node) => ({
+            ...node,
+            id: node.entity_id || node.id,
+            name: node.name || node.label || node.entity_id || node.id,
+            color: this._nodeColor(node),
+            size: node.level === 0 ? 9 : 6,
+        }));
+        const links = this._graphEdges.map((edge) => {
+            const source = edge.source_id || edge.source_entity_id || edge.source;
+            const target = edge.target_id || edge.target_entity_id || edge.target;
+            const edgeId = this._getEdgeId(edge);
+            const relationType = edge.relationship_type || edge.type || 'related';
+            const directed = this._isEdgeDirected(edge);
+            return {
+                ...edge,
+                id: edgeId,
+                source,
+                target,
+                relation_type: relationType,
+                directed,
+                highlighted: highlightedEdgeIds.has(edgeId),
+            };
+        });
+        return { nodes, links };
+    }
+
+    _initGraph() {
+        const factory = window.ForceGraph3D;
+        if (typeof factory !== 'function') {
+            throw new Error('ForceGraph3D is not available in window');
+        }
+        const container = this.renderRoot?.querySelector('#graph-canvas');
+        if (!container) {
+            throw new Error('Graph canvas is not available');
+        }
+        this._graphInstance = factory()(container)
+            .backgroundColor('rgba(0,0,0,0)')
+            .cooldownTicks(120)
+            .warmupTicks(80)
+            .nodeLabel((node) => `${node.name} (${node.entity_type || 'entity'})`)
+            .nodeColor((node) => node.color)
+            .nodeVal((node) => node.size)
+            .linkLabel((link) => `${link.relation_type} (${link.directed ? 'directed' : 'undirected'})`)
+            .linkColor((link) => (link.highlighted ? '#ff6b6b' : '#9ba3bf'))
+            .linkWidth((link) => {
+                if (link.highlighted) {
+                    return 4;
+                }
+                return GRAPH_PRESETS[this._graphPreset].linkWidth;
+            })
+            .linkDirectionalArrowLength((link) => (link.directed ? 3 : 0))
+            .linkDirectionalArrowRelPos(1)
+            .linkDirectionalParticles((link) => (link.highlighted ? 4 : 0))
+            .linkDirectionalParticleWidth(3)
+            .onNodeClick((node) => {
+                this._selectedNodeId = node.id;
+                this._attachmentEntityId = node.id;
+                this._onOpenEntity(node.id);
+            })
+            .onNodeHover((node) => {
+                this._selectedNodeId = node?.id || '';
+            })
+            .onLinkClick((link) => {
+                this._selectedEdgeId = link.id;
+            });
+        this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this._graphPreset].charge);
+        this._graphInstance.nodeRelSize(GRAPH_PRESETS[this._graphPreset].nodeRelSize);
+    }
+
+    _syncGraph() {
+        if (!this._graphInstance) {
+            return;
+        }
+        const graphData = this._buildGraphDataForScene();
+        this._graphInstance.graphData(graphData);
+        this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this._graphPreset].charge);
+        this._graphInstance.nodeRelSize(GRAPH_PRESETS[this._graphPreset].nodeRelSize);
+    }
+
+    _assertOfflineVendorSetup() {
+        const expectedSrc = '/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js';
+        const hasExpectedScript = Array.from(document.scripts).some((script) => {
+            if (typeof script.src !== 'string') {
+                return false;
+            }
+            return script.src.includes(expectedSrc);
+        });
+        if (!hasExpectedScript) {
+            throw new Error(`Offline vendor script is required: ${expectedSrc}`);
+        }
+        if (typeof window.ForceGraph3D !== 'function') {
+            throw new Error('ForceGraph3D is not loaded from offline vendor script');
+        }
+    }
+
+    _onSimpleInput(event) {
+        const fieldName = event.target.dataset.field;
+        if (!fieldName) {
+            throw new Error('data-field is required for simple input binding');
+        }
+        this[fieldName] = event.target.value;
+    }
+
+    _toggleFullscreen() {
+        this._isFullscreen = !this._isFullscreen;
+    }
+
+    _getNativeOperationIds() {
+        return new Set([
+            'getEntities',
+            'searchEntities',
+            'createEntity',
+            'updateEntity',
+            'deleteEntity',
+            'createRelationship',
+            'deleteRelationship',
+            'getInfluenceGraph',
+            'getRelatedEntities',
+            'getShortestPath',
+            'grantToUser',
+            'grantToCompany',
+            'makeEntityPublic',
+            'grantNamespaceToUser',
+            'grantNamespaceToCompany',
+            'makeNamespacePublic',
+            'revokeGrant',
+            'createAccessRequest',
+            'approveAccessRequest',
+            'rejectAccessRequest',
+            'getNamespaces',
+            'createNamespace',
+            'getNamespaceTemplates',
+            'getNamespaceGrants',
+            'getEntityAttachments',
+            'uploadAttachment',
+            'deleteAttachment',
+        ]);
+    }
+
+    _getCoverageMatrix() {
+        if (!this.crmApi) {
+            throw new Error('crmApi service is required to build coverage matrix');
+        }
+        const nativeOperations = this._getNativeOperationIds();
+        const operationsByMethod = new Map();
+        this._getBackendOperations().forEach((operation) => {
+            operationsByMethod.set(operation.method, operation);
+        });
+        const ownMethodNames = Object.keys(this.crmApi)
+            .filter((methodName) => typeof this.crmApi[methodName] === 'function');
+        const prototypeRef = Object.getPrototypeOf(this.crmApi);
+        const prototypeMethodNames = prototypeRef && prototypeRef !== Object.prototype
+            ? Object.getOwnPropertyNames(prototypeRef)
+                .filter((methodName) => methodName !== 'constructor' && typeof this.crmApi[methodName] === 'function')
+            : [];
+        const apiMethodNames = Array.from(new Set([...ownMethodNames, ...prototypeMethodNames]));
+        return apiMethodNames.map((methodName) => {
+            const operation = operationsByMethod.get(methodName);
+            if (!operation) {
+                return {
+                    id: methodName,
+                    label: methodName,
+                    method: methodName,
+                    status: 'not_covered',
+                };
+            }
+            const status = nativeOperations.has(operation.method)
+                ? 'covered_by_native_ui'
+                : 'covered_by_json_runner_only';
+            return {
+                ...operation,
+                status,
+            };
+        });
+    }
+
+    async _executeNativeAction(actionLabel, executor) {
+        this._backendLoading = true;
+        try {
+            const result = await executor();
+            this._backendOperationResult = JSON.stringify(result, null, 2);
+            await this._loadGraphData();
+            this.success(`Выполнено: ${actionLabel}`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this._backendOperationResult = `Error: ${message}`;
+            this.error(`Ошибка операции ${actionLabel}: ${message}`);
+        } finally {
+            this._backendLoading = false;
+        }
+    }
+
+    async _createEntityNative() {
+        if (!this._entityFormName.trim()) {
+            throw new Error('Entity name is required');
+        }
+        await this._executeNativeAction('create entity', () => this.crmApi.createEntity({
+            entity_type: this._entityFormType.trim(),
+            name: this._entityFormName.trim(),
+            namespace: this._entityFormNamespace.trim(),
+            description: this._entityFormDescription.trim() || null,
+            attributes: {},
+        }));
+    }
+
+    async _updateEntityNative() {
+        if (!this._entityFormId.trim()) {
+            throw new Error('Entity ID is required');
+        }
+        if (!this._entityFormName.trim()) {
+            throw new Error('Entity name is required');
+        }
+        await this._executeNativeAction('update entity', () => this.crmApi.updateEntity(
+            this._entityFormId.trim(),
+            { name: this._entityFormName.trim(), description: this._entityFormDescription.trim() || null },
+        ));
+    }
+
+    async _deleteEntityNative() {
+        if (!this._entityFormId.trim()) {
+            throw new Error('Entity ID is required');
+        }
+        await this._executeNativeAction('delete entity', () => this.crmApi.deleteEntity(this._entityFormId.trim()));
+    }
+
+    async _createRelationshipNative() {
+        if (!this._relationshipSourceId.trim() || !this._relationshipTargetId.trim() || !this._relationshipType.trim()) {
+            throw new Error('Source, target and relationship type are required');
+        }
+        await this._executeNativeAction('create relationship', () => this.crmApi.createRelationship({
+            source_entity_id: this._relationshipSourceId.trim(),
+            target_entity_id: this._relationshipTargetId.trim(),
+            relationship_type: this._relationshipType.trim(),
+            weight: 1.0,
+        }));
+    }
+
+    async _deleteRelationshipNative() {
+        if (!this._relationshipFormId.trim()) {
+            throw new Error('Relationship ID is required');
+        }
+        await this._executeNativeAction('delete relationship', () => this.crmApi.deleteRelationship(this._relationshipFormId.trim()));
+    }
+
+    async _grantEntityUserNative() {
+        if (!this._grantEntityId.trim() || !this._grantUserId.trim()) {
+            throw new Error('Entity ID and user ID are required');
+        }
+        await this._executeNativeAction('grant entity to user', () => this.crmApi.grantToUser(
+            this._grantEntityId.trim(),
+            this._grantUserId.trim(),
+            this._grantRole.trim(),
+        ));
+    }
+
+    async _grantEntityCompanyNative() {
+        if (!this._grantEntityId.trim() || !this._grantCompanyId.trim()) {
+            throw new Error('Entity ID and company ID are required');
+        }
+        await this._executeNativeAction('grant entity to company', () => this.crmApi.grantToCompany(
+            this._grantEntityId.trim(),
+            this._grantCompanyId.trim(),
+            this._grantRole.trim(),
+        ));
+    }
+
+    async _grantEntityPublicNative() {
+        if (!this._grantEntityId.trim()) {
+            throw new Error('Entity ID is required');
+        }
+        await this._executeNativeAction('make entity public', () => this.crmApi.makeEntityPublic(this._grantEntityId.trim()));
+    }
+
+    async _grantNamespaceUserNative() {
+        if (!this._grantNamespace.trim() || !this._grantUserId.trim()) {
+            throw new Error('Namespace and user ID are required');
+        }
+        await this._executeNativeAction('grant namespace to user', () => this.crmApi.grantNamespaceToUser(
+            this._grantNamespace.trim(),
+            this._grantUserId.trim(),
+            this._grantRole.trim(),
+        ));
+    }
+
+    async _grantNamespaceCompanyNative() {
+        if (!this._grantNamespace.trim() || !this._grantCompanyId.trim()) {
+            throw new Error('Namespace and company ID are required');
+        }
+        await this._executeNativeAction('grant namespace to company', () => this.crmApi.grantNamespaceToCompany(
+            this._grantNamespace.trim(),
+            this._grantCompanyId.trim(),
+            this._grantRole.trim(),
+        ));
+    }
+
+    async _grantNamespacePublicNative() {
+        if (!this._grantNamespace.trim()) {
+            throw new Error('Namespace is required');
+        }
+        await this._executeNativeAction('make namespace public', () => this.crmApi.makeNamespacePublic(this._grantNamespace.trim()));
+    }
+
+    async _revokeGrantNative() {
+        if (!this._grantId.trim()) {
+            throw new Error('Grant ID is required');
+        }
+        await this._executeNativeAction('revoke grant', () => this.crmApi.revokeGrant(this._grantId.trim()));
+    }
+
+    async _createAccessRequestNative() {
+        if (!this._accessRequestEntityId.trim()) {
+            throw new Error('Entity ID is required');
+        }
+        await this._executeNativeAction('create access request', () => this.crmApi.createAccessRequest(
+            this._accessRequestEntityId.trim(),
+            this._accessRequestMessage.trim() || null,
+            true,
+            Number(this._accessRequestDepth),
+        ));
+    }
+
+    async _listAccessRequestsNative() {
+        await this._executeNativeAction('list access requests', () => this.crmApi.listAccessRequests(null));
+    }
+
+    async _approveAccessRequestNative() {
+        if (!this._accessRequestId.trim()) {
+            throw new Error('Request ID is required');
+        }
+        await this._executeNativeAction('approve access request', () => this.crmApi.approveAccessRequest(this._accessRequestId.trim()));
+    }
+
+    async _rejectAccessRequestNative() {
+        if (!this._accessRequestId.trim()) {
+            throw new Error('Request ID is required');
+        }
+        await this._executeNativeAction('reject access request', () => this.crmApi.rejectAccessRequest(this._accessRequestId.trim()));
+    }
+
+    async _createNamespaceNative() {
+        if (!this._namespaceNameInput.trim()) {
+            throw new Error('Namespace name is required');
+        }
+        if (!this._namespaceTemplateIdInput.trim()) {
+            throw new Error('Template ID is required');
+        }
+        await this._executeNativeAction('create namespace', () => this.crmApi.createNamespace(
+            this._namespaceNameInput.trim(),
+            this._namespaceDescriptionInput.trim() || null,
+            this._namespaceTemplateIdInput.trim(),
+        ));
+    }
+
+    async _loadNamespaceOverviewNative() {
+        await this._executeNativeAction('load namespace overview', async () => {
+            const payload = {};
+            payload.namespaces = await this.crmApi.getNamespaces();
+            payload.templates = await this.crmApi.getNamespaceTemplates();
+            if (this._grantNamespace.trim()) {
+                payload.namespace_grants = await this.crmApi.getNamespaceGrants(this._grantNamespace.trim());
+            }
+            return payload;
+        });
+    }
+
+    _focusSelectedNode() {
+        if (!this._selectedNodeId) {
+            throw new Error('Select node before focus action');
+        }
+        const node = this._buildGraphDataForScene().nodes.find((item) => item.id === this._selectedNodeId);
+        if (!node) {
+            throw new Error(`Selected node not found in scene: ${this._selectedNodeId}`);
+        }
+        this._graphInstance.cameraPosition(
+            { x: node.x || 0, y: node.y || 0, z: (node.z || 0) + 80 },
+            { x: node.x || 0, y: node.y || 0, z: node.z || 0 },
+            1200,
+        );
+    }
+
+    async _expandFromSelected() {
+        if (!this._selectedNodeId) {
+            throw new Error('Select node before expand action');
+        }
+        this._selectedRootId = this._selectedNodeId;
+        this._maxDepth = Math.min(this._maxDepth + 1, 5);
+        await this._rebuildGraphByMode();
+    }
+
+    _isolateSelectedNeighborhood() {
+        if (!this._selectedNodeId) {
+            throw new Error('Select node before isolate action');
+        }
+        const neighborhoodIds = new Set([this._selectedNodeId]);
+        for (const edge of this._graphEdges) {
+            const sourceId = edge.source_id || edge.source_entity_id || edge.source;
+            const targetId = edge.target_id || edge.target_entity_id || edge.target;
+            if (sourceId === this._selectedNodeId) {
+                neighborhoodIds.add(targetId);
+            }
+            if (targetId === this._selectedNodeId) {
+                neighborhoodIds.add(sourceId);
+            }
+        }
+        this._graphNodes = this._graphNodes.filter((node) => neighborhoodIds.has(node.entity_id || node.id));
+        this._graphEdges = this._graphEdges.filter((edge) => {
+            const sourceId = edge.source_id || edge.source_entity_id || edge.source;
+            const targetId = edge.target_id || edge.target_entity_id || edge.target;
+            return neighborhoodIds.has(sourceId) && neighborhoodIds.has(targetId);
+        });
+    }
+
+    async _revealNextLevel() {
+        this._maxDepth = Math.min(this._maxDepth + 1, 5);
+        await this._rebuildGraphByMode();
     }
 
     async _loadGraphData() {
         this._loading = true;
-        const crmApi = this.crmApi;
-        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
-        const entities = await crmApi.getEntities({ namespace: namespaceName, limit: 200 });
-        this._entities = Array.isArray(entities) ? entities : [];
-        if (!this._selectedRootId && this._entities.length > 0) {
-            const currentEntityId = CRMStore.state.entities.currentEntityId;
-            this._selectedRootId = currentEntityId || this._entities[0].entity_id;
+        try {
+            const crmApi = this.crmApi;
+            const namespaceName = this._getNamespaceName();
+            const entities = await crmApi.getEntities({ namespace: namespaceName, limit: 400 });
+            this._entities = Array.isArray(entities) ? entities : [];
+            if (!this._selectedRootId && this._entities.length > 0) {
+                this._selectedRootId = CRMStore.state.entities.currentEntityId || this._entities[0].entity_id;
+            }
+            if (!this._pathSourceId && this._entities.length > 0) {
+                this._pathSourceId = this._selectedRootId;
+            }
+            if (!this._pathTargetId && this._entities.length > 1) {
+                const target = this._entities.find((entity) => entity.entity_id !== this._pathSourceId);
+                this._pathTargetId = target ? target.entity_id : this._entities[0].entity_id;
+            }
+            await this._rebuildGraphByMode();
+        } finally {
+            this._loading = false;
         }
-        if (this._pathSourceId.length === 0 && this._entities.length > 0) {
-            this._pathSourceId = this._selectedRootId || this._entities[0].entity_id;
-        }
-        if (this._pathTargetId.length === 0 && this._entities.length > 1) {
-            const secondEntity = this._entities.find((entity) => entity.entity_id !== this._pathSourceId);
-            this._pathTargetId = secondEntity ? secondEntity.entity_id : this._entities[0].entity_id;
-        }
-        await this._loadRelationshipsForFallback(namespaceName);
-        await this._rebuildGraph();
-        this._loading = false;
     }
 
-    async _loadRelationshipsForFallback(namespaceName) {
-        if (typeof this._selectedRootId !== 'string' || this._selectedRootId.trim().length === 0) {
-            this._relationships = [];
-            return;
+    async _rebuildGraphByMode() {
+        if (!VIEW_MODES.includes(this._viewMode)) {
+            throw new Error(`Unsupported graph mode: ${this._viewMode}`);
         }
-        const crmApi = this.crmApi;
-        const response = await crmApi.getEntityRelationships(this._selectedRootId, { namespace: namespaceName });
-        if (Array.isArray(response)) {
-            this._relationships = response;
-            return;
-        }
-        if (!response || typeof response !== 'object' || !Array.isArray(response.relationships)) {
-            throw new Error('Entity relationships must be array');
-        }
-        this._relationships = response.relationships;
-    }
-
-    async _rebuildGraph() {
         if (!this._selectedRootId) {
             this._graphNodes = [];
             this._graphEdges = [];
             return;
         }
-
-        const crmApi = this.crmApi;
-        const influence = await crmApi.getInfluenceGraph(this._selectedRootId, { max_depth: this._maxDepth });
-        const nodes = Array.isArray(influence.nodes) ? influence.nodes : [];
-        const edges = Array.isArray(influence.edges) ? influence.edges : [];
-        if (nodes.length === 0 && edges.length === 0) {
-            const fallbackGraph = this._buildFallbackGraph();
-            this._graphNodes = fallbackGraph.nodes;
-            this._graphEdges = fallbackGraph.edges;
+        if (this._viewMode === 'influence') {
+            await this._buildInfluenceGraph();
             return;
         }
+        if (this._viewMode === 'related') {
+            await this._buildRelatedGraph();
+            return;
+        }
+        await this._buildPathGraph();
+    }
+
+    _getRelationshipFilter() {
+        const trimmedValue = this._relationshipTypeFilter.trim();
+        if (trimmedValue.length === 0) {
+            return null;
+        }
+        return trimmedValue;
+    }
+
+    async _buildInfluenceGraph() {
+        const relationshipType = this._getRelationshipFilter();
+        const params = { max_depth: this._maxDepth };
+        if (relationshipType) {
+            params.relationship_types = relationshipType;
+        }
+        const response = await this.crmApi.getInfluenceGraph(this._selectedRootId, params);
+        if (!response || typeof response !== 'object') {
+            throw new Error('Influence graph response must be object');
+        }
+        this._graphNodes = Array.isArray(response.nodes) ? response.nodes : [];
+        this._graphEdges = Array.isArray(response.edges) ? response.edges : [];
+        this._relationships = this._graphEdges;
+    }
+
+    async _buildRelatedGraph() {
+        const relationshipType = this._getRelationshipFilter();
+        const params = { direction: this._relatedDirection };
+        if (relationshipType) {
+            params.relationship_type = relationshipType;
+        }
+        const relatedResponse = await this.crmApi.getRelatedEntities(this._selectedRootId, params);
+        if (!relatedResponse || typeof relatedResponse !== 'object') {
+            throw new Error('Related entities response must be object');
+        }
+        const nodeMap = new Map();
+        const rootEntity = this._resolveEntityById(this._selectedRootId);
+        if (!rootEntity) {
+            throw new Error(`Root entity not found in local cache: ${this._selectedRootId}`);
+        }
+        nodeMap.set(this._selectedRootId, {
+            entity_id: rootEntity.entity_id,
+            entity_type: rootEntity.entity_type,
+            name: rootEntity.name,
+            level: 0,
+            access: true,
+            attributes: rootEntity.attributes || {},
+        });
+        for (const bucket of ['incoming', 'outgoing', 'undirected']) {
+            const collection = relatedResponse[bucket];
+            if (!Array.isArray(collection)) {
+                throw new Error(`Related entities bucket must be array: ${bucket}`);
+            }
+            for (const node of collection) {
+                nodeMap.set(node.entity_id, node);
+            }
+        }
+        const relationshipsResponse = await this.crmApi.getEntityRelationships(this._selectedRootId, { namespace: this._getNamespaceName() });
+        if (!relationshipsResponse || typeof relationshipsResponse !== 'object') {
+            throw new Error('Entity relationships response must be object');
+        }
+        if (!Array.isArray(relationshipsResponse.relationships)) {
+            throw new Error('relationships must be array');
+        }
+        const relationType = this._getRelationshipFilter();
+        const nodeIds = new Set(nodeMap.keys());
+        const filteredEdges = relationshipsResponse.relationships.filter((edge) => {
+            const source = edge.source_entity_id;
+            const target = edge.target_entity_id;
+            if (!nodeIds.has(source) || !nodeIds.has(target)) {
+                return false;
+            }
+            if (relationType && edge.relationship_type !== relationType) {
+                return false;
+            }
+            return true;
+        });
+        this._graphNodes = Array.from(nodeMap.values());
+        this._graphEdges = filteredEdges;
+        this._relationships = filteredEdges;
+    }
+
+    async _buildPathGraph() {
+        if (!this._pathSourceId || !this._pathTargetId) {
+            throw new Error('Both source and target entities are required');
+        }
+        if (this._pathSourceId === this._pathTargetId) {
+            throw new Error('Source and target entities must be different');
+        }
+        this._findingPath = true;
+        let response;
+        try {
+            response = await this.crmApi.getShortestPath(this._pathSourceId, this._pathTargetId, {
+                max_depth: this._pathMaxDepth,
+                namespace: this._getNamespaceName(),
+            });
+        } finally {
+            this._findingPath = false;
+        }
+        if (!response || typeof response !== 'object') {
+            throw new Error('Shortest path response must be object');
+        }
+        if (!Array.isArray(response.path)) {
+            throw new Error('Shortest path must include path array');
+        }
+        if (!Array.isArray(response.edges)) {
+            throw new Error('Shortest path must include edges array');
+        }
+        this._shortestPathEdges = response.edges;
+        const entityMap = this._getEntityMap();
+        const nodes = response.path.map((entityId, index) => {
+            const entity = entityMap.get(entityId);
+            if (!entity) {
+                return {
+                    entity_id: entityId,
+                    entity_type: 'hidden',
+                    name: 'Hidden',
+                    level: index,
+                    access: false,
+                    attributes: null,
+                };
+            }
+            return {
+                entity_id: entity.entity_id,
+                entity_type: entity.entity_type,
+                name: entity.name,
+                level: index,
+                access: true,
+                attributes: entity.attributes || {},
+            };
+        });
         this._graphNodes = nodes;
-        this._graphEdges = edges;
-        this._relationships = edges;
+        this._graphEdges = response.edges;
     }
 
-    _buildFallbackGraph() {
-        const entityMap = new Map(this._entities.map((entity) => [entity.entity_id, entity]));
-        const adjacency = new Map();
-        for (const relationship of this._relationships) {
-            if (!adjacency.has(relationship.source_entity_id)) {
-                adjacency.set(relationship.source_entity_id, []);
-            }
-            if (!adjacency.has(relationship.target_entity_id)) {
-                adjacency.set(relationship.target_entity_id, []);
-            }
-            adjacency.get(relationship.source_entity_id).push(relationship.target_entity_id);
-            adjacency.get(relationship.target_entity_id).push(relationship.source_entity_id);
-        }
-
-        const queue = [{ id: this._selectedRootId, depth: 0 }];
-        const visited = new Set([this._selectedRootId]);
-        while (queue.length > 0) {
-            const current = queue.shift();
-            if (current.depth >= this._maxDepth) {
-                continue;
-            }
-            const neighbors = adjacency.get(current.id) || [];
-            for (const neighborId of neighbors) {
-                if (visited.has(neighborId)) {
-                    continue;
-                }
-                visited.add(neighborId);
-                queue.push({ id: neighborId, depth: current.depth + 1 });
-            }
-        }
-
-        const nodes = Array.from(visited)
-            .map((entityId) => entityMap.get(entityId))
-            .filter(Boolean);
-        const edges = this._relationships.filter(
-            (relationship) => visited.has(relationship.source_entity_id) && visited.has(relationship.target_entity_id),
-        );
-        return { nodes, edges };
-    }
-
-    async _onRootChange(event) {
-        this._selectedRootId = event.target.value;
-        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
-        await this._loadRelationshipsForFallback(namespaceName);
-        await this._rebuildGraph();
-    }
-
-    async _onDepthChange(event) {
-        this._maxDepth = Number(event.target.value);
-        await this._rebuildGraph();
-    }
-
-    async _onRefresh() {
-        await this._loadGraphData();
+    _onOpenEntity(entityId) {
+        CRMStore.setCurrentView('entities');
+        CRMStore.setCurrentEntity(entityId);
     }
 
     _onSearchQueryInput(event) {
         this._entitySearchQuery = event.target.value;
     }
 
-    async _onSearchEntity() {
-        const query = this._entitySearchQuery.trim();
-        if (query.length === 0) {
-            throw new Error('Search query is required');
-        }
-        const crmApi = this.crmApi;
-        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
-        const response = await crmApi.searchEntities(query, { namespace: namespaceName, limit: 20 });
-        const result = Array.isArray(response) ? response : response?.entities;
-        if (!Array.isArray(result) || result.length === 0) {
-            throw new Error('Search returned no entities');
-        }
-        const foundEntity = result[0];
-        if (typeof foundEntity.entity_id !== 'string' || foundEntity.entity_id.trim().length === 0) {
-            throw new Error('Search entity_id is required');
-        }
-        this._selectedRootId = foundEntity.entity_id;
-        this._pathSourceId = foundEntity.entity_id;
-        await this._loadRelationshipsForFallback(namespaceName);
-        await this._rebuildGraph();
+    _onModeChange(event) {
+        this._viewMode = event.target.value;
+        this._rebuildGraphByMode();
+    }
+
+    _onRootChange(event) {
+        this._selectedRootId = event.target.value;
+        this._pathSourceId = event.target.value;
+        this._rebuildGraphByMode();
+    }
+
+    _onDepthChange(event) {
+        this._maxDepth = Number(event.target.value);
+        this._rebuildGraphByMode();
+    }
+
+    _onPathDepthChange(event) {
+        this._pathMaxDepth = Number(event.target.value);
+    }
+
+    _onRelationshipTypeFilterChange(event) {
+        this._relationshipTypeFilter = event.target.value;
+        this._rebuildGraphByMode();
+    }
+
+    _onRelatedDirectionChange(event) {
+        this._relatedDirection = event.target.value;
+        this._rebuildGraphByMode();
     }
 
     _onPathSourceChange(event) {
@@ -457,180 +1216,218 @@ export class GraphPage extends PlatformElement {
         this._pathTargetId = event.target.value;
     }
 
-    async _onFindShortestPath() {
-        if (this._pathSourceId.length === 0 || this._pathTargetId.length === 0) {
-            throw new Error('Both source and target entities are required');
+    _onPresetChange(event) {
+        this._graphPreset = event.target.value;
+    }
+
+    async _onSearchEntity() {
+        const query = this._entitySearchQuery.trim();
+        if (!query) {
+            throw new Error('Search query is required');
         }
-        if (this._pathSourceId === this._pathTargetId) {
-            throw new Error('Source and target entities must be different');
+        const response = await this.crmApi.searchEntities(query, { namespace: this._getNamespaceName(), limit: 20 });
+        const entities = Array.isArray(response) ? response : response?.entities;
+        if (!Array.isArray(entities) || entities.length === 0) {
+            throw new Error('Search returned no entities');
         }
-        this._findingPath = true;
-        const crmApi = this.crmApi;
-        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
+        this._selectedRootId = entities[0].entity_id;
+        this._pathSourceId = entities[0].entity_id;
+        await this._rebuildGraphByMode();
+        this.success(`Фокус графа: ${entities[0].name}`);
+    }
+
+    _getBackendOperations() {
+        return [
+            { id: 'getEntities', label: 'Entities: list', method: 'getEntities', args: '[{"limit":100}]' },
+            { id: 'getEntity', label: 'Entities: get by id', method: 'getEntity', args: '["entity_id"]' },
+            { id: 'createEntity', label: 'Entities: create', method: 'createEntity', args: '[{"entity_type":"contact","name":"New Contact","namespace":"default","attributes":{}}]' },
+            { id: 'updateEntity', label: 'Entities: update', method: 'updateEntity', args: '["entity_id",{"name":"Updated Name"}]' },
+            { id: 'deleteEntity', label: 'Entities: delete', method: 'deleteEntity', args: '["entity_id"]' },
+            { id: 'searchEntities', label: 'Entities: search', method: 'searchEntities', args: '["query",{"limit":20}]' },
+            { id: 'findEntitiesByText', label: 'Entities: find by text', method: 'findEntitiesByText', args: '["Any text with mentions"]' },
+            { id: 'analyzeText', label: 'Entities: analyze text', method: 'analyzeText', args: '["Call John about project",null,{"checkDuplicates":true}]' },
+            { id: 'getEntityTypes', label: 'Entities: list types', method: 'getEntityTypes', args: '[]' },
+            { id: 'getEntityTypesByNamespace', label: 'Entities: list types by namespace', method: 'getEntityTypesByNamespace', args: '["default"]' },
+            { id: 'createEntityType', label: 'Entities: create type', method: 'createEntityType', args: '[{"type_id":"custom_type","name":"Custom Type","description":"Custom"}]' },
+            { id: 'getEntityCard', label: 'Entities: card', method: 'getEntityCard', args: '["entity_id"]' },
+            { id: 'getEntityRelationships', label: 'Entities: relationships', method: 'getEntityRelationships', args: '["entity_id",{}]' },
+            { id: 'getEntityWithRelatedEntities', label: 'Entities: with related', method: 'getEntityWithRelatedEntities', args: '["entity_id"]' },
+            { id: 'getDailySummary', label: 'Entities: daily summary', method: 'getDailySummary', args: '["2026-03-29",{"forceRebuild":false}]' },
+            { id: 'getRelationships', label: 'Relationships: list', method: 'getRelationships', args: '[{"limit":500}]' },
+            { id: 'getRelationship', label: 'Relationships: get by id', method: 'getRelationship', args: '["relationship_id"]' },
+            { id: 'createRelationship', label: 'Relationships: create', method: 'createRelationship', args: '[{"source_entity_id":"source","target_entity_id":"target","relationship_type":"knows","weight":1.0}]' },
+            { id: 'deleteRelationship', label: 'Relationships: delete', method: 'deleteRelationship', args: '["relationship_id"]' },
+            { id: 'getRelationshipTypes', label: 'Relationships: list types', method: 'getRelationshipTypes', args: '[]' },
+            { id: 'createRelationshipType', label: 'Relationships: create type', method: 'createRelationshipType', args: '[{"type_id":"new_rel","name":"New Relation","is_directed":true}]' },
+            { id: 'getInfluenceGraph', label: 'Graph: influence', method: 'getInfluenceGraph', args: '["entity_id",{"max_depth":3}]' },
+            { id: 'getRelatedEntities', label: 'Graph: related', method: 'getRelatedEntities', args: '["entity_id",{"direction":"both"}]' },
+            { id: 'getShortestPath', label: 'Graph: shortest path', method: 'getShortestPath', args: '["source_id","target_id",{"max_depth":10}]' },
+            { id: 'getEntityGrants', label: 'Grants: list entity grants', method: 'getEntityGrants', args: '["entity_id"]' },
+            { id: 'grantToUser', label: 'Grants: entity grant user', method: 'grantToUser', args: '["entity_id","user_id","viewer"]' },
+            { id: 'grantToCompany', label: 'Grants: entity grant company', method: 'grantToCompany', args: '["entity_id","company_id","viewer"]' },
+            { id: 'makeEntityPublic', label: 'Grants: entity public', method: 'makeEntityPublic', args: '["entity_id"]' },
+            { id: 'revokeGrant', label: 'Grants: revoke', method: 'revokeGrant', args: '["grant_id"]' },
+            { id: 'listAccessRequests', label: 'Access Requests: list', method: 'listAccessRequests', args: '[null]' },
+            { id: 'getAccessRequest', label: 'Access Requests: get', method: 'getAccessRequest', args: '["request_id"]' },
+            { id: 'createAccessRequest', label: 'Access Requests: create', method: 'createAccessRequest', args: '["entity_id","Need access",true,2]' },
+            { id: 'approveAccessRequest', label: 'Access Requests: approve', method: 'approveAccessRequest', args: '["request_id"]' },
+            { id: 'rejectAccessRequest', label: 'Access Requests: reject', method: 'rejectAccessRequest', args: '["request_id"]' },
+            { id: 'getNamespaces', label: 'Namespaces: list', method: 'getNamespaces', args: '[]' },
+            { id: 'getNamespaceEditability', label: 'Namespaces: editability', method: 'getNamespaceEditability', args: '["default"]' },
+            { id: 'updateNamespace', label: 'Namespaces: update', method: 'updateNamespace', args: '["default",{"display_name":"Default"}]' },
+            { id: 'getNamespaceTemplates', label: 'Namespaces: list templates', method: 'getNamespaceTemplates', args: '[]' },
+            { id: 'getTemplateSchemaOptions', label: 'Namespaces: schema options', method: 'getTemplateSchemaOptions', args: '[]' },
+            { id: 'getNamespaceTemplate', label: 'Namespaces: get template', method: 'getNamespaceTemplate', args: '["template_id"]' },
+            { id: 'createNamespaceTemplate', label: 'Namespaces: create template', method: 'createNamespaceTemplate', args: '[{"template_id":"new_template","name":"New Template","description":"desc","types":[]}]' },
+            { id: 'updateNamespaceTemplate', label: 'Namespaces: update template', method: 'updateNamespaceTemplate', args: '["template_id",{"name":"Updated Template"}]' },
+            { id: 'deleteNamespaceTemplate', label: 'Namespaces: delete template', method: 'deleteNamespaceTemplate', args: '["template_id"]' },
+            { id: 'upsertNamespaceTemplateType', label: 'Namespaces: upsert template type', method: 'upsertNamespaceTemplateType', args: '["template_id",{"type_id":"meeting","name":"Meeting"}]' },
+            { id: 'deleteNamespaceTemplateType', label: 'Namespaces: delete template type', method: 'deleteNamespaceTemplateType', args: '["template_id","type_id"]' },
+            { id: 'createNamespace', label: 'Namespaces: create', method: 'createNamespace', args: '["new_namespace","Description","template_id"]' },
+            { id: 'getNamespaceGrants', label: 'Namespace grants: list', method: 'getNamespaceGrants', args: '["default"]' },
+            { id: 'grantNamespaceToUser', label: 'Namespace grants: user', method: 'grantNamespaceToUser', args: '["default","user_id","viewer"]' },
+            { id: 'grantNamespaceToCompany', label: 'Namespace grants: company', method: 'grantNamespaceToCompany', args: '["default","company_id","viewer"]' },
+            { id: 'makeNamespacePublic', label: 'Namespace grants: public', method: 'makeNamespacePublic', args: '["default"]' },
+            { id: 'getEntityAttachments', label: 'Attachments: list', method: 'getEntityAttachments', args: '["entity_id"]' },
+            { id: 'uploadAttachment', label: 'Attachments: upload', method: 'uploadAttachment', args: '["entity_id","<File object from native panel>"]' },
+            { id: 'deleteAttachment', label: 'Attachments: delete', method: 'deleteAttachment', args: '["entity_id","attachment_id"]' },
+        ];
+    }
+
+    _onBackendOperationChange(event) {
+        this._backendOperationId = event.target.value;
+        const operation = this._getBackendOperations().find((item) => item.id === this._backendOperationId);
+        if (!operation) {
+            throw new Error(`Unknown backend operation: ${this._backendOperationId}`);
+        }
+        this._backendOperationArgs = operation.args;
+    }
+
+    _onBackendArgsInput(event) {
+        this._backendOperationArgs = event.target.value;
+    }
+
+    _injectSelectedNodeToArgs() {
+        if (!this._selectedNodeId) {
+            throw new Error('Select node in graph first');
+        }
+        this._backendOperationArgs = this._backendOperationArgs.replace(/entity_id|source_id|target_id/g, this._selectedNodeId);
+    }
+
+    async _runBackendOperation() {
+        this._backendLoading = true;
         try {
-            const response = await crmApi.getShortestPath(this._pathSourceId, this._pathTargetId, {
-                namespace: namespaceName,
-            });
-            if (!response || typeof response !== 'object') {
-                throw new Error('Shortest path response must be object');
+            const operation = this._getBackendOperations().find((item) => item.id === this._backendOperationId);
+            if (!operation) {
+                throw new Error(`Unknown operation: ${this._backendOperationId}`);
             }
-            const candidateEdges = response.path_relationships || response.relationships || response.edges || response.path;
-            if (!Array.isArray(candidateEdges)) {
-                throw new Error('Shortest path relationships must be array');
+            const parsedArgs = JSON.parse(this._backendOperationArgs);
+            if (!Array.isArray(parsedArgs)) {
+                throw new Error('Operation args must be JSON array');
             }
-            this._shortestPathEdges = candidateEdges;
+            const method = this.crmApi[operation.method];
+            if (typeof method !== 'function') {
+                throw new Error(`CRM API method is missing: ${operation.method}`);
+            }
+            const result = await method.apply(this.crmApi, parsedArgs);
+            this._backendOperationResult = JSON.stringify(result, null, 2);
+            await this._loadGraphData();
+            this.success(`Операция выполнена: ${operation.label}`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this._backendOperationResult = `Error: ${message}`;
+            this.error(`Ошибка операции: ${message}`);
         } finally {
-            this._findingPath = false;
+            this._backendLoading = false;
         }
     }
 
-    _onOpenEntity(entityId) {
-        CRMStore.setCurrentView('entities');
-        CRMStore.setCurrentEntity(entityId);
+    _onAttachmentEntityIdInput(event) {
+        this._attachmentEntityId = event.target.value;
     }
 
-    _resolveEntity(entityId) {
-        return this._entities.find((entity) => entity.entity_id === entityId) || null;
+    _onAttachmentFileChange(event) {
+        const file = event.target.files?.[0];
+        this._attachmentFile = file || null;
     }
 
-    _getRelationshipTypeConfig(typeId) {
-        const relationshipTypes = CRMStore.state.entities.relationshipTypes;
-        if (!Array.isArray(relationshipTypes)) {
-            throw new Error('relationshipTypes must be array');
+    async _uploadAttachment() {
+        if (!this._attachmentEntityId) {
+            throw new Error('Entity ID is required for attachment upload');
         }
-        if (typeof typeId !== 'string' || typeId.trim().length === 0) {
-            return null;
+        if (!(this._attachmentFile instanceof File)) {
+            throw new Error('Attachment file is required');
         }
-        return relationshipTypes.find((item) => item?.type_id === typeId) || null;
+        await this._executeNativeAction('upload attachment', () => this.crmApi.uploadAttachment(this._attachmentEntityId, this._attachmentFile));
     }
 
-    _getRelationshipTypeLabel(typeId) {
-        const config = this._getRelationshipTypeConfig(typeId);
-        if (config && typeof config.name === 'string' && config.name.trim().length > 0) {
-            return config.name.trim();
-        }
-        return typeId;
-    }
-
-    _getRelationshipArrow(typeId) {
-        const config = this._getRelationshipTypeConfig(typeId);
-        if (config && config.is_directed === false) {
-            return '<->';
-        }
-        return '->';
-    }
-
-    _renderNodes() {
-        if (this._graphNodes.length === 0) {
-            return html`
-                <div class="empty">
-                    <platform-icon name="network" size="28"></platform-icon>
-                    <div>Нет данных графа для выбранного узла</div>
-                </div>
-            `;
-        }
-        return this._graphNodes.map((node) => {
-            const entityId = node.entity_id || node.id;
-            const name = node.name || node.label || entityId;
-            const type = node.entity_type || node.type || 'entity';
-            return html`
-                <button class="node-item" type="button" @click=${() => this._onOpenEntity(entityId)}>
-                    <div class="node-name">${name}</div>
-                    <div class="node-meta">${type}</div>
-                </button>
-            `;
-        });
-    }
-
-    _renderEdges() {
-        if (this._graphEdges.length === 0) {
-            return html`
-                <div class="empty">
-                    <platform-icon name="circular-connection" size="28"></platform-icon>
-                    <div>Связи пока не найдены</div>
-                </div>
-            `;
-        }
-        return this._graphEdges.map((edge) => {
-            const sourceId = edge.source_entity_id || edge.source_id || edge.source;
-            const targetId = edge.target_entity_id || edge.target_id || edge.target;
-            const sourceEntity = this._resolveEntity(sourceId);
-            const targetEntity = this._resolveEntity(targetId);
-            const sourceName = sourceEntity?.name || sourceId;
-            const targetName = targetEntity?.name || targetId;
-            const relationType = edge.relationship_type || edge.type || 'related';
-            const relationLabel = this._getRelationshipTypeLabel(relationType);
-            const relationArrow = this._getRelationshipArrow(relationType);
-            return html`
-                <div class="edge-item">
-                    <div class="edge-relation">${sourceName} ${relationArrow} ${targetName}</div>
-                    <div class="edge-meta">${relationLabel}</div>
-                </div>
-            `;
-        });
-    }
-
-    _renderShortestPathEdges() {
-        if (this._shortestPathEdges.length === 0) {
-            return html`
-                <div class="empty">
-                    <platform-icon name="route" size="24"></platform-icon>
-                    <div>Путь не построен</div>
-                </div>
-            `;
-        }
-        return html`<div class="path-list">${this._shortestPathEdges.map((edge) => {
-            const sourceId = edge.source_entity_id || edge.source_id || edge.source;
-            const targetId = edge.target_entity_id || edge.target_id || edge.target;
-            const sourceName = this._resolveEntity(sourceId)?.name || sourceId;
-            const targetName = this._resolveEntity(targetId)?.name || targetId;
-            const relationType = edge.relationship_type || edge.type || 'related';
-            return html`
-                <div class="edge-item">
-                    <div class="edge-relation">${sourceName} ${this._getRelationshipArrow(relationType)} ${targetName}</div>
-                    <div class="edge-meta">${this._getRelationshipTypeLabel(relationType)}</div>
-                </div>
-            `;
-        })}</div>`;
+    _renderLegend() {
+        return html`
+            <div class="legend-item"><span class="legend-dot" style="background:#7ac7ff"></span> Contact</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#ffb457"></span> Note</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#8ce9a2"></span> Task</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#bca8ff"></span> Other</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#7f7f8f"></span> Hidden</div>
+        `;
     }
 
     render() {
+        const operations = this._getBackendOperations();
+        const coverageMatrix = this._getCoverageMatrix();
+        const coveredNativeCount = coverageMatrix.filter((item) => item.status === 'covered_by_native_ui').length;
+        const coveredJsonCount = coverageMatrix.filter((item) => item.status === 'covered_by_json_runner_only').length;
+        const uncoveredCount = coverageMatrix.filter((item) => item.status === 'not_covered').length;
+        const relationshipTypes = this._getRelationshipTypes();
         return html`
+            <div class="layout ${this._isFullscreen ? 'fullscreen' : ''}">
             <div class="toolbar">
                 <div class="toolbar-title">
                     <platform-icon name="network" size="18"></platform-icon>
-                    <span>Граф связей</span>
+                    <span>3D Graph Studio</span>
                 </div>
                 <div class="toolbar-control">
-                    <span class="toolbar-label">Корневой узел</span>
+                    <span class="toolbar-label">Режим</span>
+                    <select class="toolbar-select" .value=${this._viewMode} @change=${this._onModeChange}>
+                        <option value="influence">Граф влияния</option>
+                        <option value="related">Связанные сущности</option>
+                        <option value="path">Кратчайший путь</option>
+                    </select>
+                </div>
+                <div class="toolbar-control">
+                    <span class="toolbar-label">Корень</span>
                     <select class="toolbar-select" .value=${this._selectedRootId} @change=${this._onRootChange}>
-                        ${this._entities.map((entity) => html`
-                            <option value=${entity.entity_id}>${entity.name}</option>
-                        `)}
+                        ${this._entities.map((entity) => html`<option value=${entity.entity_id}>${entity.name}</option>`)}
                     </select>
                 </div>
                 <div class="toolbar-control">
                     <span class="toolbar-label">Глубина</span>
                     <select class="toolbar-select" .value=${String(this._maxDepth)} @change=${this._onDepthChange}>
-                        <option value="1">1 уровень</option>
-                        <option value="2">2 уровня</option>
-                        <option value="3">3 уровня</option>
-                        <option value="4">4 уровня</option>
-                        <option value="5">5 уровней</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
                     </select>
                 </div>
-                <button class="btn btn-secondary refresh-btn" type="button" @click=${this._onRefresh}>
-                    Обновить
-                </button>
+                <div class="toolbar-control">
+                    <span class="toolbar-label">Preset</span>
+                    <select class="toolbar-select" .value=${this._graphPreset} @change=${this._onPresetChange}>
+                        <option value="dense">Плотно</option>
+                        <option value="readable">Читаемо</option>
+                        <option value="presentation">Презентация</option>
+                    </select>
+                </div>
                 <input
-                    class="toolbar-search"
+                    class="toolbar-input"
                     type="text"
-                    placeholder="Поиск сущности..."
                     .value=${this._entitySearchQuery}
+                    placeholder="Поиск сущности..."
                     @input=${this._onSearchQueryInput}
                 />
-                <button class="btn btn-secondary refresh-btn" type="button" @click=${this._onSearchEntity}>
-                    Найти
+                <button class="btn btn-secondary" type="button" @click=${this._onSearchEntity}>Найти</button>
+                <button class="btn btn-secondary" type="button" @click=${this._loadGraphData}>Обновить</button>
+                <button class="btn btn-secondary" type="button" @click=${this._toggleFullscreen}>
+                    ${this._isFullscreen ? 'Выйти из fullscreen' : 'Fullscreen графа'}
                 </button>
             </div>
 
@@ -640,65 +1437,219 @@ export class GraphPage extends PlatformElement {
                     <div class="stat-value">${this._entities.length}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Узлов в графе</div>
+                    <div class="stat-label">Узлов в сцене</div>
                     <div class="stat-value">${this._graphNodes.length}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Связей в графе</div>
+                    <div class="stat-label">Связей в сцене</div>
                     <div class="stat-value">${this._graphEdges.length}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Ребер в path</div>
+                    <div class="stat-value">${this._shortestPathEdges.length}</div>
                 </div>
             </div>
 
-            <div class="content">
-                <section class="panel">
+            <div class="workspace">
+                <section class="graph-panel">
                     <div class="panel-header">
-                        <div class="panel-title">Узлы</div>
-                        <div class="panel-count">${this._graphNodes.length}</div>
-                    </div>
-                    <div class="panel-body">
-                        ${this._loading ? html`<div class="empty">Загрузка графа...</div>` : this._renderNodes()}
-                    </div>
-                </section>
-
-                <section class="panel">
-                    <div class="panel-header">
-                        <div class="panel-title">Связи</div>
-                        <div class="panel-count">${this._graphEdges.length}</div>
-                    </div>
-                    <div class="panel-body">
-                        ${this._loading ? html`<div class="empty">Загрузка связей...</div>` : this._renderEdges()}
-                    </div>
-                </section>
-
-                <section class="panel path-panel">
-                    <div class="panel-header">
-                        <div class="panel-title">Кратчайший путь</div>
-                        <div class="panel-count">${this._shortestPathEdges.length}</div>
-                    </div>
-                    <div class="panel-body">
-                        <div class="path-toolbar">
-                            <select class="path-select" .value=${this._pathSourceId} @change=${this._onPathSourceChange}>
-                                ${this._entities.map((entity) => html`
-                                    <option value=${entity.entity_id}>От: ${entity.name}</option>
-                                `)}
-                            </select>
-                            <select class="path-select" .value=${this._pathTargetId} @change=${this._onPathTargetChange}>
-                                ${this._entities.map((entity) => html`
-                                    <option value=${entity.entity_id}>До: ${entity.name}</option>
-                                `)}
-                            </select>
-                            <button
-                                class="btn btn-secondary"
-                                type="button"
-                                ?disabled=${this._findingPath}
-                                @click=${this._onFindShortestPath}
-                            >
-                                ${this._findingPath ? 'Поиск...' : 'Построить путь'}
+                        <div class="panel-title">3D Graph</div>
+                        <div class="row">
+                            <span class="node-pill">node: ${this._selectedNodeId || '—'}</span>
+                            <span class="node-pill">edge: ${this._selectedEdgeId || '—'}</span>
+                            <button class="btn btn-secondary" type="button" @click=${this._toggleFullscreen}>
+                                ${this._isFullscreen ? 'Обычный вид' : 'Fullscreen'}
                             </button>
                         </div>
-                        ${this._renderShortestPathEdges()}
+                    </div>
+                    <div id="graph-canvas" class="graph-canvas"></div>
+                    <div class="legend">${this._renderLegend()}</div>
+                </section>
+
+                <section class="control-panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Панель действий</div>
+                    </div>
+                    <div class="control-body">
+                        <div class="section">
+                            <div class="section-title">Быстрая навигация по графу</div>
+                            <div class="small">1) Выбери режим, 2) отфильтруй связи, 3) используй действия ниже.</div>
+                            <div class="section-grid">
+                                <select class="toolbar-select" .value=${this._relationshipTypeFilter} @change=${this._onRelationshipTypeFilterChange}>
+                                    <option value="">Все типы связей</option>
+                                    ${relationshipTypes.map((item) => html`<option value=${item.type_id}>${item.name}</option>`)}
+                                </select>
+                                <select class="toolbar-select" .value=${this._relatedDirection} @change=${this._onRelatedDirectionChange}>
+                                    <option value="both">Обе стороны</option>
+                                    <option value="incoming">Входящие</option>
+                                    <option value="outgoing">Исходящие</option>
+                                </select>
+                            </div>
+                            <div class="section-grid">
+                                <select class="toolbar-select" .value=${this._pathSourceId} @change=${this._onPathSourceChange}>
+                                    ${this._entities.map((entity) => html`<option value=${entity.entity_id}>from: ${entity.name}</option>`)}
+                                </select>
+                                <select class="toolbar-select" .value=${this._pathTargetId} @change=${this._onPathTargetChange}>
+                                    ${this._entities.map((entity) => html`<option value=${entity.entity_id}>to: ${entity.name}</option>`)}
+                                </select>
+                            </div>
+                            <div class="section-grid">
+                                <input class="toolbar-input" type="number" min="1" max="20" .value=${String(this._pathMaxDepth)} @input=${this._onPathDepthChange} />
+                                <button class="btn btn-secondary" type="button" ?disabled=${this._findingPath} @click=${this._buildPathGraph}>
+                                    ${this._findingPath ? 'Поиск...' : 'Построить path'}
+                                </button>
+                            </div>
+                            <div class="row">
+                                <button class="btn btn-secondary" type="button" @click=${this._focusSelectedNode}>Фокус на выбранном узле</button>
+                                <button class="btn btn-secondary" type="button" @click=${this._expandFromSelected}>Раскрыть соседей</button>
+                                <button class="btn btn-secondary" type="button" @click=${this._isolateSelectedNeighborhood}>Оставить только окружение</button>
+                                <button class="btn btn-secondary" type="button" @click=${this._revealNextLevel}>Показать следующий уровень</button>
+                            </div>
+                        </div>
+
+                        <details class="section-collapsible">
+                            <summary>Расширенный backend runner (диагностика)</summary>
+                            <div class="section-collapsible-content">
+                                <select class="toolbar-select" .value=${this._backendOperationId} @change=${this._onBackendOperationChange}>
+                                    ${operations.map((item) => html`<option value=${item.id}>${item.label}</option>`)}
+                                </select>
+                                <textarea class="textarea" .value=${this._backendOperationArgs} @input=${this._onBackendArgsInput}></textarea>
+                                <div class="row">
+                                    <button class="btn btn-secondary" type="button" @click=${this._injectSelectedNodeToArgs}>Подставить selected node</button>
+                                    <button class="btn btn-primary" type="button" ?disabled=${this._backendLoading} @click=${this._runBackendOperation}>
+                                        ${this._backendLoading ? 'Выполняю...' : 'Выполнить'}
+                                    </button>
+                                </div>
+                                <div class="small">JSON-массив аргументов: каждый элемент — отдельный аргумент метода API.</div>
+                            </div>
+                        </details>
+
+                        <details class="section-collapsible">
+                            <summary>Матрица покрытия API</summary>
+                            <div class="section-collapsible-content">
+                                <div class="small">native: ${coveredNativeCount}, json-only: ${coveredJsonCount}, not-covered: ${uncoveredCount}</div>
+                                <div class="result-box">${coverageMatrix.map((item) => `${item.method} -> ${item.status}`).join('\n')}</div>
+                            </div>
+                        </details>
+
+                        <details class="section-collapsible">
+                            <summary>Сущности</summary>
+                            <div class="section-collapsible-content">
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_entityFormId" .value=${this._entityFormId} placeholder="entity_id" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_entityFormName" .value=${this._entityFormName} placeholder="name" @input=${this._onSimpleInput} />
+                                </div>
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_entityFormType" .value=${this._entityFormType} placeholder="entity_type" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_entityFormNamespace" .value=${this._entityFormNamespace} placeholder="namespace" @input=${this._onSimpleInput} />
+                                </div>
+                                <input class="toolbar-input" data-field="_entityFormDescription" .value=${this._entityFormDescription} placeholder="description" @input=${this._onSimpleInput} />
+                                <div class="row">
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._createEntityNative}>Создать</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._updateEntityNative}>Обновить</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._deleteEntityNative}>Удалить</button>
+                                </div>
+                            </div>
+                        </details>
+
+                        <details class="section-collapsible">
+                            <summary>Связи</summary>
+                            <div class="section-collapsible-content">
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_relationshipFormId" .value=${this._relationshipFormId} placeholder="relationship_id" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_relationshipType" .value=${this._relationshipType} placeholder="relationship_type" @input=${this._onSimpleInput} />
+                                </div>
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_relationshipSourceId" .value=${this._relationshipSourceId} placeholder="source_entity_id" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_relationshipTargetId" .value=${this._relationshipTargetId} placeholder="target_entity_id" @input=${this._onSimpleInput} />
+                                </div>
+                                <div class="row">
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._createRelationshipNative}>Создать связь</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._deleteRelationshipNative}>Удалить связь</button>
+                                </div>
+                            </div>
+                        </details>
+
+                        <details class="section-collapsible">
+                            <summary>Права доступа (grants)</summary>
+                            <div class="section-collapsible-content">
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_grantEntityId" .value=${this._grantEntityId} placeholder="entity_id" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_grantNamespace" .value=${this._grantNamespace} placeholder="namespace" @input=${this._onSimpleInput} />
+                                </div>
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_grantUserId" .value=${this._grantUserId} placeholder="user_id" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_grantCompanyId" .value=${this._grantCompanyId} placeholder="company_id" @input=${this._onSimpleInput} />
+                                </div>
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_grantRole" .value=${this._grantRole} placeholder="role" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_grantId" .value=${this._grantId} placeholder="grant_id" @input=${this._onSimpleInput} />
+                                </div>
+                                <div class="row">
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantEntityUserNative}>Entity -> User</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantEntityCompanyNative}>Entity -> Company</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantEntityPublicNative}>Entity public</button>
+                                </div>
+                                <div class="row">
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantNamespaceUserNative}>Namespace -> User</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantNamespaceCompanyNative}>Namespace -> Company</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantNamespacePublicNative}>Namespace public</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._revokeGrantNative}>Revoke</button>
+                                </div>
+                            </div>
+                        </details>
+
+                        <details class="section-collapsible">
+                            <summary>Запросы доступа</summary>
+                            <div class="section-collapsible-content">
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_accessRequestEntityId" .value=${this._accessRequestEntityId} placeholder="entity_id" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_accessRequestId" .value=${this._accessRequestId} placeholder="request_id" @input=${this._onSimpleInput} />
+                                </div>
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_accessRequestMessage" .value=${this._accessRequestMessage} placeholder="message" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" type="number" min="1" max="5" data-field="_accessRequestDepth" .value=${String(this._accessRequestDepth)} @input=${this._onSimpleInput} />
+                                </div>
+                                <div class="row">
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._createAccessRequestNative}>Создать</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._listAccessRequestsNative}>Список</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._approveAccessRequestNative}>Approve</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._rejectAccessRequestNative}>Reject</button>
+                                </div>
+                            </div>
+                        </details>
+
+                        <details class="section-collapsible">
+                            <summary>Namespaces</summary>
+                            <div class="section-collapsible-content">
+                                <div class="section-grid">
+                                    <input class="toolbar-input" data-field="_namespaceNameInput" .value=${this._namespaceNameInput} placeholder="namespace name" @input=${this._onSimpleInput} />
+                                    <input class="toolbar-input" data-field="_namespaceTemplateIdInput" .value=${this._namespaceTemplateIdInput} placeholder="template_id" @input=${this._onSimpleInput} />
+                                </div>
+                                <input class="toolbar-input" data-field="_namespaceDescriptionInput" .value=${this._namespaceDescriptionInput} placeholder="description" @input=${this._onSimpleInput} />
+                                <div class="row">
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._createNamespaceNative}>Создать namespace</button>
+                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._loadNamespaceOverviewNative}>Обзор namespace</button>
+                                </div>
+                            </div>
+                        </details>
+
+                        <details class="section-collapsible">
+                            <summary>Вложения</summary>
+                            <div class="section-collapsible-content">
+                                <input class="toolbar-input" type="text" .value=${this._attachmentEntityId} placeholder="entity_id" @input=${this._onAttachmentEntityIdInput} />
+                                <input type="file" @change=${this._onAttachmentFileChange} />
+                                <button class="btn btn-secondary" type="button" @click=${this._uploadAttachment}>Загрузить файл</button>
+                            </div>
+                        </details>
+
+                        <div class="section">
+                            <div class="section-title">Результат операции</div>
+                            <div class="result-box">${this._backendOperationResult || 'Пока нет выполненных операций'}</div>
+                        </div>
                     </div>
                 </section>
+            </div>
             </div>
         `;
     }

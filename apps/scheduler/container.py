@@ -25,7 +25,7 @@ class SchedulerContainer(BaseContainer):
 
     @lazy
     def scheduler_service(self):
-        from apps.broker.broker import broker
+        from apps.flows_worker.broker import broker
         from apps.scheduler.config import get_scheduler_settings
         from core.scheduler import SchedulerService
 

@@ -94,7 +94,7 @@ CMD ["python", "-m", "apps.rag.main"]
 
 # Worker
 FROM base-final AS worker
-CMD ["taskiq", "worker", "apps.broker.worker:broker", "--workers", "4"]
+CMD ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
 
 # Scheduler
 FROM base-final AS scheduler
@@ -102,7 +102,7 @@ CMD ["taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"]
 
 # RAG Worker
 FROM base-final AS rag-worker
-CMD ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]
+CMD ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
 
 # Sync
 FROM base-final AS sync
@@ -111,7 +111,7 @@ CMD ["python", "-m", "apps.sync.main"]
 
 # Sync Worker
 FROM base-final AS sync-worker
-CMD ["taskiq", "worker", "apps.sync_worker.worker:broker", "--workers", "2"]
+CMD ["taskiq", "worker", "apps.sync_worker.worker:worker_app", "--workers", "2"]
 
 # Migrations (init container)
 FROM base-final AS migrations

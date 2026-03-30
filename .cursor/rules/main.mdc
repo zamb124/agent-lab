@@ -21,9 +21,11 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 | crm | 8003 | CRM: entities, graph, access control |
 | rag | 8004 | RAG: документы, семантический поиск |
 | sync | 8005 | Инженерный чат с Git-интеграцией |
-| broker | — | TaskIQ брокер фоновых задач |
+| flows_worker | — | TaskIQ worker задач сервиса flows |
+| crm_worker | — | TaskIQ worker задач CRM |
 | rag_worker | — | TaskIQ worker обработки документов |
 | sync_worker | — | TaskIQ worker realtime команд sync |
+| idle_worker | — | TaskIQ worker фоновых idle-задач (calendar/model sync и др.) |
 | scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler process |
 
 ## ОБЯЗАТЕЛЬНО: Новое = правка рулов

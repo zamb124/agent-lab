@@ -10,12 +10,12 @@ from typing import Any, Dict
 
 from core.logging import get_logger
 
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="execute_node", queue_name="default")
+@broker.task(task_name="execute_node", queue_name="flows_worker")
 async def execute_node(
     node_id: str,
     node_config: Dict[str, Any],

@@ -37,7 +37,7 @@ _CRM_WORKER_PID = "/tmp/platform_test_crm_taskiq_worker.pid"
 
 
 def _force_restart_sync_worker() -> None:
-    subprocess.run(["pkill", "-f", "apps.sync_worker.worker:broker"], capture_output=True, text=True)
+    subprocess.run(["pkill", "-f", "apps.sync_worker.worker:worker_app"], capture_output=True, text=True)
     Path(_SYNC_WORKER_PID).unlink(missing_ok=True)
     Path(f"{_SYNC_WORKER_PID}.refs").unlink(missing_ok=True)
     print("🔄 Принудительный перезапуск sync worker: старые процессы и PID-файлы очищены")
@@ -92,7 +92,7 @@ class SessionWorkerManager:
             name="TaskIQ",
             lock_file="/tmp/taskiq.lock",
             pid_file="/tmp/taskiq.pid",
-            command=[sys.executable, "-m", "taskiq", "worker", "app.broker:broker"],
+            command=[sys.executable, "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app"],
             env={"TESTING": "true"},
             cleanup_patterns=["taskiq.*worker", "multiprocessing.spawn"],
             startup_wait=3
@@ -365,7 +365,7 @@ def taskiq_worker():
     """
     Запускает TaskIQ worker для тестов.
     
-    В Docker: использует существующий worker-test контейнер
+    В Docker: использует существующий flows_worker_test контейнер
     Локально: запускает worker как subprocess через SessionWorkerManager
     
     scope="session" - worker запускается один раз на все тесты.
@@ -385,7 +385,7 @@ def taskiq_worker():
         pid_file=_TASKIQ_WORKER_PID,
         # Один процесс: mock LLM в Redis (mock_llm:responses) без атомарного pop — при -w 2
         # параллельные задачи крадут ответы друг у друга и E2E (триггеры, RAG) падают.
-        command=[sys.executable, "-m", "taskiq", "worker", "apps.broker.worker:broker", "-w", "1"],
+        command=[sys.executable, "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app", "-w", "1"],
         env={
             **TEST_DATABASE_ENV,
             "TESTING": "true",
@@ -398,7 +398,7 @@ def taskiq_worker():
             "CALLS__LIVEKIT_API_SECRET": "secret",
         },
         cleanup_patterns=[
-            "taskiq.*apps.broker.worker:broker",
+            "taskiq.*apps.flows_worker.worker:worker_app",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
@@ -432,7 +432,7 @@ def rag_worker():
         name="RAGWorker",
         lock_file=_RAG_WORKER_LOCK,
         pid_file=_RAG_WORKER_PID,
-        command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:broker", "-w", "1"],
+        command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:worker_app", "-w", "1"],
         env={
             **TEST_DATABASE_ENV,
             "TESTING": "true",
@@ -459,7 +459,7 @@ def rag_worker():
 @pytest.fixture(scope="session")
 def sync_worker():
     """
-    TaskIQ worker очереди sync (apps.sync_worker.worker:broker).
+    TaskIQ worker очереди sync (apps.sync_worker.worker:worker_app).
 
     Нужен для REST/WS, где вызывается handle_command.kiq() (создание space/channel и т.д.).
     """
@@ -479,7 +479,7 @@ def sync_worker():
             "-m",
             "taskiq",
             "worker",
-            "apps.sync_worker.worker:broker",
+            "apps.sync_worker.worker:worker_app",
             "-w",
             "2",
         ],
@@ -505,7 +505,7 @@ def sync_worker():
         },
         cleanup_patterns=[
             "apps.sync_worker.worker",
-            "taskiq.*apps.sync_worker.worker:broker",
+            "taskiq.*apps.sync_worker.worker:worker_app",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
@@ -520,7 +520,7 @@ def sync_worker():
 @pytest.fixture(scope="session")
 def crm_worker():
     """
-    TaskIQ worker очереди crm (apps.crm_worker.worker:broker).
+    TaskIQ worker очереди crm (apps.crm_worker.worker:worker_app).
     """
     if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
         yield None
@@ -535,7 +535,7 @@ def crm_worker():
             "-m",
             "taskiq",
             "worker",
-            "apps.crm_worker.worker:broker",
+            "apps.crm_worker.worker:worker_app",
             "-w",
             "1",
         ],
@@ -548,7 +548,7 @@ def crm_worker():
         },
         cleanup_patterns=[
             "apps.crm_worker.worker",
-            "taskiq.*apps.crm_worker.worker:broker",
+            "taskiq.*apps.crm_worker.worker:worker_app",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
@@ -567,7 +567,7 @@ def taskiq_broker(rag_worker):
     
     Зависит от rag_worker - гарантирует что worker запущен.
     """
-    from apps.broker.broker import broker
+    from apps.flows_worker.broker import broker
     return broker
 
 

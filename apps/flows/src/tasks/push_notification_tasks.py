@@ -18,12 +18,12 @@ from a2a.types import (
 from core.logging import get_logger
 from apps.flows.src.services.push_notifications import REDIS_PREFIX, REDIS_TTL, _get_redis
 
-from apps.broker.broker import broker
+from apps.idle_worker.broker import broker as idle_broker
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="push_config_set", queue_name="default")
+@idle_broker.task(task_name="push_config_set", queue_name="idle")
 async def set_config(params: TaskPushNotificationConfig) -> Dict[str, Any]:
     """Сохраняет конфигурацию push notification."""
     redis = _get_redis()
@@ -63,7 +63,7 @@ async def set_config(params: TaskPushNotificationConfig) -> Dict[str, Any]:
     return data
 
 
-@broker.task(task_name="push_config_get", queue_name="default")
+@idle_broker.task(task_name="push_config_get", queue_name="idle")
 async def get_config(params: GetTaskPushNotificationConfigParams) -> Optional[Dict[str, Any]]:
     """Получает конфигурацию push notification."""
     redis = _get_redis()
@@ -89,7 +89,7 @@ async def get_config(params: GetTaskPushNotificationConfigParams) -> Optional[Di
     return json.loads(data) if data else None
 
 
-@broker.task(task_name="push_config_list", queue_name="default")
+@idle_broker.task(task_name="push_config_list", queue_name="idle")
 async def list_configs(params: ListTaskPushNotificationConfigParams) -> List[Dict[str, Any]]:
     """Список конфигураций для задачи."""
     redis = _get_redis()
@@ -113,7 +113,7 @@ async def list_configs(params: ListTaskPushNotificationConfigParams) -> List[Dic
     return result
 
 
-@broker.task(task_name="push_config_delete", queue_name="default")
+@idle_broker.task(task_name="push_config_delete", queue_name="idle")
 async def delete_config(params: DeleteTaskPushNotificationConfigParams) -> None:
     """Удаляет конфигурацию push notification."""
     redis = _get_redis()
@@ -134,12 +134,12 @@ async def delete_config(params: DeleteTaskPushNotificationConfigParams) -> None:
     logger.info(f"Push config deleted: task={task_id}, config={config_id}")
 
 
-@broker.task(
+@idle_broker.task(
     task_name="push_notification_send",
     retry_on_error=True,
     max_retries=5,
     default_retry_delay=5.0,
-    queue_name="default"
+    queue_name="idle"
 )
 async def send_webhook(
     url: str,
@@ -165,11 +165,11 @@ async def send_webhook(
         return {"success": True, "status_code": response.status_code}
 
 
-@broker.task(
+@idle_broker.task(
     task_name="send_task_update",
     retry_on_error=True,
     max_retries=3,
-    queue_name="default"
+    queue_name="idle"
 )
 async def send_task_update(
     task_id: str, context_id: str, state: str, message: Optional[str] = None, is_final: bool = False
@@ -210,19 +210,19 @@ async def send_task_update(
         await send_webhook.kiq(url, payload, token, credentials)
 
 
-@broker.task(task_name="send_task_completed", queue_name="default")
+@idle_broker.task(task_name="send_task_completed", queue_name="idle")
 async def send_task_completed(task_id: str, context_id: str, response: str) -> None:
     """Уведомление о завершении."""
     await send_task_update(task_id, context_id, "completed", response, True)
 
 
-@broker.task(task_name="send_task_failed", queue_name="default")
+@idle_broker.task(task_name="send_task_failed", queue_name="idle")
 async def send_task_failed(task_id: str, context_id: str, error: str) -> None:
     """Уведомление об ошибке."""
     await send_task_update(task_id, context_id, "failed", f"Error: {error}", True)
 
 
-@broker.task(task_name="send_task_input_required", queue_name="default")
+@idle_broker.task(task_name="send_task_input_required", queue_name="idle")
 async def send_task_input_required(task_id: str, context_id: str, question: str) -> None:
     """Уведомление о необходимости ввода."""
     await send_task_update(task_id, context_id, "input-required", question, True)

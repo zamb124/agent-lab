@@ -203,8 +203,8 @@ jobs:
             }
 
             docker compose -f docker-compose-prod.yaml up -d \
-              agents frontend crm rag sync \
-              worker scheduler rag-worker sync-worker \
+              agents frontend crm rag sync scheduler-api \
+              flows_worker scheduler crm_worker rag_worker sync_worker idle_worker \
               livekit livekit-egress coturn
 
             _egress_wait=0

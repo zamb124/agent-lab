@@ -53,6 +53,7 @@ async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> No
     request = PlatformScheduleCreateRequest(
         target_service="flows",
         task_name=CALENDAR_SYNC_TASK_NAME,
+        queue_name="idle",
         schedule_type=PlatformScheduleType.CRON,
         cron=config.cron,
         timezone="UTC",

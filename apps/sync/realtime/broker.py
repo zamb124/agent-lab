@@ -26,7 +26,7 @@ broker.on_event("startup")(recovery_handler)
 
 
 async def sync_worker_startup(state: TaskiqState) -> None:
-    setup_logging(service_name="sync-worker")
+    setup_logging(service_name="sync_worker")
     settings = get_settings()
     await notification_manager.start_redis_listener(settings.database.redis_url)
     if settings.push.enabled:

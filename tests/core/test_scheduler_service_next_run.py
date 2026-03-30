@@ -188,7 +188,7 @@ async def test_get_redis_snapshot_returns_taskiq_schedule_data(monkeypatch: pyte
         schedule_id="schedule-redis-1",
         target_service="flows",
         task_name="sync_llm_models_task",
-        queue_name="default",
+        queue_name="idle",
         schedule_type=PlatformScheduleType.INTERVAL,
         cron=None,
         interval_seconds=60,

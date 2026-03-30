@@ -8,12 +8,12 @@ from typing import Any, Dict, List, Optional
 
 from core.clients.llm import get_llm
 from core.logging import get_logger
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="invoke_llm", queue_name="default")
+@broker.task(task_name="invoke_llm", queue_name="flows_worker")
 async def invoke_llm(
     messages: List[Dict[str, str]],
     tools: Optional[List[Dict[str, Any]]] = None,

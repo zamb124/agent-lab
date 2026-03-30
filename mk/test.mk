@@ -9,12 +9,12 @@ RUN_UI_IN_TEST ?= 0
 _PYTEST_IGNORE_UI := --ignore=tests/frontend/browser --ignore=tests/ui
 
 test-up:
-	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test test-a2a-agent worker-test scheduler-test rag-worker-test livekit-test livekit-egress-test livekit-cli-test
+	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test test-a2a-agent flows_worker_test scheduler_test rag_worker_test livekit-test livekit-egress-test livekit-cli-test
 	@echo "Ожидание готовности сервисов (postgres, redis, minio, test-a2a-agent, worker, scheduler, livekit, livekit-egress, livekit-cli)..."
 	@sleep 7
 
 test-down:
-	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test test-a2a-agent worker-test scheduler-test rag-worker-test livekit-test livekit-egress-test livekit-cli-test
+	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test test-a2a-agent flows_worker_test scheduler_test rag_worker_test livekit-test livekit-egress-test livekit-cli-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up

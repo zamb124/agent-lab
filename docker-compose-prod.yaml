@@ -290,12 +290,12 @@ services:
   # ============================================
   # Workers
   # ============================================
-  worker:
+  flows_worker:
     <<: *app
-    command: ["taskiq", "worker", "apps.broker.worker:broker", "--workers", "4"]
+    command: ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - worker_logs:/app/logs
+      - flows_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -326,10 +326,10 @@ services:
     networks:
       - agentlab-net
 
-  rag-worker:
+  rag_worker:
     <<: *app
     container_name: agentlab_rag_worker
-    command: ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]
+    command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
       - rag_worker_logs:/app/logs
@@ -344,13 +344,49 @@ services:
     networks:
       - agentlab-net
 
-  sync-worker:
+  sync_worker:
     <<: *app
     container_name: agentlab_sync_worker
-    command: ["taskiq", "worker", "apps.sync_worker.worker:broker", "--workers", "2"]
+    command: ["taskiq", "worker", "apps.sync_worker.worker:worker_app", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
       - sync_worker_logs:/app/logs
+    environment:
+      <<: *common-env
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  crm_worker:
+    <<: *app
+    container_name: agentlab_crm_worker
+    command: ["taskiq", "worker", "apps.crm_worker.worker:worker_app", "--workers", "2"]
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - crm_worker_logs:/app/logs
+    environment:
+      <<: *common-env
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  idle_worker:
+    <<: *app
+    container_name: agentlab_idle_worker
+    command: ["taskiq", "worker", "apps.idle_worker.worker:worker_app", "--workers", "2"]
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - idle_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -435,9 +471,11 @@ volumes:
   rag_logs:
   sync_logs:
   scheduler_api_logs:
-  worker_logs:
+  flows_worker_logs:
   rag_worker_logs:
   sync_worker_logs:
+  crm_worker_logs:
+  idle_worker_logs:
 
 networks:
   agentlab-net:

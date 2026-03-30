@@ -1,13 +1,13 @@
 """TaskIQ задачи синхронизации LLM моделей."""
 
-from apps.broker.broker import broker
+from apps.idle_worker.broker import broker as idle_broker
 from apps.flows.src.container import get_container
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="sync_llm_models_task", queue_name="default")
+@idle_broker.task(task_name="sync_llm_models_task", queue_name="idle")
 async def sync_llm_models_task(
     scheduler_task_id: str | None = None,
     company_id: str | None = None,

@@ -85,13 +85,13 @@ services:
   #     - dev-net
 
   # Worker опционален - можно запустить локально для дебага:
-  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq worker apps.broker.worker:broker
-  # worker:
+  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq worker apps.flows_worker.worker:worker_app
+  # flows_worker:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile
   #     target: worker
-  #   container_name: platform-worker-dev
+  #   container_name: platform_flows_worker_dev
   #   depends_on:
   #     redis:
   #       condition: service_healthy
@@ -101,7 +101,7 @@ services:
   #     - DATABASE__SHARED_URL=postgresql://platform_user:admin@postgres:5432/platform_shared
   #     - DATABASE__REDIS_URL=redis://redis:6379/0
   #     - TASKS__BROKER_URL=redis://redis:6379/1
-  #   command: ["uv", "run", "python", "-m", "taskiq", "worker", "apps.broker.worker:broker", "--workers", "4"]
+  #   command: ["uv", "run", "python", "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
   #   restart: unless-stopped
   #   networks:
   #     - dev-net
@@ -130,12 +130,12 @@ services:
 
   # RAGWorker опционален - можно запустить локально для дебага:
   # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared DATABASE__RAG_URL=postgresql://platform_user:admin@localhost:54321/platform_rag TASKS__BROKER_URL=redis://localhost:63791/1 uv run python scripts/run_rag_worker.py
-  # rag-worker:
+  # rag_worker:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile
   #     target: rag-worker
-  #   container_name: platform-rag-worker-dev
+  #   container_name: platform_rag_worker_dev
   #   depends_on:
   #     redis:
   #       condition: service_healthy
@@ -145,7 +145,7 @@ services:
   #     - DATABASE__SHARED_URL=postgresql://platform_user:admin@postgres:5432/platform_shared
   #     - DATABASE__REDIS_URL=redis://redis:6379/0
   #     - TASKS__BROKER_URL=redis://redis:6379/1
-  #   command: ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]
+  #   command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
   #   restart: unless-stopped
   #   networks:
   #     - dev-net

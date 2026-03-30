@@ -15,12 +15,12 @@ from core.logging import get_logger
 from core.scheduler import get_schedule_source
 from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.models import ScheduledTaskStatus
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="execute_scheduled_task", queue_name="scheduled")
+@broker.task(task_name="execute_scheduled_task", queue_name="flows_worker")
 async def execute_scheduled_task(
     scheduled_task_id: str,
     flow_id: str,

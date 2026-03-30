@@ -15,8 +15,8 @@ git push -> GitHub Actions -> ghcr.io -> SSH -> docker compose up -d
 
 | Файл | Назначение |
 |------|-----------|
-| `Dockerfile` | Мульти-стейдж: agents, frontend, crm, rag, sync, worker, scheduler, rag-worker, sync-worker, migrations, full |
-| `docker-compose-prod.yaml` | Все сервисы: postgres, redis, agents, frontend, crm, rag, sync, worker, scheduler, rag-worker, sync-worker, migrations |
+| `Dockerfile` | Мульти-стейдж: agents, frontend, crm, rag, sync, flows_worker, scheduler, crm_worker, rag_worker, sync_worker, idle_worker, migrations, full |
+| `docker-compose-prod.yaml` | Все сервисы: postgres, redis, agents, frontend, crm, rag, sync, scheduler-api, flows_worker, scheduler, crm_worker, rag_worker, sync_worker, idle_worker, migrations |
 | `.github/workflows/deploy.yml` | CI/CD пайплайн |
 | `deploy/k8.sh` | Одноразовая подготовка сервера (MicroK8s + Docker Engine + Portainer) |
 | `deploy/ingress.sh` | Настройка Ingress + cert-manager (Let's Encrypt) |
@@ -113,10 +113,13 @@ Postgres и Redis при этом **не перезапускаются**.
 | crm | 8003 | CRM: entities, graph |
 | rag | 8004 | RAG: документы, поиск |
 | sync | 8005 | Инженерный чат, Git |
-| worker | - | TaskIQ worker (agents) |
+| scheduler-api | 8006 | Scheduler control-plane API |
+| flows_worker | - | TaskIQ worker (flows) |
 | scheduler | - | TaskIQ scheduler |
-| rag-worker | - | TaskIQ worker (RAG) |
-| sync-worker | - | TaskIQ worker (sync realtime) |
+| crm_worker | - | TaskIQ worker (CRM) |
+| rag_worker | - | TaskIQ worker (RAG) |
+| sync_worker | - | TaskIQ worker (sync realtime) |
+| idle_worker | - | TaskIQ worker (idle platform tasks) |
 
 ---
 

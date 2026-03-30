@@ -10,9 +10,12 @@ from calendar import monthrange
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from apps.broker.broker import broker
+import httpx
+
+from apps.idle_worker.broker import broker as idle_broker
 from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
+from core.calendar.service import CalendarReauthRequiredError
 from core.calendar.repositories import CalendarIntegrationSqlRepository
 from core.logging import get_logger
 from core.models import CalendarEventSource, CalendarProvider
@@ -35,8 +38,26 @@ class _TickStats:
     integrations_total: int = 0
     integrations_success: int = 0
     integrations_failed: int = 0
+    failures_auth: int = 0
+    failures_network: int = 0
+    failures_validation: int = 0
+    failures_unknown: int = 0
     events_new: int = 0
     notifications_sent: int = 0
+
+
+def _classify_failure(error: Exception) -> str:
+    if isinstance(error, CalendarReauthRequiredError):
+        return "auth"
+    if isinstance(error, httpx.HTTPStatusError):
+        if error.response.status_code in {401, 403}:
+            return "auth"
+        return "network"
+    if isinstance(error, (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError)):
+        return "network"
+    if isinstance(error, ValueError):
+        return "validation"
+    return "unknown"
 
 
 async def _load_existing_event_ids(
@@ -155,7 +176,7 @@ async def _sync_single_integration(
         return len(new_event_ids), sent
 
 
-@broker.task(task_name="calendar_sync_tick", queue_name="default")
+@idle_broker.task(task_name="calendar_sync_tick", queue_name="idle")
 async def calendar_sync_tick(
     scheduler_task_id: str | None = None,
     company_id: str | None = None,
@@ -167,6 +188,10 @@ async def calendar_sync_tick(
             "integrations_total": 0,
             "integrations_success": 0,
             "integrations_failed": 0,
+            "auth_failed": 0,
+            "network_failed": 0,
+            "validation_failed": 0,
+            "unknown_failed": 0,
             "events_new": 0,
             "notifications_sent": 0,
         }
@@ -190,6 +215,10 @@ async def calendar_sync_tick(
             "integrations_total": 0,
             "integrations_success": 0,
             "integrations_failed": 0,
+            "auth_failed": 0,
+            "network_failed": 0,
+            "validation_failed": 0,
+            "unknown_failed": 0,
             "events_new": 0,
             "notifications_sent": 0,
         }
@@ -213,12 +242,25 @@ async def calendar_sync_tick(
         integration = integrations[index]
         if isinstance(outcome, Exception):
             stats.integrations_failed += 1
-            logger.exception(
-                "calendar_sync_tick: sync failed for integration_id=%s provider=%s company_id=%s user_id=%s",
+            failure_kind = _classify_failure(outcome)
+            if failure_kind == "auth":
+                stats.failures_auth += 1
+            elif failure_kind == "network":
+                stats.failures_network += 1
+            elif failure_kind == "validation":
+                stats.failures_validation += 1
+            else:
+                stats.failures_unknown += 1
+            logger.error(
+                "calendar_sync_tick: sync failed for integration_id=%s provider=%s company_id=%s user_id=%s error_type=%s failure_kind=%s error=%s",
                 integration.integration_id,
                 CalendarProvider(integration.provider).value,
                 integration.company_id,
                 integration.user_id,
+                type(outcome).__name__,
+                failure_kind,
+                str(outcome),
+                exc_info=(type(outcome), outcome, outcome.__traceback__),
             )
             continue
         new_events_count, sent_notifications = outcome
@@ -227,10 +269,14 @@ async def calendar_sync_tick(
         stats.notifications_sent += sent_notifications
 
     logger.info(
-        "calendar_sync_tick done: integrations_total=%s success=%s failed=%s new_events=%s notifications=%s scheduler_task_id=%s company_id=%s",
+        "calendar_sync_tick done: integrations_total=%s success=%s failed=%s auth_failed=%s network_failed=%s validation_failed=%s unknown_failed=%s new_events=%s notifications=%s scheduler_task_id=%s company_id=%s",
         stats.integrations_total,
         stats.integrations_success,
         stats.integrations_failed,
+        stats.failures_auth,
+        stats.failures_network,
+        stats.failures_validation,
+        stats.failures_unknown,
         stats.events_new,
         stats.notifications_sent,
         scheduler_task_id,
@@ -240,6 +286,10 @@ async def calendar_sync_tick(
         "integrations_total": stats.integrations_total,
         "integrations_success": stats.integrations_success,
         "integrations_failed": stats.integrations_failed,
+        "auth_failed": stats.failures_auth,
+        "network_failed": stats.failures_network,
+        "validation_failed": stats.failures_validation,
+        "unknown_failed": stats.failures_unknown,
         "events_new": stats.events_new,
         "notifications_sent": stats.notifications_sent,
     }

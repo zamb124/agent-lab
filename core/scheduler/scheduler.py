@@ -6,7 +6,7 @@ from taskiq import TaskiqScheduler
 
 from core.logging import get_logger
 from core.scheduler.source import get_schedule_source
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
 

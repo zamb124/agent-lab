@@ -12,7 +12,7 @@ from core.context import get_context
 from apps.flows.src.eval import safe_eval
 from core.logging import get_logger
 
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-@broker.task(queue_name="default")
+@broker.task(queue_name="flows_worker")
 async def execute_inline_code(code: str, state_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Выполняет inline код через safe_eval.

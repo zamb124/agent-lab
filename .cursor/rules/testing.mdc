@@ -25,8 +25,8 @@ alwaysApply: false
 
 ### Разделение runtime `make app` и тестовых cleanup
 
-- `make app` запускает сервисы/воркеры через alias-модуль `apps.app_runtime_targets`, чтобы сигнатуры процессов не совпадали с тестовыми (`apps.<service>.main:app`, `apps.<worker>.worker:broker`).
-- В test cleanup запрещены широкие паттерны вида `taskiq.*worker`; использовать только точные сигнатуры тестовых воркеров (например `taskiq.*apps.sync_worker.worker:broker`).
+- `make app` запускает сервисы/воркеры через alias-модуль `apps.app_runtime_targets`, чтобы сигнатуры процессов не совпадали с тестовыми (`apps.<service>.main:app`, `apps.<worker>.worker:worker_app`).
+- В test cleanup запрещены широкие паттерны вида `taskiq.*worker`; использовать только точные сигнатуры тестовых воркеров (например `taskiq.*apps.sync_worker.worker:worker_app`).
 - Цель: `make test` не должен убивать локальные процессы, поднятые через `make app`.
 
 **PytestCollectionWarning** (`cannot collect test class ... because it has a __init__`): доменные классы с префиксом `Test*` (например `TestRunner`, `TestCaseConfig`) не должны собираться как тесты — на классе задаётся **`__test__ = False`** (для Pydantic-моделей: **`__test__: ClassVar[bool] = False`**).
@@ -40,7 +40,7 @@ alwaysApply: false
 | Раннер | **@web/test-runner** + **@web/test-runner-playwright** (Chromium), конфиг **[`web-test-runner.config.mjs`](../../web-test-runner.config.mjs)** |
 | Файлы | **`tests/ui_components/**/*.test.js`**, хелперы — **`tests/ui_components/helpers/`** (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture` / `html` / `expect` из `@open-wc/testing`) |
 | Импорты | Как в приложении: `lit` через **node-resolve**, префиксы **`@platform/lib/`** и **`@platform/services/`** — через import map в конфиге (пути к `core/frontend/static/...`) |
-| Запуск | **`npm ci`**, затем **`npm run test:ui-components`** или **`make test-ui-components`**. В **`make test`** / **`docker-compose` tests-runner** **не входит** — нужны Node.js и зависимости из [`package.json`](../../package.json). |
+| Запуск | **`npm ci`**, затем **`npm run test:ui-components`** или **`make test-ui-components`**. В **`make test`** / **`docker-compose` tests_runner** **не входит** — нужны Node.js и зависимости из [`package.json`](../../package.json). |
 | Изоляция сервисов | После тестов вызывать **`teardownPlatformServices()`** — сброс [`ServiceRegistry.resetForUiTests()`](../../core/frontend/static/lib/services/ServiceRegistry.js). Не использовать в прод-коде. |
 | Логи | При `setupPlatformServices` возможны предупреждения PWA (404 для `sw.js`, если раннер не отдаёт статику) — ожидаемо. В **`create_service_app`** при **`TESTING=true`** маршруты PWA по умолчанию не регистрируются. |
 | PWA (HTTP) | **`tests/core/test_pwa_routes.py`**: отдача `/manifest.json`, `/sw.js`, `/offline.html` через `register_platform_pwa_routes`, контракт манифеста, `FileNotFoundError` без артефактов. Не дублирует проверку фабрики при `TESTING=true`; поведение Service Worker в браузере — вне scope (E2E/ручной). |
@@ -152,7 +152,7 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 `@pytest.mark.real_taskiq` отключает `sync_tools` — tools идут через реальный worker и Redis pub/sub.
 
-**Полный E2E flows (webhook → `process_flow_task` → LLM из `mock_llm:responses` → channel HTTP):** маркер `real_taskiq` здесь не использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis — в `apps/flows/main.py` при `TESTING=true` вызываются `get_llm("mock-gpt-4")` и `configure_mock_llm_redis(container.redis_client)` (та же схема, что в `apps/broker/worker.py`). Иначе глобальный `MockLLM` в процессе uvicorn не привязан к Redis, а отдельный platform worker не разделяет с тестом ту же настройку экземпляра.
+**Полный E2E flows (webhook → `process_flow_task` → LLM из `mock_llm:responses` → channel HTTP):** маркер `real_taskiq` здесь не использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis — в `apps/flows/main.py` при `TESTING=true` вызываются `get_llm("mock-gpt-4")` и `configure_mock_llm_redis(container.redis_client)` (та же схема, что в `apps/flows_worker/worker.py`). Иначе глобальный `MockLLM` в процессе uvicorn не привязан к Redis, а отдельный platform worker не разделяет с тестом ту же настройку экземпляра.
 
 **Platform TaskIQ в тестах:** в `tests/fixtures/workers.py` worker запускается с **`-w 1`**, чтобы не было гонок за одним ключом `mock_llm:responses` при нескольких consumer-процессах.
 
@@ -341,7 +341,7 @@ uv run pytest tests/flows/api/test_a2a.py::TestA2A::test_message_send -v -s
 
 ## Внешние зависимости тестового окружения
 
-- **Компонентные UI-тесты (`npm run test:ui-components`):** образ **[`Dockerfile.test`](../../Dockerfile.test)** и контейнер **tests-runner** содержат только Python/uv. Прогон WTR — **отдельным job** с Node.js. **E2E `tests/ui/e2e`** — pytest + Playwright из uv (`uv run playwright install chromium`).
+- **Компонентные UI-тесты (`npm run test:ui-components`):** образ **[`Dockerfile.test`](../../Dockerfile.test)** и контейнер **tests_runner** содержат только Python/uv. Прогон WTR — **отдельным job** с Node.js. **E2E `tests/ui/e2e`** — pytest + Playwright из uv (`uv run playwright install chromium`).
 - Фикстура `test_a2a_sample` — URL тестового A2A sample; в `docker-compose-test.yaml` сервис `test-a2a-agent` проброшен на порт **18052**.
 - `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push тестов.
 - Реальные вызовы LLM API в `test_llm_providers.py` пропускаются (`skip`) при 401/403 от внешнего API в CI.

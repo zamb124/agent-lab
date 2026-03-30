@@ -46,7 +46,7 @@ dev-minio-restart:
 # Test Environment (порты: 54322, 63792, 19002-19012, 18052) - ТОЛЬКО для автотестов
 test:
 	@echo "🧪 Запуск тестов в изолированном окружении (включая MinIO и test-a2a-agent)..."
-	docker-compose -f docker-compose-test.yaml up --build --abort-on-container-exit tests-runner
+	docker-compose -f docker-compose-test.yaml up --build --abort-on-container-exit tests_runner
 	@echo "✅ Тесты завершены"
 
 test-down:
@@ -56,15 +56,15 @@ test-down:
 
 test-unit:
 	@echo "🧪 Запуск unit тестов..."
-	docker-compose -f docker-compose-test.yaml run --rm tests-runner pytest tests/ -m unit -v
+	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m unit -v
 
 test-integration:
 	@echo "🧪 Запуск integration тестов..."
-	docker-compose -f docker-compose-test.yaml run --rm tests-runner pytest tests/ -m integration -v
+	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m integration -v
 
 test-e2e:
 	@echo "🧪 Запуск e2e тестов..."
-	docker-compose -f docker-compose-test.yaml run --rm tests-runner pytest tests/ -m e2e -v
+	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m e2e -v
 
 test-logs:
 	docker-compose -f docker-compose-test.yaml logs -f

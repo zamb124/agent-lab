@@ -28,7 +28,7 @@ async def rag_worker_startup(state: TaskiqState) -> None:
     from apps.rag_worker.config import get_settings
     from core.rag.factory import get_default_rag_provider
 
-    setup_logging(service_name="rag-worker")
+    setup_logging(service_name="rag_worker")
 
     settings = get_settings()
     provider = get_default_rag_provider()

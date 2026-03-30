@@ -8,12 +8,13 @@
     python scripts/run.py crm         # Запуск crm сервиса
     python scripts/run.py rag         # Запуск rag сервиса
     python scripts/run.py sync        # Запуск sync сервиса
-    python scripts/run.py worker      # Запуск TaskIQ worker
+    python scripts/run.py flows_worker # Запуск TaskIQ flows_worker
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
-    python scripts/run.py rag-worker  # Запуск RAG worker
-    python scripts/run.py sync-worker # Запуск Sync worker
-    python scripts/run.py crm-worker  # Запуск CRM worker
+    python scripts/run.py rag_worker  # Запуск RAG worker
+    python scripts/run.py sync_worker # Запуск Sync worker
+    python scripts/run.py crm_worker  # Запуск CRM worker
+    python scripts/run.py idle_worker # Запуск Idle worker
     python scripts/run.py all         # Все сервисы параллельно (make app)
     python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах 8001–8006
     python scripts/run.py kill-ports  # только освободить порты HTTP-сервисов
@@ -69,24 +70,29 @@ SERVICES = {
     },
     
     # TaskIQ workers
-    "worker": {
+    "flows_worker": {
         "type": "taskiq-worker",
-        "broker": "apps.app_runtime_targets:flows_taskiq_broker",
+        "worker_app": "apps.app_runtime_targets:flows_taskiq_worker_app",
         "workers": "1",
     },
-    "rag-worker": {
+    "rag_worker": {
         "type": "taskiq-worker",
-        "broker": "apps.app_runtime_targets:rag_taskiq_broker",
+        "worker_app": "apps.app_runtime_targets:rag_taskiq_worker_app",
         "workers": "1",
     },
-    "sync-worker": {
+    "sync_worker": {
         "type": "taskiq-worker",
-        "broker": "apps.app_runtime_targets:sync_taskiq_broker",
+        "worker_app": "apps.app_runtime_targets:sync_taskiq_worker_app",
         "workers": "1",
     },
-    "crm-worker": {
+    "crm_worker": {
         "type": "taskiq-worker",
-        "broker": "apps.app_runtime_targets:crm_taskiq_broker",
+        "worker_app": "apps.app_runtime_targets:crm_taskiq_worker_app",
+        "workers": "1",
+    },
+    "idle_worker": {
+        "type": "taskiq-worker",
+        "worker_app": "apps.app_runtime_targets:idle_taskiq_worker_app",
         "workers": "1",
     },
     
@@ -124,7 +130,7 @@ def build_command(service: str) -> list[str]:
             "-m",
             "taskiq",
             "worker",
-            config["broker"],
+            config["worker_app"],
             "--workers",
             config["workers"],
         ]

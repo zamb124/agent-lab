@@ -43,7 +43,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV TESTING=true
 
-CMD ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "1"]
+CMD ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "1"]
 
 # Полный образ для pytest и worker/scheduler (последний stage = default при сборке без --target)
 FROM base-test AS default

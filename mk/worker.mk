@@ -1,22 +1,22 @@
-.PHONY: worker-up worker-down worker-logs worker-restart worker-build
+.PHONY: flows-worker-up flows-worker-down flows-worker-logs flows-worker-restart flows-worker-build
 .PHONY: taskiq taskiq-reload taskiq-prod
 .PHONY: taskiq-scheduler taskiq-scheduler-reload
 
-# Docker worker (старый TaskProcessor)
-worker-up:
-	docker-compose up -d worker
+# Docker flows_worker
+flows-worker-up:
+	docker-compose -f docker-compose-prod.yaml up -d flows_worker
 
-worker-down:
-	docker-compose stop worker
+flows-worker-down:
+	docker-compose -f docker-compose-prod.yaml stop flows_worker
 
-worker-logs:
-	docker-compose logs -f worker
+flows-worker-logs:
+	docker-compose -f docker-compose-prod.yaml logs -f flows_worker
 
-worker-restart:
-	docker-compose restart worker
+flows-worker-restart:
+	docker-compose -f docker-compose-prod.yaml restart flows_worker
 
-worker-build:
-	docker-compose build worker
+flows-worker-build:
+	docker-compose -f docker-compose-prod.yaml build flows_worker
 
 # TaskIQ worker
 # ВАЖНО: --workers 1 обязателен для taskiq-postgres, иначе NOTIFY дублирует задачи

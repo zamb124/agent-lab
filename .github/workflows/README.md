@@ -53,7 +53,12 @@
 │  │ crm      │ 8003 │ python -m apps.crm.main                │   │
 │  │ rag      │ 8004 │ python -m apps.rag.main                │   │
 │  │ sync     │ 8005 │ python -m apps.sync.main               │   │
-│  │ worker   │  —   │ taskiq worker apps.broker.worker:broker│   │
+│  │ scheduler-api │ 8006 │ python -m apps.scheduler.main      │   │
+│  │ flows_worker │  —   │ taskiq worker apps.flows_worker.worker:worker_app│   │
+│  │ crm_worker │  —   │ taskiq worker apps.crm_worker.worker:worker_app│   │
+│  │ rag_worker │  —   │ taskiq worker apps.rag_worker.worker:worker_app│   │
+│  │ sync_worker │  —   │ taskiq worker apps.sync_worker.worker:worker_app│   │
+│  │ idle_worker │  —   │ taskiq worker apps.idle_worker.worker:worker_app│   │
 │  │ scheduler│  —   │ taskiq scheduler ...                   │   │
 │  └──────────┴──────┴────────────────────────────────────────┘   │
 │                                                                 │

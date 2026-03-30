@@ -14,6 +14,8 @@ from uuid import uuid4
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
+import httpx
+
 from core.calendar.repositories import CalendarEventSqlRepository, CalendarIntegrationSqlRepository
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
@@ -42,6 +44,10 @@ class GoogleOAuthConfig:
     auth_url: str
     token_url: str
     scope: str
+
+
+class CalendarReauthRequiredError(RuntimeError):
+    """Интеграция требует повторной OAuth авторизации пользователя."""
 
 
 def _ensure_utc(value: datetime) -> datetime:
@@ -351,6 +357,116 @@ class CalendarService:
             token_url=provider.token_url,
             scope="https://www.googleapis.com/auth/calendar",
         )
+
+    @staticmethod
+    def _is_google_access_token_expired(credentials: CalendarIntegrationCredentials) -> bool:
+        if credentials.expires_at is None:
+            return False
+        expires_at = _ensure_utc(credentials.expires_at)
+        return expires_at <= datetime.now(timezone.utc) + timedelta(minutes=2)
+
+    @staticmethod
+    def _extract_oauth_error(payload: dict) -> str | None:
+        error_value = payload.get("error")
+        if isinstance(error_value, str) and error_value != "":
+            return error_value
+        return None
+
+    @staticmethod
+    def _extract_oauth_error_description(payload: dict) -> str | None:
+        description = payload.get("error_description")
+        if isinstance(description, str) and description != "":
+            return description
+        return None
+
+    async def _disable_google_integration_and_raise_reauth(
+        self,
+        *,
+        integration: CalendarIntegration,
+        reason: str,
+    ) -> None:
+        disabled_settings = integration.settings.model_copy(update={"sync_enabled": False})
+        disabled_integration = integration.model_copy(
+            update={
+                "settings": disabled_settings,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        )
+        await self._integration_repository.upsert(disabled_integration)
+        raise CalendarReauthRequiredError(
+            f"Google integration requires re-auth: integration_id={integration.integration_id}, "
+            f"company_id={integration.company_id}, user_id={integration.user_id}, reason={reason}"
+        )
+
+    async def _refresh_google_access_token(
+        self,
+        *,
+        integration: CalendarIntegration,
+    ) -> CalendarIntegration:
+        refresh_token = integration.credentials.refresh_token
+        if refresh_token is None or refresh_token == "":
+            await self._disable_google_integration_and_raise_reauth(
+                integration=integration,
+                reason="missing_refresh_token",
+            )
+        oauth_config = self._get_google_oauth_config()
+        async with get_httpx_client(timeout=30.0) as client:
+            response = await client.post(
+                oauth_config.token_url,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": oauth_config.client_id,
+                    "client_secret": oauth_config.client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        if response.status_code >= 400:
+            payload = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+            oauth_error = self._extract_oauth_error(payload) if isinstance(payload, dict) else None
+            oauth_error_description = self._extract_oauth_error_description(payload) if isinstance(payload, dict) else None
+            if oauth_error == "invalid_grant":
+                reason = "invalid_grant"
+                if oauth_error_description:
+                    reason = f"{reason}:{oauth_error_description}"
+                await self._disable_google_integration_and_raise_reauth(
+                    integration=integration,
+                    reason=reason,
+                )
+            raise RuntimeError(
+                f"Google token refresh failed: integration_id={integration.integration_id}, "
+                f"status_code={response.status_code}, error={oauth_error}, description={oauth_error_description}"
+            )
+        token_payload = response.json()
+        access_token = token_payload.get("access_token")
+        if not isinstance(access_token, str) or access_token == "":
+            raise ValueError("Google token refresh response missing access_token")
+        expires_in = token_payload.get("expires_in")
+        expires_at = None
+        if isinstance(expires_in, int) and expires_in > 0:
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        new_refresh_token = token_payload.get("refresh_token")
+        if not isinstance(new_refresh_token, str) or new_refresh_token == "":
+            new_refresh_token = refresh_token
+        token_type = token_payload.get("token_type")
+        scope = token_payload.get("scope")
+        refreshed_credentials = integration.credentials.model_copy(
+            update={
+                "access_token": access_token,
+                "refresh_token": new_refresh_token,
+                "expires_at": expires_at,
+                "token_type": token_type if isinstance(token_type, str) else integration.credentials.token_type,
+                "scope": scope if isinstance(scope, str) else integration.credentials.scope,
+            }
+        )
+        refreshed_integration = integration.model_copy(
+            update={
+                "credentials": refreshed_credentials,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        )
+        await self._integration_repository.upsert(refreshed_integration)
+        return refreshed_integration
 
     async def start_google_oauth(
         self,
@@ -730,24 +846,40 @@ class CalendarService:
         imported = 0
         exported = 0
         if provider == CalendarProvider.GOOGLE:
-            if integration.settings.sync_inbound_enabled:
-                imported = await self._sync_google_inbound(
-                    company_id=company_id,
-                    user_id=user_id,
-                    credentials=integration.credentials,
-                    calendar_id=calendar_id,
-                    start_at=start_at,
-                    end_at=end_at,
-                )
-            if integration.settings.sync_outbound_enabled:
-                exported = await self._sync_google_outbound(
-                    user_id=user_id,
-                    company_id=company_id,
-                    credentials=integration.credentials,
-                    calendar_id=calendar_id,
-                    start_at=start_at,
-                    end_at=end_at,
-                )
+            google_integration = integration
+            if self._is_google_access_token_expired(google_integration.credentials):
+                google_integration = await self._refresh_google_access_token(integration=google_integration)
+
+            async def _run_google_sync(current_integration: CalendarIntegration) -> tuple[int, int]:
+                imported_events = 0
+                exported_events = 0
+                if current_integration.settings.sync_inbound_enabled:
+                    imported_events = await self._sync_google_inbound(
+                        company_id=company_id,
+                        user_id=user_id,
+                        credentials=current_integration.credentials,
+                        calendar_id=calendar_id,
+                        start_at=start_at,
+                        end_at=end_at,
+                    )
+                if current_integration.settings.sync_outbound_enabled:
+                    exported_events = await self._sync_google_outbound(
+                        user_id=user_id,
+                        company_id=company_id,
+                        credentials=current_integration.credentials,
+                        calendar_id=calendar_id,
+                        start_at=start_at,
+                        end_at=end_at,
+                    )
+                return imported_events, exported_events
+
+            try:
+                imported, exported = await _run_google_sync(google_integration)
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code != 401:
+                    raise
+                google_integration = await self._refresh_google_access_token(integration=google_integration)
+                imported, exported = await _run_google_sync(google_integration)
             return {"imported": imported, "exported": exported}
         if provider == CalendarProvider.YANDEX:
             if not integration.credentials.username:
