@@ -15,6 +15,7 @@ import '../components/mini-graph-preview.js';
 const VIEW_MODES = ['influence', 'related', 'path'];
 
 const GRAPH_PANELS_STORAGE_KEY = 'crm_graph_panels';
+const GRAPH_TIMELINE_SEEDED_KEY = 'crm_graph_timeline_seeded';
 const PANEL_IDS = ['search', 'timeline', 'legend', 'meta'];
 
 function _loadPanelVisibility() {
@@ -603,6 +604,7 @@ export class GraphPage extends PlatformElement {
         this._namespaceDescriptionInput = '';
         this._isFullscreen = false;
         this._defaultOverviewActive = true;
+        this._overviewSeedEntityIds = [];
         this._showSidePanel = false;
         this._canvasPathState = 'idle';
         this._canvasPathHint = 'Режим обзора';
@@ -744,6 +746,38 @@ export class GraphPage extends PlatformElement {
         this._timelineMaxTimestamp = maxTimestamp;
         this._timelineStartPercent = Math.max(0, Math.min(100, this._timelineStartPercent));
         this._timelineEndPercent = Math.max(this._timelineStartPercent, Math.min(100, this._timelineEndPercent));
+    }
+
+    _applyDefaultTimelineTodayIfNeeded() {
+        if (typeof sessionStorage === 'undefined') {
+            return;
+        }
+        if (sessionStorage.getItem(GRAPH_TIMELINE_SEEDED_KEY)) {
+            return;
+        }
+        if (!this._timelineMinTimestamp || !this._timelineMaxTimestamp) {
+            sessionStorage.setItem(GRAPH_TIMELINE_SEEDED_KEY, '1');
+            return;
+        }
+        const span = Math.max(1, this._timelineMaxTimestamp - this._timelineMinTimestamp);
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        let startPercent = ((startOfDay.getTime() - this._timelineMinTimestamp) / span) * 100;
+        let endPercent = ((endOfDay.getTime() - this._timelineMinTimestamp) / span) * 100;
+        startPercent = Math.max(0, Math.min(100, startPercent));
+        endPercent = Math.max(0, Math.min(100, endPercent));
+        if (endPercent < startPercent) {
+            const tmp = startPercent;
+            startPercent = endPercent;
+            endPercent = tmp;
+        }
+        if (endPercent - startPercent < 0.5) {
+            endPercent = Math.min(100, startPercent + 0.5);
+        }
+        this._timelineStartPercent = startPercent;
+        this._timelineEndPercent = endPercent;
+        sessionStorage.setItem(GRAPH_TIMELINE_SEEDED_KEY, '1');
     }
 
     _isNodeInTimelineWindow(node) {
@@ -1485,9 +1519,19 @@ export class GraphPage extends PlatformElement {
             await this._ensureEntityTypePaletteLoaded(namespaceName);
             const timelineBounds = await crmApi.getEntityTimelineBounds({ namespace: namespaceName });
             this._applyTimelineBounds(timelineBounds);
+            this._applyDefaultTimelineTodayIfNeeded();
             const timelineParams = this._getTimelineQueryParams();
             const entities = await crmApi.getEntities({ namespace: namespaceName, limit: 120, ...timelineParams });
+            const noteEntities = await crmApi.getEntities({
+                namespace: namespaceName,
+                entity_type: 'note',
+                limit: 20,
+                ...timelineParams,
+            });
             this._entities = Array.isArray(entities) ? entities : [];
+            this._overviewSeedEntityIds = Array.isArray(noteEntities)
+                ? noteEntities.map((item) => item.entity_id)
+                : [];
             if (!this._selectedRootId && this._entities.length > 0) {
                 this._selectedRootId = CRMStore.state.entities.currentEntityId || this._entities[0].entity_id;
             }
@@ -1529,19 +1573,20 @@ export class GraphPage extends PlatformElement {
     }
 
     async _buildLatestEntitiesInfluenceGraph() {
-        const seedEntities = this._entities.slice(0, 20);
-        if (seedEntities.length === 0) {
+        const seedIds = this._overviewSeedEntityIds;
+        if (seedIds.length === 0) {
             this._graphNodes = [];
             this._graphEdges = [];
             this._shortestPathEdges = [];
             return;
         }
-        const seedIds = seedEntities.map((entity) => entity.entity_id);
         const relationshipType = this._getRelationshipFilter();
         const timelineParams = this._getTimelineQueryParams();
+        const namespaceName = this._getNamespaceName();
         const response = await this.crmApi.getOverviewGraph(seedIds, {
             max_depth: this._maxDepth,
             relationship_types: relationshipType,
+            namespace: namespaceName || null,
             ...timelineParams,
         });
         if (!response || typeof response !== 'object') {
@@ -1565,7 +1610,12 @@ export class GraphPage extends PlatformElement {
 
     async _buildInfluenceGraph() {
         const relationshipType = this._getRelationshipFilter();
-        const params = { max_depth: this._maxDepth, ...this._getTimelineQueryParams() };
+        const namespaceName = this._getNamespaceName();
+        const params = {
+            max_depth: this._maxDepth,
+            namespace: namespaceName || null,
+            ...this._getTimelineQueryParams(),
+        };
         if (relationshipType) {
             params.relationship_types = relationshipType;
         }

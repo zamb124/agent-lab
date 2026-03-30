@@ -31,6 +31,14 @@ logger = get_logger(__name__)
 MAX_NODES_IN_GRAPH = 1000
 
 
+class GraphEntityLimitExceededError(Exception):
+    """Слишком много сущностей в выбранном периоде/пространстве для построения графа."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 class GraphService:
     """
     Сервис для анализа графа связей.
@@ -52,6 +60,39 @@ class GraphService:
         self._relationship_type_repo = relationship_type_repo
         self._entity_repo = entity_repo
         self._access_control = access_control
+
+    def _timeline_filters_for_count(
+        self,
+        created_at_from: Optional[datetime],
+        created_at_to: Optional[datetime],
+    ) -> Optional[Dict[str, Any]]:
+        if created_at_from is None and created_at_to is None:
+            return None
+        created_spec: Dict[str, Any] = {}
+        if created_at_from is not None:
+            created_spec["$gte"] = created_at_from
+        if created_at_to is not None:
+            created_spec["$lte"] = created_at_to
+        return {"created_at": created_spec}
+
+    async def _ensure_graph_entity_count_within_limit(
+        self,
+        namespace: Optional[str],
+        created_at_from: Optional[datetime],
+        created_at_to: Optional[datetime],
+    ) -> None:
+        if created_at_from is None and created_at_to is None:
+            return
+        filters = self._timeline_filters_for_count(created_at_from, created_at_to)
+        count = await self._entity_repo.count_all(
+            namespace=namespace,
+            filters=filters,
+        )
+        if count > MAX_NODES_IN_GRAPH:
+            raise GraphEntityLimitExceededError(
+                f"В выбранном периоде слишком много сущностей ({count}), "
+                f"максимум для графа — {MAX_NODES_IN_GRAPH}. Сузьте период на таймлайне."
+            )
     
     def _get_context_info(self) -> Tuple[Optional[str], Optional[str]]:
         """
@@ -97,6 +138,7 @@ class GraphService:
         relationship_types: Optional[List[str]] = None,
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
+        namespace: Optional[str] = None,
     ) -> InfluenceGraphResponse:
         """
         Строит граф влияния от entity с учетом:
@@ -119,6 +161,10 @@ class GraphService:
         user_id, company_id = self._get_context_info()
         timeline_from = self._normalize_datetime(created_at_from)
         timeline_to = self._normalize_datetime(created_at_to)
+
+        await self._ensure_graph_entity_count_within_limit(
+            namespace, timeline_from, timeline_to
+        )
         
         root_entity = await self._entity_repo.get(entity_id)
         if not root_entity:
@@ -144,8 +190,9 @@ class GraphService:
         
         while queue:
             if len(visited) > MAX_NODES_IN_GRAPH:
-                logger.warning(f"Graph too large, stopping at {MAX_NODES_IN_GRAPH} nodes")
-                break
+                raise GraphEntityLimitExceededError(
+                    f"Граф превышает лимит {MAX_NODES_IN_GRAPH} вершин; сузьте период или глубину."
+                )
             
             current_id, current_level = queue.popleft()
             
@@ -212,11 +259,17 @@ class GraphService:
         relationship_types: Optional[List[str]] = None,
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
+        namespace: Optional[str] = None,
     ) -> InfluenceGraphResponse:
         """Объединённый граф влияния по нескольким seed-сущностям за один вызов."""
         user_id, company_id = self._get_context_info()
         timeline_from = self._normalize_datetime(created_at_from)
         timeline_to = self._normalize_datetime(created_at_to)
+
+        await self._ensure_graph_entity_count_within_limit(
+            namespace, timeline_from, timeline_to
+        )
+
         direction_map = await self._build_direction_map()
 
         visited: Set[str] = set()
@@ -243,8 +296,9 @@ class GraphService:
 
         while queue:
             if len(visited) > MAX_NODES_IN_GRAPH:
-                logger.warning(f"Overview graph too large, stopping at {MAX_NODES_IN_GRAPH} nodes")
-                break
+                raise GraphEntityLimitExceededError(
+                    f"Граф превышает лимит {MAX_NODES_IN_GRAPH} вершин; сузьте период или глубину."
+                )
             current_id, current_level = queue.popleft()
             if current_level >= max_depth:
                 continue
@@ -295,6 +349,7 @@ class GraphService:
         max_depth: int = 10,
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
+        namespace: Optional[str] = None,
     ) -> ShortestPathResponse:
         """
         Кратчайший путь между entities с учетом весов.
@@ -312,6 +367,10 @@ class GraphService:
         user_id, company_id = self._get_context_info()
         timeline_from = self._normalize_datetime(created_at_from)
         timeline_to = self._normalize_datetime(created_at_to)
+
+        await self._ensure_graph_entity_count_within_limit(
+            namespace, timeline_from, timeline_to
+        )
         
         logger.info(f"Finding shortest path: from={from_entity_id}, to={to_entity_id}, user={user_id}, company={company_id}")
         
@@ -391,6 +450,7 @@ class GraphService:
         relationship_type: Optional[str] = None,
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
+        namespace: Optional[str] = None,
     ) -> RelatedEntitiesResponse:
         """
         Получает прямо связанные entities (1 уровень).
@@ -406,6 +466,10 @@ class GraphService:
         user_id, company_id = self._get_context_info()
         timeline_from = self._normalize_datetime(created_at_from)
         timeline_to = self._normalize_datetime(created_at_to)
+
+        await self._ensure_graph_entity_count_within_limit(
+            namespace, timeline_from, timeline_to
+        )
         
         entity = await self._entity_repo.get(entity_id)
         if not entity:

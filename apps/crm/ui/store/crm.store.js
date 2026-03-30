@@ -153,6 +153,25 @@ function getSuggestionDedupeKey(suggestion) {
     return `${entityType}|${entitySubtype}|${name}|${dueDate}|${noteDate}`;
 }
 
+function normalizeNameForRelationshipLookup(value) {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    let s = value.trim().toLowerCase();
+    s = s.replace(/[«»""''`]/g, '');
+    s = s.replace(/\s+/g, ' ');
+    return s;
+}
+
+function buildEntityResolutionKey(entityType, name) {
+    const t = normalizeString(entityType).toLowerCase();
+    const n = normalizeNameForRelationshipLookup(name);
+    if (t.length === 0 || n.length === 0) {
+        throw new Error('Для сопоставления связи нужны entity_type и name');
+    }
+    return `${t}|${n}`;
+}
+
 function normalizeAnalyzeResponse(analysis) {
     if (!analysis || typeof analysis !== 'object') {
         throw new Error('Analyze response must be object');
@@ -949,9 +968,13 @@ export const CRMStore = {
             throw new Error('Not a relationship suggestion');
         }
 
+        const currentNoteId = baseStore.state.entities.currentNoteId;
+        const idByKey = this._buildEntityIdLookupFromOpenSuggestions(suggestions, currentNoteId);
+        const { sourceId, targetId } = this._resolveRelationshipEndpointsFromLookup(suggestion, idByKey);
+
         const relationship = await this._createRelationshipIfMissing(crmApi, {
-            source_entity_id: suggestion.source_entity_id,
-            target_entity_id: suggestion.target_entity_id,
+            source_entity_id: sourceId,
+            target_entity_id: targetId,
             relationship_type: suggestion.relationship_type,
             weight: suggestion.weight || 1.0,
             attributes: suggestion.attributes || {},
@@ -1006,6 +1029,78 @@ export const CRMStore = {
         return updated;
     },
 
+    _buildEntityIdLookupAfterEntityConfirm(uniqueEntitySuggestions, createdOrUpdatedEntities, currentNoteId) {
+        const idByKey = new Map();
+        if (currentNoteId) {
+            const noteRow = baseStore.state.entities.notes.find((item) => item.entity_id === currentNoteId);
+            if (noteRow && typeof noteRow.name === 'string' && noteRow.name.trim().length > 0) {
+                idByKey.set(buildEntityResolutionKey('note', noteRow.name), currentNoteId);
+            }
+        }
+        for (let i = 0; i < uniqueEntitySuggestions.length; i++) {
+            const s = uniqueEntitySuggestions[i];
+            const ent = createdOrUpdatedEntities[i];
+            if (!ent || typeof ent.entity_id !== 'string' || ent.entity_id.trim().length === 0) {
+                throw new Error('Подтверждение сущности должно вернуть entity_id');
+            }
+            idByKey.set(buildEntityResolutionKey(s.entity_type, s.name), ent.entity_id);
+        }
+        return idByKey;
+    },
+
+    _buildEntityIdLookupFromOpenSuggestions(suggestions, currentNoteId) {
+        const idByKey = new Map();
+        if (currentNoteId) {
+            const noteRow = baseStore.state.entities.notes.find((item) => item.entity_id === currentNoteId);
+            if (noteRow && typeof noteRow.name === 'string' && noteRow.name.trim().length > 0) {
+                idByKey.set(buildEntityResolutionKey('note', noteRow.name), currentNoteId);
+            }
+        }
+        const entityRows = suggestions.filter((item) => item?.entity_type && !isRelationshipSuggestion(item));
+        for (const s of entityRows) {
+            if (s.dedup_action === 'merge' && typeof s.dedup_existing_id === 'string' && s.dedup_existing_id.trim().length > 0) {
+                idByKey.set(buildEntityResolutionKey(s.entity_type, s.name), s.dedup_existing_id.trim());
+            }
+        }
+        return idByKey;
+    },
+
+    _resolveRelationshipEndpointsFromLookup(relationship, idByKey) {
+        let sourceId = normalizeString(relationship.source_entity_id);
+        let targetId = normalizeString(relationship.target_entity_id);
+        if (sourceId.length === 0) {
+            const st = normalizeString(relationship.source_type);
+            const sn = relationship.source_name;
+            if (typeof sn !== 'string' || sn.trim().length === 0) {
+                throw new Error('У связи нет source_entity_id и source_name');
+            }
+            const key = buildEntityResolutionKey(st, sn);
+            const hit = idByKey.get(key);
+            if (!hit) {
+                throw new Error(
+                    `Не найдена сущность-источник связи: «${sn}» (тип ${st}). Подтвердите сущности целиком или проверьте совпадение имени с карточкой.`,
+                );
+            }
+            sourceId = hit;
+        }
+        if (targetId.length === 0) {
+            const tt = normalizeString(relationship.target_type);
+            const tn = relationship.target_name;
+            if (typeof tn !== 'string' || tn.trim().length === 0) {
+                throw new Error('У связи нет target_entity_id и target_name');
+            }
+            const key = buildEntityResolutionKey(tt, tn);
+            const hit = idByKey.get(key);
+            if (!hit) {
+                throw new Error(
+                    `Не найдена целевая сущность связи: «${tn}» (тип ${tt}). Подтвердите сущности целиком или проверьте совпадение имени с карточкой.`,
+                );
+            }
+            targetId = hit;
+        }
+        return { sourceId, targetId };
+    },
+
     async confirmAllSuggestions(crmApi) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
@@ -1055,15 +1150,20 @@ export const CRMStore = {
             processedCount++;
         }
 
+        const idByKey = this._buildEntityIdLookupAfterEntityConfirm(
+            uniqueEntitySuggestions,
+            createdOrUpdatedEntities,
+            currentNoteId,
+        );
+
         const relationships = suggestions.filter((item) => isRelationshipSuggestion(item));
         const relationshipKeys = new Set();
         for (const suggestion of relationships) {
-            const sourceId = normalizeString(suggestion.source_entity_id);
-            const targetId = normalizeString(suggestion.target_entity_id);
             const typeId = normalizeString(suggestion.relationship_type);
-            if (sourceId.length === 0 || targetId.length === 0 || typeId.length === 0) {
-                continue;
+            if (typeId.length === 0) {
+                throw new Error('У связи не задан relationship_type');
             }
+            const { sourceId, targetId } = this._resolveRelationshipEndpointsFromLookup(suggestion, idByKey);
             const relationKey = `${sourceId}|${targetId}|${typeId}`;
             if (relationshipKeys.has(relationKey)) {
                 continue;

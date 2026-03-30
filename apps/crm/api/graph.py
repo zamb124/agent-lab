@@ -15,7 +15,7 @@ from apps.crm.models.graph import (
     InfluenceGraphResponse,
     RelatedEntitiesResponse
 )
-from apps.crm.services.graph_service import GraphService
+from apps.crm.services.graph_service import GraphEntityLimitExceededError, GraphService
 from apps.crm.dependencies import get_graph_service
 from core.logging import get_logger
 
@@ -30,6 +30,7 @@ class OverviewGraphRequest(BaseModel):
     relationship_types: Optional[str] = Field(default=None, description="Comma-separated типы связей")
     created_at_from: Optional[datetime] = None
     created_at_to: Optional[datetime] = None
+    namespace: Optional[str] = Field(default=None, description="Namespace для проверки лимита сущностей в БД")
 
 
 @router.post("/overview-graph", response_model=InfluenceGraphResponse)
@@ -52,8 +53,11 @@ async def get_overview_graph(
             relationship_types=rel_types_list,
             created_at_from=request.created_at_from,
             created_at_to=request.created_at_to,
+            namespace=request.namespace,
         )
         return graph
+    except GraphEntityLimitExceededError as e:
+        raise HTTPException(status_code=400, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
@@ -70,6 +74,7 @@ async def get_influence_graph(
     relationship_types: Optional[str] = Query(None, description="Comma-separated типы связей"),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
+    namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
     service: GraphService = Depends(get_graph_service)
 ):
     """
@@ -103,8 +108,11 @@ async def get_influence_graph(
             relationship_types=rel_types_list,
             created_at_from=created_at_from,
             created_at_to=created_at_to,
+            namespace=namespace,
         )
         return graph
+    except GraphEntityLimitExceededError as e:
+        raise HTTPException(status_code=400, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
@@ -121,6 +129,7 @@ async def get_related_entities(
     relationship_type: Optional[str] = Query(None),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
+    namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
     service: GraphService = Depends(get_graph_service)
 ):
     """
@@ -144,8 +153,11 @@ async def get_related_entities(
             relationship_type=relationship_type,
             created_at_from=created_at_from,
             created_at_to=created_at_to,
+            namespace=namespace,
         )
         return related
+    except GraphEntityLimitExceededError as e:
+        raise HTTPException(status_code=400, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

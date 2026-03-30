@@ -11,7 +11,7 @@ from apps.crm.models.api import RelationshipCreate, RelationshipResponse, Relati
 from apps.crm.models.graph import ShortestPathResponse
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
-from apps.crm.services.graph_service import GraphService
+from apps.crm.services.graph_service import GraphEntityLimitExceededError, GraphService
 from apps.crm.container import get_crm_container
 from apps.crm.dependencies import get_graph_service
 from apps.crm.db.models import Relationship, RelationshipType
@@ -154,6 +154,7 @@ async def find_shortest_path(
     max_depth: int = Query(10, ge=1, le=20, description="Максимальная глубина поиска"),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
+    namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
     service: GraphService = Depends(get_graph_service)
 ):
     """
@@ -183,8 +184,11 @@ async def find_shortest_path(
             max_depth=max_depth,
             created_at_from=created_at_from,
             created_at_to=created_at_to,
+            namespace=namespace,
         )
         return path
+    except GraphEntityLimitExceededError as e:
+        raise HTTPException(status_code=400, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
