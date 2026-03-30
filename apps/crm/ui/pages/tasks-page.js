@@ -23,6 +23,8 @@ export class TasksPage extends PlatformElement {
         _activeStatus: { state: true },
         _dragOverStatus: { state: true },
         _draggingTaskId: { state: true },
+        _dndInsert: { state: true },
+        _dndSourceStatus: { state: true },
     };
 
     static styles = [
@@ -235,6 +237,20 @@ export class TasksPage extends PlatformElement {
                 box-shadow: inset 0 0 0 1px var(--crm-selected-stroke);
             }
 
+            .dnd-gap {
+                height: 4px;
+                margin: 4px 0;
+                border-radius: var(--radius-sm);
+                background: linear-gradient(
+                    90deg,
+                    var(--crm-daily-notes-cta-bg),
+                    var(--accent-tertiary, #8794f0)
+                );
+                box-shadow: 0 0 0 1px var(--crm-selected-stroke);
+                flex-shrink: 0;
+                pointer-events: none;
+            }
+
             @media (prefers-reduced-motion: reduce) {
                 .column-body {
                     transition: none;
@@ -260,24 +276,59 @@ export class TasksPage extends PlatformElement {
                 background: var(--crm-surface-elevated);
             }
 
-            .task-card[draggable='true'] {
-                cursor: grab;
-            }
-
-            .task-card[draggable='true']:active {
-                cursor: grabbing;
-            }
-
             .task-card.dnd-dragging {
                 opacity: 0.55;
                 transform: scale(0.98);
                 box-shadow: var(--glass-shadow-medium, 0 8px 24px rgba(0, 0, 0, 0.12));
             }
 
-            .task-header {
+            .task-card-top {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+
+            .task-card-top-main {
                 display: flex;
                 align-items: center;
                 gap: 10px;
+                min-width: 0;
+                flex: 1;
+            }
+
+            .task-drag-handle {
+                flex-shrink: 0;
+                width: 32px;
+                height: 32px;
+                margin: -4px -4px 0 0;
+                padding: 0;
+                box-sizing: border-box;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: grab;
+                touch-action: none;
+                user-select: none;
+                -webkit-user-select: none;
+                transition: color var(--duration-fast), background var(--duration-fast);
+            }
+
+            .task-drag-handle * {
+                pointer-events: none;
+            }
+
+            .task-drag-handle:hover {
+                color: var(--text-secondary);
+                background: var(--crm-surface-tint);
+            }
+
+            .task-drag-handle:active {
+                cursor: grabbing;
             }
 
             .task-icon {
@@ -303,11 +354,8 @@ export class TasksPage extends PlatformElement {
                 white-space: nowrap;
                 flex: 1;
                 min-width: 0;
-                background: transparent;
-                border: none;
                 padding: 0;
                 text-align: left;
-                cursor: pointer;
             }
 
             .task-meta {
@@ -469,6 +517,8 @@ export class TasksPage extends PlatformElement {
         this._activeStatus = 'todo';
         this._dragOverStatus = null;
         this._draggingTaskId = null;
+        this._dndInsert = null;
+        this._dndSourceStatus = null;
 
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._isMobile = state.ui.isMobile;
@@ -546,22 +596,59 @@ export class TasksPage extends PlatformElement {
             return;
         }
         this._draggingTaskId = task.entity_id;
+        this._dndSourceStatus = this._taskStatus(task);
+        this._dndInsert = null;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData(TASK_DND_MIME, task.entity_id);
         e.dataTransfer.setData('text/plain', task.entity_id);
-        const card = e.currentTarget;
-        card.classList.add('dnd-dragging');
+        const card = e.currentTarget.closest('.task-card');
+        if (card) {
+            card.classList.add('dnd-dragging');
+        }
     }
 
     _onTaskDragEnd(e) {
-        const card = e.currentTarget;
-        card.classList.remove('dnd-dragging');
+        const card = e.currentTarget.closest('.task-card');
+        if (card) {
+            card.classList.remove('dnd-dragging');
+        }
         this._draggingTaskId = null;
         this._dragOverStatus = null;
+        this._dndInsert = null;
+        this._dndSourceStatus = null;
         this._scheduleClearSuppressTaskClick();
     }
 
-    _onColumnDragOver(e, targetStatus) {
+    _computeDndInsert(e, statusId) {
+        const source = this._dndSourceStatus;
+        if (!source || source === statusId) {
+            this._dndInsert = null;
+            return;
+        }
+        const body = e.currentTarget;
+        const cards = [...body.querySelectorAll('.task-card:not(.dnd-dragging)')];
+        const y = e.clientY;
+        let beforeTaskId = '__end__';
+        for (const el of cards) {
+            const id = el.dataset.taskId;
+            if (!id) {
+                continue;
+            }
+            const r = el.getBoundingClientRect();
+            const mid = r.top + r.height / 2;
+            if (y < mid) {
+                beforeTaskId = id;
+                break;
+            }
+        }
+        const prev = this._dndInsert;
+        if (prev && prev.status === statusId && prev.beforeTaskId === beforeTaskId) {
+            return;
+        }
+        this._dndInsert = { status: statusId, beforeTaskId };
+    }
+
+    _onColumnBodyDragOver(e, targetStatus) {
         if (this._isMobile || !this._draggingTaskId) {
             return;
         }
@@ -570,14 +657,7 @@ export class TasksPage extends PlatformElement {
         if (this._dragOverStatus !== targetStatus) {
             this._dragOverStatus = targetStatus;
         }
-    }
-
-    _onColumnDragEnter(e, targetStatus) {
-        if (this._isMobile || !this._draggingTaskId) {
-            return;
-        }
-        e.preventDefault();
-        this._dragOverStatus = targetStatus;
+        this._computeDndInsert(e, targetStatus);
     }
 
     _onColumnDragLeave(e) {
@@ -590,6 +670,40 @@ export class TasksPage extends PlatformElement {
             return;
         }
         this._dragOverStatus = null;
+        this._dndInsert = null;
+    }
+
+    _dndGapBeforeTask(statusId, taskId) {
+        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) {
+            return false;
+        }
+        if (this._dndInsert.status !== statusId) {
+            return false;
+        }
+        return this._dndInsert.beforeTaskId === taskId;
+    }
+
+    _dndGapAfterLast(statusId, taskCount) {
+        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) {
+            return false;
+        }
+        if (this._dndInsert.status !== statusId) {
+            return false;
+        }
+        if (this._dndInsert.beforeTaskId !== '__end__') {
+            return false;
+        }
+        return taskCount > 0;
+    }
+
+    _dndGapEmptyColumn(statusId) {
+        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) {
+            return false;
+        }
+        if (this._dndInsert.status !== statusId) {
+            return false;
+        }
+        return this._dndInsert.beforeTaskId === '__end__';
     }
 
     async _onColumnDrop(e, targetStatus) {
@@ -599,6 +713,7 @@ export class TasksPage extends PlatformElement {
         e.preventDefault();
         e.stopPropagation();
         this._dragOverStatus = null;
+        this._dndInsert = null;
         const rawId = e.dataTransfer.getData(TASK_DND_MIME) || e.dataTransfer.getData('text/plain');
         const taskId = typeof rawId === 'string' ? rawId.trim() : '';
         if (!taskId) {
@@ -621,7 +736,8 @@ export class TasksPage extends PlatformElement {
         if (this._suppressTaskClick) {
             return;
         }
-        if (e.target.closest('.task-move-btn')) {
+        const path = e.composedPath();
+        if (path.some((node) => node instanceof Element && (node.classList.contains('task-move-btn') || node.classList.contains('task-drag-handle')))) {
             return;
         }
         this._openTask(task.entity_id);
@@ -736,40 +852,57 @@ export class TasksPage extends PlatformElement {
                             </div>
                             <div
                                 class="column-body ${this._dragOverStatus === s.id ? 'dnd-target' : ''}"
-                                @dragover=${(e) => this._onColumnDragOver(e, s.id)}
-                                @dragenter=${(e) => this._onColumnDragEnter(e, s.id)}
+                                @dragover=${(e) => this._onColumnBodyDragOver(e, s.id)}
                                 @dragleave=${this._onColumnDragLeave}
                                 @drop=${(e) => this._onColumnDrop(e, s.id)}
                             >
                                 ${this._loading ? html`
                                     <div class="empty">Загрузка...</div>
                                 ` : statusTasks.length === 0 ? html`
+                                    ${this._dndGapEmptyColumn(s.id) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : ''}
                                     <div class="empty">Нет задач</div>
-                                ` : statusTasks.map((task) => html`
-                                    <article
-                                        class="task-card"
-                                        ?draggable=${!this._isMobile}
-                                        @dragstart=${(e) => this._onTaskDragStart(e, task)}
-                                        @dragend=${this._onTaskDragEnd}
-                                        @click=${(e) => this._onTaskCardClick(task, e)}
-                                    >
-                                        <div class="task-header">
-                                            <div class="task-icon">
-                                                <platform-icon name="checklist" size="18"></platform-icon>
+                                ` : html`
+                                    ${statusTasks.map((task) => html`
+                                        ${this._dndGapBeforeTask(s.id, task.entity_id) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : ''}
+                                        <article
+                                            class="task-card"
+                                            data-task-id=${task.entity_id}
+                                            @click=${(e) => this._onTaskCardClick(task, e)}
+                                        >
+                                            <div class="task-card-top">
+                                                <div class="task-card-top-main">
+                                                    <div class="task-icon">
+                                                        <platform-icon name="checklist" size="18"></platform-icon>
+                                                    </div>
+                                                    <span class="task-name">${task.name}</span>
+                                                </div>
+                                                ${!this._isMobile ? html`
+                                                    <div
+                                                        class="task-drag-handle"
+                                                        draggable="true"
+                                                        title="Перетащить задачу"
+                                                        role="button"
+                                                        tabindex="0"
+                                                        aria-label="Перетащить задачу"
+                                                        @dragstart=${(e) => this._onTaskDragStart(e, task)}
+                                                        @dragend=${this._onTaskDragEnd}
+                                                        @click=${(e) => e.stopPropagation()}
+                                                    >
+                                                        <platform-icon name="drag-handle" size="18" ?filled=${true}></platform-icon>
+                                                    </div>
+                                                ` : ''}
                                             </div>
-                                            <button class="task-name" type="button" draggable="false" @click=${(e) => { e.stopPropagation(); this._onTaskCardClick(task, e); }}>
-                                                ${task.name}
-                                            </button>
-                                        </div>
-                                        <div class="task-footer">
-                                            <span class="task-priority">${task.priority || 'medium'}${task.due_date ? ` \u00b7 ${task.due_date}` : ''}</span>
-                                            <button class="task-move-btn" type="button" draggable="false" @click=${(e) => { e.stopPropagation(); this._moveTask(task, this._nextStatus(s.id)); }}>
-                                                <platform-icon name="${this._nextStatusIcon(s.id)}" size="12"></platform-icon>
-                                                ${this._nextStatusLabel(s.id)}
-                                            </button>
-                                        </div>
-                                    </article>
-                                `)}
+                                            <div class="task-footer">
+                                                <span class="task-priority">${task.priority || 'medium'}${task.due_date ? ` \u00b7 ${task.due_date}` : ''}</span>
+                                                <button class="task-move-btn" type="button" @click=${(e) => { e.stopPropagation(); this._moveTask(task, this._nextStatus(s.id)); }}>
+                                                    <platform-icon name="${this._nextStatusIcon(s.id)}" size="12"></platform-icon>
+                                                    ${this._nextStatusLabel(s.id)}
+                                                </button>
+                                            </div>
+                                        </article>
+                                    `)}
+                                    ${this._dndGapAfterLast(s.id, statusTasks.length) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : ''}
+                                `}
                             </div>
                         </section>
                     `;
