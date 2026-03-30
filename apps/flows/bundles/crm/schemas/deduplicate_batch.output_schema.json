@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "properties": {
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pair_index": { "type": "integer" },
+          "is_duplicate": { "type": "boolean" },
+          "confidence": { "type": "number" },
+          "reason": { "type": "string" },
+          "action": { "type": "string", "enum": ["merge", "create"] },
+          "merged_attributes": {
+            "anyOf": [
+              { "type": "null" },
+              { "type": "object", "additionalProperties": { "type": "string" } }
+            ]
+          },
+          "merged_description": {
+            "anyOf": [{ "type": "null" }, { "type": "string" }]
+          }
+        },
+        "required": [
+          "pair_index",
+          "is_duplicate",
+          "confidence",
+          "reason",
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["decisions"],
+  "additionalProperties": false
+}

@@ -291,26 +291,29 @@ class TestEntityDeduplication:
             {
                 "type": "text",
                 "content": json.dumps({
-                    "is_duplicate": True,
-                    "confidence": 0.9,
-                    "reason": "Это тот же контакт",
-                    "action": "merge",
-                    "merged_attributes": {
-                        "email": "petr@company.com",
-                        "phone": "+79998887766"
-                    },
-                    "merged_description": "Менеджер по продажам"
-                })
-            },
-            {
-                "type": "text",
-                "content": json.dumps({
-                    "is_duplicate": False,
-                    "confidence": 0.81,
-                    "reason": "Новый участник команды",
-                    "action": "create",
-                    "merged_attributes": None,
-                    "merged_description": None
+                    "decisions": [
+                        {
+                            "pair_index": 0,
+                            "is_duplicate": True,
+                            "confidence": 0.9,
+                            "reason": "Это тот же контакт",
+                            "action": "merge",
+                            "merged_attributes": {
+                                "email": "petr@company.com",
+                                "phone": "+79998887766"
+                            },
+                            "merged_description": "Менеджер по продажам"
+                        },
+                        {
+                            "pair_index": 1,
+                            "is_duplicate": False,
+                            "confidence": 0.81,
+                            "reason": "Новый участник команды",
+                            "action": "create",
+                            "merged_attributes": None,
+                            "merged_description": None
+                        }
+                    ]
                 })
             }
         ])

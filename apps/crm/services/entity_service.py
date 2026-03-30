@@ -5,8 +5,10 @@
 Включает AI анализ с составными промптами и каскадное удаление через Saga.
 """
 
+import asyncio
+import time
 from collections import deque
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timezone
 import uuid
 import re
@@ -35,6 +37,9 @@ import json
 from datetime import datetime as dt
 logger = get_logger(__name__)
 from core.config import get_settings
+from apps.crm.config import get_crm_settings
+
+_ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
 
 class EntityService:
     """
@@ -575,6 +580,7 @@ class EntityService:
             request.extract_relationship_types
         )
         
+        t_analyze = time.perf_counter()
         ai_result = await self._call_ai_agent(
             text=request.text,
             prompt=prompt,
@@ -582,11 +588,21 @@ class EntityService:
             entity_types=entity_types,
             relationship_types=relationship_types,
         )
+        logger.info(
+            "crm.analyze.flow_llm_ms=%.1f",
+            (time.perf_counter() - t_analyze) * 1000,
+        )
         
         if check_duplicates and ai_result.entities:
+            t_dedup = time.perf_counter()
             dedup_results = await self._deduplicate_entities(
                 extracted_entities=ai_result.entities,
                 namespace=namespace,
+            )
+            logger.info(
+                "crm.analyze.dedup_phase_ms=%.1f entities=%s",
+                (time.perf_counter() - t_dedup) * 1000,
+                len(ai_result.entities),
             )
             
             for i, entity in enumerate(ai_result.entities):
@@ -674,7 +690,8 @@ class EntityService:
         # Извлекаем и нормализуем данные из A2A response
         result_data = self._extract_data_from_a2a_response(response)
         normalized_result = self._normalize_analyze_result(result_data)
-        
+        self._validate_analyze_entity_descriptions(normalized_result)
+
         return AIAnalyzeResponse(
             note=normalized_result.get("note"),
             entities=normalized_result.get("entities", []),
@@ -706,7 +723,29 @@ class EntityService:
             ]
 
         return normalized
-    
+
+    def _validate_analyze_entity_descriptions(self, normalized: Dict[str, Any]) -> None:
+        """Ответ analyze должен содержать непустые описания для note (если не null) и каждой entity."""
+        min_len = _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN
+        note_data = normalized.get("note")
+        if isinstance(note_data, dict):
+            desc = note_data.get("description")
+            if not isinstance(desc, str) or len(desc.strip()) < min_len:
+                raise ValueError(
+                    f"Поле note.description обязательно и должно содержать не менее {min_len} непробельных символов"
+                )
+        entities_data = normalized.get("entities")
+        if not isinstance(entities_data, list):
+            return
+        for i, ent in enumerate(entities_data):
+            if not isinstance(ent, dict):
+                raise ValueError(f"entities[{i}] должен быть объектом")
+            desc = ent.get("description")
+            if not isinstance(desc, str) or len(desc.strip()) < min_len:
+                raise ValueError(
+                    f"Поле entities[{i}].description обязательно и должно содержать не менее {min_len} непробельных символов"
+                )
+
     def _extract_data_from_a2a_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """
         Извлекает структурированные данные из A2A response.
@@ -762,6 +801,7 @@ class EntityService:
                             "is_duplicate",
                             "summary",
                             "structured_output",
+                            "decisions",
                         )
                     ):
                         return data
@@ -1273,36 +1313,54 @@ class EntityService:
         Проверяет каждую entity на дубликат.
         
         Логика:
-        1. Семантический поиск по name + description
+        1. Семантический поиск по name + description (RAG-запросы параллельно)
         2. similarity > 0.95 -> точный дубликат, merge сразу
-        3. similarity 0.7-0.95 -> вызов LLM для уточнения
+        3. similarity 0.7-0.95 -> вызов LLM для уточнения (батч deduplicate_batch при >=2 пар)
         4. similarity < 0.7 -> новая entity
         """
-        results = []
-        
-        for entity in extracted_entities:
+        if not extracted_entities:
+            return []
+
+        crm_settings = get_crm_settings()
+        t_rag = time.perf_counter()
+        rag_sem = asyncio.Semaphore(crm_settings.dedup_rag_max_concurrent_searches)
+
+        async def search_one(entity: AIExtractedEntity) -> List[Tuple[CRMEntity, float]]:
             search_query = f"{entity.name} {entity.description or ''}"
-            scored_candidates = await self._entity_repo.search_with_similarity(
-                query=search_query,
-                entity_type=entity.entity_type,
-                namespace=namespace,
-                limit=3
-            )
-            
+            async with rag_sem:
+                return await self._entity_repo.search_with_similarity(
+                    query=search_query,
+                    entity_type=entity.entity_type,
+                    namespace=namespace,
+                    limit=3,
+                )
+
+        scored_per_entity = await asyncio.gather(*[search_one(e) for e in extracted_entities])
+        logger.info(
+            "crm.dedup.rag_ms=%.1f entities=%s",
+            (time.perf_counter() - t_rag) * 1000,
+            len(extracted_entities),
+        )
+
+        results: List[Optional[DeduplicateResult]] = [None] * len(extracted_entities)
+        need_llm: List[Tuple[int, AIExtractedEntity, CRMEntity, float]] = []
+
+        for i, entity in enumerate(extracted_entities):
+            scored_candidates = scored_per_entity[i]
             if not scored_candidates:
-                results.append(DeduplicateResult(
+                results[i] = DeduplicateResult(
                     is_duplicate=False,
                     confidence=0.0,
                     reason="No candidates found",
-                    action="create"
-                ))
+                    action="create",
+                )
                 continue
-            
+
             top_candidate, similarity = scored_candidates[0]
-            
+
             if similarity > 0.95:
                 merged_attrs = {**(top_candidate.attributes or {}), **(entity.attributes or {})}
-                results.append(DeduplicateResult(
+                results[i] = DeduplicateResult(
                     is_duplicate=True,
                     confidence=similarity,
                     reason="High similarity match",
@@ -1312,20 +1370,68 @@ class EntityService:
                     merged_attributes=merged_attrs,
                     merged_description=self._merge_descriptions(
                         top_candidate.description, entity.description
-                    )
-                ))
+                    ),
+                )
             elif similarity >= 0.7:
-                dedup_result = await self._call_deduplicate_agent(entity, top_candidate)
-                results.append(dedup_result)
+                need_llm.append((i, entity, top_candidate, similarity))
             else:
-                results.append(DeduplicateResult(
+                results[i] = DeduplicateResult(
                     is_duplicate=False,
                     confidence=similarity,
                     reason="Low similarity",
-                    action="create"
-                ))
-        
-        return results
+                    action="create",
+                )
+
+        t_llm = time.perf_counter()
+        if need_llm:
+            llm_by_index = await self._run_llm_deduplicate_round(need_llm)
+            for list_idx, dedup_result in llm_by_index.items():
+                results[list_idx] = dedup_result
+        logger.info(
+            "crm.dedup.llm_ms=%.1f pairs=%s",
+            (time.perf_counter() - t_llm) * 1000,
+            len(need_llm),
+        )
+
+        finalized: List[DeduplicateResult] = []
+        for i, r in enumerate(results):
+            if r is None:
+                raise RuntimeError(f"dedup: не заполнен результат для сущности с индексом {i}")
+            finalized.append(r)
+        return finalized
+
+    async def _run_llm_deduplicate_round(
+        self,
+        need_llm: List[Tuple[int, AIExtractedEntity, CRMEntity, float]],
+    ) -> Dict[int, DeduplicateResult]:
+        """Несколько пар: чанки по dedup_batch_max_pairs; чанки выполняются параллельно с ограничением."""
+        crm_settings = get_crm_settings()
+        max_pairs = crm_settings.dedup_batch_max_pairs_per_request
+        max_concurrent = crm_settings.dedup_llm_max_concurrent_batch_requests
+        chunks: List[List[Tuple[int, AIExtractedEntity, CRMEntity, float]]] = [
+            need_llm[i : i + max_pairs] for i in range(0, len(need_llm), max_pairs)
+        ]
+        chunk_sem = asyncio.Semaphore(max_concurrent)
+
+        async def run_chunk(
+            chunk: List[Tuple[int, AIExtractedEntity, CRMEntity, float]],
+        ) -> Dict[int, DeduplicateResult]:
+            async with chunk_sem:
+                if len(chunk) == 1:
+                    list_idx, extracted, candidate, _sim = chunk[0]
+                    dr = await self._call_deduplicate_agent(extracted, candidate)
+                    return {list_idx: dr}
+                return await self._call_deduplicate_batch_agent(chunk)
+
+        chunk_results = await asyncio.gather(*[run_chunk(c) for c in chunks])
+        merged: Dict[int, DeduplicateResult] = {}
+        for part in chunk_results:
+            merged.update(part)
+        if len(merged) != len(need_llm):
+            raise ValueError(
+                f"dedup LLM: ожидалось {len(need_llm)} решений, получено {len(merged)}"
+            )
+        return merged
     
     def _merge_descriptions(self, existing: Optional[str], new: Optional[str]) -> str:
         """Объединяет описания"""
@@ -1381,3 +1487,85 @@ class EntityService:
             merged_attributes=result_data.get("merged_attributes"),
             merged_description=result_data.get("merged_description")
         )
+
+    async def _call_deduplicate_batch_agent(
+        self,
+        chunk: List[Tuple[int, AIExtractedEntity, CRMEntity, float]],
+    ) -> Dict[int, DeduplicateResult]:
+        """Один LLM-вызов для нескольких пар (извлечённая vs кандидат из RAG)."""
+        settings = get_settings()
+        flows_base_url = settings.server.get_flows_service_url().rstrip("/")
+
+        pairs_for_prompt: List[Dict[str, Any]] = []
+        for pair_index, (list_idx, extracted, candidate, similarity) in enumerate(chunk):
+            pairs_for_prompt.append(
+                {
+                    "pair_index": pair_index,
+                    "list_index": list_idx,
+                    "vector_similarity": similarity,
+                    "extracted_entity": {
+                        "type": extracted.entity_type,
+                        "name": extracted.name,
+                        "description": extracted.description,
+                        "attributes": extracted.attributes,
+                    },
+                    "candidate_entity": {
+                        "entity_id": candidate.entity_id,
+                        "type": candidate.entity_type,
+                        "name": candidate.name,
+                        "description": candidate.description,
+                        "attributes": candidate.attributes,
+                    },
+                }
+            )
+
+        variables = {"pairs_json": json.dumps(pairs_for_prompt, ensure_ascii=False)}
+
+        response = await self._a2a_client.send_task(
+            base_url=f"{flows_base_url}/flows/api/v1/crm",
+            content="Batch deduplicate entity pairs",
+            skill_id="deduplicate_batch",
+            metadata={"variables": variables},
+        )
+
+        result_data = self._extract_data_from_a2a_response(response)
+        decisions = result_data.get("decisions")
+        if not isinstance(decisions, list):
+            raise ValueError("deduplicate_batch: поле decisions должно быть массивом")
+        if len(decisions) != len(chunk):
+            raise ValueError(
+                f"deduplicate_batch: ожидалось {len(chunk)} элементов decisions, получено {len(decisions)}"
+            )
+
+        by_pair_index: Dict[int, Dict[str, Any]] = {}
+        for dec in decisions:
+            if not isinstance(dec, dict):
+                raise ValueError("deduplicate_batch: каждый элемент decisions должен быть объектом")
+            pi = dec.get("pair_index")
+            if not isinstance(pi, int):
+                raise ValueError("deduplicate_batch: pair_index обязателен и должен быть целым числом")
+            by_pair_index[pi] = dec
+
+        out: Dict[int, DeduplicateResult] = {}
+        for pair_index in range(len(chunk)):
+            dec = by_pair_index.get(pair_index)
+            if dec is None:
+                raise ValueError(f"deduplicate_batch: нет решения для pair_index={pair_index}")
+            list_idx, extracted, candidate, _sim = chunk[pair_index]
+            is_dup = bool(dec.get("is_duplicate", False))
+            action_raw = dec.get("action", "create")
+            if action_raw not in ("merge", "create"):
+                raise ValueError(
+                    f"deduplicate_batch: action должен быть merge или create, получено {action_raw!r}"
+                )
+            out[list_idx] = DeduplicateResult(
+                is_duplicate=is_dup,
+                confidence=float(dec.get("confidence", 0.0)),
+                reason=str(dec.get("reason", "")),
+                action=action_raw,
+                existing_entity_id=candidate.entity_id if is_dup else None,
+                existing_entity_name=candidate.name if is_dup else None,
+                merged_attributes=dec.get("merged_attributes"),
+                merged_description=dec.get("merged_description"),
+            )
+        return out

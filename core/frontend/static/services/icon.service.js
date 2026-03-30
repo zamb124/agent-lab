@@ -31,6 +31,7 @@ const ICON_MAP = {
     'logout': 'logout',
     'login': 'login',
     'user': 'user',
+    'users': 'user',
     'settings': 'settings',
     'refresh': 'refresh',
     'tool': 'tool',

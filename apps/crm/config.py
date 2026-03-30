@@ -35,6 +35,18 @@ class CRMSettings(BaseSettings):
         default=10000,
         description="Максимальное количество задач на компанию"
     )
+    dedup_rag_max_concurrent_searches: int = Field(
+        default=16,
+        description="Максимум параллельных RAG-поисков при дедупликации извлечённых сущностей",
+    )
+    dedup_llm_max_concurrent_batch_requests: int = Field(
+        default=4,
+        description="Максимум параллельных A2A-запросов батч-дедупа (чанки пар)",
+    )
+    dedup_batch_max_pairs_per_request: int = Field(
+        default=30,
+        description="Максимум пар сущностей в одном вызове skill deduplicate_batch",
+    )
 
 
 _crm_settings: Optional[CRMSettings] = None

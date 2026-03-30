@@ -93,6 +93,25 @@
         }
       },
       "edges": []
+    },
+    "deduplicate_batch": {
+      "name": "Deduplicate Batch",
+      "description": "Пакетное сравнение нескольких пар извлечённая сущность vs кандидат из БД",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/deduplicate_batch.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.1
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/deduplicate_batch.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
     }
   }
 }
