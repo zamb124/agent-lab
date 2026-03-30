@@ -6,7 +6,7 @@
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 from sqlalchemy import delete, select, and_, func
@@ -70,6 +70,18 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 parts.append(f"Дедлайн: {entity.due_date}")
 
         return "\n".join(parts)
+
+    @staticmethod
+    def _parse_datetime_filter_value(value: Any) -> datetime:
+        if isinstance(value, datetime):
+            parsed_value = value
+        elif isinstance(value, str):
+            parsed_value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        else:
+            raise ValueError("Unsupported datetime filter value type")
+        if parsed_value.tzinfo is None:
+            return parsed_value.replace(tzinfo=timezone.utc)
+        return parsed_value
 
     # -- CRUD --
 
@@ -172,6 +184,34 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def get_created_at_bounds(
+        self,
+        entity_type: Optional[str] = None,
+        entity_subtype: Optional[str] = None,
+        namespace: Optional[str] = None,
+        company_id: Optional[str] = None,
+    ) -> Tuple[Optional[Any], Optional[Any], int]:
+        """Возвращает min/max created_at и количество сущностей."""
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = (
+                select(
+                    func.min(CRMEntity.created_at),
+                    func.max(CRMEntity.created_at),
+                    func.count(CRMEntity.entity_id),
+                )
+                .where(CRMEntity.company_id == cid)
+            )
+            if entity_type:
+                stmt = stmt.where(CRMEntity.entity_type == entity_type)
+            if entity_subtype:
+                stmt = stmt.where(CRMEntity.entity_subtype == entity_subtype)
+            if namespace:
+                stmt = stmt.where(CRMEntity.namespace == namespace)
+            result = await session.execute(stmt)
+            min_created_at, max_created_at, total_entities = result.one()
+            return min_created_at, max_created_at, int(total_entities or 0)
+
     def _apply_filters(self, stmt, filters: Dict[str, Any]):
         """Применяет фильтры к SQL-запросу."""
         for key, value in filters.items():
@@ -196,6 +236,20 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                             stmt = stmt.where(column == d)
                 elif isinstance(value, str):
                     stmt = stmt.where(column == date.fromisoformat(value))
+            elif key == "created_at":
+                column = CRMEntity.created_at
+                if isinstance(value, dict):
+                    for op, op_value in value.items():
+                        dt_value = self._parse_datetime_filter_value(op_value)
+                        if op == "$gte":
+                            stmt = stmt.where(column >= dt_value)
+                        elif op == "$lte":
+                            stmt = stmt.where(column <= dt_value)
+                        elif op == "$eq":
+                            stmt = stmt.where(column == dt_value)
+                else:
+                    dt_value = self._parse_datetime_filter_value(value)
+                    stmt = stmt.where(column == dt_value)
             elif isinstance(value, dict):
                 for op, op_value in value.items():
                     column = getattr(CRMEntity, key, None)

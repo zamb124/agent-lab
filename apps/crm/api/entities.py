@@ -5,9 +5,19 @@ API для работы с entities.
 """
 
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
-from apps.crm.models.api import EntityCreate, EntityUpdate, EntityResponse, AIAnalyzeRequest, AIAnalyzeResponse, SearchMentionsRequest, RelationshipResponse
+from apps.crm.models.api import (
+    EntityCreate,
+    EntityUpdate,
+    EntityResponse,
+    EntityTimelineBoundsResponse,
+    AIAnalyzeRequest,
+    AIAnalyzeResponse,
+    SearchMentionsRequest,
+    RelationshipResponse,
+)
 from apps.crm.db.models import CRMEntity
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.access_control_service import AccessControlService
@@ -61,6 +71,22 @@ async def search_entities(
         limit=limit
     )
     return [EntityResponse.model_validate(e) for e in entities]
+
+
+@router.get("/timeline/bounds", response_model=EntityTimelineBoundsResponse)
+async def get_entities_timeline_bounds(
+    entity_type: Optional[str] = Query(None),
+    entity_subtype: Optional[str] = Query(None),
+    namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
+    service: EntityService = Depends(get_entity_service),
+):
+    """Получить границы timeline по created_at."""
+    bounds = await service.get_timeline_bounds(
+        entity_type=entity_type,
+        entity_subtype=entity_subtype,
+        namespace=namespace,
+    )
+    return EntityTimelineBoundsResponse.model_validate(bounds)
 
 
 @router.get("/{entity_id}")
@@ -142,6 +168,8 @@ async def list_entities(
     user_id: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
+    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
     limit: int = Query(100, le=1000),
     service: EntityService = Depends(get_entity_service)
 ):
@@ -158,6 +186,13 @@ async def list_entities(
             filters["note_date"]["$lte"] = date_to
         else:
             filters["note_date"] = {"$lte": date_to}
+    if created_at_from:
+        filters["created_at"] = {"$gte": created_at_from}
+    if created_at_to:
+        if "created_at" in filters:
+            filters["created_at"]["$lte"] = created_at_to
+        else:
+            filters["created_at"] = {"$lte": created_at_to}
     
     entities = await service.list_entities(
         entity_type=entity_type,

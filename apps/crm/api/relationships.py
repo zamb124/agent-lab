@@ -144,6 +144,8 @@ async def find_shortest_path(
     from_entity_id: str = Query(..., alias="from", description="ID начальной entity"),
     to_entity_id: str = Query(..., alias="to", description="ID конечной entity"),
     max_depth: int = Query(10, ge=1, le=20, description="Максимальная глубина поиска"),
+    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
+    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
     service: GraphService = Depends(get_graph_service)
 ):
     """
@@ -152,7 +154,7 @@ async def find_shortest_path(
     Использует:
     - Алгоритм: Bidirectional Weighted Dijkstra
     - Учитывает weight из Relationship
-    - Учитывает направленность (is_directed, inverse_type_id)
+    - Возвращает два расчета: directed и undirected
     
     Args:
         from_entity_id: Начальная entity
@@ -170,7 +172,9 @@ async def find_shortest_path(
         path = await service.find_shortest_path(
             from_entity_id=from_entity_id,
             to_entity_id=to_entity_id,
-            max_depth=max_depth
+            max_depth=max_depth,
+            created_at_from=created_at_from,
+            created_at_to=created_at_to,
         )
         return path
     except ValueError as e:

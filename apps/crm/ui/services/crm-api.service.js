@@ -11,6 +11,10 @@ export class CRMAPIService extends BaseService {
     async getEntities(params = {}) {
         return this.get('/entities', params);
     }
+
+    async getEntityTimelineBounds(params = {}) {
+        return this.get('/entities/timeline/bounds', params);
+    }
     
     async getEntity(entityId) {
         if (!entityId) {
@@ -173,6 +177,19 @@ export class CRMAPIService extends BaseService {
             throw new Error('Entity ID is required');
         }
         return this.get(`/entities/${entityId}/influence-graph`, params);
+    }
+
+    async getOverviewGraph(entityIds, params = {}) {
+        if (!Array.isArray(entityIds) || entityIds.length === 0) {
+            throw new Error('entity_ids array is required');
+        }
+        return this.post('/entities/overview-graph', {
+            entity_ids: entityIds,
+            max_depth: params.max_depth || 3,
+            relationship_types: params.relationship_types || null,
+            created_at_from: params.created_at_from || null,
+            created_at_to: params.created_at_to || null,
+        });
     }
 
     async getRelatedEntities(entityId, params = {}) {

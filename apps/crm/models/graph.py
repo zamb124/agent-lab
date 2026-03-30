@@ -19,6 +19,10 @@ class GraphNode(BaseModel):
     name: str = Field(description="Название entity или 'Hidden'")
     level: int = Field(description="Глубина от корневого узла (0 для root)")
     access: bool = Field(description="Есть ли полный доступ к entity")
+    created_at: Optional[str] = Field(
+        default=None,
+        description="Время создания entity (ISO8601)"
+    )
     attributes: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Атрибуты entity (только если access=True)"
@@ -69,6 +73,10 @@ class ShortestPathResponse(BaseModel):
     edges: List[GraphEdge] = Field(description="Ребра вдоль пути")
     total_distance: float = Field(description="Сумма весов вдоль пути")
     exists: bool = Field(description="Существует ли путь")
+    undirected_path: List[str] = Field(description="Путь без учета направления ребер")
+    undirected_edges: List[GraphEdge] = Field(description="Ребра пути без учета направления")
+    undirected_total_distance: float = Field(description="Сумма весов пути без учета направления")
+    undirected_exists: bool = Field(description="Существует ли путь без учета направления")
 
 
 class RelatedEntitiesResponse(BaseModel):

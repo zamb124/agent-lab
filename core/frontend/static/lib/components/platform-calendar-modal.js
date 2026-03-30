@@ -27,17 +27,11 @@ const BASE_TIMEZONE_OPTIONS = [
     'Australia/Sydney',
 ];
 
+import { COLOR_PALETTE } from '@platform/lib/utils/color-palette.js';
+
 const EVENT_COLOR_KEY = 'event_color';
 const DEFAULT_EVENT_COLOR = 'default';
-const EVENT_COLOR_OPTIONS = [
-    { key: 'default', dot: '#a2affb' },
-    { key: 'mint', dot: '#34c38f' },
-    { key: 'sky', dot: '#4ea8ff' },
-    { key: 'violet', dot: '#8f7bff' },
-    { key: 'amber', dot: '#f5b14c' },
-    { key: 'rose', dot: '#ef6f98' },
-    { key: 'gray', dot: '#8f96a3' },
-];
+const EVENT_COLOR_OPTIONS = COLOR_PALETTE;
 
 function pad2(value) {
     return String(value).padStart(2, '0');

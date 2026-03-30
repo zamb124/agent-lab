@@ -8,6 +8,7 @@ import {
   waitUntil,
 } from './helpers/index.js';
 
+import { CRMStore } from '../../apps/crm/ui/store/crm.store.js';
 import '../../apps/crm/ui/pages/graph-page.js';
 
 function createForceGraphMock() {
@@ -69,20 +70,43 @@ describe('crm graph page', () => {
     await setupPlatformServices('/crm');
     ServiceRegistry.register('crmApi', {
       getEntities: async () => ([
-        { entity_id: 'entity-1', entity_type: 'contact', name: 'Entity One', attributes: {} },
-        { entity_id: 'entity-2', entity_type: 'note', name: 'Entity Two', attributes: {} },
+        { entity_id: 'entity-1', entity_type: 'contact', name: 'Entity One', attributes: {}, created_at: '2026-01-01T00:00:00Z' },
+        { entity_id: 'entity-2', entity_type: 'note', name: 'Entity Two', attributes: {}, created_at: '2026-12-31T00:00:00Z' },
       ]),
+      getEntityTimelineBounds: async () => ({
+        min_created_at: '2026-01-01T00:00:00Z',
+        max_created_at: '2026-12-31T00:00:00Z',
+        total_entities: 2,
+      }),
+      getOverviewGraph: async () => ({
+        nodes: [
+          { entity_id: 'entity-1', entity_type: 'contact', name: 'Entity One', level: 0, access: true, created_at: '2026-01-01T00:00:00Z' },
+          { entity_id: 'entity-2', entity_type: 'note', name: 'Entity Two', level: 1, access: true, created_at: '2026-12-31T00:00:00Z' },
+        ],
+        edges: [
+          { edge_id: 'edge-1', source_id: 'entity-1', target_id: 'entity-2', relationship_type: 'knows', is_directed: true, weight: 1.0 },
+        ],
+      }),
       getInfluenceGraph: async () => ({
         nodes: [
-          { entity_id: 'entity-1', entity_type: 'contact', name: 'Entity One', level: 0, access: true },
-          { entity_id: 'entity-2', entity_type: 'note', name: 'Entity Two', level: 1, access: true },
+          { entity_id: 'entity-1', entity_type: 'contact', name: 'Entity One', level: 0, access: true, created_at: '2026-01-01T00:00:00Z' },
+          { entity_id: 'entity-2', entity_type: 'note', name: 'Entity Two', level: 1, access: true, created_at: '2026-12-31T00:00:00Z' },
         ],
         edges: [
           { edge_id: 'edge-1', source_id: 'entity-1', target_id: 'entity-2', relationship_type: 'knows', is_directed: true, weight: 1.0 },
         ],
       }),
       getRelatedEntities: async () => ({ incoming: [], outgoing: [], undirected: [] }),
-      getShortestPath: async () => ({ path: ['entity-1', 'entity-2'], edges: [], exists: true, total_distance: 1.0 }),
+      getShortestPath: async () => ({
+        path: ['entity-1', 'entity-2'],
+        edges: [],
+        exists: true,
+        total_distance: 1.0,
+        undirected_path: ['entity-1', 'entity-2'],
+        undirected_edges: [],
+        undirected_exists: true,
+        undirected_total_distance: 1.0,
+      }),
       searchEntities: async () => ([{ entity_id: 'entity-1', name: 'Entity One' }]),
       getEntityRelationships: async () => ({ relationships: [] }),
       uploadAttachment: async () => ({ status: 'ok' }),
@@ -110,8 +134,16 @@ describe('crm graph page', () => {
       getEntity: async () => ({ entity_id: 'entity-1' }),
       findEntitiesByText: async () => ([]),
       analyzeText: async () => ({}),
-      getEntityTypes: async () => ([]),
-      getEntityTypesByNamespace: async () => ([]),
+      getEntityTypes: async () => ([
+        { type_id: 'contact', name: 'Contact', color: '#7ac7ff', namespace_ids: ['default'] },
+        { type_id: 'note', name: 'Note', color: '#ffb457', namespace_ids: ['default'] },
+        { type_id: 'task', name: 'Task', color: '#8ce9a2', namespace_ids: ['default'] },
+      ]),
+      getEntityTypesByNamespace: async () => ([
+        { type_id: 'contact', name: 'Contact', color: '#7ac7ff', namespace_ids: ['default'] },
+        { type_id: 'note', name: 'Note', color: '#ffb457', namespace_ids: ['default'] },
+        { type_id: 'task', name: 'Task', color: '#8ce9a2', namespace_ids: ['default'] },
+      ]),
       createEntityType: async () => ({}),
       getRelationships: async () => ([]),
       getRelationship: async () => ({}),
@@ -150,6 +182,40 @@ describe('crm graph page', () => {
         }
       },
     };
+    CRMStore.setState({
+      namespaces: {
+        list: [{ name: 'default', company_id: 'test-company' }],
+        templates: [],
+        templateDetails: null,
+        schemaOptions: null,
+        current: { name: 'default', company_id: 'test-company' },
+        settingsSelected: null,
+        settingsEditability: null,
+        settingsLoading: false,
+        settingsSaving: false,
+        grants: [],
+        loading: false,
+      },
+      entities: {
+        notes: [],
+        currentNoteId: null,
+        noteText: '',
+        noteRelatedEntities: [],
+        list: [],
+        entityTypes: [
+          { type_id: 'contact', name: 'Contact', color: '#4ea8ff', namespace_ids: ['default'] },
+          { type_id: 'note', name: 'Note', color: '#f5b14c', namespace_ids: ['default'] },
+          { type_id: 'task', name: 'Task', color: '#34c38f', namespace_ids: ['default'] },
+        ],
+        relationshipTypes: [],
+        currentEntityId: null,
+        currentEntity: null,
+        currentEntityRelated: [],
+        relationships: [],
+        filters: { namespace: 'default', entity_type: null, entity_subtype: null, date_from: null, date_to: null, tags: [], search: '', user_id: null },
+        entitiesLoading: false,
+      },
+    });
     window.ForceGraph3D = () => () => createForceGraphMock();
     const vendorScript = document.createElement('script');
     vendorScript.src = '/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js';
@@ -175,10 +241,10 @@ describe('crm graph page', () => {
 
   it('поддерживает graph режимы influence/related/path', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
-    await waitUntil(() => Boolean(el.shadowRoot.querySelector('.toolbar-select')));
-    const modeSelect = el.shadowRoot.querySelector('.toolbar-select');
-    const options = Array.from(modeSelect.querySelectorAll('option')).map((option) => option.value);
-    expect(options).to.deep.equal(['influence', 'related', 'path']);
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('.mode-pills')));
+    const modePills = el.shadowRoot.querySelectorAll('.mode-pill');
+    const modes = Array.from(modePills).map((pill) => pill.textContent.trim());
+    expect(modes).to.deep.equal(['influence', 'related', 'path']);
   });
 
   it('использует офлайн vendor script для 3d-force-graph', async () => {
@@ -188,23 +254,81 @@ describe('crm graph page', () => {
     expect(htmlContent).to.contain('/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js');
   });
 
-  it('включает fullscreen режим графа', async () => {
+  it('не показывает fullscreen toggle в canvas-first UI', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
     await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
     const fullscreenButton = Array.from(el.shadowRoot.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Fullscreen графа'));
-    expect(fullscreenButton).to.exist;
-    fullscreenButton.click();
-    await waitUntil(() => el.shadowRoot.querySelector('.layout').classList.contains('fullscreen'));
+      .find((button) => button.textContent.includes('Fullscreen'));
+    expect(fullscreenButton).to.not.exist;
   });
 
-  it('запускает canvas режим выбора маршрута', async () => {
+  it('рендерит правую икон-панель с tooltip', async () => {
     const el = await fixture(html`<graph-page></graph-page>`);
     await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
-    const pathButton = Array.from(el.shadowRoot.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Построить маршрут'));
+    const iconButtons = el.shadowRoot.querySelectorAll('.icon-toolbar .icon-btn');
+    expect(iconButtons.length).to.be.greaterThan(6);
+    const fitButton = Array.from(iconButtons).find((button) => button.getAttribute('title') === 'Вписать граф');
+    expect(fitButton).to.exist;
+  });
+
+  it('запускает canvas режим выбора маршрута через иконку', async () => {
+    const el = await fixture(html`<graph-page></graph-page>`);
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    const pathButton = el.shadowRoot.querySelector('.icon-toolbar .icon-btn[title="Режим выбора маршрута"]');
     expect(pathButton).to.exist;
     pathButton.click();
     expect(el._canvasPathState).to.equal('pick_source');
+  });
+
+  it('не падает при выборе одинаковых source и target', async () => {
+    const el = await fixture(html`<graph-page></graph-page>`);
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    el._canvasPathState = 'pick_target';
+    el._pathSourceId = 'entity-1';
+    el._onCanvasNodeClick({ id: 'entity-1' });
+    expect(el._canvasPathState).to.equal('pick_target');
+    expect(el._canvasPathHint).to.equal('Выбери другую сущность для target');
+  });
+
+  it('фильтрует видимый граф по левому поиску', async () => {
+    const el = await fixture(html`<graph-page></graph-page>`);
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    el._entitySearchQuery = 'Entity Two';
+    await el.updateComplete;
+    const snapshot = el._getVisibleGraphSnapshot();
+    expect(snapshot.isFiltered).to.equal(true);
+    expect(snapshot.nodes.length).to.equal(1);
+  });
+
+  it('формирует timeline query params для backend фильтра', async () => {
+    const el = await fixture(html`<graph-page></graph-page>`);
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    el._timelineStartPercent = 50;
+    el._timelineEndPercent = 100;
+    await el.updateComplete;
+    const params = el._getTimelineQueryParams();
+    expect(params).to.have.property('created_at_from');
+    expect(params).to.have.property('created_at_to');
+  });
+
+  it('не очищает сцену если путь не найден', async () => {
+    const el = await fixture(html`<graph-page></graph-page>`);
+    await waitUntil(() => Boolean(el.shadowRoot.querySelector('#graph-canvas')));
+    await waitUntil(() => el._graphNodes.length > 0);
+    el.crmApi.getShortestPath = async () => ({
+      path: [],
+      edges: [],
+      exists: false,
+      total_distance: 0,
+      undirected_path: [],
+      undirected_edges: [],
+      undirected_exists: false,
+      undirected_total_distance: 0,
+    });
+    el._pathSourceId = 'entity-1';
+    el._pathTargetId = 'entity-2';
+    await el._buildPathGraph();
+    expect(el._graphNodes.length).to.be.greaterThan(0);
+    expect(el._canvasPathHint).to.equal('Маршрут не найден');
   });
 });

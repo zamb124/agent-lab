@@ -69,6 +69,13 @@ class EntityResponse(BaseModel):
     updated_at: datetime
 
 
+class EntityTimelineBoundsResponse(BaseModel):
+    """Границы timeline по created_at."""
+    min_created_at: Optional[datetime]
+    max_created_at: Optional[datetime]
+    total_entities: int
+
+
 class EntityTypeCreate(BaseModel):
     """Создание типа сущности"""
     type_id: str

@@ -10,6 +10,7 @@ from apps.crm.models.api import EntityTypeCreate, EntityTypeUpdate, EntityTypeRe
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import EntityType
+from apps.crm.color_palette import ENTITY_COLOR_PALETTE, assign_color_from_palette
 from core.context import get_context
 
 router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
@@ -26,6 +27,27 @@ def get_entity_type_repo() -> EntityTypeRepository:
     return container.entity_type_repository
 
 
+async def _backfill_missing_colors(
+    types: List[EntityType],
+    repo: EntityTypeRepository,
+) -> bool:
+    used_colors = {
+        entity_type.color
+        for entity_type in types
+        if isinstance(entity_type.color, str) and entity_type.color.strip()
+    }
+    updated = False
+    for entity_type in types:
+        if isinstance(entity_type.color, str) and entity_type.color.strip():
+            continue
+        assigned_color = assign_color_from_palette(used_colors)
+        entity_type.color = assigned_color
+        used_colors.add(assigned_color)
+        await repo.update(entity_type)
+        updated = True
+    return updated
+
+
 @router.get("", response_model=List[EntityTypeResponse])
 async def list_entity_types(
     namespace: Optional[str] = Query(default=None, description="Фильтр разрешенных типов по namespace"),
@@ -33,6 +55,8 @@ async def list_entity_types(
 ):
     """Получить все типы entities для компании"""
     types = await repo.get_all_for_company(namespace=namespace)
+    if await _backfill_missing_colors(types, repo):
+        types = await repo.get_all_for_company(namespace=namespace)
     return types
 
 
@@ -45,7 +69,10 @@ async def list_entity_types_by_namespace(
     normalized_namespace = namespace.strip()
     if not normalized_namespace:
         raise HTTPException(status_code=422, detail="namespace is required")
-    return await repo.list_allowed_for_namespace(normalized_namespace)
+    types = await repo.list_allowed_for_namespace(normalized_namespace)
+    if await _backfill_missing_colors(types, repo):
+        return await repo.list_allowed_for_namespace(normalized_namespace)
+    return types
 
 
 @router.get("/{type_id}", response_model=EntityTypeResponse)
@@ -57,6 +84,9 @@ async def get_entity_type(
     entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
+    if not entity_type.color or not entity_type.color.strip():
+        entity_type.color = assign_color_from_palette(set())
+        await repo.update(entity_type)
     return entity_type
 
 
@@ -72,6 +102,15 @@ async def create_entity_type(
     if len(namespace_ids) == 0:
         raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
 
+    existing_types = await repo.get_all_for_company()
+    used_colors = {
+        et.color for et in existing_types
+        if isinstance(et.color, str) and et.color.strip()
+    }
+    resolved_color = data.color
+    if not resolved_color or not resolved_color.strip():
+        resolved_color = assign_color_from_palette(used_colors)
+
     entity_type = EntityType(
         type_id=data.type_id,
         name=data.name,
@@ -81,7 +120,7 @@ async def create_entity_type(
         required_fields=data.required_fields or {},
         optional_fields=data.optional_fields or {},
         icon=data.icon,
-        color=data.color,
+        color=resolved_color,
         is_system=False,
         is_event=data.is_event,
         check_duplicates=data.check_duplicates,
@@ -124,6 +163,8 @@ async def update_entity_type(
         if len(data.namespace_ids) == 0:
             raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
         entity_type.namespace_ids = data.namespace_ids
+    if not entity_type.color or not entity_type.color.strip():
+        entity_type.color = assign_color_from_palette(set())
     
     await repo.update(entity_type)
     return entity_type
@@ -144,4 +185,3 @@ async def update_public_fields(
     await repo.update(entity_type)
     
     return entity_type
-

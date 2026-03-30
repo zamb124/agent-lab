@@ -3,9 +3,54 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
-import '@platform/lib/components/platform-icon.js';
 
 const VIEW_MODES = ['influence', 'related', 'path'];
+
+const GRAPH_PANELS_STORAGE_KEY = 'crm_graph_panels';
+const PANEL_IDS = ['search', 'timeline', 'legend', 'meta'];
+
+function _loadPanelVisibility() {
+    const raw = localStorage.getItem(GRAPH_PANELS_STORAGE_KEY);
+    if (!raw) {
+        return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+        return null;
+    }
+    return parsed;
+}
+
+function _savePanelVisibility(panels) {
+    localStorage.setItem(GRAPH_PANELS_STORAGE_KEY, JSON.stringify(panels));
+}
+
+function _isMobileViewport() {
+    return window.innerWidth <= 767;
+}
+
+function _getDefaultPanelVisibility() {
+    const isMobile = _isMobileViewport();
+    return {
+        search: !isMobile,
+        timeline: !isMobile,
+        legend: !isMobile,
+        meta: !isMobile,
+    };
+}
+
+function _resolvePanelVisibility() {
+    const stored = _loadPanelVisibility();
+    const defaults = _getDefaultPanelVisibility();
+    if (!stored) {
+        return defaults;
+    }
+    const resolved = {};
+    PANEL_IDS.forEach((panelId) => {
+        resolved[panelId] = typeof stored[panelId] === 'boolean' ? stored[panelId] : defaults[panelId];
+    });
+    return resolved;
+}
 
 const GRAPH_PRESETS = {
     dense: { charge: -60, linkWidth: 0.8, nodeRelSize: 5 },
@@ -71,6 +116,11 @@ export class GraphPage extends PlatformElement {
         _canvasPathState: { state: true },
         _canvasPathHint: { state: true },
         _labelMode: { state: true },
+        _timelineStartPercent: { state: true },
+        _timelineEndPercent: { state: true },
+        _timelineMinTimestamp: { state: true },
+        _timelineMaxTimestamp: { state: true },
+        _panelVisibility: { state: true },
     };
 
     static styles = [
@@ -382,14 +432,457 @@ export class GraphPage extends PlatformElement {
                 color: var(--text-secondary);
             }
 
+            .canvas-layout {
+                width: 100%;
+                height: 100%;
+                min-height: 0;
+            }
+
+            .canvas-stage {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                min-height: 560px;
+                background: radial-gradient(circle at top, rgba(130, 130, 180, 0.18), rgba(20, 20, 35, 0.75));
+            }
+
+            .canvas-stage .graph-canvas {
+                position: absolute;
+                inset: 0;
+            }
+
+            .overlay-card {
+                position: absolute;
+                z-index: 12;
+                background: rgba(16, 20, 31, 0.58);
+                border: 1px solid rgba(156, 166, 191, 0.22);
+                border-radius: 14px;
+                backdrop-filter: blur(6px);
+                color: #eef2ff;
+                transition: opacity 0.18s ease, transform 0.18s ease;
+                pointer-events: none;
+            }
+
+            .overlay-card button,
+            .overlay-card input,
+            .overlay-card select,
+            .overlay-card textarea,
+            .overlay-card summary,
+            .overlay-card .timeline-slider::-webkit-slider-thumb {
+                pointer-events: auto;
+            }
+
+            .panel-hidden,
+            .overlay-card.panel-hidden,
+            .overlay-search.panel-hidden {
+                display: none !important;
+            }
+
+            .toolbar-separator {
+                width: 20px;
+                height: 2px;
+                background: rgba(127, 214, 255, 0.4);
+                border-radius: 1px;
+                margin: 4px auto;
+            }
+
+            .icon-btn.toggle-btn {
+                border-style: dashed;
+                border-color: rgba(156, 166, 191, 0.3);
+            }
+
+            .icon-btn.toggle-btn.active {
+                border-style: solid;
+                border-color: rgba(127, 214, 255, 0.6);
+            }
+
+            .overlay-search {
+                position: absolute;
+                z-index: 12;
+                top: 20px;
+                left: 20px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                pointer-events: none;
+            }
+
+            .search-pill {
+                display: flex;
+                align-items: center;
+                gap: 0;
+                background: rgba(16, 20, 31, 0.62);
+                border: 1px solid rgba(156, 166, 191, 0.28);
+                border-radius: 999px;
+                overflow: hidden;
+                pointer-events: auto;
+                backdrop-filter: blur(6px);
+            }
+
+            .search-pill input {
+                border: none;
+                background: transparent;
+                color: #eef2ff;
+                font-size: 13px;
+                padding: 8px 14px;
+                width: 180px;
+                outline: none;
+            }
+
+            .search-pill input::placeholder {
+                color: rgba(200, 210, 240, 0.5);
+            }
+
+            .search-pill .pill-icon-btn {
+                width: 32px;
+                height: 32px;
+                border: none;
+                background: transparent;
+                color: rgba(200, 210, 240, 0.7);
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+
+            .search-pill .pill-icon-btn:hover {
+                color: #eef2ff;
+            }
+
+            .search-pill .pill-icon-btn svg {
+                width: 14px;
+                height: 14px;
+                fill: none;
+                stroke: currentColor;
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+
+            .mode-pills {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                pointer-events: auto;
+            }
+
+            .mode-pill {
+                display: inline-flex;
+                align-items: center;
+                padding: 5px 10px;
+                border-radius: 999px;
+                border: 1px solid rgba(156, 166, 191, 0.28);
+                background: rgba(16, 20, 31, 0.52);
+                backdrop-filter: blur(6px);
+                color: rgba(200, 210, 240, 0.75);
+                font-size: 12px;
+                cursor: pointer;
+                transition: background 0.14s, color 0.14s;
+            }
+
+            .mode-pill:hover {
+                background: rgba(40, 52, 80, 0.8);
+                color: #eef2ff;
+            }
+
+            .mode-pill.active {
+                background: rgba(46, 86, 125, 0.85);
+                border-color: rgba(127, 214, 255, 0.55);
+                color: #eef2ff;
+            }
+
+            .timeline-overlay {
+                top: 160px;
+                left: 16px;
+                width: 94px;
+                padding: 10px 8px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .timeline-title {
+                font-size: 11px;
+                color: #d5dff9;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+            }
+
+            .timeline-sliders {
+                position: relative;
+                width: 28px;
+                height: 220px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .timeline-track {
+                position: absolute;
+                width: 3px;
+                height: 100%;
+                border-radius: 2px;
+                background: rgba(156, 166, 191, 0.35);
+            }
+
+            .timeline-track-active {
+                position: absolute;
+                width: 3px;
+                border-radius: 2px;
+                background: rgba(127, 214, 255, 0.55);
+            }
+
+            .timeline-slider {
+                position: absolute;
+                width: 220px;
+                height: 28px;
+                margin: 0;
+                transform: rotate(-90deg);
+                transform-origin: center center;
+                background: transparent;
+                pointer-events: none;
+                -webkit-appearance: none;
+                appearance: none;
+            }
+
+            .timeline-slider::-webkit-slider-runnable-track {
+                background: transparent;
+                height: 4px;
+            }
+
+            .timeline-slider::-webkit-slider-thumb {
+                pointer-events: auto;
+                -webkit-appearance: none;
+                appearance: none;
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background: #7fd6ff;
+                cursor: pointer;
+                border: 2px solid rgba(255, 255, 255, 0.6);
+                margin-top: -6px;
+                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+            }
+
+            .timeline-slider.start {
+                z-index: 2;
+            }
+
+            .timeline-slider.end {
+                z-index: 1;
+            }
+
+            .timeline-slider.end::-webkit-slider-thumb {
+                background: #f2c94c;
+            }
+
+            .timeline-label {
+                font-size: 10px;
+                color: #d0dbf8;
+                text-align: center;
+                line-height: 1.2;
+            }
+
+            .timeline-reset-icon {
+                width: 24px;
+                height: 24px;
+                border: 1px solid rgba(156, 166, 191, 0.3);
+                border-radius: 6px;
+                background: rgba(27, 34, 52, 0.7);
+                color: rgba(200, 210, 240, 0.7);
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                pointer-events: auto;
+                transition: background 0.14s;
+            }
+
+            .timeline-reset-icon:hover {
+                background: rgba(58, 75, 113, 0.95);
+                color: #eef2ff;
+            }
+
+            .overlay-meta {
+                top: 20px;
+                right: 62px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 10px;
+                font-size: 11px;
+            }
+
+            .meta-pill {
+                display: inline-flex;
+                align-items: center;
+                padding: 4px 8px;
+                border-radius: 999px;
+                border: 1px solid rgba(156, 166, 191, 0.4);
+                background: rgba(27, 34, 52, 0.9);
+                color: #d8deef;
+            }
+
+            .icon-toolbar {
+                position: absolute;
+                top: 16px;
+                right: 16px;
+                z-index: 14;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                padding: 6px;
+                border-radius: 12px;
+                background: rgba(16, 20, 31, 0.58);
+                border: 1px solid rgba(156, 166, 191, 0.22);
+                backdrop-filter: blur(6px);
+                pointer-events: auto;
+                max-height: calc(100% - 32px);
+                overflow-y: auto;
+                scrollbar-width: none;
+            }
+
+            .icon-toolbar::-webkit-scrollbar {
+                display: none;
+            }
+
+            .icon-btn {
+                width: 28px;
+                height: 28px;
+                border-radius: 7px;
+                border: 1px solid rgba(156, 166, 191, 0.4);
+                background: rgba(27, 34, 52, 0.86);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                color: #e7ecff;
+                cursor: pointer;
+                transition: background 0.16s ease, transform 0.16s ease;
+            }
+
+            .icon-btn:hover {
+                background: rgba(58, 75, 113, 0.95);
+                transform: translateY(-1px);
+            }
+
+            .icon-btn.active {
+                border-color: rgba(127, 214, 255, 0.8);
+                background: rgba(46, 86, 125, 0.95);
+            }
+
+            .icon-btn svg {
+                width: 14px;
+                height: 14px;
+                fill: none;
+                stroke: currentColor;
+                stroke-width: 1.8;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+
+            .legend-overlay {
+                left: 16px;
+                bottom: 16px;
+                padding: 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                width: min(420px, calc(100% - 100px));
+            }
+
+            .legend-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .empty-search-state {
+                position: absolute;
+                z-index: 11;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                padding: 12px 16px;
+                border-radius: 12px;
+                border: 1px solid rgba(194, 112, 112, 0.56);
+                background: rgba(54, 23, 28, 0.84);
+                color: #f7d7d7;
+                font-size: 13px;
+                backdrop-filter: blur(8px);
+            }
+
+            .advanced-drawer {
+                position: absolute;
+                right: 16px;
+                bottom: 16px;
+                z-index: 15;
+                width: min(720px, calc(100% - 32px));
+                max-height: min(58vh, 540px);
+                overflow: auto;
+                border: 1px solid rgba(156, 166, 191, 0.22);
+                border-radius: 12px;
+                background: rgba(13, 17, 27, 0.72);
+                backdrop-filter: blur(6px);
+                pointer-events: auto;
+            }
+
+            .advanced-drawer > summary {
+                list-style: none;
+                cursor: pointer;
+                padding: 10px 12px;
+                font-size: 13px;
+                font-weight: 600;
+                border-bottom: 1px solid rgba(156, 166, 191, 0.3);
+                color: #dbe4ff;
+            }
+
+            .advanced-drawer > summary::-webkit-details-marker {
+                display: none;
+            }
+
+            .advanced-content {
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
             @media (max-width: 1199px) {
-                .workspace {
-                    grid-template-columns: 1fr;
-                    overflow: auto;
+                .search-pill input {
+                    width: 140px;
                 }
 
-                .graph-panel {
-                    min-height: 440px;
+                .overlay-meta {
+                    top: 20px;
+                    right: 72px;
+                    flex-wrap: wrap;
+                    max-width: 260px;
+                }
+
+                .timeline-overlay {
+                    top: auto;
+                    bottom: 56px;
+                    left: 16px;
+                }
+
+                .timeline-sliders {
+                    height: 160px;
+                }
+
+                .timeline-slider {
+                    width: 160px;
+                }
+
+                .legend-overlay {
+                    width: min(320px, calc(100% - 140px));
+                }
+
+                .advanced-drawer {
+                    width: min(480px, calc(100% - 32px));
+                    max-height: min(40vh, 380px);
                 }
             }
 
@@ -399,14 +892,77 @@ export class GraphPage extends PlatformElement {
                     border-radius: 0;
                 }
 
-                .toolbar,
-                .stats,
-                .workspace {
-                    padding: var(--space-3);
+                .canvas-stage {
+                    min-height: 400px;
                 }
 
-                .stats {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                .overlay-search {
+                    top: 8px;
+                    left: 8px;
+                    flex-wrap: wrap;
+                }
+
+                .search-pill input {
+                    width: 100px;
+                }
+
+                .mode-pills {
+                    gap: 3px;
+                }
+
+                .mode-pill {
+                    font-size: 11px;
+                    padding: 4px 8px;
+                }
+
+                .overlay-meta {
+                    display: none;
+                }
+
+                .icon-toolbar {
+                    top: 8px;
+                    right: 8px;
+                    padding: 4px;
+                    gap: 4px;
+                }
+
+                .icon-btn {
+                    width: 28px;
+                    height: 28px;
+                }
+
+                .timeline-overlay {
+                    top: auto;
+                    bottom: 48px;
+                    left: 8px;
+                    width: 72px;
+                    padding: 6px;
+                }
+
+                .timeline-sliders {
+                    height: 120px;
+                }
+
+                .timeline-slider {
+                    width: 120px;
+                }
+
+                .legend-overlay {
+                    left: 8px;
+                    bottom: 8px;
+                    width: calc(100% - 96px);
+                    padding: 6px 8px;
+                }
+
+                .legend-row {
+                    gap: 6px;
+                }
+
+                .advanced-drawer {
+                    right: 8px;
+                    bottom: 8px;
+                    width: calc(100% - 16px);
+                    max-height: min(36vh, 320px);
                 }
 
                 .section-grid {
@@ -471,7 +1027,17 @@ export class GraphPage extends PlatformElement {
         this._canvasPathState = 'idle';
         this._canvasPathHint = 'Режим обзора';
         this._labelMode = 'adaptive';
+        this._timelineStartPercent = 0;
+        this._timelineEndPercent = 100;
+        this._timelineMinTimestamp = 0;
+        this._timelineMaxTimestamp = 0;
+        this._panelVisibility = _resolvePanelVisibility();
         this._graphInstance = null;
+        this._autoFitPending = false;
+        this._timelineReloadTimer = null;
+        this._entityTypePaletteNamespace = '';
+        this._lastClickNodeId = '';
+        this._lastClickTimestamp = 0;
         this._onSearchQueryInput = this._onSearchQueryInput.bind(this);
         this._onModeChange = this._onModeChange.bind(this);
         this._onRootChange = this._onRootChange.bind(this);
@@ -523,6 +1089,9 @@ export class GraphPage extends PlatformElement {
         this._swapCanvasPathEndpoints = this._swapCanvasPathEndpoints.bind(this);
         this._onCanvasNodeClick = this._onCanvasNodeClick.bind(this);
         this._toggleLabelMode = this._toggleLabelMode.bind(this);
+        this._onTimelineStartInput = this._onTimelineStartInput.bind(this);
+        this._onTimelineEndInput = this._onTimelineEndInput.bind(this);
+        this._resetTimelineFilter = this._resetTimelineFilter.bind(this);
     }
 
     async firstUpdated() {
@@ -538,6 +1107,9 @@ export class GraphPage extends PlatformElement {
             || changedProperties.has('_graphEdges')
             || changedProperties.has('_shortestPathEdges')
             || changedProperties.has('_graphPreset')
+            || changedProperties.has('_entitySearchQuery')
+            || changedProperties.has('_timelineStartPercent')
+            || changedProperties.has('_timelineEndPercent')
         ) {
             this._syncGraph();
         }
@@ -545,6 +1117,10 @@ export class GraphPage extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        if (this._timelineReloadTimer) {
+            clearTimeout(this._timelineReloadTimer);
+            this._timelineReloadTimer = null;
+        }
         if (this._graphInstance) {
             this._graphInstance._destructor();
             this._graphInstance = null;
@@ -567,6 +1143,95 @@ export class GraphPage extends PlatformElement {
         return new Map(this._entities.map((entity) => [entity.entity_id, entity]));
     }
 
+    _parseTimestamp(rawValue) {
+        if (!rawValue) {
+            return null;
+        }
+        const timestamp = Date.parse(rawValue);
+        if (!Number.isFinite(timestamp)) {
+            return null;
+        }
+        return timestamp;
+    }
+
+    _applyTimelineBounds(bounds) {
+        if (!bounds || typeof bounds !== 'object') {
+            throw new Error('Timeline bounds response must be object');
+        }
+        const minTimestamp = this._parseTimestamp(bounds.min_created_at);
+        const maxTimestamp = this._parseTimestamp(bounds.max_created_at);
+        const totalEntities = Number(bounds.total_entities);
+        if (!Number.isFinite(totalEntities) || totalEntities < 0) {
+            throw new Error('total_entities must be non-negative number');
+        }
+        if (totalEntities === 0 || minTimestamp === null || maxTimestamp === null) {
+            this._timelineMinTimestamp = 0;
+            this._timelineMaxTimestamp = 0;
+            this._timelineStartPercent = 0;
+            this._timelineEndPercent = 100;
+            return;
+        }
+        this._timelineMinTimestamp = minTimestamp;
+        this._timelineMaxTimestamp = maxTimestamp;
+        this._timelineStartPercent = Math.max(0, Math.min(100, this._timelineStartPercent));
+        this._timelineEndPercent = Math.max(this._timelineStartPercent, Math.min(100, this._timelineEndPercent));
+    }
+
+    _isNodeInTimelineWindow(node) {
+        if (!this._timelineMinTimestamp || !this._timelineMaxTimestamp) {
+            return true;
+        }
+        if (this._timelineStartPercent <= 0 && this._timelineEndPercent >= 100) {
+            return true;
+        }
+        const nodeRawTimestamp = node.created_at || node.createdAt || null;
+        const nodeTimestamp = this._parseTimestamp(nodeRawTimestamp);
+        if (nodeTimestamp === null) {
+            return false;
+        }
+        const timelineSpan = Math.max(1, this._timelineMaxTimestamp - this._timelineMinTimestamp);
+        const fromTimestamp = this._timelineMinTimestamp + (timelineSpan * (this._timelineStartPercent / 100));
+        const toTimestamp = this._timelineMinTimestamp + (timelineSpan * (this._timelineEndPercent / 100));
+        return nodeTimestamp >= fromTimestamp && nodeTimestamp <= toTimestamp;
+    }
+
+    _formatTimelineLabel(timestamp) {
+        if (!timestamp) {
+            return '—';
+        }
+        const dateValue = new Date(timestamp);
+        return dateValue.toLocaleDateString('ru-RU');
+    }
+
+    async _ensureEntityTypePaletteLoaded(namespaceName) {
+        const cachedTypes = CRMStore.state.entities.entityTypes;
+        const hasCachedTypes = Array.isArray(cachedTypes) && cachedTypes.length > 0;
+        if (hasCachedTypes && this._entityTypePaletteNamespace === (namespaceName || '')) {
+            return;
+        }
+        if (typeof CRMStore.loadEntityTypes !== 'function') {
+            return;
+        }
+        await CRMStore.loadEntityTypes(this.crmApi, namespaceName || null);
+        this._entityTypePaletteNamespace = namespaceName || '';
+    }
+
+    _getTimelineQueryParams() {
+        if (!this._timelineMinTimestamp || !this._timelineMaxTimestamp) {
+            return {};
+        }
+        if (this._timelineStartPercent <= 0 && this._timelineEndPercent >= 100) {
+            return {};
+        }
+        const timelineSpan = Math.max(1, this._timelineMaxTimestamp - this._timelineMinTimestamp);
+        const fromTimestamp = this._timelineMinTimestamp + (timelineSpan * (this._timelineStartPercent / 100));
+        const toTimestamp = this._timelineMinTimestamp + (timelineSpan * (this._timelineEndPercent / 100));
+        return {
+            created_at_from: new Date(fromTimestamp).toISOString(),
+            created_at_to: new Date(toTimestamp).toISOString(),
+        };
+    }
+
     _getEdgeId(edge) {
         const edgeId = edge.edge_id || edge.relationship_id || edge.id;
         if (typeof edgeId === 'string' && edgeId.trim().length > 0) {
@@ -582,20 +1247,35 @@ export class GraphPage extends PlatformElement {
         return this._entities.find((entity) => entity.entity_id === entityId) || null;
     }
 
+    _getNamespaceEntityTypeColors() {
+        const entityTypes = CRMStore.state.entities.entityTypes;
+        if (!Array.isArray(entityTypes)) {
+            throw new Error('entityTypes must be array');
+        }
+        const colorsByType = new Map();
+        entityTypes.forEach((item) => {
+            const typeId = typeof item?.type_id === 'string' ? item.type_id.trim() : '';
+            if (!typeId) {
+                return;
+            }
+            const colorValue = typeof item.color === 'string' ? item.color.trim() : '';
+            if (colorValue) {
+                colorsByType.set(typeId, colorValue);
+            }
+        });
+        return colorsByType;
+    }
+
     _nodeColor(node) {
         if (node.access === false) {
             return '#7f7f8f';
         }
-        if (node.entity_type === 'note') {
-            return '#ffb457';
+        const entityType = typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
+        if (!entityType) {
+            return '#bca8ff';
         }
-        if (node.entity_type === 'contact') {
-            return '#7ac7ff';
-        }
-        if (node.entity_type === 'task') {
-            return '#8ce9a2';
-        }
-        return '#bca8ff';
+        const colorsByType = this._getNamespaceEntityTypeColors();
+        return colorsByType.get(entityType) || '#bca8ff';
     }
 
     _isEdgeDirected(edge) {
@@ -610,9 +1290,52 @@ export class GraphPage extends PlatformElement {
         return relationshipType.is_directed !== false;
     }
 
+    _getVisibleGraphSnapshot() {
+        const query = this._entitySearchQuery.trim().toLowerCase();
+        if (!query) {
+            return {
+                nodes: this._graphNodes,
+                edges: this._graphEdges,
+                isFiltered: this._timelineStartPercent > 0 || this._timelineEndPercent < 100,
+                isEmpty: this._graphNodes.length === 0,
+            };
+        }
+        const matchedNodeIds = new Set();
+        this._graphNodes.forEach((node) => {
+            const nodeId = node.entity_id || node.id || '';
+            const nodeName = node.name || node.label || '';
+            const nodeType = node.entity_type || '';
+            const haystack = `${String(nodeName)} ${String(nodeId)} ${String(nodeType)}`.toLowerCase();
+            if (haystack.includes(query)) {
+                matchedNodeIds.add(nodeId);
+            }
+        });
+        if (matchedNodeIds.size === 0) {
+            return {
+                nodes: [],
+                edges: [],
+                isFiltered: true,
+                isEmpty: true,
+            };
+        }
+        const nodes = this._graphNodes.filter((node) => matchedNodeIds.has(node.entity_id || node.id));
+        const edges = this._graphEdges.filter((edge) => {
+            const sourceId = edge.source_id || edge.source_entity_id || edge.source;
+            const targetId = edge.target_id || edge.target_entity_id || edge.target;
+            return matchedNodeIds.has(sourceId) && matchedNodeIds.has(targetId);
+        });
+        return {
+            nodes,
+            edges,
+            isFiltered: true,
+            isEmpty: false,
+        };
+    }
+
     _buildGraphDataForScene() {
+        const visibleGraph = this._getVisibleGraphSnapshot();
         const highlightedEdgeIds = new Set(this._shortestPathEdges.map((edge) => this._getEdgeId(edge)));
-        const nodes = this._graphNodes.map((node) => ({
+        const nodes = visibleGraph.nodes.map((node) => ({
             ...node,
             id: node.entity_id || node.id,
             name: node.name || node.label || node.entity_id || node.id,
@@ -624,7 +1347,7 @@ export class GraphPage extends PlatformElement {
             nodes[0].y = 0;
             nodes[0].z = 0;
         }
-        const links = this._graphEdges.map((edge) => {
+        const links = visibleGraph.edges.map((edge) => {
             const source = edge.source_id || edge.source_entity_id || edge.source;
             const target = edge.target_id || edge.target_entity_id || edge.target;
             const edgeId = this._getEdgeId(edge);
@@ -637,6 +1360,7 @@ export class GraphPage extends PlatformElement {
                 target,
                 relation_type: relationType,
                 directed,
+                path_kind: edge.path_kind || null,
                 highlighted: highlightedEdgeIds.has(edgeId),
             };
         });
@@ -663,20 +1387,33 @@ export class GraphPage extends PlatformElement {
             .linkLabel(() => '')
             .nodeThreeObject((node) => {
                 const sprite = this._createTextSprite(node.name || node.id || '', '#f0f4ff', 24);
+                if (!sprite) {
+                    return null;
+                }
                 sprite.visible = this._shouldShowNodeLabel(node);
+                sprite.position.set(0, (node.size || 1.6) * 1.9, 0);
                 return sprite;
             })
             .nodeThreeObjectExtend(true)
-            .nodePositionUpdate((labelSprite, coords, node) => {
-                if (!labelSprite || !coords) {
-                    return false;
+            .linkColor((link) => {
+                if (link.path_kind === 'directed') {
+                    return '#41d36d';
                 }
-                labelSprite.visible = this._shouldShowNodeLabel(node);
-                labelSprite.position.set(coords.x, coords.y + 12, coords.z);
-                return true;
+                if (link.path_kind === 'undirected') {
+                    return '#f2c94c';
+                }
+                if (link.path_kind === 'both') {
+                    return '#9adf5d';
+                }
+                if (link.highlighted) {
+                    return '#ff6b6b';
+                }
+                return '#9ba3bf';
             })
-            .linkColor((link) => (link.highlighted ? '#ff6b6b' : '#9ba3bf'))
             .linkWidth((link) => {
+                if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
+                    return 4;
+                }
                 if (link.highlighted) {
                     return 4;
                 }
@@ -686,6 +1423,9 @@ export class GraphPage extends PlatformElement {
                 return GRAPH_PRESETS[this._graphPreset].linkWidth + 0.6;
             })
             .linkOpacity((link) => {
+                if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
+                    return 0.95;
+                }
                 if (link.highlighted || link.id === this._selectedEdgeId) {
                     return 0.95;
                 }
@@ -697,6 +1437,9 @@ export class GraphPage extends PlatformElement {
             .linkThreeObjectExtend(true)
             .linkThreeObject((link) => {
                 const sprite = this._createTextSprite(link.relation_type || 'related', '#d4dae8', 20);
+                if (!sprite) {
+                    return null;
+                }
                 sprite.visible = this._shouldShowLinkLabel(link);
                 return sprite;
             })
@@ -713,7 +1456,12 @@ export class GraphPage extends PlatformElement {
                 sprite.position.set(middlePosition.x, middlePosition.y, middlePosition.z);
                 return true;
             })
-            .linkDirectionalArrowLength((link) => (link.directed ? 3 : 0))
+            .linkDirectionalArrowLength((link) => {
+                if (link.path_kind === 'undirected') {
+                    return 0;
+                }
+                return link.directed ? 3 : 0;
+            })
             .linkDirectionalArrowRelPos(1)
             .linkDirectionalParticles((link) => (link.highlighted ? 4 : 0))
             .linkDirectionalParticleWidth(3)
@@ -737,10 +1485,14 @@ export class GraphPage extends PlatformElement {
                     return;
                 }
                 if (currentGraphData.nodes.length <= 1) {
+                    this._autoFitPending = false;
                     this._applySingleNodeCamera();
                     return;
                 }
-                this._fitGraphToViewport(300, 70);
+                if (this._autoFitPending) {
+                    this._autoFitPending = false;
+                    this._fitGraphToViewport(300, 90);
+                }
             });
         this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this._graphPreset].charge);
         this._graphInstance.d3VelocityDecay(0.5);
@@ -824,7 +1576,6 @@ export class GraphPage extends PlatformElement {
         if (!this._graphInstance) {
             return;
         }
-        this._graphInstance.centerAt(0, 0, 0);
         this._graphInstance.cameraPosition({ x: 0, y: 0, z: MIN_CAMERA_DISTANCE }, { x: 0, y: 0, z: 0 }, 220);
     }
 
@@ -841,6 +1592,7 @@ export class GraphPage extends PlatformElement {
             singleNode.fx = 0;
             singleNode.fy = 0;
             singleNode.fz = 0;
+            this._autoFitPending = false;
         }
         this._graphInstance.graphData(graphData);
         this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this._graphPreset].charge);
@@ -854,12 +1606,7 @@ export class GraphPage extends PlatformElement {
             }
             return;
         }
-        requestAnimationFrame(() => {
-            if (!this._graphInstance) {
-                return;
-            }
-            this._fitGraphToViewport(260, 90);
-        });
+        this._autoFitPending = true;
     }
 
     _assertOfflineVendorSetup() {
@@ -894,6 +1641,129 @@ export class GraphPage extends PlatformElement {
         this._showSidePanel = !this._showSidePanel;
     }
 
+    _clearCanvasSearchFilter() {
+        this._entitySearchQuery = '';
+    }
+
+    _togglePanel(panelId) {
+        const nextVisibility = { ...this._panelVisibility };
+        nextVisibility[panelId] = !nextVisibility[panelId];
+        this._panelVisibility = nextVisibility;
+        _savePanelVisibility(nextVisibility);
+    }
+
+    _onTimelineStartInput(event) {
+        const value = Number(event.target.value);
+        this._timelineStartPercent = Math.max(0, Math.min(this._timelineEndPercent, value));
+        this._scheduleTimelineReload();
+    }
+
+    _onTimelineEndInput(event) {
+        const value = Number(event.target.value);
+        this._timelineEndPercent = Math.min(100, Math.max(this._timelineStartPercent, value));
+        this._scheduleTimelineReload();
+    }
+
+    _resetTimelineFilter() {
+        this._timelineStartPercent = 0;
+        this._timelineEndPercent = 100;
+        this._scheduleTimelineReload();
+    }
+
+    _scheduleTimelineReload() {
+        if (this._timelineReloadTimer) {
+            clearTimeout(this._timelineReloadTimer);
+        }
+        this._timelineReloadTimer = setTimeout(() => {
+            this._timelineReloadTimer = null;
+            this._loadGraphData().catch((error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.error(`Ошибка таймлайна: ${message}`);
+            });
+        }, 220);
+    }
+
+    async _changeDepthDelta(delta) {
+        const nextDepth = Math.max(1, Math.min(5, this._maxDepth + delta));
+        if (nextDepth === this._maxDepth) {
+            return;
+        }
+        this._maxDepth = nextDepth;
+        await this._rebuildGraphByMode();
+    }
+
+    async _toggleRelationshipTypeQuickFilter() {
+        const relationshipTypes = this._getRelationshipTypes();
+        if (this._relationshipTypeFilter.trim().length > 0) {
+            this._relationshipTypeFilter = '';
+            await this._rebuildGraphByMode();
+            return;
+        }
+        if (relationshipTypes.length === 0) {
+            throw new Error('Relationship types are required for quick filter');
+        }
+        const selectedEdge = this._graphEdges.find((edge) => this._getEdgeId(edge) === this._selectedEdgeId);
+        if (selectedEdge && selectedEdge.relationship_type) {
+            this._relationshipTypeFilter = selectedEdge.relationship_type;
+            await this._rebuildGraphByMode();
+            return;
+        }
+        this._relationshipTypeFilter = relationshipTypes[0].type_id;
+        await this._rebuildGraphByMode();
+    }
+
+    async _resetCanvasView() {
+        this._entitySearchQuery = '';
+        this._resetTimelineFilter();
+        this._relationshipTypeFilter = '';
+        this._viewMode = 'influence';
+        this._defaultOverviewActive = true;
+        this._canvasPathState = 'idle';
+        this._canvasPathHint = 'Режим обзора';
+        this._shortestPathEdges = [];
+        await this._rebuildGraphByMode();
+    }
+
+    async _onToolbarAction(actionId) {
+        if (actionId === 'fit') {
+            this._fitGraphToViewport(250, 80);
+            return;
+        }
+        if (actionId === 'path_mode') {
+            this._startCanvasPathPicking();
+            return;
+        }
+        if (actionId === 'swap_path') {
+            await this._swapCanvasPathEndpoints();
+            return;
+        }
+        if (actionId === 'reset_path') {
+            await this._resetCanvasPathPicking();
+            return;
+        }
+        if (actionId === 'depth_plus') {
+            await this._changeDepthDelta(1);
+            return;
+        }
+        if (actionId === 'depth_minus') {
+            await this._changeDepthDelta(-1);
+            return;
+        }
+        if (actionId === 'filter_rel_type') {
+            await this._toggleRelationshipTypeQuickFilter();
+            return;
+        }
+        if (actionId === 'labels_mode') {
+            this._toggleLabelMode();
+            return;
+        }
+        if (actionId === 'reset_view') {
+            await this._resetCanvasView();
+            return;
+        }
+        throw new Error(`Unsupported toolbar action: ${actionId}`);
+    }
+
     _toggleLabelMode() {
         this._labelMode = this._labelMode === 'adaptive' ? 'minimal' : 'adaptive';
         if (!this._graphInstance) {
@@ -907,6 +1777,7 @@ export class GraphPage extends PlatformElement {
         this._canvasPathState = 'pick_source';
         this._canvasPathHint = 'Кликни на первую сущность (source)';
         this._viewMode = 'path';
+        this._entitySearchQuery = '';
         this._shortestPathEdges = [];
         this._pathSourceId = '';
         this._pathTargetId = '';
@@ -959,7 +1830,7 @@ export class GraphPage extends PlatformElement {
         if (link.id === this._selectedEdgeId || link.highlighted) {
             return true;
         }
-        if (this._graphEdges.length <= 70 && this._getCameraDistance() < ADAPTIVE_LABEL_DISTANCE * 0.9) {
+        if (this._graphEdges.length <= 16 && this._getCameraDistance() < ADAPTIVE_LABEL_DISTANCE * 0.82) {
             return true;
         }
         return false;
@@ -999,40 +1870,73 @@ export class GraphPage extends PlatformElement {
         return distance;
     }
 
-    _createTextSprite(text, color = '#d7dbee', fontSize = 24) {
-        if (!window.THREE || typeof window.THREE.CanvasTexture !== 'function') {
-            throw new Error('THREE runtime is required for canvas labels');
+    _mergePathEdgesByKind(directedEdges, undirectedEdges) {
+        const merged = new Map();
+        directedEdges.forEach((edge) => {
+            const edgeId = this._getEdgeId(edge);
+            merged.set(edgeId, { ...edge, path_kind: 'directed' });
+        });
+        undirectedEdges.forEach((edge) => {
+            const edgeId = this._getEdgeId(edge);
+            const existing = merged.get(edgeId);
+            if (!existing) {
+                merged.set(edgeId, { ...edge, path_kind: 'undirected' });
+                return;
+            }
+            merged.set(edgeId, { ...existing, path_kind: 'both' });
+        });
+        return Array.from(merged.values());
+    }
+
+    _createTextSprite(text, color = '#f2f5ff', fontSize = 22, maxLength = 28) {
+        if (!window.THREE || typeof window.THREE.CanvasTexture !== 'function' || typeof window.THREE.Sprite !== 'function') {
+            return null;
         }
-        const labelText = typeof text === 'string' && text.trim().length > 0 ? text : 'entity';
+        const baseText = typeof text === 'string' && text.trim().length > 0 ? text.trim() : 'entity';
+        const labelText = baseText.length > maxLength ? `${baseText.slice(0, maxLength - 1)}…` : baseText;
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         if (!context) {
-            throw new Error('2D canvas context is required for text labels');
+            return null;
         }
-        context.font = `600 ${fontSize}px Inter, sans-serif`;
+        context.font = `700 ${fontSize}px Inter, sans-serif`;
         const textWidth = Math.max(24, Math.ceil(context.measureText(labelText).width));
-        canvas.width = textWidth + 24;
-        canvas.height = fontSize + 18;
-        context.font = `600 ${fontSize}px Inter, sans-serif`;
-        context.fillStyle = 'rgba(12, 15, 23, 0.8)';
-        context.fillRect(0, 0, canvas.width, canvas.height);
+        canvas.width = textWidth + 18;
+        canvas.height = fontSize + 12;
+        context.font = `700 ${fontSize}px Inter, sans-serif`;
         context.fillStyle = color;
-        context.fillText(labelText, 12, fontSize);
+        context.textBaseline = 'middle';
+        context.shadowColor = 'rgba(5, 7, 12, 0.95)';
+        context.shadowBlur = 6;
+        context.lineWidth = 4;
+        context.strokeStyle = 'rgba(5, 7, 12, 0.92)';
+        context.strokeText(labelText, 8, canvas.height / 2);
+        context.fillText(labelText, 8, canvas.height / 2);
         const texture = new window.THREE.CanvasTexture(canvas);
         texture.needsUpdate = true;
         const material = new window.THREE.SpriteMaterial({
             map: texture,
             transparent: true,
+            depthTest: false,
             depthWrite: false,
         });
         const sprite = new window.THREE.Sprite(material);
-        sprite.scale.set(canvas.width * 0.11, canvas.height * 0.11, 1);
+        sprite.scale.set(canvas.width * 0.07, canvas.height * 0.07, 1);
+        sprite.renderOrder = 999;
         return sprite;
     }
 
     _onCanvasNodeClick(node, event) {
         this._selectedNodeId = node.id;
         this._attachmentEntityId = node.id;
+        const now = Date.now();
+        const isDoubleClick = this._lastClickNodeId === node.id && (now - this._lastClickTimestamp) < 380;
+        this._lastClickNodeId = node.id;
+        this._lastClickTimestamp = now;
+        if (isDoubleClick) {
+            this._flyToNode(node);
+            return;
+        }
         if (event?.altKey) {
             this._onOpenEntity(node.id);
             return;
@@ -1046,7 +1950,9 @@ export class GraphPage extends PlatformElement {
         }
         if (this._canvasPathState === 'pick_target') {
             if (node.id === this._pathSourceId) {
-                throw new Error('Source и target должны быть разными');
+                this._canvasPathHint = 'Выбери другую сущность для target';
+                this.warning('Source и target должны быть разными');
+                return;
             }
             this._pathTargetId = node.id;
             this._canvasPathState = 'built';
@@ -1058,6 +1964,21 @@ export class GraphPage extends PlatformElement {
             return;
         }
         this._canvasPathHint = 'Режим обзора';
+    }
+
+    _flyToNode(node) {
+        if (!this._graphInstance) {
+            return;
+        }
+        const nodeX = node.x || 0;
+        const nodeY = node.y || 0;
+        const nodeZ = node.z || 0;
+        const flyDistance = 120;
+        this._graphInstance.cameraPosition(
+            { x: nodeX, y: nodeY, z: nodeZ + flyDistance },
+            { x: nodeX, y: nodeY, z: nodeZ },
+            800,
+        );
     }
 
     _getNativeOperationIds() {
@@ -1376,7 +2297,11 @@ export class GraphPage extends PlatformElement {
         try {
             const crmApi = this.crmApi;
             const namespaceName = this._getNamespaceName();
-            const entities = await crmApi.getEntities({ namespace: namespaceName, limit: 400 });
+            await this._ensureEntityTypePaletteLoaded(namespaceName);
+            const timelineBounds = await crmApi.getEntityTimelineBounds({ namespace: namespaceName });
+            this._applyTimelineBounds(timelineBounds);
+            const timelineParams = this._getTimelineQueryParams();
+            const entities = await crmApi.getEntities({ namespace: namespaceName, limit: 120, ...timelineParams });
             this._entities = Array.isArray(entities) ? entities : [];
             if (!this._selectedRootId && this._entities.length > 0) {
                 this._selectedRootId = CRMStore.state.entities.currentEntityId || this._entities[0].entity_id;
@@ -1426,44 +2351,23 @@ export class GraphPage extends PlatformElement {
             this._shortestPathEdges = [];
             return;
         }
+        const seedIds = seedEntities.map((entity) => entity.entity_id);
         const relationshipType = this._getRelationshipFilter();
-        const params = { max_depth: this._maxDepth };
-        if (relationshipType) {
-            params.relationship_types = relationshipType;
+        const timelineParams = this._getTimelineQueryParams();
+        const response = await this.crmApi.getOverviewGraph(seedIds, {
+            max_depth: this._maxDepth,
+            relationship_types: relationshipType,
+            ...timelineParams,
+        });
+        if (!response || typeof response !== 'object') {
+            throw new Error('Overview graph response must be object');
         }
-        const responses = await Promise.all(
-            seedEntities.map((entity) => this.crmApi.getInfluenceGraph(entity.entity_id, params)),
-        );
-        const nodeMap = new Map();
-        const edgeMap = new Map();
-        for (const response of responses) {
-            if (!response || typeof response !== 'object') {
-                throw new Error('Influence graph response must be object');
-            }
-            if (!Array.isArray(response.nodes) || !Array.isArray(response.edges)) {
-                throw new Error('Influence graph response must contain nodes and edges arrays');
-            }
-            response.nodes.forEach((node) => {
-                const nodeId = node.entity_id || node.id;
-                if (!nodeId) {
-                    throw new Error('Graph node must have entity_id or id');
-                }
-                if (!nodeMap.has(nodeId)) {
-                    nodeMap.set(nodeId, node);
-                    return;
-                }
-                const existingNode = nodeMap.get(nodeId);
-                if (existingNode.access === false && node.access !== false) {
-                    nodeMap.set(nodeId, node);
-                }
-            });
-            response.edges.forEach((edge) => {
-                edgeMap.set(this._getEdgeId(edge), edge);
-            });
+        if (!Array.isArray(response.nodes) || !Array.isArray(response.edges)) {
+            throw new Error('Overview graph response must contain nodes and edges arrays');
         }
         this._shortestPathEdges = [];
-        this._graphNodes = Array.from(nodeMap.values());
-        this._graphEdges = Array.from(edgeMap.values());
+        this._graphNodes = response.nodes;
+        this._graphEdges = response.edges;
     }
 
     _getRelationshipFilter() {
@@ -1476,7 +2380,7 @@ export class GraphPage extends PlatformElement {
 
     async _buildInfluenceGraph() {
         const relationshipType = this._getRelationshipFilter();
-        const params = { max_depth: this._maxDepth };
+        const params = { max_depth: this._maxDepth, ...this._getTimelineQueryParams() };
         if (relationshipType) {
             params.relationship_types = relationshipType;
         }
@@ -1491,7 +2395,7 @@ export class GraphPage extends PlatformElement {
 
     async _buildRelatedGraph() {
         const relationshipType = this._getRelationshipFilter();
-        const params = { direction: this._relatedDirection };
+        const params = { direction: this._relatedDirection, ...this._getTimelineQueryParams() };
         if (relationshipType) {
             params.relationship_type = relationshipType;
         }
@@ -1510,6 +2414,7 @@ export class GraphPage extends PlatformElement {
             name: rootEntity.name,
             level: 0,
             access: true,
+            created_at: rootEntity.created_at || null,
             attributes: rootEntity.attributes || {},
         });
         for (const bucket of ['incoming', 'outgoing', 'undirected']) {
@@ -1560,6 +2465,7 @@ export class GraphPage extends PlatformElement {
             response = await this.crmApi.getShortestPath(this._pathSourceId, this._pathTargetId, {
                 max_depth: this._pathMaxDepth,
                 namespace: this._getNamespaceName(),
+                ...this._getTimelineQueryParams(),
             });
         } finally {
             this._findingPath = false;
@@ -1573,9 +2479,25 @@ export class GraphPage extends PlatformElement {
         if (!Array.isArray(response.edges)) {
             throw new Error('Shortest path must include edges array');
         }
-        this._shortestPathEdges = response.edges;
+        if (!Array.isArray(response.undirected_path)) {
+            throw new Error('Shortest path must include undirected_path array');
+        }
+        if (!Array.isArray(response.undirected_edges)) {
+            throw new Error('Shortest path must include undirected_edges array');
+        }
+        const directedExists = response.exists === true && response.path.length > 0;
+        const undirectedExists = response.undirected_exists === true && response.undirected_path.length > 0;
+        if (!directedExists && !undirectedExists) {
+            this._shortestPathEdges = [];
+            this._canvasPathHint = 'Маршрут не найден';
+            this.warning(`Маршрут не найден: ${this._pathSourceId} -> ${this._pathTargetId}`);
+            return;
+        }
+        const mergedPathEdges = this._mergePathEdgesByKind(response.edges, response.undirected_edges);
+        this._shortestPathEdges = mergedPathEdges;
         const entityMap = this._getEntityMap();
-        const nodes = response.path.map((entityId, index) => {
+        const mergedPathNodeIds = Array.from(new Set([...response.path, ...response.undirected_path]));
+        const nodes = mergedPathNodeIds.map((entityId, index) => {
             const entity = entityMap.get(entityId);
             if (!entity) {
                 return {
@@ -1584,6 +2506,7 @@ export class GraphPage extends PlatformElement {
                     name: 'Hidden',
                     level: index,
                     access: false,
+                    created_at: null,
                     attributes: null,
                 };
             }
@@ -1593,13 +2516,14 @@ export class GraphPage extends PlatformElement {
                 name: entity.name,
                 level: index,
                 access: true,
+                created_at: entity.created_at || null,
                 attributes: entity.attributes || {},
             };
         });
         this._graphNodes = nodes;
-        this._graphEdges = response.edges;
+        this._graphEdges = mergedPathEdges;
         this._canvasPathState = 'built';
-        this._canvasPathHint = 'Маршрут построен';
+        this._canvasPathHint = 'Маршруты построены: directed + undirected';
     }
 
     _onOpenEntity(entityId) {
@@ -1664,18 +2588,15 @@ export class GraphPage extends PlatformElement {
     async _onSearchEntity() {
         const query = this._entitySearchQuery.trim();
         if (!query) {
-            throw new Error('Search query is required');
+            this._clearCanvasSearchFilter();
+            return;
         }
-        const response = await this.crmApi.searchEntities(query, { namespace: this._getNamespaceName(), limit: 20 });
-        const entities = Array.isArray(response) ? response : response?.entities;
-        if (!Array.isArray(entities) || entities.length === 0) {
-            throw new Error('Search returned no entities');
+        const snapshot = this._getVisibleGraphSnapshot();
+        if (snapshot.isEmpty) {
+            this.warning('По фильтру ничего не найдено');
+            return;
         }
-        this._defaultOverviewActive = false;
-        this._selectedRootId = entities[0].entity_id;
-        this._pathSourceId = entities[0].entity_id;
-        await this._rebuildGraphByMode();
-        this.success(`Фокус графа: ${entities[0].name}`);
+        this.success(`Отфильтровано узлов: ${snapshot.nodes.length}`);
     }
 
     _getBackendOperations() {
@@ -1803,14 +2724,64 @@ export class GraphPage extends PlatformElement {
         await this._executeNativeAction('upload attachment', () => this.crmApi.uploadAttachment(this._attachmentEntityId, this._attachmentFile));
     }
 
-    _renderLegend() {
+    _renderLegend(visibleNodes = []) {
+        const colorsByType = this._getNamespaceEntityTypeColors();
+        const visibleTypes = Array.from(new Set(
+            visibleNodes
+                .map((node) => (typeof node.entity_type === 'string' ? node.entity_type.trim() : ''))
+                .filter((typeId) => typeId.length > 0 && typeId !== 'hidden'),
+        ));
         return html`
-            <div class="legend-item"><span class="legend-dot" style="background:#7ac7ff"></span> Contact</div>
-            <div class="legend-item"><span class="legend-dot" style="background:#ffb457"></span> Note</div>
-            <div class="legend-item"><span class="legend-dot" style="background:#8ce9a2"></span> Task</div>
-            <div class="legend-item"><span class="legend-dot" style="background:#bca8ff"></span> Other</div>
+            ${visibleTypes.map((typeId) => html`
+                <div class="legend-item"><span class="legend-dot" style="background:${colorsByType.get(typeId)}"></span>${typeId}</div>
+            `)}
             <div class="legend-item"><span class="legend-dot" style="background:#7f7f8f"></span> Hidden</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#41d36d"></span> Path directed</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#f2c94c"></span> Path undirected</div>
         `;
+    }
+
+    _renderToolbarIcon(actionId) {
+        if (actionId === 'fit') {
+            return html`<svg viewBox="0 0 24 24"><path d="M8 3H3v5"/><path d="M3 3l6 6"/><path d="M16 3h5v5"/><path d="M21 3l-6 6"/><path d="M8 21H3v-5"/><path d="M3 21l6-6"/><path d="M16 21h5v-5"/><path d="M21 21l-6-6"/></svg>`;
+        }
+        if (actionId === 'path_mode') {
+            return html`<svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M7 17c4-6 5-9 10-10"/></svg>`;
+        }
+        if (actionId === 'swap_path') {
+            return html`<svg viewBox="0 0 24 24"><path d="M4 7h14"/><path d="M14 3l4 4-4 4"/><path d="M20 17H6"/><path d="M10 13l-4 4 4 4"/></svg>`;
+        }
+        if (actionId === 'reset_path') {
+            return html`<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M7 6l1 14h8l1-14"/></svg>`;
+        }
+        if (actionId === 'depth_plus') {
+            return html`<svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M12 4v16"/></svg>`;
+        }
+        if (actionId === 'depth_minus') {
+            return html`<svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg>`;
+        }
+        if (actionId === 'filter_rel_type') {
+            return html`<svg viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M7 12h10"/><path d="M10 19h4"/></svg>`;
+        }
+        if (actionId === 'labels_mode') {
+            return html`<svg viewBox="0 0 24 24"><path d="M4 18l4-12h2l4 12"/><path d="M6 13h6"/><path d="M16 8h4"/><path d="M18 8v10"/></svg>`;
+        }
+        if (actionId === 'reset_view') {
+            return html`<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>`;
+        }
+        if (actionId === 'toggle_search') {
+            return html`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>`;
+        }
+        if (actionId === 'toggle_timeline') {
+            return html`<svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7l4-4 4 4"/><path d="M8 17l4 4 4-4"/></svg>`;
+        }
+        if (actionId === 'toggle_legend') {
+            return html`<svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h6"/></svg>`;
+        }
+        if (actionId === 'toggle_meta') {
+            return html`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 12v4"/></svg>`;
+        }
+        throw new Error(`Unknown icon action: ${actionId}`);
     }
 
     render() {
@@ -1820,275 +2791,173 @@ export class GraphPage extends PlatformElement {
         const coveredJsonCount = coverageMatrix.filter((item) => item.status === 'covered_by_json_runner_only').length;
         const uncoveredCount = coverageMatrix.filter((item) => item.status === 'not_covered').length;
         const relationshipTypes = this._getRelationshipTypes();
+        const visibleGraph = this._getVisibleGraphSnapshot();
+        const timelineSpan = Math.max(1, this._timelineMaxTimestamp - this._timelineMinTimestamp);
+        const timelineFromTimestamp = this._timelineMinTimestamp + (timelineSpan * (this._timelineStartPercent / 100));
+        const timelineToTimestamp = this._timelineMinTimestamp + (timelineSpan * (this._timelineEndPercent / 100));
+        const toolbarActions = [
+            { id: 'fit', label: 'Вписать граф' },
+            { id: 'path_mode', label: 'Режим выбора маршрута' },
+            { id: 'swap_path', label: 'Поменять source/target' },
+            { id: 'reset_path', label: 'Сбросить маршрут' },
+            { id: 'depth_plus', label: 'Увеличить глубину' },
+            { id: 'depth_minus', label: 'Уменьшить глубину' },
+            { id: 'filter_rel_type', label: 'Фильтр по типу связи' },
+            { id: 'labels_mode', label: 'Переключить режим лейблов' },
+            { id: 'reset_view', label: 'Сбросить вид' },
+        ];
         return html`
-            <div class="layout ${this._isFullscreen ? 'fullscreen' : ''}">
-            <div class="toolbar">
-                <div class="toolbar-title">
-                    <platform-icon name="network" size="18"></platform-icon>
-                    <span>3D Graph Studio</span>
-                </div>
-                <div class="toolbar-control">
-                    <span class="toolbar-label">Режим</span>
-                    <select class="toolbar-select" .value=${this._viewMode} @change=${this._onModeChange}>
-                        <option value="influence">Граф влияния</option>
-                        <option value="related">Связанные сущности</option>
-                        <option value="path">Кратчайший путь</option>
-                    </select>
-                </div>
-                <div class="toolbar-control">
-                    <span class="toolbar-label">Глубина</span>
-                    <select class="toolbar-select" .value=${String(this._maxDepth)} @change=${this._onDepthChange}>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                    </select>
-                </div>
-                <div class="toolbar-control">
-                    <span class="toolbar-label">Preset</span>
-                    <select class="toolbar-select" .value=${this._graphPreset} @change=${this._onPresetChange}>
-                        <option value="dense">Плотно</option>
-                        <option value="readable">Читаемо</option>
-                        <option value="presentation">Презентация</option>
-                    </select>
-                </div>
-                <input
-                    class="toolbar-input"
-                    type="text"
-                    .value=${this._entitySearchQuery}
-                    placeholder="Поиск сущности..."
-                    @input=${this._onSearchQueryInput}
-                />
-                <button class="btn btn-secondary" type="button" @click=${this._onSearchEntity}>Найти</button>
-                <button class="btn btn-secondary" type="button" @click=${this._loadGraphData}>Обновить</button>
-                <button class="btn btn-secondary" type="button" @click=${this._toggleLabelMode}>
-                    ${this._labelMode === 'adaptive' ? 'Лейблы: adaptive' : 'Лейблы: minimal'}
-                </button>
-                <button class="btn btn-secondary" type="button" @click=${this._toggleSidePanel}>
-                    ${this._showSidePanel ? 'Скрыть панель' : 'Показать панель'}
-                </button>
-                <button class="btn btn-secondary" type="button" @click=${this._toggleFullscreen}>
-                    ${this._isFullscreen ? 'Выйти из fullscreen' : 'Fullscreen графа'}
-                </button>
-            </div>
+            <div class="canvas-layout">
+                <section class="canvas-stage">
+                    <div id="graph-canvas" class="graph-canvas"></div>
 
-            <div class="stats">
-                <div class="stat-card">
-                    <div class="stat-label">Сущностей</div>
-                    <div class="stat-value">${this._entities.length}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Узлов в сцене</div>
-                    <div class="stat-value">${this._graphNodes.length}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Связей в сцене</div>
-                    <div class="stat-value">${this._graphEdges.length}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Ребер в path</div>
-                    <div class="stat-value">${this._shortestPathEdges.length}</div>
-                </div>
-            </div>
+                    <div class="overlay-search ${this._panelVisibility.search ? '' : 'panel-hidden'}">
+                        <div class="search-pill">
+                            <input
+                                type="text"
+                                .value=${this._entitySearchQuery}
+                                placeholder="Фильтр..."
+                                @input=${this._onSearchQueryInput}
+                                @keydown=${(e) => e.key === 'Escape' && this._clearCanvasSearchFilter()}
+                            />
+                            ${this._entitySearchQuery.trim()
+                                ? html`<button class="pill-icon-btn" type="button" title="Очистить" @click=${this._clearCanvasSearchFilter}><svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button>`
+                                : html`<button class="pill-icon-btn" type="button" title="Обновить граф" @click=${this._loadGraphData}><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg></button>`
+                            }
+                        </div>
+                        <div class="mode-pills">
+                            ${VIEW_MODES.map((mode) => html`
+                                <button class="mode-pill ${this._viewMode === mode ? 'active' : ''}" type="button" @click=${() => { this._viewMode = mode; if (mode !== 'influence') { this._defaultOverviewActive = false; } if (mode !== 'path') { this._canvasPathState = 'idle'; this._canvasPathHint = 'Режим обзора'; } this._rebuildGraphByMode(); }}>
+                                    ${mode === 'influence' ? 'influence' : mode === 'related' ? 'related' : 'path'}
+                                </button>
+                            `)}
+                        </div>
+                    </div>
 
-            <div class="workspace">
-                <section class="graph-panel">
-                    <div class="panel-header">
-                        <div class="panel-title">3D Graph</div>
-                        <div class="row">
+                    <div class="overlay-card timeline-overlay ${this._panelVisibility.timeline ? '' : 'panel-hidden'}">
+                        <div class="timeline-title">Timeline</div>
+                        <div class="timeline-label">${this._formatTimelineLabel(this._timelineMaxTimestamp)}</div>
+                        <div class="timeline-sliders">
+                            <div class="timeline-track"></div>
+                            <div
+                                class="timeline-track-active"
+                                style="top:${100 - this._timelineEndPercent}%;bottom:${this._timelineStartPercent}%"
+                            ></div>
+                            <input
+                                class="timeline-slider start"
+                                type="range"
+                                min="0"
+                                max="100"
+                                step="1"
+                                .value=${String(this._timelineStartPercent)}
+                                @input=${this._onTimelineStartInput}
+                            />
+                            <input
+                                class="timeline-slider end"
+                                type="range"
+                                min="0"
+                                max="100"
+                                step="1"
+                                .value=${String(this._timelineEndPercent)}
+                                @input=${this._onTimelineEndInput}
+                            />
+                        </div>
+                        <div class="timeline-label">${this._formatTimelineLabel(this._timelineMinTimestamp)}</div>
+                        <button class="pill-icon-btn timeline-reset-icon" type="button" title="Сброс timeline" @click=${this._resetTimelineFilter}>
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>
+                        </button>
+                    </div>
+
+                    <div class="overlay-card overlay-meta ${this._panelVisibility.meta ? '' : 'panel-hidden'}">
+                        <span class="meta-pill">режим: ${this._viewMode}</span>
+                        <span class="meta-pill">глубина: ${this._maxDepth}</span>
+                        <span class="meta-pill">узлов: ${visibleGraph.nodes.length}</span>
+                        <span class="meta-pill">связей: ${visibleGraph.edges.length}</span>
+                    </div>
+
+                    <div class="icon-toolbar">
+                        ${toolbarActions.map((action) => html`
+                            <button
+                                class="icon-btn ${action.id === 'labels_mode' && this._labelMode === 'adaptive' ? 'active' : ''}"
+                                type="button"
+                                title=${action.label}
+                                aria-label=${action.label}
+                                @click=${() => this._onToolbarAction(action.id)}
+                            >
+                                ${this._renderToolbarIcon(action.id)}
+                            </button>
+                        `)}
+                        <div class="toolbar-separator"></div>
+                        <button class="icon-btn toggle-btn ${this._panelVisibility.search ? 'active' : ''}" type="button" title="Показать/скрыть поиск" @click=${() => this._togglePanel('search')}>${this._renderToolbarIcon('toggle_search')}</button>
+                        <button class="icon-btn toggle-btn ${this._panelVisibility.timeline ? 'active' : ''}" type="button" title="Показать/скрыть timeline" @click=${() => this._togglePanel('timeline')}>${this._renderToolbarIcon('toggle_timeline')}</button>
+                        <button class="icon-btn toggle-btn ${this._panelVisibility.legend ? 'active' : ''}" type="button" title="Показать/скрыть легенду" @click=${() => this._togglePanel('legend')}>${this._renderToolbarIcon('toggle_legend')}</button>
+                        <button class="icon-btn toggle-btn ${this._panelVisibility.meta ? 'active' : ''}" type="button" title="Показать/скрыть статистику" @click=${() => this._togglePanel('meta')}>${this._renderToolbarIcon('toggle_meta')}</button>
+                    </div>
+
+                    <div class="overlay-card legend-overlay ${this._panelVisibility.legend ? '' : 'panel-hidden'}">
+                        <div class="legend-row">${this._renderLegend(visibleGraph.nodes)}</div>
+                        <div class="legend-row">
+                            <span class="canvas-hint">${this._canvasPathHint}</span>
                             <span class="node-pill">node: ${this._selectedNodeId || '—'}</span>
                             <span class="node-pill">edge: ${this._selectedEdgeId || '—'}</span>
-                            <span class="canvas-hint">${this._canvasPathHint}</span>
-                            <button class="btn btn-secondary" type="button" @click=${this._startCanvasPathPicking}>Построить маршрут</button>
-                            <button class="btn btn-secondary" type="button" @click=${this._swapCanvasPathEndpoints}>Поменять точки</button>
-                            <button class="btn btn-secondary" type="button" @click=${this._resetCanvasPathPicking}>Сбросить маршрут</button>
-                            <button class="btn btn-secondary" type="button" @click=${() => this._fitGraphToViewport(250, 80)}>
-                                Вписать граф
-                            </button>
-                            <button class="btn btn-secondary" type="button" @click=${this._toggleFullscreen}>
-                                ${this._isFullscreen ? 'Обычный вид' : 'Fullscreen'}
-                            </button>
                         </div>
                     </div>
-                    <div id="graph-canvas" class="graph-canvas"></div>
-                    <div class="legend">${this._renderLegend()}</div>
+
+                    ${visibleGraph.isFiltered && visibleGraph.isEmpty ? html`
+                        <div class="empty-search-state">По текущему фильтру совпадений нет</div>
+                    ` : ''}
+
+                    <details class="advanced-drawer">
+                        <summary>Advanced операции и диагностика</summary>
+                        <div class="advanced-content">
+                            <details class="section-collapsible">
+                                <summary>Backend runner</summary>
+                                <div class="section-collapsible-content">
+                                    <select class="toolbar-select" .value=${this._backendOperationId} @change=${this._onBackendOperationChange}>
+                                        ${operations.map((item) => html`<option value=${item.id}>${item.label}</option>`)}
+                                    </select>
+                                    <textarea class="textarea" .value=${this._backendOperationArgs} @input=${this._onBackendArgsInput}></textarea>
+                                    <div class="row">
+                                        <button class="btn btn-secondary" type="button" @click=${this._injectSelectedNodeToArgs}>Подставить selected node</button>
+                                        <button class="btn btn-primary" type="button" ?disabled=${this._backendLoading} @click=${this._runBackendOperation}>
+                                            ${this._backendLoading ? 'Выполняю...' : 'Выполнить'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <details class="section-collapsible">
+                                <summary>Матрица покрытия API</summary>
+                                <div class="section-collapsible-content">
+                                    <div class="small">native: ${coveredNativeCount}, json-only: ${coveredJsonCount}, not-covered: ${uncoveredCount}</div>
+                                    <div class="result-box">${coverageMatrix.map((item) => `${item.method} -> ${item.status}`).join('\n')}</div>
+                                </div>
+                            </details>
+
+                            <details class="section-collapsible">
+                                <summary>Быстрые native действия</summary>
+                                <div class="section-collapsible-content">
+                                    <div class="row">
+                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._focusSelectedNode}>Фокус на выбранном узле</button>
+                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._expandFromSelected}>Раскрыть соседей</button>
+                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._isolateSelectedNeighborhood}>Оставить окружение</button>
+                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._revealNextLevel}>Следующий уровень</button>
+                                    </div>
+                                    <div class="section-grid">
+                                        <input class="toolbar-input" type="text" .value=${this._attachmentEntityId} placeholder="entity_id для вложения" @input=${this._onAttachmentEntityIdInput} />
+                                        <input type="file" @change=${this._onAttachmentFileChange} />
+                                    </div>
+                                    <button class="btn btn-secondary" type="button" @click=${this._uploadAttachment}>Загрузить вложение</button>
+                                </div>
+                            </details>
+
+                            <div class="section">
+                                <div class="section-title">Результат операции</div>
+                                <div class="result-box">${this._backendOperationResult || 'Пока нет выполненных операций'}</div>
+                            </div>
+                        </div>
+                    </details>
                 </section>
-
-                <section class="control-panel ${this._showSidePanel ? '' : 'hidden'}">
-                    <div class="panel-header">
-                        <div class="panel-title">Панель действий</div>
-                    </div>
-                    <div class="control-body">
-                        <div class="section">
-                            <div class="section-title">Быстрая навигация по графу</div>
-                            <div class="small">Работаем с канвой: кликни по узлам для выбора и маршрута.</div>
-                            <div class="section-grid">
-                                <select class="toolbar-select" .value=${this._relationshipTypeFilter} @change=${this._onRelationshipTypeFilterChange}>
-                                    <option value="">Все типы связей</option>
-                                    ${relationshipTypes.map((item) => html`<option value=${item.type_id}>${item.name}</option>`)}
-                                </select>
-                                <select class="toolbar-select" .value=${this._relatedDirection} @change=${this._onRelatedDirectionChange}>
-                                    <option value="both">Обе стороны</option>
-                                    <option value="incoming">Входящие</option>
-                                    <option value="outgoing">Исходящие</option>
-                                </select>
-                            </div>
-                            <div class="section-grid">
-                                <input class="toolbar-input" type="number" min="1" max="20" .value=${String(this._pathMaxDepth)} @input=${this._onPathDepthChange} />
-                                <div class="small">Маршрут: нажми \"Построить маршрут\" в хедере канвы и кликни 2 узла</div>
-                            </div>
-                            <div class="row">
-                                <button class="btn btn-secondary" type="button" @click=${this._focusSelectedNode}>Фокус на выбранном узле</button>
-                                <button class="btn btn-secondary" type="button" @click=${this._expandFromSelected}>Раскрыть соседей</button>
-                                <button class="btn btn-secondary" type="button" @click=${this._isolateSelectedNeighborhood}>Оставить только окружение</button>
-                                <button class="btn btn-secondary" type="button" @click=${this._revealNextLevel}>Показать следующий уровень</button>
-                            </div>
-                        </div>
-
-                        <details class="section-collapsible">
-                            <summary>Расширенный backend runner (диагностика)</summary>
-                            <div class="section-collapsible-content">
-                                <select class="toolbar-select" .value=${this._backendOperationId} @change=${this._onBackendOperationChange}>
-                                    ${operations.map((item) => html`<option value=${item.id}>${item.label}</option>`)}
-                                </select>
-                                <textarea class="textarea" .value=${this._backendOperationArgs} @input=${this._onBackendArgsInput}></textarea>
-                                <div class="row">
-                                    <button class="btn btn-secondary" type="button" @click=${this._injectSelectedNodeToArgs}>Подставить selected node</button>
-                                    <button class="btn btn-primary" type="button" ?disabled=${this._backendLoading} @click=${this._runBackendOperation}>
-                                        ${this._backendLoading ? 'Выполняю...' : 'Выполнить'}
-                                    </button>
-                                </div>
-                                <div class="small">JSON-массив аргументов: каждый элемент — отдельный аргумент метода API.</div>
-                            </div>
-                        </details>
-
-                        <details class="section-collapsible">
-                            <summary>Матрица покрытия API</summary>
-                            <div class="section-collapsible-content">
-                                <div class="small">native: ${coveredNativeCount}, json-only: ${coveredJsonCount}, not-covered: ${uncoveredCount}</div>
-                                <div class="result-box">${coverageMatrix.map((item) => `${item.method} -> ${item.status}`).join('\n')}</div>
-                            </div>
-                        </details>
-
-                        <details class="section-collapsible">
-                            <summary>Сущности</summary>
-                            <div class="section-collapsible-content">
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_entityFormId" .value=${this._entityFormId} placeholder="entity_id" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_entityFormName" .value=${this._entityFormName} placeholder="name" @input=${this._onSimpleInput} />
-                                </div>
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_entityFormType" .value=${this._entityFormType} placeholder="entity_type" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_entityFormNamespace" .value=${this._entityFormNamespace} placeholder="namespace" @input=${this._onSimpleInput} />
-                                </div>
-                                <input class="toolbar-input" data-field="_entityFormDescription" .value=${this._entityFormDescription} placeholder="description" @input=${this._onSimpleInput} />
-                                <div class="row">
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._createEntityNative}>Создать</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._updateEntityNative}>Обновить</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._deleteEntityNative}>Удалить</button>
-                                </div>
-                            </div>
-                        </details>
-
-                        <details class="section-collapsible">
-                            <summary>Связи</summary>
-                            <div class="section-collapsible-content">
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_relationshipFormId" .value=${this._relationshipFormId} placeholder="relationship_id" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_relationshipType" .value=${this._relationshipType} placeholder="relationship_type" @input=${this._onSimpleInput} />
-                                </div>
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_relationshipSourceId" .value=${this._relationshipSourceId} placeholder="source_entity_id" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_relationshipTargetId" .value=${this._relationshipTargetId} placeholder="target_entity_id" @input=${this._onSimpleInput} />
-                                </div>
-                                <div class="row">
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._createRelationshipNative}>Создать связь</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._deleteRelationshipNative}>Удалить связь</button>
-                                </div>
-                            </div>
-                        </details>
-
-                        <details class="section-collapsible">
-                            <summary>Права доступа (grants)</summary>
-                            <div class="section-collapsible-content">
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_grantEntityId" .value=${this._grantEntityId} placeholder="entity_id" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_grantNamespace" .value=${this._grantNamespace} placeholder="namespace" @input=${this._onSimpleInput} />
-                                </div>
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_grantUserId" .value=${this._grantUserId} placeholder="user_id" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_grantCompanyId" .value=${this._grantCompanyId} placeholder="company_id" @input=${this._onSimpleInput} />
-                                </div>
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_grantRole" .value=${this._grantRole} placeholder="role" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_grantId" .value=${this._grantId} placeholder="grant_id" @input=${this._onSimpleInput} />
-                                </div>
-                                <div class="row">
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantEntityUserNative}>Entity -> User</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantEntityCompanyNative}>Entity -> Company</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantEntityPublicNative}>Entity public</button>
-                                </div>
-                                <div class="row">
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantNamespaceUserNative}>Namespace -> User</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantNamespaceCompanyNative}>Namespace -> Company</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._grantNamespacePublicNative}>Namespace public</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._revokeGrantNative}>Revoke</button>
-                                </div>
-                            </div>
-                        </details>
-
-                        <details class="section-collapsible">
-                            <summary>Запросы доступа</summary>
-                            <div class="section-collapsible-content">
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_accessRequestEntityId" .value=${this._accessRequestEntityId} placeholder="entity_id" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_accessRequestId" .value=${this._accessRequestId} placeholder="request_id" @input=${this._onSimpleInput} />
-                                </div>
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_accessRequestMessage" .value=${this._accessRequestMessage} placeholder="message" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" type="number" min="1" max="5" data-field="_accessRequestDepth" .value=${String(this._accessRequestDepth)} @input=${this._onSimpleInput} />
-                                </div>
-                                <div class="row">
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._createAccessRequestNative}>Создать</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._listAccessRequestsNative}>Список</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._approveAccessRequestNative}>Approve</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._rejectAccessRequestNative}>Reject</button>
-                                </div>
-                            </div>
-                        </details>
-
-                        <details class="section-collapsible">
-                            <summary>Namespaces</summary>
-                            <div class="section-collapsible-content">
-                                <div class="section-grid">
-                                    <input class="toolbar-input" data-field="_namespaceNameInput" .value=${this._namespaceNameInput} placeholder="namespace name" @input=${this._onSimpleInput} />
-                                    <input class="toolbar-input" data-field="_namespaceTemplateIdInput" .value=${this._namespaceTemplateIdInput} placeholder="template_id" @input=${this._onSimpleInput} />
-                                </div>
-                                <input class="toolbar-input" data-field="_namespaceDescriptionInput" .value=${this._namespaceDescriptionInput} placeholder="description" @input=${this._onSimpleInput} />
-                                <div class="row">
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._createNamespaceNative}>Создать namespace</button>
-                                    <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._loadNamespaceOverviewNative}>Обзор namespace</button>
-                                </div>
-                            </div>
-                        </details>
-
-                        <details class="section-collapsible">
-                            <summary>Вложения</summary>
-                            <div class="section-collapsible-content">
-                                <input class="toolbar-input" type="text" .value=${this._attachmentEntityId} placeholder="entity_id" @input=${this._onAttachmentEntityIdInput} />
-                                <input type="file" @change=${this._onAttachmentFileChange} />
-                                <button class="btn btn-secondary" type="button" @click=${this._uploadAttachment}>Загрузить файл</button>
-                            </div>
-                        </details>
-
-                        <div class="section">
-                            <div class="section-title">Результат операции</div>
-                            <div class="result-box">${this._backendOperationResult || 'Пока нет выполненных операций'}</div>
-                        </div>
-                    </div>
-                </section>
-            </div>
             </div>
         `;
     }

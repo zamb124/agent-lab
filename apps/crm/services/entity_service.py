@@ -303,6 +303,24 @@ class EntityService:
             filters=filters,
             limit=limit,
         )
+
+    async def get_timeline_bounds(
+        self,
+        entity_type: Optional[str] = None,
+        entity_subtype: Optional[str] = None,
+        namespace: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Возвращает границы timeline по created_at."""
+        min_created_at, max_created_at, total_entities = await self._entity_repo.get_created_at_bounds(
+            entity_type=entity_type,
+            entity_subtype=entity_subtype,
+            namespace=namespace,
+        )
+        return {
+            "min_created_at": min_created_at.isoformat() if min_created_at else None,
+            "max_created_at": max_created_at.isoformat() if max_created_at else None,
+            "total_entities": total_entities,
+        }
     
     @staticmethod
     def _get_related_entity_id(relationship: Relationship, current_entity_id: str) -> str:
