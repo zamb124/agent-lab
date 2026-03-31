@@ -55,6 +55,7 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
   - после успешного `crm_rebuild_daily_summary` воркер отправляет `crm_daily_summary_updated`;
   - payload содержит `event=crm.daily_summary.updated`, `date`, `namespace`, `summary_state`;
   - фронтенд не использует polling для ожидания завершения пересчета.
+- **Заметки (список daily notes):** при `create` / `update` / `delete` note `EntityService` рассылает `NotificationType.CRM_NOTE_UPDATED` (`crm_note_updated`) через тот же канал, что и daily summary (`notify_user` → Redis `platform:notifications` → WS `/crm/ws/notifications`). Получатели совпадают с daily summary: `resolve_user_ids_for_namespace_broadcast` в `apps/crm/services/namespace_notification_recipients.py` (участники компании + гранты на `namespace`). В `data` обязательны: `event=crm.note.updated`, `company_id`, `namespace` (после нормализации как у summary: `all` для пустого), `note_id`, `note_date` (ISO дата или `null`), `action` ∈ `created` | `updated` | `deleted`. Страница `daily-notes-page.js` перезагружает список заметок и кэш карточек, если открыты тот же `namespace` и та же выбранная дата, что в payload; при отсутствии `note_date` клиент событие игнорирует.
 - Redis контракт состояния:
   - ключ state: `crm:daily_summary:v1:{company}:{namespace_or_all}:{date}:state`;
   - lock: `...:lock` (`SET NX EX`);
@@ -313,6 +314,8 @@ company_id="acme", namespace="default"   # По умолчанию
 
 - UI хранит последний выбранный namespace в `localStorage` с ключом, привязанным к `company_id`, и восстанавливает его при открытии CRM.
 - Если сохраненный namespace больше не существует в списке компании, UI сбрасывает выбор на режим "Все" (без неявной подстановки другого namespace).
+- Модалка заметки (`note-view-modal`): мини-граф связей открывается отдельной центрированной модалкой `note-graph-modal` (не внутри тела полноэкранной заметки), чтобы WebGL не конфликтовал со скроллом и z-index. Вложенные модалки: `GlassModal.showModal()` выставляет `--platform-modal-layer-z` через `nextModalLayerZIndex()`; при открытии только через `open = true` (без `showModal`) слой дополняется в `willUpdate`, если переменная ещё пуста. Событие закрытия: `close` и `modal-closed`.
+- `mini-graph-preview`: один запрос `getInfluenceGraph` с `max_depth` до 5 (`maxDepth`), визуально как основной граф — матовые сферы (`graph-3d-helpers`), направленные рёбра по `is_directed`, панель «− / уровень / +» фильтрует узлы по `level` без повторного запроса; `initialDisplayDepth` (по умолчанию 1).
 
 **В vector_documents:** фильтрация по `namespace_id` = `{company_id}_{namespace}`
 

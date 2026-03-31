@@ -799,25 +799,55 @@ export class DailyNotesPage extends PlatformElement {
         if (!notification || notification.service !== 'crm') {
             return;
         }
-        if (notification.type !== 'crm_daily_summary_updated') {
-            return;
-        }
-        const payload = notification.data;
-        if (!payload || payload.event !== 'crm.daily_summary.updated') {
-            return;
-        }
+        if (notification.type === 'crm_daily_summary_updated') {
+            const payload = notification.data;
+            if (!payload || payload.event !== 'crm.daily_summary.updated') {
+                return;
+            }
 
+            const selectedNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
+            const payloadNamespace = this._normalizeNamespaceName(payload.namespace);
+            if (payloadNamespace !== selectedNamespace) {
+                return;
+            }
+            if (payload.date !== this._selectedDate) {
+                return;
+            }
+
+            this._loadingSummary = false;
+            this._applySummaryPayload(payload.summary_state);
+            return;
+        }
+        if (notification.type === 'crm_note_updated') {
+            void this._handleCrmNoteWsNotification(notification);
+        }
+    }
+
+    async _handleCrmNoteWsNotification(notification) {
+        const payload = notification.data;
+        if (!payload || payload.event !== 'crm.note.updated') {
+            return;
+        }
+        if (typeof payload.note_id !== 'string' || payload.note_id.trim().length === 0) {
+            return;
+        }
         const selectedNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
         const payloadNamespace = this._normalizeNamespaceName(payload.namespace);
         if (payloadNamespace !== selectedNamespace) {
             return;
         }
-        if (payload.date !== this._selectedDate) {
+        if (payload.note_date == null || payload.note_date !== this._selectedDate) {
             return;
         }
-
-        this._loadingSummary = false;
-        this._applySummaryPayload(payload.summary_state);
+        const noteId = payload.note_id.trim();
+        if (payload.action === 'updated' || payload.action === 'created') {
+            const nextCache = { ...this._noteEntitiesByNoteId };
+            delete nextCache[noteId];
+            this._noteEntitiesByNoteId = nextCache;
+        }
+        await this._reloadNotesForSelectedDate();
+        await this._loadVisibleNoteEntities();
+        this.requestUpdate();
     }
 
     _formatSummaryGeneratedAt(date) {

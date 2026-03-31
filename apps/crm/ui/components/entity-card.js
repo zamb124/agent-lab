@@ -619,7 +619,7 @@ export class EntityCard extends PlatformElement {
                 <div class="section-title">Граф связей</div>
                 <mini-graph-preview
                     .entityId=${this.entityId}
-                    .maxDepth=${2}
+                    .maxDepth=${5}
                     height="200px"
                     @entity-open=${(e) => this._onRelatedClick(e.detail.entityId)}
                 ></mini-graph-preview>

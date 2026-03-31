@@ -489,7 +489,15 @@ export class GlassModal extends PlatformElement {
         this._portalRestoreFallbackTimer = null;
     }
 
+    /**
+     * Открывает модалку: поднимает z-index через nextModalLayerZIndex (вложенные модалки
+     * оказываются выше предыдущих), переносит хост в document.body в willUpdate.
+     */
     showModal() {
+        this.style.setProperty(
+            '--platform-modal-layer-z',
+            String(nextModalLayerZIndex()),
+        );
         this.open = true;
         this._position = { x: null, y: null };
     }
@@ -499,6 +507,10 @@ export class GlassModal extends PlatformElement {
         this._isFullscreen = false;
         this._position = { x: null, y: null };
         this.dispatchEvent(new CustomEvent('modal-closed', {
+            bubbles: false,
+            composed: true,
+        }));
+        this.dispatchEvent(new CustomEvent('close', {
             bubbles: false,
             composed: true,
         }));
@@ -585,10 +597,13 @@ export class GlassModal extends PlatformElement {
         }
         if (changedProperties.has('open') && this.open) {
             this._clearPortalCloseHooks();
-            this.style.setProperty(
-                '--platform-modal-layer-z',
-                String(nextModalLayerZIndex()),
-            );
+            const z = this.style.getPropertyValue('--platform-modal-layer-z').trim();
+            if (!z) {
+                this.style.setProperty(
+                    '--platform-modal-layer-z',
+                    String(nextModalLayerZIndex()),
+                );
+            }
             this._attachPortalToBody();
         }
     }

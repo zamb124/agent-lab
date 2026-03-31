@@ -25,6 +25,7 @@ class NotificationType(str, Enum):
     SYSTEM = "system"
     SYNC_NEW_MESSAGE = "sync_new_message"
     CRM_DAILY_SUMMARY_UPDATED = "crm_daily_summary_updated"
+    CRM_NOTE_UPDATED = "crm_note_updated"
     CALENDAR_NEW_EVENT = "calendar_new_event"
 
 

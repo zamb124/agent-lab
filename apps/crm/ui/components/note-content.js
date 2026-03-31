@@ -481,35 +481,11 @@ export class NoteContent extends PlatformElement {
                 padding-bottom: 8px;
             }
 
-            .attachments-section {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                padding-bottom: 8px;
-            }
-
             .section-toolbar {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
-            }
-
-            .section-action-btn {
-                height: 30px;
-                border: none;
-                border-radius: 14px;
-                padding: 0 12px;
-                background: rgba(34, 34, 34, 0.08);
-                color: var(--text-primary);
-                font-size: 12px;
-                line-height: 14px;
-                cursor: pointer;
-            }
-
-            .section-action-btn:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
             }
 
             .card-header {
@@ -577,8 +553,7 @@ export class NoteContent extends PlatformElement {
 
             .tasks-title,
             .entities-title,
-            .relationships-title,
-            .attachments-title {
+            .relationships-title {
                 margin: 0;
                 font-size: 20px;
                 line-height: 26px;
@@ -854,54 +829,6 @@ export class NoteContent extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            .attachment-item {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 10px;
-                border-radius: 12px;
-                padding: 10px 12px;
-                background: rgba(34, 34, 34, 0.05);
-            }
-
-            .attachment-name {
-                min-width: 0;
-                font-size: 14px;
-                line-height: 18px;
-                color: var(--text-primary);
-                overflow-wrap: anywhere;
-                word-break: break-word;
-            }
-
-            .attachment-status {
-                font-size: 12px;
-                line-height: 16px;
-                color: rgba(34, 34, 34, 0.45);
-                flex-shrink: 0;
-            }
-
-            .attachment-actions {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-            }
-
-            .attachment-delete-btn {
-                border: none;
-                border-radius: 10px;
-                background: rgba(255, 136, 92, 0.18);
-                color: #ff885c;
-                padding: 4px 8px;
-                font-size: 12px;
-                line-height: 14px;
-                cursor: pointer;
-            }
-
-            .attachment-delete-btn:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-
             @media (max-width: 1279px) {
                 .layout {
                     grid-template-columns: 1fr;
@@ -974,8 +901,7 @@ export class NoteContent extends PlatformElement {
                 .summary-title,
                 .tasks-title,
                 .entities-title,
-                .relationships-title,
-                .attachments-title {
+                .relationships-title {
                     font-size: 18px;
                     line-height: 24px;
                 }
@@ -1582,6 +1508,12 @@ export class NoteContent extends PlatformElement {
                                     `)}
                                 </div>
                             </div>
+                            <input
+                                id="note-attachment-input"
+                                type="file"
+                                style="display: none;"
+                                @change=${this._onAttachmentFileSelected}
+                            />
                             <button
                                 class="round-btn"
                                 type="button"
@@ -1789,46 +1721,6 @@ export class NoteContent extends PlatformElement {
                                 </div>
                             `;
                         })}
-                    </section>
-
-                    <section class="attachments-section">
-                        <div class="section-toolbar">
-                            <h3 class="attachments-title">Вложения</h3>
-                            <button
-                                class="section-action-btn"
-                                type="button"
-                                ?disabled=${this.processingAttachment || this.draftMode}
-                                @click=${this._openFilePicker}
-                            >
-                                ${this.processingAttachment ? 'Загрузка...' : 'Добавить файл'}
-                            </button>
-                            <input
-                                id="note-attachment-input"
-                                type="file"
-                                style="display: none;"
-                                @change=${this._onAttachmentFileSelected}
-                            />
-                        </div>
-                        ${attachments.length === 0 ? html`
-                            <div class="attachment-item">
-                                <span class="attachment-name">Нет вложений</span>
-                            </div>
-                        ` : attachments.map((attachment) => html`
-                            <div class="attachment-item">
-                                <span class="attachment-name">${this._getAttachmentName(attachment)}</span>
-                                <span class="attachment-actions">
-                                    <span class="attachment-status">${this._getAttachmentStatus(attachment)}</span>
-                                    <button
-                                        class="attachment-delete-btn"
-                                        type="button"
-                                        ?disabled=${this.processingAttachment || this.draftMode}
-                                        @click=${() => this._emitDeleteAttachment(attachment)}
-                                    >
-                                        Удалить
-                                    </button>
-                                </span>
-                            </div>
-                        `)}
                     </section>
                 </aside>
             </div>

@@ -1,6 +1,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
+import { createMatteSphereNodeGroup } from './graph-3d-helpers.js';
+
+const API_MAX_DEPTH = 5;
+const MINI_NODE_REL_SIZE = 4;
 
 function _resolveNodeColor(node) {
     if (node.access === false) {
@@ -21,77 +25,107 @@ function _resolveNodeColor(node) {
     return match.color.trim();
 }
 
-function _truncate(text, max) {
-    if (typeof text !== 'string') {
-        return '';
+function _normalizeLevel(rawNode, rootEntityId, nodeId) {
+    if (typeof rawNode.level === 'number' && Number.isFinite(rawNode.level)) {
+        return Math.max(0, Math.floor(rawNode.level));
     }
-    return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+    if (nodeId === rootEntityId) {
+        return 0;
+    }
+    return 1;
 }
 
-function _createLabelSprite(text, color, fontSize) {
-    if (!window.THREE || typeof window.THREE.CanvasTexture !== 'function') {
-        throw new Error('THREE.js is not available');
+function _edgeDirected(edge) {
+    if (typeof edge.is_directed === 'boolean') {
+        return edge.is_directed;
     }
-    const label = _truncate(text, 20);
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-        throw new Error('Cannot create canvas 2d context');
+    if (typeof edge.directed === 'boolean') {
+        return edge.directed;
     }
-    ctx.font = `700 ${fontSize}px Inter, sans-serif`;
-    const tw = Math.max(16, Math.ceil(ctx.measureText(label).width));
-    canvas.width = tw + 14;
-    canvas.height = fontSize + 10;
-    ctx.font = `700 ${fontSize}px Inter, sans-serif`;
-    ctx.fillStyle = color;
-    ctx.textBaseline = 'middle';
-    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    ctx.shadowColor = isDark ? 'rgba(5,7,12,0.9)' : 'rgba(255,255,255,0.9)';
-    ctx.shadowBlur = 4;
-    ctx.strokeStyle = isDark ? 'rgba(5,7,12,0.85)' : 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 3;
-    ctx.strokeText(label, 6, canvas.height / 2);
-    ctx.fillText(label, 6, canvas.height / 2);
-    const texture = new window.THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    const material = new window.THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-    });
-    const sprite = new window.THREE.Sprite(material);
-    sprite.scale.set(canvas.width * 0.06, canvas.height * 0.06, 1);
-    sprite.renderOrder = 999;
-    return sprite;
+    return false;
 }
 
 export class MiniGraphPreview extends PlatformElement {
     static properties = {
         entityId: { type: String },
         maxDepth: { type: Number },
+        initialDisplayDepth: { type: Number },
         width: { type: String },
         height: { type: String },
         _loading: { state: true },
         _error: { state: true },
-        _graphNodes: { state: true },
-        _graphEdges: { state: true },
+        _fetchedNodes: { state: true },
+        _fetchedEdges: { state: true },
+        _displayDepth: { state: true },
     };
 
     static styles = [
         ...PlatformElement.styles,
         css`
             :host {
-                display: block;
+                display: flex;
+                flex-direction: column;
                 border-radius: 12px;
                 overflow: hidden;
                 border: 1px solid var(--glass-border-subtle);
+                min-height: 0;
             }
-            .mini-canvas {
-                width: 100%;
-                height: 100%;
+
+            .mini-depth-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+                flex-shrink: 0;
+                padding: var(--space-2) var(--space-3);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                background: var(--glass-tint-subtle);
+            }
+
+            .mini-depth-label {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                min-width: 7rem;
+                text-align: center;
+            }
+
+            .mini-depth-btn {
+                width: 32px;
+                height: 32px;
+                border: none;
+                border-radius: var(--radius-full);
+                background: var(--glass-tint-medium);
+                color: var(--text-primary);
+                font-size: 18px;
+                line-height: 1;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .mini-depth-btn:hover:not(:disabled) {
+                background: var(--glass-tint-strong);
+            }
+
+            .mini-depth-btn:disabled {
+                opacity: 0.35;
+                cursor: not-allowed;
+            }
+
+            .mini-canvas-wrap {
+                flex: 1;
+                min-height: 120px;
                 position: relative;
             }
+
+            .mini-canvas {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+            }
+
             .mini-empty {
                 display: flex;
                 align-items: center;
@@ -106,31 +140,93 @@ export class MiniGraphPreview extends PlatformElement {
     constructor() {
         super();
         this.entityId = '';
-        this.maxDepth = 2;
+        this.maxDepth = API_MAX_DEPTH;
+        this.initialDisplayDepth = 1;
         this.width = '100%';
         this.height = '240px';
         this._loading = false;
         this._error = '';
-        this._graphNodes = [];
-        this._graphEdges = [];
+        this._fetchedNodes = [];
+        this._fetchedEdges = [];
+        this._displayDepth = 1;
         this._graphInstance = null;
     }
 
     firstUpdated() {
+        super.firstUpdated?.();
         if (this.entityId) {
             this._loadAndRender();
         }
     }
 
     updated(changed) {
-        if (changed.has('entityId') && this.entityId) {
+        if (changed.has('entityId')) {
+            if (!this.entityId) {
+                this._destroyGraph();
+                this._fetchedNodes = [];
+                this._fetchedEdges = [];
+                this._error = '';
+                this._loading = false;
+            } else {
+                const prev = changed.get('entityId');
+                if (prev !== undefined && prev !== this.entityId) {
+                    this._loadAndRender();
+                }
+            }
+            return;
+        }
+        if (changed.has('maxDepth') && this.entityId) {
             this._loadAndRender();
+            return;
+        }
+        if (changed.has('_displayDepth') && this._graphInstance) {
+            this._syncFilteredGraphData();
         }
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         this._destroyGraph();
+    }
+
+    _getFetchDepth() {
+        const n = this.maxDepth;
+        if (typeof n !== 'number' || !Number.isFinite(n)) {
+            return API_MAX_DEPTH;
+        }
+        return Math.min(API_MAX_DEPTH, Math.max(1, Math.floor(n)));
+    }
+
+    _getMaxLevelInFetched() {
+        const root = this.entityId;
+        const nodes = Array.isArray(this._fetchedNodes) ? this._fetchedNodes : [];
+        if (nodes.length === 0) {
+            return 0;
+        }
+        let maxL = 0;
+        for (const raw of nodes) {
+            const id = raw.entity_id || raw.id;
+            if (typeof id !== 'string') {
+                continue;
+            }
+            const level = _normalizeLevel(raw, root, id);
+            if (level > maxL) {
+                maxL = level;
+            }
+        }
+        return maxL;
+    }
+
+    _clampInitialDisplayDepth() {
+        const maxL = this._getMaxLevelInFetched();
+        const initial = typeof this.initialDisplayDepth === 'number' && Number.isFinite(this.initialDisplayDepth)
+            ? Math.floor(this.initialDisplayDepth)
+            : 1;
+        let d = Math.max(1, initial);
+        if (maxL > 0) {
+            d = Math.min(d, maxL);
+        }
+        this._displayDepth = d;
     }
 
     async _loadAndRender() {
@@ -140,17 +236,100 @@ export class MiniGraphPreview extends PlatformElement {
         this._loading = true;
         this._error = '';
         this._destroyGraph();
-        const response = await this.crmApi.getInfluenceGraph(this.entityId, { max_depth: this.maxDepth });
-        const nodes = response.nodes || [];
-        const edges = response.edges || [];
-        this._graphNodes = nodes;
-        this._graphEdges = edges;
-        this._loading = false;
-        if (nodes.length === 0) {
+        try {
+            const response = await this.crmApi.getInfluenceGraph(this.entityId, { max_depth: this._getFetchDepth() });
+            const nodes = Array.isArray(response.nodes) ? response.nodes : [];
+            const edges = Array.isArray(response.edges) ? response.edges : [];
+            this._fetchedNodes = nodes;
+            this._fetchedEdges = edges;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this._error = message;
+            this._fetchedNodes = [];
+            this._fetchedEdges = [];
+            this._loading = false;
             return;
         }
+        this._loading = false;
+        if (this._fetchedNodes.length === 0) {
+            return;
+        }
+        this._clampInitialDisplayDepth();
         await this.updateComplete;
         this._initGraph();
+    }
+
+    _normalizeSceneNodes() {
+        const root = this.entityId;
+        return this._fetchedNodes.map((raw) => {
+            const id = raw.entity_id || raw.id;
+            if (typeof id !== 'string' || id.trim().length === 0) {
+                throw new Error('Graph node must have entity_id or id');
+            }
+            const level = _normalizeLevel(raw, root, id);
+            const isCenter = id === root;
+            return {
+                ...raw,
+                id,
+                name: raw.name || raw.label || id,
+                color: _resolveNodeColor(raw),
+                size: isCenter ? 2.4 : 1.2,
+                level,
+            };
+        });
+    }
+
+    _buildSceneData(displayDepth) {
+        const allNodes = this._normalizeSceneNodes();
+        const visibleNodes = allNodes.filter((n) => n.level <= displayDepth);
+        const visibleIds = new Set(visibleNodes.map((n) => n.id));
+
+        const sceneLinks = [];
+        for (const edge of this._fetchedEdges) {
+            const source = edge.source_id || edge.source_entity_id || edge.source;
+            const target = edge.target_id || edge.target_entity_id || edge.target;
+            if (typeof source !== 'string' || typeof target !== 'string') {
+                continue;
+            }
+            if (!visibleIds.has(source) || !visibleIds.has(target)) {
+                continue;
+            }
+            const directed = _edgeDirected(edge);
+            const relationType = edge.relationship_type || edge.type || 'related';
+            sceneLinks.push({
+                source,
+                target,
+                directed,
+                relation_type: relationType,
+            });
+        }
+
+        return { nodes: visibleNodes, links: sceneLinks };
+    }
+
+    _syncFilteredGraphData() {
+        if (!this._graphInstance) {
+            return;
+        }
+        const maxL = this._getMaxLevelInFetched();
+        let depth = this._displayDepth;
+        if (maxL > 0) {
+            depth = Math.min(depth, maxL);
+        }
+        depth = Math.max(1, depth);
+        if (depth !== this._displayDepth) {
+            this._displayDepth = depth;
+        }
+        const { nodes, links } = this._buildSceneData(depth);
+        if (nodes.length === 1) {
+            nodes[0].x = 0;
+            nodes[0].y = 0;
+            nodes[0].z = 0;
+            nodes[0].fx = 0;
+            nodes[0].fy = 0;
+            nodes[0].fz = 0;
+        }
+        this._graphInstance.graphData({ nodes, links });
     }
 
     _initGraph() {
@@ -158,8 +337,9 @@ export class MiniGraphPreview extends PlatformElement {
         if (typeof factory !== 'function') {
             throw new Error('ForceGraph3D is not available in window');
         }
+        const wrap = this.renderRoot?.querySelector('.mini-canvas-wrap');
         const container = this.renderRoot?.querySelector('.mini-canvas');
-        if (!container) {
+        if (!wrap || !container) {
             throw new Error('Mini graph canvas container not found');
         }
         const canvasBg = getComputedStyle(document.documentElement)
@@ -167,22 +347,10 @@ export class MiniGraphPreview extends PlatformElement {
         const labelColor = getComputedStyle(document.documentElement)
             .getPropertyValue('--text-primary').trim() || '#f0f4ff';
 
-        const sceneNodes = this._graphNodes.map((node) => {
-            const id = node.entity_id || node.id;
-            const isCenter = id === this.entityId;
-            return {
-                ...node,
-                id,
-                name: node.name || node.label || id,
-                color: _resolveNodeColor(node),
-                size: isCenter ? 2.4 : 1.2,
-                level: isCenter ? 0 : (node.level ?? 1),
-            };
-        });
-        const sceneLinks = this._graphEdges.map((edge) => ({
-            source: edge.source_id || edge.source_entity_id || edge.source,
-            target: edge.target_id || edge.target_entity_id || edge.target,
-        }));
+        const { nodes: sceneNodes, links: sceneLinks } = this._buildSceneData(this._displayDepth);
+
+        const linkBaseColor = '#9ba3bf';
+        const linkDirectedColor = '#41d36d';
 
         this._graphInstance = factory()(container)
             .backgroundColor(canvasBg)
@@ -191,19 +359,25 @@ export class MiniGraphPreview extends PlatformElement {
             .showNavInfo(false)
             .cooldownTicks(60)
             .warmupTicks(40)
-            .nodeRelSize(4)
+            .nodeRelSize(MINI_NODE_REL_SIZE)
             .nodeColor((n) => n.color)
             .nodeVal((n) => n.size)
             .nodeLabel(() => '')
-            .nodeThreeObject((node) => {
-                const sprite = _createLabelSprite(node.name || node.id, labelColor, 16);
-                sprite.position.set(0, (node.size || 1) * 2, 0);
-                return sprite;
-            })
-            .nodeThreeObjectExtend(true)
-            .linkColor(() => '#9ba3bf')
-            .linkWidth(0.6)
-            .linkOpacity(0.4)
+            .nodeThreeObject((node) => createMatteSphereNodeGroup(node, {
+                nodeRelSize: MINI_NODE_REL_SIZE,
+                labelColor,
+                labelFontSize: 16,
+            }))
+            .nodeThreeObjectExtend(false)
+            .linkColor((link) => (link.directed ? linkDirectedColor : linkBaseColor))
+            .linkWidth((link) => (link.directed ? 0.9 : 0.6))
+            .linkOpacity((link) => (link.directed ? 0.75 : 0.45))
+            .linkDirectionalArrowLength((link) => (link.directed ? 7 : 0))
+            .linkDirectionalArrowRelPos(0.88)
+            .linkDirectionalArrowColor((link) => (link.directed ? linkDirectedColor : linkBaseColor))
+            .linkDirectionalParticles((link) => (link.directed ? 2 : 0))
+            .linkDirectionalParticleWidth(1.2)
+            .linkDirectionalParticleSpeed(0.006)
             .enableNodeDrag(true)
             .onNodeClick((node) => {
                 this.emit('entity-open', { entityId: node.id });
@@ -221,7 +395,6 @@ export class MiniGraphPreview extends PlatformElement {
             })
             .graphData({ nodes: sceneNodes, links: sceneLinks });
 
-        // Фиксируем z-координаты при каждом тике симуляции
         this._graphInstance.d3Force('flatZ', () => {
             const gd = this._graphInstance.graphData();
             if (!gd?.nodes) {
@@ -230,7 +403,6 @@ export class MiniGraphPreview extends PlatformElement {
             gd.nodes.forEach((n) => { n.z = 0; n.fz = 0; });
         });
 
-        // Камера сверху вниз по z-оси
         requestAnimationFrame(() => {
             if (!this._graphInstance) {
                 return;
@@ -263,8 +435,29 @@ export class MiniGraphPreview extends PlatformElement {
         }
     }
 
+    _onDecreaseDepth() {
+        if (this._displayDepth <= 1) {
+            return;
+        }
+        this._displayDepth -= 1;
+    }
+
+    _onIncreaseDepth() {
+        const maxL = this._getMaxLevelInFetched();
+        if (maxL <= 0) {
+            return;
+        }
+        if (this._displayDepth >= maxL) {
+            return;
+        }
+        this._displayDepth += 1;
+    }
+
     render() {
         const hostStyle = `width:${this.width};height:${this.height}`;
+        const maxL = this._getMaxLevelInFetched();
+        const canDecrease = this._displayDepth > 1;
+        const canIncrease = maxL > 0 && this._displayDepth < maxL;
 
         if (this._loading) {
             return html`<div style="${hostStyle}" class="mini-empty">Загрузка графа...</div>`;
@@ -272,10 +465,37 @@ export class MiniGraphPreview extends PlatformElement {
         if (this._error) {
             return html`<div style="${hostStyle}" class="mini-empty">${this._error}</div>`;
         }
-        if (!this._loading && this._graphNodes.length === 0 && this.entityId) {
+        if (!this._loading && this._fetchedNodes.length === 0 && this.entityId) {
             return html`<div style="${hostStyle}" class="mini-empty">Нет связей</div>`;
         }
-        return html`<div class="mini-canvas" style="${hostStyle}"></div>`;
+
+        const depthCap = Math.max(maxL, 1);
+        const depthLabel = `Уровень ${this._displayDepth} из ${depthCap}`;
+
+        return html`
+            <div style="${hostStyle};display:flex;flex-direction:column;min-height:0;">
+                <div class="mini-depth-toolbar">
+                    <button
+                        type="button"
+                        class="mini-depth-btn"
+                        title="Меньше уровней"
+                        ?disabled=${!canDecrease}
+                        @click=${this._onDecreaseDepth}
+                    >\u2212</button>
+                    <span class="mini-depth-label">${depthLabel}</span>
+                    <button
+                        type="button"
+                        class="mini-depth-btn"
+                        title="Больше уровней"
+                        ?disabled=${!canIncrease}
+                        @click=${this._onIncreaseDepth}
+                    >+</button>
+                </div>
+                <div class="mini-canvas-wrap">
+                    <div class="mini-canvas"></div>
+                </div>
+            </div>
+        `;
     }
 }
 

@@ -1,5 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { createGraphTextSprite } from './graph-3d-helpers.js';
 
 const GRAPH_PRESETS = {
     dense: { charge: -60, linkWidth: 0.8, nodeRelSize: 5 },
@@ -602,42 +603,7 @@ export class GraphCanvas extends PlatformElement {
     }
 
     _createTextSprite(text, color = '#f2f5ff', fontSize = 22, maxLength = 28) {
-        if (!window.THREE || typeof window.THREE.CanvasTexture !== 'function' || typeof window.THREE.Sprite !== 'function') {
-            throw new Error('THREE.js is not available for text sprite rendering');
-        }
-        const baseText = typeof text === 'string' && text.trim().length > 0 ? text.trim() : 'entity';
-        const labelText = baseText.length > maxLength ? `${baseText.slice(0, maxLength - 1)}\u2026` : baseText;
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        if (!context) {
-            throw new Error('Cannot create 2d canvas context for text sprite');
-        }
-        context.font = `700 ${fontSize}px Inter, sans-serif`;
-        const textWidth = Math.max(24, Math.ceil(context.measureText(labelText).width));
-        canvas.width = textWidth + 18;
-        canvas.height = fontSize + 12;
-        context.font = `700 ${fontSize}px Inter, sans-serif`;
-        context.fillStyle = color;
-        context.textBaseline = 'middle';
-        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-        context.shadowColor = isDark ? 'rgba(5, 7, 12, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-        context.shadowBlur = 6;
-        context.lineWidth = 4;
-        context.strokeStyle = isDark ? 'rgba(5, 7, 12, 0.92)' : 'rgba(255, 255, 255, 0.92)';
-        context.strokeText(labelText, 8, canvas.height / 2);
-        context.fillText(labelText, 8, canvas.height / 2);
-        const texture = new window.THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        const material = new window.THREE.SpriteMaterial({
-            map: texture,
-            transparent: true,
-            depthTest: false,
-            depthWrite: false,
-        });
-        const sprite = new window.THREE.Sprite(material);
-        sprite.scale.set(canvas.width * 0.07, canvas.height * 0.07, 1);
-        sprite.renderOrder = 999;
-        return sprite;
+        return createGraphTextSprite(text, color, fontSize, maxLength);
     }
 }
 

@@ -33,6 +33,7 @@ from apps.crm.db.repositories.relationship_type_repository import RelationshipTy
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.models import Relationship
 from apps.crm.services.attachment_service import AttachmentService
+from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
 from core.clients.a2a_client import A2AClient
@@ -259,7 +260,17 @@ class EntityService:
                 date_str=entity.note_date.isoformat(),
                 namespace=entity.namespace,
             )
-        
+
+        if entity.entity_type == "note":
+            note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None
+            await broadcast_crm_note_event(
+                company_id=entity.company_id,
+                namespace=entity.namespace,
+                note_id=entity.entity_id,
+                note_date_iso=note_date_iso,
+                action="created",
+            )
+
         return entity
     
     async def get_entity(
@@ -333,6 +344,15 @@ class EntityService:
                     date_str=new_note_date,
                     namespace=new_namespace,
                 )
+
+            note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None
+            await broadcast_crm_note_event(
+                company_id=entity.company_id,
+                namespace=entity.namespace,
+                note_id=entity.entity_id,
+                note_date_iso=note_date_iso,
+                action="updated",
+            )
 
         return entity
     
@@ -523,6 +543,16 @@ class EntityService:
             await self.enqueue_daily_summary_rebuild(
                 date_str=entity.note_date.isoformat(),
                 namespace=entity.namespace,
+            )
+
+        if entity.entity_type == "note":
+            note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None
+            await broadcast_crm_note_event(
+                company_id=entity.company_id,
+                namespace=entity.namespace,
+                note_id=entity_id,
+                note_date_iso=note_date_iso,
+                action="deleted",
             )
 
         return True

@@ -1,11 +1,12 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 import { CRMStore } from '../store/crm.store.js';
 import './entity-modal.js';
 import './share-modal.js';
 import './ai-analysis-modal.js';
 import '../components/note-content.js';
-import '../components/mini-graph-preview.js';
+import './note-graph-modal.js';
 
 export class NoteViewModal extends PlatformModal {
     static properties = {
@@ -45,13 +46,13 @@ export class NoteViewModal extends PlatformModal {
                 min-height: 0;
             }
 
+            .header-btn.graph-open-btn {
+                color: var(--text-secondary);
+            }
+
             @media (max-width: 767px) {
                 .note-view-shell {
                     padding: 0;
-                }
-
-                .note-graph-section {
-                    display: none;
                 }
             }
         `,
@@ -79,6 +80,50 @@ export class NoteViewModal extends PlatformModal {
 
     renderHeader() {
         return this._editing ? 'Редактирование заметки' : 'Просмотр заметки';
+    }
+
+    renderHeaderActions() {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.trim().length === 0) {
+            return html``;
+        }
+        return html`
+            <button
+                class="header-btn graph-open-btn"
+                type="button"
+                title="Граф связей (отдельное окно)"
+                @click=${this._openNoteGraphModal}
+            >
+                <platform-icon name="network" size="16"></platform-icon>
+            </button>
+        `;
+    }
+
+    _openNoteGraphModal() {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.trim().length === 0) {
+            throw new Error('Note entity_id is required for graph');
+        }
+        const modal = document.createElement('note-graph-modal');
+        modal.entityId = this.note.entity_id.trim();
+        const onEntityOpen = (event) => {
+            this._openEntityFromGraphNode(event);
+        };
+        modal.addEventListener('entity-open', onEntityOpen);
+        modal.addEventListener('close', () => {
+            modal.removeEventListener('entity-open', onEntityOpen);
+            modal.remove();
+        });
+        document.body.appendChild(modal);
+        modal.showModal();
+    }
+
+    _openEntityFromGraphNode(event) {
+        const entityId = event.detail?.entityId;
+        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+            throw new Error('entityId is required');
+        }
+        return this._openEntityModal({
+            detail: { entity: { entity_id: entityId.trim(), name: '' } },
+        });
     }
 
     async firstUpdated() {
@@ -588,17 +633,6 @@ export class NoteViewModal extends PlatformModal {
                     @cancel-edit-note=${this._handleCancelEdit}
                     @save-note=${this._handleSaveNote}
                 ></note-content>
-
-                ${this.note?.entity_id ? html`
-                    <div class="note-graph-section" style="padding: 0 var(--space-4) var(--space-4);">
-                        <mini-graph-preview
-                            .entityId=${this.note.entity_id}
-                            .maxDepth=${2}
-                            height="200px"
-                            @entity-open=${this._openEntityModal}
-                        ></mini-graph-preview>
-                    </div>
-                ` : ''}
             </div>
         `;
     }
