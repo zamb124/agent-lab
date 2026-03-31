@@ -1168,11 +1168,15 @@ export class MessageComposer extends PlatformElement {
     }
 
     _pickMediaRecorderMimeType() {
+        /*
+         * Safari / iOS не декодирует WebM в <audio>; сначала MP4/AAC — иначе голосовые не играют в приложении.
+         */
         const variants = [
+            'audio/mp4;codecs=mp4a.40.2',
+            'audio/mp4',
             'audio/webm;codecs=opus',
             'audio/webm',
             'audio/ogg;codecs=opus',
-            'audio/mp4',
         ];
         for (const variant of variants) {
             if (MediaRecorder.isTypeSupported(variant)) {
@@ -1239,11 +1243,14 @@ export class MessageComposer extends PlatformElement {
         this._recordingStartAt = Date.now();
         this._recordingSeconds = 0;
         this._recordingStream = await getUserMediaCompat({ audio: true });
-        const mimeType = this._pickMediaRecorderMimeType();
-        this._recordingMimeType = mimeType !== '' ? mimeType : 'audio/webm';
-        this._mediaRecorder = mimeType !== ''
-            ? new MediaRecorder(this._recordingStream, { mimeType })
+        const pickedMime = this._pickMediaRecorderMimeType();
+        this._mediaRecorder = pickedMime !== ''
+            ? new MediaRecorder(this._recordingStream, { mimeType: pickedMime })
             : new MediaRecorder(this._recordingStream);
+        const resolvedMime = typeof this._mediaRecorder.mimeType === 'string' && this._mediaRecorder.mimeType !== ''
+            ? this._mediaRecorder.mimeType
+            : pickedMime;
+        this._recordingMimeType = resolvedMime !== '' ? resolvedMime : 'audio/mp4';
         this._mediaRecorder.ondataavailable = (event) => {
             if (event.data && event.data.size > 0) {
                 this._recordingChunks.push(event.data);
@@ -1290,14 +1297,22 @@ export class MessageComposer extends PlatformElement {
         if (typeof this.channelId !== 'string' || this.channelId === '') {
             throw new Error('Канал не выбран.');
         }
-        const mimeType = blob.type || this._recordingMimeType;
+        const mimeType = (blob.type && blob.type !== '') ? blob.type : this._recordingMimeType;
         if (mimeType === '') {
             throw new Error('mime_type аудио не определен.');
         }
         this._uploading = true;
         const syncApi = this.services.get('syncApi');
         try {
-            const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+            const lower = mimeType.toLowerCase();
+            let ext = 'webm';
+            if (lower.includes('ogg')) {
+                ext = 'ogg';
+            } else if (lower.includes('mp4') || lower.includes('m4a') || lower.includes('aac') || lower.includes('caf')) {
+                ext = 'm4a';
+            } else if (lower.includes('webm')) {
+                ext = 'webm';
+            }
             const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: mimeType });
             const uploaded = await syncApi.uploadFile(file);
             if (!uploaded || typeof uploaded.file_id !== 'string' || uploaded.file_id === '') {

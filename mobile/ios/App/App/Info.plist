@@ -46,6 +46,8 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Приложению нужен доступ к микрофону для записи голосовых сообщений в чате.</string>
+	<string>Приложению нужен доступ к микрофону для голосовых сообщений и звонков в чате.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Приложению нужен доступ к камере для видеозвонков и конференций в чате.</string>
 </dict>
 </plist>

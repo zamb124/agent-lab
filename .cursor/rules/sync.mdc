@@ -145,6 +145,7 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 - Длинные строки без пробелов в пузырьке не должны вылезать за ширину: `overflow-wrap` на тексте в `message-bubble.js`.
 - Упоминания в тексте (`@…`): токен после `@` — UUID **или** platform id (`user_…`, `test_user_…`). Разбор и извлечение `mentioned_user_ids` — `apps/sync/ui/utils/sync-mention-text.js`; в ленте подпись — **`name` из GET /company/members** (`SyncStore.companyMembers`), не сырой id; пузырёк по ширине — `width: fit-content`, блок с текстом не растягивается за счёт `flex: 1` у колонки времени.
 - Аудиосообщение в чате: тип контента `file/audio` (каноническая модель `AudioAttachmentContent` в `core/files/models.py`, импортируется в `apps/sync/models/messages.py`). Поля: `file_id`, `filename`, `mime_type`, `size`, `duration_ms`, `waveform?`, `transcription_status`, `transcription_text?`, `transcription_error?`. Запуск расшифровки — `POST /channels/{channel_id}/messages/{message_id}/transcribe` (`messages.transcribe_audio`), статусы: `idle|processing|done|failed`.
+- Запись в `message-composer.js`: порядок типов для `MediaRecorder` — сначала **`audio/mp4`** (Safari/iOS), затем webm/opus; расширение файла и `mime` из `MediaRecorder.mimeType` / blob. Воспроизведение: **`platform-audio-message-player.js`** (`playsinline`, ошибки декодирования WebM на iPhone — текст в UI).
 
 ## Frontend (Lit 3 + PlatformApp)
 

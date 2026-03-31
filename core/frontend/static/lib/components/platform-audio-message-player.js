@@ -1,5 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import { AppEvents } from '../utils/types.js';
 
 function formatDuration(seconds) {
     if (!Number.isFinite(seconds) || seconds < 0) {
@@ -23,6 +24,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         _isPlaying: { state: true },
         _currentTime: { state: true },
         _resolvedDuration: { state: true },
+        _playbackError: { state: true },
     };
 
     static styles = [
@@ -171,6 +173,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         this._isPlaying = false;
         this._currentTime = 0;
         this._resolvedDuration = 0;
+        this._playbackError = '';
         this._onAudioTimeUpdate = this._handleAudioTimeUpdate.bind(this);
         this._onAudioLoadedMetadata = this._handleAudioLoadedMetadata.bind(this);
         this._onAudioEnded = this._handleAudioEnded.bind(this);
@@ -196,6 +199,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
             this._isPlaying = false;
             this._currentTime = 0;
             this._resolvedDuration = 0;
+            this._playbackError = '';
             this._bindAudioListeners();
         }
     }
@@ -248,6 +252,28 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         this._currentTime = 0;
     }
 
+    _onAudioError(e) {
+        const el = e.target;
+        if (!(el instanceof HTMLAudioElement)) {
+            return;
+        }
+        const me = el.error;
+        this._isPlaying = false;
+        let msg = 'Не удалось воспроизвести аудио.';
+        if (me) {
+            if (me.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+                msg =
+                    'Этот файл в формате, который на iPhone не воспроизводится (часто WebM). '
+                    + 'Новые голосовые с телефона сохраняются в совместимом формате.';
+            } else if (me.code === MediaError.MEDIA_ERR_NETWORK) {
+                msg = 'Не удалось загрузить аудио (сеть).';
+            } else if (me.code === MediaError.MEDIA_ERR_DECODE) {
+                msg = 'Не удалось декодировать аудио.';
+            }
+        }
+        this._playbackError = msg;
+    }
+
     _effectiveDuration() {
         if (this._resolvedDuration > 0) {
             return this._resolvedDuration;
@@ -268,8 +294,24 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
             this._isPlaying = false;
             return;
         }
-        await audio.play();
-        this._isPlaying = true;
+        this._playbackError = '';
+        try {
+            await audio.play();
+            this._isPlaying = true;
+        } catch (err) {
+            this._isPlaying = false;
+            const name = err && typeof err === 'object' && 'name' in err ? err.name : '';
+            const text =
+                name === 'NotSupportedError'
+                    ? 'Воспроизведение этого формата недоступно в браузере.'
+                    : (err instanceof Error ? err.message : String(err));
+            this._playbackError = text;
+            window.dispatchEvent(
+                new CustomEvent(AppEvents.TOAST_SHOW, {
+                    detail: { type: 'warning', message: text, duration: 5000 },
+                })
+            );
+        }
     }
 
     _seek(e) {
@@ -319,7 +361,15 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
 
         return html`
             <div class="root">
-                <audio preload="metadata" src=${this.src}></audio>
+                <audio
+                    preload="metadata"
+                    playsinline
+                    src=${this.src}
+                    @error=${this._onAudioError}
+                ></audio>
+                ${this._playbackError
+                    ? html`<div class="transcription error">${this._playbackError}</div>`
+                    : ''}
                 <div class="row">
                     <button class="play-btn" type="button" @click=${this._togglePlay}>
                         ${this._isPlaying ? 'II' : '▶'}
