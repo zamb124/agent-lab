@@ -147,6 +147,11 @@ export const islandStyles = css`
             padding-bottom: max(var(--space-8), var(--platform-safe-bottom));
         }
     }
+
+    :host([content-no-scroll]) .island-content {
+        overflow: hidden;
+        overflow-y: hidden;
+    }
 `;
 
 /**

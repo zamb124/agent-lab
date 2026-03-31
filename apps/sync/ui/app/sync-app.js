@@ -1308,7 +1308,7 @@ export class SyncApp extends PlatformApp {
             </div>
 
             <div class="main" ?inert=${callUiLocked}>
-                <platform-island padding="none">
+                <platform-island padding="none" content-no-scroll>
                     <chat-view></chat-view>
                 </platform-island>
             </div>

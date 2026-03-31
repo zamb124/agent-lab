@@ -15,6 +15,8 @@ export class PlatformIsland extends PlatformElement {
         headerGlow: { type: Boolean, attribute: 'header-glow' },
         /** На мобилке с padding="none": только нижний safe-area (контент не уходит под home indicator). Sync чат без этого. */
         safeBottom: { type: Boolean, attribute: 'safe-bottom' },
+        /** У .island-content overflow:hidden — скролл только у внутренних областей (иначе iOS при фокусе в input прокручивает весь слот вверх). */
+        contentNoScroll: { type: Boolean, attribute: 'content-no-scroll' },
     };
 
     static styles = [
@@ -29,6 +31,7 @@ export class PlatformIsland extends PlatformElement {
         this.padding = 'md';
         this.headerGlow = true;
         this.safeBottom = false;
+        this.contentNoScroll = false;
     }
 
     render() {
