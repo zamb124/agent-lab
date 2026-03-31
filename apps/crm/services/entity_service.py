@@ -674,9 +674,11 @@ class EntityService:
         out: Dict[Tuple[str, str], str] = {}
         for key, ids in buckets.items():
             if len(ids) > 1:
-                raise ValueError(
-                    "Неоднозначное сопоставление (тип, имя) с строкой черновика: "
-                    f"{key!r}; кандидаты draft_entity_id={ids}"
+                logger.warning(
+                    "analyze: дубликат ключа (тип, имя) в черновике %s — "
+                    "оставляем первый draft_entity_id из %s",
+                    key,
+                    ids,
                 )
             out[key] = ids[0]
         return out
@@ -1439,12 +1441,16 @@ class EntityService:
                     if not isinstance(data, dict):
                         continue
                     if "res" in data:
-                        try:
-                            parsed = json.loads(data["res"])
-                        except (json.JSONDecodeError, TypeError):
-                            parsed = None
-                        if isinstance(parsed, dict):
-                            return parsed
+                        raw_res = data["res"]
+                        if isinstance(raw_res, dict):
+                            return raw_res
+                        if isinstance(raw_res, str) and raw_res.strip():
+                            try:
+                                parsed = json.loads(raw_res)
+                            except (json.JSONDecodeError, TypeError):
+                                parsed = None
+                            if isinstance(parsed, dict):
+                                return parsed
                         continue
                     if any(
                         k in data
@@ -1478,21 +1484,63 @@ class EntityService:
             if extracted:
                 return extracted
         return {}
-    
+
+    @staticmethod
+    def _compose_summary_fallback_from_structured(payload: Dict[str, Any]) -> str:
+        """Если модель вернула пустой summary, собираем читаемый текст из highlights/key_events."""
+        lines: list[str] = []
+        for key in ("highlights", "key_events"):
+            raw = payload.get(key)
+            if not isinstance(raw, list):
+                continue
+            for item in raw:
+                if isinstance(item, str):
+                    normalized = item.strip()
+                    if normalized:
+                        lines.append(normalized)
+        if not lines:
+            return ""
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for line in lines:
+            k = line.lower()
+            if k in seen:
+                continue
+            seen.add(k)
+            deduped.append(line)
+        return "\n".join(deduped)
+
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Извлекает JSON из текста (включая markdown code blocks)."""
-        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', text)
+        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', text, re.IGNORECASE)
         if json_match:
             try:
-                return json.loads(json_match.group(1).strip())
+                parsed = json.loads(json_match.group(1).strip())
+                if isinstance(parsed, dict):
+                    return parsed
             except (json.JSONDecodeError, TypeError):
                 pass
-        
-        try:
-            return json.loads(text.strip())
-        except (json.JSONDecodeError, TypeError):
-            pass
-        
+
+        stripped = text.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        if "{" in stripped:
+            start = stripped.find("{")
+            end = stripped.rfind("}")
+            if start != -1 and end > start:
+                try:
+                    parsed = json.loads(stripped[start : end + 1])
+                    if isinstance(parsed, dict):
+                        return parsed
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
         return {}
 
     def _extract_summary_from_payload(self, payload: Any) -> Optional[str]:
@@ -1760,6 +1808,12 @@ class EntityService:
             summary_text = s if isinstance(s, str) else None
         if summary_text is None:
             summary_text = ""
+        if isinstance(structured, dict) and (
+            not isinstance(summary_text, str) or not summary_text.strip()
+        ):
+            fallback = self._compose_summary_fallback_from_structured(structured)
+            if fallback.strip():
+                summary_text = fallback
         summary_entities = self._extract_string_list_from_payload(structured, "entities")
         if not summary_entities and isinstance(structured, dict):
             parsed = structured

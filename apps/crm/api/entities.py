@@ -7,6 +7,7 @@ API для работы с entities.
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import ValidationError
 
 from apps.crm.models.api import (
     EntityCreate,
@@ -23,6 +24,7 @@ from apps.crm.models.api import (
 )
 from apps.crm.db.models import CRMEntity
 from apps.crm.config import get_crm_settings
+from apps.crm.taskiq_analyze_errors import parse_validation_from_task_message
 from apps.crm.services.entity_service import DraftVersionConflictError, EntityService
 from apps.crm.services.access_control_service import AccessControlService
 from apps.crm.dependencies import get_entity_service, get_access_control_service
@@ -317,8 +319,26 @@ async def analyze_text(
             detail="Таймаут analyze в worker",
         ) from exc
     if res.is_err:
-        raise HTTPException(status_code=422, detail=str(res.error))
-    result = AIAnalyzeResponse.model_validate(res.return_value)
+        err = res.error
+        if isinstance(err, ValidationError):
+            raise HTTPException(status_code=422, detail=err.errors())
+        err_msg = str(err) if err else ""
+        parsed = parse_validation_from_task_message(err_msg)
+        if parsed is not None:
+            raise HTTPException(status_code=422, detail=parsed)
+        errors_fn = getattr(err, "errors", None)
+        if callable(errors_fn):
+            try:
+                out = errors_fn()
+            except Exception:
+                out = None
+            if out:
+                raise HTTPException(status_code=422, detail=out)
+        raise HTTPException(status_code=422, detail=err_msg or repr(err))
+    try:
+        result = AIAnalyzeResponse.model_validate(res.return_value)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
     if note_id and context and context.user:
         suggestions_count = len(result.entities or []) + len(result.relationships or [])
         await notify_user(

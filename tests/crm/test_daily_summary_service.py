@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -303,6 +304,83 @@ async def test_compute_daily_summary_falls_back_to_entities_from_notes():
 
     assert payload["summary"] == "Итог дня без списка сущностей"
     assert payload["entities"] == ["Альфа Банк", "Yandex", "Sber"]
+
+
+@pytest.mark.asyncio
+async def test_compute_daily_summary_fallback_from_highlights_when_summary_empty():
+    _set_test_context()
+    service = _build_service()
+    note = SimpleNamespace(
+        entity_id="n-1",
+        updated_at=None,
+        name="n1",
+        entity_subtype=None,
+        description="d",
+        tags=[],
+        attributes={"ai_analysis_applied_at": "2026-01-01T00:00:00+00:00"},
+    )
+    service._collect_notes_and_source_version = AsyncMock(
+        return_value=([note], {"notes_count": 1, "max_updated_at": None})
+    )
+    service._entity_to_dict = lambda _: {"name": "n1"}
+
+    body = {
+        "summary": "",
+        "entities": [],
+        "key_events": ["Событие дня"],
+        "highlights": ["Главное"],
+        "statistics": {"entities_created": 0, "notes_added": 0, "tasks_completed": 0},
+    }
+    service._a2a_client.send_task = AsyncMock(
+        return_value={
+            "response": "",
+            "raw": {
+                "result": {
+                    "artifacts": [
+                        {
+                            "parts": [
+                                {
+                                    "kind": "data",
+                                    "data": {"res": json.dumps(body, ensure_ascii=False)},
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+        }
+    )
+
+    payload = await service.compute_daily_summary(date_str="2026-03-28", namespace=None)
+
+    assert payload["summary"] == "Главное\nСобытие дня"
+
+
+def test_extract_data_from_a2a_response_res_as_dict_not_string():
+    _set_test_context()
+    service = _build_service()
+    out = service._extract_data_from_a2a_response(
+        {
+            "response": "",
+            "raw": {
+                "result": {
+                    "artifacts": [
+                        {
+                            "parts": [
+                                {
+                                    "kind": "data",
+                                    "data": {
+                                        "res": {"summary": "OK", "entities": []},
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+        }
+    )
+    assert out.get("summary") == "OK"
 
 
 @pytest.mark.asyncio

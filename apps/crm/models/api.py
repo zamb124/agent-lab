@@ -375,14 +375,14 @@ class AIAnalyzeRelationshipExtracted(BaseModel):
     Только текстовые концы; после ответа CRM превращает в AIAnalysisRelationshipDraft.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     source_type: str
     source_name: str
     target_type: str
     target_name: str
     relationship_type: str
-    weight: float
+    weight: float = 1.0
     attributes: Optional[Dict[str, Any]] = None
 
 
