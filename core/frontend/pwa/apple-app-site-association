@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["MLL2V8KTV4.ru.humanitec.app"],
+        "paths": [
+          "/",
+          "/join/*",
+          "/frontend/*",
+          "/sync/*",
+          "/crm/*",
+          "/rag/*",
+          "/flows/*",
+          "/documentation/*",
+          "/scheduler/*"
+        ]
+      }
+    ]
+  }
+}
