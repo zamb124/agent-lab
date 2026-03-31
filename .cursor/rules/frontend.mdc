@@ -434,7 +434,7 @@ export class MyForm extends PlatformElement {
 
 **Capacitor iOS:** в **`capacitor.config.json`** для встроенного WKWebView **`ios.contentInset`: `"never"`** — insets только из CSS (`env(safe-area-inset-*)`), без двойного смещения от **`automatic`** (белые полосы / странные отступы при клавиатуре).
 
-**Sync Chat (`apps/sync/ui/app/sync-app.js`):** на узком экране у `:host` **`overflow-x: hidden`**, **`overflow-y: hidden`** (кроме режима звонка). Контент чата: **`platform-island`** с **`padding="none"`**, **`content-no-scroll`** (у **`.island-content`** **`overflow: hidden`** — иначе iOS при фокусе в поле ввода прокручивает весь слот вверх), без **`safe-bottom`**, шапка — **`chat-view`** с **`env(safe-area-inset-top)`** на мобилке, нижняя зона — **`message-composer`** с **`max(..., env(safe-area-inset-bottom))`** и учётом **`data-keyboard-visual`**.
+**Sync Chat (`apps/sync/ui/app/sync-app.js`):** на узком экране у `:host` **`overflow-x: hidden`**, **`overflow-y: hidden`** (кроме режима звонка). Контент чата: **`platform-island`** с **`padding="none"`**, **`content-no-scroll`** (у **`.island-content`** **`overflow: hidden`** — иначе iOS при фокусе в поле ввода прокручивает весь слот вверх), без **`safe-bottom`**, шапка — **`chat-view`** с **`env(safe-area-inset-top)`** на мобилке, нижняя зона — **`message-composer`** с **`max(..., env(safe-area-inset-bottom))`** и учётом **`data-keyboard-visual`**. Лента **`message-list`**: у **`.list`** **`scroll-behavior: auto`** (не **`smooth`** — иначе программный скролл вниз не догоняет новые сообщения), **`ResizeObserver`** + повтор после **`updateComplete`** для прилипания к низу.
 
 ---
 

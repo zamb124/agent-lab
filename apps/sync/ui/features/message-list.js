@@ -120,6 +120,10 @@ export class MessageList extends PlatformElement {
                 overflow: hidden;
             }
 
+            /*
+             * Без smooth: иначе scrollTop = scrollHeight анимируется и при смене scrollHeight
+             * (новое сообщение, картинка в пузыре) лента не доезжает до низа.
+             */
             .list {
                 flex: 1;
                 overflow-y: auto;
@@ -127,7 +131,7 @@ export class MessageList extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
-                scroll-behavior: smooth;
+                scroll-behavior: auto;
             }
 
             .messages-loading-bar {
@@ -260,6 +264,10 @@ export class MessageList extends PlatformElement {
         this._hasMoreOlder = false;
         this._loadingOlder = false;
         this._lastScrollTop = 0;
+        /** @type {ResizeObserver | null} */
+        this._listResizeObs = null;
+        /** @type {HTMLElement | null} */
+        this._listResizeTarget = null;
     }
 
     _regenerateSkeletonPlan() {
@@ -324,6 +332,7 @@ export class MessageList extends PlatformElement {
         super.disconnectedCallback?.();
         this._unsubscribe?.();
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
+        this._detachListResizeObserver();
     }
 
     _syncCurrentUserId() {
@@ -341,8 +350,36 @@ export class MessageList extends PlatformElement {
             // При переключении канала всегда стартуем из нижней точки ленты.
             this._stickToBottom = true;
             this._lastScrollTop = 0;
+            this._detachListResizeObserver();
         }
-        this._scrollIfSticky();
+        const listEl = this.shadowRoot?.querySelector('.list');
+        if (listEl instanceof HTMLElement && listEl !== this._listResizeTarget) {
+            this._detachListResizeObserver();
+            this._listResizeTarget = listEl;
+            this._listResizeObs = new ResizeObserver(() => {
+                if (!this._stickToBottom) {
+                    return;
+                }
+                listEl.scrollTop = listEl.scrollHeight;
+                this._lastScrollTop = listEl.scrollTop;
+            });
+            this._listResizeObs.observe(listEl);
+        }
+        void this.updateComplete.then(() => {
+            this._scrollIfSticky();
+            requestAnimationFrame(() => {
+                this._scrollIfSticky();
+                requestAnimationFrame(() => this._scrollIfSticky());
+            });
+        });
+    }
+
+    _detachListResizeObserver() {
+        if (this._listResizeObs) {
+            this._listResizeObs.disconnect();
+            this._listResizeObs = null;
+        }
+        this._listResizeTarget = null;
     }
 
     _onScroll(e) {
@@ -383,14 +420,22 @@ export class MessageList extends PlatformElement {
     }
 
     _scrollIfSticky() {
-        if (!this._stickToBottom) return;
-        const el = this.shadowRoot?.querySelector('.list');
-        if (el) {
-            requestAnimationFrame(() => {
-                el.scrollTop = el.scrollHeight;
-                this._lastScrollTop = el.scrollTop;
-            });
+        if (!this._stickToBottom) {
+            return;
         }
+        const el = this.shadowRoot?.querySelector('.list');
+        if (!(el instanceof HTMLElement)) {
+            return;
+        }
+        const apply = () => {
+            el.scrollTop = el.scrollHeight;
+            this._lastScrollTop = el.scrollTop;
+        };
+        apply();
+        requestAnimationFrame(() => {
+            apply();
+            requestAnimationFrame(apply);
+        });
     }
 
     /**
