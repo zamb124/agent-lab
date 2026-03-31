@@ -67,7 +67,7 @@ npx cap open ios
 
 ## Safe area и shell (тот же веб, что в браузере)
 
-Вёрстка общая с PWA и вебом: **`viewport-fit=cover`**, токены **`--platform-safe-*`** в **`core/frontend/static/assets/css/tokens.css`**, хедер страниц **`page-header`** со sticky и отступом под вырез, контейнер **`platform-island`** с нижним inset на мобилке, полноэкранный **`glass-modal`** без полей у overlay на fullscreen. Подробнее — **`.cursor/rules/frontend.mdc`**, раздел «Высота вьюпорта» и safe area.
+Вёрстка общая с PWA и вебом: **`viewport-fit=cover`**, токены **`--platform-safe-*`** в **`core/frontend/static/assets/css/tokens.css`**, хедер страниц **`page-header`** со sticky и отступом под вырез, контейнер **`platform-island`** с нижним inset на мобилке, полноэкранный **`glass-modal`** без полей у overlay на fullscreen. В **`capacitor.config.json`** для iOS задано **`contentInset: "never"`** (safe area только из CSS, без дублирования от WKWebView). Подробнее — **`.cursor/rules/frontend.mdc`**, раздел «Высота вьюпорта» и safe area.
 
 ## Синхронизация после смены конфига
 

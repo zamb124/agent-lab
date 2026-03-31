@@ -116,11 +116,16 @@ export class GlassModal extends PlatformElement {
                 width: 90%;
                 max-width: min(500px, 100%);
                 max-height: min(90vh, 100dvh);
-                overflow-y: auto;
-                overflow-x: hidden;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                min-height: 0;
                 border-radius: var(--radius-3xl, 28px);
                 padding: 0;
                 box-sizing: border-box;
+
+                --modal-content-inset: var(--space-2, 8px);
+                --modal-content-radius: var(--radius-xl, 16px);
 
                 background: var(--glass-solid-strong, rgba(40, 40, 40, 0.92));
                 border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
@@ -217,9 +222,7 @@ export class GlassModal extends PlatformElement {
                 height: min(94vh, 100dvh - 1.5rem) !important;
                 max-height: min(94vh, 100dvh - 1.5rem) !important;
                 border-radius: var(--radius-lg, 16px);
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
+                --modal-content-radius: var(--radius-lg, 16px);
             }
 
             .modal-header {
@@ -233,6 +236,7 @@ export class GlassModal extends PlatformElement {
                 cursor: grab;
                 user-select: none;
                 flex-shrink: 0;
+                align-self: stretch;
             }
 
             .modal-header:active {
@@ -288,10 +292,15 @@ export class GlassModal extends PlatformElement {
                 position: relative;
                 color: var(--text-primary, rgba(255, 255, 255, 0.95));
                 z-index: 2;
-                flex: 1;
+                flex: 1 1 auto;
                 min-height: 0;
+                min-width: 0;
                 overflow-y: auto;
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
                 padding: var(--space-4, 16px);
+                margin: 0 var(--modal-content-inset) var(--modal-content-inset);
+                border-radius: var(--modal-content-radius);
             }
 
             .modal.fullscreen .modal-content,
@@ -307,6 +316,8 @@ export class GlassModal extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
+                margin: 0;
+                border-radius: 0;
             }
 
             .modal-actions {
@@ -317,6 +328,9 @@ export class GlassModal extends PlatformElement {
                 padding-top: 0;
                 z-index: 2;
                 flex-shrink: 0;
+                align-self: stretch;
+                margin-left: var(--modal-content-inset);
+                margin-right: var(--modal-content-inset);
             }
 
             .modal-actions:empty {

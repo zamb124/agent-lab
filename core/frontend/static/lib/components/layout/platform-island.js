@@ -13,6 +13,8 @@ export class PlatformIsland extends PlatformElement {
         variant: { type: String, reflect: true },
         padding: { type: String, reflect: true },
         headerGlow: { type: Boolean, attribute: 'header-glow' },
+        /** На мобилке с padding="none": только нижний safe-area (контент не уходит под home indicator). Sync чат без этого. */
+        safeBottom: { type: Boolean, attribute: 'safe-bottom' },
     };
 
     static styles = [
@@ -26,6 +28,7 @@ export class PlatformIsland extends PlatformElement {
         this.variant = 'default';
         this.padding = 'md';
         this.headerGlow = true;
+        this.safeBottom = false;
     }
 
     render() {

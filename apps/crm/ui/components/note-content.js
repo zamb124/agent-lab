@@ -834,7 +834,7 @@ export class NoteContent extends PlatformElement {
 
             @media (max-width: 1279px) {
                 .layout {
-                    grid-template-columns: 1fr;
+                    grid-template-columns: minmax(0, 1fr);
                 }
 
                 .note-main,

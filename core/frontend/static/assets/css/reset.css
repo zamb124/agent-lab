@@ -48,6 +48,18 @@ body {
     overflow-x: hidden;
 }
 
+/* Lit SPA (CRM, Sync, RAG, Flows): iOS не должен скроллить document — иначе «едет» весь экран с хедером */
+html:has(body.platform-shell) {
+    height: 100%;
+    overflow: hidden;
+}
+
+body.platform-shell {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
 /* Animated background orbs for depth */
 body::before,
 body::after {

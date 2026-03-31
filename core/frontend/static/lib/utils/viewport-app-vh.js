@@ -16,16 +16,26 @@ function applyVisualViewportCssVars() {
     if (!mq.matches) {
         root.style.removeProperty('--app-vh');
         root.style.removeProperty('--app-vw');
+        root.removeAttribute('data-keyboard-visual');
         return;
     }
     const vv = window.visualViewport;
     if (!vv || typeof vv.height !== 'number') {
         root.style.removeProperty('--app-vh');
         root.style.removeProperty('--app-vw');
+        root.removeAttribute('data-keyboard-visual');
         return;
     }
     root.style.setProperty('--app-vh', `${Math.round(vv.height)}px`);
     root.style.setProperty('--app-vw', `${Math.round(vv.width)}px`);
+
+    const innerH = window.innerHeight;
+    const keyboardLikely = innerH > 0 && innerH - vv.height > 80;
+    if (keyboardLikely) {
+        root.setAttribute('data-keyboard-visual', '1');
+    } else {
+        root.removeAttribute('data-keyboard-visual');
+    }
 }
 
 /**
@@ -49,6 +59,7 @@ export function initPlatformViewportAppVh() {
 
     if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', onVisualViewport);
+        window.visualViewport.addEventListener('scroll', onVisualViewport);
     }
 
     applyVisualViewportCssVars();

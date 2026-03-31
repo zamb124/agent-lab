@@ -614,7 +614,7 @@ export class CRMApp extends PlatformApp {
                         </div>
                     ` : ''}
                 ` : ''}
-                <platform-island padding=${this._isMobile ? 'none' : 'md'}>
+                <platform-island padding=${this._isMobile ? 'none' : 'md'} ?safe-bottom=${this._isMobile}>
                     ${this._renderContent()}
                 </platform-island>
             </div>

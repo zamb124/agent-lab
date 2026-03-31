@@ -89,6 +89,10 @@ export class MessageComposer extends PlatformElement {
                 .composer {
                     padding: var(--space-2) var(--space-2) max(var(--space-2), env(safe-area-inset-bottom, 0px));
                 }
+
+                :host-context(html[data-keyboard-visual="1"]) .composer {
+                    padding: var(--space-2);
+                }
             }
 
             .row {

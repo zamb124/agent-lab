@@ -77,6 +77,7 @@ export const islandStyles = css`
         box-sizing: border-box;
         overflow-y: auto;
         overflow-x: hidden;
+        overscroll-behavior: contain;
     }
 
     :host([padding="none"]) .island-content {
@@ -130,6 +131,9 @@ export const islandStyles = css`
 
         :host([padding="none"]) .island-content {
             padding: 0;
+        }
+
+        :host([padding="none"][safe-bottom]) .island-content {
             padding-bottom: var(--platform-safe-bottom);
         }
 

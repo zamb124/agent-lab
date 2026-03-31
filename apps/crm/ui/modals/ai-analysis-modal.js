@@ -32,9 +32,12 @@ export class AIAnalysisModal extends PlatformModal {
 
             .root {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                 gap: var(--space-3);
                 min-height: 520px;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
             }
 
             .loading-shell {
@@ -95,6 +98,7 @@ export class AIAnalysisModal extends PlatformModal {
                 flex-direction: column;
                 gap: var(--space-3);
                 min-height: 0;
+                min-width: 0;
             }
 
             .block {
@@ -102,6 +106,9 @@ export class AIAnalysisModal extends PlatformModal {
                 border-radius: var(--radius-xl);
                 background: var(--crm-surface-muted);
                 padding: var(--space-3);
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
             }
 
             .ai-summary {
@@ -144,6 +151,8 @@ export class AIAnalysisModal extends PlatformModal {
                 color: var(--text-primary);
                 line-height: 1.45;
                 font-size: var(--text-base);
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .chips {
@@ -238,6 +247,7 @@ export class AIAnalysisModal extends PlatformModal {
                 flex-direction: column;
                 gap: var(--space-3);
                 overflow: auto;
+                min-width: 0;
             }
 
             .connection-card {
@@ -247,6 +257,9 @@ export class AIAnalysisModal extends PlatformModal {
                 align-items: flex-start;
                 gap: var(--space-2);
                 border: none;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
             }
 
             .connection-card.blue {
@@ -399,15 +412,19 @@ export class AIAnalysisModal extends PlatformModal {
 
             .connection-header {
                 display: flex;
-                align-items: center;
+                align-items: flex-start;
                 justify-content: space-between;
                 gap: var(--space-2);
+                min-width: 0;
+                flex-wrap: wrap;
             }
 
             .connection-meta {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                flex-shrink: 0;
+                margin-left: auto;
             }
 
             .relationship-type {
@@ -579,13 +596,34 @@ export class AIAnalysisModal extends PlatformModal {
 
             @media (max-width: 1024px) {
                 .root {
-                    grid-template-columns: 1fr;
+                    grid-template-columns: minmax(0, 1fr);
                 }
                 .connections-title {
                     font-size: 30px;
                 }
                 .block-title {
                     font-size: var(--text-xl);
+                }
+            }
+
+            @media (max-width: 480px) {
+                .connection-avatar {
+                    width: 48px;
+                    height: 48px;
+                }
+
+                .attr-row,
+                .attr-add-row {
+                    grid-template-columns: 1fr;
+                }
+
+                .task-row {
+                    grid-template-columns: auto minmax(0, 1fr) auto;
+                }
+
+                .task-row span {
+                    min-width: 0;
+                    overflow-wrap: anywhere;
                 }
             }
         `,
