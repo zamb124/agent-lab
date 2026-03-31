@@ -1,0 +1,13 @@
+{
+  "appId": "ru.humanitec.app",
+  "appName": "Humanitec",
+  "webDir": "www",
+  "server": {
+    "url": "https://humanitec.ru",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "limitsNavigationsToAppBoundDomains": false
+  }
+}

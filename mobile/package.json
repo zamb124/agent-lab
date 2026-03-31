@@ -1,0 +1,24 @@
+{
+  "name": "@humanitec/mobile-build",
+  "private": true,
+  "description": "Оболочки магазинов для PWA Humanitec: Android TWA, iOS Capacitor",
+  "scripts": {
+    "pwa:lighthouse": "bash scripts/run-lighthouse-ci.sh",
+    "twa:doctor": "bubblewrap doctor",
+    "twa:init": "bubblewrap init",
+    "twa:bootstrap": "bash scripts/init-twa.sh",
+    "twa:build": "bubblewrap build",
+    "twa:build:project": "bash scripts/build-twa.sh",
+    "twa:update": "bubblewrap update",
+    "cap:doctor": "cap doctor",
+    "cap:sync": "cap sync",
+    "cap:copy": "cap copy"
+  },
+  "devDependencies": {
+    "@lhci/cli": "^0.14.0",
+    "@bubblewrap/cli": "^1.24.0",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0"
+  }
+}

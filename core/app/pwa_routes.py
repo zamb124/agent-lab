@@ -17,11 +17,15 @@ def register_platform_pwa_routes(app: FastAPI, project_root: Path) -> None:
     """
     Регистрирует GET /manifest.json, /sw.js, /offline.html.
     При отсутствии файлов — исключение при старте приложения.
+
+    Опционально: GET /.well-known/assetlinks.json — если в ``core/frontend/pwa/assetlinks.json``
+    лежит готовый JSON для Android TWA (Digital Asset Links). Без файла маршрут не регистрируется.
     """
     pwa_dir = platform_pwa_assets_dir(project_root)
     manifest_path = pwa_dir / "manifest.json"
     sw_path = pwa_dir / "sw.js"
     offline_path = pwa_dir / "offline.html"
+    assetlinks_path = pwa_dir / "assetlinks.json"
 
     if not manifest_path.is_file():
         raise FileNotFoundError(f"PWA manifest не найден: {manifest_path}")
@@ -48,3 +52,12 @@ def register_platform_pwa_routes(app: FastAPI, project_root: Path) -> None:
     @app.get("/offline.html")
     async def serve_offline():
         return FileResponse(offline_path)
+
+    if assetlinks_path.is_file():
+
+        @app.get("/.well-known/assetlinks.json")
+        async def serve_asset_links():
+            return FileResponse(
+                assetlinks_path,
+                media_type="application/json",
+            )

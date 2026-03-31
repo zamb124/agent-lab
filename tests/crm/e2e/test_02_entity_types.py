@@ -144,6 +144,34 @@ class TestEntityTypes:
         assert updated["icon"] == "📝"
 
     @pytest.mark.asyncio
+    async def test_update_entity_type_is_context_anchor(self, crm_client, unique_id, auth_headers_system):
+        """Флаг якоря контекста на типе: запись и чтение."""
+        type_id = f"anchor_flag_{unique_id}"
+        create_resp = await crm_client.post(
+            "/crm/api/v1/entity-types/",
+            json={
+                "type_id": type_id,
+                "name": "Тип якоря",
+                "namespace_ids": ["default"],
+                "is_context_anchor": False,
+            },
+            headers=auth_headers_system,
+        )
+        assert create_resp.status_code == 200
+        assert create_resp.json().get("is_context_anchor") is False
+
+        update_resp = await crm_client.put(
+            f"/crm/api/v1/entity-types/{type_id}",
+            json={"is_context_anchor": True},
+            headers=auth_headers_system,
+        )
+        assert update_resp.status_code == 200
+        assert update_resp.json().get("is_context_anchor") is True
+
+        get_resp = await crm_client.get(f"/crm/api/v1/entity-types/{type_id}", headers=auth_headers_system)
+        assert get_resp.json().get("is_context_anchor") is True
+
+    @pytest.mark.asyncio
     async def test_create_namespace_from_template(self, crm_client, unique_id, auth_headers_system):
         create_template_response = await crm_client.post("/crm/api/v1/namespaces/templates", json={
             "template_id": f"sales_{unique_id}",

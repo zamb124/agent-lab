@@ -163,7 +163,13 @@ class EntityType(Base):
         nullable=False,
         comment="Список namespace, где тип разрешен"
     )
-    
+    is_context_anchor: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Тип может быть якорем контекста для заметок (сделка, лид и т.д.)",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
@@ -513,6 +519,12 @@ class NamespaceTemplateType(Base):
     check_duplicates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     weight_coefficient: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     namespace_ids: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+    is_context_anchor: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="При материализации в EntityType — якорь контекста",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

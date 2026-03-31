@@ -327,11 +327,11 @@ export class CRMApp extends PlatformApp {
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const selectedDate = CRMStore.getDailyNotesDate();
+        const { from, to } = CRMStore.getDailyNotesRange();
         await Promise.all([
             CRMStore.loadNotes(crmApi, {
-                dateFrom: selectedDate,
-                dateTo: selectedDate,
+                dateFrom: from,
+                dateTo: to,
                 limit: 300,
             }),
             CRMStore.loadEntityTypes(crmApi, namespaceName),
@@ -425,14 +425,14 @@ export class CRMApp extends PlatformApp {
     }
 
     _createNote() {
-        const selectedDate = CRMStore.getDailyNotesDate();
+        const focusDate = CRMStore.getDailyNotesFocusDate();
         const draftNote = {
             entity_id: `draft-${Date.now()}`,
             entity_type: 'note',
             entity_subtype: null,
             name: '',
             description: '',
-            note_date: selectedDate,
+            note_date: focusDate,
             attributes: {},
         };
         const modal = document.createElement('note-view-modal');
@@ -526,12 +526,12 @@ export class CRMApp extends PlatformApp {
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const selectedDate = CRMStore.getDailyNotesDate();
+        const { from, to } = CRMStore.getDailyNotesRange();
         await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
         await CRMStore.loadNotes(crmApi, {
-            dateFrom: selectedDate,
-            dateTo: selectedDate,
+            dateFrom: from,
+            dateTo: to,
             limit: 300,
         });
     }
@@ -544,12 +544,12 @@ export class CRMApp extends PlatformApp {
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const selectedDate = CRMStore.getDailyNotesDate();
+        const { from, to } = CRMStore.getDailyNotesRange();
         await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
         await CRMStore.loadNotes(crmApi, {
-            dateFrom: selectedDate,
-            dateTo: selectedDate,
+            dateFrom: from,
+            dateTo: to,
             limit: 300,
         });
     }

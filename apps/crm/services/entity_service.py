@@ -32,7 +32,9 @@ from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.models import Relationship
+from apps.crm.constants_graph import IN_CONTEXT_RELATIONSHIP_TYPE, NOTE_VOICE_RELATIONSHIP_TYPE
 from apps.crm.services.attachment_service import AttachmentService
+from apps.crm.services.user_person_service import UserPersonService
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
@@ -40,7 +42,7 @@ from core.clients.a2a_client import A2AClient
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
-from core.models.identity_models import Namespace
+from core.models.identity_models import Namespace, NamespaceCRMSettings
 import json
 from datetime import datetime as dt
 logger = get_logger(__name__)
@@ -107,6 +109,7 @@ class EntityService:
         attachment_service: AttachmentService,
         a2a_client: A2AClient,
         daily_summary_cache_service: DailySummaryCacheService,
+        user_person_service: UserPersonService,
     ):
         self._entity_repo = entity_repo
         self._entity_type_repo = entity_type_repo
@@ -116,6 +119,7 @@ class EntityService:
         self._attachment_service = attachment_service
         self._a2a_client = a2a_client
         self._daily_summary_cache_service = daily_summary_cache_service
+        self._user_person_service = user_person_service
     
     def _get_company_id(self) -> str:
         context = get_context()
@@ -176,6 +180,128 @@ class EntityService:
             if namespace not in subtype_namespaces:
                 raise ValueError(f"Entity subtype '{entity_subtype}' is not allowed in namespace '{namespace}'")
 
+    async def _load_namespace_crm_settings(self, namespace: str) -> NamespaceCRMSettings:
+        ns = await self._namespace_repo.get(namespace)
+        if ns is None or ns.crm_settings is None:
+            return NamespaceCRMSettings()
+        return ns.crm_settings
+
+    async def _validate_voice_target(self, entity_id: str, company_id: str) -> None:
+        ent = await self._entity_repo.get(entity_id)
+        if ent is None or ent.company_id != company_id:
+            raise ValueError(f"Сущность голоса не найдена: {entity_id}")
+        if ent.entity_type != "contact":
+            raise ValueError("Голос заметки должен быть типа contact")
+
+    async def _validate_context_target(self, entity_id: str, company_id: str) -> None:
+        ent = await self._entity_repo.get(entity_id)
+        if ent is None or ent.company_id != company_id:
+            raise ValueError(f"Сущность контекста не найдена: {entity_id}")
+        et = await self._entity_type_repo.get_by_type_id(ent.entity_type)
+        if et is None or not et.is_context_anchor:
+            raise ValueError("Контекст заметки должен быть типом с флагом якоря контекста")
+
+    async def _get_existing_outgoing_target(
+        self,
+        source_entity_id: str,
+        relationship_type: str,
+    ) -> Optional[str]:
+        rels = await self._relationship_repo.get_outgoing(source_entity_id, relationship_type)
+        if not rels:
+            return None
+        return rels[0].target_entity_id
+
+    async def _resolve_voice_entity_id_for_note(
+        self,
+        *,
+        namespace: str,
+        user_id: str,
+        company_id: str,
+        voice_entity_id: Optional[str],
+        voice_entity_in_payload: bool,
+    ) -> Optional[str]:
+        if voice_entity_in_payload:
+            if voice_entity_id is None:
+                return None
+            await self._validate_voice_target(voice_entity_id, company_id)
+            return voice_entity_id
+        settings = await self._load_namespace_crm_settings(namespace)
+        mode = settings.default_note_voice
+        if mode == "none":
+            return None
+        if mode == "self":
+            return await self._user_person_service.get_or_create_person_entity_id(user_id, company_id)
+        last_id = await self._user_person_service.resolve_last_voice_entity_id(user_id, company_id, namespace)
+        if last_id:
+            await self._validate_voice_target(last_id, company_id)
+            return last_id
+        return await self._user_person_service.get_or_create_person_entity_id(user_id, company_id)
+
+    async def _resolve_context_entity_id_for_note(
+        self,
+        *,
+        namespace: str,
+        company_id: str,
+        context_entity_id: Optional[str],
+        context_entity_in_payload: bool,
+    ) -> Optional[str]:
+        if context_entity_in_payload:
+            if context_entity_id is None:
+                return None
+            await self._validate_context_target(context_entity_id, company_id)
+            return context_entity_id
+        settings = await self._load_namespace_crm_settings(namespace)
+        anchor = settings.default_context_entity_id
+        if anchor is None or (isinstance(anchor, str) and anchor.strip() == ""):
+            return None
+        await self._validate_context_target(anchor, company_id)
+        return anchor
+
+    async def _sync_note_graph_edges(
+        self,
+        *,
+        note_id: str,
+        namespace: str,
+        user_id: str,
+        resolved_voice_id: Optional[str],
+        resolved_context_id: Optional[str],
+    ) -> None:
+        company_id = self._get_company_id()
+        await self._relationship_repo.delete_outgoing_by_source_and_types(
+            note_id,
+            [NOTE_VOICE_RELATIONSHIP_TYPE, IN_CONTEXT_RELATIONSHIP_TYPE],
+        )
+        now = datetime.now(timezone.utc)
+        if resolved_voice_id:
+            voice_row = Relationship(
+                relationship_id=str(uuid.uuid4()),
+                source_entity_id=note_id,
+                target_entity_id=resolved_voice_id,
+                relationship_type=NOTE_VOICE_RELATIONSHIP_TYPE,
+                namespace=namespace,
+                weight=1.0,
+                attributes={},
+                company_id=company_id,
+                created_at=now,
+                updated_at=now,
+            )
+            await self._relationship_repo.create(voice_row)
+            await self._user_person_service.record_last_voice_entity(user_id, namespace, resolved_voice_id)
+        if resolved_context_id:
+            ctx_row = Relationship(
+                relationship_id=str(uuid.uuid4()),
+                source_entity_id=note_id,
+                target_entity_id=resolved_context_id,
+                relationship_type=IN_CONTEXT_RELATIONSHIP_TYPE,
+                namespace=namespace,
+                weight=1.0,
+                attributes={},
+                company_id=company_id,
+                created_at=now,
+                updated_at=now,
+            )
+            await self._relationship_repo.create(ctx_row)
+
     async def _list_notes_for_date(self, date_str: str, namespace: Optional[str] = None) -> List[CRMEntity]:
         query_filters: dict[str, Any] = {"note_date": date_str}
         return await self._entity_repo.list_all(
@@ -217,7 +343,10 @@ class EntityService:
         entity_subtype: Optional[str] = None,
         attributes: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        
+        voice_entity_id: Optional[str] = None,
+        context_entity_id: Optional[str] = None,
+        voice_entity_in_payload: bool = False,
+        context_entity_in_payload: bool = False,
         **kwargs
     ) -> CRMEntity:
         """Создает новую entity"""
@@ -255,6 +384,29 @@ class EntityService:
         await self._entity_repo.create(entity)
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
 
+        if entity.entity_type == "note":
+            company_id = self._get_company_id()
+            resolved_voice = await self._resolve_voice_entity_id_for_note(
+                namespace=namespace,
+                user_id=user_id,
+                company_id=company_id,
+                voice_entity_id=voice_entity_id,
+                voice_entity_in_payload=voice_entity_in_payload,
+            )
+            resolved_context = await self._resolve_context_entity_id_for_note(
+                namespace=namespace,
+                company_id=company_id,
+                context_entity_id=context_entity_id,
+                context_entity_in_payload=context_entity_in_payload,
+            )
+            await self._sync_note_graph_edges(
+                note_id=entity.entity_id,
+                namespace=namespace,
+                user_id=user_id,
+                resolved_voice_id=resolved_voice,
+                resolved_context_id=resolved_context,
+            )
+
         if entity.entity_type == "note" and entity.note_date is not None:
             await self.enqueue_daily_summary_rebuild(
                 date_str=entity.note_date.isoformat(),
@@ -286,7 +438,10 @@ class EntityService:
         self, 
         entity_id: str,
         updates: Dict[str, Any],
-        
+        voice_entity_id: Optional[str] = None,
+        voice_entity_in_payload: bool = False,
+        context_entity_id: Optional[str] = None,
+        context_entity_in_payload: bool = False,
     ) -> CRMEntity:
         """Обновляет entity"""
         
@@ -352,6 +507,42 @@ class EntityService:
                 note_id=entity.entity_id,
                 note_date_iso=note_date_iso,
                 action="updated",
+            )
+
+            company_id = self._get_company_id()
+            uid = entity.user_id
+            ns = entity.namespace
+            if voice_entity_in_payload:
+                resolved_voice = await self._resolve_voice_entity_id_for_note(
+                    namespace=ns,
+                    user_id=uid,
+                    company_id=company_id,
+                    voice_entity_id=voice_entity_id,
+                    voice_entity_in_payload=True,
+                )
+            else:
+                resolved_voice = await self._get_existing_outgoing_target(
+                    entity.entity_id,
+                    NOTE_VOICE_RELATIONSHIP_TYPE,
+                )
+            if context_entity_in_payload:
+                resolved_context = await self._resolve_context_entity_id_for_note(
+                    namespace=ns,
+                    company_id=company_id,
+                    context_entity_id=context_entity_id,
+                    context_entity_in_payload=True,
+                )
+            else:
+                resolved_context = await self._get_existing_outgoing_target(
+                    entity.entity_id,
+                    IN_CONTEXT_RELATIONSHIP_TYPE,
+                )
+            await self._sync_note_graph_edges(
+                note_id=entity.entity_id,
+                namespace=ns,
+                user_id=uid,
+                resolved_voice_id=resolved_voice,
+                resolved_context_id=resolved_context,
             )
 
         return entity
@@ -1132,6 +1323,18 @@ class EntityService:
             request.extract_entity_types,
             request.extract_relationship_types
         )
+        ctx = get_context()
+        prefix_parts: list[str] = []
+        if ctx and ctx.user:
+            profile_block = await self._user_person_service.format_user_profile_for_ai(ctx.user.user_id)
+            if profile_block.strip():
+                prefix_parts.append("ПРОФИЛЬ АВТОРА ЗАМЕТКИ:\n" + profile_block)
+        anchor_types = [et for et in entity_types if getattr(et, "is_context_anchor", False)]
+        if anchor_types:
+            anchor_lines = "\n".join(f"- {et.name} ({et.type_id})" for et in anchor_types)
+            prefix_parts.append("ТИПЫ-ЯКОРЯ КОНТЕКСТА (привязка заметок к сделке, лиду и т.д.):\n" + anchor_lines)
+        if prefix_parts:
+            prompt = "\n\n".join(prefix_parts) + "\n\n" + prompt
         
         t_analyze = time.perf_counter()
         state = await self._call_ai_agent(

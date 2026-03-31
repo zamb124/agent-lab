@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from pydantic import BaseModel, ConfigDict
 from enum import Enum
 
@@ -43,9 +43,22 @@ class User(BaseModel):
         readonly=True,
     )
     name: str = Field(
-        title="Имя", 
-        description="Имя пользователя", 
-        placeholder="Иван Иванов"
+        title="Имя",
+        description="Отображаемое имя; при сохранении ФИО может выставляться из имени и фамилии",
+        placeholder="Иван Иванов",
+        max_length=200,
+    )
+    first_name: Optional[str] = Field(
+        default=None,
+        title="Имя",
+        description="Имя для профиля и сопоставления на графе",
+        max_length=100,
+    )
+    last_name: Optional[str] = Field(
+        default=None,
+        title="Фамилия",
+        description="Фамилия для профиля и сопоставления на графе",
+        max_length=100,
     )
     status: UserStatus = Field(
         default=UserStatus.ACTIVE,
@@ -94,7 +107,8 @@ class User(BaseModel):
     bio: Optional[str] = Field(
         default=None,
         title="О себе",
-        description="Биография пользователя"
+        description="Биография пользователя для ИИ и интерфейса",
+        max_length=4000,
     )
     ui_preferences: Dict[str, Any] = Field(
         default_factory=dict,
@@ -292,6 +306,20 @@ class AuthRequest(BaseModel):
     redirect_uri: Optional[str] = Field(default=None, description="URI для редиректа")
 
 
+class NamespaceCRMSettings(BaseModel):
+    """Настройки CRM для namespace (заметки: голос, контекст)."""
+
+    show_note_voice_ui: bool = Field(default=True, title="Показывать выбор голоса")
+    default_note_voice: Literal["self", "none", "last"] = Field(
+        default="self",
+        title="Голос по умолчанию для новой заметки",
+    )
+    default_context_entity_id: Optional[str] = Field(
+        default=None,
+        title="Якорь контекста по умолчанию",
+    )
+
+
 class Namespace(BaseModel):
     """
     Namespace (изолированная область данных).
@@ -318,6 +346,11 @@ class Namespace(BaseModel):
         default=False,
         title="По умолчанию",
         description="Является ли namespace дефолтным для компании"
+    )
+    crm_settings: Optional[NamespaceCRMSettings] = Field(
+        default=None,
+        title="Настройки CRM",
+        description="Опционально: UI заметок и значения по умолчанию",
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

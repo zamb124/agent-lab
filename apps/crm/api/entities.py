@@ -27,7 +27,8 @@ from apps.crm.config import get_crm_settings
 from apps.crm.taskiq_analyze_errors import parse_validation_from_task_message
 from apps.crm.services.entity_service import DraftVersionConflictError, EntityService
 from apps.crm.services.access_control_service import AccessControlService
-from apps.crm.dependencies import get_entity_service, get_access_control_service
+from apps.crm.dependencies import get_entity_service, get_access_control_service, get_container_dep
+from apps.crm.container import CRMContainer
 from apps.crm_worker.tasks.analysis_tasks import (
     analyze_text_with_ai_task,
     apply_analysis_draft_task,
@@ -38,6 +39,24 @@ from core.websocket.publisher import notify_user, Notification, NotificationType
 from taskiq.exceptions import TaskiqResultTimeoutError
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
+
+
+@router.get("/person-entity/self", response_model=EntityResponse)
+async def get_person_entity_for_current_user(
+    container: CRMContainer = Depends(get_container_dep),
+):
+    """Сущность contact, соответствующая текущему пользователю (для голоса «Я»)."""
+    ctx = get_context()
+    if not ctx or not ctx.user or not ctx.active_company:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    person_id = await container.user_person_service.get_or_create_person_entity_id(
+        ctx.user.user_id,
+        ctx.active_company.company_id,
+    )
+    entity = await container.entity_repository.get(person_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Person entity not found")
+    return EntityResponse.model_validate(entity)
 
 
 @router.post("", response_model=EntityResponse)
@@ -59,7 +78,11 @@ async def create_entity(
             note_date=data.note_date,
             due_date=data.due_date,
             priority=data.priority,
-            assignees=data.assignees
+            assignees=data.assignees,
+            voice_entity_id=data.voice_entity_id,
+            context_entity_id=data.context_entity_id,
+            voice_entity_in_payload="voice_entity_id" in data.model_fields_set,
+            context_entity_in_payload="context_entity_id" in data.model_fields_set,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -212,10 +235,18 @@ async def update_entity(
     if not user_id or not await access_control.can_write_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Обновление
     updates = data.model_dump(exclude_none=True)
+    updates.pop("voice_entity_id", None)
+    updates.pop("context_entity_id", None)
     try:
-        updated = await service.update_entity(entity_id, updates)
+        updated = await service.update_entity(
+            entity_id,
+            updates,
+            voice_entity_id=data.voice_entity_id,
+            voice_entity_in_payload="voice_entity_id" in data.model_fields_set,
+            context_entity_id=data.context_entity_id,
+            context_entity_in_payload="context_entity_id" in data.model_fields_set,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return EntityResponse.model_validate(updated)

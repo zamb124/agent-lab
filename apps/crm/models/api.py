@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Dict, Any, List, Optional, Literal
 from datetime import date, datetime
 
+from core.models.identity_models import NamespaceCRMSettings
+
 
 class EntityCreate(BaseModel):
     """Создание entity"""
@@ -17,7 +19,16 @@ class EntityCreate(BaseModel):
     attributes: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
     user_id: Optional[str] = None
-    
+
+    voice_entity_id: Optional[str] = Field(
+        default=None,
+        description="Сущность-голос (обычно contact); null в JSON — без голоса при переданном поле",
+    )
+    context_entity_id: Optional[str] = Field(
+        default=None,
+        description="Якорь контекста; null — без привязки",
+    )
+
     note_date: Optional[date] = None
     due_date: Optional[date] = None
     priority: Optional[str] = None
@@ -31,7 +42,10 @@ class EntityUpdate(BaseModel):
     status: Optional[str] = None
     attributes: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
-    
+
+    voice_entity_id: Optional[str] = None
+    context_entity_id: Optional[str] = None
+
     note_date: Optional[date] = None
     due_date: Optional[date] = None
     priority: Optional[str] = None
@@ -90,6 +104,7 @@ class EntityTypeCreate(BaseModel):
     is_event: bool = False
     check_duplicates: bool = True
     namespace_ids: Optional[List[str]] = None
+    is_context_anchor: bool = False
 
 
 class EntityTypeUpdate(BaseModel):
@@ -103,6 +118,7 @@ class EntityTypeUpdate(BaseModel):
     icon: Optional[str] = None
     color: Optional[str] = None
     namespace_ids: Optional[List[str]] = None
+    is_context_anchor: Optional[bool] = None
 
 
 class EntityTypeResponse(BaseModel):
@@ -124,6 +140,7 @@ class EntityTypeResponse(BaseModel):
     check_duplicates: bool
     weight_coefficient: float
     namespace_ids: List[str]
+    is_context_anchor: bool
     created_at: datetime
 
 
@@ -223,6 +240,7 @@ class NamespaceResponse(BaseModel):
     company_id: str
     description: Optional[str] = None
     is_default: bool = False
+    crm_settings: Optional[NamespaceCRMSettings] = None
 
 
 class NamespaceListResponse(BaseModel):
@@ -235,6 +253,7 @@ class NamespaceUpdateRequest(BaseModel):
     """Обновление существующего namespace."""
     description: Optional[str] = None
     allowed_type_ids: Optional[List[str]] = None
+    crm_settings: Optional[NamespaceCRMSettings] = None
 
 
 class NamespaceEditabilityResponse(BaseModel):
@@ -288,6 +307,7 @@ class NamespaceTemplateTypeUpsertRequest(BaseModel):
     check_duplicates: bool = True
     weight_coefficient: float = 1.0
     namespace_ids: List[str] = Field(default_factory=list)
+    is_context_anchor: bool = False
 
 
 class NamespaceTemplateTypeResponse(BaseModel):
@@ -304,6 +324,7 @@ class NamespaceTemplateTypeResponse(BaseModel):
     check_duplicates: bool
     weight_coefficient: float
     namespace_ids: List[str]
+    is_context_anchor: bool
 
 
 class NamespaceTemplateDetailsResponse(BaseModel):

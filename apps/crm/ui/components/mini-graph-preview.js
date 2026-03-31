@@ -212,7 +212,6 @@ export class MiniGraphPreview extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        this._teardownGraphResizeObserver();
         this._destroyGraph();
     }
 
@@ -357,6 +356,25 @@ export class MiniGraphPreview extends PlatformElement {
             nodes[0].fz = 0;
         }
         this._graphInstance.graphData({ nodes, links });
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                this._applyGraphContainerSize();
+            });
+        });
+    }
+
+    _applyGraphContainerSize() {
+        if (!this._graphInstance) {
+            return;
+        }
+        const canvasEl = this.renderRoot?.querySelector('.mini-canvas');
+        if (!canvasEl) {
+            return;
+        }
+        const w = Math.max(1, Math.floor(canvasEl.clientWidth));
+        const h = Math.max(1, Math.floor(canvasEl.clientHeight));
+        this._graphInstance.width(w);
+        this._graphInstance.height(h);
     }
 
     _initGraph() {
@@ -459,13 +477,7 @@ export class MiniGraphPreview extends PlatformElement {
             if (controls) {
                 controls.enableRotate = false;
             }
-            const canvasEl = this.renderRoot?.querySelector('.mini-canvas');
-            if (canvasEl) {
-                const w = Math.max(1, Math.floor(canvasEl.clientWidth));
-                const h = Math.max(1, Math.floor(canvasEl.clientHeight));
-                this._graphInstance.width(w);
-                this._graphInstance.height(h);
-            }
+            this._applyGraphContainerSize();
             this._setupGraphResizeObserver();
         });
     }
@@ -495,17 +507,7 @@ export class MiniGraphPreview extends PlatformElement {
             return;
         }
         this._resizeObserver = new ResizeObserver(() => {
-            if (!this._graphInstance) {
-                return;
-            }
-            const canvasEl = this.renderRoot?.querySelector('.mini-canvas');
-            if (!canvasEl) {
-                return;
-            }
-            const w = Math.max(1, Math.floor(canvasEl.clientWidth));
-            const h = Math.max(1, Math.floor(canvasEl.clientHeight));
-            this._graphInstance.width(w);
-            this._graphInstance.height(h);
+            this._applyGraphContainerSize();
         });
         this._resizeObserver.observe(wrap);
     }

@@ -39,6 +39,7 @@ def _build_service() -> EntityService:
         attachment_service=AsyncMock(),
         a2a_client=AsyncMock(),
         daily_summary_cache_service=AsyncMock(),
+        user_person_service=AsyncMock(),
     )
 
 
@@ -271,6 +272,7 @@ async def test_compute_daily_summary_falls_back_to_entities_from_notes():
     note = SimpleNamespace(
         entity_id="n-1",
         updated_at=None,
+        entity_subtype=None,
         tags=["Альфа Банк"],
         name="Встреча с @Yandex",
         description="Обсудили планы с @Sber и @Yandex",
@@ -384,11 +386,16 @@ def test_extract_data_from_a2a_response_res_as_dict_not_string():
 
 
 @pytest.mark.asyncio
-async def test_update_entity_note_date_triggers_both_dates():
+async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
     _set_test_context()
+    monkeypatch.setattr(entity_service_module, "broadcast_crm_note_event", AsyncMock())
     service = _build_service()
     existing = SimpleNamespace(
+        entity_id="e-1",
         entity_type="note",
+        entity_subtype=None,
+        company_id="c-1",
+        user_id="u-1",
         note_date=date.fromisoformat("2026-03-27"),
         namespace="sales",
         updated_at=None,
@@ -397,6 +404,9 @@ async def test_update_entity_note_date_triggers_both_dates():
     service._entity_repo.get = AsyncMock(return_value=existing)
     service._entity_repo.update = AsyncMock()
     service.enqueue_daily_summary_rebuild = AsyncMock(return_value=True)
+    service._relationship_repo.get_outgoing = AsyncMock(return_value=[])
+    service._relationship_repo.delete_outgoing_by_source_and_types = AsyncMock()
+    service._relationship_repo.create = AsyncMock()
 
     await service.update_entity(
         entity_id="e-1",
@@ -417,10 +427,12 @@ async def test_update_entity_note_date_triggers_both_dates():
 @pytest.mark.asyncio
 async def test_delete_entity_note_triggers_rebuild(monkeypatch):
     _set_test_context()
+    monkeypatch.setattr(entity_service_module, "broadcast_crm_note_event", AsyncMock())
     service = _build_service()
     entity = SimpleNamespace(
         entity_id="e-1",
         entity_type="note",
+        company_id="c-1",
         note_date=date.fromisoformat("2026-03-28"),
         namespace="sales",
         attachment_ids=[],

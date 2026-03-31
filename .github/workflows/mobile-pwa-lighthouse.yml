@@ -1,0 +1,30 @@
+# Опционально: проверка PWA на production URL (Lighthouse CI).
+# Задайте секрет PWA_LIGHTHOUSE_URL (например https://humanitec.ru/).
+name: mobile-pwa-lighthouse
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile tooling
+        run: npm ci
+        working-directory: mobile
+
+      - name: Run Lighthouse CI
+        env:
+          PWA_LIGHTHOUSE_URL: ${{ secrets.PWA_LIGHTHOUSE_URL }}
+        run: ./scripts/run-lighthouse-ci.sh
+        working-directory: mobile

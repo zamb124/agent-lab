@@ -70,6 +70,21 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
             "priority": {"type": "enum", "values": ["low", "medium", "high", "urgent"]},
         },
     },
+    {
+        "type_id": "contact",
+        "parent_type_id": None,
+        "name": "Контакт",
+        "description": "Человек или контактная запись",
+        "is_system": True,
+        "is_event": False,
+        "prompt": "Извлекай персону, роль и контекст взаимодействия.",
+        "icon": "user",
+        "color": "#546E7A",
+        "weight_coefficient": 1.0,
+        "required_fields": {"display_name": {"type": "string", "label": "Имя"}},
+        "optional_fields": {"role": {"type": "string", "label": "Роль"}},
+        "is_context_anchor": False,
+    },
 ]
 
 SYSTEM_RELATIONSHIP_TYPE_TEMPLATES = [
@@ -244,6 +259,28 @@ SYSTEM_RELATIONSHIP_TYPE_TEMPLATES = [
         "color": "#BDBDBD",
         "weight_default": 0.3,
     },
+    {
+        "type_id": "note_voice",
+        "name": "Голос заметки",
+        "description": "Направленная связь: заметка (источник) — сущность-голос (цель)",
+        "is_system": True,
+        "is_directed": True,
+        "prompt": None,
+        "icon": "user",
+        "color": "#7CB342",
+        "weight_default": 1.0,
+    },
+    {
+        "type_id": "in_context",
+        "name": "В контексте",
+        "description": "Заметка привязана к якорной сущности (сделка, лид и т.д.)",
+        "is_system": True,
+        "is_directed": True,
+        "prompt": None,
+        "icon": "anchor",
+        "color": "#5C6BC0",
+        "weight_default": 1.0,
+    },
 ]
 
 
@@ -265,6 +302,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#7E57C2",
                 "is_event": False,
                 "check_duplicates": True,
+                "is_context_anchor": True,
             },
             {
                 "type_id": "deal",
@@ -277,6 +315,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#EF6C00",
                 "is_event": False,
                 "check_duplicates": True,
+                "is_context_anchor": True,
             },
         ],
     },
@@ -297,6 +336,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#D32F2F",
                 "is_event": True,
                 "check_duplicates": True,
+                "is_context_anchor": True,
             },
             {
                 "type_id": "decision",
@@ -309,6 +349,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#1976D2",
                 "is_event": False,
                 "check_duplicates": False,
+                "is_context_anchor": True,
             },
         ],
     },
@@ -329,6 +370,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#8E24AA",
                 "is_event": False,
                 "check_duplicates": True,
+                "is_context_anchor": True,
             },
             {
                 "type_id": "interview",
@@ -341,6 +383,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#00897B",
                 "is_event": True,
                 "check_duplicates": False,
+                "is_context_anchor": True,
             },
         ],
     },

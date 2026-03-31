@@ -342,6 +342,8 @@ uv run pytest tests/flows/api/test_reload_flow_from_bundle.py -v
 
 ## Внешние зависимости тестового окружения
 
+- **CRM E2E (`tests/crm/e2e`):** pytest подставляет `DATABASE__CRM_URL` из [`tests/fixtures/test_database_env.py`](../../tests/fixtures/test_database_env.py) (PostgreSQL порт **54322**, БД `platform_crm`). После новых миграций в `migrations/crm/` применить их к этой БД, например:  
+  `DATABASE__CRM_URL="postgresql+asyncpg://platform_user:admin@localhost:54322/platform_crm" uv run python -m scripts.db_migrate upgrade --service crm`
 - **Компонентные UI-тесты (`npm run test:ui-components`):** образ **[`Dockerfile.test`](../../Dockerfile.test)** и контейнер **tests_runner** содержат только Python/uv. Прогон WTR — **отдельным job** с Node.js. **E2E `tests/ui/e2e`** — pytest + Playwright из uv (`uv run playwright install chromium`).
 - Фикстура `test_a2a_sample` — URL тестового A2A sample; в `docker-compose-test.yaml` сервис `test-a2a-agent` проброшен на порт **18052**.
 - `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push тестов.

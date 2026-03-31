@@ -56,3 +56,27 @@ def test_register_platform_pwa_routes_raises_when_assets_missing(tmp_path: Path)
     app = FastAPI()
     with pytest.raises(FileNotFoundError, match="PWA manifest"):
         register_platform_pwa_routes(app, tmp_path)
+
+
+def test_assetlinks_json_when_file_present(tmp_path: Path) -> None:
+    """При наличии core/frontend/pwa/assetlinks.json — отдача /.well-known/assetlinks.json."""
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    src_pwa = repo_root / "core" / "frontend" / "pwa"
+    dst_pwa = tmp_path / "core" / "frontend" / "pwa"
+    dst_pwa.mkdir(parents=True)
+    for name in ("manifest.json", "sw.js", "offline.html"):
+        (dst_pwa / name).write_bytes((src_pwa / name).read_bytes())
+    (dst_pwa / "assetlinks.json").write_text(
+        '[{"relation":["delegate_permission/common.handle_all_urls"],'
+        '"target":{"namespace":"android_app","package_name":"ru.test.twa",'
+        '"sha256_cert_fingerprints":["AA:BB:CC"]}}]',
+        encoding="utf-8",
+    )
+    app = FastAPI()
+    register_platform_pwa_routes(app, tmp_path)
+    client = TestClient(app)
+    response = client.get("/.well-known/assetlinks.json")
+    assert response.status_code == 200
+    assert "application/json" in response.headers["content-type"]
+    data = response.json()
+    assert data[0]["target"]["package_name"] == "ru.test.twa"

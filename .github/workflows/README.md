@@ -169,3 +169,7 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | Yandex | `https://humanitec.ru/frontend/api/auth/callback/yandex` |
 | Google | `https://humanitec.ru/frontend/api/auth/callback/google` |
 | GitHub | `https://humanitec.ru/frontend/api/auth/callback/github` |
+
+## Mobile: Lighthouse CI
+
+Workflow [`mobile-pwa-lighthouse.yml`](mobile-pwa-lighthouse.yml) — по расписанию и вручную; проверяет PWA на URL из секрета **`PWA_LIGHTHOUSE_URL`** (например `https://humanitec.ru/`). Без секрета job завершится ошибкой на шаге Lighthouse.

@@ -97,6 +97,7 @@ class CompanyInitService:
                     check_duplicates=template.get('check_duplicates', True),
                     weight_coefficient=template.get('weight_coefficient', 1.0),
                     namespace_ids=["default"],
+                    is_context_anchor=template.get('is_context_anchor', False),
                     created_at=datetime.now(timezone.utc)
                 )
                 await self._entity_type_repo.create(entity_type)
@@ -114,6 +115,7 @@ class CompanyInitService:
             existing.is_event = template.get("is_event", False)
             existing.check_duplicates = template.get("check_duplicates", True)
             existing.weight_coefficient = template.get("weight_coefficient", 1.0)
+            existing.is_context_anchor = template.get("is_context_anchor", False)
             if "default" not in existing.namespace_ids:
                 existing.namespace_ids = list(existing.namespace_ids) + ["default"]
             await self._entity_type_repo.update(existing)
@@ -196,6 +198,7 @@ class CompanyInitService:
                     check_duplicates=item.get("check_duplicates", True),
                     weight_coefficient=item.get("weight_coefficient", 1.0),
                     namespace_ids=item.get("namespace_ids", []),
+                    is_context_anchor=item.get("is_context_anchor", False),
                 )
         return created_count
     

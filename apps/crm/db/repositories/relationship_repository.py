@@ -93,6 +93,25 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
     
+    async def delete_outgoing_by_source_and_types(
+        self,
+        source_entity_id: str,
+        relationship_types: List[str],
+    ) -> int:
+        """Удаляет исходящие связи от source с указанными типами."""
+        if not relationship_types:
+            return 0
+        company_id = self._get_company_id()
+        async with self._db.session() as session:
+            stmt = delete(Relationship).where(
+                Relationship.company_id == company_id,
+                Relationship.source_entity_id == source_entity_id,
+                Relationship.relationship_type.in_(relationship_types),
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            return int(result.rowcount or 0)
+
     async def delete_by_entity(
         self,
         entity_id: str

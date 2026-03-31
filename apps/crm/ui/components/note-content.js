@@ -38,6 +38,9 @@ export class NoteContent extends PlatformElement {
         _draftText: { state: true },
         _draftSubtype: { state: true },
         _draftNoteDate: { state: true },
+        _draftVoiceMode: { state: true },
+        _draftManualVoiceId: { state: true },
+        _draftContextEntityId: { state: true },
     };
 
     static styles = [
@@ -1004,6 +1007,30 @@ export class NoteContent extends PlatformElement {
         this._draftText = '';
         this._draftSubtype = '';
         this._draftNoteDate = '';
+        this._draftVoiceMode = 'default';
+        this._draftManualVoiceId = '';
+        this._draftContextEntityId = '';
+    }
+
+    _syncVoiceContextDraftsFromGraph() {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.trim().length === 0) {
+            this._draftVoiceMode = 'default';
+            this._draftManualVoiceId = '';
+            this._draftContextEntityId = '';
+            return;
+        }
+        const rels = Array.isArray(this.relationships) ? this.relationships : [];
+        const nid = this.note.entity_id;
+        const voice = rels.find((r) => r.relationship_type === 'note_voice' && r.source_entity_id === nid);
+        const ctx = rels.find((r) => r.relationship_type === 'in_context' && r.source_entity_id === nid);
+        if (voice && typeof voice.target_entity_id === 'string') {
+            this._draftVoiceMode = 'manual';
+            this._draftManualVoiceId = voice.target_entity_id;
+        } else {
+            this._draftVoiceMode = 'default';
+            this._draftManualVoiceId = '';
+        }
+        this._draftContextEntityId = ctx && typeof ctx.target_entity_id === 'string' ? ctx.target_entity_id : '';
     }
 
     willUpdate(changedProperties) {
@@ -1018,6 +1045,12 @@ export class NoteContent extends PlatformElement {
                 this._draftSubtype = noteSubtype;
                 this._draftNoteDate = noteDate || getLocalIsoDate();
             }
+        }
+        if (
+            this.editable
+            && (changedProperties.has('note') || changedProperties.has('editable') || changedProperties.has('relationships'))
+        ) {
+            this._syncVoiceContextDraftsFromGraph();
         }
     }
 
@@ -1322,7 +1355,22 @@ export class NoteContent extends PlatformElement {
             description: this._draftText,
             entitySubtype: subtype.length > 0 ? subtype : null,
             noteDate,
+            voiceMode: this._draftVoiceMode,
+            voiceEntityId: (this._draftManualVoiceId || '').trim(),
+            contextEntityId: (this._draftContextEntityId || '').trim(),
         });
+    }
+
+    _onVoiceModeChange(event) {
+        this._draftVoiceMode = event.target.value;
+    }
+
+    _onManualVoiceInput(event) {
+        this._draftManualVoiceId = event.target.value;
+    }
+
+    _onContextEntityInput(event) {
+        this._draftContextEntityId = event.target.value;
     }
 
     _emitCancelEdit() {
@@ -1464,6 +1512,36 @@ export class NoteContent extends PlatformElement {
                                         .value=${this._draftNoteDate}
                                         @change=${this._onNoteDateChange}
                                     ></platform-date-picker>
+                                </div>
+                                <div class="note-edit-meta voice-context-row">
+                                    <label class="form-label">Голос заметки</label>
+                                    <select
+                                        class="form-select"
+                                        .value=${this._draftVoiceMode}
+                                        @change=${this._onVoiceModeChange}
+                                    >
+                                        <option value="default">По умолчанию (неймспейс)</option>
+                                        <option value="self">Я</option>
+                                        <option value="none">Без голоса</option>
+                                        <option value="manual">Контакт (id)</option>
+                                    </select>
+                                    ${this._draftVoiceMode === 'manual' ? html`
+                                        <input
+                                            class="form-input mono"
+                                            type="text"
+                                            placeholder="entity_id контакта"
+                                            .value=${this._draftManualVoiceId}
+                                            @input=${this._onManualVoiceInput}
+                                        />
+                                    ` : ''}
+                                    <label class="form-label">Контекст (якорь)</label>
+                                    <input
+                                        class="form-input mono"
+                                        type="text"
+                                        placeholder="entity_id сделки/лида (необязательно)"
+                                        .value=${this._draftContextEntityId}
+                                        @input=${this._onContextEntityInput}
+                                    />
                                 </div>
                             ` : html`<h2 class="note-title">${noteTitle}</h2>`}
                             <p class="note-date">${noteDate}</p>

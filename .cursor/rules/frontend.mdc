@@ -45,7 +45,9 @@ LitElement (Lit)
 
 ## PWA
 
-Единый Web App Manifest, Service Worker и offline-страница: каталог **`core/frontend/pwa/`** (`manifest.json`, `sw.js`, `offline.html`). Маршруты **`GET /manifest.json`**, **`GET /sw.js`**, **`GET /offline.html`** подключает **`create_service_app`** через **`core/app/pwa_routes.py`** (`register_platform_pwa_routes`). Параметр фабрики **`include_platform_pwa`**: по умолчанию **`None`** — при **`TESTING=true`** PWA-маршруты не регистрируются, иначе регистрируются. Клиент: **`core/frontend/static/services/pwa.service.js`** (`navigator.serviceWorker.register('/sw.js', { scope: '/' })`). В каждом SPA-shell: **`<link rel="manifest" href="/manifest.json">`**. В standalone PWA запрещён zoom (pinch/gesture/keyboard): guard ставится централизованно в **`core/frontend/static/lib/platform-element/index.js`** для всех приложений на `PlatformElement`, обязательный `meta viewport` — канонический `PLATFORM_MOBILE_VIEWPORT_CONTENT`. Push API остаётся на префиксе сервиса: **`/{service}/api/push/*`** (см. `getBaseUrl()`).
+Единый Web App Manifest, Service Worker и offline-страница: каталог **`core/frontend/pwa/`** (`manifest.json`, `sw.js`, `offline.html`). Опционально для Android TWA: **`assetlinks.json`** (шаблон **`assetlinks.json.example`**) — тогда **`GET /.well-known/assetlinks.json`**. Маршруты подключает **`create_service_app`** через **`core/app/pwa_routes.py`** (`register_platform_pwa_routes`). Параметр фабрики **`include_platform_pwa`**: по умолчанию **`None`** — при **`TESTING=true`** PWA-маршруты не регистрируются, иначе регистрируются. Клиент: **`core/frontend/static/services/pwa.service.js`** (`navigator.serviceWorker.register('/sw.js', { scope: '/' })`). В каждом SPA-shell: **`<link rel="manifest" href="/manifest.json">`**. В standalone PWA запрещён zoom (pinch/gesture/keyboard): guard ставится централизованно в **`core/frontend/static/lib/platform-element/index.js`** для всех приложений на `PlatformElement`, обязательный `meta viewport` — канонический `PLATFORM_MOBILE_VIEWPORT_CONTENT`. Push API остаётся на префиксе сервиса: **`/{service}/api/push/*`** (см. `getBaseUrl()`).
+
+**Магазины приложений (Android TWA / iOS):** артефакты сборки, конфиги-шаблоны, полный waterfall — каталог **`mobile/`** (`mobile/README.md`, `mobile/docs/WATERFALL.md`, фазы `mobile/docs/PHASE*.md`). Веб-приложение не дублируется: оболочки грузят production URL.
 
 ## Архитектура
 
@@ -298,6 +300,8 @@ export const MyAppStore = {
     },
 };
 ```
+
+У `BaseStore` для persist доступны `partialize` и опционально `persistMerge(persistedState, currentState)` (кастомное слияние, например миграция полей в `ui`). Именованный экспорт `deepMerge` из `BaseStore.js` можно использовать внутри `persistMerge`.
 
 ---
 

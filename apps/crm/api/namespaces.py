@@ -92,7 +92,8 @@ async def list_namespaces(
                 name=ns.name,
                 company_id=ns.company_id,
                 description=ns.description,
-                is_default=ns.is_default
+                is_default=ns.is_default,
+                crm_settings=ns.crm_settings,
             )
             for ns in namespaces
         ],
@@ -190,6 +191,7 @@ async def get_namespace_template(
                 check_duplicates=item.check_duplicates,
                 weight_coefficient=item.weight_coefficient,
                 namespace_ids=item.namespace_ids,
+                is_context_anchor=item.is_context_anchor,
             )
             for item in template_types
         ],
@@ -263,6 +265,7 @@ async def upsert_template_type(
         check_duplicates=request.check_duplicates,
         weight_coefficient=request.weight_coefficient,
         namespace_ids=request.namespace_ids,
+        is_context_anchor=request.is_context_anchor,
     )
     return NamespaceTemplateTypeResponse(
         type_id=item.type_id,
@@ -278,6 +281,7 @@ async def upsert_template_type(
         check_duplicates=item.check_duplicates,
         weight_coefficient=item.weight_coefficient,
         namespace_ids=item.namespace_ids,
+        is_context_anchor=item.is_context_anchor,
     )
 
 
@@ -320,7 +324,8 @@ async def create_namespace(
         name=namespace.name,
         company_id=namespace.company_id,
         description=namespace.description,
-        is_default=namespace.is_default
+        is_default=namespace.is_default,
+        crm_settings=namespace.crm_settings,
     )
 
 
@@ -387,9 +392,18 @@ async def update_namespace(
         allowed_type_ids=allowed_type_ids,
     )
 
+    if request.crm_settings is not None:
+        ns = await container.namespace_repository.get(normalized_namespace_name)
+        if ns is None:
+            raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+        ns.crm_settings = request.crm_settings
+        await container.namespace_repository.set(ns)
+        updated_namespace = ns
+
     return NamespaceResponse(
         name=updated_namespace.name,
         company_id=updated_namespace.company_id,
         description=updated_namespace.description,
         is_default=updated_namespace.is_default,
+        crm_settings=updated_namespace.crm_settings,
     )

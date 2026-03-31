@@ -2,7 +2,7 @@
  * CRM Store - Состояние CRM приложения
  * Доменная структура: entities, ui, ai, grants, accessRequests
  */
-import { BaseStore } from '@platform/lib/store/BaseStore.js';
+import { BaseStore, deepMerge } from '@platform/lib/store/BaseStore.js';
 
 const LAST_NAMESPACE_STORAGE_KEY = 'crm:last-namespace-by-company';
 const ALL_NAMESPACES_SENTINEL = '__ALL__';
@@ -23,6 +23,36 @@ function assertIsoDate(value, fieldName) {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
         throw new Error(`${fieldName} must be ISO date string YYYY-MM-DD`);
     }
+}
+
+function assertDailyNotesRange(range, fieldName) {
+    if (!range || typeof range !== 'object' || Array.isArray(range)) {
+        throw new Error(`${fieldName} must be object with from and to`);
+    }
+    assertIsoDate(range.from, `${fieldName}.from`);
+    assertIsoDate(range.to, `${fieldName}.to`);
+}
+
+function normalizeDailyNotesRange(from, to) {
+    assertIsoDate(from, 'dailyNotesRange.from');
+    assertIsoDate(to, 'dailyNotesRange.to');
+    if (from > to) {
+        return { from: to, to: from };
+    }
+    return { from, to };
+}
+
+function crmPersistMerge(persistedState, currentState) {
+    const merged = deepMerge(currentState, persistedState);
+    const persistedUi = persistedState?.ui;
+    if (persistedUi && typeof persistedUi.dailyNotesDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(persistedUi.dailyNotesDate)) {
+        const d = persistedUi.dailyNotesDate;
+        merged.ui = {
+            ...merged.ui,
+            dailyNotesRange: { from: d, to: d },
+        };
+    }
+    return merged;
 }
 
 function getNamespaceName(namespace) {
@@ -212,7 +242,10 @@ const baseStore = new BaseStore('crm', {
         filterTags: [],
         searchQuery: '',
         collapsedPanels: {},
-        dailyNotesDate: getTodayIsoDate(),
+        dailyNotesRange: {
+            from: getTodayIsoDate(),
+            to: getTodayIsoDate(),
+        },
     },
     ai: {
         suggestions: [],
@@ -228,6 +261,7 @@ const baseStore = new BaseStore('crm', {
 }, {
     persist: true,
     devtools: true,
+    persistMerge: crmPersistMerge,
     partialize: (state) => ({
         namespaces: {
             current: state.namespaces.current,
@@ -236,7 +270,7 @@ const baseStore = new BaseStore('crm', {
             currentView: state.ui.currentView,
             sidebarOpen: state.ui.sidebarOpen,
             collapsedPanels: state.ui.collapsedPanels,
-            dailyNotesDate: state.ui.dailyNotesDate,
+            dailyNotesRange: state.ui.dailyNotesRange,
         }
     })
 });
@@ -313,24 +347,39 @@ export const CRMStore = {
         }
     },
 
-    getDailyNotesDate() {
-        const value = baseStore.state.ui.dailyNotesDate;
-        assertIsoDate(value, 'ui.dailyNotesDate');
-        // Миграция legacy-значения: раньше дата инициализировалась через UTC.
+    getDailyNotesRange() {
+        const range = baseStore.state.ui.dailyNotesRange;
+        assertDailyNotesRange(range, 'ui.dailyNotesRange');
+        let { from, to } = range;
+        if (from > to) {
+            const normalized = normalizeDailyNotesRange(from, to);
+            this.setDailyNotesRange(normalized);
+            from = normalized.from;
+            to = normalized.to;
+        }
         const utcToday = getUtcTodayIsoDate();
         const localToday = getTodayIsoDate();
-        if (value === utcToday && utcToday !== localToday) {
-            this.setDailyNotesDate(localToday);
-            return localToday;
+        if (from === utcToday && utcToday !== localToday && to === utcToday) {
+            this.setDailyNotesRange({ from: localToday, to: localToday });
+            return { from: localToday, to: localToday };
         }
-        return value;
+        return { from, to };
     },
 
-    setDailyNotesDate(isoDate) {
-        assertIsoDate(isoDate, 'ui.dailyNotesDate');
+    /** День по умолчанию для новой заметки: конец выбранного периода. */
+    getDailyNotesFocusDate() {
+        return this.getDailyNotesRange().to;
+    },
+
+    setDailyNotesRange({ from, to }) {
+        const normalized = normalizeDailyNotesRange(from, to);
         baseStore.setState((s) => ({
-            ui: { ...s.ui, dailyNotesDate: isoDate }
+            ui: { ...s.ui, dailyNotesRange: normalized },
         }));
+    },
+
+    todayIsoDate() {
+        return getTodayIsoDate();
     },
     
     toggleSidebar() {

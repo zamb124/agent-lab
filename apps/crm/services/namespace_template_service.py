@@ -76,6 +76,7 @@ class NamespaceTemplateService:
                     check_duplicates=item.check_duplicates,
                     weight_coefficient=item.weight_coefficient,
                     namespace_ids=[],
+                    is_context_anchor=item.is_context_anchor,
                 )
                 runtime_type = await self._entity_type_repo.create(runtime_type)
                 existing_types_map[runtime_type.type_id] = runtime_type

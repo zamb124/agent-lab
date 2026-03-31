@@ -22,6 +22,10 @@ export class CRMAPIService extends BaseService {
         }
         return this.get(`/entities/${entityId}`);
     }
+
+    async getPersonEntitySelf() {
+        return this.get('/entities/person-entity/self');
+    }
     
     async createEntity(data) {
         if (!data) {

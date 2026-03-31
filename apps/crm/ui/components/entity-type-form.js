@@ -27,6 +27,7 @@ const HINTS = {
     typePrompt: 'Подсказка для AI-извлечения данных под этот тип.',
     flagIsEvent: 'Если включено, сущности этого типа трактуются как события (встреча, звонок).',
     flagCheckDuplicates: 'Если включено, система будет проверять дубликаты при создании.',
+    flagContextAnchor: 'Сделки, лиды и подобные типы — вокруг них можно группировать заметки (контекст на графе).',
 };
 
 export class EntityTypeForm extends PlatformElement {
@@ -121,6 +122,7 @@ export class EntityTypeForm extends PlatformElement {
             color: '',
             is_event: false,
             check_duplicates: true,
+            is_context_anchor: false,
         };
     }
 
@@ -156,6 +158,7 @@ export class EntityTypeForm extends PlatformElement {
                     color: (this.draft.color || '').trim() || null,
                     is_event: Boolean(this.draft.is_event),
                     check_duplicates: this.draft.check_duplicates !== false,
+                    is_context_anchor: Boolean(this.draft.is_context_anchor),
                 },
             },
             bubbles: true,
@@ -253,6 +256,10 @@ export class EntityTypeForm extends PlatformElement {
                             <div class="flag-item">
                                 <platform-switch size="sm" label="check_duplicates" .checked=${this.draft.check_duplicates !== false} @change=${(e) => this._update('check_duplicates', Boolean(e.detail.value))}></platform-switch>
                                 <platform-help-hint strategy="local" label="Справка: check_duplicates" .text=${HINTS.flagCheckDuplicates}></platform-help-hint>
+                            </div>
+                            <div class="flag-item">
+                                <platform-switch size="sm" label="is_context_anchor" .checked=${Boolean(this.draft.is_context_anchor)} @change=${(e) => this._update('is_context_anchor', Boolean(e.detail.value))}></platform-switch>
+                                <platform-help-hint strategy="local" label="Справка: якорь контекста" .text=${HINTS.flagContextAnchor}></platform-help-hint>
                             </div>
                         </div>
                     </div>

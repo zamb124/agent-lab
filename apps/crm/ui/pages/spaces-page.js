@@ -4,12 +4,16 @@ import { CRMStore } from '../store/crm.store.js';
 import { EntityTypeForm } from '../components/entity-type-form.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-switch.js';
 
 const SPACES_HINTS = {
     namespaceDescription: 'Описание текущего пространства. Изменение описания не влияет на существующие сущности и доступно всегда.',
     namespaceAllowedTypes: 'Типы, которые можно создавать в этом пространстве. Используемые типы нельзя убрать. Новые типы можно добавить всегда.',
     typePrompt: 'Подсказка для AI-извлечения и структурирования данных под этот тип.',
     typeDescription: 'Подробное пояснение типа: что хранится, какие атрибуты обязательны, в каких процессах используется.',
+    crmShowVoiceUi: 'Показывать в форме заметки блок выбора «от чьего имени».',
+    crmDefaultVoice: 'Значение по умолчанию для новой заметки: персона пользователя, без голоса или последний выбор в сессии.',
+    crmDefaultContext: 'Необязательный entity_id якоря контекста по умолчанию для новых заметок в этом пространстве.',
 };
 
 export class SpacesPage extends PlatformElement {
@@ -26,6 +30,7 @@ export class SpacesPage extends PlatformElement {
         _editingTypeDraft: { state: true },
         _showCreateForm: { state: true },
         _createSaving: { state: true },
+        _selectedNamespaceCrmDraft: { state: true },
     };
 
     static styles = [
@@ -89,6 +94,7 @@ export class SpacesPage extends PlatformElement {
         this._editingTypeDraft = null;
         this._showCreateForm = false;
         this._createSaving = false;
+        this._selectedNamespaceCrmDraft = SpacesPage.defaultCrmDraft();
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._namespaces = state.namespaces.list || [];
             this._entityTypes = state.entities.entityTypes || [];
@@ -102,6 +108,36 @@ export class SpacesPage extends PlatformElement {
     disconnectedCallback() {
         super.disconnectedCallback();
         this._unsubscribe?.();
+    }
+
+    static defaultCrmDraft() {
+        return {
+            show_note_voice_ui: true,
+            default_note_voice: 'self',
+            default_context_entity_id: '',
+        };
+    }
+
+    _mergeNamespaceCrmDraft(namespace) {
+        const base = SpacesPage.defaultCrmDraft();
+        if (!namespace || typeof namespace !== 'object') {
+            return base;
+        }
+        const cs = namespace.crm_settings;
+        if (!cs || typeof cs !== 'object') {
+            return base;
+        }
+        const voice = cs.default_note_voice;
+        const allowedVoice = voice === 'none' || voice === 'last' || voice === 'self';
+        return {
+            show_note_voice_ui: cs.show_note_voice_ui !== false,
+            default_note_voice: allowedVoice ? voice : 'self',
+            default_context_entity_id: typeof cs.default_context_entity_id === 'string' ? cs.default_context_entity_id : '',
+        };
+    }
+
+    _updateNamespaceCrmDraft(field, value) {
+        this._selectedNamespaceCrmDraft = { ...this._selectedNamespaceCrmDraft, [field]: value };
     }
 
     async firstUpdated() {
@@ -148,6 +184,7 @@ export class SpacesPage extends PlatformElement {
             this._selectedNamespaceDraftAllowedTypeIds = Array.isArray(payload?.current_allowed_type_ids)
                 ? [...payload.current_allowed_type_ids]
                 : [];
+            this._selectedNamespaceCrmDraft = this._mergeNamespaceCrmDraft(selectedNamespace);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Ошибка загрузки настроек пространства';
             this.error(message);
@@ -182,6 +219,12 @@ export class SpacesPage extends PlatformElement {
             name: entityType.name || '',
             description: entityType.description || '',
             prompt: entityType.prompt || '',
+            parent_type_id: entityType.parent_type_id || '',
+            icon: entityType.icon || '',
+            color: entityType.color || '',
+            is_event: Boolean(entityType.is_event),
+            check_duplicates: entityType.check_duplicates !== false,
+            is_context_anchor: Boolean(entityType.is_context_anchor),
         };
     }
 
@@ -260,9 +303,15 @@ export class SpacesPage extends PlatformElement {
                     .map((item) => String(item).trim())
                     .filter((item) => item.length > 0)
                 : [];
+            const ctxRaw = (this._selectedNamespaceCrmDraft.default_context_entity_id || '').trim();
             const payload = {
                 description: this._selectedNamespaceDraftDescription.trim() || null,
                 allowed_type_ids: [...new Set(normalizedAllowedTypeIds)],
+                crm_settings: {
+                    show_note_voice_ui: Boolean(this._selectedNamespaceCrmDraft.show_note_voice_ui),
+                    default_note_voice: this._selectedNamespaceCrmDraft.default_note_voice,
+                    default_context_entity_id: ctxRaw.length > 0 ? ctxRaw : null,
+                },
             };
             const crmApi = this.services.get('crmApi');
             await CRMStore.updateExistingNamespace(crmApi, this._selectedNamespaceName, payload);
@@ -428,6 +477,48 @@ export class SpacesPage extends PlatformElement {
                                         ${(this._selectedNamespaceEditability.used_type_ids || []).map((typeId) => html`<span class="chip mono">${typeId}</span>`)}
                                     </div>
                                 ` : ''}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label label-with-hint">
+                                    <span>CRM: заметки</span>
+                                    <platform-help-hint strategy="local" label="Справка: голос заметки" .text=${SPACES_HINTS.crmShowVoiceUi}></platform-help-hint>
+                                </label>
+                                <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;">
+                                    <platform-switch
+                                        size="sm"
+                                        label="Показывать выбор голоса"
+                                        .checked=${Boolean(this._selectedNamespaceCrmDraft.show_note_voice_ui)}
+                                        @change=${(e) => this._updateNamespaceCrmDraft('show_note_voice_ui', Boolean(e.detail.value))}
+                                    ></platform-switch>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label label-with-hint">
+                                    <span>Голос по умолчанию</span>
+                                    <platform-help-hint strategy="local" label="Справка: дефолт голоса" .text=${SPACES_HINTS.crmDefaultVoice}></platform-help-hint>
+                                </label>
+                                <select
+                                    class="form-input"
+                                    style="max-width:320px;"
+                                    .value=${this._selectedNamespaceCrmDraft.default_note_voice}
+                                    @change=${(e) => this._updateNamespaceCrmDraft('default_note_voice', e.target.value)}
+                                >
+                                    <option value="self">Я (персона пользователя)</option>
+                                    <option value="none">Без голоса</option>
+                                    <option value="last">Последний выбор</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label label-with-hint">
+                                    <span>Контекст по умолчанию (entity_id)</span>
+                                    <platform-help-hint strategy="local" label="Справка: якорь по умолчанию" .text=${SPACES_HINTS.crmDefaultContext}></platform-help-hint>
+                                </label>
+                                <input
+                                    class="form-input mono"
+                                    placeholder="опционально"
+                                    .value=${this._selectedNamespaceCrmDraft.default_context_entity_id}
+                                    @input=${(e) => this._updateNamespaceCrmDraft('default_context_entity_id', e.target.value)}
+                                />
                             </div>
                         </div>
                         <button class="save-btn" ?disabled=${this._namespaceEditorSaving} @click=${this._saveNamespaceSettings}>

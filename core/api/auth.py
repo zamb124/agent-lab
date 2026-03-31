@@ -9,7 +9,7 @@ import logging
 from typing import Annotated, Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import RedirectResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field as PydanticField
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.config import get_settings
@@ -25,12 +25,14 @@ router = APIRouter(tags=["auth"])
 
 class UserUpdate(BaseModel):
     """Обновление данных пользователя"""
-    name: Optional[str] = None
+    name: Optional[str] = PydanticField(None, max_length=200)
+    first_name: Optional[str] = PydanticField(None, max_length=100)
+    last_name: Optional[str] = PydanticField(None, max_length=100)
     emails: Optional[List[str]] = None
     phones: Optional[List[str]] = None
     messengers: Optional[Dict[str, str]] = None
     avatar_url: Optional[str] = None
-    bio: Optional[str] = None
+    bio: Optional[str] = PydanticField(None, max_length=4000)
     ui_preferences: Optional[Dict[str, Any]] = None
 
 
@@ -286,6 +288,8 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
     return {
         "user_id": user.user_id,
         "name": user.name,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
         "status": user.status,
         "groups": user.groups,
         "companies": user.companies,
@@ -372,10 +376,19 @@ async def update_current_user(
         raise HTTPException(status_code=404, detail="User not found")
     
     update_data = updates.model_dump(exclude_none=True)
-    
+
     for field, value in update_data.items():
         setattr(user, field, value)
-    
+
+    if "first_name" in update_data or "last_name" in update_data:
+        parts: list[str] = []
+        if user.first_name and user.first_name.strip():
+            parts.append(user.first_name.strip())
+        if user.last_name and user.last_name.strip():
+            parts.append(user.last_name.strip())
+        if parts:
+            user.name = " ".join(parts)
+
     user.updated_at = datetime.now(timezone.utc)
     await user_repo.set(user)
     

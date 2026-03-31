@@ -122,6 +122,15 @@ class CRMContainer(BaseContainer):
             namespace_repo=self.namespace_repository,
             entity_repo=self.entity_repository,
         )
+
+    @lazy
+    def user_person_service(self):
+        from apps.crm.services.user_person_service import UserPersonService
+        return UserPersonService(
+            entity_repo=self.entity_repository,
+            entity_type_repo=self.entity_type_repository,
+            user_repository=self.user_repository,
+        )
     
     @lazy
     def entity_service(self):
@@ -136,6 +145,7 @@ class CRMContainer(BaseContainer):
             attachment_service=self.attachment_service,
             a2a_client=A2AClient(timeout=300.0),
             daily_summary_cache_service=self.daily_summary_cache_service,
+            user_person_service=self.user_person_service,
         )
     
     @lazy

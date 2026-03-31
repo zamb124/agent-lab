@@ -412,6 +412,35 @@ export class NoteViewModal extends PlatformModal {
         }
     }
 
+    async _buildVoiceContextPayload(crmApi, detail, options) {
+        if (!detail || typeof detail !== 'object') {
+            throw new Error('save-note detail is required');
+        }
+        const isUpdate = Boolean(options && options.isUpdate);
+        const out = {};
+        const mode = detail.voiceMode;
+        if (mode === 'none') {
+            out.voice_entity_id = null;
+        } else if (mode === 'self') {
+            const person = await crmApi.getPersonEntitySelf();
+            out.voice_entity_id = person.entity_id;
+        } else if (mode === 'manual') {
+            const raw = typeof detail.voiceEntityId === 'string' ? detail.voiceEntityId.trim() : '';
+            if (raw.length > 0) {
+                out.voice_entity_id = raw;
+            } else {
+                out.voice_entity_id = null;
+            }
+        }
+        const ctx = typeof detail.contextEntityId === 'string' ? detail.contextEntityId.trim() : '';
+        if (ctx.length > 0) {
+            out.context_entity_id = ctx;
+        } else if (isUpdate) {
+            out.context_entity_id = null;
+        }
+        return out;
+    }
+
     _handleEditNote() {
         if (!this.note || typeof this.note !== 'object') {
             throw new Error('note is required');
@@ -457,6 +486,7 @@ export class NoteViewModal extends PlatformModal {
             try {
                 const crmApi = this.crmApi;
                 if (this.draftMode) {
+                    const voiceExtra = await this._buildVoiceContextPayload(crmApi, detail, { isUpdate: false });
                     const createdNote = await CRMStore.createNote(crmApi, {
                         name: noteName.trim(),
                         description: noteDescription,
@@ -464,6 +494,7 @@ export class NoteViewModal extends PlatformModal {
                             ? entitySubtype.trim()
                             : null,
                         note_date: noteDate.trim(),
+                        ...voiceExtra,
                     });
                     this.note = createdNote;
                     this.draftMode = false;
@@ -473,6 +504,7 @@ export class NoteViewModal extends PlatformModal {
                         composed: true,
                     }));
                 } else {
+                    const voiceExtra = await this._buildVoiceContextPayload(crmApi, detail, { isUpdate: true });
                     await CRMStore.updateNote(crmApi, this.note.entity_id, {
                         name: noteName.trim(),
                         description: noteDescription,
@@ -480,6 +512,7 @@ export class NoteViewModal extends PlatformModal {
                             ? entitySubtype.trim()
                             : null,
                         note_date: noteDate.trim(),
+                        ...voiceExtra,
                     });
                 }
             } catch (error) {

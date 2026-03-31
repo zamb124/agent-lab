@@ -32,8 +32,8 @@ export class UserProfileModal extends PlatformFormModal {
             errors.name = 'Имя не должно превышать 100 символов';
         }
 
-        if (data.bio && data.bio.length > 500) {
-            errors.bio = 'Описание не должно превышать 500 символов';
+        if (data.bio && data.bio.length > 4000) {
+            errors.bio = 'Описание не должно превышать 4000 символов';
         }
 
         return errors;
@@ -43,6 +43,8 @@ export class UserProfileModal extends PlatformFormModal {
         try {
             await this.auth.updateProfile({
                 name: data.name.trim(),
+                first_name: data.first_name?.trim() || null,
+                last_name: data.last_name?.trim() || null,
                 bio: data.bio?.trim() || null,
                 ui_preferences: {
                     ...this.user?.ui_preferences,
@@ -76,14 +78,40 @@ export class UserProfileModal extends PlatformFormModal {
         return html`
             <form @submit=${this._onSubmit} @input=${this._onInput}>
                 <div class="form-group">
-                    <label for="name" class="form-label">Имя</label>
+                    <label for="first_name" class="form-label">Имя</label>
+                    <input
+                        type="text"
+                        id="first_name"
+                        name="first_name"
+                        class="form-input"
+                        .value=${this.user.first_name || ''}
+                        placeholder="Имя"
+                        maxlength="100"
+                    />
+                    ${this.renderFieldError('first_name')}
+                </div>
+                <div class="form-group">
+                    <label for="last_name" class="form-label">Фамилия</label>
+                    <input
+                        type="text"
+                        id="last_name"
+                        name="last_name"
+                        class="form-input"
+                        .value=${this.user.last_name || ''}
+                        placeholder="Фамилия"
+                        maxlength="100"
+                    />
+                    ${this.renderFieldError('last_name')}
+                </div>
+                <div class="form-group">
+                    <label for="name" class="form-label">Отображаемое имя</label>
                     <input
                         type="text"
                         id="name"
                         name="name"
                         class="form-input"
                         .value=${this.user.name || ''}
-                        placeholder="Введите ваше имя"
+                        placeholder="Как показывать в интерфейсе"
                         required
                     />
                     ${this.renderFieldError('name')}
@@ -112,7 +140,7 @@ export class UserProfileModal extends PlatformFormModal {
                         .value=${this.user.bio || ''}
                     ></textarea>
                     ${this.renderFieldError('bio')}
-                    <small class="form-help">Максимум 500 символов</small>
+                    <small class="form-help">Максимум 4000 символов</small>
                 </div>
 
                 <div class="form-group">

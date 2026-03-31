@@ -11,7 +11,8 @@ export class DailyNotesPage extends PlatformElement {
     static properties = {
         _notes: { state: true },
         _query: { state: true },
-        _selectedDate: { state: true },
+        _dateFrom: { state: true },
+        _dateTo: { state: true },
         _currentNamespace: { state: true },
         _noteEntitiesByNoteId: { state: true },
         _currentUser: { state: true },
@@ -673,7 +674,9 @@ export class DailyNotesPage extends PlatformElement {
         super();
         this._notes = [];
         this._query = '';
-        this._selectedDate = CRMStore.getDailyNotesDate();
+        const initialRange = CRMStore.getDailyNotesRange();
+        this._dateFrom = initialRange.from;
+        this._dateTo = initialRange.to;
         this._currentNamespace = null;
         this._noteEntitiesByNoteId = {};
         this._currentUser = null;
@@ -691,12 +694,16 @@ export class DailyNotesPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._selectedDate = CRMStore.getDailyNotesDate();
+        const range = CRMStore.getDailyNotesRange();
+        this._dateFrom = range.from;
+        this._dateTo = range.to;
         this._currentNamespace = CRMStore.state.namespaces.current;
         this._isMobile = CRMStore.state.ui.isMobile;
         window.addEventListener('crm-mobile-search', this._onMobileSearch);
         this._unsubscribe = CRMStore.subscribe((state) => {
-            this._selectedDate = state.ui.dailyNotesDate;
+            const { from, to } = CRMStore.getDailyNotesRange();
+            this._dateFrom = from;
+            this._dateTo = to;
             this._isMobile = state.ui.isMobile;
             const previousNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
             this._currentNamespace = state.namespaces.current;
@@ -739,10 +746,21 @@ export class DailyNotesPage extends PlatformElement {
 
     async _loadDailySummary(options = {}) {
         const { forceRebuild = false, waitForWsUpdate = false } = options;
+        const { from, to } = CRMStore.getDailyNotesRange();
+        this._dateFrom = from;
+        this._dateTo = to;
+        if (from !== to) {
+            this._loadingSummary = false;
+            this._summaryText = 'Сводка строится для одного дня. Сузьте период до одной даты.';
+            this._summaryEntities = [];
+            this._summaryGeneratedAt = '';
+            this._summaryRevalidating = false;
+            return;
+        }
         this._loadingSummary = true;
         try {
             const crmApi = this.services.get('crmApi');
-            const response = await crmApi.getDailySummary(this._selectedDate, {
+            const response = await crmApi.getDailySummary(from, {
                 forceRebuild,
                 namespace: this._getCurrentNamespaceName(),
             });
@@ -810,7 +828,7 @@ export class DailyNotesPage extends PlatformElement {
             if (payloadNamespace !== selectedNamespace) {
                 return;
             }
-            if (payload.date !== this._selectedDate) {
+            if (this._dateFrom !== this._dateTo || payload.date !== this._dateFrom) {
                 return;
             }
 
@@ -836,7 +854,10 @@ export class DailyNotesPage extends PlatformElement {
         if (payloadNamespace !== selectedNamespace) {
             return;
         }
-        if (payload.note_date == null || payload.note_date !== this._selectedDate) {
+        if (payload.note_date == null || typeof payload.note_date !== 'string') {
+            return;
+        }
+        if (payload.note_date < this._dateFrom || payload.note_date > this._dateTo) {
             return;
         }
         const noteId = payload.note_id.trim();
@@ -897,9 +918,26 @@ export class DailyNotesPage extends PlatformElement {
         this._loadVisibleNoteEntities();
     }
 
-    async _onDateChange(event) {
-        CRMStore.setDailyNotesDate(event.target.value);
-        this._selectedDate = CRMStore.getDailyNotesDate();
+    async _onDateRangeChange(event) {
+        const detail = event.detail;
+        if (!detail || detail.selection !== 'range') {
+            throw new Error('Ожидается selection=range у platform-date-picker');
+        }
+        const v = detail.value;
+        if (!v || typeof v !== 'object') {
+            throw new Error('Значение диапазона должно быть объектом');
+        }
+        const start = v.start;
+        const end = v.end;
+        if (typeof start !== 'string' || typeof end !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+            const today = CRMStore.todayIsoDate();
+            CRMStore.setDailyNotesRange({ from: today, to: today });
+        } else {
+            CRMStore.setDailyNotesRange({ from: start, to: end });
+        }
+        const range = CRMStore.getDailyNotesRange();
+        this._dateFrom = range.from;
+        this._dateTo = range.to;
         await this._reloadNotesForSelectedDate();
         await this._loadDailySummary();
         await this._loadVisibleNoteEntities();
@@ -908,28 +946,35 @@ export class DailyNotesPage extends PlatformElement {
     async _reloadNotesForSelectedDate() {
         const crmApi = this.services.get('crmApi');
         this._noteEntitiesByNoteId = {};
+        const { from, to } = CRMStore.getDailyNotesRange();
+        this._dateFrom = from;
+        this._dateTo = to;
         const notes = await CRMStore.loadNotes(crmApi, {
-            dateFrom: this._selectedDate,
-            dateTo: this._selectedDate,
+            dateFrom: from,
+            dateTo: to,
             limit: 300,
         });
         this._notes = Array.isArray(notes) ? notes : [];
     }
 
     async _onCreateNote() {
+        const focusDate = CRMStore.getDailyNotesFocusDate();
         const draftNote = {
             entity_id: `draft-${Date.now()}`,
             entity_type: 'note',
             entity_subtype: null,
             name: '',
             description: '',
-            note_date: this._selectedDate,
+            note_date: focusDate,
             attributes: {},
         };
         this._openNoteModal(draftNote, { editable: true, draftMode: true });
     }
 
     async _onRefreshSummary() {
+        if (this._dateFrom !== this._dateTo) {
+            return;
+        }
         await this._loadDailySummary({ forceRebuild: true, waitForWsUpdate: true });
     }
 
@@ -1195,7 +1240,7 @@ export class DailyNotesPage extends PlatformElement {
                     </span>
                     <span class="summary-title-text">Daily summary</span>
                 </h3>
-                <button class="summary-refresh-btn" type="button" title="Обновить" @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
+                <button class="summary-refresh-btn" type="button" title="Обновить" @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary || this._dateFrom !== this._dateTo}>
                     <platform-icon
                         class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
                         name="refresh"
@@ -1253,10 +1298,11 @@ export class DailyNotesPage extends PlatformElement {
                     <platform-date-picker
                         class="date-input"
                         mode="date"
+                        selection="range"
                         value-format="iso"
-                        label="Дата заметки"
-                        .value=${this._selectedDate}
-                        @change=${this._onDateChange}
+                        label="Период"
+                        .value=${{ start: this._dateFrom, end: this._dateTo }}
+                        @change=${this._onDateRangeChange}
                     ></platform-date-picker>
                     <button class="cta-btn" type="button" @click=${this._onCreateNote}>Добавить заметку</button>
                 </div>
@@ -1266,7 +1312,7 @@ export class DailyNotesPage extends PlatformElement {
                 <section class="main-column">
                     <div class="cards-scroll">
                         ${filteredNotes.length === 0 ? html`
-                            <div class="empty">На выбранную дату заметок нет</div>
+                            <div class="empty">На выбранный период заметок нет</div>
                         ` : html`
                             <div class="cards-grid">
                                 ${filteredNotes.map((note) => html`

@@ -125,7 +125,8 @@ async def create_entity_type(
         is_event=data.is_event,
         check_duplicates=data.check_duplicates,
         namespace_ids=namespace_ids,
-        company_id=company_id
+        company_id=company_id,
+        is_context_anchor=data.is_context_anchor,
     )
     
     await repo.create_custom_type(entity_type, company_id)
@@ -163,6 +164,8 @@ async def update_entity_type(
         if len(data.namespace_ids) == 0:
             raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
         entity_type.namespace_ids = data.namespace_ids
+    if data.is_context_anchor is not None:
+        entity_type.is_context_anchor = data.is_context_anchor
     if not entity_type.color or not entity_type.color.strip():
         entity_type.color = assign_color_from_palette(set())
     

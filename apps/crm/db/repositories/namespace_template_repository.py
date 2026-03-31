@@ -94,6 +94,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
         check_duplicates: bool,
         weight_coefficient: float,
         namespace_ids: list[str],
+        is_context_anchor: bool = False,
     ) -> NamespaceTemplateType:
         async with self._db.session() as session:
             stmt = select(NamespaceTemplateType).where(
@@ -119,6 +120,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             existing.check_duplicates = check_duplicates
             existing.weight_coefficient = weight_coefficient
             existing.namespace_ids = namespace_ids
+            existing.is_context_anchor = is_context_anchor
             session.add(existing)
             await session.commit()
             await session.refresh(existing)

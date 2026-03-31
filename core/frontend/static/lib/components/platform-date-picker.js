@@ -773,6 +773,9 @@ export class PlatformDatePicker extends PlatformElement {
         this._emitValueEvent('input');
         if (finalize) {
             this._emitValueEvent('change');
+            if (this.mode === 'date') {
+                this._closePopup();
+            }
         }
     }
 
@@ -970,6 +973,16 @@ export class PlatformDatePicker extends PlatformElement {
         this._viewYear = now.getFullYear();
         this._viewMonth = now.getMonth();
         this._focusedDateIso = formatIsoDate(now);
+        if (this.selection === 'range' && this.mode === 'date') {
+            const normalized = normalizeDateForMode(this.mode, now);
+            this._rangeStart = normalized;
+            this._rangeEnd = normalized;
+            this._setExposedValueFromInternal();
+            this._emitValueEvent('input');
+            this._emitValueEvent('change');
+            this._closePopup();
+            return;
+        }
         this._commitDateSelection(now, true);
     }
 
@@ -1101,6 +1114,9 @@ export class PlatformDatePicker extends PlatformElement {
         const end = this._rangeEnd ? this._rangeEnd.toLocaleDateString(this.locale) : '';
         if (!start && !end) {
             return '';
+        }
+        if (this._rangeStart && this._rangeEnd && compareDateOnly(this._rangeStart, this._rangeEnd) === 0) {
+            return start;
         }
         return `${start || '...'} - ${end || '...'}`;
     }

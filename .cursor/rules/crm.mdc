@@ -56,7 +56,7 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
   - после успешного `crm_rebuild_daily_summary` воркер отправляет `crm_daily_summary_updated`;
   - payload содержит `event=crm.daily_summary.updated`, `date`, `namespace`, `summary_state`;
   - фронтенд не использует polling для ожидания завершения пересчета.
-- **Заметки (список daily notes):** при `create` / `update` / `delete` note `EntityService` рассылает `NotificationType.CRM_NOTE_UPDATED` (`crm_note_updated`) через тот же канал, что и daily summary (`notify_user` → Redis `platform:notifications` → WS `/crm/ws/notifications`). Получатели совпадают с daily summary: `resolve_user_ids_for_namespace_broadcast` в `apps/crm/services/namespace_notification_recipients.py` (участники компании + гранты на `namespace`). В `data` обязательны: `event=crm.note.updated`, `company_id`, `namespace` (после нормализации как у summary: `all` для пустого), `note_id`, `note_date` (ISO дата или `null`), `action` ∈ `created` | `updated` | `deleted`. Страница `daily-notes-page.js` перезагружает список заметок и кэш карточек, если открыты тот же `namespace` и та же выбранная дата, что в payload; при отсутствии `note_date` клиент событие игнорирует.
+- **Заметки (список daily notes):** при `create` / `update` / `delete` note `EntityService` рассылает `NotificationType.CRM_NOTE_UPDATED` (`crm_note_updated`) через тот же канал, что и daily summary (`notify_user` → Redis `platform:notifications` → WS `/crm/ws/notifications`). Получатели совпадают с daily summary: `resolve_user_ids_for_namespace_broadcast` в `apps/crm/services/namespace_notification_recipients.py` (участники компании + гранты на `namespace`). В `data` обязательны: `event=crm.note.updated`, `company_id`, `namespace` (после нормализации как у summary: `all` для пустого), `note_id`, `note_date` (ISO дата или `null`), `action` ∈ `created` | `updated` | `deleted`. Страница `daily-notes-page.js` перезагружает список заметок и кэш карточек, если открыты тот же `namespace` и `note_date` попадает в выбранный период (`CRMStore` `ui.dailyNotesRange` `from`/`to`); при отсутствии `note_date` клиент событие игнорирует. Фильтр списка заметок: `date_from` / `date_to` в API. Daily summary на UI запрашивается только если `from === to`; push `crm_daily_summary_updated` обрабатывается в этом же однодневном режиме.
 - Redis контракт состояния:
   - ключ state: `crm:daily_summary:v1:{company}:{namespace_or_all}:{date}:state`;
   - lock: `...:lock` (`SET NX EX`);
@@ -92,12 +92,21 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
   - Связь: `document_id` -> `entity_id`
 
 **PostgreSQL:**
-- `EntityType` - типы сущностей runtime (минимальное ядро: `note`, `task`; остальное создается из template)
-- `RelationshipType` - типы связей (11 системных: mentions, linked, related_to, parent_of, child_of, assigned_to, belongs_to, follows_up, blocks, blocked_by, duplicates)
+- `EntityType` - типы сущностей runtime (минимальное ядро: `note`, `task`; остальное создается из template); флаг `is_context_anchor` — тип может быть целью связи «заметка в контексте» (`in_context`).
+- `RelationshipType` - типы связей (системные включают: mentions, linked, related_to, parent_of, child_of, assigned_to, belongs_to, follows_up, blocks, blocked_by, duplicates, **note_voice**, **in_context**)
 - `Relationship` - связи между entities (source → target, weight, metadata)
 - `AccessGrant` - права доступа (public, user, company, с ролями viewer/editor/admin)
 - `NamespaceTemplate` - шаблоны пространств (DB editable)
-- `NamespaceTemplateType` - типы внутри шаблона (`prompt`, `required_fields`, `optional_fields`, `check_duplicates`, `namespace_ids`)
+- `NamespaceTemplateType` - типы внутри шаблона (`prompt`, `required_fields`, `optional_fields`, `check_duplicates`, `namespace_ids`, `is_context_anchor`)
+
+### Заметки: голос и контекст на графе
+
+- **Аудит vs голос:** поле `CRMEntity.user_id` — кто технически создал запись. «От чьего имени» смысл заметки задаётся ребром **`note_voice`** (заметка → сущность-голос, обычно контакт или персона пользователя).
+- **`in_context`:** заметка → сущность-якорь; цель должна иметь `EntityType.is_context_anchor=True` (сделка, лид, проект и т.д. по настройке пространства).
+- API создания/обновления заметки: опциональные `voice_entity_id`, `context_entity_id`; синхронизация рёбер в `EntityService` (источник правды — таблица `relationships`, не дублировать только в `attributes`).
+- **`Namespace.crm_settings`** (модель `NamespaceCRMSettings` в core): `show_note_voice_ui`, `default_note_voice` (`self` | `none` | `last`), опционально `default_context_entity_id`; обновление через CRM API namespace (поле `crm_settings`).
+- Персона пользователя на графе: `UserPersonService`, эндпоинт `GET /crm/api/v1/entities/person-entity/self` — контакт «Я» для выбора голоса.
+- **Профиль для ИИ:** у платформенного пользователя `first_name`, `last_name`, расширенный `bio`; при AI-анализе заметки в контекст промпта добавляются краткое описание профиля и перечень типов-якорей неймспейса.
 
 ### Изоляция
 

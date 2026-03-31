@@ -34,3 +34,6 @@ docs/video/*.mov
 /.hypothesis/
 /sync1/
 .DS_Store
+
+# Android TWA Digital Asset Links (копия из assetlinks.json.example, значения под прод)
+core/frontend/pwa/assetlinks.json
