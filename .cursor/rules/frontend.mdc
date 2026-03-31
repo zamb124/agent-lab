@@ -51,6 +51,18 @@ LitElement (Lit)
 
 **Магазины приложений (Android TWA / iOS):** артефакты сборки и конфиги-шаблоны — каталог **`mobile/`** (`mobile/README.md` — вход, проверки PWA и релизы; `mobile/docs/WATERFALL.md` — краткая дорожная карта; `mobile/docs/IOS_CAPACITOR.md`, `mobile/android/README.md`; витрина — `mobile/store-listing/README.md`). **Тексты витрины и скриншоты App Store** в репозитории: **`mobile/store-listing/metadata/`** (локали `ru`, `en-US`), загрузка в ASC — **`mobile/fastlane/`** (`upload_listing`), генерация скриншотов — **`mobile/scripts/capture_app_store_screenshots.py`** / **`make store-screenshots-ios`**. Веб-приложение не дублируется: оболочки грузят production URL. Переходы по ссылкам на тот же продукт в Capacitor / standalone PWA: не **`window.open(..., '_blank')`** для внутренних маршрутов — **`openUrlSameWindowOrTab`** из **`core/frontend/static/lib/utils/native-app-shell.js`**. Ранний перехват кликов по **`<a href>`** (тот же origin или тенанты `*.humanitec.ru` / `*.humanetic.ru` / `*.agents-lab.ru` и dev-хосты): **`installNativeAppShellLinkCapture`** вызывается из **`viewport-app-vh.js`** (импорт с **`app-loader`**); нативность проверяется **на клике**, не при регистрации; для iOS/Android дополнительно **`webkit.messageHandlers.bridge`** / **`androidBridge`** (`native-app-shell.js`, как в `@capacitor/core`); глобальная подмена **`window.open`** на **`location.assign`** для внутренних URL — **`installNativeAppShellWindowOpenPatch`**. На iOS дополнительно нативный swizzle `WKUIDelegate.createWebViewWith` — **`mobile/ios/App/App/HumanitecWebViewNewWindowFix.swift`** (иначе Capacitor открывает Safari). Детали: `mobile/docs/IOS_CAPACITOR.md`.
 
+## Deep links (Universal Links / App Links)
+
+- **Префиксы путей** — один список: **`core/frontend/static/lib/utils/platform-deeplink-paths.js`** (`DEEPLINK_PATH_PREFIXES`). Новый сервис: одна строка здесь + согласованные **`paths`** в **`core/frontend/pwa/apple-app-site-association`** и описание intent / `pathPrefix` для Android (см. **`mobile/android/README.md`**).
+- **Холодное открытие из ОС:** **`core/frontend/static/lib/utils/platform-deeplink-init.js`** подключается из **`app-loader.js`**. На нативной платформе — **`@capacitor/app`** → **`App.addListener('appUrlOpen', …)`** → **`location.assign`**; допустимость URL — **`isInternalProductNavigationUrl`** из **`native-app-shell.js`** (те же правила хостов, без дублирения).
+- **Import map:** в каждом SPA-shell (`apps/*/ui/index.html`, **`apps/sync/ui/call-join.html`**) заданы **`@capacitor/app`** и **`@capacitor/core`** → статические копии в **`core/frontend/static/assets/js/vendor/@capacitor/`** (обновлять при смене версии плагина в **`mobile/package.json`**).
+- **iOS:** **`mobile/ios/App/App/App.entitlements`** — Associated Domains; зависимость **`@capacitor/app`** в **`mobile/package.json`**, после смены — **`npx cap sync ios`**.
+- **Сервер:** **`GET /.well-known/apple-app-site-association`** регистрируется **`register_platform_pwa_routes`**, если файл лежит в **`core/frontend/pwa/`** (рядом с assetlinks). Не отдавать этот путь редиректом на SPA (см. **`infrastructure.mdc`**).
+
+### Субдомены и deep links
+
+Universal Links привязаны к **хосту**. Публичные ссылки, которые должны стабильно открывать приложение с одной AASA на apex (без дублирования **`applinks:*.humanitec.ru`** и отдельного файла на каждом поддомене), размещайте на **`https://humanitec.ru/...`** (например инвайты **`/join?...`**). Работа в кабинете тенанта после входа — обычная навигация внутри WebView. Детали: **`invites.mdc`**.
+
 ## Архитектура
 
 ```

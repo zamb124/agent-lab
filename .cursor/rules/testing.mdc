@@ -39,11 +39,11 @@ alwaysApply: false
 |---|---|
 | Раннер | **@web/test-runner** + **@web/test-runner-playwright** (Chromium), конфиг **[`web-test-runner.config.mjs`](../../web-test-runner.config.mjs)** |
 | Файлы | **`tests/ui_components/**/*.test.js`**, хелперы — **`tests/ui_components/helpers/`** (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture` / `html` / `expect` из `@open-wc/testing`) |
-| Импорты | Как в приложении: `lit` через **node-resolve**, префиксы **`@platform/lib/`** и **`@platform/services/`** — через import map в конфиге (пути к `core/frontend/static/...`) |
+| Импорты | Как в приложении: `lit` через **node-resolve**, префиксы **`@platform/lib/`**, **`@platform/services/`**, при необходимости **`@capacitor/app`** и **`@capacitor/core`** (vendor в `core/frontend/static/assets/js/vendor/@capacitor/`) — через import map в конфиге |
 | Запуск | **`npm ci`**, затем **`npm run test:ui-components`** или **`make test-ui-components`**. В **`make test`** / **`docker-compose` tests_runner** **не входит** — нужны Node.js и зависимости из [`package.json`](../../package.json). |
 | Изоляция сервисов | После тестов вызывать **`teardownPlatformServices()`** — сброс [`ServiceRegistry.resetForUiTests()`](../../core/frontend/static/lib/services/ServiceRegistry.js). Не использовать в прод-коде. |
 | Логи | При `setupPlatformServices` возможны предупреждения PWA (404 для `sw.js`, если раннер не отдаёт статику) — ожидаемо. В **`create_service_app`** при **`TESTING=true`** маршруты PWA по умолчанию не регистрируются. |
-| PWA (HTTP) | **`tests/core/test_pwa_routes.py`**: отдача `/manifest.json`, `/sw.js`, `/offline.html` через `register_platform_pwa_routes`, контракт манифеста, `FileNotFoundError` без артефактов. Не дублирует проверку фабрики при `TESTING=true`; поведение Service Worker в браузере — вне scope (E2E/ручной). |
+| PWA (HTTP) | **`tests/core/test_pwa_routes.py`**: отдача `/manifest.json`, `/sw.js`, `/offline.html`, опционально **`/.well-known/assetlinks.json`** и **`/.well-known/apple-app-site-association`**, контракт манифеста, `FileNotFoundError` без артефактов. Не дублирует проверку фабрики при `TESTING=true`; поведение Service Worker в браузере — вне scope (E2E/ручной). |
 
 **Граница:** `tests/ui_components` — изолированные Lit-компоненты (WTR); **`tests/ui/e2e`** — E2E с бэкендом; **`tests/ui`** — только движок (conftest, `AppUI`, реестр).
 

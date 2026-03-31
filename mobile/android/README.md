@@ -34,6 +34,8 @@ location = /.well-known/assetlinks.json {
 
 Инфраструктура может монтировать файл иначе — главное: стабильный URL и корректный JSON.
 
+**App Links и префиксы URL:** список продуктовых префиксов — **`core/frontend/static/lib/utils/platform-deeplink-paths.js`** (`DEEPLINK_PATH_PREFIXES`). В **`AndroidManifest.xml`** intent-filters с **`android:pathPrefix`** / **`pathPattern`** должны быть согласованы с этим списком и с **`/.well-known/apple-app-site-association`** на том же origin.
+
 ## Инициализация проекта TWA
 
 Рабочий каталог для Gradle-проекта не коммитится целиком — генерируется локально или в CI.

@@ -16,6 +16,8 @@ export default {
           imports: {
             '@platform/lib/': '/core/frontend/static/lib/',
             '@platform/services/': '/core/frontend/static/services/',
+            '@capacitor/app': '/core/frontend/static/assets/js/vendor/@capacitor/app/index.js',
+            '@capacitor/core': '/core/frontend/static/assets/js/vendor/@capacitor/core/index.js',
           },
         },
       },

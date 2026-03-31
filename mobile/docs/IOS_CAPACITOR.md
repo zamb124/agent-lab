@@ -43,6 +43,15 @@ npx cap open ios
 - `Info.plist`: `NSCameraUsageDescription`, `NSMicrophoneUsageDescription` для WebRTC и голосовых.
 - Прогон на физическом iPhone: Sync (звонок, сообщение, голосовое, файл).
 
+## Universal Links (ссылка из Mail / Notes открывает приложение)
+
+1. На сервере: **`GET https://<домен>/.well-known/apple-app-site-association`** — JSON без расширения (в репозитории: **`core/frontend/pwa/apple-app-site-association`**, отдаёт **`pwa_routes.py`**). Префиксы **`paths`** в файле должны совпадать с **`DEEPLINK_PATH_PREFIXES`** в **`core/frontend/static/lib/utils/platform-deeplink-paths.js`**.
+2. В приложении: **`App.entitlements`** — **`com.apple.developer.associated-domains`**, значения **`applinks:humanitec.ru`** и при необходимости **`www.`** / другие продуктовые домены (файл в репо: **`mobile/ios/App/App/App.entitlements`**).
+3. Плагин **`@capacitor/app`**: **`npm install`** в **`mobile/`**, **`npx cap sync ios`**. В веб-странице: **`platform-deeplink-init.js`** (подключение из **`app-loader.js`**) подписывается на **`appUrlOpen`** и делает **`location.assign`** на внутренний маршрут; фильтр URL — **`isInternalProductNavigationUrl`** в **`native-app-shell.js`**.
+4. Проверка: [Apple App Search API Validation](https://search.developer.apple.com/appsearch-validation-tool/) или открытие ссылки из Notes на устройстве с установленной сборкой.
+
+Ручной чеклист: сохранить ссылку **`https://humanitec.ru/join`** (или другой согласованный path) в Notes → по нажатию открывается приложение → в WebView загружается ожидаемый path.
+
 ## Пуши
 
 Веб Push в установленной из App Store WKWebView-оболочке **не** эквивалентен Safari PWA; для фоновых уведомлений обычно нужны **APNs** и плагин (см. [`PUSH_PARITY_APNS.md`](PUSH_PARITY_APNS.md)).

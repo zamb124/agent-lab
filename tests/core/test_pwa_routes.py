@@ -80,3 +80,25 @@ def test_assetlinks_json_when_file_present(tmp_path: Path) -> None:
     assert "application/json" in response.headers["content-type"]
     data = response.json()
     assert data[0]["target"]["package_name"] == "ru.test.twa"
+
+
+def test_apple_app_site_association_when_file_present(tmp_path: Path) -> None:
+    """При наличии apple-app-site-association — отдача /.well-known/apple-app-site-association."""
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    src_pwa = repo_root / "core" / "frontend" / "pwa"
+    dst_pwa = tmp_path / "core" / "frontend" / "pwa"
+    dst_pwa.mkdir(parents=True)
+    for name in ("manifest.json", "sw.js", "offline.html"):
+        (dst_pwa / name).write_bytes((src_pwa / name).read_bytes())
+    (dst_pwa / "apple-app-site-association").write_bytes(
+        (src_pwa / "apple-app-site-association").read_bytes()
+    )
+    app = FastAPI()
+    register_platform_pwa_routes(app, tmp_path)
+    client = TestClient(app)
+    response = client.get("/.well-known/apple-app-site-association")
+    assert response.status_code == 200
+    assert "application/json" in response.headers["content-type"]
+    data = response.json()
+    assert "applinks" in data
+    assert data["applinks"]["details"][0]["appIDs"][0].endswith("ru.humanitec.app")

@@ -43,6 +43,8 @@ LiveKit требует отдельный поддомен с собственн
 
 Запросы **`/manifest.json`**, **`/sw.js`**, **`/offline.html`** на общем хосте обычно попадают на сервис с префиксом **`/`** (frontend). Локально при прямом доступе к порту любого сервиса те же пути отдаёт этот инстанс через **`create_service_app`** (см. `core/frontend/pwa/`, `frontend.mdc`).
 
+**`/.well-known/apple-app-site-association`** и **`/.well-known/assetlinks.json`**: отдавать как **JSON** с корректным `Content-Type`, **без** SPA-fallback и без редиректа на другой хост. В приложении — через **`register_platform_pwa_routes`** при наличии файлов в **`core/frontend/pwa/`**. Если перед фронтом стоит отдельный nginx: отдельные **`location =`** для этих путей до общего **`try_files`** к **`index.html`**.
+
 ## Сервисы на хосте
 
 Все сервисы слушают на `0.0.0.0` (нужно для доступа из K8s Endpoints):
