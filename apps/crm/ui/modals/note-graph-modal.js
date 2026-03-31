@@ -12,13 +12,28 @@ export class NoteGraphModal extends PlatformModal {
         css`
             .graph-modal-body {
                 width: 100%;
-                min-height: 320px;
                 box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                min-height: min(360px, 45vh);
+                height: min(520px, 62vh);
+            }
+
+            .modal.fullscreen .graph-modal-body,
+            .modal.full .graph-modal-body {
+                flex: 1 1 auto;
+                min-height: 0;
+                height: auto;
+                max-height: none;
             }
 
             mini-graph-preview {
                 display: block;
                 width: 100%;
+                flex: 1 1 auto;
+                min-height: 0;
+                align-self: stretch;
             }
         `,
     ];
@@ -43,8 +58,9 @@ export class NoteGraphModal extends PlatformModal {
                 <mini-graph-preview
                     .entityId=${id}
                     .maxDepth=${5}
+                    .fillContainer=${true}
                     width="100%"
-                    height="520px"
+                    height="100%"
                 ></mini-graph-preview>
             </div>
         `;

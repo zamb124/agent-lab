@@ -302,6 +302,13 @@ export class GlassModal extends PlatformElement {
                 max-height: none;
             }
 
+            .modal.fullscreen .modal-content:has(.graph-modal-body),
+            .modal.full .modal-content:has(.graph-modal-body) {
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
             .modal-actions {
                 position: relative;
                 display: flex;
