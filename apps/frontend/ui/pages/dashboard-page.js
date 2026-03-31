@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { FrontendStore } from '../store/frontend.store.js';
+import { openUrlSameWindowOrTab } from '@platform/lib/utils/native-app-shell.js';
 import '@platform/lib/components/company-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
@@ -321,7 +322,7 @@ export class DashboardPage extends PlatformElement {
 
     _renderServiceCard(service) {
         return html`
-            <div class="service-card" @click=${() => window.open(this._buildServiceUrl(service.id), '_blank')}>
+            <div class="service-card" @click=${() => openUrlSameWindowOrTab(this._buildServiceUrl(service.id))}>
                 <div class="service-header">
                     <span class="service-icon">
                         <img src="${service.logo}" alt="${service.name}">

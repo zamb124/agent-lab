@@ -123,16 +123,24 @@ export const islandStyles = css`
 
         .island-content {
             padding: var(--space-4);
+            padding-bottom: max(var(--space-4), var(--platform-safe-bottom));
             display: flex;
             flex-direction: column;
         }
 
         :host([padding="none"]) .island-content {
             padding: 0;
+            padding-bottom: var(--platform-safe-bottom);
         }
 
         :host([padding="sm"]) .island-content {
             padding: var(--space-2);
+            padding-bottom: max(var(--space-2), var(--platform-safe-bottom));
+        }
+
+        :host([padding="lg"]) .island-content {
+            padding: var(--space-8);
+            padding-bottom: max(var(--space-8), var(--platform-safe-bottom));
         }
     }
 `;

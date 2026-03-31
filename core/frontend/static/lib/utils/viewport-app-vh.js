@@ -3,6 +3,11 @@
  * чтобы fixed-layout и 100%-высота совпадали с видимой областью iOS Safari при съезжающих панелях.
  */
 
+import { installNativeAppShellLinkCapture, installNativeAppShellWindowOpenPatch } from './native-app-shell.js';
+
+installNativeAppShellLinkCapture();
+installNativeAppShellWindowOpenPatch();
+
 const MOBILE_SHELL_MQ = '(max-width: 767px)';
 
 function applyVisualViewportCssVars() {
@@ -44,7 +49,6 @@ export function initPlatformViewportAppVh() {
 
     if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', onVisualViewport);
-        window.visualViewport.addEventListener('scroll', onVisualViewport);
     }
 
     applyVisualViewportCssVars();

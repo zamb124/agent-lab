@@ -22,11 +22,13 @@ export class LandingHeader extends PlatformElement {
             .header-container {
                 max-width: 1440px;
                 margin: 0 auto;
-                padding: 20px;
+                padding: max(20px, var(--platform-safe-top)) max(20px, var(--platform-safe-right))
+                    max(20px, var(--platform-safe-bottom)) max(20px, var(--platform-safe-left));
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 20px;
+                box-sizing: border-box;
             }
             
             .logo {

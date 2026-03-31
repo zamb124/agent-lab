@@ -11,6 +11,12 @@
     --breakpoint-tablet: 768px;
     --breakpoint-desktop: 1024px;
     --breakpoint-wide: 1440px;
+
+    /* iOS/Android вырезы; с meta viewport-fit=cover */
+    --platform-safe-top: env(safe-area-inset-top, 0px);
+    --platform-safe-right: env(safe-area-inset-right, 0px);
+    --platform-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --platform-safe-left: env(safe-area-inset-left, 0px);
     
     /* ========== ЦВЕТОВАЯ ПАЛИТРА ========== */
     

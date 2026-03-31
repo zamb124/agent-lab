@@ -23,7 +23,9 @@ export class SelectCompanyPage extends PlatformElement {
                 display: block;
                 min-height: var(--app-vh, 100vh);
                 background: var(--landing-background, #0F0F0F);
-                padding: 40px 20px;
+                padding: max(40px, var(--platform-safe-top)) max(20px, var(--platform-safe-right))
+                    max(40px, var(--platform-safe-bottom)) max(20px, var(--platform-safe-left));
+                box-sizing: border-box;
             }
 
             .container {

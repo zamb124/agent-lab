@@ -72,6 +72,23 @@ export class PageHeader extends PlatformElement {
             }
 
             @media (max-width: 767px) {
+                :host {
+                    margin-bottom: var(--space-4);
+                }
+
+                .header-wrap {
+                    position: sticky;
+                    top: 0;
+                    z-index: 30;
+                    margin: 0 0 var(--space-4);
+                    padding: max(var(--space-2), var(--platform-safe-top)) 0 var(--space-3);
+                    background: var(--glass-solid-strong);
+                    backdrop-filter: blur(var(--glass-blur-medium));
+                    -webkit-backdrop-filter: blur(var(--glass-blur-medium));
+                    border-bottom: 1px solid var(--glass-border-subtle);
+                    box-sizing: border-box;
+                }
+
                 .header {
                     flex-wrap: wrap;
                 }
@@ -91,7 +108,6 @@ export class PageHeader extends PlatformElement {
                     flex-shrink: 0;
                     transition: all var(--duration-fast) var(--easing-default);
                     box-shadow: var(--glass-shadow-subtle);
-                    margin-top: 2px;
                 }
 
                 .menu-btn.hidden {
@@ -117,6 +133,11 @@ export class PageHeader extends PlatformElement {
             }
 
             /* Light theme */
+            :host-context([data-theme="light"]) .header-wrap {
+                background: rgba(255, 255, 255, 0.92);
+                border-bottom-color: rgba(15, 23, 42, 0.08);
+            }
+
             :host-context([data-theme="light"]) .menu-btn {
                 background: rgba(255, 255, 255, 0.95);
                 border-color: rgba(0, 0, 0, 0.1);
@@ -171,6 +192,7 @@ export class PageHeader extends PlatformElement {
         const showMenu = this._isMobile && !this._sidebarOpen;
 
         return html`
+            <div class="header-wrap">
             <div class="header">
                 <div class="header-left">
                     <button 
@@ -188,6 +210,7 @@ export class PageHeader extends PlatformElement {
                 <div class="actions">
                     <slot name="actions"></slot>
                 </div>
+            </div>
             </div>
         `;
     }

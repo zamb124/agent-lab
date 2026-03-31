@@ -330,6 +330,10 @@ export class GlassModal extends PlatformElement {
             }
 
             @media (max-width: 768px) {
+                .modal-overlay:has(.modal.fullscreen) {
+                    padding: 0;
+                }
+
                 .modal {
                     width: 95%;
                     border-radius: var(--radius-2xl, 24px);
@@ -351,9 +355,33 @@ export class GlassModal extends PlatformElement {
                     margin: 0;
                 }
 
+                .modal.fullscreen .modal-header {
+                    padding: max(var(--space-3, 12px), var(--platform-safe-top))
+                        max(var(--space-3, 12px), var(--platform-safe-right)) 0
+                        max(var(--space-3, 12px), var(--platform-safe-left));
+                }
+
+                .modal.fullscreen .modal-content {
+                    padding: var(--space-3, 12px)
+                        max(var(--space-3, 12px), var(--platform-safe-right))
+                        var(--space-3, 12px)
+                        max(var(--space-3, 12px), var(--platform-safe-left));
+                }
+
+                .modal.fullscreen .modal-actions {
+                    padding: 0 max(var(--space-3, 12px), var(--platform-safe-right))
+                        max(var(--space-3, 12px), var(--platform-safe-bottom))
+                        max(var(--space-3, 12px), var(--platform-safe-left));
+                }
+
                 .modal::before {
                     left: var(--space-3, 12px);
                     right: var(--space-3, 12px);
+                }
+
+                .modal.fullscreen::before {
+                    left: max(var(--space-3, 12px), var(--platform-safe-left));
+                    right: max(var(--space-3, 12px), var(--platform-safe-right));
                 }
 
                 .modal-header {
@@ -383,14 +411,32 @@ export class GlassModal extends PlatformElement {
                     padding: var(--space-2, 8px) var(--space-2, 8px) 0 var(--space-2, 8px);
                 }
 
+                .modal.fullscreen .modal-header {
+                    padding: max(var(--space-2, 8px), var(--platform-safe-top))
+                        max(var(--space-2, 8px), var(--platform-safe-right)) 0
+                        max(var(--space-2, 8px), var(--platform-safe-left));
+                }
+
                 .modal-content {
                     padding: var(--space-2, 8px);
+                }
+
+                .modal.fullscreen .modal-content {
+                    padding: var(--space-2, 8px) max(var(--space-2, 8px), var(--platform-safe-right)) var(--space-2, 8px)
+                        max(var(--space-2, 8px), var(--platform-safe-left));
                 }
 
                 .modal-actions {
                     padding: var(--space-2, 8px);
                     padding-top: 0;
                     padding-bottom: max(var(--space-2, 8px), env(safe-area-inset-bottom, 0px));
+                    flex-direction: column;
+                }
+
+                .modal.fullscreen .modal-actions {
+                    padding: 0 max(var(--space-2, 8px), var(--platform-safe-right))
+                        max(var(--space-2, 8px), var(--platform-safe-bottom))
+                        max(var(--space-2, 8px), var(--platform-safe-left));
                     flex-direction: column;
                 }
 

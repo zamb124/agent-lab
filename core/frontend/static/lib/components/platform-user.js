@@ -11,6 +11,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import { openUrlSameWindowOrTab } from '../utils/native-app-shell.js';
 import { AppEvents } from '../utils/types.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
@@ -268,11 +269,7 @@ export class PlatformUser extends PlatformElement {
     _openServiceApp(serviceId, event) {
         event.stopPropagation();
         const url = this._buildServiceUrl(serviceId);
-        if (this._isStandalonePwaMode()) {
-            window.location.href = url;
-            return;
-        }
-        window.open(url, '_blank', 'noopener,noreferrer');
+        openUrlSameWindowOrTab(url);
     }
 
     _buildServiceUrl(serviceId) {
@@ -307,13 +304,6 @@ export class PlatformUser extends PlatformElement {
             hostname === '127.0.0.1' ||
             hostname.endsWith('.lvh.me')
         );
-    }
-
-    _isStandalonePwaMode() {
-        const mediaQuery = window.matchMedia('(display-mode: standalone)');
-        const isStandaloneDisplayMode = Boolean(mediaQuery && mediaQuery.matches);
-        const isStandaloneIosMode = window.navigator.standalone === true;
-        return isStandaloneDisplayMode || isStandaloneIosMode;
     }
 
     _getUserInitials() {
@@ -531,7 +521,7 @@ export class PlatformUser extends PlatformElement {
                 ? this.documentationTag.trim()
                 : null;
         const url = buildScenarioDocumentationUrl({ tag });
-        window.open(url, '_blank', 'noopener,noreferrer');
+        openUrlSameWindowOrTab(url);
     }
 
     _toggleTheme() {
