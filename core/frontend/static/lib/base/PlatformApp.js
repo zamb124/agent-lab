@@ -7,6 +7,7 @@ import { ServiceRegistry } from '../services/ServiceRegistry.js';
 import { AppEvents } from '../utils/types.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+import { serviceIdFromBaseUrl, setLastVisitedService } from '../utils/last-visited-service.js';
 
 // PWA Install Banner для iOS/Android
 import '../components/pwa-install-banner.js';
@@ -180,6 +181,13 @@ export class PlatformApp extends PlatformElement {
         return renderPlatformAppShell(this);
     }
 
+    _recordLastVisitedServiceFromApp() {
+        const id = serviceIdFromBaseUrl(this.getBaseUrl());
+        if (id) {
+            setLastVisitedService(id);
+        }
+    }
+
     async connectedCallback() {
         try {
             if (!this._toastListenerAttached) {
@@ -225,6 +233,8 @@ export class PlatformApp extends PlatformElement {
                     this.redirectToAuth();
                     return;
                 }
+
+                this._recordLastVisitedServiceFromApp();
             }
 
             const routes = this.setupRoutes();

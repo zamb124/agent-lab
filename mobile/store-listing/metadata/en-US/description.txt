@@ -1,0 +1,11 @@
+Humanitec is a platform for automating business processes with AI agents.
+
+Build flows for support, sales, and internal work, connect a corporate knowledge base, and manage contacts in CRM. Team chat and calls keep collaboration in one place.
+
+Features:
+— AI agents and flows without unnecessary complexity;
+— CRM and relationship graph;
+— RAG: documents and semantic search;
+— team sync in chat.
+
+The web UI updates from the server: after installing the app you get current functionality without reinstalling from the store, until the native shell changes.

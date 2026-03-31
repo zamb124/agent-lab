@@ -16,6 +16,7 @@ import { AppEvents } from '../utils/types.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
 import { createAvatarRetry } from '../utils/avatar-retry.js';
+import { buildServiceEntryUrl, setLastVisitedService } from '../utils/last-visited-service.js';
 import './platform-icon.js';
 
 export class PlatformUser extends PlatformElement {
@@ -263,47 +264,20 @@ export class PlatformUser extends PlatformElement {
                 logo: '/static/core/assets/service_logos/sync_logo.svg',
                 description: 'Инженерный чат с Git-интеграцией',
             },
+            {
+                id: 'frontend',
+                name: 'Console',
+                logo: '/static/core/assets/service_logos/frontend_logo.svg',
+                description: 'Humanitec: консоль платформы',
+            },
         ];
     }
 
     _openServiceApp(serviceId, event) {
         event.stopPropagation();
-        const url = this._buildServiceUrl(serviceId);
+        setLastVisitedService(serviceId);
+        const url = buildServiceEntryUrl(serviceId);
         openUrlSameWindowOrTab(url);
-    }
-
-    _buildServiceUrl(serviceId) {
-        const servicePath = `/${serviceId}`;
-        if (!this._isLocalHost(window.location.hostname)) {
-            return servicePath;
-        }
-
-        const servicePortById = {
-            flows: '8001',
-            frontend: '8002',
-            crm: '8003',
-            rag: '8004',
-            sync: '8005',
-        };
-
-        const targetPort = servicePortById[serviceId];
-        if (!targetPort) {
-            throw new Error(`Неизвестный сервис для перехода: ${serviceId}`);
-        }
-
-        if (window.location.port === targetPort) {
-            return servicePath;
-        }
-
-        return `${window.location.protocol}//${window.location.hostname}:${targetPort}${servicePath}`;
-    }
-
-    _isLocalHost(hostname) {
-        return (
-            hostname === 'localhost' ||
-            hostname === '127.0.0.1' ||
-            hostname.endsWith('.lvh.me')
-        );
     }
 
     _getUserInitials() {

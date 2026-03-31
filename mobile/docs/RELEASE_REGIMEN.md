@@ -25,3 +25,7 @@
 
 - Сборки с подписью только в защищённых ветках; секреты не в репозитории.
 - См. [`.github/workflows/mobile-pwa-lighthouse.yml`](../../.github/workflows/mobile-pwa-lighthouse.yml) для необязательной проверки PWA по URL.
+
+## Витрина App Store из репозитория
+
+Тексты и скриншоты: [`../store-listing/`](../store-listing/). Загрузка в App Store Connect без ручного ввода в веб-форме: [`../fastlane/README.md`](../fastlane/README.md) (`upload_listing`). Скриншоты: `uv run python mobile/scripts/capture_app_store_screenshots.py` (из корня репо).

@@ -132,6 +132,7 @@ sync = [
 ]
 
 dev = [
+    "skia-python>=144.0",
     "pillow>=12.0.0",
     "pytest>=9.0.0",
     "pytest-asyncio>=1.3.0",

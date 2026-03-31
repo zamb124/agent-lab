@@ -18,6 +18,7 @@
 - [Фаза 2 — чеклист PWA](docs/PHASE2_PWA_CHECKLIST.md) · [Tenant / start_url](docs/TENANT_START_URL.md)
 - [App Store 4.2](docs/APP_STORE_4_2.md) · [Push APNs roadmap](docs/PUSH_PARITY_APNS.md)
 - [QA матрица](docs/QA_MATRIX_TEMPLATE.md) · [Карточки магазинов](docs/STORE_LISTING_CHECKLIST.md) · [Релизы](docs/RELEASE_REGIMEN.md)
+- [Витрина из кода (тексты, скриншоты, fastlane)](store-listing/README.md)
 - [Android TWA](android/README.md) — Trusted Web Activity, Bubblewrap, `assetlinks.json`.
 - [iOS / Capacitor](docs/IOS_CAPACITOR.md) — WKWebView, удалённый URL, App Store 4.2.
 - [Digital Asset Links на сервере](config/well-known-assetlinks-README.md)
@@ -40,6 +41,9 @@ npm install
 mobile/
   docs/WATERFALL.md
   docs/PHASE*.md …
+  store-listing/metadata/   # описания и скриншоты витрины (App Store)
+  fastlane/                 # fastlane upload_listing → App Store Connect
+  scripts/capture_app_store_screenshots.py
   lighthouserc.cjs
   capacitor.config.json
   android/README.md

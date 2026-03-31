@@ -69,6 +69,20 @@ npx cap open ios
 
 Вёрстка общая с PWA и вебом: **`viewport-fit=cover`**, токены **`--platform-safe-*`** в **`core/frontend/static/assets/css/tokens.css`**, хедер страниц **`page-header`** со sticky и отступом под вырез, контейнер **`platform-island`** с нижним inset на мобилке, полноэкранный **`glass-modal`** без полей у overlay на fullscreen. В **`capacitor.config.json`** для iOS задано **`contentInset: "never"`** (safe area только из CSS, без дублирования от WKWebView). Подробнее — **`.cursor/rules/frontend.mdc`**, раздел «Высота вьюпорта» и safe area.
 
+## Иконка приложения (Humanitec)
+
+Единый знак с главной: **`core/frontend/static/assets/service_logos/frontend_logo.svg`** на фоне **`#1a1a2e`** (как **`background_color`** в PWA manifest). PNG для PWA: **`core/frontend/static/pwa/icons/`**; иконка App Store / Xcode: **`mobile/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`** (1024×1024).
+
+Пересборка всех размеров после смены логотипа или фона:
+
+```bash
+cd /path/to/agent-lab
+uv sync
+uv run python scripts/generate_humanitec_pwa_icons.py
+```
+
+Зависимость генератора: **`skia-python`** (группа **`dev`** в `pyproject.toml`). После обновления **`AppIcon`** — снова **`npx cap sync ios`** при необходимости.
+
 ## Синхронизация после смены конфига
 
 ```bash

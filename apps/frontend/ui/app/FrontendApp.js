@@ -13,6 +13,7 @@ import { EmbedService } from '../services/embed.service.js';
 import { FlowsCatalogService } from '../services/flows-catalog.service.js';
 import { SchedulerTasksService } from '../services/scheduler-tasks.service.js';
 import { FrontendStore } from '../store/frontend.store.js';
+import { replaceLocationToLastVisitedNonFrontendService } from '@platform/lib/utils/last-visited-service.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/auth-modal.js';
 
@@ -122,7 +123,8 @@ export class FrontendApp extends PlatformApp {
     constructor() {
         super();
         this._isLanding = false;
-        
+        this._dashboardLastServiceRedirectDone = false;
+
         this.state = this.use((s) => ({
             currentView: s.ui.currentView,
         }));
@@ -165,6 +167,23 @@ export class FrontendApp extends PlatformApp {
 
     getBaseUrl() {
         return '/frontend';
+    }
+
+    _recordLastVisitedServiceFromApp() {
+        const path = window.location.pathname;
+        if (
+            path === '/' ||
+            path.startsWith('/products/') ||
+            path === '/policy' ||
+            path === '/terms' ||
+            path === '/login' ||
+            path === '/frontend/login' ||
+            path === '/select-company' ||
+            path === '/join'
+        ) {
+            return;
+        }
+        super._recordLastVisitedServiceFromApp();
     }
 
     async initServices() {
@@ -352,6 +371,22 @@ export class FrontendApp extends PlatformApp {
                     <div class="loading-text">Перенаправление на вход...</div>
                 </div>
             `;
+        }
+
+        if (
+            !this._isLanding &&
+            window.location.pathname === '/dashboard' &&
+            !this._dashboardLastServiceRedirectDone
+        ) {
+            this._dashboardLastServiceRedirectDone = true;
+            if (replaceLocationToLastVisitedNonFrontendService()) {
+                return html`
+                    <div class="loading-container">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">Загрузка...</div>
+                    </div>
+                `;
+            }
         }
 
         if (this._isLanding) {

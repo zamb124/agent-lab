@@ -1,0 +1,30 @@
+# frozen_string_literal: true
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Загрузить текст витрины и скриншоты из ../store-listing/metadata (IPA не загружается)"
+  lane :upload_listing do
+    metadata_abs = File.expand_path("../store-listing/metadata", __dir__)
+
+    opts = {
+      skip_binary: true,
+      submit_for_review: false,
+      automatic_release: false,
+      force: true,
+      metadata_path: metadata_abs,
+      precheck_include_in_app_purchases: false,
+      skip_screenshots: ENV["SKIP_SCREENSHOTS"] == "1",
+    }
+
+    if ENV["APP_STORE_CONNECT_KEY_PATH"]
+      opts[:api_key] = app_store_connect_api_key(
+        key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+        issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+        key_filepath: File.expand_path(ENV.fetch("APP_STORE_CONNECT_KEY_PATH"), ENV["PWD"] || Dir.pwd),
+      )
+    end
+
+    upload_to_app_store(opts)
+  end
+end
