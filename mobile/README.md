@@ -1,29 +1,49 @@
 # Сборки магазинов (Android TWA / iOS)
 
-Каталог **`mobile/`** — артефакты и инструкции для упаковки PWA платформы в приложения магазинов. **Бизнес-логика и UI остаются в веб-коде** (`core/frontend/`, `apps/*/ui/`); здесь только оболочки, конфиги, скрипты и документация по процессу.
+Каталог **`mobile/`** — оболочки, конфиги и документация для упаковки PWA в приложения. **UI и бизнес-логика** — в `core/`, `apps/*/ui/`.
+
+## Операционные гиды
+
+| Тема | Документ |
+|------|----------|
+| **iOS** — Capacitor, Xcode, safe area, иконки, OAuth | [`docs/IOS_CAPACITOR.md`](docs/IOS_CAPACITOR.md) |
+| **Android** — TWA, Digital Asset Links, Bubblewrap | [`android/README.md`](android/README.md) |
+| **Витрина App Store** — тексты, скриншоты, fastlane | [`store-listing/README.md`](store-listing/README.md), [`fastlane/README.md`](fastlane/README.md) |
+
+## Проверки PWA (production)
+
+Нужны для той же среды, что откроет оболочка.
+
+- Манифест и SW: [`scripts/check-pwa-manifest-url.sh`](scripts/check-pwa-manifest-url.sh) — в `mobile/.env` задать `PWA_MANIFEST_URL` (см. [`config/env.example`](config/env.example)).
+- Lighthouse: `export PWA_LIGHTHOUSE_URL="https://<host>/"`, затем [`scripts/run-lighthouse-ci.sh`](scripts/run-lighthouse-ci.sh) или `npm run pwa:lighthouse` в `mobile/`; пороги — [`lighthouserc.cjs`](lighthouserc.cjs).
+- VAPID: `GET /<service>/api/push/vapid-public-key` на том же origin (см. [`core/push/router.py`](../core/push/router.py)).
+
+## Релизы и обновления
+
+- **Только веб:** деплой `core/` и `apps/` — TWA и Capacitor подхватывают изменения **без** нового бинарника, пока не меняются `applicationId` / bundle id, signing, домен, критичные нативные плагины или разрешения в манифестах.
+- **Новый билд:** смена package/bundle id, новые разрешения (Info.plist / AndroidManifest), обновление Capacitor/Bubblewrap/SDK по требованию магазина, нативные плагины (push и т.д.).
+- **Версии:** Android — монотонно `versionCode`; iOS — `CFBundleShortVersionString` / `CFBundleVersion` по правилам Apple.
+- **Витрина из репозитория:** [`store-listing/metadata/`](store-listing/metadata/), загрузка — [`fastlane/README.md`](fastlane/README.md); скриншоты — `uv run python mobile/scripts/capture_app_store_screenshots.py` или `make store-screenshots-ios` из корня репо.
+- **CI:** подпись только в защищённых ветках; секреты не в git. PWA по URL: [`.github/workflows/README.md`](../.github/workflows/README.md) (`PWA_LIGHTHOUSE_URL`).
 
 ## Связь с репозиторием
 
-| Компонент | Где в репозитории |
-|-----------|-------------------|
+| Компонент | Где |
+|-----------|-----|
 | Манифест, SW, offline | [`core/frontend/pwa/`](../core/frontend/pwa/) |
-| Digital Asset Links (опционально) | `core/frontend/pwa/assetlinks.json` — `GET /.well-known/assetlinks.json` ([`pwa_routes.py`](../core/app/pwa_routes.py)), шаблон [`assetlinks.json.example`](../core/frontend/pwa/assetlinks.json.example) |
+| Digital Asset Links | `core/frontend/pwa/assetlinks.json` — `GET /.well-known/assetlinks.json` ([`pwa_routes.py`](../core/app/pwa_routes.py)), шаблон [`assetlinks.json.example`](../core/frontend/pwa/assetlinks.json.example) |
 | Маршруты `/manifest.json`, `/sw.js` | [`core/app/pwa_routes.py`](../core/app/pwa_routes.py) |
-| Клиент PWA (SW, VAPID push) | [`core/frontend/static/services/pwa.service.js`](../core/frontend/static/services/pwa.service.js) |
+| Клиент PWA | [`core/frontend/static/services/pwa.service.js`](../core/frontend/static/services/pwa.service.js) |
 
-## Документация процесса
+## Справочники
 
-- **[Полный waterfall (фазы, ворота, артефакты)](docs/WATERFALL.md)** — единственный источник правды по этапам проекта магазинов.
-- [Фаза 1 — инициация](docs/PHASE1_INITIATION.md) · [РФ / учётки](docs/RU_OPS_ACCOUNTS.md)
-- [Фаза 2 — чеклист PWA](docs/PHASE2_PWA_CHECKLIST.md) · [Tenant / start_url](docs/TENANT_START_URL.md)
-- [App Store 4.2](docs/APP_STORE_4_2.md) · [Push APNs roadmap](docs/PUSH_PARITY_APNS.md)
-- [QA матрица](docs/QA_MATRIX_TEMPLATE.md) · [Карточки магазинов](docs/STORE_LISTING_CHECKLIST.md) · [Релизы](docs/RELEASE_REGIMEN.md)
-- [Витрина из кода (тексты, скриншоты, fastlane)](store-listing/README.md)
-- [Android TWA](android/README.md) — Trusted Web Activity, Bubblewrap, `assetlinks.json`.
-- [iOS / Capacitor](docs/IOS_CAPACITOR.md) — WKWebView, удалённый URL, App Store 4.2.
-- [Digital Asset Links на сервере](config/well-known-assetlinks-README.md)
+- [Дорожная карта магазинов (кратко)](docs/WATERFALL.md)
+- [Tenant и start_url](docs/TENANT_START_URL.md)
+- [РФ: учётки магазинов](docs/RU_OPS_ACCOUNTS.md)
+- [Push: Web vs APNs](docs/PUSH_PARITY_APNS.md)
+- [QA-матрица перед релизом](docs/QA_MATRIX_TEMPLATE.md)
 
-## Быстрый старт (инструменты)
+## Быстрый старт
 
 ```bash
 cd mobile
@@ -31,36 +51,32 @@ npm install
 ./scripts/check-pwa-manifest-url.sh
 ```
 
-Переменные окружения: скопировать [`config/env.example`](config/env.example) в `mobile/.env` и выставить `PWA_MANIFEST_URL`.
-
-Дальше — по фазам из `docs/WATERFALL.md` и README в `android/` / `ios/`.
+Дальше — [`docs/WATERFALL.md`](docs/WATERFALL.md), [`android/README.md`](android/README.md), [`docs/IOS_CAPACITOR.md`](docs/IOS_CAPACITOR.md).
 
 ## Структура каталога
 
 ```
 mobile/
   docs/WATERFALL.md
-  docs/PHASE*.md …
-  store-listing/metadata/   # описания и скриншоты витрины (App Store)
-  fastlane/                 # fastlane upload_listing → App Store Connect
+  docs/IOS_CAPACITOR.md
+  docs/TENANT_START_URL.md
+  docs/RU_OPS_ACCOUNTS.md
+  docs/PUSH_PARITY_APNS.md
+  docs/QA_MATRIX_TEMPLATE.md
+  store-listing/metadata/
+  fastlane/
   scripts/capture_app_store_screenshots.py
+  scripts/generate_humanitec_pwa_icons.py   # корень репо: scripts/generate_humanitec_pwa_icons.py
   lighthouserc.cjs
   capacitor.config.json
   android/README.md
-  docs/IOS_CAPACITOR.md
   config/env.example
   config/capacitor.config.json.example
   config/assetlinks.json.template
-  scripts/check-pwa-manifest-url.sh
-  scripts/run-lighthouse-ci.sh
-  scripts/init-twa.sh
-  scripts/build-twa.sh
   www/index.html
   package.json
 ```
 
 ## Секреты
 
-Ключи подписи, профили Apple, JSON сервис-аккаунта Play **не хранятся в git**. Шаблон переменных: [`config/env.example`](config/env.example).
-
-В GitHub для workflow Lighthouse: секрет **`PWA_LIGHTHOUSE_URL`** (см. [`.github/workflows/README.md`](../.github/workflows/README.md)).
+Ключи подписи, профили Apple, JSON Play Console **не в git**. Шаблон: [`config/env.example`](config/env.example).

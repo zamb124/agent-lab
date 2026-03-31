@@ -193,6 +193,17 @@ export class SelectCompanyPage extends PlatformElement {
             }
 
             const urlParams = new URLSearchParams(window.location.search);
+            if (
+                this.companies.length > 1 &&
+                urlParams.get('action') !== 'create'
+            ) {
+                const active = this.companies.find((c) => c.is_active === true);
+                if (active && active.subdomain) {
+                    this.handleCompanySelect(active);
+                    return;
+                }
+            }
+
             if (urlParams.get('action') === 'create' && this.companies.length === 0) {
                 this.showCreateModal = true;
             }

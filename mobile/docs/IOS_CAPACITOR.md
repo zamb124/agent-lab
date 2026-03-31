@@ -4,7 +4,7 @@
 
 ## Предварительные условия
 
-1. Закрыта **Фаза 2** из [`WATERFALL.md`](WATERFALL.md).
+1. Production URL и PWA (`manifest`, `sw.js`, HTTPS) доступны так же, как для браузера (см. [`mobile/README.md`](../README.md)).
 2. macOS: установлен **полный Xcode** из App Store (не только Command Line Tools). В терминале: `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, затем `xcodebuild -version`.
 3. **CocoaPods**: `brew install cocoapods` (или `gem install cocoapods`). После `cap add ios` / `cap sync ios` при ошибке pod выполните: `cd ios/App && pod install`.
 4. В **`mobile/`**: `npm install`.
@@ -26,7 +26,22 @@ npx cap open ios
 
 - **Signing & Capabilities:** команда разработчика, bundle id.
 - **Info.plist:** `NSCameraUsageDescription`, `NSMicrophoneUsageDescription` (и при необходимости для файлов/фото) — тексты на языке пользователя.
-- **Guideline 4.2:** нативный splash, экран настроек/«О приложении», офлайн-поведение — см. [`APP_STORE_4_2.md`](APP_STORE_4_2.md) и WATERFALL.
+
+## App Store: Guideline 4.2 (не «просто сайт»)
+
+Оболочка Capacitor загружает веб по `server.url`; для ревью Apple нужно показать ценность **приложения** как продукта.
+
+**Минимальный набор для продуктовой заявки**
+
+- [ ] Нативный **splash** / launch screen (бренд Humanitec).
+- [ ] Работа **offline** на уровне ожиданий: показ [`/offline.html`](../../core/app/pwa_routes.py) или эквивалент при отсутствии сети.
+- [ ] Экран **«О приложении»** или раздел настроек с версией, ссылками на Privacy Policy и поддержку.
+- [ ] Описание в App Store явно перечисляет: чаты, звонки, CRM, агенты — то, что отличает клиент от «оболочки вокруг сайта».
+
+**Технические напоминания**
+
+- `Info.plist`: `NSCameraUsageDescription`, `NSMicrophoneUsageDescription` для WebRTC и голосовых.
+- Прогон на физическом iPhone: Sync (звонок, сообщение, голосовое, файл).
 
 ## Пуши
 

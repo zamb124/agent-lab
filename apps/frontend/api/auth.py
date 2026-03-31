@@ -87,7 +87,15 @@ async def auth_callback(
         else:
             redirect_url = build_url(target_host, "/dashboard", company.subdomain)
     else:
-        redirect_url = build_url(target_host, "/select-company")
+        active_id = user.active_company_id
+        if active_id and active_id in user.companies:
+            company = await container.company_repository.get(active_id)
+            if company and company.subdomain:
+                redirect_url = build_url(target_host, "/dashboard", company.subdomain)
+            else:
+                redirect_url = build_url(target_host, "/select-company")
+        else:
+            redirect_url = build_url(target_host, "/select-company")
     
     response = RedirectResponse(url=redirect_url)
     

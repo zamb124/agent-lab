@@ -13,8 +13,8 @@ export class GlassToast extends PlatformElement {
             :host {
                 display: block;
                 position: fixed;
-                top: var(--space-6);
-                right: var(--space-6);
+                top: max(var(--space-6), env(safe-area-inset-top, 0px));
+                right: max(var(--space-6), env(safe-area-inset-right, 0px));
                 z-index: var(--z-toast);
                 max-width: 400px;
                 animation: slideIn 0.3s var(--easing-spring);

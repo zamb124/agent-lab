@@ -86,3 +86,31 @@ SKIP_SCREENSHOTS=1 bundle exec fastlane upload_listing
 ## Google Play
 
 Формат Google Play отличается (XML/HTML, другие размеры скриншотов). Для единого источника текста можно дублировать ключевые блоки из `metadata/ru/description.txt` в `fastlane supply` или в консоль Play вручную; отдельный автоматический поток можно добавить позже.
+
+## Перед публикацией
+
+Источник правды по текстам и скриншотам — этот каталог (`metadata/`), загрузка в App Store Connect — [`../fastlane/`](../fastlane/) (`bundle exec fastlane upload_listing`).
+
+### Общее
+
+- [ ] Название и краткое имя согласованы с брендом.
+- [ ] Описание на русском (и при необходимости английском) — правки в `metadata/`, не только в веб-консоли.
+- [ ] Скриншоты для телефона (и планшета для iPad, если таргет); iPhone 6.7": `uv run python mobile/scripts/capture_app_store_screenshots.py`.
+- [ ] Иконка 512×512 и требования витрины выполнены.
+- [ ] URL **Privacy Policy** и **Terms** актуальны и открываются публично.
+- [ ] Категория приложения и возрастной рейтинг заполнены честно (чаты, звонки, обработка данных).
+
+### Google Play
+
+- [ ] Data safety / декларация сбора данных.
+- [ ] AAB загружен, подпись release.
+
+### Apple App Store
+
+- [ ] App Privacy (nutrition labels) согласованы с фактическим сбором данных.
+- [ ] IPA / архив из Xcode, версия и build number.
+- [ ] Guideline 4.2 (минимальный функционал, «О приложении») — см. [`../docs/IOS_CAPACITOR.md`](../docs/IOS_CAPACITOR.md).
+
+### Дополнительные витрины (RuStore, AppGallery, …)
+
+- [ ] Отдельные требования модерации прочитаны и выполнены.

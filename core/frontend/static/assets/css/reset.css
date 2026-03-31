@@ -60,6 +60,25 @@ body.platform-shell {
     overscroll-behavior: none;
 }
 
+/*
+ * Узкая ширина: высота документа = var(--app-vh) из visualViewport (viewport-app-vh.js).
+ * Иначе на iOS Safari height: 100% цепляется к layout viewport (полный экран), а shell — к
+ * уменьшенной видимой области при клавиатуре: пустой зазор и «улёт» композера вверх.
+ */
+@media (max-width: 767px) {
+    html:has(body.platform-shell) {
+        height: var(--app-vh, 100%);
+        min-height: var(--app-vh, 100%);
+        max-height: var(--app-vh, 100%);
+    }
+
+    body.platform-shell {
+        height: var(--app-vh, 100%);
+        min-height: var(--app-vh, 100%);
+        max-height: var(--app-vh, 100%);
+    }
+}
+
 /* Animated background orbs for depth */
 body::before,
 body::after {

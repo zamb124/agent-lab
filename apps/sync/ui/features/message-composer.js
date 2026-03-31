@@ -14,6 +14,33 @@ import { extractMentionedUserIdsFromPlainText } from '../utils/sync-mention-text
 
 const EMOJIS = ['😀', '😅', '😉', '😍', '🤝', '🔥', '✅', '💡', '🧠', '🚀', '📌', '🧩', '⚠️', '❌', '👍', '👀'];
 
+/**
+ * WKWebView и часть встроенных браузеров отдают только legacy getUserMedia.
+ * @param {MediaStreamConstraints} constraints
+ * @returns {Promise<MediaStream>}
+ */
+function getUserMediaCompat(constraints) {
+    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
+        return nav.mediaDevices.getUserMedia(constraints);
+    }
+    const legacy = nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia);
+    if (typeof legacy === 'function') {
+        return new Promise((resolve, reject) => {
+            legacy.call(nav, constraints, resolve, reject);
+        });
+    }
+    return Promise.reject(new Error('NO_GET_USER_MEDIA'));
+}
+
+function hasGetUserMediaApi() {
+    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
+        return true;
+    }
+    return Boolean(nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia));
+}
+
 function extractPlainTextFromMsg(msg) {
     const contents = msg?.contents ?? [];
     const parts = [];
@@ -609,7 +636,7 @@ export class MessageComposer extends PlatformElement {
     _focusTextarea() {
         const ta = this.shadowRoot?.querySelector('textarea.textarea');
         if (!ta) return;
-        ta.focus();
+        ta.focus({ preventScroll: true });
         const len = ta.value.length;
         try {
             ta.setSelectionRange(len, len);
@@ -721,7 +748,7 @@ export class MessageComposer extends PlatformElement {
         queueMicrotask(() => {
             const ta = this.shadowRoot?.querySelector('textarea.textarea');
             if (!ta) return;
-            ta.focus();
+            ta.focus({ preventScroll: true });
             try {
                 ta.setSelectionRange(pos, pos);
             } catch {
@@ -1173,13 +1200,10 @@ export class MessageComposer extends PlatformElement {
         }
         const hostname = window.location.hostname.toLowerCase();
         const isLocalLvhMe = hostname === 'lvh.me' || hostname.endsWith('.lvh.me');
-        const canUseGetUserMedia = Boolean(
-            navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function'
-        );
         if (!window.isSecureContext && !isLocalLvhMe) {
             throw new Error('Запись доступна только в HTTPS или localhost.');
         }
-        if (!canUseGetUserMedia) {
+        if (!hasGetUserMediaApi()) {
             if (isLocalLvhMe && window.location.protocol === 'http:') {
                 throw new Error(
                     'Для http://*.lvh.me браузер блокирует доступ к микрофону. '
@@ -1188,10 +1212,13 @@ export class MessageComposer extends PlatformElement {
             }
             throw new Error('Браузер не поддерживает запись с микрофона.');
         }
+        if (typeof MediaRecorder === 'undefined') {
+            throw new Error('Запись аудио недоступна: в этом окружении нет MediaRecorder.');
+        }
         this._recordingChunks = [];
         this._recordingStartAt = Date.now();
         this._recordingSeconds = 0;
-        this._recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this._recordingStream = await getUserMediaCompat({ audio: true });
         const mimeType = this._pickMediaRecorderMimeType();
         this._recordingMimeType = mimeType !== '' ? mimeType : 'audio/webm';
         this._mediaRecorder = mimeType !== ''
