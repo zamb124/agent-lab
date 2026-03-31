@@ -43,9 +43,14 @@ function applyVisualViewportCssVars() {
     /*
      * iOS: при фокусе в поле Safari сдвигает layout viewport; остаётся window.scrollY и зазор
      * между клавиатурой и нижней панелью. Для platform-shell внешний скролл не нужен.
+     * behavior: instant — не полагаться на CSS html (у лендинга может быть scroll-behavior: smooth).
      */
     if (typeof window.scrollTo === 'function' && (window.scrollY !== 0 || window.scrollX !== 0)) {
-        window.scrollTo(0, 0);
+        try {
+            window.scrollTo({ left: 0, top: 0, behavior: 'instant' });
+        } catch {
+            window.scrollTo(0, 0);
+        }
     }
 }
 

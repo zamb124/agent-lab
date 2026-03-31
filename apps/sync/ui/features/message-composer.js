@@ -845,6 +845,26 @@ export class MessageComposer extends PlatformElement {
         this._flushTypingNotTyping();
     }
 
+    /** Сброс внешнего скролла документа сразу при тапе в поле (iOS иначе даёт скачок и «плавное» догоняние). */
+    _onTextareaFocus() {
+        if (typeof window === 'undefined' || window.innerWidth > 767) {
+            return;
+        }
+        const pin = () => {
+            if (window.scrollY === 0 && window.scrollX === 0) {
+                return;
+            }
+            try {
+                window.scrollTo({ left: 0, top: 0, behavior: 'instant' });
+            } catch {
+                window.scrollTo(0, 0);
+            }
+        };
+        pin();
+        requestAnimationFrame(pin);
+    }
+
+
     async _sendText() {
         const text = this._text.trim();
         const hasPending = this._pendingAttachments.length > 0;
@@ -1427,6 +1447,7 @@ export class MessageComposer extends PlatformElement {
                         placeholder="Сообщение..."
                         .value=${this._text}
                         @input=${this._onTextInput}
+                        @focus=${this._onTextareaFocus}
                         @blur=${this._onTextareaBlur}
                         @keydown=${this._onKeyDown}
                     ></textarea>

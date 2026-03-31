@@ -52,6 +52,11 @@ body {
 html:has(body.platform-shell) {
     height: 100%;
     overflow: hidden;
+    /*
+     * Иначе window.scrollTo(0,0) из viewport-app-vh.js наследует scroll-behavior: smooth у html
+     * и визуально «тянет» экран вниз после скачка клавиатуры.
+     */
+    scroll-behavior: auto;
 }
 
 body.platform-shell {
