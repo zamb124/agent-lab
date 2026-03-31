@@ -8,7 +8,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { FlowsStore } from '../../store/flows.store.js';
 import { injectEditorStyles } from './flow-editor-styles.js';
-import '../../modals/confirm-modal.js';
+import { confirm } from '../../modals/confirm-modal.js';
 import '../../modals/code-modal.js';
 import '../../modals/trigger-editor-modal.js';
 import './resource-property-panel.js';
@@ -51,6 +51,7 @@ export class FlowEditorPage extends PlatformElement {
         
         this._panelEntering = false;
         this._confirmModal = null;
+        this._reloadFromBundleBusy = false;
     }
 
     async connectedCallback() {
@@ -795,6 +796,62 @@ export class FlowEditorPage extends PlatformElement {
         this.emit('flow-changed');
     }
 
+    async _completeReloadFromBundle(flowId) {
+        if (!flowId) {
+            return;
+        }
+        await FlowsStore.loadFlow(flowId, this.a2a, this.state.value.currentSkillId);
+        const editorState = FlowsStore.state.editor;
+        await this._updateCanvasDirectly(editorState.skillsData, editorState.inheritedData);
+        this._initialConfigHash = this._calculateConfigHash();
+        this._hasUnsavedChanges = false;
+        this.success('Агент переинициализирован из репозитория');
+    }
+
+    async _onFlowReloadFromBundle(e) {
+        const flowId = e.detail?.flowId || this.flowId;
+        if (!flowId) {
+            return;
+        }
+        try {
+            await this._completeReloadFromBundle(flowId);
+        } catch (err) {
+            console.error('[FlowEditorPage] flow reload from bundle:', err);
+            this.error(err.message || String(err));
+        }
+    }
+
+    async _onReloadFromBundleRequested() {
+        const flowId = this.flowId;
+        if (!flowId || this.state.value.flowConfig?.source !== 'file') {
+            return;
+        }
+        const agreed = await confirm(
+            'Агент будет переинициализирован из bundle в репозитории. Несохранённые правки в редакторе будут потеряны.',
+            {
+                title: 'Переинициализация из репозитория',
+                variant: 'warning',
+                confirmText: 'Переинициализировать',
+                cancelText: 'Отмена',
+            },
+        );
+        if (!agreed) {
+            return;
+        }
+        this._reloadFromBundleBusy = true;
+        this.requestUpdate();
+        try {
+            await this.a2a.reloadFlowFromBundle(flowId);
+            await this._completeReloadFromBundle(flowId);
+        } catch (err) {
+            console.error('[FlowEditorPage] reload from bundle (header):', err);
+            this.error(err.message || String(err));
+        } finally {
+            this._reloadFromBundleBusy = false;
+            this.requestUpdate();
+        }
+    }
+
     _onNodeDeleted(e) {
         const { nodeId } = e.detail;
         
@@ -1033,12 +1090,14 @@ export class FlowEditorPage extends PlatformElement {
                         .flowId=${this.flowId}
                         .skillId=${currentSkillId}
                         .flowConfig=${flowConfig}
+                        .flowSource=${flowConfig?.source || ''}
                         .flowVariables=${flowConfig?.variables || {}}
                         .previewExecutionState=${previewExecutionState}
                         ?expanded=${panelExpanded}
                         @node-updated=${this._onNodeUpdated}
                         @node-deleted=${this._onNodeDeleted}
                         @node-id-changed=${this._onNodeIdChanged}
+                        @flow-reload-from-bundle=${this._onFlowReloadFromBundle}
                     ></property-panel>
                 </div>
             </div>
@@ -1143,6 +1202,8 @@ export class FlowEditorPage extends PlatformElement {
             <div class="editor-layout">
                 <editor-header
                     flow-name=${flowConfig?.name || 'New Flow'}
+                    flow-source=${flowConfig?.source || ''}
+                    ?reload-from-bundle-loading=${this._reloadFromBundleBusy}
                     ?saving=${isSaving}
                     .mode=${this.editorMode}
                     ?agent-execution-running=${this.state.value.agentExecutionRunning}
@@ -1151,6 +1212,7 @@ export class FlowEditorPage extends PlatformElement {
                     @mode-changed=${this._onModeChanged}
                     @stop-agent-requested=${this._onStopAgent}
                     @show-code=${this._onShowCode}
+                    @reload-from-bundle-requested=${this._onReloadFromBundleRequested}
                 ></editor-header>
                 
                 <skills-tabs-bar

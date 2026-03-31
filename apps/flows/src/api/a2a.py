@@ -167,14 +167,14 @@ async def _handle_streaming(
         async for event in handler.on_message_stream(params, context=context):
             event_data = event.model_dump(by_alias=True, exclude_none=True)
             response = {"jsonrpc": "2.0", "id": rpc_id, "result": event_data}
-            yield f"data: {json.dumps(response)}\n\n"
+            yield f"data: {json.dumps(response, ensure_ascii=False, default=str)}\n\n"
     except PermissionDenied as e:
         error_response = {
             "jsonrpc": "2.0",
             "id": rpc_id,
             "error": e.error.to_json_rpc_error(),
         }
-        yield f"data: {json.dumps(error_response)}\n\n"
+        yield f"data: {json.dumps(error_response, ensure_ascii=False, default=str)}\n\n"
 
 
 async def _handle_resubscribe_streaming(
@@ -183,7 +183,7 @@ async def _handle_resubscribe_streaming(
     async for event in handler.on_resubscribe_to_task(params):
         event_data = event.model_dump(by_alias=True, exclude_none=True)
         response = {"jsonrpc": "2.0", "id": rpc_id, "result": event_data}
-        yield f"data: {json.dumps(response)}\n\n"
+        yield f"data: {json.dumps(response, ensure_ascii=False, default=str)}\n\n"
 
 
 @router.post("/{flow_id}")

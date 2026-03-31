@@ -42,7 +42,6 @@ import './components/editors/test-panel.js';
 import './components/nodes/index.js';
 
 // Модальные окна (загружаем ДО функциональных компонентов, которые их используют)
-import './modals/platform-modal-host.js';
 import './modals/confirm-modal.js';
 import './modals/sessions-modal.js';
 import './modals/tracing-modal.js';

@@ -7,6 +7,8 @@ User Story: AI автоматически анализирует текст, в�
 import pytest
 import json
 
+_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
+
 
 @pytest.mark.real_taskiq
 class TestAIAnalysis:
@@ -15,12 +17,13 @@ class TestAIAnalysis:
     @pytest.mark.asyncio
     async def test_ai_extract_note_with_entities(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI извлекает note + entities + relationships из текста"""
+        note_title = "Встреча с Иваном"
         await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "name": "Встреча с Иваном",
+                    "name": note_title,
                     "description": "Обсудили проект X. Иван предложил нанять Петра для разработки.",
                     "note_date": "2024-01-06"
                 },
@@ -28,26 +31,35 @@ class TestAIAnalysis:
                     {
                         "entity_type": "task",
                         "name": "Иван Иванов",
+                        "description": "Менеджер проекта, ведёт переговоры и сроки",
                         "attributes": {"role": "менеджер"}
                     },
                     {
                         "entity_type": "task",
                         "name": "Петр Петров",
+                        "description": "Разработчик, подключается к задачам бэкенда",
                         "attributes": {"role": "разработчик"}
                     }
                 ],
                 "relationships": [
                     {
-                        "source_entity_id": "note_id",
-                        "target_entity_id": "ivan_id",
-                        "relationship_type": "mentions"
+                        "source_type": "note",
+                        "source_name": note_title,
+                        "target_type": "task",
+                        "target_name": "Иван Иванов",
+                        "relationship_type": "mentions",
+                        "weight": 1.0,
                     },
                     {
-                        "source_entity_id": "note_id",
-                        "target_entity_id": "project_x_id",
-                        "relationship_type": "mentions"
+                        "source_type": "note",
+                        "source_name": note_title,
+                        "target_type": "task",
+                        "target_name": "Петр Петров",
+                        "relationship_type": "mentions",
+                        "weight": 1.0,
                     }
-                ]
+                ],
+                "metadata": _META,
             })
         }])
         
@@ -67,7 +79,11 @@ class TestAIAnalysis:
         assert "task" in entity_types
         
         assert len(result["relationships"]) >= 2
-    
+        for rel in result["relationships"]:
+            assert rel.get("draft_relationship_id")
+            assert rel.get("source_draft_entity_id")
+            assert rel.get("target_draft_entity_id")
+
     @pytest.mark.asyncio
     async def test_ai_extract_tasks(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI извлекает задачи с дедлайнами и приоритетами"""
@@ -76,7 +92,8 @@ class TestAIAnalysis:
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "name": "План задач на неделю"
+                    "name": "План задач на неделю",
+                    "description": "Список приоритетных задач на текущую неделю команды",
                 },
                 "entities": [
                     {
@@ -97,11 +114,13 @@ class TestAIAnalysis:
                     {
                         "entity_type": "task",
                         "name": "Обновить документацию",
+                        "description": "Актуализировать внутреннюю документацию продукта",
                         "due_date": "2024-01-15",
                         "priority": "medium"
                     }
                 ],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
             })
         }])
         
@@ -139,12 +158,13 @@ class TestAIAnalysis:
                     "description": "Обсудили проект X (75% готовности). Решили нанять разработчика. Петр - backend, Анна - тестирование. Следующая встреча через неделю."
                 },
                 "entities": [
-                    {"entity_type": "task", "name": "Проект X"},
-                    {"entity_type": "task", "name": "Иван"},
-                    {"entity_type": "task", "name": "Петр"},
-                    {"entity_type": "task", "name": "Анна"}
+                    {"entity_type": "task", "name": "Проект X", "description": "Текущий проект с прогрессом и рисками"},
+                    {"entity_type": "task", "name": "Иван", "description": "Участник встречи, предложил усилить команду"},
+                    {"entity_type": "task", "name": "Петр", "description": "Отвечает за backend и реализацию сервисов"},
+                    {"entity_type": "task", "name": "Анна", "description": "Занимается тестированием и качеством релиза"}
                 ],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
             })
         }])
         
@@ -164,29 +184,36 @@ class TestAIAnalysis:
     @pytest.mark.asyncio
     async def test_ai_extract_with_mentioned_entities(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI учитывает явно упомянутые entities через @"""
+        existing_name = f"Существующая задача {unique_id}"
         existing_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "task",
-            "name": f"Существующая задача {unique_id}",
+            "name": existing_name,
+            "description": "Задача уже в CRM для проверки связи analyze по имени",
             "attributes": {"email": "existing@example.com"}
         }, headers=auth_headers_system)
         existing_id = existing_entity_resp.json()["entity_id"]
-        
+
+        call_title = "Звонок с клиентом"
         await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "name": "Звонок с клиентом",
+                    "name": call_title,
                     "description": "Обсудили условия сотрудничества"
                 },
                 "entities": [],
                 "relationships": [
                     {
-                        "source_entity_id": "note_id",
-                        "target_entity_id": existing_id,
-                        "relationship_type": "mentions"
+                        "source_type": "note",
+                        "source_name": call_title,
+                        "target_type": "task",
+                        "target_name": existing_name,
+                        "relationship_type": "mentions",
+                        "weight": 1.0,
                     }
-                ]
+                ],
+                "metadata": _META,
             })
         }])
         
@@ -199,8 +226,10 @@ class TestAIAnalysis:
         result = response.json()
         
         relationships = result["relationships"]
-        mentioned_rel = next((r for r in relationships if r["target_entity_id"] == existing_id), None)
-        assert mentioned_rel is not None
+        assert len(relationships) >= 1
+        rel0 = relationships[0]
+        assert rel0["relationship_type"] == "mentions"
+        assert rel0.get("target_draft_entity_id")
     
     @pytest.mark.asyncio
     async def test_ai_extract_specific_entity_types(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
@@ -210,13 +239,15 @@ class TestAIAnalysis:
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "name": "Встреча"
+                    "name": "Встреча",
+                    "description": "Краткий протокол встречи с участниками команды",
                 },
                 "entities": [
-                    {"entity_type": "task", "name": "Иван"},
-                    {"entity_type": "task", "name": "Петр"}
+                    {"entity_type": "task", "name": "Иван", "description": "Участник встречи, статус задач"},
+                    {"entity_type": "task", "name": "Петр", "description": "Второй участник, вопросы по срокам"}
                 ],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
             })
         }])
         
@@ -246,19 +277,24 @@ class TestAIAnalysis:
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "name": "Распределение задач"
+                    "name": "Распределение задач",
+                    "description": "Кто над чем работает в текущем спринте команды",
                 },
                 "entities": [
-                    {"entity_type": "task", "name": "Иван"},
-                    {"entity_type": "task", "name": "Проект A"}
+                    {"entity_type": "task", "name": "Иван", "description": "Сотрудник, назначенный на проект A"},
+                    {"entity_type": "task", "name": "Проект A", "description": "Основной проект спринта с дедлайнами"}
                 ],
                 "relationships": [
                     {
-                        "source_entity_id": "ivan_id",
-                        "target_entity_id": "project_a_id",
-                        "relationship_type": f"works_on_{unique_id}"
+                        "source_type": "task",
+                        "source_name": "Иван",
+                        "target_type": "task",
+                        "target_name": "Проект A",
+                        "relationship_type": f"works_on_{unique_id}",
+                        "weight": 1.0,
                     }
-                ]
+                ],
+                "metadata": _META,
             })
         }])
         

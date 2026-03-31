@@ -36,6 +36,8 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 
 ## Bundles (`apps/flows/bundles/<id>/flow.json`)
 
+Запись в БД из bundle задаёт `FlowConfig.source == "file"`. Перезагрузка одного агента в namespace компании без полного `company/init`: `POST /flows/api/v1/flows/{flow_id}/reload-from-bundle` — вызывает `FlowsLoader.reload_flow_bundle(flow_id)` (тот же путь, что при загрузке registry). В UI редактора LLM-ноды кнопка с иконкой `refresh` активна только при `source=file`.
+
 При загрузке в БД `FlowsLoader` инлайнит:
 - `prompt: "prompts/foo.md"` — текст промпта из файла;
 - `output_schema_file: "schemas/bar.json"` — подставляет JSON Schema в `output_schema` (поле `output_schema_file` удаляется). Путь относительно каталога bundle.

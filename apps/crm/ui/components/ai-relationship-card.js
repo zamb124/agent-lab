@@ -12,6 +12,8 @@ export class AIRelationshipCard extends PlatformElement {
         suggestion: { type: Object },
         index: { type: Number },
         relationshipTypes: { type: Array },
+        draftNote: { type: Object },
+        draftEntities: { type: Array },
     };
 
     static styles = [
@@ -128,6 +130,29 @@ export class AIRelationshipCard extends PlatformElement {
         this.suggestion = {};
         this.index = 0;
         this.relationshipTypes = [];
+        this.draftNote = null;
+        this.draftEntities = [];
+    }
+
+    _resolveDraftEndpoint(draftEntityId) {
+        if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
+            throw new Error('draftEntityId is required');
+        }
+        const note = this.draftNote;
+        if (note && note.draft_entity_id === draftEntityId) {
+            return {
+                name: typeof note.name === 'string' && note.name.trim().length > 0 ? note.name : 'Заметка',
+                typeLabel: typeof note.entity_type === 'string' ? note.entity_type : 'note',
+            };
+        }
+        const rows = Array.isArray(this.draftEntities) ? this.draftEntities : [];
+        const row = rows.find((e) => e && e.draft_entity_id === draftEntityId);
+        if (!row) {
+            throw new Error(`Нет сущности черновика с draft_entity_id=${draftEntityId}`);
+        }
+        const name = typeof row.name === 'string' && row.name.trim().length > 0 ? row.name : '?';
+        const typeLabel = typeof row.entity_type === 'string' ? row.entity_type : '';
+        return { name, typeLabel };
     }
 
     _getTypeConfig() {
@@ -159,10 +184,12 @@ export class AIRelationshipCard extends PlatformElement {
 
     render() {
         const config = this._getTypeConfig();
-        const source = this.suggestion.source_name || this.suggestion.source_entity_id || '?';
-        const target = this.suggestion.target_name || this.suggestion.target_entity_id || '?';
-        const sourceType = this.suggestion.source_type || '';
-        const targetType = this.suggestion.target_type || '';
+        const src = this._resolveDraftEndpoint(this.suggestion.source_draft_entity_id);
+        const tgt = this._resolveDraftEndpoint(this.suggestion.target_draft_entity_id);
+        const source = src.name;
+        const target = tgt.name;
+        const sourceType = src.typeLabel;
+        const targetType = tgt.typeLabel;
 
         return html`
             <div class="card">

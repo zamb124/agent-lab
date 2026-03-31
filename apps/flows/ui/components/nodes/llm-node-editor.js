@@ -9,6 +9,7 @@ import '../editors/llm-config-editor.js';
 import '../editors/tag-input.js';
 import '../../modals/inline-tool-modal.js';
 import '../../modals/tool-picker-modal.js';
+import { confirm } from '../../modals/confirm-modal.js';
 import '../editors/json-field-editor.js';
 
 export class LlmNodeEditor extends BaseNodeEditor {
@@ -186,6 +187,41 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 color: var(--accent);
             }
             
+            .mode-toggle-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                margin-bottom: var(--space-2);
+            }
+
+            .mode-toggle-header .section-title {
+                margin: 0;
+            }
+
+            .reload-from-bundle-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--space-2);
+                border: none;
+                background: transparent;
+                color: var(--text-secondary);
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+
+            .reload-from-bundle-btn:hover:not(:disabled) {
+                color: var(--accent);
+                background: var(--glass-tint-subtle);
+            }
+
+            .reload-from-bundle-btn:disabled {
+                opacity: 0.35;
+                cursor: not-allowed;
+            }
+
             .mode-toggle-row {
                 display: flex;
                 gap: var(--space-3);
@@ -323,6 +359,8 @@ export class LlmNodeEditor extends BaseNodeEditor {
         graphNodes: { type: Array },
         messagesFilterMode: { type: String },
         messagesFilterCustomIds: { type: Array },
+        flowSource: { type: String },
+        reloadFromBundleLoading: { type: Boolean },
     };
 
     constructor() {
@@ -341,6 +379,39 @@ export class LlmNodeEditor extends BaseNodeEditor {
         this.graphNodes = [];
         this.messagesFilterMode = 'all';
         this.messagesFilterCustomIds = [];
+        this.flowSource = '';
+        this.reloadFromBundleLoading = false;
+    }
+
+    _canReloadFromBundle() {
+        return this.flowSource === 'file' && !!this.flowId;
+    }
+
+    async _onReloadFromBundle() {
+        if (!this._canReloadFromBundle() || this.reloadFromBundleLoading) {
+            return;
+        }
+        const agreed = await confirm(
+            'Агент будет переинициализирован из bundle в репозитории. Несохранённые правки в редакторе будут потеряны.',
+            {
+                title: 'Переинициализация из репозитория',
+                variant: 'warning',
+                confirmText: 'Переинициализировать',
+                cancelText: 'Отмена',
+            },
+        );
+        if (!agreed) {
+            return;
+        }
+        this.reloadFromBundleLoading = true;
+        try {
+            await this.a2a.reloadFlowFromBundle(this.flowId);
+            this.emit('flow-reload-from-bundle', { flowId: this.flowId });
+        } catch (err) {
+            this.error(err.message || String(err));
+        } finally {
+            this.reloadFromBundleLoading = false;
+        }
     }
     
     _getDefaultSchema() {
@@ -936,8 +1007,17 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 </div>
                 
                 <div class="section">
-                    <div class="section-header">
+                    <div class="section-header mode-toggle-header">
                         <span class="section-title">Режим вывода</span>
+                        <button
+                            type="button"
+                            class="reload-from-bundle-btn"
+                            title="Переинициализировать агента из репозитория (bundle)"
+                            ?disabled=${!this._canReloadFromBundle() || this.reloadFromBundleLoading}
+                            @click=${this._onReloadFromBundle}
+                        >
+                            <platform-icon name="refresh" size="16"></platform-icon>
+                        </button>
                     </div>
                     <div class="loop-config">
                         <div class="mode-toggle-row">

@@ -5,7 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
-import { CRMStore } from '../store/crm.store.js';
+import { CRMStore, isRelationshipSuggestion } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 import './ai-entity-card.js';
 import './ai-relationship-card.js';
@@ -17,6 +17,7 @@ export class AISuggestionsPanel extends PlatformElement {
         _entityTypes: { state: true },
         _relationshipTypes: { state: true },
         _confirming: { state: true },
+        _draftAnalyzeNote: { state: true },
     };
 
     static styles = [
@@ -203,19 +204,21 @@ export class AISuggestionsPanel extends PlatformElement {
     _initFromStore() {
         const state = CRMStore.state;
         const suggestions = state.ai.suggestions || [];
-        this._entities = suggestions.filter(s => s.entity_type && !s.relationship_type);
-        this._relationships = suggestions.filter(s => s.relationship_type);
+        this._entities = suggestions.filter((s) => s.entity_type && !isRelationshipSuggestion(s));
+        this._relationships = suggestions.filter((s) => isRelationshipSuggestion(s));
         this._entityTypes = state.entities.entityTypes || [];
         this._relationshipTypes = state.entities.relationshipTypes || [];
+        this._draftAnalyzeNote = state.ai.analyzeContextNote || null;
     }
 
     _subscribeToStore() {
         this._unsubscribe = CRMStore.subscribe(state => {
             const suggestions = state.ai.suggestions || [];
-            this._entities = suggestions.filter(s => s.entity_type && !s.relationship_type);
-            this._relationships = suggestions.filter(s => s.relationship_type);
+            this._entities = suggestions.filter((s) => s.entity_type && !isRelationshipSuggestion(s));
+            this._relationships = suggestions.filter((s) => isRelationshipSuggestion(s));
             this._entityTypes = state.entities.entityTypes || [];
             this._relationshipTypes = state.entities.relationshipTypes || [];
+            this._draftAnalyzeNote = state.ai.analyzeContextNote || null;
         });
     }
 
@@ -386,6 +389,8 @@ export class AISuggestionsPanel extends PlatformElement {
                                             .suggestion=${rel}
                                             .index=${globalIndex}
                                             .relationshipTypes=${this._relationshipTypes}
+                                            .draftNote=${this._draftAnalyzeNote}
+                                            .draftEntities=${this._entities}
                                             @confirm=${this._onConfirmRelationship}
                                         ></ai-relationship-card>
                                     `;

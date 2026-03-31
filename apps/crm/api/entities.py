@@ -15,16 +15,25 @@ from apps.crm.models.api import (
     EntityTimelineBoundsResponse,
     AIAnalyzeRequest,
     AIAnalyzeResponse,
+    AIAnalysisDraftApplyResult,
+    AIAnalysisDraftPatchRequest,
+    AIAnalysisDraftStored,
     SearchMentionsRequest,
     RelationshipResponse,
 )
 from apps.crm.db.models import CRMEntity
-from apps.crm.services.entity_service import EntityService
+from apps.crm.config import get_crm_settings
+from apps.crm.services.entity_service import DraftVersionConflictError, EntityService
 from apps.crm.services.access_control_service import AccessControlService
 from apps.crm.dependencies import get_entity_service, get_access_control_service
+from apps.crm_worker.tasks.analysis_tasks import (
+    analyze_text_with_ai_task,
+    apply_analysis_draft_task,
+)
 from core.clients.stt_client import STTClientFactory
 from core.context import get_context
 from core.websocket.publisher import notify_user, Notification, NotificationType
+from taskiq.exceptions import TaskiqResultTimeoutError
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
 
@@ -89,6 +98,67 @@ async def get_entities_timeline_bounds(
         namespace=namespace,
     )
     return EntityTimelineBoundsResponse.model_validate(bounds)
+
+
+@router.patch("/notes/{note_id}/analysis-draft", response_model=AIAnalysisDraftStored)
+async def patch_note_analysis_draft(
+    note_id: str,
+    body: AIAnalysisDraftPatchRequest,
+    service: EntityService = Depends(get_entity_service),
+    access_control: AccessControlService = Depends(get_access_control_service),
+):
+    note = await service.get_entity(note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not user_id or not await access_control.can_write_entity(note, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    try:
+        return await service.patch_analysis_draft(note_id, body)
+    except DraftVersionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/notes/{note_id}/analysis-draft/apply", response_model=AIAnalysisDraftApplyResult)
+async def apply_note_analysis_draft(
+    note_id: str,
+    service: EntityService = Depends(get_entity_service),
+    access_control: AccessControlService = Depends(get_access_control_service),
+):
+    note = await service.get_entity(note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    auth_token = ctx.auth_token if ctx else None
+    if not user_id or not await access_control.can_write_entity(note, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not user_id or not company_id:
+        raise HTTPException(status_code=500, detail="Контекст пользователя или компании отсутствует")
+    settings = get_crm_settings()
+    ns = note.namespace or "default"
+    try:
+        task = await apply_analysis_draft_task.kiq(
+            note_id=note_id,
+            company_id=company_id,
+            namespace=ns,
+            auth_token=auth_token,
+            user_id=user_id,
+        )
+        res = await task.wait_result(timeout=settings.taskiq_sync_timeout_seconds)
+    except TaskiqResultTimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Таймаут применения черновика analyze в worker",
+        ) from exc
+    if res.is_err:
+        raise HTTPException(status_code=422, detail=str(res.error))
+    return AIAnalysisDraftApplyResult.model_validate(res.return_value)
 
 
 @router.get("/{entity_id}")
@@ -220,15 +290,35 @@ async def analyze_text(
     request: AIAnalyzeRequest,
     note_id: Optional[str] = Query(None, description="ID заметки для нотификации"),
     check_duplicates: bool = Query(True, description="Проверять дубликаты entities"),
-    service: EntityService = Depends(get_entity_service)
 ):
     """AI анализ текста с извлечением entities и relationships"""
-    try:
-        result = await service.analyze_text_with_ai(request, check_duplicates=check_duplicates)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    
     context = get_context()
+    auth_token = context.auth_token if context else None
+    user_id_ctx = context.user.user_id if context and context.user else None
+    company_id_ctx = context.active_company.company_id if context and context.active_company else None
+    active_ns = context.active_namespace if context else "default"
+    if not user_id_ctx or not company_id_ctx:
+        raise HTTPException(status_code=500, detail="Контекст пользователя или компании отсутствует")
+    settings = get_crm_settings()
+    try:
+        task = await analyze_text_with_ai_task.kiq(
+            request_payload=request.model_dump(mode="json"),
+            note_id=note_id,
+            check_duplicates=check_duplicates,
+            company_id=company_id_ctx,
+            namespace=active_ns or "default",
+            auth_token=auth_token,
+            user_id=user_id_ctx,
+        )
+        res = await task.wait_result(timeout=settings.taskiq_sync_timeout_seconds)
+    except TaskiqResultTimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Таймаут analyze в worker",
+        ) from exc
+    if res.is_err:
+        raise HTTPException(status_code=422, detail=str(res.error))
+    result = AIAnalyzeResponse.model_validate(res.return_value)
     if note_id and context and context.user:
         suggestions_count = len(result.entities or []) + len(result.relationships or [])
         await notify_user(

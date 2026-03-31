@@ -4,6 +4,7 @@ A2A Client - HTTP клиент для взаимодействия с внешн
 Автоматически добавляет заголовки из контекста (Authorization, X-Company-Id и т.д.)
 """
 
+import json
 import uuid
 from typing import Any, Dict, Optional
 
@@ -136,8 +137,10 @@ class A2AClient:
         logger.debug(f"A2A send_task to {url}: {content[:100]}...")
 
         try:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            headers = {**headers, "Content-Type": "application/json"}
             async with get_httpx_client(timeout=self.timeout, follow_redirects=True) as client:
-                response = await client.post(url, json=payload, headers=headers)
+                response = await client.post(url, content=body, headers=headers)
 
                 if response.status_code != 200:
                     raise A2AClientError(

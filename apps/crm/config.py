@@ -39,13 +39,38 @@ class CRMSettings(BaseSettings):
         default=16,
         description="Максимум параллельных RAG-поисков при дедупликации извлечённых сущностей",
     )
+    dedup_rag_search_limit: int = Field(
+        default=5,
+        ge=1,
+        le=32,
+        description="Сколько кандидатов из RAG (top по similarity) на извлечённую сущность при дедупе",
+    )
     dedup_llm_max_concurrent_batch_requests: int = Field(
-        default=4,
-        description="Максимум параллельных A2A-запросов батч-дедупа (чанки пар)",
+        default=10,
+        description="Максимум параллельных A2A-запросов батч-дедупа (чанки пар к deduplicate_batch)",
     )
     dedup_batch_max_pairs_per_request: int = Field(
-        default=30,
-        description="Максимум пар сущностей в одном вызове skill deduplicate_batch",
+        default=5,
+        ge=1,
+        le=5,
+        description="Не больше 5 пар в одном вызове skill deduplicate_batch",
+    )
+    taskiq_sync_timeout_seconds: float = Field(
+        default=300.0,
+        ge=1.0,
+        description="Таймаут ожидания TaskIQ (analyze/apply) при синхронном HTTP: kiq + wait_result",
+    )
+    daily_summary_chunk_size: int = Field(
+        default=5,
+        ge=1,
+        le=32,
+        description="Размер чанка заметок в map-reduce daily summary (skills summarize_chunk / summarize_merge)",
+    )
+    daily_summary_map_reduce_max_concurrent: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description="Максимум параллельных A2A-вызовов на один уровень map-reduce daily summary",
     )
 
 

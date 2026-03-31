@@ -31,7 +31,7 @@
 
 - `note`: либо `null`, либо **полный** объект сущности в том же формате, что элементы `entities`: обязательны **`entity_type`** (значение из списка ТИПЫ ENTITIES выше, для самой заметки обычно `note`), `name`, `description`, `attributes`, `confidence`. Не опускай `entity_type` у `note` только потому что это отдельное поле верхнего уровня
 - `entities`: массив сущностей; у каждой обязательны осмысленные `name` и **`description`** (2–3 предложения для семантического поиска, не пустая строка)
-- `relationships`: связи между сущностями; `source_name` / `target_name` совпадают с именами из `entities`
+- `relationships`: связи между сущностями; `source_name` / `target_name` совпадают с именами из `note` или `entities`. Поля `source_type` / `target_type` — это **`entity_type` из соответствующей строки** (как в списке ТИПЫ ENTITIES). Для заметки с подтипом в CRM в JSON обычно `entity_type: "note"` и `entity_subtype` (например `meeting`); в связи для такой строки указывай **`source_type`/`target_type`: `note`** — либо тот же подтип (`meeting`), если он есть в списке типов; CRM сопоставляет оба варианта с одной строкой черновика
 - `metadata.dates_mentioned`, `places_mentioned`, `key_topics` — массивы строк (пустые массивы допустимы, если нечего извлечь)
 
 ## ПРАВИЛА ИЗВЛЕЧЕНИЯ

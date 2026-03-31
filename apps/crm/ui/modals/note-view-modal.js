@@ -523,7 +523,10 @@ export class NoteViewModal extends PlatformModal {
         if (!attrs || typeof attrs !== 'object') {
             return false;
         }
-        return typeof attrs.ai_analysis_draft === 'object' && attrs.ai_analysis_draft !== null;
+        const draft = attrs.ai_analysis_draft;
+        return typeof draft === 'object'
+            && draft !== null
+            && typeof draft.draft_version === 'number';
     }
 
     _getAnalysisDraftGeneratedAt() {
@@ -535,10 +538,10 @@ export class NoteViewModal extends PlatformModal {
             return '';
         }
         const draft = attrs.ai_analysis_draft;
-        if (!draft || typeof draft !== 'object' || typeof draft.saved_at !== 'string') {
+        if (!draft || typeof draft !== 'object' || typeof draft.updated_at !== 'string') {
             return '';
         }
-        const parsedDate = new Date(draft.saved_at);
+        const parsedDate = new Date(draft.updated_at);
         if (Number.isNaN(parsedDate.getTime())) {
             return '';
         }

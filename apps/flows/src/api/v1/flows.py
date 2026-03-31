@@ -2,12 +2,14 @@
 API endpoints для flows.
 """
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.services.flows_loader import FlowsLoader
 from core.logging import get_logger
 from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig
 from apps.flows.src.services.flow_validator import FlowValidator
@@ -313,6 +315,14 @@ class FlowResponse(BaseModel):
     # Ресурсы агента
     resources: Dict[str, Any] = {}
 
+    # manual | api | file (bundle в репозитории)
+    source: str = "manual"
+
+
+class ReloadFlowFromBundleResponse(BaseModel):
+    flow_id: str
+    message: str
+
 
 class FlowValidateRequest(BaseModel):
     """Запрос на валидацию агента"""
@@ -421,6 +431,7 @@ async def list_flows(
             "type": f.type,
             "tags": f.tags,
             "hidden": hidden,
+            "source": getattr(f, "source", None) or "manual",
         }
         
         # LOCAL flow
@@ -559,6 +570,7 @@ async def create_flow(
         evaluation=request.evaluation,
         hidden=getattr(flow_config, 'hidden', False),
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
+        source=flow_config.source,
     )
 
 
@@ -624,12 +636,50 @@ async def get_flow(
             url=_generate_flow_url(flow_cfg.flow_id, flow_cfg.type, getattr(flow_cfg, 'url', None)),
             triggers=triggers_response,
             resources=flow_cfg.resources or {},
+            source=getattr(flow_cfg, "source", None) or "manual",
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Ошибка получения flow '{flow_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Ошибка получения flow: {str(e)}")
+
+
+@router.post("/{flow_id}/reload-from-bundle", response_model=ReloadFlowFromBundleResponse)
+async def reload_flow_from_bundle(
+    flow_id: str,
+    container: FlowContainer = Depends(get_container_dep),
+) -> ReloadFlowFromBundleResponse:
+    """
+    Перезаписывает flow в БД из каталога ``apps/flows/bundles/<flow_id>/`` (как при company init).
+
+    Имеет смысл для агентов с source=file; иначе в репозитории может не быть bundle.
+    """
+    existing = await container.flow_repository.get(flow_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    flows_root = Path(__file__).resolve().parents[3]
+    bundles_dir = flows_root / "bundles"
+    registry_path = flows_root / "registry.yaml"
+
+    loader = FlowsLoader(
+        bundles_dir=bundles_dir,
+        flow_repository=container.flow_repository,
+        node_repository=container.node_repository,
+        tool_repository=container.tool_repository,
+        registry_path=registry_path,
+    )
+
+    try:
+        loaded_id = await loader.reload_flow_bundle(flow_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return ReloadFlowFromBundleResponse(
+        flow_id=loaded_id,
+        message=f"Flow '{loaded_id}' перезагружен из bundle",
+    )
 
 
 @router.put("/{flow_id}", response_model=FlowResponse)
@@ -715,6 +765,7 @@ async def update_flow(
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
         triggers=triggers_response,
         resources=flow_config.resources or {},
+        source=flow_config.source,
     )
 
 
@@ -773,6 +824,7 @@ async def get_version(
         skills=skills_response,
         hidden=getattr(version_cfg, 'hidden', False),
         url=_generate_flow_url(version_cfg.flow_id, version_cfg.type, getattr(version_cfg, 'url', None)),
+        source=getattr(version_cfg, "source", None) or "manual",
     )
 
 

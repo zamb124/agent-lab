@@ -56,6 +56,44 @@
       },
       "edges": []
     },
+    "summarize_chunk": {
+      "name": "Daily Summary Chunk",
+      "description": "Map-reduce: сводка по чанку до 5 карточек заметок",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/summarize_chunk.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.3
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/summarize.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "summarize_merge": {
+      "name": "Daily Summary Merge",
+      "description": "Map-reduce: слияние промежуточных сводок за день",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/summarize_merge.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/summarize.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
     "call_summary": {
       "name": "Call Summary",
       "description": "Структурированное summary встречи по транскрипту",

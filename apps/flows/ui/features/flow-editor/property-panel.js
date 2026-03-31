@@ -23,6 +23,7 @@ export class PropertyPanel extends PlatformElement {
         flowId: { type: String, attribute: 'flow-id' },
         skillId: { type: String, attribute: 'skill-id' },
         flowConfig: { type: Object },
+        flowSource: { type: String },
         flowVariables: { type: Object },
         previewExecutionState: { type: Object },
         expanded: { type: Boolean },
@@ -35,6 +36,7 @@ export class PropertyPanel extends PlatformElement {
         this.flowId = '';
         this.skillId = 'base';
         this.flowConfig = null;
+        this.flowSource = '';
         this.flowVariables = {};
         this.previewExecutionState = null;
         this.expanded = false;
@@ -126,6 +128,10 @@ export class PropertyPanel extends PlatformElement {
         this.emit('node-id-changed', e.detail);
     }
 
+    _onFlowReloadFromBundle(e) {
+        this.emit('flow-reload-from-bundle', e.detail);
+    }
+
     _graphNodesFromFlow() {
         const raw = this.flowConfig?.nodes;
         if (!raw || typeof raw !== 'object') {
@@ -169,6 +175,7 @@ export class PropertyPanel extends PlatformElement {
                     .nodeId=${this.node.id || this.node.nodeId}
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
+                    .flowSource=${this.flowSource}
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     .graphNodes=${this._graphNodesFromFlow()}
@@ -176,6 +183,7 @@ export class PropertyPanel extends PlatformElement {
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
+                    @flow-reload-from-bundle=${this._onFlowReloadFromBundle}
                 ></llm-node-editor>`;
             case 'code':
                 return html`<code-node-editor

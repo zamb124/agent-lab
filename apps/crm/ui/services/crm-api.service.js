@@ -104,6 +104,23 @@ export class CRMAPIService extends BaseService {
         const params = query.size > 0 ? `?${query.toString()}` : '';
         return this.post(`/entities/analyze${params}`, body);
     }
+
+    async patchNoteAnalysisDraft(noteId, body) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
+        }
+        if (!body || typeof body !== 'object') {
+            throw new Error('Patch body is required');
+        }
+        return this.patch(`/entities/notes/${encodeURIComponent(noteId)}/analysis-draft`, body);
+    }
+
+    async applyNoteAnalysisDraft(noteId) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
+        }
+        return this.post(`/entities/notes/${encodeURIComponent(noteId)}/analysis-draft/apply`, {});
+    }
     
     async getEntityTypes() {
         return this.get('/entity-types');

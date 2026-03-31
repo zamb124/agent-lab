@@ -36,6 +36,10 @@ export class A2AService extends BaseService {
         return this.delete(`/api/v1/flows/${flowId}`);
     }
 
+    async reloadFlowFromBundle(flowId) {
+        return this.post(`/api/v1/flows/${encodeURIComponent(flowId)}/reload-from-bundle`, {});
+    }
+
     async sendMessage(flowId, message, context = {}) {
         return this.post(`/api/v1/flows/${flowId}/chat`, {
             message,

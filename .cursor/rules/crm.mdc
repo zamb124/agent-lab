@@ -17,7 +17,34 @@ description: "CRM NetWorkle система управления сущностя
 
 CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relationships, grants)**
 
-```
+### Chunked async (`core/utils/chunked_async.py`)
+
+Общие примитивы для **daily summary** (многоуровневое слияние) и **дедупликации LLM** (один уровень параллельных чанков).
+
+| Функция | Назначение |
+|---------|------------|
+| `chunk_sequence(items, chunk_size)` | Стабильная нарезка списка подряд на чанки ≤ `chunk_size`. `chunk_size < 1` → `ValueError`; пустой `items` → `[]`. |
+| `run_chunked_map(items, chunk_size, process_chunk, max_concurrent)` | Для каждого чанка `await process_chunk(chunk)`; параллельность — `asyncio.Semaphore(max_concurrent)` + `gather`. Результат — **по одному значению на чанк, порядок = порядок чанков**. |
+| `map_reduce_tree(leaves, chunk_size, map_batch, merge_batch, max_concurrent)` | Дерево над типом листа `T` и промежуточным `R` (в summary оба конца — JSON-сводки). `leaves` непустой, иначе `ValueError`. |
+
+**Алгоритм `map_reduce_tree` (канон):**
+
+1. Если `len(leaves) ≤ chunk_size` → вернуть `await map_batch(leaves)`.
+2. Иначе `current ← await run_chunked_map(leaves, chunk_size, map_batch, max_concurrent)`.
+3. Пока `len(current) > chunk_size`: `current ← await run_chunked_map(current, chunk_size, merge_batch, max_concurrent)`.
+4. Если `len(current) == 1` → вернуть `current[0]`; иначе → вернуть `await merge_batch(current)`.
+
+**Где в CRM:**
+
+- **Daily summary** (`compute_daily_summary`): листья — карточки заметок с `ai_analysis_applied_at` (`_note_to_summary_card`); `map_batch` → A2A skill `summarize_chunk`; `merge_batch` → `summarize_merge`. Настройки: `daily_summary_chunk_size`, `daily_summary_map_reduce_max_concurrent`.
+- **Дедуп после RAG** (`_run_llm_deduplicate_round`): только `run_chunked_map` по списку пар в «серой зоне»; чанк из 1 пары → skill `deduplicate`, иначе → `deduplicate_batch`. Настройки: `dedup_batch_max_pairs_per_request` (1–5), `dedup_llm_max_concurrent_batch_requests`.
+
+### AI analyze / apply черновика (TaskIQ crm worker, синхронный HTTP)
+
+- `POST /entities/analyze` и `POST /entities/notes/{id}/analysis-draft/apply` ставят задачи в очередь **`crm`** (`apps.crm_worker.tasks.analysis_tasks`) и **ждут результат** через `wait_result` (таймаут `CRMSettings.taskiq_sync_timeout_seconds`, по умолчанию 300 с). Для клиента ответ по-прежнему один синхронный HTTP; тяжёлая работа выполняется в процессе `crm_worker`.
+- В контексте воркера восстанавливается `Context` через `_set_crm_context` (как у daily summary): `company_id`, `namespace` заметки при apply, `active_namespace` при analyze, `auth_token` / `user_id` из запроса.
+- При старте `crm_worker` вызывается `set_billing_service(get_crm_container().billing_service)` — иначе RAG/embeddings при dedup в задачах analyze падают с «BillingService не инициализирован» (в HTTP CRM это делает `create_service_app`).
+- **`apply_analysis_draft`** в `EntityService`: строки сущностей обрабатывает `_apply_analysis_draft_entity_rows_with_retries` — на каждом **раунде** параллельный `gather` по текущему списку «ожидающих», неуспешные остаются на следующий раунд (до `ANALYSIS_DRAFT_APPLY_MAX_ROUNDS`, см. `entity_service.py`). Одна строка — `_persist_analysis_draft_entity_row` (create или merge + RAG). Для merge с одним `dedup_existing_id` — `asyncio.Lock` на целевой id. Если после всех раундов остались ошибки — `ApplyAnalysisDraftEntityFailuresError` (текст с перечислением `draft_entity_id` / name / type). Затем связи (`gather`), снятие `ai_analysis_draft` с заметки.
 
 ### Daily Summary (event-driven, SWR)
 
@@ -33,6 +60,7 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
   - lock: `...:lock` (`SET NX EX`);
   - revalidating flag: `...:revalidating`.
 - `source_version` обязателен и строится из заметок дня: `notes_count`, `max_updated_at`.
+- Пересчёт текста (`compute_daily_summary`): только заметки с `attributes.ai_analysis_applied_at` (ставится при успешном `apply_analysis_draft`). Карточки — `_note_to_summary_card`. Алгоритм слияния — раздел **Chunked async** (`map_reduce_tree` + skills `summarize_chunk` / `summarize_merge`).
 - Триггеры пересчета:
   - после `create/update/delete` note в `EntityService`;
   - в `update` note с изменением `note_date` пересчитываются обе даты (старая и новая).
@@ -351,7 +379,7 @@ company_id="acme", namespace="default"   # По умолчанию
 - Источник правды по доступности типа в пространстве: `EntityType.namespace_ids`.
 - Создание/обновление сущности обязано проходить проверку: `entity_type` (и `entity_subtype`, если указан) должен содержать текущий `namespace` в `namespace_ids`.
 - `AI analyze` работает в контексте `namespace` и использует только разрешенные в нем типы.
-- Дедупликация `EntityService._deduplicate_entities` обязана искать кандидатов в том же `namespace`. RAG-поиск кандидатов по извлечённым сущностям выполняется параллельно (семафор `dedup_rag_max_concurrent_searches` в `CRMSettings`). Для двух и более пар в «серой зоне» similarity используется skill flows `deduplicate_batch` (один LLM-вызов на чанк); одна пара — skill `deduplicate`. Чанки батча и параллельность чанков: `dedup_batch_max_pairs_per_request`, `dedup_llm_max_concurrent_batch_requests`. Ответ analyze: у `note` (если не null) и у каждой entity непустое `description` не короче порога (`_ANALYZE_ENTITY_DESCRIPTION_MIN_LEN` / JSON Schema `minLength` в bundle CRM).
+- Дедупликация `EntityService._deduplicate_entities`: кандидаты в том же `namespace`; RAG — `dedup_rag_search_limit`, параллельность поиска — `dedup_rag_max_concurrent_searches`. LLM по «серой зоне» — раздел **Chunked async** (`run_chunked_map` + `deduplicate` / `deduplicate_batch`). Ответ analyze: у `note` (если не null) и у каждой entity непустое `description` не короче порога (`_ANALYZE_ENTITY_DESCRIPTION_MIN_LEN` / JSON Schema в bundle CRM).
 - Связи из analyze приходят с `source_name`/`target_name` (id часто null). При `CRMStore.confirmAllSuggestions` после создания/обновления сущностей строится карта `entity_type`+нормализованное имя → `entity_id` (включая merge через возвращённый `entity_id`, совпадение имён с учётом кавычек «»). По ней заполняются концы связи перед `createRelationship`. Точечное `confirmRelationship` использует ту же логику только для уже известных id (merge/`dedup_existing_id` и текущая заметка); новые сущности без подтверждения в карту не попадают — нужен полный подтверждающий проход или «Подтвердить всё».
 - При создании `namespace` через шаблон: типы из `NamespaceTemplateType` materialize в `EntityType` (если отсутствуют) и получают новый namespace в `namespace_ids`.
 - `NamespaceTemplate` хранит метаданные шаблона включая `icon`; иконка редактируется через UI шаблонов (`/crm/templates`) и используется для визуального выбора шаблона.

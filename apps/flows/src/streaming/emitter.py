@@ -56,7 +56,10 @@ class Emitter(BaseEmitter):
         channel = f"stream:{self.state.task_id}"
         event_kind = event_dict.get("kind", "unknown")
         logger.debug(f"[Emitter] Publishing {event_kind} to {channel}")
-        await self.redis.publish(channel, json.dumps(event_dict, default=str))
+        await self.redis.publish(
+            channel,
+            json.dumps(event_dict, default=str, ensure_ascii=False),
+        )
         logger.debug(f"[Emitter] Published {event_kind} to {channel}")
 
 

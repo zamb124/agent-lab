@@ -806,6 +806,35 @@ class FlowsLoader:
         
         return stats
 
+    async def reload_flow_bundle(self, bundle_id: str) -> str:
+        """
+        Перезаписывает один flow и связанные nodes из каталога ``bundles/<bundle_id>/`` в БД.
+
+        Использует тот же путь, что и полная загрузка registry: кеш tools/nodes, defaults из registry.
+        """
+        await self._load_tools_cache()
+        await self._load_nodes_cache()
+
+        if not self.registry_path.exists():
+            raise ValueError(f"Registry не найден: {self.registry_path}")
+
+        with open(self.registry_path, "r", encoding="utf-8") as f:
+            self._registry = yaml.safe_load(f) or {}
+        self._defaults = self._registry.get("defaults", {})
+
+        bundle_dir = self.bundles_dir / bundle_id
+        config_path = bundle_dir / "flow.json"
+        if not config_path.exists():
+            raise ValueError(
+                f"Каталог bundle '{bundle_id}' не найден или в нём нет flow.json: {bundle_dir}"
+            )
+
+        await self._preload_nodes_to_cache(bundle_id)
+        loaded_flow_id = await self._load_flow_bundle(bundle_id)
+        if not loaded_flow_id:
+            raise ValueError(f"Не удалось загрузить bundle '{bundle_id}' в БД")
+        return loaded_flow_id
+
 
 async def load_flows_to_db(
     flow_repository: FlowRepository,

@@ -129,6 +129,11 @@ export class EditorHeader extends PlatformElement {
             .mode-btn:hover:not(.active) {
                 color: var(--text-secondary);
             }
+
+            .mode-btn:disabled {
+                opacity: 0.35;
+                cursor: not-allowed;
+            }
             
             .header-right {
                 display: flex;
@@ -184,6 +189,8 @@ export class EditorHeader extends PlatformElement {
         saving: { type: Boolean },
         mode: { type: String },
         agentExecutionRunning: { type: Boolean, attribute: 'agent-execution-running' },
+        flowSource: { type: String, attribute: 'flow-source' },
+        reloadFromBundleLoading: { type: Boolean, attribute: 'reload-from-bundle-loading' },
     };
 
     constructor() {
@@ -192,6 +199,19 @@ export class EditorHeader extends PlatformElement {
         this.saving = false;
         this.mode = 'visual';
         this.agentExecutionRunning = false;
+        this.flowSource = '';
+        this.reloadFromBundleLoading = false;
+    }
+
+    _canReloadFromBundle() {
+        return this.flowSource === 'file';
+    }
+
+    _onReloadFromBundleClick() {
+        if (!this._canReloadFromBundle() || this.reloadFromBundleLoading) {
+            return;
+        }
+        this.emit('reload-from-bundle-requested', {});
     }
 
     getFlowName() {
@@ -270,6 +290,17 @@ export class EditorHeader extends PlatformElement {
                                 name="${this.agentExecutionRunning ? 'stop' : 'play'}"
                                 size="18"
                             ></platform-icon>
+                        </button>
+                        <button
+                            type="button"
+                            class="mode-btn"
+                            title="Переинициализировать агента из репозитория (bundle)"
+                            ?disabled=${!this._canReloadFromBundle() || this.reloadFromBundleLoading}
+                            @click=${this._onReloadFromBundleClick}
+                        >
+                            ${this.reloadFromBundleLoading
+                                ? html`<platform-spinner size="18"></platform-spinner>`
+                                : html`<platform-icon name="refresh" size="18"></platform-icon>`}
                         </button>
                     </div>
                 </div>

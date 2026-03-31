@@ -946,7 +946,10 @@ export class DailyNotesPage extends PlatformElement {
         if (!attrs || typeof attrs !== 'object') {
             return false;
         }
-        return typeof attrs.ai_analysis_draft === 'object' && attrs.ai_analysis_draft !== null;
+        const draft = attrs.ai_analysis_draft;
+        return typeof draft === 'object'
+            && draft !== null
+            && typeof draft.draft_version === 'number';
     }
 
     _openNoteAnalysisDraftModal(note) {

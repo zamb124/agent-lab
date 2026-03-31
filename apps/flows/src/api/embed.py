@@ -189,7 +189,7 @@ async def embed_chat_stream(
                     "id": f"embed_{embed_id}",
                     "result": event_data
                 }
-                yield f"data: {json.dumps(response)}\n\n"
+                yield f"data: {json.dumps(response, ensure_ascii=False, default=str)}\n\n"
         except Exception as e:
             logger.error(f"Ошибка стриминга виджета {embed_id}: {e}", exc_info=True)
             error_response = {
@@ -200,7 +200,7 @@ async def embed_chat_stream(
                     "message": "Ошибка обработки сообщения"
                 }
             }
-            yield f"data: {json.dumps(error_response)}\n\n"
+            yield f"data: {json.dumps(error_response, ensure_ascii=False, default=str)}\n\n"
     
     return StreamingResponse(
         event_generator(),

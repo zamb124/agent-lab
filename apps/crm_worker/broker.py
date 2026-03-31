@@ -5,6 +5,8 @@ TaskIQ broker для CRM фоновых задач.
 import redis.asyncio as redis
 from taskiq import TaskiqState
 
+from apps.crm.container import get_crm_container
+from core.billing import set_billing_service
 from core.config import get_settings
 from core.logging import get_logger, setup_logging
 from core.scheduler import get_schedule_source
@@ -50,6 +52,9 @@ async def _ensure_reconcile_schedule() -> None:
 async def crm_worker_startup(state: TaskiqState) -> None:
     setup_logging(service_name="crm_worker")
     settings = get_settings()
+    container = get_crm_container()
+    set_billing_service(container.billing_service)
+    logger.info("CRM Worker: BillingService инициализирован")
     await notification_manager.start_redis_listener(settings.database.redis_url)
     await _ensure_reconcile_schedule()
     logger.info("CRM Worker: запуск")

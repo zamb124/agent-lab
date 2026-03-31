@@ -8,17 +8,24 @@
 import asyncio
 import time
 from collections import deque
-from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime, timezone
+from typing import List, Optional, Dict, Any, Tuple, Set, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+from datetime import datetime, timezone, date
 import uuid
 import re
 
 from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import (
-    AIAnalyzeRequest, 
-    AIAnalyzeResponse, 
+    AIAnalyzeRequest,
+    AIAnalyzeResponse,
+    AIAnalyzeRelationshipExtracted,
+    AIAnalysisDraftApplyResult,
+    AIAnalysisDraftPatchRequest,
+    AIAnalysisDraftStored,
+    AIAnalysisRelationshipDraft,
     AIExtractedEntity,
-    DeduplicateResult
+    DeduplicateResult,
 )
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
@@ -38,8 +45,45 @@ from datetime import datetime as dt
 logger = get_logger(__name__)
 from core.config import get_settings
 from apps.crm.config import get_crm_settings
+from core.utils.chunked_async import map_reduce_tree, run_chunked_map
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
+_DAILY_SUMMARY_CARD_SNIPPET_MAX = 500
+
+ANALYSIS_DRAFT_APPLY_MAX_ROUNDS = 3
+
+
+class DraftVersionConflictError(ValueError):
+    """Ожидаемая версия черновика не совпадает с сохранённой в заметке."""
+
+
+class ApplyAnalysisDraftEntityFailuresError(Exception):
+    """После всех раундов ретраев часть строк черновика не сохранилась."""
+
+    def __init__(
+        self,
+        failures: List[Tuple[str, Optional[str], Optional[str], str]],
+    ) -> None:
+        """
+        failures: (draft_entity_id, name, entity_type, сообщение об ошибке)
+        """
+        self.failures = failures
+        parts = [
+            f"draft_entity_id={did} name={name!r} type={etype!r}: {msg}"
+            for did, name, etype, msg in failures
+        ]
+        super().__init__("Не удалось применить строки черновика: " + "; ".join(parts))
+
+
+class _AnalyzePipelineState(BaseModel):
+    """Промежуточное состояние analyze до выдачи draft-id связям (только сервис)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    note: Optional[AIExtractedEntity] = None
+    entities: List[AIExtractedEntity] = Field(default_factory=list)
+    relationships_extracted: List[AIAnalyzeRelationshipExtracted] = Field(default_factory=list)
+
 
 class EntityService:
     """
@@ -551,10 +595,487 @@ class EntityService:
             logger.error(f"Failed to search mentions: {e}")
             return []
     
+    @staticmethod
+    def _normalize_name_for_relationship_key(name: str) -> str:
+        s = name.strip().lower()
+        for q in "\u00ab\u00bb\"\"''`":
+            s = s.replace(q, "")
+        while "  " in s:
+            s = s.replace("  ", " ")
+        return s.strip()
+
+    def _assign_draft_ids_to_note_and_entities(self, state: _AnalyzePipelineState) -> None:
+        if state.note is not None:
+            state.note = state.note.model_copy(
+                update={"draft_entity_id": str(uuid.uuid4())}
+            )
+        state.entities = [
+            e.model_copy(update={"draft_entity_id": str(uuid.uuid4())})
+            for e in state.entities
+        ]
+
+    def _draft_entity_key_to_id_index(
+        self,
+        note: Optional[AIExtractedEntity],
+        entities: List[AIExtractedEntity],
+    ) -> Dict[Tuple[str, str], str]:
+        buckets: Dict[Tuple[str, str], List[str]] = {}
+
+        def put_row(entity: AIExtractedEntity) -> None:
+            did = entity.draft_entity_id
+            if not did:
+                raise ValueError("Внутренняя ошибка: у сущности черновика нет draft_entity_id")
+            norm_name = self._normalize_name_for_relationship_key(entity.name)
+            type_lower = entity.entity_type.lower().strip()
+            keys: List[Tuple[str, str]] = [(type_lower, norm_name)]
+            sub = entity.entity_subtype
+            if isinstance(sub, str) and sub.strip():
+                sub_lower = sub.lower().strip()
+                if sub_lower != type_lower:
+                    keys.append((sub_lower, norm_name))
+            for key in keys:
+                buckets.setdefault(key, []).append(did)
+
+        if note is not None:
+            put_row(note)
+        for ent in entities:
+            put_row(ent)
+
+        out: Dict[Tuple[str, str], str] = {}
+        for key, ids in buckets.items():
+            if len(ids) > 1:
+                raise ValueError(
+                    "Неоднозначное сопоставление (тип, имя) с строкой черновика: "
+                    f"{key!r}; кандидаты draft_entity_id={ids}"
+                )
+            out[key] = ids[0]
+        return out
+
+    def _build_relationship_drafts_from_extracted(
+        self,
+        state: _AnalyzePipelineState,
+    ) -> List[AIAnalysisRelationshipDraft]:
+        key_index = self._draft_entity_key_to_id_index(state.note, state.entities)
+        out: List[AIAnalysisRelationshipDraft] = []
+        for ext in state.relationships_extracted:
+            st = ext.source_type.strip()
+            sn = ext.source_name
+            tt = ext.target_type.strip()
+            tn = ext.target_name
+            sk = (st.lower(), self._normalize_name_for_relationship_key(sn))
+            tk = (tt.lower(), self._normalize_name_for_relationship_key(tn))
+            if sk not in key_index:
+                raise ValueError(
+                    f"Нет сущности черновика для конца связи source: type={st!r} name={sn!r}"
+                )
+            if tk not in key_index:
+                raise ValueError(
+                    f"Нет сущности черновика для конца связи target: type={tt!r} name={tn!r}"
+                )
+            out.append(
+                AIAnalysisRelationshipDraft(
+                    draft_relationship_id=str(uuid.uuid4()),
+                    source_draft_entity_id=key_index[sk],
+                    target_draft_entity_id=key_index[tk],
+                    relationship_type=ext.relationship_type,
+                    weight=ext.weight,
+                    attributes=ext.attributes,
+                )
+            )
+        return out
+
+    async def _persist_analysis_draft_to_note(
+        self,
+        note_id: str,
+        snapshot: AIAnalyzeResponse,
+    ) -> None:
+        note = await self._entity_repo.get(note_id)
+        if not note:
+            raise ValueError(f"Заметка не найдена: {note_id}")
+        if note.entity_type != "note":
+            raise ValueError(
+                f"Сохранение черновика analyze допустимо только для note, получено: {note.entity_type}"
+            )
+        attrs = dict(note.attributes or {})
+        prev = attrs.get("ai_analysis_draft")
+        next_ver = 1
+        if isinstance(prev, dict) and isinstance(prev.get("draft_version"), int):
+            next_ver = int(prev["draft_version"]) + 1
+        stored = AIAnalysisDraftStored(
+            draft_version=next_ver,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            note=snapshot.note,
+            entities=list(snapshot.entities),
+            relationships=list(snapshot.relationships),
+        )
+        attrs["ai_analysis_draft"] = stored.model_dump(mode="json")
+        await self.update_entity(note_id, {"attributes": attrs})
+
+    async def _load_analysis_draft_from_note(
+        self,
+        note_id: str,
+    ) -> Tuple[CRMEntity, AIAnalysisDraftStored]:
+        note = await self._entity_repo.get(note_id)
+        if not note:
+            raise ValueError(f"Entity not found: {note_id}")
+        if note.entity_type != "note":
+            raise ValueError("Ожидалась заметка (entity_type=note)")
+        raw = (note.attributes or {}).get("ai_analysis_draft")
+        if not isinstance(raw, dict):
+            raise ValueError("У заметки нет черновика ai_analysis_draft")
+        if not isinstance(raw.get("draft_version"), int):
+            raise ValueError(
+                "Некорректный формат ai_analysis_draft: отсутствует или неверен draft_version"
+            )
+        draft = AIAnalysisDraftStored.model_validate(raw)
+        for ent in draft.entities:
+            if not ent.draft_entity_id:
+                raise ValueError("Каждая сущность в черновике должна иметь draft_entity_id")
+        for rel in draft.relationships:
+            if (
+                not rel.draft_relationship_id
+                or not rel.source_draft_entity_id
+                or not rel.target_draft_entity_id
+            ):
+                raise ValueError(
+                    "Каждая связь в черновике должна иметь draft_relationship_id, "
+                    "source_draft_entity_id и target_draft_entity_id"
+                )
+        return note, draft
+
+    async def patch_analysis_draft(
+        self,
+        note_id: str,
+        body: AIAnalysisDraftPatchRequest,
+    ) -> AIAnalysisDraftStored:
+        note, draft = await self._load_analysis_draft_from_note(note_id)
+        if body.expected_version != draft.draft_version:
+            raise DraftVersionConflictError(
+                f"Версия черновика не совпадает: ожидалось {body.expected_version}, "
+                f"в БД {draft.draft_version}"
+            )
+
+        remove_e: Set[str] = set(body.remove_entity_draft_ids)
+        remove_r: Set[str] = set(body.remove_relationship_draft_ids)
+
+        entities = [e for e in draft.entities if e.draft_entity_id not in remove_e]
+        rels = [r for r in draft.relationships if r.draft_relationship_id not in remove_r]
+
+        remaining_draft_ids = {e.draft_entity_id for e in entities if e.draft_entity_id}
+        if draft.note is not None and draft.note.draft_entity_id:
+            remaining_draft_ids.add(draft.note.draft_entity_id)
+        rels = [
+            r
+            for r in rels
+            if r.source_draft_entity_id in remaining_draft_ids
+            and r.target_draft_entity_id in remaining_draft_ids
+        ]
+
+        by_draft_entity = {e.draft_entity_id: i for i, e in enumerate(entities)}
+        seen_entity_patch: Set[str] = set()
+        for p in body.patch_entities:
+            if p.draft_entity_id in seen_entity_patch:
+                raise ValueError(
+                    f"Дублирующийся draft_entity_id в patch_entities: {p.draft_entity_id}"
+                )
+            seen_entity_patch.add(p.draft_entity_id)
+            idx = by_draft_entity.get(p.draft_entity_id)
+            if idx is None:
+                raise ValueError(f"Нет сущности с draft_entity_id={p.draft_entity_id}")
+            ent = entities[idx]
+            updates: Dict[str, Any] = {}
+            if p.name is not None:
+                updates["name"] = p.name
+            if p.description is not None:
+                updates["description"] = p.description
+            if p.entity_subtype is not None:
+                updates["entity_subtype"] = p.entity_subtype
+            if p.note_date is not None:
+                updates["note_date"] = p.note_date
+            if p.due_date is not None:
+                updates["due_date"] = p.due_date
+            if p.priority is not None:
+                updates["priority"] = p.priority
+            if p.assignees is not None:
+                updates["assignees"] = p.assignees
+            if p.attributes is not None:
+                merged = dict(ent.attributes or {})
+                merged.update(p.attributes)
+                updates["attributes"] = merged
+            if updates:
+                entities[idx] = ent.model_copy(update=updates)
+
+        by_rel = {r.draft_relationship_id: i for i, r in enumerate(rels)}
+        seen_rel_patch: Set[str] = set()
+        for p in body.patch_relationships:
+            if p.draft_relationship_id in seen_rel_patch:
+                raise ValueError(
+                    f"Дублирующийся draft_relationship_id в patch_relationships: "
+                    f"{p.draft_relationship_id}"
+                )
+            seen_rel_patch.add(p.draft_relationship_id)
+            idx = by_rel.get(p.draft_relationship_id)
+            if idx is None:
+                raise ValueError(
+                    f"Нет связи с draft_relationship_id={p.draft_relationship_id}"
+                )
+            rel = rels[idx]
+            ru: Dict[str, Any] = {}
+            if p.weight is not None:
+                ru["weight"] = p.weight
+            if p.attributes is not None:
+                rmerged = dict(rel.attributes or {})
+                rmerged.update(p.attributes)
+                ru["attributes"] = rmerged
+            if ru:
+                rels[idx] = rel.model_copy(update=ru)
+
+        next_draft = AIAnalysisDraftStored(
+            draft_version=draft.draft_version + 1,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            note=draft.note,
+            entities=entities,
+            relationships=rels,
+        )
+
+        attrs = dict(note.attributes or {})
+        attrs["ai_analysis_draft"] = next_draft.model_dump(mode="json")
+        await self.update_entity(note_id, {"attributes": attrs})
+        return next_draft
+
+    async def _persist_analysis_draft_entity_row(
+        self,
+        ent: AIExtractedEntity,
+        namespace: str,
+        merge_target_locks: Dict[str, asyncio.Lock],
+    ) -> Tuple[str, str, Literal["created", "updated"]]:
+        """Одна строка черновика: create или merge в БД и RAG (без ретраев)."""
+        did = ent.draft_entity_id
+        if not did:
+            raise ValueError("Сущность без draft_entity_id в сохранённом черновике")
+
+        def _lock_for_merge_target(entity_id: str) -> asyncio.Lock:
+            if entity_id not in merge_target_locks:
+                merge_target_locks[entity_id] = asyncio.Lock()
+            return merge_target_locks[entity_id]
+
+        if ent.dedup_action == "merge":
+            existing_id = ent.dedup_existing_id
+            if not existing_id:
+                raise ValueError(
+                    f"dedup_action=merge требует dedup_existing_id (draft_entity_id={did})"
+                )
+            async with _lock_for_merge_target(existing_id):
+                existing_row = await self._entity_repo.get(existing_id)
+                if not existing_row:
+                    raise ValueError(f"dedup_existing_id не найден в БД: {existing_id}")
+                merged_attrs = {**(existing_row.attributes or {}), **(ent.attributes or {})}
+                raw = ent.model_dump()
+                await self.update_entity(
+                    existing_id,
+                    {
+                        "name": ent.name,
+                        "description": ent.description,
+                        "entity_subtype": ent.entity_subtype,
+                        "attributes": merged_attrs,
+                        "priority": raw.get("priority"),
+                        "assignees": raw.get("assignees") or [],
+                        "note_date": self._parse_optional_date_iso(raw.get("note_date")),
+                        "due_date": self._parse_optional_date_iso(raw.get("due_date")),
+                    },
+                )
+            return (did, existing_id, "updated")
+        if ent.dedup_action in (None, "create"):
+            created = await self._create_entity_from_draft_row(ent, namespace)
+            return (did, created.entity_id, "created")
+        raise ValueError(
+            f"Неизвестный dedup_action={ent.dedup_action!r} (draft_entity_id={did})"
+        )
+
+    async def _apply_analysis_draft_entity_rows_with_retries(
+        self,
+        entities: List[AIExtractedEntity],
+        namespace: str,
+    ) -> Tuple[Dict[str, str], List[str], List[str]]:
+        """
+        Параллельный проход по списку; неуспешные строки повторяются до ANALYSIS_DRAFT_APPLY_MAX_ROUNDS.
+        Возвращает id_map по draft_entity_id, списки created/updated в порядке следования в entities.
+        """
+        merge_target_locks: Dict[str, asyncio.Lock] = {}
+        pending = list(entities)
+        last_error_by_draft: Dict[str, Exception] = {}
+        id_fragment: Dict[str, str] = {}
+        kind_by_draft: Dict[str, Literal["created", "updated"]] = {}
+
+        for _ in range(ANALYSIS_DRAFT_APPLY_MAX_ROUNDS):
+            if not pending:
+                break
+            results = await asyncio.gather(
+                *[
+                    self._persist_analysis_draft_entity_row(
+                        ent, namespace, merge_target_locks
+                    )
+                    for ent in pending
+                ],
+                return_exceptions=True,
+            )
+            next_pending: List[AIExtractedEntity] = []
+            for ent, res in zip(pending, results):
+                did = ent.draft_entity_id
+                if not did:
+                    raise ValueError("Сущность без draft_entity_id в сохранённом черновике")
+                if isinstance(res, BaseException):
+                    last_error_by_draft[did] = res
+                    next_pending.append(ent)
+                    continue
+                out_did, real_id, kind = res
+                id_fragment[out_did] = real_id
+                kind_by_draft[out_did] = kind
+            pending = next_pending
+
+        if pending:
+            failures: List[Tuple[str, Optional[str], Optional[str], str]] = []
+            for ent in pending:
+                did = ent.draft_entity_id or ""
+                exc = last_error_by_draft.get(did)
+                msg = str(exc) if exc else "unknown error"
+                failures.append((did, ent.name, ent.entity_type, msg))
+            raise ApplyAnalysisDraftEntityFailuresError(failures)
+
+        created_entity_ids: List[str] = []
+        updated_entity_ids: List[str] = []
+        for ent in entities:
+            did = ent.draft_entity_id
+            if not did or did not in id_fragment:
+                continue
+            if kind_by_draft.get(did) == "created":
+                created_entity_ids.append(id_fragment[did])
+            elif kind_by_draft.get(did) == "updated":
+                updated_entity_ids.append(id_fragment[did])
+
+        return (id_fragment, created_entity_ids, updated_entity_ids)
+
+    async def apply_analysis_draft(self, note_id: str) -> AIAnalysisDraftApplyResult:
+        note, draft = await self._load_analysis_draft_from_note(note_id)
+        namespace = self._resolve_namespace_for_write(note.namespace)
+
+        all_types = await self._relationship_type_repo.get_all_for_company(include_system=True)
+        valid_type_ids = {t.type_id for t in all_types}
+
+        draft_entity_ids = {e.draft_entity_id for e in draft.entities if e.draft_entity_id}
+        if draft.note is not None and draft.note.draft_entity_id:
+            draft_entity_ids.add(draft.note.draft_entity_id)
+
+        rel_tuples: Set[Tuple[str, str, str]] = set()
+        for rel in draft.relationships:
+            t = (
+                rel.source_draft_entity_id,
+                rel.target_draft_entity_id,
+                rel.relationship_type,
+            )
+            if t in rel_tuples:
+                raise ValueError(
+                    f"В черновике дублируется связь source_draft={t[0]!r} "
+                    f"target_draft={t[1]!r} type={t[2]!r}"
+                )
+            rel_tuples.add(t)
+            if rel.relationship_type not in valid_type_ids:
+                raise ValueError(f"Неизвестный тип связи: {rel.relationship_type}")
+            if rel.source_draft_entity_id not in draft_entity_ids:
+                raise ValueError(
+                    f"Связь ссылается на неизвестный source_draft_entity_id: "
+                    f"{rel.source_draft_entity_id}"
+                )
+            if rel.target_draft_entity_id not in draft_entity_ids:
+                raise ValueError(
+                    f"Связь ссылается на неизвестный target_draft_entity_id: "
+                    f"{rel.target_draft_entity_id}"
+                )
+
+        id_map: Dict[str, str] = {}
+        if draft.note is not None and draft.note.draft_entity_id:
+            id_map[draft.note.draft_entity_id] = note_id
+
+        id_fragment, created_entity_ids, updated_entity_ids = (
+            await self._apply_analysis_draft_entity_rows_with_retries(
+                draft.entities,
+                namespace,
+            )
+        )
+        id_map.update(id_fragment)
+
+        async def create_one_relationship(rel: AIAnalysisRelationshipDraft) -> Optional[str]:
+            src = id_map[rel.source_draft_entity_id]
+            tgt = id_map[rel.target_draft_entity_id]
+            existing = await self._relationship_repo.find_exact(
+                src, tgt, rel.relationship_type
+            )
+            if existing:
+                return None
+            weight = rel.weight if rel.weight is not None else 1.0
+            row = Relationship(
+                relationship_id=str(uuid.uuid4()),
+                source_entity_id=src,
+                target_entity_id=tgt,
+                relationship_type=rel.relationship_type,
+                namespace=namespace,
+                weight=weight,
+                attributes=dict(rel.attributes or {}),
+                company_id=self._get_company_id(),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+            saved = await self._relationship_repo.create(row)
+            return saved.relationship_id
+
+        rel_results = await asyncio.gather(
+            *[create_one_relationship(rel) for rel in draft.relationships]
+        )
+        created_relationship_ids = [rid for rid in rel_results if rid is not None]
+
+        attrs = dict(note.attributes or {})
+        if "ai_analysis_draft" in attrs:
+            del attrs["ai_analysis_draft"]
+        attrs["ai_analysis_applied_at"] = datetime.now(timezone.utc).isoformat()
+        await self.update_entity(note_id, {"attributes": attrs})
+
+        return AIAnalysisDraftApplyResult(
+            created_entity_ids=created_entity_ids,
+            updated_entity_ids=updated_entity_ids,
+            created_relationship_ids=created_relationship_ids,
+        )
+
+    async def _create_entity_from_draft_row(
+        self,
+        ent: AIExtractedEntity,
+        namespace: str,
+    ) -> CRMEntity:
+        raw = ent.model_dump()
+        return await self.create_entity(
+            entity_type=ent.entity_type,
+            name=ent.name,
+            description=ent.description,
+            entity_subtype=ent.entity_subtype,
+            namespace=namespace,
+            attributes=raw.get("attributes") or {},
+            tags=raw.get("tags") or [],
+            note_date=self._parse_optional_date_iso(raw.get("note_date")),
+            due_date=self._parse_optional_date_iso(raw.get("due_date")),
+            priority=raw.get("priority"),
+            assignees=raw.get("assignees") or [],
+        )
+
+    @staticmethod
+    def _parse_optional_date_iso(value: Optional[str]) -> Optional[date]:
+        if value is None or value == "":
+            return None
+        return date.fromisoformat(value)
+
     async def analyze_text_with_ai(
         self,
         request: AIAnalyzeRequest,
-        check_duplicates: bool = True
+        check_duplicates: bool = True,
+        note_id: Optional[str] = None,
     ) -> AIAnalyzeResponse:
         """
         AI анализ текста с составными промптами.
@@ -581,10 +1102,9 @@ class EntityService:
         )
         
         t_analyze = time.perf_counter()
-        ai_result = await self._call_ai_agent(
+        state = await self._call_ai_agent(
             text=request.text,
             prompt=prompt,
-            mentioned_entity_ids=request.mentioned_entity_ids,
             entity_types=entity_types,
             relationship_types=relationship_types,
         )
@@ -592,20 +1112,26 @@ class EntityService:
             "crm.analyze.flow_llm_ms=%.1f",
             (time.perf_counter() - t_analyze) * 1000,
         )
-        
-        if check_duplicates and ai_result.entities:
+
+        await self._inject_mentioned_entities_into_analyze_state(
+            state,
+            request.mentioned_entity_ids,
+            namespace,
+        )
+
+        if check_duplicates and state.entities:
             t_dedup = time.perf_counter()
             dedup_results = await self._deduplicate_entities(
-                extracted_entities=ai_result.entities,
+                extracted_entities=state.entities,
                 namespace=namespace,
             )
             logger.info(
                 "crm.analyze.dedup_phase_ms=%.1f entities=%s",
                 (time.perf_counter() - t_dedup) * 1000,
-                len(ai_result.entities),
+                len(state.entities),
             )
-            
-            for i, entity in enumerate(ai_result.entities):
+
+            for i, entity in enumerate(state.entities):
                 if i < len(dedup_results):
                     result = dedup_results[i]
                     entity.dedup_action = result.action
@@ -613,7 +1139,17 @@ class EntityService:
                     if result.is_duplicate:
                         entity.dedup_existing_id = result.existing_entity_id
                         entity.dedup_existing_name = result.existing_entity_name
-        
+
+        self._assign_draft_ids_to_note_and_entities(state)
+        draft_relationships = self._build_relationship_drafts_from_extracted(state)
+        ai_result = AIAnalyzeResponse(
+            note=state.note,
+            entities=state.entities,
+            relationships=draft_relationships,
+        )
+        if note_id:
+            await self._persist_analysis_draft_to_note(note_id, ai_result)
+
         return ai_result
     
     def _build_composite_prompt(
@@ -649,21 +1185,81 @@ class EntityService:
                 prompt_parts.append(rt.prompt)
         
         return "\n".join(prompt_parts)
-    
+
+    async def _inject_mentioned_entities_into_analyze_state(
+        self,
+        state: _AnalyzePipelineState,
+        mentioned_entity_ids: Optional[List[str]],
+        namespace: str,
+    ) -> None:
+        """
+        Связи в ответе LLM ссылаются на (type, name) строк черновика.
+        Упомянутые через @ сущности из БД подмешиваются как строки, чтобы резолв концов связи не падал.
+        """
+        if not mentioned_entity_ids:
+            return
+        company_id = self._get_company_id()
+
+        def row_key(entity: AIExtractedEntity) -> Tuple[str, str]:
+            return (
+                entity.entity_type.lower().strip(),
+                self._normalize_name_for_relationship_key(entity.name),
+            )
+
+        occupied: Set[Tuple[str, str]] = set()
+        if state.note is not None:
+            occupied.add(row_key(state.note))
+        for ent in state.entities:
+            occupied.add(row_key(ent))
+
+        for mid in mentioned_entity_ids:
+            row = await self._entity_repo.get(mid)
+            if not row:
+                raise ValueError(f"Упомянутая сущность не найдена: {mid}")
+            if row.company_id != company_id:
+                raise ValueError(
+                    f"Упомянутая сущность {mid} принадлежит другой компании"
+                )
+            if row.namespace != namespace:
+                raise ValueError(
+                    f"Упомянутая сущность {mid} в namespace {row.namespace!r}, "
+                    f"ожидался {namespace!r}"
+                )
+            k = (row.entity_type.lower().strip(), self._normalize_name_for_relationship_key(row.name))
+            if k in occupied:
+                continue
+            occupied.add(k)
+            desc = row.description
+            if not isinstance(desc, str) or len(desc.strip()) < _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN:
+                raise ValueError(
+                    f"У сущности {mid} нет описания длиной "
+                    f"не менее {_ANALYZE_ENTITY_DESCRIPTION_MIN_LEN} символов (нужно для analyze)"
+                )
+            payload = {
+                "entity_type": row.entity_type,
+                "name": row.name,
+                "description": desc,
+                "attributes": dict(row.attributes or {}),
+                "entity_subtype": row.entity_subtype,
+            }
+            state.entities.append(
+                AIExtractedEntity.model_validate(
+                    self._normalize_entity_payload(payload)
+                )
+            )
+
     async def _call_ai_agent(
         self,
         text: str,
         prompt: str,
-        mentioned_entity_ids: Optional[List[str]],
         entity_types: List,
         relationship_types: List,
-    ) -> AIAnalyzeResponse:
+    ) -> _AnalyzePipelineState:
         """Вызывает AI agent через A2A API для анализа"""
         from core.config import get_settings
-        
+
         settings = get_settings()
-        
-        # Формируем переменные для агента
+
         variables = {
             "text": text,
             "entity_types": [
@@ -673,9 +1269,9 @@ class EntityService:
             "relationship_types": [
                 {"type": rt.type_id, "prompt": rt.prompt or ""}
                 for rt in relationship_types if rt.prompt
-            ]
+            ],
         }
-        
+
         flows_base_url = settings.server.get_flows_service_url().rstrip("/")
 
         response = await self._a2a_client.send_task(
@@ -684,18 +1280,46 @@ class EntityService:
             skill_id="analyze",
             metadata={
                 "variables": variables
-            }
+            },
         )
-        
-        # Извлекаем и нормализуем данные из A2A response
+
         result_data = self._extract_data_from_a2a_response(response)
         normalized_result = self._normalize_analyze_result(result_data)
         self._validate_analyze_entity_descriptions(normalized_result)
 
-        return AIAnalyzeResponse(
-            note=normalized_result.get("note"),
-            entities=normalized_result.get("entities", []),
-            relationships=normalized_result.get("relationships", [])
+        note_obj: Optional[AIExtractedEntity] = None
+        note_data = normalized_result.get("note")
+        if isinstance(note_data, dict):
+            note_obj = AIExtractedEntity.model_validate(
+                self._normalize_entity_payload(note_data)
+            )
+
+        entities_data = normalized_result.get("entities")
+        if not isinstance(entities_data, list):
+            entities_data = []
+        entity_list: List[AIExtractedEntity] = []
+        for i, raw_ent in enumerate(entities_data):
+            if not isinstance(raw_ent, dict):
+                raise ValueError(f"entities[{i}] должен быть объектом")
+            entity_list.append(
+                AIExtractedEntity.model_validate(
+                    self._normalize_entity_payload(raw_ent)
+                )
+            )
+
+        rels_data = normalized_result.get("relationships")
+        if not isinstance(rels_data, list):
+            rels_data = []
+        rel_extracted: List[AIAnalyzeRelationshipExtracted] = []
+        for i, raw_rel in enumerate(rels_data):
+            if not isinstance(raw_rel, dict):
+                raise ValueError(f"relationships[{i}] должен быть объектом")
+            rel_extracted.append(AIAnalyzeRelationshipExtracted.model_validate(raw_rel))
+
+        return _AnalyzePipelineState(
+            note=note_obj,
+            entities=entity_list,
+            relationships_extracted=rel_extracted,
         )
 
     def _normalize_entity_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -969,14 +1593,82 @@ class EntityService:
                             append_entity(entity_name)
 
         return entities
-    
+
+    @staticmethod
+    def _note_has_applied_ai_analysis(note: CRMEntity) -> bool:
+        attrs = note.attributes or {}
+        v = attrs.get("ai_analysis_applied_at")
+        return isinstance(v, str) and bool(v.strip())
+
+    def _note_to_summary_card(self, note: CRMEntity) -> Dict[str, Any]:
+        attrs = note.attributes or {}
+        snippet: str
+        custom = attrs.get("ai_summary_snippet")
+        if isinstance(custom, str) and custom.strip():
+            snippet = custom.strip()
+            if len(snippet) > _DAILY_SUMMARY_CARD_SNIPPET_MAX:
+                snippet = snippet[:_DAILY_SUMMARY_CARD_SNIPPET_MAX]
+        else:
+            desc = note.description or ""
+            snippet = desc[:_DAILY_SUMMARY_CARD_SNIPPET_MAX] if desc else ""
+
+        return {
+            "entity_id": note.entity_id,
+            "name": note.name or "",
+            "entity_subtype": note.entity_subtype or "",
+            "snippet": snippet,
+        }
+
+    async def _call_summarize_chunk_skill(
+        self,
+        cards: List[Dict[str, Any]],
+        date_str: str,
+        namespace: Optional[str],
+    ) -> Dict[str, Any]:
+        company_id = self._get_company_id()
+        settings = get_settings()
+        flows_base = settings.server.get_flows_service_url().rstrip("/")
+        variables = {
+            "notes_json": json.dumps(cards, ensure_ascii=False),
+            "date": date_str,
+            "namespace": self._normalize_namespace(namespace),
+        }
+        response = await self._a2a_client.send_task(
+            base_url=f"{flows_base}/flows/api/v1/crm",
+            content="Daily summary: chunk",
+            skill_id="summarize_chunk",
+            metadata={"variables": variables, "company_id": company_id},
+        )
+        return self._extract_data_from_a2a_response(response)
+
+    async def _call_summarize_merge_skill(
+        self,
+        partial_payloads: List[Dict[str, Any]],
+        date_str: str,
+        namespace: Optional[str],
+    ) -> Dict[str, Any]:
+        company_id = self._get_company_id()
+        settings = get_settings()
+        flows_base = settings.server.get_flows_service_url().rstrip("/")
+        variables = {
+            "partials_json": json.dumps(partial_payloads, ensure_ascii=False),
+            "date": date_str,
+            "namespace": self._normalize_namespace(namespace),
+        }
+        response = await self._a2a_client.send_task(
+            base_url=f"{flows_base}/flows/api/v1/crm",
+            content="Daily summary: merge partials",
+            skill_id="summarize_merge",
+            metadata={"variables": variables, "company_id": company_id},
+        )
+        return self._extract_data_from_a2a_response(response)
+
     async def compute_daily_summary(
         self,
         date_str: str,
         namespace: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Синхронно вычисляет summary для даты и namespace."""
-        company_id = self._get_company_id()
+        """Синхронно вычисляет summary для даты и namespace (map-reduce по чанкам заметок с AI)."""
         dt.fromisoformat(date_str)
 
         notes, source_version = await self._collect_notes_and_source_version(
@@ -994,33 +1686,53 @@ class EntityService:
                 "source_version": source_version,
             }
 
-        input_entities = self._extract_entities_from_notes(notes)
-        payload = {
-            "notes": [self._entity_to_dict(note) for note in notes],
-            "date": date_str,
-            "namespace": self._normalize_namespace(namespace),
-            "entities": input_entities,
-        }
+        analyzed_notes = [n for n in notes if self._note_has_applied_ai_analysis(n)]
+        if not analyzed_notes:
+            return {
+                "date": date_str,
+                "namespace": self._normalize_namespace(namespace),
+                "summary": (
+                    f"За {date_str} нет заметок с применённым AI-анализом "
+                    f"(ожидается поле ai_analysis_applied_at после подтверждения черновика)."
+                ),
+                "entities": [],
+                "entities_count": len(notes),
+                "source_version": source_version,
+            }
 
-        settings = get_settings()
-        flows_url = settings.server.get_flows_service_url()
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_url}/flows/api/v1/crm",
-            content=json.dumps(payload),
-            skill_id="summarize",
-            metadata={"company_id": company_id},
+        crm_settings = get_crm_settings()
+        chunk_sz = crm_settings.daily_summary_chunk_size
+        max_conc = crm_settings.daily_summary_map_reduce_max_concurrent
+        cards = [self._note_to_summary_card(n) for n in analyzed_notes]
+        input_entities = self._extract_entities_from_notes(analyzed_notes)
+
+        async def map_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+            return await self._call_summarize_chunk_skill(
+                batch, date_str, namespace
+            )
+
+        async def merge_batch(partials: List[Dict[str, Any]]) -> Dict[str, Any]:
+            return await self._call_summarize_merge_skill(
+                partials, date_str, namespace
+            )
+
+        structured = await map_reduce_tree(
+            cards,
+            chunk_size=chunk_sz,
+            map_batch=map_batch,
+            merge_batch=merge_batch,
+            max_concurrent=max_conc,
         )
 
-        structured = self._extract_data_from_a2a_response(response)
-        raw = (response.get("response") or "").strip()
-        parsed = self._extract_json_from_text(raw) if raw else {}
         summary_text = self._extract_summary_from_payload(structured)
+        if summary_text is None and isinstance(structured, dict):
+            s = structured.get("summary")
+            summary_text = s if isinstance(s, str) else None
         if summary_text is None:
-            summary_text = self._extract_summary_from_payload(parsed)
-        if summary_text is None:
-            summary_text = raw
+            summary_text = ""
         summary_entities = self._extract_string_list_from_payload(structured, "entities")
-        if not summary_entities:
+        if not summary_entities and isinstance(structured, dict):
+            parsed = structured
             summary_entities = self._extract_string_list_from_payload(parsed, "entities")
         if not summary_entities:
             summary_entities = self._extract_entities_from_text_mentions(summary_text)
@@ -1332,7 +2044,7 @@ class EntityService:
                     query=search_query,
                     entity_type=entity.entity_type,
                     namespace=namespace,
-                    limit=3,
+                    limit=crm_settings.dedup_rag_search_limit,
                 )
 
         scored_per_entity = await asyncio.gather(*[search_one(e) for e in extracted_entities])
@@ -1404,26 +2116,26 @@ class EntityService:
         self,
         need_llm: List[Tuple[int, AIExtractedEntity, CRMEntity, float]],
     ) -> Dict[int, DeduplicateResult]:
-        """Несколько пар: чанки по dedup_batch_max_pairs; чанки выполняются параллельно с ограничением."""
+        """Несколько пар: чанки по dedup_batch_max_pairs (не больше 5); run_chunked_map из core."""
         crm_settings = get_crm_settings()
-        max_pairs = crm_settings.dedup_batch_max_pairs_per_request
+        max_pairs = min(5, crm_settings.dedup_batch_max_pairs_per_request)
         max_concurrent = crm_settings.dedup_llm_max_concurrent_batch_requests
-        chunks: List[List[Tuple[int, AIExtractedEntity, CRMEntity, float]]] = [
-            need_llm[i : i + max_pairs] for i in range(0, len(need_llm), max_pairs)
-        ]
-        chunk_sem = asyncio.Semaphore(max_concurrent)
 
         async def run_chunk(
             chunk: List[Tuple[int, AIExtractedEntity, CRMEntity, float]],
         ) -> Dict[int, DeduplicateResult]:
-            async with chunk_sem:
-                if len(chunk) == 1:
-                    list_idx, extracted, candidate, _sim = chunk[0]
-                    dr = await self._call_deduplicate_agent(extracted, candidate)
-                    return {list_idx: dr}
-                return await self._call_deduplicate_batch_agent(chunk)
+            if len(chunk) == 1:
+                list_idx, extracted, candidate, _sim = chunk[0]
+                dr = await self._call_deduplicate_agent(extracted, candidate)
+                return {list_idx: dr}
+            return await self._call_deduplicate_batch_agent(chunk)
 
-        chunk_results = await asyncio.gather(*[run_chunk(c) for c in chunks])
+        chunk_results = await run_chunked_map(
+            need_llm,
+            max_pairs,
+            run_chunk,
+            max_concurrent=max_concurrent,
+        )
         merged: Dict[int, DeduplicateResult] = {}
         for part in chunk_results:
             merged.update(part)
@@ -1455,17 +2167,18 @@ class EntityService:
         variables = {
             "extracted_entity": {
                 "type": extracted.entity_type,
+                "entity_subtype": extracted.entity_subtype,
                 "name": extracted.name,
                 "description": extracted.description,
-                "attributes": extracted.attributes
+                "attributes": extracted.attributes,
             },
             "candidate_entity": {
-                "entity_id": candidate.entity_id,
                 "type": candidate.entity_type,
+                "entity_subtype": candidate.entity_subtype,
                 "name": candidate.name,
                 "description": candidate.description,
-                "attributes": candidate.attributes
-            }
+                "attributes": candidate.attributes,
+            },
         }
         
         response = await self._a2a_client.send_task(
@@ -1505,13 +2218,14 @@ class EntityService:
                     "vector_similarity": similarity,
                     "extracted_entity": {
                         "type": extracted.entity_type,
+                        "entity_subtype": extracted.entity_subtype,
                         "name": extracted.name,
                         "description": extracted.description,
                         "attributes": extracted.attributes,
                     },
                     "candidate_entity": {
-                        "entity_id": candidate.entity_id,
                         "type": candidate.entity_type,
+                        "entity_subtype": candidate.entity_subtype,
                         "name": candidate.name,
                         "description": candidate.description,
                         "attributes": candidate.attributes,

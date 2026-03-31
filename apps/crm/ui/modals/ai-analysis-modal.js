@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import { CRMStore } from '../store/crm.store.js';
+import { CRMStore, isRelationshipSuggestion } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 import './entity-modal.js';
 
@@ -296,7 +296,7 @@ export class AIAnalysisModal extends PlatformModal {
             .score-track {
                 height: 16px;
                 border-radius: var(--radius-full);
-                background: rgba(34, 34, 34, 0.08);
+                background: var(--glass-tint-strong);
                 margin-top: var(--space-2);
                 position: relative;
                 overflow: hidden;
@@ -365,18 +365,24 @@ export class AIAnalysisModal extends PlatformModal {
             .existing-hint {
                 margin-top: 4px;
                 font-size: var(--text-xs);
-                color: rgba(34, 34, 34, 0.6);
+                color: var(--text-secondary);
             }
 
             .existing-link {
                 border: none;
                 background: transparent;
-                color: #5f6fda;
-                font-size: var(--text-xs);
-                line-height: 16px;
+                color: var(--crm-selected-text);
+                font-size: var(--text-sm);
+                font-weight: var(--font-bold);
+                line-height: 1.25;
                 padding: 0;
                 cursor: pointer;
-                text-decoration: underline;
+                text-decoration: none;
+                font-family: inherit;
+            }
+
+            .existing-link:hover {
+                color: var(--crm-button-primary-hover);
             }
 
             .remove-connection {
@@ -407,7 +413,7 @@ export class AIAnalysisModal extends PlatformModal {
             .relationship-type {
                 font-size: var(--text-xs);
                 line-height: 16px;
-                color: rgba(34, 34, 34, 0.5);
+                color: var(--text-tertiary);
                 margin-top: 4px;
             }
 
@@ -428,15 +434,15 @@ export class AIAnalysisModal extends PlatformModal {
             }
 
             .relationship-arrow {
-                color: rgba(34, 34, 34, 0.4);
+                color: var(--text-tertiary);
                 display: inline-flex;
                 align-items: center;
             }
 
             .relationship-object-link {
                 border: none;
-                background: rgba(153, 166, 249, 0.2);
-                color: #5f6fda;
+                background: var(--crm-selected-bg);
+                color: var(--crm-selected-text);
                 border-radius: 12px;
                 padding: 2px 10px;
                 font-size: var(--text-xs);
@@ -450,8 +456,8 @@ export class AIAnalysisModal extends PlatformModal {
 
             .relationship-object-link:disabled {
                 cursor: not-allowed;
-                color: rgba(34, 34, 34, 0.35);
-                background: rgba(34, 34, 34, 0.08);
+                color: var(--text-disabled);
+                background: var(--glass-tint-medium);
             }
 
             .attr-toggle {
@@ -466,7 +472,7 @@ export class AIAnalysisModal extends PlatformModal {
 
             .attrs-panel {
                 margin-top: var(--space-2);
-                border-top: 1px solid rgba(34, 34, 34, 0.08);
+                border-top: 1px solid var(--crm-stroke);
                 padding-top: var(--space-2);
                 display: flex;
                 flex-direction: column;
@@ -481,11 +487,11 @@ export class AIAnalysisModal extends PlatformModal {
             }
 
             .attr-input {
-                border: 1px solid rgba(34, 34, 34, 0.1);
+                border: 1px solid var(--crm-stroke);
                 border-radius: 10px;
                 height: 30px;
                 padding: 0 10px;
-                background: rgba(255, 255, 255, 0.75);
+                background: var(--crm-surface-elevated);
                 color: var(--text-primary);
                 font-size: var(--text-xs);
                 min-width: 0;
@@ -501,7 +507,8 @@ export class AIAnalysisModal extends PlatformModal {
                 height: 24px;
                 border: none;
                 border-radius: 12px;
-                background: rgba(34, 34, 34, 0.08);
+                background: var(--glass-tint-medium);
+                color: var(--text-secondary);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
@@ -566,8 +573,8 @@ export class AIAnalysisModal extends PlatformModal {
             }
 
             .btn-disabled {
-                background: rgba(34, 34, 34, 0.05);
-                color: rgba(34, 34, 34, 0.2);
+                background: var(--glass-tint-subtle);
+                color: var(--text-disabled);
             }
 
             @media (max-width: 1024px) {
@@ -735,7 +742,15 @@ export class AIAnalysisModal extends PlatformModal {
     }
 
     _getConnectionSuggestions() {
-        return this._suggestions.filter((item) => item.entity_type !== 'task');
+        return this._suggestions.filter((item) => {
+            if (isRelationshipSuggestion(item)) {
+                return true;
+            }
+            if (!item.entity_type) {
+                return false;
+            }
+            return item.entity_type !== 'task';
+        });
     }
 
     _onToggleTask(taskId) {
@@ -765,8 +780,9 @@ export class AIAnalysisModal extends PlatformModal {
         this._taskDraft = '';
     }
 
-    _onRemoveConnection(index) {
-        CRMStore.removeSuggestion(index);
+    async _onRemoveConnection(index) {
+        const crmApi = this.services.get('crmApi');
+        await CRMStore.removeSuggestionWithServerDraftSync(crmApi, index);
     }
 
     _getSuggestionUiKey(item, index) {
@@ -1060,46 +1076,66 @@ export class AIAnalysisModal extends PlatformModal {
         return normalized.charAt(0).toUpperCase() + normalized.slice(1);
     }
 
-    _getRelationshipDisplay(item) {
-        const sourceId = typeof item.source_entity_id === 'string' ? item.source_entity_id : '';
-        const targetId = typeof item.target_entity_id === 'string' ? item.target_entity_id : '';
-        const sourceName = typeof item.source_name === 'string' && item.source_name.trim().length > 0
-            ? item.source_name
-            : (sourceId || 'Источник');
-        const targetName = typeof item.target_name === 'string' && item.target_name.trim().length > 0
-            ? item.target_name
-            : (targetId || 'Объект');
+    _draftEndpointLabel(draftEntityId) {
+        if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
+            throw new Error('draft_entity_id конца связи обязателен');
+        }
+        const ctx = CRMStore.state.ai.analyzeContextNote;
+        if (ctx?.draft_entity_id === draftEntityId) {
+            if (typeof ctx.name === 'string' && ctx.name.trim().length > 0) {
+                return ctx.name.trim();
+            }
+            return 'Заметка';
+        }
+        const row = this._suggestions.find((s) => s?.draft_entity_id === draftEntityId && s.entity_type);
+        if (!row || typeof row.name !== 'string' || row.name.trim().length === 0) {
+            throw new Error(`Нет подписи для draft_entity_id=${draftEntityId}`);
+        }
+        return row.name.trim();
+    }
 
+    _draftEndpointRealEntityId(draftEntityId) {
+        if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
+            return '';
+        }
         const noteId = typeof this._currentNoteId === 'string' ? this._currentNoteId : '';
-        if (noteId.length > 0 && sourceId === noteId && targetId.length > 0) {
-            return {
-                sourceLabel: sourceName,
-                targetLabel: targetName,
-                objectId: targetId,
-                objectLabel: targetName,
-            };
+        const ctx = CRMStore.state.ai.analyzeContextNote;
+        if (ctx?.draft_entity_id === draftEntityId && noteId.length > 0) {
+            return noteId;
         }
-        if (noteId.length > 0 && targetId === noteId && sourceId.length > 0) {
-            return {
-                sourceLabel: sourceName,
-                targetLabel: targetName,
-                objectId: sourceId,
-                objectLabel: sourceName,
-            };
+        const row = this._suggestions.find((s) => s?.draft_entity_id === draftEntityId && s.entity_type);
+        if (row?.dedup_action === 'merge' && typeof row.dedup_existing_id === 'string' && row.dedup_existing_id.trim().length > 0) {
+            return row.dedup_existing_id.trim();
         }
-        if (targetId.length > 0) {
-            return {
-                sourceLabel: sourceName,
-                targetLabel: targetName,
-                objectId: targetId,
-                objectLabel: targetName,
-            };
+        const resolved = CRMStore.state.ai.resolvedDraftEntityIds;
+        if (resolved && typeof resolved[draftEntityId] === 'string' && resolved[draftEntityId].trim().length > 0) {
+            return resolved[draftEntityId].trim();
+        }
+        return '';
+    }
+
+    _getRelationshipDisplay(item) {
+        if (!isRelationshipSuggestion(item)) {
+            throw new Error('Ожидалась связь черновика (draft_relationship_id)');
+        }
+        const sourceLabel = this._draftEndpointLabel(item.source_draft_entity_id);
+        const targetLabel = this._draftEndpointLabel(item.target_draft_entity_id);
+        const targetReal = this._draftEndpointRealEntityId(item.target_draft_entity_id);
+        const sourceReal = this._draftEndpointRealEntityId(item.source_draft_entity_id);
+        let objectId = '';
+        let objectLabel = targetLabel;
+        if (targetReal.length > 0) {
+            objectId = targetReal;
+            objectLabel = targetLabel;
+        } else if (sourceReal.length > 0) {
+            objectId = sourceReal;
+            objectLabel = sourceLabel;
         }
         return {
-            sourceLabel: sourceName,
-            targetLabel: targetName,
-            objectId: sourceId.length > 0 ? sourceId : '',
-            objectLabel: sourceId.length > 0 ? sourceName : targetName,
+            sourceLabel,
+            targetLabel,
+            objectId,
+            objectLabel,
         };
     }
 
@@ -1233,8 +1269,7 @@ export class AIAnalysisModal extends PlatformModal {
                             const expanded = this._isSuggestionExpanded(uiKey);
                             const draft = this._attributeDrafts[suggestionIndex] || { key: '', value: '' };
                             const subtitle = item.description || this._getConnectionSubtitle(item);
-                            const isRelationship = typeof item.relationship_type === 'string'
-                                && item.relationship_type.trim().length > 0;
+                            const isRelationship = isRelationshipSuggestion(item);
                             const dedupBadge = this._getDedupBadge(item);
                             const existingEntityRef = this._getExistingEntityRef(item);
                             const relationshipTypeLabel = isRelationship
@@ -1287,7 +1322,15 @@ export class AIAnalysisModal extends PlatformModal {
                                                     ${dedupBadge.label}
                                                     ${dedupBadge.confidence !== null ? ` ${dedupBadge.confidence}%` : ''}
                                                 </span>
-                                                <button class="remove-connection" type="button" @click=${() => this._onRemoveConnection(suggestionIndex)}>
+                                                <button
+                                                    class="remove-connection"
+                                                    type="button"
+                                                    @click=${() => {
+                                                        this._onRemoveConnection(suggestionIndex).catch((err) => {
+                                                            this.error(err?.message || String(err));
+                                                        });
+                                                    }}
+                                                >
                                                     <platform-icon name="close" size="14"></platform-icon>
                                                 </button>
                                             </div>

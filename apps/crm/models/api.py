@@ -345,7 +345,11 @@ class NamespaceTemplateSchemaOptionsResponse(BaseModel):
 class AIExtractedEntity(BaseModel):
     """Entity извлеченная AI (без БД полей)"""
     model_config = {"extra": "allow"}  # Разрешаем дополнительные поля от AI
-    
+
+    draft_entity_id: Optional[str] = Field(
+        default=None,
+        description="Стабильный id строки черновика; выставляет только CRM после analyze",
+    )
     entity_type: str
     name: str
     entity_subtype: Optional[str] = None
@@ -365,16 +369,35 @@ class AIExtractedEntity(BaseModel):
     dedup_confidence: Optional[float] = None
 
 
-class AIExtractedRelationship(BaseModel):
-    """Relationship извлеченная AI (без БД полей)"""
-    source_entity_id: Optional[str] = None
-    source_name: Optional[str] = None
-    source_type: Optional[str] = None
-    target_entity_id: Optional[str] = None
-    target_name: Optional[str] = None
-    target_type: Optional[str] = None
+class AIAnalyzeRelationshipExtracted(BaseModel):
+    """
+    Связь в сыром JSON от skill analyze (flows).
+    Только текстовые концы; после ответа CRM превращает в AIAnalysisRelationshipDraft.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_type: str
+    source_name: str
+    target_type: str
+    target_name: str
     relationship_type: str
-    weight: Optional[float] = None
+    weight: float
+    attributes: Optional[Dict[str, Any]] = None
+
+
+class AIAnalysisRelationshipDraft(BaseModel):
+    """
+    Связь в ответе POST /analyze и в ai_analysis_draft.
+    Концы связи только через draft_entity_id строк сущностей черновика.
+    """
+
+    draft_relationship_id: str
+    source_draft_entity_id: str
+    target_draft_entity_id: str
+    relationship_type: str
+    weight: float = 1.0
+    attributes: Optional[Dict[str, Any]] = None
 
 
 class AIAnalyzeResponse(BaseModel):
@@ -387,10 +410,51 @@ class AIAnalyzeResponse(BaseModel):
         default_factory=list,
         description="Извлеченные entities"
     )
-    relationships: List[AIExtractedRelationship] = Field(
+    relationships: List[AIAnalysisRelationshipDraft] = Field(
         default_factory=list,
-        description="Извлеченные связи"
+        description="Связи черновика (только draft-id концов)"
     )
+
+
+class AIAnalysisDraftStored(BaseModel):
+    """Снимок черновика analyze в attributes заметки (каноническая схема)."""
+    draft_version: int
+    updated_at: str
+    note: Optional[AIExtractedEntity] = None
+    entities: List[AIExtractedEntity] = Field(default_factory=list)
+    relationships: List[AIAnalysisRelationshipDraft] = Field(default_factory=list)
+
+
+class DraftEntityPatch(BaseModel):
+    draft_entity_id: str
+    name: Optional[str] = None
+    description: Optional[str] = None
+    attributes: Optional[Dict[str, Any]] = None
+    entity_subtype: Optional[str] = None
+    note_date: Optional[str] = None
+    due_date: Optional[str] = None
+    priority: Optional[str] = None
+    assignees: Optional[List[str]] = None
+
+
+class DraftRelationshipPatch(BaseModel):
+    draft_relationship_id: str
+    weight: Optional[float] = None
+    attributes: Optional[Dict[str, Any]] = None
+
+
+class AIAnalysisDraftPatchRequest(BaseModel):
+    expected_version: int
+    remove_entity_draft_ids: List[str] = Field(default_factory=list)
+    remove_relationship_draft_ids: List[str] = Field(default_factory=list)
+    patch_entities: List[DraftEntityPatch] = Field(default_factory=list)
+    patch_relationships: List[DraftRelationshipPatch] = Field(default_factory=list)
+
+
+class AIAnalysisDraftApplyResult(BaseModel):
+    created_entity_ids: List[str] = Field(default_factory=list)
+    updated_entity_ids: List[str] = Field(default_factory=list)
+    created_relationship_ids: List[str] = Field(default_factory=list)
 
 
 class DeduplicateResult(BaseModel):

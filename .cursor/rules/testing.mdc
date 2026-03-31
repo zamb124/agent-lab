@@ -324,6 +324,7 @@ uv run pytest tests/
 uv run pytest tests/ --cov=apps/flows/src --cov-report=term
 uv run pytest tests/flows/api/test_a2a.py -v
 uv run pytest tests/flows/api/test_a2a.py::TestA2A::test_message_send -v -s
+uv run pytest tests/flows/api/test_reload_flow_from_bundle.py -v
 ```
 
 ---

@@ -8,13 +8,14 @@
 
 ### Извлеченная сущность (новая):
 - Тип: {extracted_entity.type}
+- Подтип: {extracted_entity.entity_subtype}
 - Имя: {extracted_entity.name}
 - Описание: {extracted_entity.description}
 - Атрибуты: {extracted_entity.attributes}
 
-### Кандидат из базы данных:
-- ID: {candidate_entity.entity_id}
+### Кандидат из базы данных (UUID в промпт не передаются — только поля для сравнения):
 - Тип: {candidate_entity.type}
+- Подтип: {candidate_entity.entity_subtype}
 - Имя: {candidate_entity.name}
 - Описание: {candidate_entity.description}
 - Атрибуты: {candidate_entity.attributes}

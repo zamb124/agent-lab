@@ -172,7 +172,15 @@ async def test_get_daily_summary_cached_force_rebuild_on_fresh_cache():
 async def test_compute_daily_summary_uses_structured_data_summary():
     _set_test_context()
     service = _build_service()
-    note = SimpleNamespace(updated_at=None)
+    note = SimpleNamespace(
+        entity_id="n-1",
+        updated_at=None,
+        name="n1",
+        entity_subtype=None,
+        description="d",
+        tags=[],
+        attributes={"ai_analysis_applied_at": "2026-01-01T00:00:00+00:00"},
+    )
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([note], {"notes_count": 1, "max_updated_at": None})
     )
@@ -210,7 +218,15 @@ async def test_compute_daily_summary_uses_structured_data_summary():
 async def test_compute_daily_summary_uses_nested_structured_output_summary():
     _set_test_context()
     service = _build_service()
-    note = SimpleNamespace(updated_at=None)
+    note = SimpleNamespace(
+        entity_id="n-1",
+        updated_at=None,
+        name="n1",
+        entity_subtype=None,
+        description="d",
+        tags=[],
+        attributes={"ai_analysis_applied_at": "2026-01-01T00:00:00+00:00"},
+    )
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([note], {"notes_count": 1, "max_updated_at": None})
     )
@@ -252,11 +268,12 @@ async def test_compute_daily_summary_falls_back_to_entities_from_notes():
     _set_test_context()
     service = _build_service()
     note = SimpleNamespace(
+        entity_id="n-1",
         updated_at=None,
         tags=["Альфа Банк"],
         name="Встреча с @Yandex",
         description="Обсудили планы с @Sber и @Yandex",
-        attributes={},
+        attributes={"ai_analysis_applied_at": "2026-01-01T00:00:00+00:00"},
     )
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([note], {"notes_count": 1, "max_updated_at": None})
