@@ -76,6 +76,19 @@ cd mobile
 npx cap sync ios
 ```
 
+## CocoaPods: `Pods-App.release.xcconfig` не найден
+
+Каталог **`mobile/ios/App/Pods`** не коммитится; файлы появляются после **`pod install`**. Локально:
+
+```bash
+cd mobile && npm install
+cd ios/App && pod install
+```
+
+Открывать **`App.xcworkspace`**, не `App.xcodeproj`.
+
+**Xcode Cloud** (путь вида `/Volumes/workspace/repository/...`): в корне репозитория добавлен **`ci_scripts/ci_post_clone.sh`** — после клона выполняет `npm ci` в `mobile/` и **`pod install`** в `mobile/ios/App`. В настройках workflow должен быть выбран тот же репозиторий; при ошибке `npm ci` проверьте актуальность `package-lock.json`.
+
 ## Сборка: Sandbox deny на `Pods-App-frameworks.sh`
 
 Если Xcode пишет `Sandbox: bash deny file-read-data` на скрипт из Pods — в проекте отключён песочный режим для user scripts: **Build Settings** → **User Script Sandboxing** → **No** (в репозитории для target App выставлено `ENABLE_USER_SCRIPT_SANDBOXING = NO` в `App.xcodeproj`).
