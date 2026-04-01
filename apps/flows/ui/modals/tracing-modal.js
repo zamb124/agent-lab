@@ -156,11 +156,15 @@ export class TracingModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Tracing';
         this.flowId = '';
         this.taskId = '';
         this.spans = [];
         this.loading = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.title = this.i18n.t('tracing_modal.title');
     }
 
     async showModal() {

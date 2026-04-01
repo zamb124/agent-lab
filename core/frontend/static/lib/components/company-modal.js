@@ -338,19 +338,6 @@ export class CompanyModal extends PlatformElement {
         }
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-    }
-
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
-        super.disconnectedCallback();
-    }
-
     _handleContentClick(e) {
         // Предотвращаем закрытие модалки при клике на содержимое
         e.stopPropagation();

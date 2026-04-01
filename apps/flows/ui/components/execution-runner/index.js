@@ -63,7 +63,7 @@ export class ExecutionRunner extends PlatformElement {
      */
     async run(message, files = [], breakpoints = {}, mocks = [], flowNodes = null, options = null) {
         if (this._isRunning) {
-            console.warn('[ExecutionRunner] Уже выполняется');
+            console.warn('[ExecutionRunner] Already running');
             return;
         }
 
@@ -110,8 +110,8 @@ export class ExecutionRunner extends PlatformElement {
                 messageText = `${message}${this.i18n.t('execution_runner.files_attached', { files: fileInfo })}`;
             }
 
-            console.log('[ExecutionRunner] Отправка breakpoints:', breakpoints);
-            console.log('[ExecutionRunner] Отправка metadata.mock:', mockPayload);
+            console.log('[ExecutionRunner] Sending breakpoints:', breakpoints);
+            console.log('[ExecutionRunner] Sending metadata.mock:', mockPayload);
 
             // Используем a2a.service вместо прямого fetch
             await this.a2a.streamMessage(
@@ -127,7 +127,7 @@ export class ExecutionRunner extends PlatformElement {
             );
 
         } catch (error) {
-            console.error('[ExecutionRunner] Ошибка:', error);
+            console.error('[ExecutionRunner] Error:', error);
             this.emit('execution-error', { error: error.message });
         } finally {
             this._isRunning = false;
@@ -141,7 +141,7 @@ export class ExecutionRunner extends PlatformElement {
      */
     async resume(answer, contextId) {
         if (this._isRunning) {
-            console.warn('[ExecutionRunner] Уже выполняется');
+            console.warn('[ExecutionRunner] Already running');
             return;
         }
 
@@ -161,7 +161,7 @@ export class ExecutionRunner extends PlatformElement {
             );
 
         } catch (error) {
-            console.error('[ExecutionRunner] Ошибка возобновления:', error);
+            console.error('[ExecutionRunner] Resume error:', error);
             this.emit('execution-error', { error: error.message });
         } finally {
             this._isRunning = false;
@@ -172,7 +172,7 @@ export class ExecutionRunner extends PlatformElement {
      * Остановить выполнение
      */
     stop() {
-        console.log('[ExecutionRunner] Остановка выполнения');
+        console.log('[ExecutionRunner] Stopping execution');
         // Note: a2a.service doesn't support abort, so we just mark as stopped
         this._isRunning = false;
     }
@@ -182,7 +182,7 @@ export class ExecutionRunner extends PlatformElement {
      */
     _handleEvent(event) {
         if (event.error) {
-            console.error('[ExecutionRunner] Ошибка сервера (event.error):', event.error);
+            console.error('[ExecutionRunner] Server error (event.error):', event.error);
             const errorMessage = typeof event.error === 'object' && event.error.message 
                 ? event.error.message 
                 : typeof event.error === 'string' 
@@ -200,7 +200,7 @@ export class ExecutionRunner extends PlatformElement {
         const resultTaskId = result.taskId || result.task_id;
         if (resultTaskId && !this._taskId) {
             this._taskId = resultTaskId;
-            console.log('[ExecutionRunner] Получен taskId:', resultTaskId);
+            console.log('[ExecutionRunner] Received taskId:', resultTaskId);
             
             this.emit('execution-started', { 
                 contextId: this._contextId,
@@ -231,20 +231,20 @@ export class ExecutionRunner extends PlatformElement {
         if (artifactName.startsWith('node_start_')) {
             const nodeId = data?.node_id || artifactName.replace('node_start_', '');
             if (nodeId) {
-                console.log('[ExecutionRunner] Запуск ноды:', nodeId);
+                console.log('[ExecutionRunner] Node start:', nodeId);
                 this.emit('node-status', { nodeId, status: 'running' });
             }
         } else if (artifactName.startsWith('node_complete_')) {
             const nodeId = data?.node_id || artifactName.replace('node_complete_', '');
             if (nodeId) {
-                console.log('[ExecutionRunner] Завершение ноды:', nodeId);
+                console.log('[ExecutionRunner] Node complete:', nodeId);
                 this.emit('node-status', { nodeId, status: 'completed' });
             }
         } else if (artifactName.startsWith('node_error_')) {
             const nodeId = data?.node_id || artifactName.replace('node_error_', '');
             if (nodeId) {
                 const errorMessage = data?.error || this.i18n.t('execution_runner.err_node');
-                console.log('[ExecutionRunner] Ошибка ноды:', nodeId, errorMessage);
+                console.log('[ExecutionRunner] Node error:', nodeId, errorMessage);
                 
                 this._nodeErrors.set(nodeId, errorMessage);
                 
@@ -267,7 +267,7 @@ export class ExecutionRunner extends PlatformElement {
         const node_id = data.node_id;
         const node_type = data.node_type || 'unknown';
         const state_snapshot = data.state_snapshot ?? data.stateSnapshot ?? {};
-        console.log('[ExecutionRunner] Сработала точка останова (artifact):', node_id, node_type);
+        console.log('[ExecutionRunner] Breakpoint hit (artifact):', node_id, node_type);
 
         if (node_id) {
             this.emit('node-status', { nodeId: node_id, status: 'breakpoint' });
@@ -290,7 +290,7 @@ export class ExecutionRunner extends PlatformElement {
 
         if (isFinal) {
             if (state === 'completed') {
-                console.log('[ExecutionRunner] Выполнение завершено');
+                console.log('[ExecutionRunner] Execution finished');
                 const message = event.status.message;
                 const text = this._extractTextFromMessage(message);
                 this.emit('execution-completed', { 
@@ -299,7 +299,7 @@ export class ExecutionRunner extends PlatformElement {
                     taskId: this._taskId
                 });
             } else if (state === 'failed') {
-                console.log('[ExecutionRunner] Получен failed status:', event);
+                console.log('[ExecutionRunner] Received failed status:', event);
                 const message = event.status.message;
                 console.log('[ExecutionRunner] message object:', message);
                 const text = this._extractTextFromMessage(message);
@@ -309,7 +309,7 @@ export class ExecutionRunner extends PlatformElement {
                 const metadata = event.metadata || {};
                 
                 if (metadata.breakpoint) {
-                    console.log('[ExecutionRunner] Сработала точка останова из статуса');
+                    console.log('[ExecutionRunner] Breakpoint hit from status');
                     const nodeId = metadata.node_id;
                     const nodeType = metadata.node_type || 'unknown';
                     const stateSnapshot =
@@ -326,7 +326,7 @@ export class ExecutionRunner extends PlatformElement {
                         });
                     }
                 } else {
-                    console.log('[ExecutionRunner] Требуется ввод');
+                    console.log('[ExecutionRunner] Input required');
                     const message = event.status.message;
                     const question = this._extractTextFromMessage(message);
                     this.emit('input-required', { 

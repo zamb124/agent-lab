@@ -7,11 +7,11 @@ import { BaseNodeModal } from './base-node-modal.js';
 import '../../components/editors/json-field-editor.js';
 
 const CHANNEL_TYPES = [
-    { id: 'telegram', name: 'Telegram', icon: 'send', color: '#0088cc' },
-    { id: 'email', name: 'Email', icon: 'mail', color: '#ea4335' },
-    { id: 'whatsapp', name: 'WhatsApp', icon: 'message-circle', color: '#25d366' },
-    { id: 'sms', name: 'SMS', icon: 'phone', color: '#6b7280' },
-    { id: 'webhook', name: 'Webhook', icon: 'globe', color: '#8b5cf6' },
+    { id: 'telegram', icon: 'send', color: '#0088cc' },
+    { id: 'email', icon: 'mail', color: '#ea4335' },
+    { id: 'whatsapp', icon: 'message-circle', color: '#25d366' },
+    { id: 'sms', icon: 'phone', color: '#6b7280' },
+    { id: 'webhook', icon: 'globe', color: '#8b5cf6' },
 ];
 
 const CHANNEL_ACTION_IDS = {
@@ -193,9 +193,9 @@ export class ChannelNodeModal extends BaseNodeModal {
         if (this.selectedChannel === 'telegram') {
             return html`
                 <div class="config-section">
-                    <div class="config-section-title">Telegram</div>
+                    <div class="config-section-title">${this.i18n.t('trigger.channels.telegram')}</div>
                     <div class="form-group">
-                        <label class="form-label">Bot Token</label>
+                        <label class="form-label">${this.i18n.t('trigger_editor.telegram.bot_token')}</label>
                         <input 
                             type="text" 
                             name="bot_token"
@@ -206,7 +206,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                         <span class="form-hint">${this.i18n.t('node_modal.channel.var_hint')}</span>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Parse Mode</label>
+                        <label class="form-label">${this.i18n.t('node_modal.channel.field_parse_mode')}</label>
                         <select name="parse_mode" class="form-select">
                             <option value="HTML" ?selected=${config.channel_config?.parse_mode === 'HTML'}>HTML</option>
                             <option value="Markdown" ?selected=${config.channel_config?.parse_mode === 'Markdown'}>Markdown</option>
@@ -220,9 +220,9 @@ export class ChannelNodeModal extends BaseNodeModal {
         if (this.selectedChannel === 'webhook') {
             return html`
                 <div class="config-section">
-                    <div class="config-section-title">Webhook</div>
+                    <div class="config-section-title">${this.i18n.t('trigger.channels.webhook')}</div>
                     <div class="form-group">
-                        <label class="form-label">URL</label>
+                        <label class="form-label">${this.i18n.t('node_modal.channel.field_url')}</label>
                         <input 
                             type="text" 
                             name="webhook_url"
@@ -232,7 +232,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                         />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Headers (JSON)</label>
+                        <label class="form-label">${this.i18n.t('node_modal.channel.field_headers_json')}</label>
                         <json-field-editor
                             name="headers"
                             .value=${config.channel_config?.headers ? JSON.stringify(config.channel_config.headers, null, 2) : '{}'}
@@ -246,9 +246,9 @@ export class ChannelNodeModal extends BaseNodeModal {
         if (this.selectedChannel === 'email') {
             return html`
                 <div class="config-section">
-                    <div class="config-section-title">Email</div>
+                    <div class="config-section-title">${this.i18n.t('trigger.channels.email')}</div>
                     <div class="form-group">
-                        <label class="form-label">SMTP Host</label>
+                        <label class="form-label">${this.i18n.t('node_modal.channel.field_smtp_host')}</label>
                         <input 
                             type="text" 
                             name="smtp_host"
@@ -258,7 +258,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                         />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">From Email</label>
+                        <label class="form-label">${this.i18n.t('node_modal.channel.field_from_email')}</label>
                         <input 
                             type="text" 
                             name="from_email"
@@ -301,7 +301,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                             name="name"
                             class="form-input"
                             .value=${config.name || ''}
-                            placeholder="Send to Channel"
+                            placeholder=${this.i18n.t('node_defaults.name_channel')}
                         />
                     </div>
                     
@@ -320,7 +320,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                                     <div class="channel-icon" style="background: ${ch.color}20; color: ${ch.color};">
                                         <platform-icon name="${ch.icon}" size="20"></platform-icon>
                                     </div>
-                                    <span class="channel-label">${ch.name}</span>
+                                    <span class="channel-label">${this.i18n.t(`trigger.channels.${ch.id}`)}</span>
                                 </div>
                             `)}
                         </div>

@@ -252,7 +252,7 @@ export class ExecutionRunner extends PlatformElement {
         };
 
         this._eventSource.onerror = (error) => {
-            console.error('Ошибка SSE:', error);
+            console.error('SSE error:', error);
             this.status = 'error';
             this._addEvent('system', this.i18n.t('canvas_runner.sse_connection_error'));
             this._stopExecution();

@@ -28,7 +28,12 @@
     "err_send": "Произошла ошибка. Попробуйте снова.",
     "err_process": "Ошибка обработки сообщения",
     "err_load_settings": "Не удалось загрузить настройки: {{status}}",
-    "placeholder_message": "Напишите сообщение..."
+    "placeholder_message": "Напишите сообщение...",
+    "embed_window_title": "ИИ-ассистент",
+    "embed_powered_by": "На базе",
+    "embed_brand_name": "Humanitec",
+    "tool_calls_line": "Инструменты: {{names}}",
+    "reasoning_prefix": "Рассуждение: "
   },
   "platform_chat": {
     "title_menu": "Открыть меню",
@@ -56,7 +61,9 @@
   },
   "chat_input": {
     "title_attach": "Прикрепить файл",
-    "title_remove_file": "Удалить файл"
+    "title_remove_file": "Удалить файл",
+    "err_file_too_large": "Файл «{{name}}» слишком большой. Максимум {{max}}.",
+    "err_file_type": "Тип файла не поддерживается: {{name}}"
   },
   "bottom_toolbar": {
     "title_select": "Выбор (V)",
@@ -68,12 +75,250 @@
   "canvas_runner": {
     "sse_connection_error": "Ошибка соединения"
   },
+  "tool_picker": {
+    "title": "Добавить инструменты",
+    "err_load": "Ошибка загрузки инструментов: {{message}}",
+    "categories": "Категории",
+    "tag_all": "Все",
+    "tag_reason": "Reason",
+    "tag_mcp": "MCP",
+    "tag_misc": "Общие",
+    "tag_math": "Математика",
+    "tag_docs": "Документы",
+    "tag_api": "API интеграции",
+    "tag_validation": "Валидация",
+    "tag_flow": "Flows",
+    "empty": "Нет инструментов",
+    "selected": "Выбрано: {{count}}",
+    "add_with_count": "Добавить ({{count}})",
+    "badge_flow": "Flow",
+    "badge_tool": "Tool"
+  },
+  "edge_condition_modal": {
+    "title": "Условие перехода",
+    "heading": "Условие перехода",
+    "mode_simple": "Простой режим",
+    "mode_python": "Python код",
+    "preview_label": "Результат:",
+    "skip_no_condition": "Пропустить (без условия)",
+    "label_variable": "Переменная",
+    "select_placeholder": "-- выберите --",
+    "label_value": "Значение",
+    "variables_available": "Доступные переменные:",
+    "python_hint_1": "Функция check(state) должна возвращать True или False.",
+    "python_hint_2": "state — dict со всеми переменными текущего состояния.",
+    "err_variable": "Выберите переменную",
+    "err_value": "Введите значение",
+    "err_code": "Код должен содержать функцию check(state)",
+    "apply": "Применить",
+    "preview_python": "Python: check(state) -> bool"
+  },
+  "span_details": {
+    "section_llm": "LLM: запрос и ответ",
+    "tab_prompt": "Prompt",
+    "tab_messages": "Сообщения ({{count}})",
+    "tab_tools": "Инструменты ({{count}})",
+    "structured_output": "Structured output",
+    "tab_response": "Ответ",
+    "empty_messages": "Нет сообщений",
+    "empty_span": "Нет данных span",
+    "raw_json_title": "Raw JSON: {{name}}",
+    "raw_json_button_title": "Показать Raw JSON",
+    "role_system_prompt": "system prompt",
+    "role_assistant": "assistant",
+    "no_response_data": "Нет данных ответа",
+    "modal_title": "Детали span",
+    "section_main": "Основная информация",
+    "section_attributes": "Атрибуты",
+    "label_operation": "Операция:",
+    "label_kind": "Тип:",
+    "label_status": "Статус:",
+    "label_duration": "Длительность:",
+    "label_start_time": "Начало:",
+    "label_end_time": "Конец:"
+  },
+  "code_docs": {
+    "header": "Документация — {{language}}",
+    "loading": "Загрузка...",
+    "load_failed": "Не удалось загрузить документацию",
+    "tab_globals": "Глобальные",
+    "tab_modules": "Модули",
+    "tab_state": "State",
+    "tab_builtins": "Builtins",
+    "section_globals": "Глобальные переменные",
+    "section_modules": "Доступные модули",
+    "section_state": "Поля ExecutionState",
+    "section_builtins": "Встроенные функции",
+    "empty_globals": "Нет доступных глобальных переменных",
+    "empty_modules": "Нет доступных модулей",
+    "empty_state": "Нет доступных полей state",
+    "empty_builtins": "Нет доступных builtins",
+    "more_methods": "...и ещё {{count}} методов"
+  },
+  "flow_skills": {
+    "err_exists": "Skill «{{id}}» уже существует",
+    "created": "Skill «{{name}}» создан",
+    "confirm_delete": "Удалить skill «{{name}}»?",
+    "deleted": "Skill удалён"
+  },
+  "skills_tabs": {
+    "base_flow": "Base Flow",
+    "add_skill_button": "Skill",
+    "delete_skill_title": "Удалить skill"
+  },
+  "variables_panel": {
+    "title": "Переменные",
+    "add_title": "Добавить переменную",
+    "empty": "Нет переменных",
+    "dropdown_header": "Переменные агента",
+    "confirm_delete": "Удалить переменную «{{name}}»?",
+    "delete_row_title": "Удалить"
+  },
+  "flow_card": {
+    "skills_title": "Skills",
+    "add_skill_title": "Добавить skill",
+    "no_skills": "Нет skills",
+    "delete_title": "Удалить",
+    "open_chat_title": "Открыть чат",
+    "edit_title": "Редактировать"
+  },
+  "chat_message": {
+    "breakpoint_continue": "Продолжить",
+    "breakpoint_view_state": "Состояние",
+    "role_user": "Вы",
+    "role_assistant": "Ассистент",
+    "role_system": "Система",
+    "reasoning_title": "Reasoning",
+    "reasoning_section_observation": "Наблюдение",
+    "reasoning_section_analysis": "Анализ",
+    "reasoning_section_plan": "План",
+    "reasoning_section_action": "Действие",
+    "tool_call_label": "Инструмент: {{name}}",
+    "tool_result_label": "Результат: {{name}}",
+    "show_tracing_title": "Показать трейсинг"
+  },
+  "raw_json": {
+    "no_data": "Нет данных",
+    "download_title": "Скачать JSON"
+  },
+  "tool_create": {
+    "title": "Добавить tool",
+    "option_new_title": "Новый tool",
+    "option_new_desc": "Создать inline tool с кодом",
+    "option_existing_title": "Существующий",
+    "option_existing_desc": "Выбрать из библиотеки"
+  },
+  "resource_editor": {
+    "rag": {
+      "label_namespace": "Namespace",
+      "placeholder_namespace": "company:docs",
+      "hint_namespace": "ID или scope namespace для RAG",
+      "label_provider": "Провайдер",
+      "label_default_top_k": "Default Top K",
+      "hint_default_top_k": "Сколько результатов возвращать по умолчанию"
+    },
+    "llm": {
+      "label_provider": "Провайдер",
+      "label_model": "Модель",
+      "placeholder_model": "openai/gpt-4o",
+      "hint_model": "Полное имя модели",
+      "label_temperature": "Temperature",
+      "label_max_tokens": "Max tokens",
+      "placeholder_max_tokens": "По умолчанию модели",
+      "label_api_key": "API key",
+      "placeholder_api_key": "@var:OPENROUTER_KEY",
+      "hint_api_key": "Прямой ключ или @var:SECRET_NAME",
+      "label_base_url": "Base URL",
+      "placeholder_base_url": "https://openrouter.ai/api/v1",
+      "hint_base_url": "Base URL провайдера (опционально)"
+    },
+    "prompt": {
+      "label_template": "Шаблон",
+      "placeholder_template": "Ты {{ role }}. Твоя задача: {{ task }}",
+      "hint_template": "Jinja2 шаблон промпта",
+      "label_variables": "Переменные по умолчанию (JSON)",
+      "hint_variables": "Значения переменных по умолчанию"
+    },
+    "files": {
+      "label_bucket": "Bucket",
+      "hint_bucket": "Имя S3 bucket",
+      "label_prefix": "Prefix",
+      "hint_prefix": "Префикс пути (опционально)",
+      "label_endpoint": "Endpoint URL",
+      "hint_endpoint": "S3 endpoint URL (для MinIO)",
+      "label_region": "Region"
+    },
+    "cache": {
+      "label_namespace": "Namespace",
+      "hint_namespace": "Префикс namespace кэша",
+      "label_ttl": "TTL (сек)",
+      "hint_ttl": "Время жизни записей в секундах"
+    },
+    "http": {
+      "label_base_url": "Base URL",
+      "placeholder_base_url": "https://api.example.com",
+      "label_headers": "Заголовки (JSON)",
+      "label_timeout": "Таймаут (сек)",
+      "label_auth_type": "Тип авторизации",
+      "auth_none": "Нет",
+      "auth_bearer": "Bearer",
+      "auth_basic": "Basic",
+      "auth_api_key": "API key",
+      "label_auth_value": "Значение",
+      "placeholder_auth_value": "@var:API_KEY",
+      "hint_auth_value": "Токен или @var:SECRET_NAME"
+    },
+    "secret": {
+      "label_key": "Ключ секрета",
+      "placeholder_key": "@var:SECRET_NAME",
+      "hint_key": "Ссылка в формате @var:SECRET_NAME"
+    },
+    "code": {
+      "hint_inline": "Inline-код с функциями и классами"
+    }
+  },
+  "flow_canvas": {
+    "inherited_badge_title": "Унаследовано из base",
+    "channel_badge": {
+      "telegram": "Telegram",
+      "email": "Email",
+      "whatsapp": "WhatsApp",
+      "sms": "SMS",
+      "webhook": "Webhook"
+    }
+  },
+  "skill_create": {
+    "title": "Создать skill",
+    "err_id_required": "Введите ID skill",
+    "label_id": "ID skill",
+    "label_name": "Название",
+    "label_init": "Инициализация",
+    "copy_base": "Копировать Base Flow",
+    "copy_named": "Копировать «{{id}}»",
+    "empty_title": "Пустой skill",
+    "empty_desc": "Создать skill с нуля, наследуя только Base Flow",
+    "copy_desc": "Скопировать ноды и связи текущего skill",
+    "create": "Создать"
+  },
   "flows_app": {
     "loading": "Загрузка Agent Builder...",
     "redirect_auth": "Перенаправление на авторизацию..."
   },
+  "state_modal": {
+    "modal_title": "State",
+    "loading": "Загрузка state...",
+    "empty_no_data": "Нет данных state",
+    "empty_hint": "State появится после выполнения задачи"
+  },
   "property_panel": {
-    "select_node": "Выберите ноду для редактирования"
+    "select_node": "Выберите ноду для редактирования",
+    "select_resource": "Выберите ресурс для редактирования"
+  },
+  "state_mapping_editor": {
+    "empty": "Нет маппингов",
+    "hint_input": "state/var/const → параметр",
+    "hint_output": "результат → state",
+    "add_mapping": "+ Добавить"
   },
   "editor": {
     "load_agent_error": "Ошибка загрузки агента: {{message}}",
@@ -160,7 +405,12 @@
     "exit_tool_label": "Exit Tool",
     "reminder_text_label": "Текст reminder",
     "prompt_tool_id": "Введите ID инструмента:",
-    "prompt_label_required": "Промпт *"
+    "prompt_label_required": "Промпт *",
+    "inline_add_tool": "Инструмент",
+    "inline_add_react_flow": "React flow",
+    "inline_add_function": "Функция",
+    "inline_add_external_api": "Внешний API",
+    "inline_add_remote_flow": "Удалённый flow"
   },
   "mcp_servers": {
     "modal_title": "MCP серверы",
@@ -527,6 +777,7 @@
     "err_failed": "Выполнение завершилось с ошибкой"
   },
   "tracing_modal": {
+    "title": "Трейсинг",
     "empty_hint": "Трейсы появятся после выполнения задач",
     "loading": "Загрузка трейсинга...",
     "no_data": "Нет данных трейсинга"
@@ -654,7 +905,8 @@
       "field_smtp_host": "SMTP host",
       "field_from_email": "Email отправителя",
       "field_url": "URL",
-      "field_headers_json": "Headers (JSON)"
+      "field_headers_json": "Headers (JSON)",
+      "placeholder_node_id": "send_telegram"
     }
   },
   "flow_create": {
@@ -852,6 +1104,8 @@
     "channels": {
       "telegram": "Telegram",
       "email": "Email",
+      "whatsapp": "WhatsApp",
+      "sms": "SMS",
       "webhook": "Webhook"
     },
     "ex": {

@@ -8,11 +8,11 @@ import '../editors/json-field-editor.js';
 import '../editors/variable-input.js';
 
 const CHANNEL_TYPES = [
-    { id: 'telegram', name: 'Telegram', icon: 'send', color: '#0088cc' },
-    { id: 'email', name: 'Email', icon: 'mail', color: '#ea4335' },
-    { id: 'whatsapp', name: 'WhatsApp', icon: 'message-circle', color: '#25d366' },
-    { id: 'sms', name: 'SMS', icon: 'phone', color: '#6b7280' },
-    { id: 'webhook', name: 'Webhook', icon: 'globe', color: '#8b5cf6' },
+    { id: 'telegram', icon: 'send', color: '#0088cc' },
+    { id: 'email', icon: 'mail', color: '#ea4335' },
+    { id: 'whatsapp', icon: 'message-circle', color: '#25d366' },
+    { id: 'sms', icon: 'phone', color: '#6b7280' },
+    { id: 'webhook', icon: 'globe', color: '#8b5cf6' },
 ];
 
 const CHANNEL_ACTION_IDS = {
@@ -142,7 +142,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
         if (channel === 'telegram') {
             return html`
                 <div class="config-section">
-                    <div class="config-section-title">Telegram</div>
+                    <div class="config-section-title">${this.i18n.t('trigger.channels.telegram')}</div>
                     <div class="form-group">
                         <div class="form-label">
                             <span class="form-label-text">${this.i18n.t('trigger_editor.telegram.bot_token')}</span>
@@ -208,7 +208,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
         if (channel === 'webhook') {
             return html`
                 <div class="config-section">
-                    <div class="config-section-title">Webhook</div>
+                    <div class="config-section-title">${this.i18n.t('trigger.channels.webhook')}</div>
                     <div class="form-group">
                         <div class="form-label">
                             <span class="form-label-text">${this.i18n.t('node_modal.channel.field_url')}</span>
@@ -278,7 +278,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
                             <div class="channel-icon" style="background: ${ch.color}20; color: ${ch.color};">
                                 <platform-icon name="${ch.icon}" size="20"></platform-icon>
                             </div>
-                            <span class="channel-label">${ch.name}</span>
+                            <span class="channel-label">${this.i18n.t(`trigger.channels.${ch.id}`)}</span>
                         </div>
                     `)}
                 </div>

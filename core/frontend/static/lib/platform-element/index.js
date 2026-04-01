@@ -83,7 +83,16 @@ export class PlatformElement extends LitElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._platformI18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         PlatformElement._registerStandaloneNoZoomGuard();
+    }
+
+    disconnectedCallback() {
+        if (this._platformI18nUnsub) {
+            this._platformI18nUnsub();
+            this._platformI18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     static _registerStandaloneNoZoomGuard() {

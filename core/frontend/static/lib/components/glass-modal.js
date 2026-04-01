@@ -755,16 +755,11 @@ export class GlassModal extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         document.addEventListener('keydown', this._boundEscape);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         this._clearPortalCloseHooks();
         document.removeEventListener('keydown', this._boundEscape);
         document.removeEventListener('mousemove', this._boundMouseMove);

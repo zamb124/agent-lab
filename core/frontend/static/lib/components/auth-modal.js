@@ -144,19 +144,6 @@ export class AuthModal extends PlatformElement {
         this.returnPath = '';
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-    }
-
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
-        super.disconnectedCallback();
-    }
-
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
         if (changedProperties.has('open') && this.open) {

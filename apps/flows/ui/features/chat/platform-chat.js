@@ -299,7 +299,7 @@ export class PlatformChat extends PlatformIsland {
                 }
             }
 
-            /* Полноэкранный режим элемента (DOM fullscreen API) */
+            /* Element fullscreen (DOM Fullscreen API) */
             :host:fullscreen,
             :host:-webkit-full-screen {
                 margin: 0;

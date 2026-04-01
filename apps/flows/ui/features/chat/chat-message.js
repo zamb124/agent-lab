@@ -318,7 +318,12 @@ export class ChatMessage extends PlatformElement {
             }
             
             .breakpoint-icon {
-                font-size: var(--text-lg);
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: var(--warning);
+                flex-shrink: 0;
             }
             
             .breakpoint-title {
@@ -407,11 +412,15 @@ export class ChatMessage extends PlatformElement {
         this.taskId = '';
     }
 
+    _escapeRegex(s) {
+        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
     _getRoleName() {
         switch (this.role) {
-            case 'user': return 'Вы';
-            case 'assistant': return 'Ассистент';
-            case 'system': return 'Система';
+            case 'user': return this.i18n.t('chat_message.role_user');
+            case 'assistant': return this.i18n.t('chat_message.role_assistant');
+            case 'system': return this.i18n.t('chat_message.role_system');
             default: return this.role;
         }
     }
@@ -440,24 +449,25 @@ export class ChatMessage extends PlatformElement {
 
     _parseReasoningStructure(text) {
         if (!text) return '';
-        
-        const sections = [
-            { key: 'Наблюдение', icon: '👁', class: 'observation' },
-            { key: 'Анализ', icon: '🔍', class: 'analysis' },
-            { key: 'План', icon: '📋', class: 'plan' },
-            { key: 'Действие', icon: '⚡', class: 'action' }
+
+        const labelKeys = [
+            'chat_message.reasoning_section_observation',
+            'chat_message.reasoning_section_analysis',
+            'chat_message.reasoning_section_plan',
+            'chat_message.reasoning_section_action',
         ];
-        
+
         let html = text;
-        
-        for (const section of sections) {
-            const regex = new RegExp(`\\*\\*${section.key}:\\*\\*\\s*`, 'g');
-            html = html.replace(regex, 
-                `<div style="font-weight: bold; margin-top: 12px; color: var(--accent);">` +
-                `<span>${section.icon}</span> ${section.key}</div>`
+
+        for (const labelKey of labelKeys) {
+            const label = this.i18n.t(labelKey);
+            const regex = new RegExp(`\\*\\*${this._escapeRegex(label)}:\\*\\*\\s*`, 'g');
+            html = html.replace(
+                regex,
+                `<div style="font-weight: bold; margin-top: 12px; color: var(--accent);">${label}</div>`
             );
         }
-        
+
         if (window.marked) {
             return unsafeHTML(window.marked.parse(html));
         }
@@ -470,7 +480,7 @@ export class ChatMessage extends PlatformElement {
         return html`
             <div class="reasoning-container">
                 <div class="reasoning-header" @click=${this._toggleReasoning}>
-                    <span class="reasoning-title">🧠 Reasoning</span>
+                    <span class="reasoning-title">${this.i18n.t('chat_message.reasoning_title')}</span>
                     <span class="reasoning-toggle">${this.expandedStates.get('reasoning') ? '▼' : '▶'}</span>
                 </div>
                 <div class="reasoning-content ${this.expandedStates.get('reasoning') ? '' : 'collapsed'}">
@@ -489,7 +499,7 @@ export class ChatMessage extends PlatformElement {
             return html`
                 <div class="tool-call">
                     <div class="tool-header" @click=${() => this._toggleToolCall(index)}>
-                        <span class="tool-name">🔧 ${toolCall.name || 'Tool'}</span>
+                        <span class="tool-name">${this.i18n.t('chat_message.tool_call_label', { name: toolCall.name || 'Tool' })}</span>
                         <span class="reasoning-toggle">${isExpanded ? '▼' : '▶'}</span>
                     </div>
                     <div class="tool-content ${isExpanded ? '' : 'collapsed'}">
@@ -516,7 +526,7 @@ export class ChatMessage extends PlatformElement {
             return html`
                 <div class="tool-result">
                     <div class="tool-header" @click=${() => this._toggleToolResult(index)}>
-                        <span class="tool-name">✅ ${result.name || 'Result'}</span>
+                        <span class="tool-name">${this.i18n.t('chat_message.tool_result_label', { name: result.name || 'Result' })}</span>
                         <span class="reasoning-toggle">${isExpanded ? '▼' : '▶'}</span>
                     </div>
                     <div class="tool-content ${isExpanded ? '' : 'collapsed'}">
@@ -552,15 +562,15 @@ export class ChatMessage extends PlatformElement {
         return html`
             <div class="breakpoint">
                 <div class="breakpoint-header">
-                    <span class="breakpoint-icon">🔴</span>
+                    <span class="breakpoint-icon" aria-hidden="true"></span>
                     <span class="breakpoint-title">Breakpoint: ${this.breakpoint.nodeId}</span>
                 </div>
                 <div class="breakpoint-message">
                     ${window.marked ? unsafeHTML(window.marked.parse(this.breakpoint.message)) : this.breakpoint.message}
                 </div>
                 <div class="breakpoint-actions">
-                    <button class="btn" @click=${this._continueBreakpoint}>Continue</button>
-                    <button class="btn" @click=${this._viewBreakpointState}>View State</button>
+                    <button class="btn" @click=${this._continueBreakpoint}>${this.i18n.t('chat_message.breakpoint_continue')}</button>
+                    <button class="btn" @click=${this._viewBreakpointState}>${this.i18n.t('chat_message.breakpoint_view_state')}</button>
                 </div>
             </div>
         `;
@@ -596,7 +606,7 @@ export class ChatMessage extends PlatformElement {
         return html`
             <div class="file-item">
                 ${isImage ? html`
-                    <div>📷</div>
+                    <platform-icon name="doc-detail" size="20"></platform-icon>
                 ` : html`
                     <platform-icon name="file" size="20"></platform-icon>
                 `}
@@ -635,7 +645,7 @@ export class ChatMessage extends PlatformElement {
                             ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
                             ${this.role === 'assistant' && this.taskId && !this.streaming ? html`
                                 <div class="header-actions">
-                                    <button class="tracing-btn" @click=${this._showTracing} title="Показать трейсинг">
+                                    <button class="tracing-btn" @click=${this._showTracing} title=${this.i18n.t('chat_message.show_tracing_title')}>
                                         <platform-icon name="terminal" size="14"></platform-icon>
                                     </button>
                                 </div>

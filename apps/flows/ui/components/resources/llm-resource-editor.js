@@ -27,7 +27,7 @@ export class LLMResourceEditor extends BaseResourceEditor {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Provider</label>
+                <label class="form-label">${this.i18n.t('resource_editor.llm.label_provider')}</label>
                 <select 
                     class="form-select"
                     .value=${provider}
@@ -41,19 +41,19 @@ export class LLMResourceEditor extends BaseResourceEditor {
             </div>
             
             <div class="form-group">
-                <label class="form-label">Model</label>
+                <label class="form-label">${this.i18n.t('resource_editor.llm.label_model')}</label>
                 <input 
                     type="text" 
                     class="form-input"
                     .value=${model}
                     @input=${(e) => this._onInputChange('model', e.target.value)}
-                    placeholder="openai/gpt-4o"
+                    placeholder=${this.i18n.t('resource_editor.llm.placeholder_model')}
                 />
-                <span class="form-hint">Полное имя модели</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.llm.hint_model')}</span>
             </div>
             
             <div class="form-group">
-                <label class="form-label">Temperature</label>
+                <label class="form-label">${this.i18n.t('resource_editor.llm.label_temperature')}</label>
                 <input 
                     type="number" 
                     class="form-input"
@@ -66,38 +66,38 @@ export class LLMResourceEditor extends BaseResourceEditor {
             </div>
             
             <div class="form-group">
-                <label class="form-label">Max Tokens</label>
+                <label class="form-label">${this.i18n.t('resource_editor.llm.label_max_tokens')}</label>
                 <input 
                     type="number" 
                     class="form-input"
                     .value=${maxTokens}
                     @input=${(e) => this._onInputChange('max_tokens', parseInt(e.target.value) || null)}
-                    placeholder="По умолчанию модели"
+                    placeholder=${this.i18n.t('resource_editor.llm.placeholder_max_tokens')}
                 />
             </div>
             
             <div class="form-group">
-                <label class="form-label">API Key</label>
+                <label class="form-label">${this.i18n.t('resource_editor.llm.label_api_key')}</label>
                 <input 
                     type="password" 
                     class="form-input"
                     .value=${apiKey}
                     @input=${(e) => this._onInputChange('api_key', e.target.value)}
-                    placeholder="@var:OPENROUTER_KEY"
+                    placeholder=${this.i18n.t('resource_editor.llm.placeholder_api_key')}
                 />
-                <span class="form-hint">Прямой ключ или @var:SECRET_NAME</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.llm.hint_api_key')}</span>
             </div>
             
             <div class="form-group">
-                <label class="form-label">Base URL</label>
+                <label class="form-label">${this.i18n.t('resource_editor.llm.label_base_url')}</label>
                 <input 
                     type="text" 
                     class="form-input"
                     .value=${baseUrl}
                     @input=${(e) => this._onInputChange('base_url', e.target.value)}
-                    placeholder="https://openrouter.ai/api/v1"
+                    placeholder=${this.i18n.t('resource_editor.llm.placeholder_base_url')}
                 />
-                <span class="form-hint">Base URL провайдера (опционально)</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.llm.hint_base_url')}</span>
             </div>
         `;
     }

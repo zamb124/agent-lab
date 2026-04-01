@@ -194,10 +194,12 @@ export class LandingFooter extends PlatformElement {
     }
 
     _legalUrl(pathname) {
-        const params = new URLSearchParams(window.location.search);
-        const lang = params.get('lang');
+        const lang = new URLSearchParams(window.location.search).get('lang');
         if (lang === 'ru') {
             return `${pathname}?lang=ru`;
+        }
+        if (lang === 'en') {
+            return `${pathname}?lang=en`;
         }
         return pathname;
     }

@@ -57,7 +57,7 @@ export class CodeResourceEditor extends BaseResourceEditor {
                     @language-change=${this._onLanguageChange}
                     @open-docs=${this._onOpenDocs}
                 ></code-editor>
-                <span class="form-hint">Inline код с функциями и классами</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.code.hint_inline')}</span>
             </div>
         `;
     }

@@ -50,7 +50,6 @@ export class PlatformSidebar extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._checkMobile();
         this._setupResizeObserver();
         document.addEventListener('keydown', this._boundKeyHandler);
@@ -60,10 +59,6 @@ export class PlatformSidebar extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         this._resizeObserver?.disconnect();
         document.removeEventListener('keydown', this._boundKeyHandler);
         window.removeEventListener('platform-sidebar-open', this._boundOpenHandler);

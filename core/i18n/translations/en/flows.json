@@ -28,7 +28,12 @@
     "err_send": "Something went wrong. Please try again.",
     "err_process": "Could not process the message",
     "err_load_settings": "Failed to load settings: {{status}}",
-    "placeholder_message": "Type a message..."
+    "placeholder_message": "Type a message...",
+    "embed_window_title": "AI Assistant",
+    "embed_powered_by": "Powered by",
+    "embed_brand_name": "Humanitec",
+    "tool_calls_line": "Tools: {{names}}",
+    "reasoning_prefix": "Reasoning: "
   },
   "platform_chat": {
     "title_menu": "Open menu",
@@ -56,7 +61,9 @@
   },
   "chat_input": {
     "title_attach": "Attach file",
-    "title_remove_file": "Remove file"
+    "title_remove_file": "Remove file",
+    "err_file_too_large": "File \"{{name}}\" is too large. Maximum {{max}}.",
+    "err_file_type": "File type not supported: {{name}}"
   },
   "bottom_toolbar": {
     "title_select": "Select (V)",
@@ -68,12 +75,250 @@
   "canvas_runner": {
     "sse_connection_error": "Connection error"
   },
+  "tool_picker": {
+    "title": "Add tools",
+    "err_load": "Failed to load tools: {{message}}",
+    "categories": "Categories",
+    "tag_all": "All",
+    "tag_reason": "Reason",
+    "tag_mcp": "MCP",
+    "tag_misc": "General",
+    "tag_math": "Math",
+    "tag_docs": "Documents",
+    "tag_api": "API integrations",
+    "tag_validation": "Validation",
+    "tag_flow": "Flows",
+    "empty": "No tools",
+    "selected": "Selected: {{count}}",
+    "add_with_count": "Add ({{count}})",
+    "badge_flow": "Flow",
+    "badge_tool": "Tool"
+  },
+  "edge_condition_modal": {
+    "title": "Edge condition",
+    "heading": "Edge condition",
+    "mode_simple": "Simple mode",
+    "mode_python": "Python code",
+    "preview_label": "Result:",
+    "skip_no_condition": "Skip (no condition)",
+    "label_variable": "Variable",
+    "select_placeholder": "-- select --",
+    "label_value": "Value",
+    "variables_available": "Available variables:",
+    "python_hint_1": "The function check(state) must return True or False.",
+    "python_hint_2": "state is a dict with all variables of the current state.",
+    "err_variable": "Select a variable",
+    "err_value": "Enter a value",
+    "err_code": "Code must define check(state)",
+    "apply": "Apply",
+    "preview_python": "Python: check(state) -> bool"
+  },
+  "span_details": {
+    "section_llm": "LLM request / response",
+    "tab_prompt": "Prompt",
+    "tab_messages": "Messages ({{count}})",
+    "tab_tools": "Tools ({{count}})",
+    "structured_output": "Structured output",
+    "tab_response": "Response",
+    "empty_messages": "No messages",
+    "empty_span": "No span data",
+    "raw_json_title": "Raw JSON: {{name}}",
+    "raw_json_button_title": "Show raw JSON",
+    "role_system_prompt": "system prompt",
+    "role_assistant": "assistant",
+    "no_response_data": "No response data",
+    "modal_title": "Span details",
+    "section_main": "Overview",
+    "section_attributes": "Attributes",
+    "label_operation": "Operation:",
+    "label_kind": "Kind:",
+    "label_status": "Status:",
+    "label_duration": "Duration:",
+    "label_start_time": "Start time:",
+    "label_end_time": "End time:"
+  },
+  "code_docs": {
+    "header": "Documentation — {{language}}",
+    "loading": "Loading...",
+    "load_failed": "Could not load documentation",
+    "tab_globals": "Globals",
+    "tab_modules": "Modules",
+    "tab_state": "State",
+    "tab_builtins": "Builtins",
+    "section_globals": "Global variables",
+    "section_modules": "Available modules",
+    "section_state": "ExecutionState fields",
+    "section_builtins": "Built-in functions",
+    "empty_globals": "No global variables available",
+    "empty_modules": "No modules available",
+    "empty_state": "No state fields available",
+    "empty_builtins": "No builtins available",
+    "more_methods": "...and {{count}} more methods"
+  },
+  "flow_skills": {
+    "err_exists": "Skill \"{{id}}\" already exists",
+    "created": "Skill \"{{name}}\" created",
+    "confirm_delete": "Delete skill \"{{name}}\"?",
+    "deleted": "Skill deleted"
+  },
+  "skills_tabs": {
+    "base_flow": "Base Flow",
+    "add_skill_button": "Skill",
+    "delete_skill_title": "Remove skill"
+  },
+  "variables_panel": {
+    "title": "Variables",
+    "add_title": "Add variable",
+    "empty": "No variables",
+    "dropdown_header": "Agent variables",
+    "confirm_delete": "Delete variable \"{{name}}\"?",
+    "delete_row_title": "Remove"
+  },
+  "flow_card": {
+    "skills_title": "Skills",
+    "add_skill_title": "Add skill",
+    "no_skills": "No skills",
+    "delete_title": "Delete",
+    "open_chat_title": "Open chat",
+    "edit_title": "Edit"
+  },
+  "chat_message": {
+    "breakpoint_continue": "Continue",
+    "breakpoint_view_state": "View state",
+    "role_user": "You",
+    "role_assistant": "Assistant",
+    "role_system": "System",
+    "reasoning_title": "Reasoning",
+    "reasoning_section_observation": "Observation",
+    "reasoning_section_analysis": "Analysis",
+    "reasoning_section_plan": "Plan",
+    "reasoning_section_action": "Action",
+    "tool_call_label": "Tool: {{name}}",
+    "tool_result_label": "Result: {{name}}",
+    "show_tracing_title": "Open tracing"
+  },
+  "raw_json": {
+    "no_data": "No data",
+    "download_title": "Download JSON"
+  },
+  "tool_create": {
+    "title": "Add tool",
+    "option_new_title": "New tool",
+    "option_new_desc": "Create an inline tool with code",
+    "option_existing_title": "Existing",
+    "option_existing_desc": "Pick from the library"
+  },
+  "resource_editor": {
+    "rag": {
+      "label_namespace": "Namespace",
+      "placeholder_namespace": "company:docs",
+      "hint_namespace": "Namespace ID or scope for RAG",
+      "label_provider": "Provider",
+      "label_default_top_k": "Default Top K",
+      "hint_default_top_k": "Default number of results to return"
+    },
+    "llm": {
+      "label_provider": "Provider",
+      "label_model": "Model",
+      "placeholder_model": "openai/gpt-4o",
+      "hint_model": "Full model name",
+      "label_temperature": "Temperature",
+      "label_max_tokens": "Max tokens",
+      "placeholder_max_tokens": "Model default",
+      "label_api_key": "API key",
+      "placeholder_api_key": "@var:OPENROUTER_KEY",
+      "hint_api_key": "Direct key or @var:SECRET_NAME",
+      "label_base_url": "Base URL",
+      "placeholder_base_url": "https://openrouter.ai/api/v1",
+      "hint_base_url": "Provider base URL (optional)"
+    },
+    "prompt": {
+      "label_template": "Template",
+      "placeholder_template": "You are {{ role }}. Your task: {{ task }}",
+      "hint_template": "Jinja2 prompt template",
+      "label_variables": "Default variables (JSON)",
+      "hint_variables": "Default variable values"
+    },
+    "files": {
+      "label_bucket": "Bucket",
+      "hint_bucket": "S3 bucket name",
+      "label_prefix": "Prefix",
+      "hint_prefix": "Path prefix (optional)",
+      "label_endpoint": "Endpoint URL",
+      "hint_endpoint": "S3 endpoint URL (for MinIO)",
+      "label_region": "Region"
+    },
+    "cache": {
+      "label_namespace": "Namespace",
+      "hint_namespace": "Cache namespace prefix",
+      "label_ttl": "TTL (seconds)",
+      "hint_ttl": "Entry time-to-live in seconds"
+    },
+    "http": {
+      "label_base_url": "Base URL",
+      "placeholder_base_url": "https://api.example.com",
+      "label_headers": "Headers (JSON)",
+      "label_timeout": "Timeout (sec)",
+      "label_auth_type": "Auth type",
+      "auth_none": "None",
+      "auth_bearer": "Bearer token",
+      "auth_basic": "Basic auth",
+      "auth_api_key": "API key",
+      "label_auth_value": "Auth value",
+      "placeholder_auth_value": "@var:API_KEY",
+      "hint_auth_value": "Token or @var:SECRET_NAME"
+    },
+    "secret": {
+      "label_key": "Secret key",
+      "placeholder_key": "@var:SECRET_NAME",
+      "hint_key": "Reference in the form @var:SECRET_NAME"
+    },
+    "code": {
+      "hint_inline": "Inline code with functions and classes"
+    }
+  },
+  "flow_canvas": {
+    "inherited_badge_title": "Inherited from base",
+    "channel_badge": {
+      "telegram": "Telegram",
+      "email": "Email",
+      "whatsapp": "WhatsApp",
+      "sms": "SMS",
+      "webhook": "Webhook"
+    }
+  },
+  "skill_create": {
+    "title": "Create skill",
+    "err_id_required": "Enter skill ID",
+    "label_id": "Skill ID",
+    "label_name": "Name",
+    "label_init": "Initialization",
+    "copy_base": "Copy base flow",
+    "copy_named": "Copy \"{{id}}\"",
+    "empty_title": "Empty skill",
+    "empty_desc": "Create a skill from scratch, inheriting only the base flow",
+    "copy_desc": "Copy nodes and edges from the current skill",
+    "create": "Create"
+  },
   "flows_app": {
     "loading": "Loading Agent Builder...",
     "redirect_auth": "Redirecting to authentication..."
   },
+  "state_modal": {
+    "modal_title": "State",
+    "loading": "Loading state...",
+    "empty_no_data": "No state data",
+    "empty_hint": "State appears after the task has run"
+  },
   "property_panel": {
-    "select_node": "Select a node to edit"
+    "select_node": "Select a node to edit",
+    "select_resource": "Select a resource to edit"
+  },
+  "state_mapping_editor": {
+    "empty": "No mappings",
+    "hint_input": "state/var/const → parameter",
+    "hint_output": "result → state",
+    "add_mapping": "+ Add"
   },
   "editor": {
     "load_agent_error": "Failed to load agent: {{message}}",
@@ -160,7 +405,12 @@
     "exit_tool_label": "Exit Tool",
     "reminder_text_label": "Reminder text",
     "prompt_tool_id": "Enter tool ID:",
-    "prompt_label_required": "Prompt *"
+    "prompt_label_required": "Prompt *",
+    "inline_add_tool": "Tool",
+    "inline_add_react_flow": "React flow",
+    "inline_add_function": "Function",
+    "inline_add_external_api": "External API",
+    "inline_add_remote_flow": "Remote flow"
   },
   "mcp_servers": {
     "modal_title": "MCP servers",
@@ -527,6 +777,7 @@
     "err_failed": "Execution failed with an error"
   },
   "tracing_modal": {
+    "title": "Tracing",
     "empty_hint": "Traces will appear after tasks run",
     "loading": "Loading traces...",
     "no_data": "No trace data"
@@ -654,7 +905,8 @@
       "field_smtp_host": "SMTP host",
       "field_from_email": "From email",
       "field_url": "URL",
-      "field_headers_json": "Headers (JSON)"
+      "field_headers_json": "Headers (JSON)",
+      "placeholder_node_id": "send_telegram"
     }
   },
   "flow_create": {
@@ -852,6 +1104,8 @@
     "channels": {
       "telegram": "Telegram",
       "email": "Email",
+      "whatsapp": "WhatsApp",
+      "sms": "SMS",
       "webhook": "Webhook"
     },
     "ex": {

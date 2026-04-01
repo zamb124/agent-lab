@@ -113,7 +113,7 @@ export class BottomToolbar extends PlatformElement {
                 <button 
                     class="toolbar-btn ${activeTool === 'add' ? 'active' : ''}"
                     @click=${() => this._setTool('add')}
-                    title="Add Node (A)"
+                    title=${this.i18n.t('bottom_toolbar.title_add_node')}
                 >
                     <platform-icon name="plus" size="20"></platform-icon>
                 </button>

@@ -134,7 +134,7 @@ export class SkillCreateModal extends PlatformModal {
 
     _onCreate() {
         if (!this.skillId.trim()) {
-            this.error('Введите ID скилла');
+            this.error(this.i18n.t('skill_create.err_id_required'));
             return;
         }
 
@@ -149,17 +149,17 @@ export class SkillCreateModal extends PlatformModal {
     }
 
     renderHeader() {
-        return 'Создать скилл';
+        return this.i18n.t('skill_create.title');
     }
 
     renderBody() {
         const copyLabel = this.currentSkillId === 'base' 
-            ? 'Копировать Base Flow' 
-            : `Копировать "${this.currentSkillId}"`;
+            ? this.i18n.t('skill_create.copy_base')
+            : this.i18n.t('skill_create.copy_named', { id: this.currentSkillId });
 
         return html`
             <div class="form-group">
-                <label class="form-label">ID скилла</label>
+                <label class="form-label">${this.i18n.t('skill_create.label_id')}</label>
                 <input
                     type="text"
                     class="form-input"
@@ -170,7 +170,7 @@ export class SkillCreateModal extends PlatformModal {
             </div>
             
             <div class="form-group">
-                <label class="form-label">Название</label>
+                <label class="form-label">${this.i18n.t('skill_create.label_name')}</label>
                 <input
                     type="text"
                     class="form-input"
@@ -181,7 +181,7 @@ export class SkillCreateModal extends PlatformModal {
             </div>
             
             <div class="form-group">
-                <label class="form-label">Инициализация</label>
+                <label class="form-label">${this.i18n.t('skill_create.label_init')}</label>
                 <div class="radio-group">
                     <div 
                         class="radio-option ${this.initType === 'empty' ? 'selected' : ''}"
@@ -195,9 +195,9 @@ export class SkillCreateModal extends PlatformModal {
                             .checked=${this.initType === 'empty'}
                         />
                         <div class="radio-content">
-                            <div class="radio-title">Пустой скилл</div>
+                            <div class="radio-title">${this.i18n.t('skill_create.empty_title')}</div>
                             <div class="radio-description">
-                                Создать скилл с нуля, наследуя только Base Flow
+                                ${this.i18n.t('skill_create.empty_desc')}
                             </div>
                         </div>
                     </div>
@@ -216,7 +216,7 @@ export class SkillCreateModal extends PlatformModal {
                         <div class="radio-content">
                             <div class="radio-title">${copyLabel}</div>
                             <div class="radio-description">
-                                Скопировать ноды и связи текущего скилла
+                                ${this.i18n.t('skill_create.copy_desc')}
                             </div>
                         </div>
                     </div>
@@ -228,10 +228,10 @@ export class SkillCreateModal extends PlatformModal {
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${this.close}>
-                Отмена
+                ${this.i18n.t('editor.cancel')}
             </platform-button>
             <platform-button variant="primary" @click=${this._onCreate}>
-                Создать
+                ${this.i18n.t('skill_create.create')}
             </platform-button>
         `;
     }

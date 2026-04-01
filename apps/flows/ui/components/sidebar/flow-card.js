@@ -348,21 +348,21 @@ export class FlowCard extends PlatformElement {
                         <button 
                             class="action-btn chat" 
                             @click=${(e) => this._emitAction('chat', e)}
-                            title="Открыть чат"
+                            title=${this.i18n.t('flow_card.open_chat_title')}
                         >
                             <platform-icon name="chat" size="14"></platform-icon>
                         </button>
                         <button 
                             class="action-btn" 
                             @click=${(e) => this._emitAction('edit', e)}
-                            title="Редактировать"
+                            title=${this.i18n.t('flow_card.edit_title')}
                         >
                             <platform-icon name="edit" size="14"></platform-icon>
                         </button>
                         <button 
                             class="action-btn danger" 
                             @click=${(e) => this._emitAction('delete', e)}
-                            title="Удалить"
+                            title=${this.i18n.t('flow_card.delete_title')}
                         >
                             <platform-icon name="trash" size="14"></platform-icon>
                         </button>
@@ -376,11 +376,11 @@ export class FlowCard extends PlatformElement {
                     <div class="flow-details">
                         <div class="skills-section">
                             <div class="skills-header">
-                                <span class="skills-title">Skills</span>
+                                <span class="skills-title">${this.i18n.t('flow_card.skills_title')}</span>
                                 <button 
                                     class="skill-add-btn" 
                                     @click=${(e) => this._emitAction('create-skill', e)}
-                                    title="Добавить skill"
+                                    title=${this.i18n.t('flow_card.add_skill_title')}
                                 >
                                     <platform-icon name="plus" size="12"></platform-icon>
                                 </button>
@@ -397,7 +397,7 @@ export class FlowCard extends PlatformElement {
                                     `)}
                                 </div>
                             ` : html`
-                                <div class="skills-empty">Нет skills</div>
+                                <div class="skills-empty">${this.i18n.t('flow_card.no_skills')}</div>
                             `}
                         </div>
                     </div>

@@ -65,7 +65,6 @@ export class PlatformUser extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._loadUser();
         window.addEventListener(AppEvents.AUTH_CHANGE, () => this._loadUser());
         document.addEventListener('click', this._boundDocumentClick);
@@ -79,10 +78,6 @@ export class PlatformUser extends PlatformElement {
     }
 
     disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         super.disconnectedCallback();
         this._avatarRetry.cancel();
         document.removeEventListener('click', this._boundDocumentClick);

@@ -197,17 +197,17 @@ export class CodeDocsModal extends PlatformModal {
             <div class="modal-icon info">
                 <platform-icon name="book-open" size="24"></platform-icon>
             </div>
-            <span>Документация - ${this._getLanguageLabel()}</span>
+            <span>${this.i18n.t('code_docs.header', { language: this._getLanguageLabel() })}</span>
         `;
     }
 
     renderBody() {
         if (this._loading) {
-            return html`<div class="loading">Загрузка...</div>`;
+            return html`<div class="loading">${this.i18n.t('code_docs.loading')}</div>`;
         }
         
         if (!this._docsData) {
-            return html`<div class="empty-state">Не удалось загрузить документацию</div>`;
+            return html`<div class="empty-state">${this.i18n.t('code_docs.load_failed')}</div>`;
         }
         
         return html`
@@ -216,25 +216,25 @@ export class CodeDocsModal extends PlatformModal {
                     class="docs-tab ${this._activeTab === 'globals' ? 'active' : ''}"
                     @click=${() => this._setTab('globals')}
                 >
-                    Globals
+                    ${this.i18n.t('code_docs.tab_globals')}
                 </button>
                 <button 
                     class="docs-tab ${this._activeTab === 'modules' ? 'active' : ''}"
                     @click=${() => this._setTab('modules')}
                 >
-                    Modules
+                    ${this.i18n.t('code_docs.tab_modules')}
                 </button>
                 <button 
                     class="docs-tab ${this._activeTab === 'state' ? 'active' : ''}"
                     @click=${() => this._setTab('state')}
                 >
-                    State
+                    ${this.i18n.t('code_docs.tab_state')}
                 </button>
                 <button 
                     class="docs-tab ${this._activeTab === 'builtins' ? 'active' : ''}"
                     @click=${() => this._setTab('builtins')}
                 >
-                    Builtins
+                    ${this.i18n.t('code_docs.tab_builtins')}
                 </button>
             </div>
             
@@ -263,14 +263,14 @@ export class CodeDocsModal extends PlatformModal {
         const globals = this._docsData?.globals || [];
         
         if (globals.length === 0) {
-            return html`<div class="empty-state">Нет доступных глобальных переменных</div>`;
+            return html`<div class="empty-state">${this.i18n.t('code_docs.empty_globals')}</div>`;
         }
         
         return html`
             <div class="docs-section">
                 <div class="docs-section-title">
                     <platform-icon name="variable" size="16"></platform-icon>
-                    Глобальные переменные
+                    ${this.i18n.t('code_docs.section_globals')}
                 </div>
                 ${globals.map(g => html`
                     <div class="docs-item">
@@ -288,14 +288,14 @@ export class CodeDocsModal extends PlatformModal {
         const moduleMethods = this._docsData?.module_methods || {};
         
         if (modules.length === 0) {
-            return html`<div class="empty-state">Нет доступных модулей</div>`;
+            return html`<div class="empty-state">${this.i18n.t('code_docs.empty_modules')}</div>`;
         }
         
         return html`
             <div class="docs-section">
                 <div class="docs-section-title">
                     <platform-icon name="package" size="16"></platform-icon>
-                    Доступные модули
+                    ${this.i18n.t('code_docs.section_modules')}
                 </div>
                 <div class="modules-grid">
                     ${modules.map(m => html`
@@ -316,7 +316,7 @@ export class CodeDocsModal extends PlatformModal {
                     `)}
                     ${methods.length > 10 ? html`
                         <div class="docs-item">
-                            <span class="docs-item-desc">...и ещё ${methods.length - 10} методов</span>
+                            <span class="docs-item-desc">${this.i18n.t('code_docs.more_methods', { count: methods.length - 10 })}</span>
                         </div>
                     ` : ''}
                 </div>
@@ -328,14 +328,14 @@ export class CodeDocsModal extends PlatformModal {
         const stateFields = this._docsData?.state_fields || [];
         
         if (stateFields.length === 0) {
-            return html`<div class="empty-state">Нет доступных полей state</div>`;
+            return html`<div class="empty-state">${this.i18n.t('code_docs.empty_state')}</div>`;
         }
         
         return html`
             <div class="docs-section">
                 <div class="docs-section-title">
                     <platform-icon name="database" size="16"></platform-icon>
-                    Поля ExecutionState
+                    ${this.i18n.t('code_docs.section_state')}
                 </div>
                 ${stateFields.map(f => html`
                     <div class="docs-item">
@@ -352,14 +352,14 @@ export class CodeDocsModal extends PlatformModal {
         const builtins = this._docsData?.builtins || [];
         
         if (builtins.length === 0) {
-            return html`<div class="empty-state">Нет доступных builtins</div>`;
+            return html`<div class="empty-state">${this.i18n.t('code_docs.empty_builtins')}</div>`;
         }
         
         return html`
             <div class="docs-section">
                 <div class="docs-section-title">
                     <platform-icon name="code" size="16"></platform-icon>
-                    Встроенные функции
+                    ${this.i18n.t('code_docs.section_builtins')}
                 </div>
                 <div class="modules-grid">
                     ${builtins.map(b => html`

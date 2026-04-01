@@ -8,9 +8,24 @@ const SUPPORTED = ['ru', 'en'];
 const COOKIE_NAME = 'language';
 const COOKIE_MAX_AGE_SEC = 365 * 24 * 60 * 60;
 
+/**
+ * Локаль по языку ОС/браузера: только ru → ru, иначе en (в т.ч. iOS/Android WebView через navigator.languages).
+ */
+export function defaultLocaleFromNavigator() {
+    if (typeof navigator === 'undefined') {
+        return 'en';
+    }
+    const raw =
+        navigator.languages && navigator.languages.length > 0
+            ? navigator.languages[0]
+            : navigator.language || '';
+    const primary = String(raw).split('-')[0].toLowerCase();
+    return primary === 'ru' ? 'ru' : 'en';
+}
+
 class I18nService {
     constructor() {
-        this._currentLocale = 'ru';
+        this._currentLocale = 'en';
         this._fallbackLocale = 'ru';
         this._translations = {};
         this._listeners = new Set();
@@ -61,12 +76,7 @@ class I18nService {
             return;
         }
 
-        const browserLocale = navigator.language || navigator.userLanguage;
-        const locale = browserLocale.split('-')[0];
-
-        if (SUPPORTED.includes(locale)) {
-            this._currentLocale = locale;
-        }
+        this._currentLocale = defaultLocaleFromNavigator();
     }
 
     /**

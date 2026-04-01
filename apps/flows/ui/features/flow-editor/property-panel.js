@@ -60,7 +60,7 @@ export class PropertyPanel extends PlatformElement {
         
         // ВАЖНО: type должен быть всегда
         if (!config.type) {
-            console.error('[PropertyPanel] Нет type в ноде!', this.node);
+            console.error('[PropertyPanel] Node has no type', this.node);
             this.config = null;
             return;
         }

@@ -125,21 +125,21 @@ export class SkillItem extends PlatformElement {
                     <button 
                         class="action-btn chat" 
                         @click=${(e) => this._emitAction('chat', e)}
-                        title="Открыть чат"
+                        title=${this.i18n.t('flow_card.open_chat_title')}
                     >
                         <platform-icon name="chat" size="12"></platform-icon>
                     </button>
                     <button 
                         class="action-btn" 
                         @click=${(e) => this._emitAction('edit', e)}
-                        title="Редактировать"
+                        title=${this.i18n.t('flow_card.edit_title')}
                     >
                         <platform-icon name="edit" size="12"></platform-icon>
                     </button>
                     <button 
                         class="action-btn danger" 
                         @click=${(e) => this._emitAction('delete-skill', e)}
-                        title="Удалить"
+                        title=${this.i18n.t('flow_card.delete_title')}
                     >
                         <platform-icon name="trash" size="12"></platform-icon>
                     </button>

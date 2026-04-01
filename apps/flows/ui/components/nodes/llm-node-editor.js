@@ -1155,24 +1155,24 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                 <div class="tools-add-menu" @click=${(e) => e.stopPropagation()}>
                                     <div class="menu-item" @click=${() => this._onCreateInline('tool')}>
                                         <platform-icon name="tool" size="14"></platform-icon>
-                                        <span>Tool</span>
+                                        <span>${this.i18n.t('llm_node.inline_add_tool')}</span>
                                     </div>
                                     <div class="menu-item" @click=${() => this._onCreateInline('llm_node')}>
                                         <platform-icon name="llm_node" size="14"></platform-icon>
-                                        <span>React flow</span>
+                                        <span>${this.i18n.t('llm_node.inline_add_react_flow')}</span>
                                     </div>
                                     <div class="menu-item" @click=${() => this._onCreateInline('function')}>
                                         <platform-icon name="code" size="14"></platform-icon>
-                                        <span>Function</span>
+                                        <span>${this.i18n.t('llm_node.inline_add_function')}</span>
                                     </div>
                                     <div class="menu-divider"></div>
                                     <div class="menu-item" @click=${() => this._onCreateInline('external_api')}>
                                         <platform-icon name="globe" size="14"></platform-icon>
-                                        <span>External API</span>
+                                        <span>${this.i18n.t('llm_node.inline_add_external_api')}</span>
                                     </div>
                                     <div class="menu-item" @click=${() => this._onCreateInline('remote_flow')}>
                                         <platform-icon name="server" size="14"></platform-icon>
-                                        <span>Remote flow</span>
+                                        <span>${this.i18n.t('llm_node.inline_add_remote_flow')}</span>
                                     </div>
                                 </div>
                             ` : ''}

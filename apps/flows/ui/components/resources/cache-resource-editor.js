@@ -23,7 +23,7 @@ export class CacheResourceEditor extends BaseResourceEditor {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Namespace</label>
+                <label class="form-label">${this.i18n.t('resource_editor.cache.label_namespace')}</label>
                 <input 
                     type="text" 
                     class="form-input"
@@ -31,11 +31,11 @@ export class CacheResourceEditor extends BaseResourceEditor {
                     @input=${(e) => this._onInputChange('namespace', e.target.value)}
                     placeholder="agent:cache"
                 />
-                <span class="form-hint">Cache namespace prefix</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.cache.hint_namespace')}</span>
             </div>
             
             <div class="form-group">
-                <label class="form-label">TTL (seconds)</label>
+                <label class="form-label">${this.i18n.t('resource_editor.cache.label_ttl')}</label>
                 <input 
                     type="number" 
                     class="form-input"
@@ -43,7 +43,7 @@ export class CacheResourceEditor extends BaseResourceEditor {
                     min="1"
                     @input=${(e) => this._onInputChange('ttl', parseInt(e.target.value) || 3600)}
                 />
-                <span class="form-hint">Время жизни записей в секундах</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.cache.hint_ttl')}</span>
             </div>
         `;
     }

@@ -302,7 +302,12 @@ export class ChatInput extends PlatformElement {
 
     _validateFile(file) {
         if (file.size > this.maxFileSize) {
-            this.error(`Файл ${file.name} слишком большой. Максимум ${this._formatFileSize(this.maxFileSize)}`);
+            this.error(
+                this.i18n.t('chat_input.err_file_too_large', {
+                    name: file.name,
+                    max: this._formatFileSize(this.maxFileSize),
+                })
+            );
             return false;
         }
         
@@ -312,7 +317,7 @@ export class ChatInput extends PlatformElement {
         ];
         
         if (!allowedTypes.includes(file.type)) {
-            this.error(`Тип файла ${file.name} не поддерживается`);
+            this.error(this.i18n.t('chat_input.err_file_type', { name: file.name }));
             return false;
         }
         

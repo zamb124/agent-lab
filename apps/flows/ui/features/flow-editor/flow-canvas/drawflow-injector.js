@@ -351,7 +351,7 @@ flow-canvas .context-menu-separator {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* Language badge для code нод */
+/* Language badge for code nodes */
 .drawflow .agent-node-lang-badge {
     position: absolute !important;
     bottom: -4px !important;

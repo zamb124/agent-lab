@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { defaultLocaleFromNavigator } from '@platform/services/i18n/i18n.service.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class LandingPage extends PlatformElement {
@@ -307,14 +308,22 @@ export class LegalPage extends PlatformElement {
     }
 
     _resolveLocaleFromQuery() {
-        const lang = new URLSearchParams(window.location.search).get('lang');
-        return lang === 'ru' ? 'ru' : 'en';
+        const raw = new URLSearchParams(window.location.search).get('lang');
+        if (raw === 'ru') {
+            return 'ru';
+        }
+        if (raw === 'en') {
+            return 'en';
+        }
+        return defaultLocaleFromNavigator();
     }
 
     _buildUrlWithLang(pathname, lang) {
         const params = new URLSearchParams(window.location.search);
         if (lang === 'ru') {
             params.set('lang', 'ru');
+        } else if (lang === 'en') {
+            params.set('lang', 'en');
         } else {
             params.delete('lang');
         }

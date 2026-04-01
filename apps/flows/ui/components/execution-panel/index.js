@@ -132,12 +132,12 @@ export class ExecutionPanel extends PlatformElement {
         const answer = this.message.trim();
         
         if (!this.contextId) {
-            console.warn('[ExecutionPanel] Нет contextId для resume');
+            console.warn('[ExecutionPanel] No contextId for resume');
             return;
         }
 
         if (this.inputQuestion && !answer) {
-            console.warn('[ExecutionPanel] Требуется ответ на вопрос');
+            console.warn('[ExecutionPanel] Answer required for the question');
             return;
         }
 

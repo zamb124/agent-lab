@@ -24,19 +24,19 @@ export class RAGResourceEditor extends BaseResourceEditor {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Namespace</label>
+                <label class="form-label">${this.i18n.t('resource_editor.rag.label_namespace')}</label>
                 <input 
                     type="text" 
                     class="form-input"
                     .value=${namespace}
                     @input=${(e) => this._onInputChange('namespace', e.target.value)}
-                    placeholder="company:docs"
+                    placeholder=${this.i18n.t('resource_editor.rag.placeholder_namespace')}
                 />
-                <span class="form-hint">ID или scope namespace для RAG</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.rag.hint_namespace')}</span>
             </div>
             
             <div class="form-group">
-                <label class="form-label">Provider</label>
+                <label class="form-label">${this.i18n.t('resource_editor.rag.label_provider')}</label>
                 <select 
                     class="form-select"
                     .value=${provider}
@@ -49,7 +49,7 @@ export class RAGResourceEditor extends BaseResourceEditor {
             </div>
             
             <div class="form-group">
-                <label class="form-label">Default Top K</label>
+                <label class="form-label">${this.i18n.t('resource_editor.rag.label_default_top_k')}</label>
                 <input 
                     type="number" 
                     class="form-input"
@@ -58,7 +58,7 @@ export class RAGResourceEditor extends BaseResourceEditor {
                     max="100"
                     @input=${(e) => this._onInputChange('default_top_k', parseInt(e.target.value) || 5)}
                 />
-                <span class="form-hint">Количество результатов по умолчанию</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.rag.hint_default_top_k')}</span>
             </div>
         `;
     }

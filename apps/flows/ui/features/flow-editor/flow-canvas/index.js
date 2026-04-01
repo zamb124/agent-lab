@@ -57,15 +57,13 @@ const CHANNEL_NODE_BADGE_ICONS = {
     webhook: 'globe',
 };
 
-const CHANNEL_NODE_BADGE_TITLES = {
-    telegram: 'Telegram',
-    email: 'Email',
-    whatsapp: 'WhatsApp',
-    sms: 'SMS',
-    webhook: 'Webhook',
-};
-
 export class FlowCanvas extends PlatformElement {
+    _channelBadgeTitle(channelId) {
+        const key = `flow_canvas.channel_badge.${channelId}`;
+        const label = this.i18n.t(key);
+        return label === key ? channelId : label;
+    }
+
     createRenderRoot() {
         return this;
     }
@@ -818,8 +816,9 @@ export class FlowCanvas extends PlatformElement {
         const entryBadge = isEntry 
             ? '<div class="agent-node-entry-badge">▶</div>' 
             : '';
+        const inheritedTitle = this.i18n.t('flow_canvas.inherited_badge_title');
         const inheritedBadge = isInherited
-            ? '<div class="agent-node-inherited-badge" title="Inherited from base"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M8 3l-3 3M8 3l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'
+            ? `<div class="agent-node-inherited-badge" title="${inheritedTitle.replace(/"/g, '&quot;')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M8 3l-3 3M8 3l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`
             : '';
         
         // Бейдж языка для code нод - используем SVG иконки
@@ -832,7 +831,7 @@ export class FlowCanvas extends PlatformElement {
         let channelBadge = '';
         if (nodeType.type === 'channel' && channelId) {
             const chIcon = CHANNEL_NODE_BADGE_ICONS[channelId] || 'send';
-            const chTitle = CHANNEL_NODE_BADGE_TITLES[channelId] || channelId;
+            const chTitle = this._channelBadgeTitle(channelId);
             channelBadge = `<div class="agent-node-lang-badge agent-node-channel-badge" data-channel="${channelId}" title="${chTitle}"><platform-icon name="${chIcon}" size="14"></platform-icon></div>`;
         }
         
@@ -1356,7 +1355,7 @@ export class FlowCanvas extends PlatformElement {
                                     `;
                                 }, 1500);
                             }).catch(err => {
-                                console.error('[FlowCanvas] Ошибка копирования:', err);
+                                console.error('[FlowCanvas] Copy error:', err);
                                 this._fallbackCopyTextToClipboard(errorMessage, copyBtn);
                             });
                         } else {
@@ -1460,10 +1459,10 @@ export class FlowCanvas extends PlatformElement {
                     `;
                 }, 1500);
             } else {
-                console.error('[FlowCanvas] Fallback: не удалось скопировать');
+                console.error('[FlowCanvas] Fallback: copy failed');
             }
         } catch (err) {
-            console.error('[FlowCanvas] Fallback: ошибка копирования', err);
+            console.error('[FlowCanvas] Fallback: copy error', err);
         }
         
         document.body.removeChild(textArea);

@@ -22,15 +22,15 @@ export class SecretResourceEditor extends BaseResourceEditor {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Secret Key</label>
+                <label class="form-label">${this.i18n.t('resource_editor.secret.label_key')}</label>
                 <input 
                     type="text" 
                     class="form-input"
                     .value=${key}
                     @input=${(e) => this._onInputChange('key', e.target.value)}
-                    placeholder="@var:SECRET_NAME"
+                    placeholder=${this.i18n.t('resource_editor.secret.placeholder_key')}
                 />
-                <span class="form-hint">Ссылка на секрет в формате @var:SECRET_NAME</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.secret.hint_key')}</span>
             </div>
         `;
     }
