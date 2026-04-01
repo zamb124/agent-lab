@@ -298,10 +298,10 @@ export class DashboardPage extends PlatformElement {
         const td = (key, params) => this.i18n.t(key, params ?? {});
         const services = [
             {
-                id: 'flows',
-                name: tp('apps.flows.name'),
-                logo: '/static/core/assets/service_logos/agents_logo.svg',
-                description: tp('apps.flows.description'),
+                id: 'sync',
+                name: tp('apps.sync.name'),
+                logo: '/static/core/assets/service_logos/sync_logo.svg',
+                description: tp('apps.sync.description'),
             },
             {
                 id: 'crm',
@@ -310,16 +310,16 @@ export class DashboardPage extends PlatformElement {
                 description: tp('apps.crm.description'),
             },
             {
+                id: 'flows',
+                name: tp('apps.flows.name'),
+                logo: '/static/core/assets/service_logos/agents_logo.svg',
+                description: tp('apps.flows.description'),
+            },
+            {
                 id: 'rag',
                 name: tp('apps.rag.name'),
                 logo: '/static/core/assets/service_logos/rag_logo.svg',
                 description: tp('apps.rag.description'),
-            },
-            {
-                id: 'sync',
-                name: tp('apps.sync.name'),
-                logo: '/static/core/assets/service_logos/sync_logo.svg',
-                description: tp('apps.sync.description'),
             },
         ];
 

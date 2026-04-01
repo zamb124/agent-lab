@@ -507,6 +507,10 @@ export class CRMApp extends PlatformApp {
             return html`<app-loader></app-loader>`;
         }
 
+        if (!this.services.isInitialized || !this.services.has('i18n')) {
+            return html`<app-loader></app-loader>`;
+        }
+
         const viewCfg = this._getViewConfig()[this._currentView] || { title: this._currentView, actionIcon: null };
 
         return html`

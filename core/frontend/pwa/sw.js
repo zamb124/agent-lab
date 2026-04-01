@@ -3,8 +3,8 @@
  * Обеспечивает офлайн-работу, кэширование и push-уведомления
  */
 
-const STATIC_CACHE_NAME = 'humanitec-static-v2';
-const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v2';
+const STATIC_CACHE_NAME = 'humanitec-static-v3';
+const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v3';
 
 // Статические ресурсы для предварительного кэширования (только пути, доступные на любом сервисе с /static/core)
 const STATIC_ASSETS = [
@@ -85,6 +85,12 @@ self.addEventListener('fetch', (event) => {
 
   // Только свой origin — иначе fetch из SW падает (CORS / чужой хост) и даёт Uncaught в promise
   if (url.origin !== swOrigin()) {
+    return;
+  }
+
+  // Сессия и токены: никогда не кэшируем и не отдаём из Cache Storage (иначе устаревший /me ломает auth)
+  if (url.pathname.includes('/api/auth/')) {
+    event.respondWith(fetch(request));
     return;
   }
 

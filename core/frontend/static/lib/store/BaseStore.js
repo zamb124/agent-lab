@@ -80,7 +80,16 @@ export class BaseStore {
         }
 
         if (this._options.devtools) {
-            storeCreator = devtools(storeCreator, { name });
+            const enableDevtools =
+                typeof window !== 'undefined'
+                && typeof window.location !== 'undefined'
+                && !!window.__REDUX_DEVTOOLS_EXTENSION__
+                && (
+                    window.location.hostname === 'localhost'
+                    || window.location.hostname === '127.0.0.1'
+                    || window.location.hostname.endsWith('.lvh.me')
+                );
+            storeCreator = devtools(storeCreator, { name, enabled: enableDevtools });
         }
 
         this._store = create(storeCreator);
