@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
+import './sync-channel-row.js';
 
 export class ChannelPicker extends PlatformElement {
     static styles = [
@@ -72,16 +73,16 @@ export class ChannelPicker extends PlatformElement {
             }
 
             .channel-card {
-                padding: var(--space-4);
+                padding: 0;
                 border-radius: var(--radius-xl);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
-                cursor: pointer;
                 text-align: left;
                 transition: all var(--duration-normal);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
 
             .channel-card:hover {
@@ -91,18 +92,10 @@ export class ChannelPicker extends PlatformElement {
                 transform: translateY(-2px);
             }
 
-            .channel-name {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .channel-type {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
+            .channel-card sync-channel-row {
+                cursor: pointer;
+                display: block;
+                width: 100%;
             }
 
             .empty {
@@ -180,17 +173,15 @@ export class ChannelPicker extends PlatformElement {
                         ? ts('sidebar.no_channels_filtered')
                         : ts('sidebar.no_channels_yet')}</div>`
                     : ''}
-                ${channels.map((ch) => {
-                    const title = ch.type === 'direct' && ch.peer?.display_name
-                        ? ch.peer.display_name
-                        : (ch.name ?? ch.id);
-                    return html`
-                        <button class="channel-card" @click=${() => this._pick(ch)}>
-                            <span class="channel-name">${title}</span>
-                            <span class="channel-type">${SyncStore.channelRowMetaLabel(ch)}</span>
-                        </button>
-                    `;
-                })}
+                ${channels.map((ch) => html`
+                    <div class="channel-card">
+                        <sync-channel-row
+                            .channel=${ch}
+                            .active=${false}
+                            @click=${() => void this._pick(ch)}
+                        ></sync-channel-row>
+                    </div>
+                `)}
             </div>
         `;
     }

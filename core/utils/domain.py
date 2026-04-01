@@ -165,20 +165,23 @@ def get_cookie_domain(host: str) -> str | None:
     Домен для cookie (с точкой в начале для субдоменов на проде).
 
     Примеры:
-        localhost:8002 → None
-        company.localhost:8002 → None
+        localhost:8002 → localhost
+        company.localhost:8002 → localhost
         lvh.me:8002 → .lvh.me
         company.lvh.me:8002 → .lvh.me
         humanitec.ru → .humanitec.ru
         company.humanitec.ru → .humanitec.ru
 
     Note:
-        Для localhost и IP не задаём domain — ограничения браузеров и same-origin.
+        Для *.localhost задаём Domain=localhost, иначе кука host-only привязана к
+        конкретному поддомену и после смены компании (редирект на другой slug)
+        браузер не шлёт auth_token — повторный вход.
+        Для IP не задаём domain (нет общего суффикса под подсети).
     """
     base = extract_base_domain(host)
 
     if base == "localhost":
-        return None
+        return "localhost"
     if _ip_dev_base(base) is not None:
         return None
 
