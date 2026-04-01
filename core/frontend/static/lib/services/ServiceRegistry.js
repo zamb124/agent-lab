@@ -100,3 +100,6 @@ class ServiceRegistryClass {
 
 export const ServiceRegistry = new ServiceRegistryClass();
 export const Services = ServiceRegistry;
+
+// i18n до registerCore: в body стоит app-loader (PlatformElement), он подписывается в connectedCallback.
+ServiceRegistry.register('i18n', i18n);

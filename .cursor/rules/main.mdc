@@ -196,11 +196,11 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 ### LLM
 
-ТОЛЬКО через `core/clients/llm/factory.py`: `get_llm()`. Запрещены прямые импорты LangChain моделей.
+ТОЛЬКО через `core/clients/llm/factory.py`: `get_llm()`. Запрещены прямые импорты LangChain моделей. Инвариант Stream-First для runtime flows — в **`streaming.mdc`** и в разделе **Перекрёстные инварианты** ниже.
 
 ### Context
 
-`get_context()` для доступа к user, company_id, trace_id. Репозитории берут company_id из контекста автоматически.
+`get_context()` для доступа к user, company_id, trace_id. Репозитории берут company_id из контекста автоматически. События стриминга несут `trace_id` и `span_id` (OpenTelemetry); см. **`streaming.mdc`**.
 
 ### Bootstrap-инварианты платформы
 
@@ -219,6 +219,21 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 ## INLINE-FIRST
 
 Платформа = JSON-конфиги flows в БД. Код в `apps/flows/src/` — это runtime-библиотека, не бизнес-логика.
+
+## Database-First
+
+Конфигурация flows и tools хранится в БД; Python задаёт поведение (рантайм, фабрики, ноды), а не дублирует бизнес-структуру конфигов в коде. Подробности: **`architecture.mdc`**.
+
+## Перекрёстные инварианты
+
+Обязательные согласования между частями платформы; детали — в указанных рулах.
+
+- **Stream-First (LLM):** в flows LLM вызывается через `.stream()`, события доставляются через Redis Pub/Sub. **`streaming.mdc`**, **`integrations.mdc`**.
+- **Тесты:** единственный мок — `MockLLM`; реальные PostgreSQL, Redis, MinIO, TaskIQ; во всех тестовых идентификаторах — фикстура **`unique_id`**; внутренние компоненты платформы не мокаются. **`testing.mdc`**.
+- **Миграции:** у каждой сервисной БД своё дерево Alembic; один и тот же физический URL нельзя подставлять во все `DATABASE__*_URL`. **`migrations.mdc`**.
+- **Терминология:** исполняемая сущность — **flow** (`flow_id`), тип ноды с LLM — **`llm_node`** (не `react_node`); пользователь — **`user_id`**. **`domain_naming.mdc`**.
+- **Уведомления:** только `notify_user` из `core.websocket.publisher`; персистентное хранилище уведомлений в БД не используем. **`notifications.mdc`**, показ в UI — **`frontend.mdc`**.
+- **Scheduler:** control-plane в `apps/scheduler`; вызов из кода других сервисов — только через `core/clients/scheduler_client.py`, не прямой `httpx`; изоляция по `company_id`. **`taskiq.mdc`**.
 
 ## Навигация по правилам
 
