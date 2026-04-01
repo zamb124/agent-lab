@@ -236,8 +236,18 @@ export const sidebarStyles = css`
         display: flex;
         align-items: center;
         gap: var(--space-2);
-        padding: 0 var(--space-3);
+        padding: 0;
         margin-bottom: var(--space-4);
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .sidebar-header slot[name="header"]::slotted(*) {
+        flex: 1 1 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
     }
 
     .sidebar-nav {

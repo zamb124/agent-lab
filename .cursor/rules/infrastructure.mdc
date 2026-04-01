@@ -54,6 +54,8 @@ LiveKit требует отдельный поддомен с собственн
 | flows | 8001 | `python -m apps.flows.main` |
 | frontend | 8002 | `python -m apps.frontend.main` |
 | crm | 8003 | `python -m apps.crm.main` |
+
+**CRM vendor (three.js, 3d-force-graph):** HTML тянет `/crm/ui/vendor/...`; FastAPI монтирует файлы из `node_modules` относительно корня репозитория (`apps/crm/main.py`). В Docker-образах **`crm`** и **`full`** стадия **`js-vendor`** (`npm ci`) копирует `node_modules/three/build` и `node_modules/3d-force-graph/dist` в `/app/node_modules/...`, иначе запросы к vendor попадали бы в SPA и отдавали `index.html` вместо JS.
 | rag | 8004 | `python -m apps.rag.main` |
 | sync | 8005 | `python -m apps.sync.main` |
 

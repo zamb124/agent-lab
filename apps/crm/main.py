@@ -80,7 +80,11 @@ if vendor_three_path.exists():
 @app.get("/crm/{path:path}")
 async def serve_crm_ui(path: str = ""):
     """Отдает главную страницу CRM UI для всех /crm/* путей (SPA fallback)"""
-    if path.startswith("api/") or path.startswith("ui/static/"):
+    if (
+        path.startswith("api/")
+        or path.startswith("ui/static/")
+        or path.startswith("ui/vendor/")
+    ):
         raise HTTPException(status_code=404, detail="Not found")
     
     ui_file = Path(__file__).parent / "ui" / "index.html"

@@ -325,7 +325,7 @@ export class PlatformNotificationManager extends PlatformElement {
                     @click=${this._togglePanel}
                     title="Уведомления"
                 >
-                    <platform-icon name="bell" size="20"></platform-icon>
+                    <platform-icon name="bell" size="16" style="--icon-size: 16px"></platform-icon>
                     <span class="status ${this.isConnected ? 'connected' : 'disconnected'}"></span>
                     ${this.unreadCount > 0 ? html`
                         <span class="badge">${this.unreadCount}</span>
@@ -384,11 +384,17 @@ export class PlatformNotificationManager extends PlatformElement {
 
         .notification-button {
             position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            width: 28px;
+            height: 28px;
+            padding: 0;
             background: transparent;
             border: none;
             cursor: pointer;
-            padding: 8px;
-            border-radius: 50%;
+            border-radius: var(--radius-md, 8px);
             transition: background 0.2s;
         }
 
@@ -402,10 +408,10 @@ export class PlatformNotificationManager extends PlatformElement {
 
         .status {
             position: absolute;
-            bottom: 8px;
-            right: 8px;
-            width: 8px;
-            height: 8px;
+            bottom: 4px;
+            right: 4px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background: var(--error-color);
         }
@@ -416,16 +422,17 @@ export class PlatformNotificationManager extends PlatformElement {
 
         .badge {
             position: absolute;
-            top: 4px;
-            right: 4px;
+            top: 1px;
+            right: 1px;
             background: var(--error-color);
             color: white;
-            border-radius: 10px;
-            padding: 2px 6px;
-            font-size: 11px;
+            border-radius: 8px;
+            padding: 1px 5px;
+            font-size: 10px;
             font-weight: bold;
-            min-width: 18px;
+            min-width: 15px;
             text-align: center;
+            line-height: 1.2;
         }
 
         .notification-panel {

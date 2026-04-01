@@ -15,23 +15,23 @@
   "apps": {
     "flows": {
       "name": "Flows",
-      "description": "Flow builder: graphs, skills, and integrations"
+      "description": "Design AI flows with graphs and skills, connect external systems — ship automation from idea to production with less custom code"
     },
     "crm": {
       "name": "NetWorkle",
-      "description": "Contacts and knowledge graph"
+      "description": "CRM plus a knowledge graph: contacts, relationships, and deal context in one network so nothing falls through the cracks"
     },
     "rag": {
       "name": "RAG",
-      "description": "Documents and search"
+      "description": "Your company knowledge base: upload documents, run semantic search, and give AI answers grounded in your own content"
     },
     "sync": {
       "name": "Sync",
-      "description": "Engineering chat with Git integration"
+      "description": "The engineering team hub: chat, Git, and calls alongside repos — align faster and ship with less friction"
     },
     "frontend": {
       "name": "Console",
-      "description": "Humanitec platform console"
+      "description": "Your platform home: company settings, billing, and one-click access to every product"
     }
   },
   "company": {

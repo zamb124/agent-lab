@@ -67,6 +67,13 @@ COPY migrations/ ./migrations/
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# three + 3d-force-graph для CRM графа: apps/crm/main.py монтирует их из repo-root node_modules.
+# В образ без этой стадии vendor-URL отдавал index.html (SPA), что ломало загрузку модулей.
+FROM node:22-bookworm-slim AS js-vendor
+WORKDIR /vendor
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
 # ============================================
 # Final stages - отличаются только CMD/EXPOSE
 # ============================================
@@ -84,6 +91,8 @@ CMD ["python", "-m", "apps.frontend.main"]
 
 # CRM
 FROM base-final AS crm
+COPY --from=js-vendor /vendor/node_modules/three/build /app/node_modules/three/build
+COPY --from=js-vendor /vendor/node_modules/3d-force-graph/dist /app/node_modules/3d-force-graph/dist
 EXPOSE 8003
 CMD ["python", "-m", "apps.crm.main"]
 
@@ -120,5 +129,7 @@ CMD ["python", "-m", "scripts.db_migrate", "upgrade"]
 # Full (для локальной разработки и тестов)
 FROM base-final AS full
 COPY --from=docs-builder /app/site ./site
+COPY --from=js-vendor /vendor/node_modules/three/build /app/node_modules/three/build
+COPY --from=js-vendor /vendor/node_modules/3d-force-graph/dist /app/node_modules/3d-force-graph/dist
 EXPOSE 8001 8002 8003 8004 8005
 CMD ["python", "run_prod.py"]

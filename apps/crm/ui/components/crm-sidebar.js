@@ -29,6 +29,14 @@ export class CRMSidebar extends PlatformElement {
                 --sidebar-logo-text-fill: transparent;
             }
 
+            .crm-sidebar-header-slot {
+                display: block;
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+            }
+
             .namespace-selector {
                 display: flex;
                 align-items: center;
@@ -38,7 +46,11 @@ export class CRMSidebar extends PlatformElement {
                 background: var(--crm-surface-muted);
                 border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
+                width: 100%;
                 min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                flex-shrink: 0;
             }
 
             .namespace-label {
@@ -62,6 +74,8 @@ export class CRMSidebar extends PlatformElement {
                 cursor: pointer;
                 outline: none;
                 padding: var(--space-1) var(--space-2);
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .namespace-selector select option {
@@ -215,10 +229,6 @@ export class CRMSidebar extends PlatformElement {
                 min-width: 0;
             }
 
-            :host([collapsed]) platform-notification-manager {
-                display: none;
-            }
-
             /* Light theme */
             :host-context([data-theme="light"]) .nav-item.active {
                 background: var(--crm-selected-bg);
@@ -335,7 +345,7 @@ export class CRMSidebar extends PlatformElement {
                 @collapse-change=${(e) => this.collapsed = e.detail.collapsed}
                 @mobile-change=${(e) => this.mobileOpen = e.detail.open}
             >
-                <div slot="header">
+                <div slot="header" class="crm-sidebar-header-slot">
                     <div class="namespace-selector" data-hide-collapsed>
                         <span class="namespace-label">${this.i18n.t('app_shell.sidebar.namespace')}</span>
                         <select @change=${this._onNamespaceChange}>
@@ -416,8 +426,9 @@ export class CRMSidebar extends PlatformElement {
 
                 <div slot="footer" class="user-section">
                     <div class="user-section-row">
-                        <platform-user block></platform-user>
-                        <platform-notification-manager></platform-notification-manager>
+                        <platform-user block>
+                            <platform-notification-manager slot="user-toolbar"></platform-notification-manager>
+                        </platform-user>
                     </div>
                     <platform-deployment-version base-url="/crm" footer></platform-deployment-version>
                 </div>

@@ -131,11 +131,11 @@ export class PlatformUser extends PlatformElement {
             this._clearCollapsedMenuPosition();
             return;
         }
-        const btn = this.renderRoot?.querySelector('.user-button');
-        if (!btn) {
+        const anchor = this.renderRoot?.querySelector('.user-bar');
+        if (!anchor) {
             return;
         }
-        const rect = btn.getBoundingClientRect();
+        const rect = anchor.getBoundingClientRect();
         const margin = 8;
         const maxW = Math.min(240, window.innerWidth - 2 * margin);
         let left = rect.left;
@@ -522,15 +522,34 @@ export class PlatformUser extends PlatformElement {
 
         return html`
             <div class="user-container">
-                <button class="user-button" @click=${this._toggleMenu} title=${this._pt('menu.user_button_title')}>
-                    ${this._renderAvatar()}
-                    <div class="user-info">
-                        <div class="user-name">${this.user.name || this._pt('menu.user_fallback')}</div>
-                        <div class="user-email">${this.user.emails?.[0] || ''}</div>
-                    </div>
-                    <span class="user-lang-badge" aria-hidden="true">${uiLocale.toUpperCase()}</span>
-                    <platform-icon name="chevron-down" size="12" class="chevron ${this._menuOpen ? 'open' : ''}"></platform-icon>
-                </button>
+                <div class="user-bar">
+                    <button
+                        type="button"
+                        class="user-button"
+                        @click=${this._toggleMenu}
+                        title=${this._pt('menu.user_button_title')}
+                        aria-expanded=${this._menuOpen ? 'true' : 'false'}
+                        aria-haspopup="true"
+                    >
+                        ${this._renderAvatar()}
+                        <div class="user-info">
+                            <div class="user-name">${this.user.name || this._pt('menu.user_fallback')}</div>
+                            <div class="user-email">${this.user.emails?.[0] || ''}</div>
+                        </div>
+                        <span class="user-lang-badge" aria-hidden="true">${uiLocale.toUpperCase()}</span>
+                    </button>
+                    <span class="user-toolbar-wrap"><slot name="user-toolbar"></slot></span>
+                    <button
+                        type="button"
+                        class="user-menu-chevron"
+                        @click=${this._toggleMenu}
+                        title=${this._pt('menu.user_button_title')}
+                        aria-expanded=${this._menuOpen ? 'true' : 'false'}
+                        aria-haspopup="true"
+                    >
+                        <platform-icon name="chevron-down" size="12" class="chevron ${this._menuOpen ? 'open' : ''}"></platform-icon>
+                    </button>
+                </div>
 
                 ${this._menuOpen ? html`
                     <div class="user-menu">
@@ -658,8 +677,18 @@ export class PlatformUser extends PlatformElement {
             }
 
             :host-context(platform-sidebar[collapsed]) .user-info,
-            :host-context(platform-sidebar[collapsed]) .chevron {
+            :host-context(platform-sidebar[collapsed]) .user-menu-chevron {
                 display: none;
+            }
+
+            .user-toolbar-wrap {
+                display: flex;
+                align-items: center;
+                flex-shrink: 0;
+            }
+
+            .user-toolbar-wrap ::slotted(platform-notification-manager) {
+                flex-shrink: 0;
             }
 
             .user-lang-badge {
@@ -680,6 +709,10 @@ export class PlatformUser extends PlatformElement {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
                 pointer-events: none;
+            }
+
+            :host-context(platform-sidebar[collapsed]) .user-toolbar-wrap {
+                display: none;
             }
 
             :host-context(platform-sidebar[collapsed]) .user-lang-badge {
@@ -705,6 +738,21 @@ export class PlatformUser extends PlatformElement {
                 width: 100%;
                 min-width: 0;
                 box-sizing: border-box;
+            }
+
+            :host-context(platform-sidebar[collapsed]) .user-bar {
+                justify-content: center;
+                width: 100%;
+                min-width: 0;
+                padding: 0;
+                background: transparent;
+                border: none;
+                box-shadow: none;
+            }
+
+            :host-context(platform-sidebar[collapsed]) .user-bar:hover {
+                background: transparent;
+                box-shadow: none;
             }
 
             :host-context(platform-sidebar[collapsed]) .user-button {
@@ -750,24 +798,62 @@ export class PlatformUser extends PlatformElement {
                 width: 100%;
             }
 
-            .user-button {
+            .user-bar {
                 display: flex;
                 align-items: center;
-                gap: var(--space-3);
+                gap: var(--space-2);
+                width: 100%;
+                box-sizing: border-box;
                 padding: var(--space-3);
                 background: var(--glass-solid-subtle);
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--glass-border-subtle);
-                cursor: pointer;
-                transition: all var(--duration-fast);
                 box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-                width: 100%;
+                transition: background var(--duration-fast), box-shadow var(--duration-fast);
+            }
+
+            .user-bar:hover {
+                background: var(--glass-solid-medium);
+                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            }
+
+            .user-button {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                flex: 1;
+                min-width: 0;
+                padding: 0;
+                margin: 0;
+                border: none;
+                background: transparent;
+                cursor: pointer;
+                font: inherit;
+                color: inherit;
+                text-align: left;
+                box-shadow: none;
                 box-sizing: border-box;
             }
 
-            .user-button:hover {
+            .user-menu-chevron {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                width: 28px;
+                height: 28px;
+                padding: 0;
+                margin: 0;
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                cursor: pointer;
+                color: inherit;
+                transition: background var(--duration-fast);
+            }
+
+            .user-menu-chevron:hover {
                 background: var(--glass-solid-medium);
-                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
             }
 
             .user-avatar {
