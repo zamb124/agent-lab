@@ -91,18 +91,14 @@ export class InlineToolModal extends PlatformModal {
     }
 
     _updateModalTitle() {
-        const typeLabels = {
-            'tool': 'Tool',
-            'llm_node': 'LLM Node',
-            'flow': 'Flow',
-            'function': 'Function',
-            'external_api': 'External API',
-            'remote_flow': 'Remote A2A flow',
-            'mcp': 'MCP Tool'
-        };
-        
-        const label = typeLabels[this.toolType] || 'Инструмент';
-        this.title = this.mode === 'create' ? `Создать ${label}` : `Редактировать ${label}`;
+        const typeKey = `inline_tool_modal.types.${this.toolType}`;
+        let label = this.i18n.t(typeKey);
+        if (label === typeKey) {
+            label = this.i18n.t('inline_tool_modal.type_fallback');
+        }
+        this.title = this.mode === 'create'
+            ? this.i18n.t('inline_tool_modal.title_create', { label })
+            : this.i18n.t('inline_tool_modal.title_edit', { label });
     }
 
     _onConfigChanged(e) {
@@ -112,25 +108,24 @@ export class InlineToolModal extends PlatformModal {
     _onSave() {
         const editor = this.shadowRoot.querySelector('[data-editor]');
         if (!editor) {
-            this.error('Редактор не найден');
+            this.error(this.i18n.t('inline_tool_modal.err_editor_missing'));
             return;
         }
 
         const config = editor.nodeConfig;
         
-        // Валидация в зависимости от типа
         if (this.toolType === 'tool' && (!config.code || !config.code.trim())) {
-            this.error('Код обязателен для tool');
+            this.error(this.i18n.t('inline_tool_modal.err_code_tool'));
             return;
         }
         
         if (this.toolType === 'llm_node' && (!config.prompt || !config.prompt.trim())) {
-            this.error('Промпт обязателен для llm_node');
+            this.error(this.i18n.t('inline_tool_modal.err_prompt_llm'));
             return;
         }
         
         if (!config.name || !config.name.trim()) {
-            this.error('Название обязательно');
+            this.error(this.i18n.t('inline_tool_modal.err_name_required'));
             return;
         }
         
@@ -238,7 +233,7 @@ export class InlineToolModal extends PlatformModal {
                 `;
             
             default:
-                return html`<div>Неизвестный тип инструмента: ${this.toolType}</div>`;
+                return html`<div>${this.i18n.t('inline_tool_modal.err_unknown_type', { type: this.toolType })}</div>`;
         }
     }
 
@@ -254,10 +249,10 @@ export class InlineToolModal extends PlatformModal {
         return html`
             <div class="action-row">
                 <button type="button" class="btn btn-secondary" @click=${this.close}>
-                    Отмена
+                    ${this.i18n.t('editor.cancel')}
                 </button>
                 <button type="button" class="btn btn-primary" @click=${this._onSave}>
-                    ${this.mode === 'create' ? 'Создать' : 'Сохранить'}
+                    ${this.mode === 'create' ? this.i18n.t('inline_tool_modal.create') : this.i18n.t('inline_tool_modal.save')}
                 </button>
             </div>
         `;

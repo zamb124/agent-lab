@@ -254,7 +254,7 @@ export class ExecutionRunner extends PlatformElement {
         this._eventSource.onerror = (error) => {
             console.error('Ошибка SSE:', error);
             this.status = 'error';
-            this._addEvent('system', 'Ошибка соединения');
+            this._addEvent('system', this.i18n.t('canvas_runner.sse_connection_error'));
             this._stopExecution();
         };
     }
@@ -324,7 +324,7 @@ export class ExecutionRunner extends PlatformElement {
         return html`
             <div class="runner-panel">
                 <div class="runner-header">
-                    <span class="runner-title">Run</span>
+                    <span class="runner-title">${this.i18n.t('execution_panel.sidebar_run_title')}</span>
                     <div class="runner-status">
                         <div class="status-dot ${this.status}"></div>
                         <span>${this.status}</span>
@@ -333,12 +333,12 @@ export class ExecutionRunner extends PlatformElement {
                 
                 <div class="runner-body">
                     <div class="input-section">
-                        <div class="input-label">Input</div>
+                        <div class="input-label">${this.i18n.t('execution_panel.label_input')}</div>
                         <textarea 
                             class="input-textarea"
                             .value=${this._input}
                             @input=${this._onInputChange}
-                            placeholder="Введите сообщение для агента..."
+                            placeholder=${this.i18n.t('execution_panel.placeholder_message')}
                             ?disabled=${isRunning}
                         ></textarea>
                     </div>
@@ -349,19 +349,19 @@ export class ExecutionRunner extends PlatformElement {
                         ?disabled=${!this._input.trim() && !isRunning}
                     >
                         ${isRunning
-                            ? html`<platform-icon name="stop" size="16"></platform-icon> Stop`
-                            : html`<platform-icon name="play" size="16"></platform-icon> Run`
+                            ? html`<platform-icon name="stop" size="16"></platform-icon> ${this.i18n.t('execution_panel.stop')}`
+                            : html`<platform-icon name="play" size="16"></platform-icon> ${this.i18n.t('execution_panel.run_start')}`
                         }
                     </button>
                     
                     ${this.output || this.events.length > 0 ? html`
                         <div class="output-section">
                             <div class="output-header">
-                                <span class="output-label">Output</span>
-                                <button class="output-clear" @click=${this._clearOutput}>Clear</button>
+                                <span class="output-label">${this.i18n.t('execution_panel.label_output')}</span>
+                                <button class="output-clear" @click=${this._clearOutput}>${this.i18n.t('execution_panel.clear')}</button>
                             </div>
                             <div class="output-content">
-                                ${this.output || 'Waiting for response...'}
+                                ${this.output || this.i18n.t('execution_panel.waiting_for_response')}
                             </div>
                             
                             ${this.events.length > 0 ? html`

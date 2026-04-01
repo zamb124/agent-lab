@@ -91,7 +91,7 @@ export class BaseNodeModal extends PlatformFormModal {
     }
 
     getModalTitle() {
-        return 'Edit Node';
+        return this.i18n.t('node_modal.common.title_edit_default');
     }
 
     showModal() {
@@ -174,7 +174,7 @@ export class BaseNodeModal extends PlatformFormModal {
     renderSidebar() {
         return html`
             <div class="form-group">
-                <label class="form-label">Node ID</label>
+                <label class="form-label">${this.i18n.t('node_modal.common.sidebar_node_id')}</label>
                 <input 
                     type="text" 
                     class="form-input readonly" 
@@ -188,10 +188,10 @@ export class BaseNodeModal extends PlatformFormModal {
     renderStateSettings() {
         return html`
             <div class="state-settings-section">
-                <h4>State & Messages</h4>
+                <h4>${this.i18n.t('node_modal.common.state_section_title')}</h4>
                 
                 <div class="form-group">
-                    <label class="form-label">Output Key</label>
+                    <label class="form-label">${this.i18n.t('node_modal.common.output_key_label')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -199,7 +199,7 @@ export class BaseNodeModal extends PlatformFormModal {
                         @input=${this._onOutputKeyChange}
                         placeholder="${this.nodeId || 'node_id'}"
                     />
-                    <span class="form-hint">Поле в state для записи результата (по умолчанию node_id)</span>
+                    <span class="form-hint">${this.i18n.t('node_modal.common.output_key_hint')}</span>
                 </div>
                 
                 <div class="checkbox-row">
@@ -209,21 +209,21 @@ export class BaseNodeModal extends PlatformFormModal {
                         .checked=${this.saveToMessages}
                         @change=${this._onSaveToMessagesChange}
                     />
-                    <label for="save-to-messages">Сохранять в messages</label>
+                    <label for="save-to-messages">${this.i18n.t('node_modal.common.save_to_messages_label')}</label>
                 </div>
                 
                 ${this.saveToMessages ? html`
                     <div class="message-field-row">
                         <div class="form-group">
-                            <label class="form-label">Message Field</label>
+                            <label class="form-label">${this.i18n.t('node_modal.common.message_field_label')}</label>
                             <input 
                                 type="text" 
                                 class="form-input"
                                 .value=${this.messageField}
                                 @input=${this._onMessageFieldChange}
-                                placeholder="По умолчанию diff стейта"
+                                placeholder=${this.i18n.t('node_modal.common.message_field_placeholder')}
                             />
-                            <span class="form-hint">Поле для записи в messages (пусто = diff стейта)</span>
+                            <span class="form-hint">${this.i18n.t('node_modal.common.message_field_hint')}</span>
                         </div>
                     </div>
                 ` : ''}
@@ -232,7 +232,7 @@ export class BaseNodeModal extends PlatformFormModal {
     }
 
     renderMainContent() {
-        return html`<p>Override renderMainContent() in subclass</p>`;
+        return html`<p>${this.i18n.t('node_modal.common.override_subclass')}</p>`;
     }
 
     renderBody() {
@@ -251,14 +251,14 @@ export class BaseNodeModal extends PlatformFormModal {
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${this.close}>
-                Отмена
+                ${this.i18n.t('editor.cancel')}
             </platform-button>
             <platform-button 
                 variant="primary" 
                 ?loading=${this.loading}
                 @click=${this._onSubmit}
             >
-                Сохранить
+                ${this.i18n.t('inline_tool_modal.save')}
             </platform-button>
         `;
     }

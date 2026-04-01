@@ -137,24 +137,24 @@ export class ToolEditorModal extends PlatformModal {
         this.mode = 'create';
         this.flowVariables = {};
         this.previewExecutionState = null;
-        this.title = 'Создать Inline Tool';
+        this.title = '';
         this.name = '';
         this.description = '';
         this.toolType = 'tool';
         this.language = 'python';
         this.code = `async def execute(args):
     """
-    Выполняет действие с переданными аргументами.
-    
+    Run the tool with the given arguments.
+
     Args:
-        args: Словарь с аргументами инструмента
-    
+        args: Argument dict for the tool
+
     Returns:
-        Результат выполнения
+        Execution result
     """
-    # Пример: можно получить доступ к state через args
+    # Example: read from args
     # user_query = args.get('user_query')
-    
+
     return {"result": "success"}
 `;
         this.argsSchema = '{}';
@@ -164,7 +164,7 @@ export class ToolEditorModal extends PlatformModal {
         super.connectedCallback();
         
         if (this.mode === 'edit' && this.toolConfig) {
-            this.title = 'Редактировать Tool';
+            this.title = this.i18n.t('tool_editor_modal.title_edit');
             this.name = this.toolConfig.name || '';
             this.description = this.toolConfig.description || '';
             this.toolType = this.toolConfig.tool_type || 'tool';
@@ -172,6 +172,8 @@ export class ToolEditorModal extends PlatformModal {
             this.argsSchema = typeof this.toolConfig.args_schema === 'string' 
                 ? this.toolConfig.args_schema 
                 : JSON.stringify(this.toolConfig.args_schema || {}, null, 2);
+        } else {
+            this.title = this.i18n.t('tool_editor_modal.title_create');
         }
     }
 
@@ -188,7 +190,7 @@ export class ToolEditorModal extends PlatformModal {
         const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
         
         if (!codeEditor || !jsonEditor) {
-            this.error('Редакторы не инициализированы');
+            this.error(this.i18n.t('tool_editor_modal.err_editors'));
             return;
         }
         
@@ -199,7 +201,7 @@ export class ToolEditorModal extends PlatformModal {
         try {
             argsSchema = argsSchemaStr ? JSON.parse(argsSchemaStr) : {};
         } catch (e) {
-            this.error('Неверный формат args_schema');
+            this.error(this.i18n.t('tool_editor_modal.err_args_schema'));
             return;
         }
         
@@ -210,12 +212,14 @@ export class ToolEditorModal extends PlatformModal {
             });
             
             if (response.valid) {
-                this.success('Код валиден');
+                this.success(this.i18n.t('tool_editor_modal.code_valid'));
             } else {
-                this.error(`Ошибка валидации: ${response.error || 'Unknown error'}`);
+                this.error(this.i18n.t('tool_editor_modal.validation_error', {
+                    message: response.error || this.i18n.t('tool_editor_modal.error_unknown'),
+                }));
             }
         } catch (error) {
-            this.error(`Ошибка валидации: ${error.message}`);
+            this.error(this.i18n.t('tool_editor_modal.validation_error', { message: error.message }));
         }
     }
 
@@ -225,7 +229,7 @@ export class ToolEditorModal extends PlatformModal {
         const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
         
         if (!codeEditor || !jsonEditor) {
-            this.error('Редакторы не инициализированы');
+            this.error(this.i18n.t('tool_editor_modal.err_editors'));
             return;
         }
         
@@ -236,7 +240,7 @@ export class ToolEditorModal extends PlatformModal {
         try {
             argsSchema = argsSchemaStr ? JSON.parse(argsSchemaStr) : {};
         } catch (e) {
-            this.error('Неверный формат args_schema');
+            this.error(this.i18n.t('tool_editor_modal.err_args_schema'));
             return;
         }
         
@@ -250,14 +254,16 @@ export class ToolEditorModal extends PlatformModal {
             });
             
             if (response.success) {
-                this.success('Выполнено успешно');
+                this.success(this.i18n.t('tool_editor_modal.execute_ok'));
                 return response;
             } else {
-                this.error(`Ошибка выполнения: ${response.error || 'Unknown error'}`);
+                this.error(this.i18n.t('tool_editor_modal.execute_error', {
+                    message: response.error || this.i18n.t('tool_editor_modal.error_unknown'),
+                }));
                 return response;
             }
         } catch (error) {
-            this.error(`Ошибка выполнения: ${error.message}`);
+            this.error(this.i18n.t('tool_editor_modal.execute_error', { message: error.message }));
             return { success: false, error: error.message };
         }
     }
@@ -267,12 +273,12 @@ export class ToolEditorModal extends PlatformModal {
         const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
         
         if (!this.name.trim()) {
-            this.error('Название обязательно');
+            this.error(this.i18n.t('tool_editor_modal.err_name'));
             return;
         }
         
         if (!codeEditor || !jsonEditor) {
-            this.error('Редакторы не инициализированы');
+            this.error(this.i18n.t('tool_editor_modal.err_editors'));
             return;
         }
         
@@ -280,7 +286,7 @@ export class ToolEditorModal extends PlatformModal {
         const argsSchemaStr = jsonEditor.getValue();
         
         if (!code.trim()) {
-            this.error('Код обязателен');
+            this.error(this.i18n.t('tool_editor_modal.err_code'));
             return;
         }
         
@@ -288,7 +294,7 @@ export class ToolEditorModal extends PlatformModal {
         try {
             argsSchema = argsSchemaStr ? JSON.parse(argsSchemaStr) : {};
         } catch (e) {
-            this.error('Неверный формат args_schema');
+            this.error(this.i18n.t('tool_editor_modal.err_args_schema'));
             return;
         }
         
@@ -346,54 +352,54 @@ export class ToolEditorModal extends PlatformModal {
         return html`
             <div class="form-grid">
                 <div class="form-group">
-                    <label class="form-label required">Название</label>
+                    <label class="form-label required">${this.i18n.t('tool_editor_modal.field_name')}</label>
                     <input 
                         type="text" 
                         class="form-input"
                         .value=${this.name}
                         @input=${(e) => this.name = e.target.value}
-                        placeholder="Название инструмента"
+                        placeholder=${this.i18n.t('tool_editor_modal.placeholder_name')}
                     />
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Описание</label>
+                    <label class="form-label">${this.i18n.t('tool_editor_modal.field_description')}</label>
                     <textarea 
                         class="form-input form-textarea"
                         .value=${this.description}
                         @input=${(e) => this.description = e.target.value}
-                        placeholder="Что делает этот инструмент?"
+                        placeholder=${this.i18n.t('tool_editor_modal.placeholder_description')}
                     ></textarea>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Тип инструмента</label>
+                    <label class="form-label">${this.i18n.t('tool_editor_modal.field_tool_type')}</label>
                     <select 
                         class="form-select"
                         .value=${this.toolType}
                         @change=${(e) => this.toolType = e.target.value}
                     >
-                        <option value="tool">Tool - обычный инструмент</option>
-                        <option value="reason">Reason - инструмент для размышлений</option>
-                        <option value="exit">Exit - инструмент для завершения</option>
+                        <option value="tool">${this.i18n.t('tool_editor_modal.option_tool')}</option>
+                        <option value="reason">${this.i18n.t('tool_editor_modal.option_reason')}</option>
+                        <option value="exit">${this.i18n.t('tool_editor_modal.option_exit')}</option>
                     </select>
                     <span class="form-hint">
-                        Reason/Exit инструменты имеют особую роль в ReAct агентах
+                        ${this.i18n.t('tool_editor_modal.tool_type_hint')}
                     </span>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label required">Args Schema</label>
+                    <label class="form-label required">${this.i18n.t('tool_editor_modal.args_schema_label')}</label>
                     <json-field-editor
                         .value=${this.argsSchema}
                         min-height="120"
-                        hint="JSON схема аргументов (например: {&quot;query&quot;: {&quot;type&quot;: &quot;string&quot;}})"
+                        hint=${this.i18n.t('tool_editor_modal.args_schema_hint')}
                         @change=${this._onArgsSchemaChange}
                     ></json-field-editor>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label required">Код</label>
+                    <label class="form-label required">${this.i18n.t('tool_editor_modal.code_label')}</label>
                     <code-editor
                         .value=${this.code}
                         .language=${this.language || 'python'}
@@ -419,10 +425,10 @@ export class ToolEditorModal extends PlatformModal {
         return html`
             <div class="action-row">
                 <button type="button" class="btn btn-secondary" @click=${this.close}>
-                    Отмена
+                    ${this.i18n.t('editor.cancel')}
                 </button>
                 <button type="button" class="btn btn-primary" @click=${this._onSave}>
-                    ${this.mode === 'create' ? 'Создать' : 'Сохранить'}
+                    ${this.mode === 'create' ? this.i18n.t('inline_tool_modal.create') : this.i18n.t('inline_tool_modal.save')}
                 </button>
             </div>
         `;

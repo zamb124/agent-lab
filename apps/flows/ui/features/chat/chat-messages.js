@@ -99,8 +99,8 @@ export class ChatMessages extends PlatformElement {
             return html`
                 <div class="empty-state">
                     <platform-icon class="empty-icon" name="chat" size="64"></platform-icon>
-                    <div class="empty-title">Начните диалог</div>
-                    <div class="empty-text">Напишите сообщение, чтобы начать общение с агентом</div>
+                    <div class="empty-title">${this.i18n.t('chat_messages.empty_title')}</div>
+                    <div class="empty-text">${this.i18n.t('chat_messages.empty_text')}</div>
                 </div>
             `;
         }

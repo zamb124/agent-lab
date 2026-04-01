@@ -367,7 +367,7 @@ export class ChatInput extends PlatformElement {
                 
                 <button 
                     class="attach-button" 
-                    title="Прикрепить файл"
+                    title=${this.i18n.t('chat_input.title_attach')}
                     @click=${this._onAttachClick}
                     ?disabled=${this.disabled || this.loading}
                 >
@@ -421,7 +421,7 @@ export class ChatInput extends PlatformElement {
                 <button 
                     class="file-remove"
                     @click=${() => this._removeFile(index)}
-                    title="Удалить файл"
+                    title=${this.i18n.t('chat_input.title_remove_file')}
                 >
                     <platform-icon name="close" size="16"></platform-icon>
                 </button>

@@ -8,13 +8,13 @@ import { AppEvents } from '@platform/lib/utils/types.js';
 
 const DEFAULT_CODE = `async def run(state):
     """
-    Обработка state.
-    
+    Process state.
+
     Args:
-        state: Текущее состояние
-    
+        state: Current execution state
+
     Returns:
-        Измененный state
+        Updated state
     """
     return state
 `;

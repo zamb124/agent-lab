@@ -941,7 +941,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">LLM</span>
+                        <span class="form-label-text">${this.i18n.t('llm_node.section_llm')}</span>
                     </div>
                     <llm-config-editor
                         model=${config.llm ? (config.llm.model || 'gpt-4o') : 'gpt-4o'}
@@ -1028,7 +1028,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                     .checked=${!this.structuredOutput}
                                     @change=${() => this._onModeChange('tools')}
                                 />
-                                Tools Mode
+                                ${this.i18n.t('llm_node.tools_mode_label')}
                             </label>
                             <label class="mode-option ${this.structuredOutput ? 'active' : ''}">
                                 <input 
@@ -1037,7 +1037,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                     .checked=${this.structuredOutput}
                                     @change=${() => this._onModeChange('structured')}
                                 />
-                                Structured Output
+                                ${this.i18n.t('llm_node.output_mode_structured')}
                             </label>
                         </div>
                         <span class="form-label-hint">${this.i18n.t('llm_node.output_mode_hint')}</span>
@@ -1045,7 +1045,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                         ${this.structuredOutput ? html`
                             <div class="loop-config-row" style="margin-top: var(--space-3);">
                                 <div class="form-label">
-                                    <span class="form-label-text">Output Schema (JSON Schema)</span>
+                                    <span class="form-label-text">${this.i18n.t('llm_node.output_schema_label')}</span>
                                 </div>
                                 <json-field-editor
                                     bounded
@@ -1062,12 +1062,12 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 ${!this.structuredOutput ? html`
                 <div class="section">
                     <div class="section-header">
-                        <span class="section-title">React Loop Configuration</span>
+                        <span class="section-title">${this.i18n.t('llm_node.section_react_loop')}</span>
                     </div>
                     <div class="loop-config">
                         <div class="loop-config-row">
                             <div class="form-label">
-                                <span class="form-label-text">Loop Mode</span>
+                                <span class="form-label-text">${this.i18n.t('llm_node.loop_mode_label')}</span>
                             </div>
                             <select 
                                 class="form-input form-select"
@@ -1083,7 +1083,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                         ${this.loopMode === 'explicit' ? html`
                             <div class="loop-config-row">
                                 <div class="form-label">
-                                    <span class="form-label-text">Exit Tool</span>
+                                    <span class="form-label-text">${this.i18n.t('llm_node.exit_tool_label')}</span>
                                 </div>
                                 <select 
                                     class="form-input form-select"
@@ -1113,7 +1113,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                             ${this.strict ? html`
                                 <div class="loop-config-row">
                                     <div class="form-label">
-                                        <span class="form-label-text">Reminder Message</span>
+                                        <span class="form-label-text">${this.i18n.t('llm_node.reminder_text_label')}</span>
                                     </div>
                                     <textarea 
                                         class="form-input form-textarea"
@@ -1129,7 +1129,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                         
                         <div class="loop-config-row">
                             <div class="form-label">
-                                <span class="form-label-text">Max Iterations</span>
+                                <span class="form-label-text">${this.i18n.t('llm_node.max_iterations_label')}</span>
                             </div>
                             <input 
                                 type="number" 

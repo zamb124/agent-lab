@@ -34,7 +34,7 @@ export class ExternalApiNodeModal extends BaseNodeModal {
     }
 
     getModalTitle() {
-        return 'External API Node';
+        return this.i18n.t('node_modal.titles.external_api');
     }
 
     _buildConfig() {
@@ -43,7 +43,7 @@ export class ExternalApiNodeModal extends BaseNodeModal {
         const method = this.shadowRoot.querySelector('[name="method"]')?.value || 'GET';
         
         if (!url) {
-            throw new Error('URL обязателен');
+            throw new Error(this.i18n.t('node_modal.external_api.err_url'));
         }
         
         const config = {
@@ -57,7 +57,7 @@ export class ExternalApiNodeModal extends BaseNodeModal {
         const authHeadersEditor = this.shadowRoot.querySelector('json-field-editor[name="auth_headers"]');
         if (authHeadersEditor?.getValue()?.trim()) {
             if (!authHeadersEditor.isValid()) {
-                throw new Error('Неверный формат Auth Headers JSON');
+                throw new Error(this.i18n.t('node_modal.external_api.err_auth_headers'));
             }
             config.auth_headers = authHeadersEditor.getParsedValue();
         }
@@ -65,7 +65,7 @@ export class ExternalApiNodeModal extends BaseNodeModal {
         const parametersEditor = this.shadowRoot.querySelector('json-field-editor[name="parameters"]');
         if (parametersEditor?.getValue()?.trim()) {
             if (!parametersEditor.isValid()) {
-                throw new Error('Неверный формат Parameters JSON');
+                throw new Error(this.i18n.t('node_modal.external_api.err_parameters'));
             }
             config.parameters = parametersEditor.getParsedValue();
         }
@@ -73,7 +73,7 @@ export class ExternalApiNodeModal extends BaseNodeModal {
         const stateMappingEditor = this.shadowRoot.querySelector('json-field-editor[name="state_mapping"]');
         if (stateMappingEditor?.getValue()?.trim()) {
             if (!stateMappingEditor.isValid()) {
-                throw new Error('Неверный формат State Mapping JSON');
+                throw new Error(this.i18n.t('node_modal.external_api.err_state_mapping'));
             }
             config.state_mapping = stateMappingEditor.getParsedValue();
         }
@@ -88,7 +88,7 @@ export class ExternalApiNodeModal extends BaseNodeModal {
             <div class="form-layout">
                 <div class="form-sidebar">
                     <div class="form-group">
-                        <label class="form-label">Node ID *</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.node_id_label')}</label>
                         <input 
                             type="text" 
                             name="node_id"
@@ -101,19 +101,19 @@ export class ExternalApiNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Имя</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.field_name')}</label>
                         <input 
                             type="text" 
                             name="name"
                             class="form-input"
                             .value=${config.name || ''}
-                            placeholder="Запрос к API"
+                            placeholder=${this.i18n.t('node_modal.external_api.placeholder_name')}
                         />
                     </div>
                     
                     <div class="api-section">
                         <div class="form-group">
-                            <label class="form-label">URL *</label>
+                            <label class="form-label">${this.i18n.t('node_modal.external_api.url_label')}</label>
                             <input 
                                 type="text" 
                                 name="url"
@@ -125,7 +125,7 @@ export class ExternalApiNodeModal extends BaseNodeModal {
                         </div>
                         
                         <div class="form-group">
-                            <label class="form-label">Method</label>
+                            <label class="form-label">${this.i18n.t('node_modal.external_api.method_label')}</label>
                             <select name="method" class="form-select">
                                 <option value="GET" ?selected=${!config.method || config.method === 'GET'}>GET</option>
                                 <option value="POST" ?selected=${config.method === 'POST'}>POST</option>
@@ -136,13 +136,13 @@ export class ExternalApiNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Auth Headers (JSON)</label>
+                        <label class="form-label">${this.i18n.t('node_modal.external_api.auth_headers_label')}</label>
                         <json-field-editor
                             name="auth_headers"
                             .value=${config.auth_headers ? JSON.stringify(config.auth_headers, null, 2) : '{}'}
                             min-height="80"
                             placeholder='{"Authorization": "Bearer @var:token"}'
-                            hint="Поддерживает @var:path для переменных"
+                            hint=${this.i18n.t('node_modal.external_api.var_path_hint')}
                         ></json-field-editor>
                     </div>
                     
@@ -151,24 +151,24 @@ export class ExternalApiNodeModal extends BaseNodeModal {
                 
                 <div class="form-main">
                     <div class="form-group">
-                        <label class="form-label">Parameters (JSON)</label>
+                        <label class="form-label">${this.i18n.t('node_modal.external_api.parameters_label')}</label>
                         <json-field-editor
                             name="parameters"
                             .value=${config.parameters ? JSON.stringify(config.parameters, null, 2) : '[]'}
                             min-height="120"
                             placeholder='[{"name": "city", "source": "@state:user.city", "location": "query"}]'
-                            hint="source: @state:path или @var:name. location: query, path, body, header"
+                            hint=${this.i18n.t('node_modal.external_api.parameters_hint')}
                         ></json-field-editor>
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">State Mapping (JSON)</label>
+                        <label class="form-label">${this.i18n.t('node_modal.external_api.state_mapping_label')}</label>
                         <json-field-editor
                             name="state_mapping"
                             .value=${config.state_mapping ? JSON.stringify(config.state_mapping, null, 2) : '{}'}
                             min-height="80"
                             placeholder='{"result": "api_response.data"}'
-                            hint="Маппинг полей ответа API в state"
+                            hint=${this.i18n.t('node_modal.external_api.state_mapping_hint')}
                         ></json-field-editor>
                     </div>
                     

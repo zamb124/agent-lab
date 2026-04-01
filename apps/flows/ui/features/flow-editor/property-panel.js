@@ -136,7 +136,7 @@ export class PropertyPanel extends PlatformElement {
     _renderDefaultPanel() {
         return html`
             <div style="padding: var(--space-4); text-align: center; color: var(--text-tertiary);">
-                Выберите ноду для редактирования
+                ${this.i18n.t('property_panel.select_node')}
             </div>
         `;
     }

@@ -20,7 +20,7 @@ export class FlowNodeEditor extends BaseNodeEditor {
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Имя</span>
+                        <span class="form-label-text">${this.i18n.t('node_modal.common.field_name')}</span>
                     </div>
                     <input 
                         type="text" 
@@ -33,7 +33,7 @@ export class FlowNodeEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Flow ID</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.flow.editor_flow_id')}</span>
                 </div>
                 <input 
                     type="text" 
@@ -46,7 +46,7 @@ export class FlowNodeEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Skill ID</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.remote_flow.skill_id_label')}</span>
                 </div>
                 <input 
                     type="text" 

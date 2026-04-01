@@ -14,24 +14,12 @@ const CHANNEL_TYPES = [
     { id: 'webhook', name: 'Webhook', icon: 'globe', color: '#8b5cf6' },
 ];
 
-const CHANNEL_ACTIONS = {
-    telegram: [
-        { id: 'send_message', name: 'Отправить сообщение' },
-        { id: 'send_photo', name: 'Отправить фото' },
-        { id: 'send_document', name: 'Отправить документ' },
-    ],
-    email: [
-        { id: 'send_email', name: 'Отправить email' },
-    ],
-    whatsapp: [
-        { id: 'send_message', name: 'Отправить сообщение' },
-    ],
-    sms: [
-        { id: 'send_sms', name: 'Отправить SMS' },
-    ],
-    webhook: [
-        { id: 'post', name: 'POST запрос' },
-    ],
+const CHANNEL_ACTION_IDS = {
+    telegram: ['send_message', 'send_photo', 'send_document'],
+    email: ['send_email'],
+    whatsapp: ['send_message'],
+    sms: ['send_sms'],
+    webhook: ['post'],
 };
 
 export class ChannelNodeModal extends BaseNodeModal {
@@ -113,7 +101,15 @@ export class ChannelNodeModal extends BaseNodeModal {
     }
 
     getModalTitle() {
-        return 'Channel Node';
+        return this.i18n.t('node_modal.titles.channel');
+    }
+
+    _channelActions(channelId) {
+        const ids = CHANNEL_ACTION_IDS[channelId] || [];
+        return ids.map((id) => ({
+            id,
+            name: this.i18n.t(`node_modal.channel.actions.${id}`),
+        }));
     }
 
     showModal(nodeId = '', config = {}) {
@@ -132,11 +128,11 @@ export class ChannelNodeModal extends BaseNodeModal {
         const action = this.shadowRoot.querySelector('[name="action"]')?.value || 'send_message';
         
         if (!nodeId) {
-            throw new Error('Node ID обязателен');
+            throw new Error(this.i18n.t('node_modal.channel.err_node_id'));
         }
         
         if (!this.selectedChannel) {
-            throw new Error('Выберите канал');
+            throw new Error(this.i18n.t('node_modal.channel.err_channel'));
         }
         
         const config = {
@@ -164,7 +160,7 @@ export class ChannelNodeModal extends BaseNodeModal {
             const headersEditor = this.shadowRoot.querySelector('json-field-editor[name="headers"]');
             if (headersEditor?.getValue()?.trim()) {
                 if (!headersEditor.isValid()) {
-                    throw new Error('Неверный формат Headers JSON');
+                    throw new Error(this.i18n.t('node_modal.channel.err_headers'));
                 }
                 const headers = headersEditor.getParsedValue();
                 if (Object.keys(headers).length > 0) {
@@ -207,7 +203,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                             .value=${config.channel_config?.bot_token || ''}
                             placeholder="@var:telegram_bot_token"
                         />
-                        <span class="form-hint">Используйте @var:имя для ссылки на переменную</span>
+                        <span class="form-hint">${this.i18n.t('node_modal.channel.var_hint')}</span>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Parse Mode</label>
@@ -280,13 +276,13 @@ export class ChannelNodeModal extends BaseNodeModal {
 
     renderBody() {
         const config = this.nodeConfig;
-        const actions = CHANNEL_ACTIONS[this.selectedChannel] || [];
+        const actions = this.selectedChannel ? this._channelActions(this.selectedChannel) : [];
         
         return html`
             <div class="form-layout">
                 <div class="form-sidebar">
                     <div class="form-group">
-                        <label class="form-label">Node ID *</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.node_id_label')}</label>
                         <input 
                             type="text" 
                             name="node_id"
@@ -299,7 +295,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Имя</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.field_name')}</label>
                         <input 
                             type="text" 
                             name="name"
@@ -314,7 +310,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                 
                 <div class="form-main">
                     <div class="form-group">
-                        <label class="form-label">Канал</label>
+                        <label class="form-label">${this.i18n.t('node_modal.channel.field_channel')}</label>
                         <div class="channel-selector">
                             ${CHANNEL_TYPES.map(ch => html`
                                 <div 
@@ -332,7 +328,7 @@ export class ChannelNodeModal extends BaseNodeModal {
                     
                     ${this.selectedChannel && actions.length > 0 ? html`
                         <div class="form-group">
-                            <label class="form-label">Действие</label>
+                            <label class="form-label">${this.i18n.t('node_modal.channel.field_action')}</label>
                             <select name="action" class="form-select">
                                 ${actions.map(action => html`
                                     <option 

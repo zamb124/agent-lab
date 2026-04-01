@@ -264,10 +264,10 @@ export class EditorHeader extends PlatformElement {
                         class="flow-name-input"
                         .value=${this.flowName}
                         @change=${this._onNameChange}
-                        placeholder="Flow name"
+                        placeholder=${this.i18n.t('editor_header.placeholder_flow_name')}
                     />
                     
-                    <span class="status-badge">Draft</span>
+                    <span class="status-badge">${this.i18n.t('editor_header.status_draft')}</span>
                 </div>
                 
                 <div class="header-center">
@@ -276,7 +276,7 @@ export class EditorHeader extends PlatformElement {
                             type="button"
                             class="mode-btn ${this.mode === 'visual' ? 'active' : ''}"
                             @click=${() => this._setMode('visual')}
-                            title="Visual Editor"
+                            title=${this.i18n.t('editor_header.title_visual_mode')}
                         >
                             <platform-icon name="edit" size="18"></platform-icon>
                         </button>
@@ -306,9 +306,9 @@ export class EditorHeader extends PlatformElement {
                 </div>
                 
                 <div class="header-right">
-                    <button class="header-btn" @click=${this._onShowCode} title="Code">
+                    <button class="header-btn" @click=${this._onShowCode} title=${this.i18n.t('editor_header.title_code')}>
                         <platform-icon name="code" size="16"></platform-icon>
-                        Code
+                        ${this.i18n.t('editor_header.btn_code')}
                     </button>
                     
                     <button 
@@ -320,7 +320,7 @@ export class EditorHeader extends PlatformElement {
                             ? html`<platform-spinner size="16"></platform-spinner>`
                             : html`<platform-icon name="save" size="16"></platform-icon>`
                         }
-                        Publish
+                        ${this.i18n.t('editor_header.btn_publish')}
                     </button>
                 </div>
             </header>

@@ -4,6 +4,7 @@
     "back_to_dashboard": "Вернуться в Dashboard",
     "zoom_in": "Приблизить",
     "zoom_out": "Отдалить",
+    "zoom_reset": "Сбросить масштаб",
     "fit_to_screen": "Подогнать под экран",
     "select_or_create_flow": "Выберите или создайте Flow",
     "save": "Сохранить",
@@ -25,7 +26,54 @@
   },
   "chat_widget": {
     "err_send": "Произошла ошибка. Попробуйте снова.",
-    "err_process": "Ошибка обработки сообщения"
+    "err_process": "Ошибка обработки сообщения",
+    "err_load_settings": "Не удалось загрузить настройки: {{status}}",
+    "placeholder_message": "Напишите сообщение..."
+  },
+  "platform_chat": {
+    "title_menu": "Открыть меню",
+    "title_sessions": "Сессии",
+    "title_edit_agent": "Редактировать агента",
+    "title_clear_chat": "Очистить чат",
+    "title_actions": "Действия",
+    "title_session_state": "Состояние сессии",
+    "menu_sessions": "Сессии",
+    "menu_edit": "Редактировать",
+    "menu_clear_chat": "Очистить чат",
+    "session_label": "Сессия:",
+    "session_none": "нет контекста",
+    "err_with_message": "Ошибка: {{message}}",
+    "stream_fallback_content": "Произошла ошибка при обработке запроса.",
+    "err_short": "Ошибка",
+    "err_occurred": "Произошла ошибка",
+    "info_chat_cleared": "Чат очищен",
+    "warn_no_session": "Нет активной сессии",
+    "warn_no_task_tracing": "Нет taskId для отображения трейсинга"
+  },
+  "chat_messages": {
+    "empty_title": "Начните диалог",
+    "empty_text": "Напишите сообщение, чтобы начать общение с агентом"
+  },
+  "chat_input": {
+    "title_attach": "Прикрепить файл",
+    "title_remove_file": "Удалить файл"
+  },
+  "bottom_toolbar": {
+    "title_select": "Выбор (V)",
+    "title_add_node": "Добавить ноду (A)",
+    "title_undo": "Отменить (Cmd+Z)",
+    "title_redo": "Повторить (Cmd+Shift+Z)",
+    "title_variables": "Переменные"
+  },
+  "canvas_runner": {
+    "sse_connection_error": "Ошибка соединения"
+  },
+  "flows_app": {
+    "loading": "Загрузка Agent Builder...",
+    "redirect_auth": "Перенаправление на авторизацию..."
+  },
+  "property_panel": {
+    "select_node": "Выберите ноду для редактирования"
   },
   "editor": {
     "load_agent_error": "Ошибка загрузки агента: {{message}}",
@@ -92,10 +140,27 @@
     "reminder_placeholder": "Ты не вызвал tool для завершения...",
     "reminder_hint": "Кастомное напоминание (опционально)",
     "max_iterations_hint": "Максимум итераций перед принудительным выходом",
+    "max_iterations_label": "Макс. итераций",
+    "loop_mode_label": "Режим цикла",
+    "tools_mode_label": "Режим Tools",
     "section_tools": "Инструменты",
     "inline_menu": "Inline ▼",
     "add_tool": "+ Добавить",
-    "empty_tools": "Нет инструментов"
+    "empty_tools": "Нет инструментов",
+    "field_name_required": "Название *",
+    "node_id_label": "Node ID *",
+    "output_mode_tools": "Tools",
+    "output_mode_structured": "Structured Output",
+    "output_schema_label": "Output Schema (JSON Schema)",
+    "output_schema_body_hint": "JSON Schema задаёт структуру ответа агента. LLM вернёт данные строго по этой схеме.",
+    "output_mapping_label": "Output Mapping (опционально)",
+    "output_mapping_body_hint": "Маппинг полей из JSON ответа в поля state. Если пусто — поля пишутся в state с теми же именами.",
+    "section_llm": "LLM",
+    "section_react_loop": "Режим ReAct Loop",
+    "exit_tool_label": "Exit Tool",
+    "reminder_text_label": "Текст reminder",
+    "prompt_tool_id": "Введите ID инструмента:",
+    "prompt_label_required": "Промпт *"
   },
   "mcp_servers": {
     "modal_title": "MCP серверы",
@@ -199,7 +264,127 @@
   "editor_header": {
     "back": "Назад",
     "stop": "Остановить",
-    "run": "Run"
+    "run": "Run",
+    "placeholder_flow_name": "Название flow",
+    "title_visual_mode": "Визуальный редактор",
+    "title_code": "Просмотр кода",
+    "btn_code": "Код",
+    "btn_publish": "Опубликовать",
+    "status_draft": "Черновик"
+  },
+  "node_types_sidebar": {
+    "triggers_title": "Триггеры",
+    "search_placeholder": "Поиск нод...",
+    "empty_triggers": "Нет триггеров",
+    "add_trigger_title": "Добавить триггер"
+  },
+  "node_palette": {
+    "category_core": "Ядро",
+    "category_tools": "Инструменты",
+    "category_integrations": "Интеграции",
+    "category_channels": "Каналы",
+    "category_resources": "Ресурсы",
+    "llm_node": {
+      "name": "LLM Node",
+      "description": "LLM и tools (ReAct)"
+    },
+    "code_node": {
+      "name": "Code Node",
+      "description": "Python функция"
+    },
+    "external_api": {
+      "name": "External API",
+      "description": "HTTP API вызов"
+    },
+    "mcp": {
+      "name": "MCP Tool",
+      "description": "MCP сервер tool"
+    },
+    "remote_flow": {
+      "name": "Remote A2A",
+      "description": "Внешний endpoint по A2A"
+    },
+    "flow_node": {
+      "name": "Flow Node",
+      "description": "Вложенный flow (subflow)"
+    },
+    "channel": {
+      "name": "Channel",
+      "description": "Отправка в каналы (Telegram, Email)"
+    },
+    "resource_code": {
+      "name": "Code",
+      "description": "Inline Python/JS код"
+    },
+    "resource_rag": {
+      "name": "RAG",
+      "description": "RAG namespace для поиска"
+    },
+    "resource_files": {
+      "name": "Files",
+      "description": "S3/MinIO файловое хранилище"
+    },
+    "resource_prompt": {
+      "name": "Prompt",
+      "description": "Шаблон промпта"
+    },
+    "resource_llm": {
+      "name": "LLM",
+      "description": "LLM модель"
+    },
+    "resource_secret": {
+      "name": "Secret",
+      "description": "Секрет из переменных"
+    },
+    "resource_http": {
+      "name": "HTTP",
+      "description": "HTTP endpoint"
+    },
+    "resource_cache": {
+      "name": "Cache",
+      "description": "Redis cache namespace"
+    }
+  },
+  "llm_config_editor": {
+    "label_model": "Модель",
+    "loading": "Загрузка...",
+    "label_temperature": "Температура",
+    "label_max_tokens": "Max tokens (опционально)",
+    "placeholder_auto": "Авто",
+    "label_provider": "Провайдер",
+    "option_system_default": "Системный по умолчанию",
+    "hint_provider": "Выберите провайдера или используйте системный по умолчанию",
+    "credentials_for": "Credentials для {{provider}}",
+    "label_api_key": "API Key",
+    "placeholder_api_key": "sk-... или @var:my_api_key",
+    "hint_api_key": "Напрямую или через переменную @var:имя_переменной",
+    "label_base_url": "Base URL (опционально)",
+    "placeholder_base_url": "https://api.openai.com/v1"
+  },
+  "test_panel": {
+    "err_session_list": "Список сессий: {{message}}",
+    "err_select_session": "Выберите сессию",
+    "running": "Выполнение...",
+    "hint_execute": "Нажмите Execute для запуска",
+    "err_run": "Ошибка выполнения",
+    "label_response": "Ответ:",
+    "state_unchanged": "State не изменился",
+    "config_valid": "Конфигурация валидна",
+    "success": "Выполнено успешно",
+    "input_state_title": "Input State (JSON)",
+    "reset": "Сбросить",
+    "session_label": "Сессия",
+    "session_loading": "Загрузка…",
+    "session_select_placeholder": "— выберите —",
+    "apply_state": "Подставить state",
+    "refresh_sessions_title": "Обновить список",
+    "refresh": "Обновить",
+    "title": "Тестирование",
+    "validate": "Validate",
+    "execute": "Execute",
+    "result_title": "Результат",
+    "view_diff": "Diff",
+    "view_full": "Full"
   },
   "node_defaults": {
     "name_llm_node": "Новый LLM-узел",
@@ -234,7 +419,58 @@
     "result_heading": "Результат",
     "clear": "Очистить",
     "mocks_section_title": "Настройка моков",
-    "persist_context_help": "Включено: каждый запуск использует тот же contextId — продолжается один state сессии. Выключено: каждый запуск с новым контекстом."
+    "persist_context_help": "Включено: каждый запуск использует тот же contextId — продолжается один state сессии. Выключено: каждый запуск с новым контекстом.",
+    "label_input": "Ввод",
+    "label_output": "Вывод",
+    "waiting_for_response": "Ожидание ответа...",
+    "sidebar_run_title": "Запуск"
+  },
+  "llm_mocks_editor": {
+    "empty_state": "Нет мок-ответов. Добавьте для тестирования без реальных вызовов нод.",
+    "add_mock": "+ Добавить мок-ответ",
+    "hint": "Выберите ноду на графе. Для агента (llm_node) можно задать мок ответа LLM или выбрать инструмент и подставить результат тула.",
+    "answer_n": "Ответ {{n}}",
+    "no_nodes": "Нет нод на графе",
+    "select_node": "Нода…",
+    "llm_only_queue": "Только LLM (очередь ответов)",
+    "type_text": "Текст",
+    "type_tool_call": "Вызов tool",
+    "type_json": "JSON",
+    "remove_row": "Удалить",
+    "text_reply_label": "Текстовый ответ",
+    "placeholder_text": "Текст ответа от ноды или тула...",
+    "tool_name_label": "Имя инструмента",
+    "args_json_label": "Аргументы (JSON)",
+    "json_reply_label": "JSON ответ ноды",
+    "add_another": "+ Добавить еще",
+    "placeholder_tool_id": "calculator"
+  },
+  "flow_variable_editor": {
+    "title_new": "Новая переменная",
+    "title_edit": "Редактировать: {{name}}",
+    "inherited_badge": "из базы",
+    "field_variable_name": "Имя переменной",
+    "placeholder_variable_key": "my_variable",
+    "field_value": "Значение",
+    "mode_text": "Текст",
+    "mode_json": "JSON",
+    "placeholder_value_plain": "Значение переменной",
+    "hint_value_json": "JSON формат для сложных структур данных",
+    "hint_value_text": "Простое текстовое значение",
+    "field_title": "Заголовок",
+    "field_description": "Описание",
+    "field_order": "Порядок",
+    "placeholder_title": "Название для отображения",
+    "placeholder_description": "Для использования в ответах агента",
+    "placeholder_order": "0",
+    "hint_order": "Порядок отображения (необязательно)",
+    "field_public": "Публичная (видна в flow-card)",
+    "btn_cancel": "Отмена",
+    "btn_save": "Сохранить",
+    "btn_create": "Создать",
+    "err_name_required": "Имя переменной обязательно",
+    "err_json_invalid": "Некорректный JSON формат",
+    "err_to_json": "Не удалось преобразовать в JSON"
   },
   "code_editor": {
     "copied": "Код скопирован",
@@ -265,7 +501,13 @@
     "section_main": "Основное",
     "placeholder_node_name": "Название ноды",
     "placeholder_node_description": "Описание назначения",
-    "remove_resource": "Удалить ресурс"
+    "placeholder_node_id": "my_node_id",
+    "field_resources": "Ресурсы",
+    "input_state_section_title": "Input State (JSON)",
+    "remove_resource": "Удалить ресурс",
+    "reset_input_state": "Сбросить",
+    "resources_drop_hint": "Перетащите ресурсы на эту ноду или добавьте глобальные ресурсы на canvas",
+    "override_render_fields": "Переопределите renderFields() в подклассе"
   },
   "json_field_editor": {
     "copied": "Скопировано",
@@ -285,7 +527,227 @@
     "err_failed": "Выполнение завершилось с ошибкой"
   },
   "tracing_modal": {
-    "empty_hint": "Трейсы появятся после выполнения задач"
+    "empty_hint": "Трейсы появятся после выполнения задач",
+    "loading": "Загрузка трейсинга...",
+    "no_data": "Нет данных трейсинга"
+  },
+  "node_modal": {
+    "titles": {
+      "llm_node": "LLM Node",
+      "remote_flow": "Remote A2A flow",
+      "external_api": "External API Node",
+      "mcp": "MCP Tool Node",
+      "flow": "Flow Node",
+      "code": "Code Node",
+      "channel": "Channel Node"
+    },
+    "common": {
+      "title_edit_default": "Редактировать ноду",
+      "override_subclass": "Переопределите renderMainContent() в подклассе",
+      "node_id_label": "Node ID *",
+      "field_name": "Имя",
+      "sidebar_node_id": "Node ID",
+      "state_section_title": "State и сообщения",
+      "output_key_label": "Output Key",
+      "output_key_hint": "Поле в state для записи результата (по умолчанию node_id)",
+      "save_to_messages_label": "Сохранять в messages",
+      "message_field_label": "Message Field",
+      "message_field_placeholder": "По умолчанию diff стейта",
+      "message_field_hint": "Поле для записи в messages (пусто = diff стейта)"
+    },
+    "remote_flow": {
+      "placeholder_name": "Удалённый агент",
+      "connection_title": "Подключение",
+      "url_label": "URL *",
+      "skill_id_label": "Skill ID",
+      "auth_headers_label": "Auth Headers (JSON)",
+      "url_hint": "Поддерживает @var:path (например: @var:config.agent_url)",
+      "auth_headers_hint": "Поддерживает @var:path для переменных",
+      "input_mapping_hint": "Какие поля из state передать удалённому агенту",
+      "err_url": "URL обязателен",
+      "err_auth_headers": "Неверный формат Auth Headers JSON"
+    },
+    "external_api": {
+      "placeholder_name": "Запрос к API",
+      "url_label": "URL *",
+      "auth_headers_label": "Auth Headers (JSON)",
+      "parameters_label": "Parameters (JSON)",
+      "state_mapping_label": "State Mapping (JSON)",
+      "var_path_hint": "Поддерживает @var:path для переменных",
+      "method_label": "Method",
+      "parameters_hint": "source: @state:path или @var:name. location: query, path, body, header",
+      "state_mapping_hint": "Маппинг полей ответа API в state",
+      "err_url": "URL обязателен",
+      "err_auth_headers": "Неверный формат Auth Headers JSON",
+      "err_parameters": "Неверный формат Parameters JSON",
+      "err_state_mapping": "Неверный формат State Mapping JSON"
+    },
+    "mcp": {
+      "placeholder_name": "MCP Tool Call",
+      "section_title": "MCP сервер и tool",
+      "headers_label": "Headers (JSON)",
+      "state_mapping_label": "State Mapping (JSON)",
+      "server_label": "MCP сервер *",
+      "tool_label": "Tool *",
+      "select_server": "Выберите сервер...",
+      "select_tool": "Выберите tool...",
+      "sync_tools_hint": "Синхронизируйте tools на странице MCP серверов",
+      "tool_params_label": "Параметры tool",
+      "headers_hint": "Дополнительные headers (переопределяют серверные)",
+      "state_mapping_hint": "Маппинг результата MCP tool в state",
+      "err_load_servers": "Ошибка загрузки MCP серверов: {{message}}",
+      "err_server": "MCP сервер обязателен",
+      "err_tool": "Tool обязателен",
+      "err_headers": "Неверный формат Headers JSON",
+      "err_state_mapping": "Неверный формат State Mapping JSON"
+    },
+    "flow": {
+      "placeholder_name": "Обработчик заказов",
+      "section_title": "Вызываемый flow",
+      "flow_label": "Flow *",
+      "flow_hint": "Вложенный flow для вызова",
+      "skill_label": "Skill",
+      "skill_hint": "Skill вложенного flow",
+      "select_flow": "Выберите flow...",
+      "err_target_flow": "Целевой flow обязателен",
+      "editor_flow_id": "Flow ID"
+    },
+    "code": {
+      "placeholder_name": "Классификатор",
+      "field_language": "Язык",
+      "field_mode": "Режим",
+      "mode_inline": "Inline",
+      "mode_path": "Path",
+      "mode_tool": "Tool",
+      "tool_id_label": "Tool ID *",
+      "tool_id_hint": "Загрузка tool из реестра",
+      "function_path_label": "Function Path *",
+      "args_schema_label": "Args Schema",
+      "args_schema_hint": "Схема параметров (опционально)",
+      "help_title": "Справка",
+      "help_after_execute": "— функция с параметрами",
+      "help_after_run": "— простая функция",
+      "help_after_args": "— параметры из input_mapping",
+      "help_after_state": "— ответ",
+      "code_label_unused": "Code (не используется)",
+      "code_label": "Code",
+      "err_tool_id": "Укажите Tool ID",
+      "err_function_path": "Укажите путь к функции",
+      "err_code": "Введите код"
+    },
+    "channel": {
+      "err_node_id": "Node ID обязателен",
+      "err_channel": "Выберите канал",
+      "err_headers": "Неверный формат Headers JSON",
+      "field_channel": "Канал",
+      "field_action": "Действие",
+      "var_hint": "Используйте @var:имя для ссылки на переменную",
+      "actions": {
+        "send_message": "Отправить сообщение",
+        "send_photo": "Отправить фото",
+        "send_document": "Отправить документ",
+        "send_email": "Отправить email",
+        "send_sms": "Отправить SMS",
+        "post": "POST запрос"
+      },
+      "field_parse_mode": "Режим разбора (Parse mode)",
+      "field_smtp_host": "SMTP host",
+      "field_from_email": "Email отправителя",
+      "field_url": "URL",
+      "field_headers_json": "Headers (JSON)"
+    }
+  },
+  "flow_create": {
+    "title": "Создать flow",
+    "subtitle": "Выберите шаблон",
+    "intro": "Выберите подходящий тип агента для вашей задачи",
+    "cancel": "Отмена",
+    "err": "Ошибка: {{message}}",
+    "templates": {
+      "react": {
+        "name": "React flow",
+        "description": "Flow с циклом ReAct: рассуждение + действие. Подходит для сложных задач с использованием инструментов."
+      },
+      "graph": {
+        "name": "Graph flow",
+        "description": "Flow с графовой структурой выполнения. Подходит для последовательных задач с условными переходами."
+      },
+      "multi_agent": {
+        "name": "Multi-flow",
+        "description": "Несколько вложенных flow и llm_node. Для сложных многошаговых сценариев."
+      },
+      "function": {
+        "name": "Function flow",
+        "description": "Flow на основе Python функций. Подходит для вычислений и трансформаций данных."
+      },
+      "tool": {
+        "name": "Tool flow",
+        "description": "Узкий flow-инструмент. Выполняет одну задачу и может вызываться из других flow."
+      },
+      "external": {
+        "name": "External flow",
+        "description": "Внешний flow (A2A). Подключается к существующему API или сервису через HTTP."
+      }
+    },
+    "gen": {
+      "react": {
+        "flow_name": "Новый React flow",
+        "description": "Описание агента",
+        "tags": "новый,react",
+        "prompt": "Вы полезный ассистент, готовый помочь пользователю."
+      },
+      "graph": {
+        "flow_name": "Новый Graph flow",
+        "description": "Описание агента",
+        "tags": "новый,graph"
+      },
+      "multi_agent": {
+        "flow_name": "Новый Multi-flow",
+        "description": "Несколько вложенных flow",
+        "tags": "новый,multi-flow",
+        "prompt": "Вы супервизор, координирующий вложенные flow и tools. Делегируйте задачи подходящим нодам."
+      },
+      "function": {
+        "flow_name": "Новый Function flow",
+        "description": "Flow на основе функций",
+        "tags": "новый,code"
+      },
+      "tool": {
+        "flow_name": "Новый Tool flow",
+        "description": "Узкий flow-инструмент",
+        "tags": "новый,code"
+      },
+      "external": {
+        "flow_name": "Новый External flow",
+        "description": "Внешний flow (A2A)",
+        "tags": "новый,external"
+      }
+    }
+  },
+  "tool_editor_modal": {
+    "title_create": "Создать Inline Tool",
+    "title_edit": "Редактировать Tool",
+    "err_editors": "Редакторы не инициализированы",
+    "err_args_schema": "Неверный формат args_schema",
+    "code_valid": "Код валиден",
+    "validation_error": "Ошибка валидации: {{message}}",
+    "execute_ok": "Выполнено успешно",
+    "execute_error": "Ошибка выполнения: {{message}}",
+    "err_name": "Название обязательно",
+    "err_code": "Код обязателен",
+    "field_name": "Название",
+    "placeholder_name": "Название инструмента",
+    "field_description": "Описание",
+    "placeholder_description": "Что делает этот инструмент?",
+    "field_tool_type": "Тип инструмента",
+    "option_tool": "Tool — обычный инструмент",
+    "option_reason": "Reason — инструмент для размышлений",
+    "option_exit": "Exit — инструмент для завершения",
+    "tool_type_hint": "Reason/Exit инструменты имеют особую роль в ReAct агентах",
+    "args_schema_label": "Args Schema",
+    "args_schema_hint": "JSON схема аргументов (например: {\"query\": {\"type\": \"string\"}})",
+    "code_label": "Код",
+    "error_unknown": "Неизвестная ошибка"
   },
   "inline_tool_modal": {
     "title_create": "Создать {{label}}",
@@ -307,5 +769,115 @@
     "err_unknown_type": "Неизвестный тип инструмента: {{type}}",
     "create": "Создать",
     "save": "Сохранить"
+  },
+  "trigger_editor": {
+    "title_create": "Создать триггер",
+    "title_edit": "Редактировать триггер",
+    "tabs_config": "Конфигурация",
+    "tabs_mapping": "Input Mapping",
+    "tabs_output": "Output Actions",
+    "field_trigger_id": "Trigger ID",
+    "field_name": "Название",
+    "field_trigger_type": "Тип триггера",
+    "mapping_output_title": "Output Mapping",
+    "mapping_hint": "Маппинг данных триггера в state агента. Слева — путь в state, справа — путь в payload.",
+    "mapping_examples_title": "Примеры путей для {{type}}",
+    "mapping_select_type": "Выберите тип триггера",
+    "output_title": "Output Actions",
+    "output_hint": "Действия после завершения агента. Обычно — отправка ответа в канал.",
+    "add_action": "Добавить действие",
+    "err_trigger_id": "Trigger ID обязателен",
+    "err_type": "Выберите тип триггера",
+    "telegram": {
+      "section": "Telegram Bot",
+      "bot_token": "Bot Token",
+      "bot_token_hint": "Токен бота. Введите @ для выбора переменной",
+      "allowed_users": "Разрешенные пользователи (ID)",
+      "allowed_users_hint": "Через запятую. Пусто = все пользователи"
+    },
+    "cron": {
+      "section": "Cron Schedule",
+      "cron": "Cron выражение",
+      "cron_hint": "Формат: минуты часы день_месяца месяц день_недели",
+      "timezone": "Timezone",
+      "initial_content": "Начальный content"
+    },
+    "webhook": {
+      "section": "Webhook",
+      "secret": "Secret Token",
+      "secret_hint": "Для верификации запросов (header X-Secret-Token)",
+      "allowed_ips": "Разрешенные IP",
+      "allowed_ips_hint": "Через запятую. Пусто = все IP"
+    },
+    "email": {
+      "section": "Email",
+      "provider": "Провайдер",
+      "imap_host": "IMAP Host",
+      "imap_user": "IMAP User",
+      "imap_password": "IMAP Password"
+    },
+    "redis": {
+      "section": "Redis Pub/Sub",
+      "channel": "Channel",
+      "pattern_subscribe": "Pattern subscribe",
+      "pattern_hint": "Использовать pattern matching для channel"
+    },
+    "output_action": {
+      "mapping_json": "Mapping (JSON)",
+      "condition": "Условие",
+      "remove_title": "Удалить"
+    },
+    "types": {
+      "telegram": {
+        "name": "Telegram Bot",
+        "description": "Запуск по сообщению в Telegram боте"
+      },
+      "cron": {
+        "name": "Cron Schedule",
+        "description": "Запуск по расписанию"
+      },
+      "webhook": {
+        "name": "HTTP Webhook",
+        "description": "Запуск по POST запросу"
+      },
+      "email": {
+        "name": "Email",
+        "description": "Запуск при получении письма"
+      },
+      "redis": {
+        "name": "Redis Pub/Sub",
+        "description": "Запуск по событию в Redis"
+      }
+    },
+    "channels": {
+      "telegram": "Telegram",
+      "email": "Email",
+      "webhook": "Webhook"
+    },
+    "ex": {
+      "telegram": {
+        "message_text": "Текст сообщения",
+        "message_chat_id": "ID чата",
+        "message_from_id": "ID отправителя",
+        "message_from_username": "Username отправителя"
+      },
+      "webhook": {
+        "body_data": "Данные из body",
+        "headers_x_custom": "Header",
+        "query_param": "Query параметр"
+      },
+      "cron": {
+        "scheduled_time": "Время запуска"
+      },
+      "email": {
+        "from": "Email отправителя",
+        "subject": "Тема письма",
+        "body": "Тело письма"
+      },
+      "redis": {
+        "channel": "Redis channel",
+        "data": "Данные сообщения"
+      }
+    }
   }
 }

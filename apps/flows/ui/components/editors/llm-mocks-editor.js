@@ -341,14 +341,13 @@ export class LLMMocksEditor extends PlatformElement {
             return html`
                 <div class="mocks-container">
                     <div class="empty-state">
-                        Нет мок-ответов. Добавьте для тестирования без реальных вызовов нод.
+                        ${this.i18n.t('llm_mocks_editor.empty_state')}
                     </div>
                     <button type="button" class="add-btn" @click=${this._addMock}>
-                        + Добавить мок-ответ
+                        ${this.i18n.t('llm_mocks_editor.add_mock')}
                     </button>
                     <div class="hint">
-                        Выберите ноду на графе. Для агента (llm_node) можно задать мок ответа LLM или
-                        выбрать инструмент и подставить результат тула.
+                        ${this.i18n.t('llm_mocks_editor.hint')}
                     </div>
                 </div>
             `;
@@ -363,7 +362,7 @@ export class LLMMocksEditor extends PlatformElement {
                     return html`
                         <div class="mock-item">
                             <div class="mock-toolbar">
-                                <span class="mock-number">Ответ ${index + 1}</span>
+                                <span class="mock-number">${this.i18n.t('llm_mocks_editor.answer_n', { n: index + 1 })}</span>
                                 <div class="mock-toolbar-main">
                                     <select
                                         class="node-select"
@@ -371,9 +370,9 @@ export class LLMMocksEditor extends PlatformElement {
                                         @change=${(e) => this._onNodeChange(mock.row_id, e.target.value)}
                                     >
                                         ${nodeIds.length === 0
-                                            ? html`<option value="" disabled>Нет нод на графе</option>`
+                                            ? html`<option value="" disabled>${this.i18n.t('llm_mocks_editor.no_nodes')}</option>`
                                             : html`
-                                                  <option value="" disabled>Нода…</option>
+                                                  <option value="" disabled>${this.i18n.t('llm_mocks_editor.select_node')}</option>
                                                   ${nodeIds.map(
                                                       (id) => html`<option value=${id}>${id}</option>`
                                                   )}
@@ -387,7 +386,7 @@ export class LLMMocksEditor extends PlatformElement {
                                                   @change=${(e) =>
                                                       this._onToolChange(mock.row_id, e.target.value)}
                                               >
-                                                  <option value=${TOOL_NONE}>Только LLM (очередь ответов)</option>
+                                                  <option value=${TOOL_NONE}>${this.i18n.t('llm_mocks_editor.llm_only_queue')}</option>
                                                   ${this._toolOptions(nid).map(
                                                       (tid) => html`<option value=${tid}>${tid}</option>`
                                                   )}
@@ -399,15 +398,15 @@ export class LLMMocksEditor extends PlatformElement {
                                         .value=${mock.type}
                                         @change=${(e) => this._onTypeChange(mock.row_id, e.target.value)}
                                     >
-                                        <option value="text">Text</option>
-                                        <option value="tool_call">Tool Call</option>
-                                        <option value="json">JSON</option>
+                                        <option value="text">${this.i18n.t('llm_mocks_editor.type_text')}</option>
+                                        <option value="tool_call">${this.i18n.t('llm_mocks_editor.type_tool_call')}</option>
+                                        <option value="json">${this.i18n.t('llm_mocks_editor.type_json')}</option>
                                     </select>
                                 </div>
                                 <button
                                     type="button"
                                     class="remove-icon-btn"
-                                    title="Удалить"
+                                    title=${this.i18n.t('llm_mocks_editor.remove_row')}
                                     @click=${() => this._removeMock(mock.row_id)}
                                 >
                                     <platform-icon name="trash" size="18"></platform-icon>
@@ -416,10 +415,10 @@ export class LLMMocksEditor extends PlatformElement {
                             ${mock.type === 'text'
                                 ? html`
                                       <div>
-                                          <div class="mock-label">Текстовый ответ</div>
+                                          <div class="mock-label">${this.i18n.t('llm_mocks_editor.text_reply_label')}</div>
                                           <textarea
                                               class="mock-textarea"
-                                              placeholder="Текст ответа от ноды или тула..."
+                                              placeholder=${this.i18n.t('llm_mocks_editor.placeholder_text')}
                                               .value=${mock.content || ''}
                                               @input=${(e) =>
                                                   this._patchRow(mock.row_id, {
@@ -432,11 +431,11 @@ export class LLMMocksEditor extends PlatformElement {
                                   ? html`
                                         <div class="tool-fields">
                                             <div>
-                                                <div class="mock-label">Имя инструмента</div>
+                                                <div class="mock-label">${this.i18n.t('llm_mocks_editor.tool_name_label')}</div>
                                                 <input
                                                     class="tool-input"
                                                     type="text"
-                                                    placeholder="calculator"
+                                                    placeholder=${this.i18n.t('llm_mocks_editor.placeholder_tool_id')}
                                                     .value=${mock.tool || ''}
                                                     @input=${(e) =>
                                                         this._patchRow(mock.row_id, {
@@ -445,7 +444,7 @@ export class LLMMocksEditor extends PlatformElement {
                                                 />
                                             </div>
                                             <div>
-                                                <div class="mock-label">Аргументы (JSON)</div>
+                                                <div class="mock-label">${this.i18n.t('llm_mocks_editor.args_json_label')}</div>
                                                 <textarea
                                                     class="mock-textarea"
                                                     placeholder='{"x": 1, "y": 2}'
@@ -460,7 +459,7 @@ export class LLMMocksEditor extends PlatformElement {
                                     `
                                   : html`
                                         <div>
-                                            <div class="mock-label">JSON ответ ноды</div>
+                                            <div class="mock-label">${this.i18n.t('llm_mocks_editor.json_reply_label')}</div>
                                             <textarea
                                                 class="mock-textarea"
                                                 placeholder='{"result": "mock_value", "status": "success"}'
@@ -475,7 +474,7 @@ export class LLMMocksEditor extends PlatformElement {
                         </div>
                     `;
                 })}
-                <button type="button" class="add-btn" @click=${this._addMock}>+ Добавить еще</button>
+                <button type="button" class="add-btn" @click=${this._addMock}>${this.i18n.t('llm_mocks_editor.add_another')}</button>
             </div>
         `;
     }

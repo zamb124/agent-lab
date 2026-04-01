@@ -32,8 +32,8 @@
         
         async init() {
             try {
-                await this.loadSettings();
                 await this.loadI18n();
+                await this.loadSettings();
                 this.render();
                 this.attachEventListeners();
             } catch (error) {
@@ -59,7 +59,8 @@
                 typeof flows.chat_widget !== 'object' ||
                 flows.chat_widget === null ||
                 typeof flows.chat_widget.err_send !== 'string' ||
-                typeof flows.chat_widget.err_process !== 'string'
+                typeof flows.chat_widget.err_process !== 'string' ||
+                typeof flows.chat_widget.err_load_settings !== 'string'
             ) {
                 throw new Error('HumanitecChat: flows.chat_widget i18n incomplete');
             }
@@ -83,6 +84,20 @@
             }
             return node;
         }
+
+        /**
+         * @param {string} key путь от корня flows, например chat_widget.err_load_settings
+         * @param {Record<string, string | number>} [params]
+         */
+        _t(key, params = {}) {
+            let s = this._flowsT(key);
+            if (Object.keys(params).length === 0) {
+                return s;
+            }
+            return s.replace(/\{\{(\w+)\}\}/g, (_, paramKey) =>
+                params[paramKey] !== undefined ? String(params[paramKey]) : `{{${paramKey}}}`
+            );
+        }
         
         async loadSettings() {
             const response = await fetch(
@@ -90,7 +105,7 @@
             );
             
             if (!response.ok) {
-                throw new Error(`Не удалось загрузить настройки: ${response.status}`);
+                throw new Error(this._t('chat_widget.err_load_settings', { status: response.status }));
             }
             
             const data = await response.json();

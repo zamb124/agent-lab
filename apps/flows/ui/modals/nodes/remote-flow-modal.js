@@ -28,7 +28,7 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
     }
 
     getModalTitle() {
-        return 'Remote A2A flow';
+        return this.i18n.t('node_modal.titles.remote_flow');
     }
 
     _buildConfig() {
@@ -37,7 +37,7 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
         const skillId = this.shadowRoot.querySelector('[name="skill_id"]')?.value?.trim() || 'default';
         
         if (!url) {
-            throw new Error('URL обязателен');
+            throw new Error(this.i18n.t('node_modal.remote_flow.err_url'));
         }
         
         const config = {
@@ -51,7 +51,7 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
         const authHeadersEditor = this.shadowRoot.querySelector('json-field-editor[name="auth_headers"]');
         if (authHeadersEditor?.getValue()?.trim()) {
             if (!authHeadersEditor.isValid()) {
-                throw new Error('Неверный формат Auth Headers JSON');
+                throw new Error(this.i18n.t('node_modal.remote_flow.err_auth_headers'));
             }
             const headers = authHeadersEditor.getParsedValue();
             if (Object.keys(headers).length > 0) {
@@ -75,7 +75,7 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
             <div class="form-layout">
                 <div class="form-sidebar">
                     <div class="form-group">
-                        <label class="form-label">Node ID *</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.node_id_label')}</label>
                         <input 
                             type="text" 
                             name="node_id"
@@ -88,21 +88,21 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Имя</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.field_name')}</label>
                         <input 
                             type="text" 
                             name="name"
                             class="form-input"
                             .value=${config.name || ''}
-                            placeholder="Удалённый агент"
+                            placeholder=${this.i18n.t('node_modal.remote_flow.placeholder_name')}
                         />
                     </div>
                     
                     <div class="connection-section">
-                        <div class="connection-title">Подключение</div>
+                        <div class="connection-title">${this.i18n.t('node_modal.remote_flow.connection_title')}</div>
                         
                         <div class="form-group">
-                            <label class="form-label">URL *</label>
+                            <label class="form-label">${this.i18n.t('node_modal.remote_flow.url_label')}</label>
                             <input 
                                 type="text" 
                                 name="url"
@@ -111,11 +111,11 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
                                 placeholder="http://agent:8080"
                                 required
                             />
-                            <span class="form-hint">Поддерживает @var:path (например: @var:config.agent_url)</span>
+                            <span class="form-hint">${this.i18n.t('node_modal.remote_flow.url_hint')}</span>
                         </div>
                         
                         <div class="form-group">
-                            <label class="form-label">Skill ID</label>
+                            <label class="form-label">${this.i18n.t('node_modal.remote_flow.skill_id_label')}</label>
                             <input 
                                 type="text" 
                                 name="skill_id"
@@ -126,13 +126,13 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
                         </div>
                         
                         <div class="form-group">
-                            <label class="form-label">Auth Headers (JSON)</label>
+                            <label class="form-label">${this.i18n.t('node_modal.remote_flow.auth_headers_label')}</label>
                             <json-field-editor
                                 name="auth_headers"
                                 .value=${config.auth_headers ? JSON.stringify(config.auth_headers, null, 2) : '{}'}
                                 min-height="80"
                                 placeholder='{"Authorization": "Bearer @var:token"}'
-                                hint="Поддерживает @var:path для переменных"
+                                hint=${this.i18n.t('node_modal.remote_flow.auth_headers_hint')}
                             ></json-field-editor>
                         </div>
                     </div>
@@ -147,7 +147,7 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
                             .mappings=${config.input_mapping || {}}
                             .stateVariables=${Object.keys(this._buildDefaultState())}
                         ></state-mapping-editor>
-                        <span class="form-hint">Определяет какие поля из state передать удалённому агенту</span>
+                        <span class="form-hint">${this.i18n.t('node_modal.remote_flow.input_mapping_hint')}</span>
                     </div>
                     
                     <test-panel

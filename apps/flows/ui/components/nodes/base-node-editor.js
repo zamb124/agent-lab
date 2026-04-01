@@ -308,14 +308,14 @@ export class BaseNodeEditor extends PlatformElement {
         return html`
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Node ID</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.common.sidebar_node_id')}</span>
                 </div>
                 <input 
                     type="text" 
                     class="form-input"
                     .value=${this.nodeId}
                     @change=${this._onNodeIdChange}
-                    placeholder="my_node_id"
+                    placeholder=${this.i18n.t('base_node_editor.placeholder_node_id')}
                 />
                 <span class="form-label-hint">${this.i18n.t('base_node_editor.node_id_hint')}</span>
             </div>
@@ -384,7 +384,7 @@ export class BaseNodeEditor extends PlatformElement {
     renderInputStateSection() {
         return html`
             <div class="sidebar-section">
-                <div class="sidebar-section-title">Input State (JSON)</div>
+                <div class="sidebar-section-title">${this.i18n.t('base_node_editor.input_state_section_title')}</div>
                 <div class="form-group">
                     <json-field-editor
                         id="sidebar-input-state"
@@ -398,7 +398,7 @@ export class BaseNodeEditor extends PlatformElement {
                         class="form-hint" 
                         style="cursor: pointer; border: none; background: none; text-decoration: underline;"
                         @click=${this._onResetInputState}
-                    >↺ Сбросить</button>
+                    >↺ ${this.i18n.t('base_node_editor.reset_input_state')}</button>
                 </div>
             </div>
         `;
@@ -424,7 +424,7 @@ export class BaseNodeEditor extends PlatformElement {
     }
 
     renderFields() {
-        return html`<p>Override renderFields() in subclass</p>`;
+        return html`<p>${this.i18n.t('base_node_editor.override_render_fields')}</p>`;
     }
 
     /**
@@ -489,10 +489,10 @@ export class BaseNodeEditor extends PlatformElement {
             return html`
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Resources</span>
+                        <span class="form-label-text">${this.i18n.t('base_node_editor.field_resources')}</span>
                     </div>
                     <div class="form-hint" style="padding: var(--space-3); border: 1px dashed var(--border-subtle); border-radius: var(--radius-md); text-align: center;">
-                        Перетащите ресурсы на эту ноду или добавьте глобальные ресурсы на canvas
+                        ${this.i18n.t('base_node_editor.resources_drop_hint')}
                     </div>
                 </div>
             `;
@@ -501,7 +501,7 @@ export class BaseNodeEditor extends PlatformElement {
         return html`
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Resources</span>
+                    <span class="form-label-text">${this.i18n.t('base_node_editor.field_resources')}</span>
                 </div>
                 <div class="resources-list" style="display: flex; flex-direction: column; gap: var(--space-2);">
                     ${nodeResources.map(res => this._renderResourceBadge(res))}

@@ -9,25 +9,25 @@ import { AppEvents } from '@platform/lib/utils/types.js';
 
 const DEFAULT_PYTHON = `def execute(args, state):
     """
-    Обработка state.
-    
+    Process state.
+
     Args:
-        args: Аргументы вызова
-        state: Текущее состояние
-    
+        args: Invocation arguments
+        state: Current execution state
+
     Returns:
-        Результат выполнения
+        Execution result dict
     """
     return {"result": "ok"}
 `;
 
 const DEFAULT_JAVASCRIPT = `async function execute(args, state) {
     /**
-     * Обработка state.
-     * 
-     * @param {Object} args - Аргументы вызова
-     * @param {Object} state - Текущее состояние
-     * @returns {Object} Результат выполнения
+     * Process state.
+     *
+     * @param {Object} args - Invocation arguments
+     * @param {Object} state - Current execution state
+     * @returns {Object} Execution result
      */
     return { result: "ok" };
 }

@@ -292,7 +292,7 @@ export class TracingModal extends PlatformModal {
             return html`
                 <div class="empty-state">
                     <platform-spinner variant="ai" size="48"></platform-spinner>
-                    <p>Загрузка трейсинга...</p>
+                    <p>${this.i18n.t('tracing_modal.loading')}</p>
                 </div>
             `;
         }
@@ -301,7 +301,7 @@ export class TracingModal extends PlatformModal {
             return html`
                 <div class="empty-state">
                     <platform-icon name="terminal" size="48"></platform-icon>
-                    <p>Нет данных трейсинга</p>
+                    <p>${this.i18n.t('tracing_modal.no_data')}</p>
                     <p style="font-size: var(--text-sm);">${this.i18n.t('tracing_modal.empty_hint')}</p>
                 </div>
             `;

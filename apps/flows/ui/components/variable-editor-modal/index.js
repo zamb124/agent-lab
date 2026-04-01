@@ -51,7 +51,7 @@ export class VariableEditorModal extends PlatformModal {
         this.variableData = null;
         this.isInherited = false;
         this.valueMode = 'text';
-        this.title = 'Новая переменная';
+        this.title = this.i18n.t('flow_variable_editor.title_new');
         this._formData = {
             name: '',
             value: '',
@@ -87,7 +87,7 @@ export class VariableEditorModal extends PlatformModal {
             order: data && data.order !== undefined ? data.order : null,
         };
         this.variableData = data;
-        this.title = `Редактировать: ${name}`;
+        this.title = this.i18n.t('flow_variable_editor.title_edit', { name });
         this.open = true;
     }
 
@@ -95,7 +95,7 @@ export class VariableEditorModal extends PlatformModal {
         return html`
             ${this.title}
             ${this.isInherited
-                ? html`<span class="inherited-badge">from base</span>`
+                ? html`<span class="inherited-badge">${this.i18n.t('flow_variable_editor.inherited_badge')}</span>`
                 : ''}
         `;
     }
@@ -106,11 +106,11 @@ export class VariableEditorModal extends PlatformModal {
             ${!isEdit
                 ? html`
                       <div class="form-group">
-                          <label class="form-label form-label-required">Имя переменной</label>
+                          <label class="form-label form-label-required">${this.i18n.t('flow_variable_editor.field_variable_name')}</label>
                           <input
                               type="text"
                               class="form-input"
-                              placeholder="my_variable"
+                              placeholder=${this.i18n.t('flow_variable_editor.placeholder_variable_key')}
                               .value=${this._formData.name}
                               @input=${(e) => this._updateFormData('name', e.target.value)}
                               required
@@ -119,63 +119,63 @@ export class VariableEditorModal extends PlatformModal {
                   `
                 : ''}
             <div class="form-group">
-                <label class="form-label">Значение</label>
+                <label class="form-label">${this.i18n.t('flow_variable_editor.field_value')}</label>
                 <div class="mode-toggle">
                     <button
                         type="button"
                         class="mode-btn ${this.valueMode === 'text' ? 'active' : ''}"
                         @click=${() => this._setValueMode('text')}
                     >
-                        Text
+                        ${this.i18n.t('flow_variable_editor.mode_text')}
                     </button>
                     <button
                         type="button"
                         class="mode-btn ${this.valueMode === 'json' ? 'active' : ''}"
                         @click=${() => this._setValueMode('json')}
                     >
-                        JSON
+                        ${this.i18n.t('flow_variable_editor.mode_json')}
                     </button>
                 </div>
                 <textarea
                     class="form-textarea"
                     placeholder=${this.valueMode === 'json'
                         ? '{"key": "value"}'
-                        : 'Значение переменной'}
+                        : this.i18n.t('flow_variable_editor.placeholder_value_plain')}
                     .value=${this._formData.value}
                     @input=${(e) => this._updateFormData('value', e.target.value)}
                 ></textarea>
                 <span class="form-hint">
                     ${this.valueMode === 'json'
-                        ? 'JSON формат для сложных структур данных'
-                        : 'Простое текстовое значение'}
+                        ? this.i18n.t('flow_variable_editor.hint_value_json')
+                        : this.i18n.t('flow_variable_editor.hint_value_text')}
                 </span>
             </div>
             <div class="form-group">
-                <label class="form-label">Заголовок</label>
+                <label class="form-label">${this.i18n.t('flow_variable_editor.field_title')}</label>
                 <input
                     type="text"
                     class="form-input"
-                    placeholder="Название компании"
+                    placeholder=${this.i18n.t('flow_variable_editor.placeholder_title')}
                     .value=${this._formData.title || ''}
                     @input=${(e) => this._updateFormData('title', e.target.value)}
                 />
             </div>
             <div class="form-group">
-                <label class="form-label">Описание</label>
+                <label class="form-label">${this.i18n.t('flow_variable_editor.field_description')}</label>
                 <input
                     type="text"
                     class="form-input"
-                    placeholder="Для использования в ответах агента"
+                    placeholder=${this.i18n.t('flow_variable_editor.placeholder_description')}
                     .value=${this._formData.description || ''}
                     @input=${(e) => this._updateFormData('description', e.target.value)}
                 />
             </div>
             <div class="form-group">
-                <label class="form-label">Порядок</label>
+                <label class="form-label">${this.i18n.t('flow_variable_editor.field_order')}</label>
                 <input
                     type="number"
                     class="form-input"
-                    placeholder="0"
+                    placeholder=${this.i18n.t('flow_variable_editor.placeholder_order')}
                     .value=${this._formData.order !== null && this._formData.order !== undefined
                         ? this._formData.order
                         : ''}
@@ -185,7 +185,7 @@ export class VariableEditorModal extends PlatformModal {
                             e.target.value ? parseInt(e.target.value, 10) : null,
                         )}
                 />
-                <span class="form-hint">Порядок отображения (необязательно)</span>
+                <span class="form-hint">${this.i18n.t('flow_variable_editor.hint_order')}</span>
             </div>
             <div class="form-group">
                 <div class="form-checkbox-group">
@@ -197,7 +197,7 @@ export class VariableEditorModal extends PlatformModal {
                         @change=${(e) => this._updateFormData('public', e.target.checked)}
                     />
                     <label class="form-checkbox-label" for="public-checkbox">
-                        Публичная (видна в flow-card)
+                        ${this.i18n.t('flow_variable_editor.field_public')}
                     </label>
                 </div>
             </div>
@@ -209,10 +209,10 @@ export class VariableEditorModal extends PlatformModal {
         return html`
             <div class="modal-actions-inner">
                 <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
-                    Отмена
+                    ${this.i18n.t('flow_variable_editor.btn_cancel')}
                 </button>
                 <button type="button" class="btn btn-primary" @click=${this._onSave}>
-                    ${isEdit ? 'Сохранить' : 'Создать'}
+                    ${isEdit ? this.i18n.t('flow_variable_editor.btn_save') : this.i18n.t('flow_variable_editor.btn_create')}
                 </button>
             </div>
         `;
@@ -255,7 +255,7 @@ export class VariableEditorModal extends PlatformModal {
                 try {
                     this._formData.value = JSON.stringify(this._formData.value, null, 2);
                 } catch {
-                    this.error('Не удалось преобразовать в JSON');
+                    this.error(this.i18n.t('flow_variable_editor.err_to_json'));
                     return;
                 }
             }
@@ -278,7 +278,7 @@ export class VariableEditorModal extends PlatformModal {
             try {
                 return JSON.parse(str);
             } catch (e) {
-                throw new Error('Некорректный JSON формат');
+                throw new Error(this.i18n.t('flow_variable_editor.err_json_invalid'));
             }
         }
 
@@ -289,7 +289,7 @@ export class VariableEditorModal extends PlatformModal {
         const name = this._formData.name.trim();
 
         if (!this.variableName && !name) {
-            this.error('Имя переменной обязательно');
+            this.error(this.i18n.t('flow_variable_editor.err_name_required'));
             return;
         }
 

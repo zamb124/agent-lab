@@ -254,9 +254,9 @@ export class LLMConfigEditor extends PlatformElement {
         return html`
             <div class="config-container">
                 <div class="config-field">
-                    <label class="config-label">Model</label>
+                    <label class="config-label">${this.i18n.t('llm_config_editor.label_model')}</label>
                     ${this.loading 
-                        ? html`<span class="loading">Загрузка...</span>`
+                        ? html`<span class="loading">${this.i18n.t('llm_config_editor.loading')}</span>`
                         : html`
                             <select 
                                 class="config-select"
@@ -272,7 +272,7 @@ export class LLMConfigEditor extends PlatformElement {
                 </div>
                 
                 <div class="config-field">
-                    <label class="config-label">Temperature: ${this.temperature.toFixed(1)}</label>
+                    <label class="config-label">${this.i18n.t('llm_config_editor.label_temperature')}: ${this.temperature.toFixed(1)}</label>
                     <div class="config-row">
                         <input
                             type="range"
@@ -287,53 +287,53 @@ export class LLMConfigEditor extends PlatformElement {
                 </div>
                 
                 <div class="config-field">
-                    <label class="config-label">Max Tokens (опционально)</label>
+                    <label class="config-label">${this.i18n.t('llm_config_editor.label_max_tokens')}</label>
                     <input
                         type="number"
                         class="config-input"
-                        placeholder="Авто"
+                        placeholder=${this.i18n.t('llm_config_editor.placeholder_auto')}
                         .value=${this.maxTokens || ''}
                         @input=${this._onMaxTokensChange}
                     />
                 </div>
                 
                 <div class="config-field">
-                    <label class="config-label">Provider</label>
+                    <label class="config-label">${this.i18n.t('llm_config_editor.label_provider')}</label>
                     <select 
                         class="config-select"
                         .value=${this.provider}
                         @change=${this._onProviderChange}
                     >
-                        <option value="">System Default</option>
+                        <option value="">${this.i18n.t('llm_config_editor.option_system_default')}</option>
                         <option value="openai" ?selected=${this.provider === 'openai'}>OpenAI</option>
                         <option value="openrouter" ?selected=${this.provider === 'openrouter'}>OpenRouter</option>
                         <option value="bothub" ?selected=${this.provider === 'bothub'}>Bothub</option>
                     </select>
-                    <div class="config-hint">Выберите провайдера или используйте системный по умолчанию</div>
+                    <div class="config-hint">${this.i18n.t('llm_config_editor.hint_provider')}</div>
                 </div>
                 
                 ${showCredentials ? html`
                     <div class="credentials-section">
-                        <div class="credentials-title">Credentials для ${this.provider}</div>
+                        <div class="credentials-title">${this.i18n.t('llm_config_editor.credentials_for', { provider: this.provider })}</div>
                         
                         <div class="config-field">
-                            <label class="config-label">API Key</label>
+                            <label class="config-label">${this.i18n.t('llm_config_editor.label_api_key')}</label>
                             <input
                                 type="text"
                                 class="config-input"
-                                placeholder="sk-... или @var:my_api_key"
+                                placeholder=${this.i18n.t('llm_config_editor.placeholder_api_key')}
                                 .value=${this.apiKey}
                                 @input=${this._onApiKeyChange}
                             />
-                            <div class="config-hint">Напрямую или через переменную @var:имя_переменной</div>
+                            <div class="config-hint">${this.i18n.t('llm_config_editor.hint_api_key')}</div>
                         </div>
                         
                         <div class="config-field">
-                            <label class="config-label">Base URL (опционально)</label>
+                            <label class="config-label">${this.i18n.t('llm_config_editor.label_base_url')}</label>
                             <input
                                 type="text"
                                 class="config-input"
-                                placeholder="https://api.openai.com/v1"
+                                placeholder=${this.i18n.t('llm_config_editor.placeholder_base_url')}
                                 .value=${this.baseUrl}
                                 @input=${this._onBaseUrlChange}
                             />

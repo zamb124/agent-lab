@@ -413,9 +413,9 @@ export class PlatformChat extends PlatformIsland {
             },
             (event) => this._handleStreamEvent(event, assistantMessage.id)
         ).catch(err => {
-            this.error(`Ошибка: ${err.message}`);
+            this.error(this.i18n.t('platform_chat.err_with_message', { message: err.message }));
             FlowsStore.updateMessage(assistantMessage.id, {
-                content: 'Произошла ошибка при обработке запроса.',
+                content: this.i18n.t('platform_chat.stream_fallback_content'),
                 streaming: false,
             });
         });
@@ -446,7 +446,7 @@ export class PlatformChat extends PlatformIsland {
         if (event.error) {
             console.error('[PlatformChat] Error in SSE:', event.error);
             FlowsStore.updateMessage(messageId, { 
-                content: event.error.message || 'Ошибка', 
+                content: event.error.message || this.i18n.t('platform_chat.err_short'), 
                 streaming: false 
             });
             return;
@@ -565,7 +565,7 @@ export class PlatformChat extends PlatformIsland {
             }
 
             if (state === 'failed' && result.final) {
-                let errorText = 'Произошла ошибка';
+                let errorText = this.i18n.t('platform_chat.err_occurred');
                 
                 if (message && message.parts) {
                     const extracted = message.parts
@@ -664,7 +664,7 @@ export class PlatformChat extends PlatformIsland {
             }
 
             if (state === 'failed' || state === 'error') {
-                let errorText = 'Произошла ошибка';
+                let errorText = this.i18n.t('platform_chat.err_occurred');
                 const taskId = result.taskId || result.task_id || this.state.value.currentTaskId;
                 
                 if (message && message.parts) {
@@ -795,7 +795,7 @@ export class PlatformChat extends PlatformIsland {
         }
 
         if (state === 'failed' && result.final) {
-            let errorText = 'Произошла ошибка';
+            let errorText = this.i18n.t('platform_chat.err_occurred');
             
             if (message && message.parts) {
                 const extracted = message.parts
@@ -855,7 +855,7 @@ export class PlatformChat extends PlatformIsland {
 
     _clearChat() {
         FlowsStore.clearChat();
-        this.info('Чат очищен');
+        this.info(this.i18n.t('platform_chat.info_chat_cleared'));
     }
 
     _openSessions() {
@@ -869,7 +869,7 @@ export class PlatformChat extends PlatformIsland {
     _openState() {
         const { contextId, currentTaskId } = this.state.value;
         if (!contextId) {
-            this.warn('Нет активной сессии');
+            this.warn(this.i18n.t('platform_chat.warn_no_session'));
             return;
         }
         
@@ -885,7 +885,7 @@ export class PlatformChat extends PlatformIsland {
     _onShowTracingFromMessage(e) {
         const { taskId } = e.detail;
         if (!taskId) {
-            this.warn('Нет taskId для отображения трейсинга');
+            this.warn(this.i18n.t('platform_chat.warn_no_task_tracing'));
             return;
         }
         
@@ -920,7 +920,7 @@ export class PlatformChat extends PlatformIsland {
             <div class="island">
                 <header class="chat-header">
                     <div class="chat-title-section">
-                        <button class="menu-btn" @click=${this._openSidebar} title="Открыть меню">
+                        <button class="menu-btn" @click=${this._openSidebar} title=${this.i18n.t('platform_chat.title_menu')}>
                             <platform-icon name="menu" size="18"></platform-icon>
                         </button>
                         <div>
@@ -928,37 +928,37 @@ export class PlatformChat extends PlatformIsland {
                                 <span class="flow-name" title="${this.flowName || this.flowId}">${this.flowName || this.flowId}</span>
                                 ${this.skillId ? html`<span class="skill-badge" title="${this.skillName || this.skillId}">${this.skillName || this.skillId}</span>` : ''}
                             </h1>
-                            <div class="chat-subtitle">Сессия: ${contextId ? contextId.substring(0, 12) : 'no-context'}...</div>
+                            <div class="chat-subtitle">${this.i18n.t('platform_chat.session_label')} ${contextId ? `${contextId.substring(0, 12)}...` : this.i18n.t('platform_chat.session_none')}</div>
                         </div>
                     </div>
                     <div class="chat-actions">
-                        <button class="action-btn" @click=${this._openSessions} title="Сессии">
+                        <button class="action-btn" @click=${this._openSessions} title=${this.i18n.t('platform_chat.title_sessions')}>
                             <platform-icon name="folder" size="20"></platform-icon>
                         </button>
-                        <button class="action-btn" @click=${this._editFlow} title="Редактировать агента">
+                        <button class="action-btn" @click=${this._editFlow} title=${this.i18n.t('platform_chat.title_edit_agent')}>
                             <platform-icon name="settings" size="20"></platform-icon>
                         </button>
-                        <button class="action-btn" @click=${this._clearChat} title="Очистить чат">
+                        <button class="action-btn" @click=${this._clearChat} title=${this.i18n.t('platform_chat.title_clear_chat')}>
                             <platform-icon name="refresh" size="20"></platform-icon>
                         </button>
                         
                         <!-- Mobile actions menu -->
                         <div class="mobile-actions-container">
-                            <button class="actions-menu-btn" @click=${this._toggleActionsMenu} title="Действия">
+                            <button class="actions-menu-btn" @click=${this._toggleActionsMenu} title=${this.i18n.t('platform_chat.title_actions')}>
                                 <platform-icon name="settings" size="20"></platform-icon>
                             </button>
                             <div class="actions-dropdown ${this._actionsMenuOpen ? 'open' : ''}" @click=${(e) => e.stopPropagation()}>
                                 <button class="actions-dropdown-item" @click=${() => { this._openSessions(); this._closeActionsMenu(); }}>
                                     <platform-icon name="folder" size="16"></platform-icon>
-                                    <span>Сессии</span>
+                                    <span>${this.i18n.t('platform_chat.menu_sessions')}</span>
                                 </button>
                                 <button class="actions-dropdown-item" @click=${() => { this._editFlow(); this._closeActionsMenu(); }}>
                                     <platform-icon name="settings" size="16"></platform-icon>
-                                    <span>Редактировать</span>
+                                    <span>${this.i18n.t('platform_chat.menu_edit')}</span>
                                 </button>
                                 <button class="actions-dropdown-item" @click=${() => { this._clearChat(); this._closeActionsMenu(); }}>
                                     <platform-icon name="refresh" size="16"></platform-icon>
-                                    <span>Очистить чат</span>
+                                    <span>${this.i18n.t('platform_chat.menu_clear_chat')}</span>
                                 </button>
                             </div>
                         </div>
@@ -967,7 +967,7 @@ export class PlatformChat extends PlatformIsland {
                 
                 <div class="chat-body">
                     ${hasState ? html`
-                        <button class="state-btn" @click=${this._openState} title="Состояние сессии">
+                        <button class="state-btn" @click=${this._openState} title=${this.i18n.t('platform_chat.title_session_state')}>
                             <platform-icon name="database" size="18"></platform-icon>
                         </button>
                     ` : ''}
@@ -980,7 +980,7 @@ export class PlatformChat extends PlatformIsland {
                     
                     <chat-input
                         ?loading=${loading}
-                        placeholder="Напишите сообщение..."
+                        placeholder=${this.i18n.t('chat_widget.placeholder_message')}
                         @send=${this._onSendMessage}
                     ></chat-input>
                 </div>

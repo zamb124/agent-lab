@@ -107,7 +107,7 @@ export class FlowsApp extends PlatformApp {
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Загрузка Flows Builder...</div>
+                    <div class="loading-text">${this.i18n.t('flows_app.loading')}</div>
                 </div>
             `;
         }
@@ -115,7 +115,7 @@ export class FlowsApp extends PlatformApp {
         if (!this._isAuthenticated) {
             return html`
                 <div class="loading-container">
-                    <div class="loading-text">Redirecting to authentication...</div>
+                    <div class="loading-text">${this.i18n.t('flows_app.redirect_auth')}</div>
                 </div>
             `;
         }
