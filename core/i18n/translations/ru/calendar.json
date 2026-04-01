@@ -71,5 +71,11 @@
   "advanced_hide": "Скрыть дополнительно",
   "view_day": "День",
   "view_week": "Неделя",
-  "view_month": "Месяц"
+  "view_month": "Месяц",
+  "pick_date_title": "Выбрать дату",
+  "sheet_prev_month": "Предыдущий месяц",
+  "sheet_next_month": "Следующий месяц",
+  "sheet_close": "Закрыть",
+  "sheet_prev_day": "Предыдущий день",
+  "sheet_next_day": "Следующий день"
 }

@@ -12,6 +12,8 @@ from apps.crm.services.entity_service import EntityService
 from core.context import Context, set_context
 from core.models.identity_models import Company, User
 
+pytestmark = pytest.mark.no_crm_http
+
 
 def _set_test_context() -> None:
     set_context(
@@ -215,7 +217,7 @@ async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss():
 
 
 @pytest.mark.asyncio
-async def test_get_period_summary_cached_period_too_long_raises(monkeypatch):
+async def test_get_period_summary_cached_long_period_clamps_to_max_days(monkeypatch):
     _set_test_context()
     service = _build_service()
 
@@ -223,13 +225,30 @@ async def test_get_period_summary_cached_period_too_long_raises(monkeypatch):
         return SimpleNamespace(period_summary_max_days=1)
 
     monkeypatch.setattr(entity_service_module, "get_crm_settings", _tiny_period_settings)
+    service._collect_period_days_bundle = AsyncMock(
+        return_value={"days": [{"date": "2026-03-29", "source_version": {"notes_count": 0}}]}
+    )
+    service._daily_summary_cache_service.get_period_state = AsyncMock(return_value=None)
+    service._daily_summary_cache_service.is_period_revalidating = AsyncMock(return_value=False)
+    service.enqueue_period_summary_rebuild = AsyncMock(return_value=True)
 
-    with pytest.raises(ValueError, match="Period too long"):
-        await service.get_period_summary_cached(
-            date_from="2026-03-28",
-            date_to="2026-03-29",
-            namespace=None,
-        )
+    payload = await service.get_period_summary_cached(
+        date_from="2026-03-28",
+        date_to="2026-03-29",
+        namespace=None,
+    )
+
+    assert payload["date_from"] == "2026-03-29"
+    assert payload["date_to"] == "2026-03-29"
+    assert payload["period_truncated"] is True
+    assert payload["requested_date_from"] == "2026-03-28"
+    assert payload["requested_date_to"] == "2026-03-29"
+    assert payload["requested_period_days"] == 2
+    service.enqueue_period_summary_rebuild.assert_awaited_once_with(
+        date_from="2026-03-29",
+        date_to="2026-03-29",
+        namespace=None,
+    )
 
 
 @pytest.mark.asyncio

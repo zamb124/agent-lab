@@ -9,6 +9,8 @@ CRM-специфичные фикстуры.
 Здесь остаются только CRM-специфичные утилиты.
 """
 
+from typing import Any
+
 import pytest
 import pytest_asyncio
 
@@ -96,11 +98,17 @@ async def _ensure_namespace(
 
 @pytest_asyncio.fixture(autouse=True)
 async def ensure_crm_test_entity_types(
-    crm_client,
-    auth_headers_system,
-    auth_headers_company2,
-    unique_id,
-):
+    request: pytest.FixtureRequest,
+    unique_id: str,
+) -> Any:
+    if request.node.get_closest_marker("no_crm_http"):
+        yield
+        return
+
+    crm_client = request.getfixturevalue("crm_client")
+    auth_headers_system = request.getfixturevalue("auth_headers_system")
+    auth_headers_company2 = request.getfixturevalue("auth_headers_company2")
+
     namespace_id = f"g_{unique_id}"
     await _ensure_namespace(crm_client, auth_headers_system, namespace_id)
     await _ensure_namespace(crm_client, auth_headers_company2, namespace_id)

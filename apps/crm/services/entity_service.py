@@ -68,6 +68,19 @@ def _iter_iso_dates_inclusive(date_from: str, date_to: str) -> list[str]:
     return out
 
 
+def _clamp_period_dates_for_summary(
+    date_from: str, date_to: str, max_days: int
+) -> tuple[str, str, bool]:
+    """
+    Оставляет не более max_days последних дней интервала (усечение с начала периода).
+    """
+    days = _iter_iso_dates_inclusive(date_from, date_to)
+    if len(days) <= max_days:
+        return date_from, date_to, False
+    tail = days[-max_days:]
+    return tail[0], tail[-1], True
+
+
 def _canonical_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
 
@@ -2465,12 +2478,11 @@ class EntityService:
         """Сводка за диапазон: merge готовых дневных сводок (при необходимости досчитывает день)."""
         datetime.fromisoformat(date_from)
         datetime.fromisoformat(date_to)
-        days = _iter_iso_dates_inclusive(date_from, date_to)
         max_days = get_crm_settings().period_summary_max_days
-        if len(days) > max_days:
-            raise ValueError(
-                f"Period too long: {len(days)} days (max {max_days})"
-            )
+        date_from, date_to, _ = _clamp_period_dates_for_summary(
+            date_from, date_to, max_days
+        )
+        days = _iter_iso_dates_inclusive(date_from, date_to)
 
         company_id = self._get_company_id()
         period_bundle = await self._collect_period_days_bundle(date_from, date_to, namespace)
@@ -2680,14 +2692,26 @@ class EntityService:
         namespace: Optional[str] = None,
         force_rebuild: bool = False,
     ) -> Dict[str, Any]:
-        datetime.fromisoformat(date_from)
-        datetime.fromisoformat(date_to)
-        days = _iter_iso_dates_inclusive(date_from, date_to)
+        requested_date_from = date_from
+        requested_date_to = date_to
+        datetime.fromisoformat(requested_date_from)
+        datetime.fromisoformat(requested_date_to)
         max_days = get_crm_settings().period_summary_max_days
-        if len(days) > max_days:
-            raise ValueError(
-                f"Period too long: {len(days)} days (max {max_days})"
-            )
+        date_from, date_to, period_was_truncated = _clamp_period_dates_for_summary(
+            requested_date_from, requested_date_to, max_days
+        )
+        requested_period_days = len(
+            _iter_iso_dates_inclusive(requested_date_from, requested_date_to)
+        )
+
+        def _period_truncation_fields() -> Dict[str, Any]:
+            fields: Dict[str, Any] = {"period_truncated": period_was_truncated}
+            if period_was_truncated:
+                fields["requested_date_from"] = requested_date_from
+                fields["requested_date_to"] = requested_date_to
+                fields["period_summary_max_days"] = max_days
+                fields["requested_period_days"] = requested_period_days
+            return fields
 
         company_id = self._get_company_id()
         current_bundle = await self._collect_period_days_bundle(
@@ -2743,6 +2767,7 @@ class EntityService:
                 "source_version": current_bundle,
                 "revalidating": True,
                 "stale": True,
+                **_period_truncation_fields(),
             }
 
         cached_version = cached_state.get("source_version")
@@ -2764,6 +2789,7 @@ class EntityService:
             "source_version": current_bundle if is_stale else cached_version,
             "revalidating": is_revalidating,
             "stale": is_stale or force_rebuild or cached_stale or is_revalidating,
+            **_period_truncation_fields(),
         }
 
     async def get_entity_card(

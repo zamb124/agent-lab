@@ -864,7 +864,7 @@ export class DailyNotesPage extends PlatformElement {
                 if (this._dateFrom === this._dateTo) {
                     return;
                 }
-                if (st.date_from !== this._dateFrom || st.date_to !== this._dateTo) {
+                if (st.date_to !== this._dateTo || st.date_from < this._dateFrom) {
                     return;
                 }
                 this._loadingSummary = false;

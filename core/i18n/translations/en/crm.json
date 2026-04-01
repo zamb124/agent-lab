@@ -1,5 +1,9 @@
 {
     "title": "CRM",
+    "notifications": {
+        "period_summary_range_clamped_title": "Summary period shortened",
+        "period_summary_range_clamped_message": "You selected {requested_days} days. Period summaries are limited to {max_days} days; only the last {max_days} days up to the end of your range are included (earlier days are omitted)."
+    },
     "nav": {
         "dashboard": "Dashboard",
         "daily_notes": "Daily Notes",

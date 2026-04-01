@@ -67,6 +67,7 @@
     "err_channel_not_selected": "No channel selected.",
     "err_no_forward_message": "No message to forward.",
     "create_space_for_meeting": "Create a space in the sidebar to start a meeting.",
+    "adhoc_meet_channel_name": "Meeting — {{date}}, {{time}}",
     "channel_settings_title": "Channel settings",
     "open_menu_title": "Open menu",
     "open_menu_aria": "Open menu",

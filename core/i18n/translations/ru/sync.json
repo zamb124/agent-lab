@@ -67,6 +67,7 @@
     "err_channel_not_selected": "Канал не выбран.",
     "err_no_forward_message": "Нет сообщения для пересылки.",
     "create_space_for_meeting": "Создайте пространство в сайдбаре, чтобы начать встречу.",
+    "adhoc_meet_channel_name": "Встреча — {{date}}, {{time}}",
     "channel_settings_title": "Настройки канала",
     "open_menu_title": "Открыть меню",
     "open_menu_aria": "Открыть меню",

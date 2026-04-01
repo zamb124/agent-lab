@@ -843,10 +843,19 @@ export class ChatView extends PlatformElement {
     }
 
     _newMeetChannelName() {
-        const raw = typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID().replace(/-/g, '')
-            : `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-        return `meet_${raw.slice(0, 20)}`;
+        const locale = this.i18n.getCurrentLocale();
+        const intlLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+        const now = new Date();
+        const dateStr = new Intl.DateTimeFormat(intlLocale, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        }).format(now);
+        const timeStr = new Intl.DateTimeFormat(intlLocale, {
+            hour: 'numeric',
+            minute: '2-digit',
+        }).format(now);
+        return this.i18n.t('chat_view.adhoc_meet_channel_name', { date: dateStr, time: timeStr });
     }
 
     _startCallWithChannel(channelId) {

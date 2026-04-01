@@ -222,6 +222,9 @@ export class PlatformCalendarModal extends PlatformModal {
         _attendeeDropdownOpen: { state: true },
         _eventForm: { state: true },
         _integrationForm: { state: true },
+        _isCompactLayout: { state: true },
+        _dateSheetOpen: { state: true },
+        _dateSheetMonthRef: { state: true },
     };
 
     static styles = [
@@ -329,6 +332,279 @@ export class PlatformCalendarModal extends PlatformModal {
                 min-height: 0;
                 overflow: auto;
                 padding: var(--space-2);
+            }
+
+            .calendar-panel--day {
+                border: none;
+                background: transparent;
+                padding: 0;
+                overflow: visible;
+            }
+
+            .btn-calendar-create {
+                width: 40px;
+                height: 40px;
+                min-width: 40px;
+                min-height: 40px;
+                padding: 0;
+                border-radius: 50%;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 22px;
+                line-height: 1;
+                font-weight: var(--font-semibold);
+            }
+
+            .btn.btn-primary.btn-calendar-create {
+                padding: 0;
+            }
+
+            .calendar-fab {
+                display: none;
+            }
+
+            .toolbar--compact {
+                flex-wrap: wrap;
+                gap: var(--space-2);
+            }
+
+            .toolbar--compact .toolbar-left {
+                flex: 1 1 100%;
+                justify-content: center;
+                align-items: center;
+                gap: var(--space-2);
+            }
+
+            .toolbar--compact .toolbar-right {
+                flex: 1 1 100%;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            .toolbar--compact .view-segment {
+                display: none;
+            }
+
+            .toolbar--compact .title {
+                display: none;
+            }
+
+            .period-date-btn {
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-medium);
+                border-radius: var(--radius-full);
+                padding: 8px 14px;
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                color: var(--text-primary);
+                cursor: pointer;
+                max-width: min(100%, 280px);
+            }
+
+            .period-date-btn:hover {
+                border-color: var(--accent);
+            }
+
+            .date-sheet-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--space-4);
+                background: rgba(0, 0, 0, 0.2);
+                backdrop-filter: blur(4px);
+                -webkit-backdrop-filter: blur(4px);
+            }
+
+            .date-sheet-card {
+                width: min(340px, 100%);
+                max-height: min(86dvh, 520px);
+                overflow: auto;
+                border-radius: var(--radius-xl);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-strong);
+                box-shadow: var(--glass-shadow-medium);
+                padding: var(--space-3);
+                display: grid;
+                gap: var(--space-3);
+            }
+
+            .date-sheet-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
+
+            .date-sheet-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+
+            .date-sheet-nav {
+                display: flex;
+                gap: var(--space-1);
+            }
+
+            .date-sheet-grid {
+                display: grid;
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+                gap: 4px;
+            }
+
+            .date-sheet-weekday {
+                text-align: center;
+                font-size: 10px;
+                color: var(--text-tertiary);
+                font-weight: var(--font-semibold);
+            }
+
+            .date-sheet-cell {
+                aspect-ratio: 1;
+                max-height: 40px;
+                border: 1px solid transparent;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                padding: 0;
+            }
+
+            .date-sheet-cell.outside {
+                color: var(--text-tertiary);
+                opacity: 0.55;
+            }
+
+            .date-sheet-cell.today {
+                border-color: color-mix(in srgb, #ef6f98 45%, var(--glass-border-subtle));
+            }
+
+            .date-sheet-cell.selected {
+                background: var(--accent-subtle);
+                color: var(--accent);
+                border-color: var(--accent);
+            }
+
+            .day-timeline {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+
+            .day-all-day-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+                padding-bottom: var(--space-2);
+                border-bottom: 1px solid var(--glass-border-subtle);
+            }
+
+            .day-timeline-scroll {
+                overflow-x: auto;
+                overflow-y: auto;
+                max-height: min(62dvh, 560px);
+                min-height: 280px;
+            }
+
+            .day-timeline-body {
+                display: grid;
+                grid-template-columns: 44px minmax(0, 1fr);
+                gap: 0;
+                align-items: start;
+                --day-hour-height: 52px;
+            }
+
+            .day-time-col {
+                display: flex;
+                flex-direction: column;
+                width: 44px;
+                flex-shrink: 0;
+            }
+
+            .day-time-label {
+                height: var(--day-hour-height);
+                font-size: 11px;
+                color: var(--text-tertiary);
+                padding-right: 6px;
+                text-align: right;
+                box-sizing: border-box;
+            }
+
+            .day-tracks {
+                position: relative;
+                min-width: 0;
+            }
+
+            .day-tracks-lines {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .day-hour-slot {
+                height: var(--day-hour-height);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                box-sizing: border-box;
+            }
+
+            .day-events-layer {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 0;
+                height: calc(24 * var(--day-hour-height));
+                pointer-events: none;
+            }
+
+            .day-event-block {
+                pointer-events: auto;
+                position: absolute;
+                left: 4px;
+                right: 4px;
+                min-height: 24px;
+                border: none;
+                border-radius: var(--radius-md);
+                padding: 6px 8px;
+                text-align: left;
+                cursor: pointer;
+                font-size: var(--text-xs);
+                line-height: 1.25;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                box-sizing: border-box;
+            }
+
+            .day-event-block.event-chip {
+                display: flex;
+            }
+
+            .day-now-line {
+                position: absolute;
+                left: 0;
+                right: 0;
+                height: 2px;
+                background: #e53935;
+                z-index: 2;
+                pointer-events: none;
+            }
+
+            .day-now-line::before {
+                content: '';
+                position: absolute;
+                left: -6px;
+                top: 50%;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #e53935;
+                transform: translateY(-50%);
             }
 
             .month-grid {
@@ -1253,6 +1529,31 @@ export class PlatformCalendarModal extends PlatformModal {
                     font-size: var(--text-sm);
                 }
 
+                .calendar-fab {
+                    display: inline-flex;
+                    position: fixed;
+                    right: max(20px, env(safe-area-inset-right));
+                    bottom: max(24px, env(safe-area-inset-bottom));
+                    z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 2);
+                    width: 52px;
+                    height: 52px;
+                    border-radius: 50%;
+                    border: none;
+                    align-items: center;
+                    justify-content: center;
+                    background: color-mix(in srgb, var(--accent) 92%, #000);
+                    color: #fff;
+                    font-size: 26px;
+                    line-height: 1;
+                    font-weight: 400;
+                    cursor: pointer;
+                    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+                }
+
+                .toolbar--compact .btn-calendar-create.toolbar-create {
+                    display: none;
+                }
+
                 .row.two {
                     grid-template-columns: 1fr;
                 }
@@ -1314,6 +1615,10 @@ export class PlatformCalendarModal extends PlatformModal {
             sync_outbound_enabled: true,
             notifications_enabled: true,
         };
+        this._isCompactLayout = false;
+        this._dateSheetOpen = false;
+        const sheetMonth = new Date();
+        this._dateSheetMonthRef = toDateInputValue(new Date(sheetMonth.getFullYear(), sheetMonth.getMonth(), 1));
     }
 
     willUpdate(changedProperties) {
@@ -1325,8 +1630,24 @@ export class PlatformCalendarModal extends PlatformModal {
         return this.i18n.t(key, params, 'calendar');
     }
 
+    _calendarLocaleTag() {
+        const code = this.i18n.getCurrentLocale();
+        if (code === 'ru') {
+            return 'ru-RU';
+        }
+        return 'en-US';
+    }
+
     async showModal() {
-        this._isFullscreen = true;
+        this._dateSheetOpen = false;
+        this._isCompactLayout = window.matchMedia('(max-width: 767px)').matches;
+        this._isFullscreen = !this._isCompactLayout;
+        if (this._isCompactLayout) {
+            this._view = 'day';
+            this.size = 'full';
+        } else {
+            this.size = 'md';
+        }
         super.showModal();
         await this._loadTeamMembers();
         await this._reload();
@@ -1455,6 +1776,203 @@ export class PlatformCalendarModal extends PlatformModal {
             cursor = addDays(cursor, 1);
         }
         return rows;
+    }
+
+    _compactPeriodLabel() {
+        const anchor = new Date(this._anchorDate);
+        if (Number.isNaN(anchor.getTime())) {
+            throw new Error(`Invalid anchor date: ${this._anchorDate}`);
+        }
+        return anchor.toLocaleDateString(this._calendarLocaleTag(), { weekday: 'short', day: 'numeric', month: 'long' });
+    }
+
+    _openDateSheet() {
+        const anchor = new Date(this._anchorDate);
+        if (Number.isNaN(anchor.getTime())) {
+            throw new Error(`Invalid anchor date: ${this._anchorDate}`);
+        }
+        this._dateSheetMonthRef = toDateInputValue(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+        this._dateSheetOpen = true;
+    }
+
+    _closeDateSheet() {
+        this._dateSheetOpen = false;
+    }
+
+    _shiftDateSheetMonth(delta) {
+        const ref = new Date(this._dateSheetMonthRef);
+        if (Number.isNaN(ref.getTime())) {
+            throw new Error(`Invalid date sheet month ref: ${this._dateSheetMonthRef}`);
+        }
+        const shifted = new Date(ref.getFullYear(), ref.getMonth() + delta, 1, 0, 0, 0, 0);
+        this._dateSheetMonthRef = toDateInputValue(shifted);
+    }
+
+    _selectDateFromSheet(iso) {
+        if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+            throw new Error(`Invalid sheet date: ${iso}`);
+        }
+        const parsed = new Date(iso);
+        if (Number.isNaN(parsed.getTime())) {
+            throw new Error(`Invalid sheet date: ${iso}`);
+        }
+        this._anchorDate = iso;
+        this._dateSheetOpen = false;
+        this._reload();
+    }
+
+    _monthCellsForDateSheet() {
+        const ref = new Date(this._dateSheetMonthRef);
+        if (Number.isNaN(ref.getTime())) {
+            throw new Error(`Invalid date sheet month ref: ${this._dateSheetMonthRef}`);
+        }
+        const monthStart = startOfMonth(ref);
+        const anchorMonth = ref.getMonth();
+        const firstVisible = startOfWeek(monthStart);
+        const today = new Date();
+        const cells = [];
+        for (let index = 0; index < 42; index += 1) {
+            const date = addDays(firstVisible, index);
+            cells.push({
+                date,
+                iso: toDateInputValue(date),
+                outside: date.getMonth() !== anchorMonth,
+                today: isSameDay(date, today),
+            });
+        }
+        return cells;
+    }
+
+    _renderDateSheet() {
+        if (!this._dateSheetOpen) {
+            return html``;
+        }
+        const weekdays = [1, 2, 3, 4, 5, 6, 7].map((i) => this._calT(`weekday_${i}`));
+        const cells = this._monthCellsForDateSheet();
+        const sheetMonth = new Date(this._dateSheetMonthRef);
+        if (Number.isNaN(sheetMonth.getTime())) {
+            throw new Error(`Invalid date sheet month ref: ${this._dateSheetMonthRef}`);
+        }
+        const monthTitle = sheetMonth.toLocaleDateString(this._calendarLocaleTag(), { month: 'long', year: 'numeric' });
+        return html`
+            <div class="date-sheet-overlay" @click=${() => this._closeDateSheet()}>
+                <div class="date-sheet-card" @click=${(e) => e.stopPropagation()}>
+                    <div class="date-sheet-header">
+                        <span class="date-sheet-title">${monthTitle}</span>
+                        <div class="date-sheet-nav">
+                            <button type="button" class="btn-icon" @click=${() => this._shiftDateSheetMonth(-1)} aria-label=${this._calT('sheet_prev_month')}>
+                                <platform-icon name="chevron-left" size="16"></platform-icon>
+                            </button>
+                            <button type="button" class="btn-icon" @click=${() => this._shiftDateSheetMonth(1)} aria-label=${this._calT('sheet_next_month')}>
+                                <platform-icon name="chevron-right" size="16"></platform-icon>
+                            </button>
+                            <button type="button" class="btn-icon" @click=${() => this._closeDateSheet()} aria-label=${this._calT('sheet_close')}>
+                                <platform-icon name="close" size="16"></platform-icon>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="date-sheet-grid">
+                        ${weekdays.map((label) => html`<div class="date-sheet-weekday">${label}</div>`)}
+                        ${cells.map((cell) => html`
+                            <button
+                                type="button"
+                                class="date-sheet-cell ${cell.outside ? 'outside' : ''} ${cell.today ? 'today' : ''} ${cell.iso === this._anchorDate ? 'selected' : ''}"
+                                @click=${() => this._selectDateFromSheet(cell.iso)}
+                            >
+                                ${cell.date.getDate()}
+                            </button>
+                        `)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderDayTimeline() {
+        const anchor = new Date(this._anchorDate);
+        if (Number.isNaN(anchor.getTime())) {
+            throw new Error(`Invalid anchor date: ${this._anchorDate}`);
+        }
+        const hourPx = 52;
+        const daySpanMin = 24 * 60;
+        const dayHeightPx = 24 * hourPx;
+        const events = this._eventsForDate(anchor);
+        const allDay = events.filter((e) => Boolean(e.all_day));
+        const timed = events.filter((e) => !e.all_day);
+        const dayStart = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 0, 0, 0, 0);
+        const dayEndMs = addDays(dayStart, 1).getTime();
+        const layoutTimed = timed.map((event) => {
+            const startMs = new Date(event.start_at).getTime();
+            const endMs = new Date(event.end_at).getTime();
+            if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+                throw new Error('event must have valid start_at and end_at');
+            }
+            const startClamped = Math.max(startMs, dayStart.getTime());
+            const endClamped = Math.min(endMs, dayEndMs);
+            const startMin = (startClamped - dayStart.getTime()) / 60000;
+            const durMin = Math.max((endClamped - startClamped) / 60000, 15);
+            const top = (startMin / daySpanMin) * dayHeightPx;
+            const height = Math.max((durMin / daySpanMin) * dayHeightPx, 28);
+            const colorKey = normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY]);
+            return { event, top, height, colorKey };
+        });
+        const hours = Array.from({ length: 24 }, (_, h) => h);
+        const now = new Date();
+        const showNow = isSameDay(now, anchor);
+        const nowTop = showNow
+            ? (((now.getHours() * 60 + now.getMinutes()) / daySpanMin) * dayHeightPx)
+            : null;
+        return html`
+            <div class="day-timeline">
+                ${allDay.length > 0 ? html`
+                    <div class="day-all-day-row">
+                        ${allDay.map((event) => html`
+                            <button
+                                type="button"
+                                class="event-chip"
+                                data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
+                                @click=${() => this._fillFormFromEvent(event)}
+                            >
+                                <span class="event-chip-title">${event.title}</span>
+                            </button>
+                        `)}
+                    </div>
+                ` : ''}
+                <div class="day-timeline-scroll">
+                    ${events.length === 0 ? html`<div class="hint" style="padding: var(--space-3);">${this._calT('events_empty')}</div>` : html`
+                        <div class="day-timeline-body">
+                            <div class="day-time-col">
+                                ${hours.map((h) => html`
+                                    <div class="day-time-label">${pad2(h)}:00</div>
+                                `)}
+                            </div>
+                            <div class="day-tracks">
+                                <div class="day-tracks-lines">
+                                    ${hours.map(() => html`<div class="day-hour-slot"></div>`)}
+                                </div>
+                                <div class="day-events-layer">
+                                    ${showNow && nowTop !== null ? html`
+                                        <div class="day-now-line" style=${`top:${nowTop}px`}></div>
+                                    ` : ''}
+                                    ${layoutTimed.map(({ event, top, height, colorKey }) => html`
+                                        <button
+                                            type="button"
+                                            class="day-event-block event-chip"
+                                            data-color=${colorKey}
+                                            style=${`top:${top}px;height:${height}px`}
+                                            @click=${() => this._fillFormFromEvent(event)}
+                                        >
+                                            <span class="event-chip-time">${this._eventStartTimeLabel(event)}</span>
+                                            <span class="event-chip-title">${event.title}</span>
+                                        </button>
+                                    `)}
+                                </div>
+                            </div>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
     }
 
     _sourceKey(source) {
@@ -2424,46 +2942,80 @@ export class PlatformCalendarModal extends PlatformModal {
         if (this._view === 'month') {
             return this._renderMonth();
         }
+        if (this._view === 'day') {
+            return this._renderDayTimeline();
+        }
         return this._renderList();
     }
 
     renderBody() {
         const v = (key) => this._calT(key);
+        const compact = this._isCompactLayout;
         return html`
             <div class="calendar-shell">
                 <section class="calendar-main">
-                    <div class="toolbar">
+                    <div class="toolbar ${compact ? 'toolbar--compact' : ''}">
                         <div class="toolbar-left">
-                            <div class="title">${this._periodLabel()}</div>
-                            <button class="btn-icon" type="button" @click=${() => this._movePeriod(-1)}>
-                                <platform-icon name="chevron-left" size="16"></platform-icon>
-                            </button>
-                            <button class="btn-icon" type="button" @click=${() => this._movePeriod(1)}>
-                                <platform-icon name="chevron-right" size="16"></platform-icon>
-                            </button>
+                            ${compact ? html`
+                                <button class="btn-icon" type="button" @click=${() => this._movePeriod(-1)} aria-label=${v('sheet_prev_day')}>
+                                    <platform-icon name="chevron-left" size="16"></platform-icon>
+                                </button>
+                                <button class="period-date-btn" type="button" @click=${() => this._openDateSheet()} title=${v('pick_date_title')}>
+                                    ${this._compactPeriodLabel()}
+                                </button>
+                                <button class="btn-icon" type="button" @click=${() => this._movePeriod(1)} aria-label=${v('sheet_next_day')}>
+                                    <platform-icon name="chevron-right" size="16"></platform-icon>
+                                </button>
+                            ` : html`
+                                <div class="title">${this._periodLabel()}</div>
+                                <button class="btn-icon" type="button" @click=${() => this._movePeriod(-1)}>
+                                    <platform-icon name="chevron-left" size="16"></platform-icon>
+                                </button>
+                                <button class="btn-icon" type="button" @click=${() => this._movePeriod(1)}>
+                                    <platform-icon name="chevron-right" size="16"></platform-icon>
+                                </button>
+                            `}
                         </div>
                         <div class="toolbar-right">
-                            <button class="btn btn-primary" type="button" @click=${() => this._openCreateEventDialog(new Date(this._anchorDate))}>
-                                ${v('create_event')}
+                            <button
+                                class="btn btn-primary btn-calendar-create toolbar-create"
+                                type="button"
+                                title=${v('create_event')}
+                                aria-label=${v('create_event')}
+                                @click=${() => this._openCreateEventDialog(new Date(this._anchorDate))}
+                            >
+                                <platform-icon name="plus" size="20"></platform-icon>
                             </button>
                             <div class="advanced-toggle">
                                 <button class="btn btn-secondary" type="button" @click=${() => { this._showAdvanced = !this._showAdvanced; }}>
                                     ${this._showAdvanced ? v('advanced_hide') : v('advanced_show')}
                                 </button>
                             </div>
-                            <div class="view-segment">
-                                <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>${v('view_day')}</button>
-                                <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>${v('view_week')}</button>
-                                <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>${v('view_month')}</button>
-                            </div>
+                            ${compact ? '' : html`
+                                <div class="view-segment">
+                                    <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>${v('view_day')}</button>
+                                    <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>${v('view_week')}</button>
+                                    <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>${v('view_month')}</button>
+                                </div>
+                            `}
                         </div>
                     </div>
-                    <div class="calendar-panel">
+                    <div class="calendar-panel ${this._view === 'day' ? 'calendar-panel--day' : ''}">
                         ${this._renderCalendarPanel()}
                     </div>
                     ${this._showAdvanced ? this._renderIntegrations() : ''}
                 </section>
             </div>
+            ${compact ? html`
+                <button
+                    type="button"
+                    class="calendar-fab"
+                    title=${v('create_event')}
+                    aria-label=${v('create_event')}
+                    @click=${() => this._openCreateEventDialog(new Date(this._anchorDate))}
+                >+</button>
+            ` : ''}
+            ${this._renderDateSheet()}
             ${this._renderEventDialog()}
         `;
     }

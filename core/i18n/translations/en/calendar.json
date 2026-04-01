@@ -71,5 +71,11 @@
   "advanced_hide": "Hide details",
   "view_day": "Day",
   "view_week": "Week",
-  "view_month": "Month"
+  "view_month": "Month",
+  "pick_date_title": "Pick a date",
+  "sheet_prev_month": "Previous month",
+  "sheet_next_month": "Next month",
+  "sheet_close": "Close",
+  "sheet_prev_day": "Previous day",
+  "sheet_next_day": "Next day"
 }

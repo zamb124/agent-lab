@@ -35,6 +35,7 @@ from apps.crm_worker.tasks.analysis_tasks import (
 )
 from core.clients.stt_client import STTClientFactory
 from core.context import get_context
+from core.i18n.service import t
 from core.websocket.publisher import notify_user, Notification, NotificationType
 from taskiq.exceptions import TaskiqResultTimeoutError
 
@@ -423,6 +424,32 @@ async def get_period_summary(
         namespace=namespace,
         force_rebuild=force_rebuild,
     )
+    ctx = get_context()
+    if summary.get("period_truncated") is True and ctx and ctx.user:
+        max_d = summary["period_summary_max_days"]
+        req_d = summary["requested_period_days"]
+        await notify_user(
+            user_id=ctx.user.user_id,
+            notification=Notification(
+                type=NotificationType.SYSTEM,
+                title=t("crm.notifications.period_summary_range_clamped_title"),
+                message=t(
+                    "crm.notifications.period_summary_range_clamped_message",
+                    max_days=max_d,
+                    requested_days=req_d,
+                ),
+                service="crm",
+                data={
+                    "event": "crm.period_summary.range_clamped",
+                    "requested_date_from": summary["requested_date_from"],
+                    "requested_date_to": summary["requested_date_to"],
+                    "effective_date_from": summary["date_from"],
+                    "effective_date_to": summary["date_to"],
+                    "period_summary_max_days": max_d,
+                    "requested_period_days": req_d,
+                },
+            ),
+        )
     return summary
 
 
