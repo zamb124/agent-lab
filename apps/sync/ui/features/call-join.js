@@ -10,6 +10,8 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+import { i18nDefaultNamespaceForBaseUrl } from '@platform/services/i18n/i18n.service.js';
 import { hueFromString } from '../utils/sync-hue.js';
 
 const token = window.location.pathname.split('/').at(-1);
@@ -273,18 +275,18 @@ class CallJoinPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+        if (!ServiceRegistry.isInitialized) {
+            await ServiceRegistry.registerCore('/sync');
+        }
+        const i18nNs = i18nDefaultNamespaceForBaseUrl('/sync');
+        if (i18nNs !== '') {
+            this.i18n.setDefaultNamespace(i18nNs);
+        }
         try {
             await Promise.all([this._fetchLinkInfo(), this._fetchCurrentUser()]);
         } finally {
-            // Гарантируем снятие спиннера даже при исключении.
             this._loading = false;
         }
-    }
-
-    disconnectedCallback() {
-        super.disconnectedCallback?.();
-        this._i18nUnsub?.();
     }
 
     _tp(key, params) {

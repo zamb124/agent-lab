@@ -6,7 +6,8 @@
     "crm_service_url": "http://localhost:8003",
     "frontend_service_url": "http://localhost:8002",
     "rag_service_url": "http://localhost:8004",
-    "sync_service_url": "http://localhost:8005"
+    "sync_service_url": "http://localhost:8005",
+    "platform_public_base_url": "http://localhost:8002"
   },
   "database": {
     "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shared",
@@ -335,5 +336,10 @@
     "turn_port": 3478,
     "turn_secret": "turnsecret",
     "turn_credential_ttl": 86400
+  },
+  "calendar_sync": {
+    "sync_meeting_reminder_enabled": true,
+    "sync_meeting_reminder_cron": "*/1 * * * *",
+    "sync_meeting_reminder_limit": 500
   }
 }

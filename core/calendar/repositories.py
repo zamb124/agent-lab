@@ -119,6 +119,7 @@ class CalendarEventSqlRepository:
             "updated_at": event.updated_at,
         }
         stmt = insert(CalendarEventRecord).values(**values)
+        metadata_col = CalendarEventRecord.__table__.c.metadata
         stmt = stmt.on_conflict_do_update(
             index_elements=["event_id"],
             set_={
@@ -141,7 +142,7 @@ class CalendarEventSqlRepository:
                 "series_id": stmt.excluded.series_id,
                 "deep_link": stmt.excluded.deep_link,
                 "external_refs": stmt.excluded.external_refs,
-                "metadata": stmt.excluded["metadata"],
+                metadata_col: stmt.excluded.metadata,
                 "created_by_user_id": stmt.excluded.created_by_user_id,
                 "updated_by_user_id": stmt.excluded.updated_by_user_id,
                 "created_at": stmt.excluded.created_at,
@@ -172,6 +173,37 @@ class CalendarEventSqlRepository:
                 .where(
                     CalendarEventRecord.company_id == company_id,
                     and_(CalendarEventRecord.start_at < end_at, CalendarEventRecord.end_at > start_at),
+                )
+                .order_by(CalendarEventRecord.start_at.asc())
+                .limit(limit)
+            )
+            rows = list(result.scalars().all())
+            return [_event_from_record(item) for item in rows]
+
+    async def list_platform_sync_meeting_reminder_window(
+        self,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+        limit: int,
+    ) -> list[CalendarEvent]:
+        """
+        События platform с активной Sync-встречей, start_at в [window_start, window_end),
+        без отправленного напоминания (metadata.sync_join_reminder_sent_at пуст).
+        Окно в UTC: типично [now+14m, now+16m) для напоминания за 15 минут.
+        """
+        session_factory = await get_session_factory(self._db_url)
+        meta = CalendarEventRecord.metadata_json
+        async with session_factory() as session:
+            result = await session.execute(
+                select(CalendarEventRecord)
+                .where(
+                    CalendarEventRecord.source == CalendarEventSource.PLATFORM.value,
+                    CalendarEventRecord.start_at >= window_start,
+                    CalendarEventRecord.start_at < window_end,
+                    meta["sync_link_token"].astext.isnot(None),
+                    meta["sync_meeting"].astext == "1",
+                    meta["sync_join_reminder_sent_at"].astext.is_(None),
                 )
                 .order_by(CalendarEventRecord.start_at.asc())
                 .limit(limit)

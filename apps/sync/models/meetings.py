@@ -57,6 +57,12 @@ class CallMeetingRead(BaseModel):
     export_target_namespace: str | None = None
     created_at: datetime
     updated_at: datetime
+    meeting_kind: Literal["recording", "scheduled"] = "recording"
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
+    join_url: str | None = None
+    link_token: str | None = None
+    calendar_event_id: str | None = None
 
 
 class CallMeetingDetailsRead(BaseModel):

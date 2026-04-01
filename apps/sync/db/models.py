@@ -340,11 +340,20 @@ class SyncCallLink(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scheduled_start_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scheduled_end_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    calendar_event_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index("ix_sync_call_links_channel", "channel_id"),
         Index("ix_sync_call_links_company", "company_id"),
         Index("ix_sync_call_links_expires", "expires_at"),
+        Index("ix_sync_call_links_calendar_event_id", "calendar_event_id"),
     )
 
     def __repr__(self) -> str:

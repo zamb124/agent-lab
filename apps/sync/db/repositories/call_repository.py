@@ -8,7 +8,12 @@ from typing import Optional
 from sqlalchemy import select, update
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
-from apps.sync.db.models import SyncCall, SyncCallLink, SyncCallParticipant
+from apps.sync.db.models import (
+    SyncCall,
+    SyncCallLink,
+    SyncCallParticipant,
+    SyncChannelMember,
+)
 
 
 class CallRepository(BaseSyncRepository[SyncCall]):
@@ -155,3 +160,120 @@ class CallRepository(BaseSyncRepository[SyncCall]):
                 .values(call_id=call_id)
             )
             await session.commit()
+
+    async def get_link_for_company(self, link_token: str, company_id: str) -> SyncCallLink:
+        async with self._db.session() as session:
+            row = await session.get(SyncCallLink, link_token)
+            if row is None or row.company_id != company_id:
+                raise ValueError(f"Ссылка {link_token} не найдена.")
+            return row
+
+    async def get_link_by_calendar_event(
+        self, company_id: str, calendar_event_id: str
+    ) -> Optional[SyncCallLink]:
+        async with self._db.session() as session:
+            stmt = (
+                select(SyncCallLink)
+                .where(
+                    SyncCallLink.company_id == company_id,
+                    SyncCallLink.calendar_event_id == calendar_event_id,
+                )
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def update_calendar_link(
+        self,
+        link_token: str,
+        company_id: str,
+        *,
+        title: Optional[str] = None,
+        scheduled_start_at: Optional[datetime] = None,
+        scheduled_end_at: Optional[datetime] = None,
+        expires_at: Optional[datetime] = None,
+    ) -> None:
+        row = await self.get_link_for_company(link_token, company_id)
+        if row.calendar_event_id is None:
+            raise ValueError("Ссылка не привязана к событию календаря.")
+        values: dict = {}
+        if title is not None:
+            values["title"] = title
+        if scheduled_start_at is not None:
+            values["scheduled_start_at"] = scheduled_start_at
+        if scheduled_end_at is not None:
+            values["scheduled_end_at"] = scheduled_end_at
+        if expires_at is not None:
+            values["expires_at"] = expires_at
+        if not values:
+            return
+        async with self._db.session() as session:
+            await session.execute(
+                update(SyncCallLink)
+                .where(
+                    SyncCallLink.link_token == link_token,
+                    SyncCallLink.company_id == company_id,
+                )
+                .values(**values)
+            )
+            await session.commit()
+
+    async def delete_link(self, link_token: str, company_id: str) -> bool:
+        async with self._db.session() as session:
+            row = await session.get(SyncCallLink, link_token)
+            if row is None or row.company_id != company_id:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
+
+    async def list_scheduled_calendar_links_for_user(
+        self,
+        company_id: str,
+        user_id: str,
+        *,
+        range_start: datetime,
+        range_end: datetime,
+        channel_id: Optional[str] = None,
+    ) -> list[SyncCallLink]:
+        async with self._db.session() as session:
+            stmt = (
+                select(SyncCallLink)
+                .join(
+                    SyncChannelMember,
+                    SyncChannelMember.channel_id == SyncCallLink.channel_id,
+                )
+                .where(
+                    SyncCallLink.company_id == company_id,
+                    SyncChannelMember.company_id == company_id,
+                    SyncChannelMember.user_id == user_id,
+                    SyncCallLink.calendar_event_id.is_not(None),
+                    SyncCallLink.scheduled_start_at.is_not(None),
+                    SyncCallLink.scheduled_end_at.is_not(None),
+                    SyncCallLink.scheduled_start_at < range_end,
+                    SyncCallLink.scheduled_end_at > range_start,
+                )
+            )
+            if channel_id is not None:
+                stmt = stmt.where(SyncCallLink.channel_id == channel_id)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def list_scheduled_calendar_links_in_range(
+        self,
+        company_id: str,
+        range_start: datetime,
+        range_end: datetime,
+    ) -> list[SyncCallLink]:
+        """Для агрегата календаря platform: все запланированные ссылки компании в окне."""
+        async with self._db.session() as session:
+            stmt = select(SyncCallLink).where(
+                SyncCallLink.company_id == company_id,
+                SyncCallLink.calendar_event_id.is_not(None),
+                SyncCallLink.scheduled_start_at.is_not(None),
+                SyncCallLink.scheduled_end_at.is_not(None),
+                SyncCallLink.scheduled_start_at < range_end,
+                SyncCallLink.scheduled_end_at > range_start,
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())

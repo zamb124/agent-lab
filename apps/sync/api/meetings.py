@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from apps.sync.container import get_sync_container
@@ -119,6 +120,7 @@ async def _load_sync_file_bytes(file_row) -> bytes:
 
 @router.get("/")
 async def list_meetings(
+    request: Request,
     channel_id: str | None = None,
     space_id: str | None = None,
     limit: int = 50,
@@ -167,15 +169,96 @@ async def list_meetings(
                 updated_at=row.updated_at,
             )
         )
-    return visible
+
+    now = datetime.now(UTC)
+    range_start = now - timedelta(days=370)
+    range_end = now + timedelta(days=370)
+    link_rows = await container.call_repository.list_scheduled_calendar_links_for_user(
+        company_id,
+        user_id,
+        range_start=range_start,
+        range_end=range_end,
+        channel_id=filters.channel_id,
+    )
+    base_join = str(request.base_url).rstrip("/")
+    for lk in link_rows:
+        if lk.scheduled_start_at is None or lk.scheduled_end_at is None or lk.calendar_event_id is None:
+            continue
+        join_url = f"{base_join}/sync/join/{lk.link_token}"
+        visible.append(
+            CallMeetingRead(
+                meeting_id=f"scheduled:{lk.calendar_event_id}",
+                call_id=lk.link_token,
+                recording_id=None,
+                channel_id=lk.channel_id,
+                space_id=None,
+                transcript_file_id=None,
+                transcript_text_file_id=None,
+                transcript_text_storage_url=None,
+                transcript_text_download_url=None,
+                summary_json={},
+                export_status="pending",
+                export_target_namespace=None,
+                created_at=lk.created_at,
+                updated_at=lk.created_at,
+                meeting_kind="scheduled",
+                scheduled_start_at=lk.scheduled_start_at,
+                scheduled_end_at=lk.scheduled_end_at,
+                join_url=join_url,
+                link_token=lk.link_token,
+                calendar_event_id=lk.calendar_event_id,
+            )
+        )
+
+    visible.sort(key=lambda m: m.scheduled_start_at or m.created_at, reverse=True)
+    return visible[: filters.limit]
 
 
 @router.get("/{meeting_id}")
-async def get_meeting(meeting_id: str) -> CallMeetingDetailsRead:
+async def get_meeting(request: Request, meeting_id: str) -> CallMeetingDetailsRead:
     context = get_context()
     container = get_sync_container()
     company_id = context.active_company.company_id
     user_id = context.user.user_id
+
+    if meeting_id.startswith("scheduled:"):
+        calendar_event_id = meeting_id.removeprefix("scheduled:")
+        if calendar_event_id == "":
+            raise HTTPException(status_code=404, detail="Встреча не найдена.")
+        lk = await container.call_repository.get_link_by_calendar_event(company_id, calendar_event_id)
+        if lk is None:
+            raise HTTPException(status_code=404, detail="Встреча не найдена.")
+        if not await container.channel_repository.is_member(lk.channel_id, user_id, company_id=company_id):
+            raise HTTPException(status_code=403, detail="Нет доступа к встрече.")
+        base_join = str(request.base_url).rstrip("/")
+        join_url = f"{base_join}/sync/join/{lk.link_token}"
+        return CallMeetingDetailsRead(
+            meeting=CallMeetingRead(
+                meeting_id=meeting_id,
+                call_id=lk.link_token,
+                recording_id=None,
+                channel_id=lk.channel_id,
+                space_id=None,
+                transcript_file_id=None,
+                transcript_text_file_id=None,
+                transcript_text_storage_url=None,
+                transcript_text_download_url=None,
+                summary_json={},
+                export_status="pending",
+                export_target_namespace=None,
+                created_at=lk.created_at,
+                updated_at=lk.created_at,
+                meeting_kind="scheduled",
+                scheduled_start_at=lk.scheduled_start_at,
+                scheduled_end_at=lk.scheduled_end_at,
+                join_url=join_url,
+                link_token=lk.link_token,
+                calendar_event_id=lk.calendar_event_id,
+            ),
+            recording=None,
+            segments=[],
+        )
+
     row = await container.call_meeting_repository.get(meeting_id)
     if row is None or row.company_id != company_id:
         raise HTTPException(status_code=404, detail="Встреча не найдена.")

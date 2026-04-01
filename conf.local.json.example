@@ -1,6 +1,7 @@
 {
   "server": {
-    "env": "development"
+    "env": "development",
+    "platform_public_base_url": "https://your-public-app-origin.example.com"
   },
   "auth": {
     "jwt_secret_key": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
@@ -85,5 +86,10 @@
     "vapid_public_key": "YOUR_VAPID_PUBLIC_KEY",
     "vapid_private_key": "YOUR_VAPID_PRIVATE_KEY",
     "vapid_email": "YOUR_EMAIL@example.com"
+  },
+  "calendar_sync": {
+    "sync_meeting_reminder_enabled": true,
+    "sync_meeting_reminder_cron": "*/1 * * * *",
+    "sync_meeting_reminder_limit": 500
   }
 }

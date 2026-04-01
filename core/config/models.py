@@ -86,6 +86,10 @@ class ServerConfig(BaseModel):
     rag_service_url: Optional[str] = None
     sync_service_url: Optional[str] = None
     scheduler_service_url: Optional[str] = None
+    platform_public_base_url: Optional[str] = Field(
+        default="https://humanitec.ru",
+        description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
+    )
 
     # Порты по умолчанию для каждого сервиса
     _default_ports: Dict[str, int] = {
@@ -346,6 +350,9 @@ class CalendarSyncConfig(BaseModel):
     max_integrations_per_tick: int = 1000
     max_parallel_integrations: int = 10
     notification_dedup_ttl_seconds: int = 86400
+    sync_meeting_reminder_enabled: bool = True
+    sync_meeting_reminder_cron: str = "*/1 * * * *"
+    sync_meeting_reminder_limit: int = 500
 
 
 class OpenAIProviderConfig(BaseModel):

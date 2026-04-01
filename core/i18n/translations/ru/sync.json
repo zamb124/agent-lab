@@ -16,6 +16,7 @@
   "label_status": "Статус",
   "label_participants": "Участники",
   "label_meeting_id": "meeting_id",
+  "label_join_link": "Ссылка для входа",
   "download_recording": "Скачать запись",
   "download_transcript": "Скачать транскрипт",
   "export_crm": "Экспорт в CRM",

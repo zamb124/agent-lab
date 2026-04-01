@@ -45,7 +45,8 @@ LEGAL__DPO_EMAIL=...
 **Общий слой** (один раз): `database`, `tasks`, `auth`, `llm`, `rag`, `s3`, `server`, …
 
 - **`database`**: `shared_url`, `flows_url`, `crm_url`, `sync_url`, `rag_url`, `redis_url` — не дублировать внутри `services.*`.
-- **`server`**: плоские URL для межсервисных вызовов — `flows_service_url`, `crm_service_url`, `frontend_service_url`, `rag_service_url`, `sync_service_url` (см. `ServerConfig`). Вложенного `server.services.*` нет.
+- **`server`**: плоские URL для межсервисных вызовов — `flows_service_url`, `crm_service_url`, `frontend_service_url`, `rag_service_url`, `sync_service_url` (см. `ServerConfig`). Вложенного `server.services.*` нет. **`platform_public_base_url`** — публичный origin без завершающего слэша (как видит браузер), для ссылок календаря → Sync join и фоновых напоминаний; локально часто совпадает с `frontend_service_url` без пути (например `http://localhost:8002`). ENV: `SERVER__PLATFORM_PUBLIC_BASE_URL`.
+- **`calendar_sync`**: фоновая синхронизация календаря (`CalendarSyncConfig`): в т.ч. **`sync_meeting_reminder_enabled`**, **`sync_meeting_reminder_cron`**, **`sync_meeting_reminder_limit`** — тик напоминаний о запланированных встречах Sync за ~15 минут до начала.
 - **`stt`**: единый STT-клиент платформы (`stt.provider`, `stt.cloud_ru.*`). В проде ключ задавать через ENV `STT__CLOUD_RU__API_KEY`.
 - **`llm`**: `provider`, `default_model`, провайдеры (`openrouter`, `bothub`, …), опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id модели; каталог цен в JSON не храним.
 - **`services.<имя>`**: только отличия от общего слоя (порт, `auth.permissions_enabled`, свой `llm` для flows, override `rag.providers` у rag-сервиса и т.д.).

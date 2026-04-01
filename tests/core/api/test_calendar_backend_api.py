@@ -107,6 +107,41 @@ async def test_calendar_event_crud_and_filters(
 
 
 @pytest.mark.asyncio
+async def test_calendar_rejects_invalid_sync_meeting_shape(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    now = datetime.now(timezone.utc)
+    response = await frontend_client.post(
+        "/frontend/api/calendar/events",
+        json={
+            "title": f"sync shape {unique_id}",
+            "kind": "meeting",
+            "source": "platform",
+            "source_id": None,
+            "namespace": None,
+            "description": None,
+            "location": None,
+            "status": "confirmed",
+            "timezone": "UTC",
+            "all_day": False,
+            "start_at": (now + timedelta(hours=4)).isoformat(),
+            "end_at": (now + timedelta(hours=5)).isoformat(),
+            "attendees": [],
+            "recurrence_rule": None,
+            "recurrence_id": None,
+            "series_id": None,
+            "deep_link": None,
+            "metadata": {},
+            "sync_meeting": "enabled",
+        },
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_calendar_rejects_invalid_time_ranges(
     unique_id: str,
     frontend_client,

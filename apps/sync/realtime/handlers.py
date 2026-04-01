@@ -1109,6 +1109,10 @@ async def _create_channel(body, *, actor_user_id: str, company_id: str, channels
         if mids[0] == actor_user_id:
             raise ValueError("Нельзя создать личный канал с самим собой.")
 
+    if body.type == ChannelType.CALENDAR_MEETING:
+        if body.name is None or body.name.strip() == "":
+            raise ValueError("Для calendar_meeting обязателен name (заголовок встречи).")
+
     channel_id = uuid4().hex
     entity = SyncChannel(
         channel_id=channel_id,

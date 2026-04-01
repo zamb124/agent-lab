@@ -37,6 +37,12 @@ from core.models import (
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 
+SYNC_LINK_TOKEN_META = "sync_link_token"
+SYNC_CHANNEL_ID_META = "sync_channel_id"
+SYNC_MEETING_FLAG_META = "sync_meeting"
+SYNC_REMINDER_SENT_META = "sync_join_reminder_sent_at"
+
+
 @dataclass(frozen=True)
 class GoogleOAuthConfig:
     client_id: str
@@ -616,12 +622,18 @@ class CalendarService:
                 )
             )
         if include_all_sources or CalendarEventSource.SYNC in include_sources:
+            platform_event_ids = {
+                e.event_id
+                for e in local_events
+                if e.source == CalendarEventSource.PLATFORM
+            }
             merged_events.extend(
                 await self._fetch_sync_events(
                     company_id=company_id,
                     user_id=user_id,
                     start_at=start_at,
                     end_at=end_at,
+                    exclude_platform_event_ids=platform_event_ids,
                 )
             )
         filtered_events = merged_events
@@ -696,8 +708,94 @@ class CalendarService:
                 ),
             )
 
+    async def _reconcile_platform_sync_meeting(
+        self,
+        *,
+        want_sync: bool,
+        current: CalendarEvent | None,
+        event_id: str,
+        title: str,
+        start_at: datetime,
+        end_at: datetime,
+        attendees: list[CalendarAttendee],
+        organizer_user_id: str,
+        company_id: str,
+        metadata: dict[str, str],
+    ) -> tuple[bool, str | None]:
+        prev_token = metadata.get(SYNC_LINK_TOKEN_META)
+        if not prev_token and current is not None:
+            prev_token = current.metadata.get(SYNC_LINK_TOKEN_META)
+
+        if want_sync:
+            settings = get_settings()
+            public_base = settings.server.platform_public_base_url
+            if public_base is None or public_base.strip() == "":
+                raise ValueError(
+                    "Для встречи Sync в конфигурации задан server.platform_public_base_url."
+                )
+            base = public_base.strip().rstrip("/")
+            invited = await self._resolve_invited_platform_user_ids(
+                company_id=company_id,
+                organizer_user_id=organizer_user_id,
+                attendees=attendees,
+            )
+            if not prev_token:
+                body: dict = {
+                    "calendar_event_id": event_id,
+                    "scheduled_title": title,
+                    "scheduled_start_at": _iso_datetime(start_at),
+                    "scheduled_end_at": _iso_datetime(end_at),
+                    "calendar_member_user_ids": invited,
+                    "join_url_base": base,
+                }
+                data = await self._service_client.post(
+                    "sync",
+                    "/sync/api/v1/calls/links",
+                    json=body,
+                )
+                token = data["link_token"]
+                metadata[SYNC_LINK_TOKEN_META] = token
+                metadata[SYNC_CHANNEL_ID_META] = data["channel_id"]
+                metadata[SYNC_MEETING_FLAG_META] = "1"
+                return True, f"{base}/sync/join/{token}"
+            patch_body = {
+                "scheduled_title": title,
+                "scheduled_start_at": _iso_datetime(start_at),
+                "scheduled_end_at": _iso_datetime(end_at),
+                "join_url_base": base,
+            }
+            data = await self._service_client.patch(
+                "sync",
+                f"/sync/api/v1/calls/links/{prev_token}",
+                json=patch_body,
+            )
+            token = data["link_token"]
+            metadata[SYNC_LINK_TOKEN_META] = token
+            metadata[SYNC_CHANNEL_ID_META] = data["channel_id"]
+            metadata[SYNC_MEETING_FLAG_META] = "1"
+            return True, f"{base}/sync/join/{token}"
+
+        if prev_token:
+            await self._service_client.delete(
+                "sync",
+                f"/sync/api/v1/calls/links/{prev_token}",
+            )
+            metadata.pop(SYNC_LINK_TOKEN_META, None)
+            metadata.pop(SYNC_CHANNEL_ID_META, None)
+            metadata.pop(SYNC_MEETING_FLAG_META, None)
+            metadata.pop(SYNC_REMINDER_SENT_META, None)
+            return True, None
+
+        return False, None
+
     async def upsert_event(self, event_id: str | None, payload: dict, user_id: str, company_id: str) -> CalendarEvent:
         now = datetime.now(timezone.utc)
+        payload = dict(payload)
+        sync_raw = payload.pop("sync_meeting", None)
+        if sync_raw is not None and not isinstance(sync_raw, dict):
+            raise ValueError("sync_meeting должен быть объектом с полем enabled.")
+        want_sync = bool(sync_raw and sync_raw.get("enabled"))
+
         current = None
         if event_id is None:
             final_event_id = uuid4().hex
@@ -716,9 +814,33 @@ class CalendarService:
         if start_at >= end_at:
             raise ValueError("Calendar event start_at must be before end_at")
 
+        md: dict[str, str] = dict(payload.get("metadata") or {})
+        if current is not None:
+            for meta_key, meta_val in current.metadata.items():
+                if meta_key not in md:
+                    md[meta_key] = meta_val
+
         source = CalendarEventSource(payload["source"])
         source_id = payload["source_id"] or final_event_id
         status = CalendarEventStatus(payload["status"])
+
+        deep_link_final: str | None = payload.get("deep_link")
+        if source == CalendarEventSource.PLATFORM:
+            handled, dl = await self._reconcile_platform_sync_meeting(
+                want_sync=want_sync,
+                current=current,
+                event_id=final_event_id,
+                title=payload["title"],
+                start_at=start_at,
+                end_at=end_at,
+                attendees=payload["attendees"],
+                organizer_user_id=user_id,
+                company_id=company_id,
+                metadata=md,
+            )
+            if handled:
+                deep_link_final = dl
+
         event = CalendarEvent(
             event_id=final_event_id,
             source=source,
@@ -738,9 +860,9 @@ class CalendarService:
             recurrence_rule=payload.get("recurrence_rule"),
             recurrence_id=payload.get("recurrence_id"),
             series_id=payload.get("series_id"),
-            deep_link=payload.get("deep_link"),
+            deep_link=deep_link_final,
             external_refs=(current.external_refs if current else []),
-            metadata=payload["metadata"],
+            metadata=md,
             created_by_user_id=created_by,
             updated_by_user_id=user_id,
             created_at=created_at,
@@ -758,10 +880,40 @@ class CalendarService:
         event = await self._event_repository.get(event_id=event_id, company_id=company_id)
         if event is None:
             raise ValueError(f"Calendar event {event_id} not found")
+        token = event.metadata.get(SYNC_LINK_TOKEN_META)
+        if token:
+            await self._service_client.delete(
+                "sync",
+                f"/sync/api/v1/calls/links/{token}",
+            )
         await self._delete_external_links(event)
         deleted = await self._event_repository.delete(event_id=event_id, company_id=company_id)
         if not deleted:
             raise RuntimeError(f"Failed to delete calendar event {event_id}")
+
+    async def sync_meeting_reminder_recipient_user_ids(self, event: CalendarEvent) -> list[str]:
+        organizer = event.created_by_user_id
+        if organizer is None or organizer == "":
+            raise ValueError("Для напоминания Sync нужен created_by_user_id у события.")
+        invited = await self._resolve_invited_platform_user_ids(
+            company_id=event.company_id,
+            organizer_user_id=organizer,
+            attendees=event.attendees,
+        )
+        recipients = set(invited)
+        recipients.add(organizer)
+        return sorted(recipients)
+
+    async def mark_sync_meeting_reminder_sent(self, event_id: str, company_id: str) -> None:
+        event = await self._event_repository.get(event_id=event_id, company_id=company_id)
+        if event is None:
+            return
+        md = dict(event.metadata)
+        md[SYNC_REMINDER_SENT_META] = _iso_datetime(datetime.now(timezone.utc))
+        updated = event.model_copy(
+            update={"metadata": md, "updated_at": datetime.now(timezone.utc)}
+        )
+        await self._event_repository.upsert(updated)
 
     async def list_integrations(self, user_id: str, company_id: str) -> list[CalendarIntegration]:
         return await self._integration_repository.list_by_user(company_id=company_id, user_id=user_id)
@@ -1290,33 +1442,61 @@ class CalendarService:
         user_id: str,
         start_at: datetime,
         end_at: datetime,
+        exclude_platform_event_ids: set[str],
     ) -> list[CalendarEvent]:
-        meetings = await self._service_client.get("sync", "/sync/api/v1/meetings/")
+        settings = get_settings()
+        public_base = settings.server.platform_public_base_url
+        params: dict[str, str] = {
+            "start_at": _iso_datetime(_ensure_utc(start_at)),
+            "end_at": _iso_datetime(_ensure_utc(end_at)),
+        }
+        if public_base is not None and public_base.strip() != "":
+            params["join_url_base"] = public_base.strip().rstrip("/")
+        rows = await self._service_client.get(
+            "sync",
+            "/sync/api/v1/calls/links/scheduled",
+            params=params,
+        )
         events: list[CalendarEvent] = []
         now = datetime.now(timezone.utc)
-        for item in meetings or []:
+        if not isinstance(rows, list):
+            return events
+        for item in rows:
             if not isinstance(item, dict):
                 continue
-            source_id = item.get("meeting_id")
-            if not isinstance(source_id, str) or source_id == "":
+            cal_id = item.get("calendar_event_id")
+            if not isinstance(cal_id, str) or cal_id == "":
                 continue
-            created_at_raw = item.get("created_at")
-            if not isinstance(created_at_raw, str) or created_at_raw == "":
+            if cal_id in exclude_platform_event_ids:
                 continue
-            created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
-            start_value = _ensure_utc(created_at)
-            end_value = start_value + timedelta(minutes=30)
+            raw_start = item.get("scheduled_start_at")
+            raw_end = item.get("scheduled_end_at")
+            if not isinstance(raw_start, str) or not isinstance(raw_end, str):
+                continue
+            start_value = _ensure_utc(datetime.fromisoformat(raw_start.replace("Z", "+00:00")))
+            end_value = _ensure_utc(datetime.fromisoformat(raw_end.replace("Z", "+00:00")))
             if start_value >= end_at or end_value <= start_at:
+                continue
+            title_raw = item.get("title")
+            title = title_raw if isinstance(title_raw, str) and title_raw.strip() else "Sync"
+            join = item.get("join_url")
+            deep = join if isinstance(join, str) and join != "" else None
+            if deep is None:
+                tok = item.get("link_token")
+                if isinstance(tok, str) and tok:
+                    deep = f"/sync/join/{tok}"
+            source_id = item.get("link_token")
+            if not isinstance(source_id, str) or source_id == "":
                 continue
             events.append(
                 CalendarEvent(
-                    event_id=f"sync-{source_id}",
+                    event_id=f"sync-cal-{cal_id}",
                     source=CalendarEventSource.SYNC,
                     source_id=source_id,
                     company_id=company_id,
                     namespace=None,
                     kind="meeting",
-                    title=f"Sync meeting {source_id[:8]}",
+                    title=title,
                     description=None,
                     location=None,
                     status=CalendarEventStatus.CONFIRMED,
@@ -1328,9 +1508,9 @@ class CalendarService:
                     recurrence_rule=None,
                     recurrence_id=None,
                     series_id=None,
-                    deep_link=f"/sync?meeting={source_id}",
+                    deep_link=deep,
                     external_refs=[],
-                    metadata={},
+                    metadata={"calendar_event_id": cal_id},
                     created_by_user_id=user_id,
                     updated_by_user_id=user_id,
                     created_at=now,

@@ -9,14 +9,17 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
 from apps.sync.container import get_sync_container
-from apps.sync.db.models import SyncCall, SyncCallLink
+from apps.sync.db.models import SyncCall, SyncCallLink, SyncChannel
 from apps.sync.models.calls import (
     CallLinkCreate,
     CallLinkInfo,
+    CallLinkPatch,
     CallLinkRead,
     CallParticipantRead,
     CallRead,
+    CallScheduledLinkRead,
     GuestJoinRequest,
     JoinResponse,
 )
@@ -94,6 +97,21 @@ async def _participant_names_for_call(container, call: SyncCall) -> dict[str, st
     return out
 
 
+def _resolve_join_url(link_token: str, join_url_base: Optional[str], request: Request) -> str:
+    if join_url_base is not None and join_url_base.strip() != "":
+        base = join_url_base.strip().rstrip("/")
+        if not base.startswith("http://") and not base.startswith("https://"):
+            raise HTTPException(status_code=400, detail="join_url_base должен быть URL с http или https.")
+        return f"{base}/sync/join/{link_token}"
+    return f"{str(request.base_url).rstrip('/')}/sync/join/{link_token}"
+
+
+def _ttl_hours_from_schedule(scheduled_end: datetime, now: datetime) -> int:
+    delta = scheduled_end - now
+    hours = int(delta.total_seconds() / 3600.0) + 2
+    return max(1, min(168, hours))
+
+
 # ─── Авторизованные эндпоинты ────────────────────────────────────────────────
 
 @router.get("/turn-credentials")
@@ -117,63 +135,234 @@ async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRe
 
     По ней может войти любой — зарегистрированный пользователь или гость.
     Звонок создаётся в SFU-режиме при первом входе.
+
+    Если передан calendar_event_id, создаётся канал типа calendar_meeting и ссылка на него.
     """
     context = get_context()
-    settings = get_settings()
     container = get_sync_container()
-
     company_id = context.active_company.company_id
-    if not await container.channel_repository.is_member(
-        body.channel_id, context.user.user_id, company_id=company_id
-    ):
-        raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
+    actor_id = context.user.user_id
 
+    channel_id: str
     attached_call_id: Optional[str] = None
-    if body.call_id:
-        try:
-            existing = await container.call_repository.get_call(body.call_id, company_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        if existing.channel_id != body.channel_id:
+    calendar_title: Optional[str] = None
+    cal_start: Optional[datetime] = None
+    cal_end: Optional[datetime] = None
+    cal_event_id: Optional[str] = None
+    ttl_hours = body.ttl_hours
+
+    if body.calendar_event_id:
+        dup = await container.call_repository.get_link_by_calendar_event(
+            company_id, body.calendar_event_id
+        )
+        if dup is not None:
             raise HTTPException(
-                status_code=400,
-                detail="Звонок относится к другому каналу.",
+                status_code=409,
+                detail="Для этого события календаря уже создана ссылка.",
             )
-        if existing.status not in ("ringing", "active"):
-            raise HTTPException(
-                status_code=400,
-                detail="Ссылка на конференцию доступна только для активного или входящего звонка.",
+        channel_id = uuid4().hex
+        ch = SyncChannel(
+            channel_id=channel_id,
+            company_id=company_id,
+            space_id=None,
+            type=CHANNEL_TYPE_CALENDAR_MEETING,
+            name=body.scheduled_title.strip(),
+            is_private=False,
+            created_at=datetime.now(UTC),
+            created_by_user_id=actor_id,
+            pinned_message_ids=[],
+        )
+        await container.channel_repository.create(ch)
+        await container.channel_repository.add_member_if_missing(
+            channel_id, actor_id, "owner", company_id=company_id
+        )
+        mids = body.calendar_member_user_ids or []
+        for uid in mids:
+            if uid == actor_id:
+                continue
+            await container.channel_repository.add_member_if_missing(
+                channel_id, uid, "member", company_id=company_id
             )
-        if existing.mode != "sfu":
-            raise HTTPException(status_code=400, detail="Гостевая ссылка поддерживается только для SFU-звонков.")
-        if not existing.livekit_room_name:
-            raise HTTPException(status_code=400, detail="У звонка нет LiveKit-комнаты.")
-        attached_call_id = existing.call_id
+        now = datetime.now(UTC)
+        ttl_hours = _ttl_hours_from_schedule(body.scheduled_end_at, now)
+        expires_at = now + timedelta(hours=ttl_hours)
+        calendar_title = body.scheduled_title.strip()
+        cal_start = body.scheduled_start_at
+        cal_end = body.scheduled_end_at
+        cal_event_id = body.calendar_event_id
+    else:
+        assert body.channel_id is not None
+        channel_id = body.channel_id
+        if not await container.channel_repository.is_member(
+            channel_id, actor_id, company_id=company_id
+        ):
+            raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
+
+        if body.call_id:
+            try:
+                existing = await container.call_repository.get_call(body.call_id, company_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            if existing.channel_id != channel_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Звонок относится к другому каналу.",
+                )
+            if existing.status not in ("ringing", "active"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ссылка на конференцию доступна только для активного или входящего звонка.",
+                )
+            if existing.mode != "sfu":
+                raise HTTPException(status_code=400, detail="Гостевая ссылка поддерживается только для SFU-звонков.")
+            if not existing.livekit_room_name:
+                raise HTTPException(status_code=400, detail="У звонка нет LiveKit-комнаты.")
+            attached_call_id = existing.call_id
+        expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
 
     link_token = uuid4().hex
-    expires_at = datetime.now(UTC) + timedelta(hours=body.ttl_hours)
-
     link = SyncCallLink(
         link_token=link_token,
-        channel_id=body.channel_id,
+        channel_id=channel_id,
         company_id=company_id,
         call_id=attached_call_id,
         call_type="video",
-        created_by_user_id=context.user.user_id,
+        created_by_user_id=actor_id,
         expires_at=expires_at,
+        title=calendar_title,
+        scheduled_start_at=cal_start,
+        scheduled_end_at=cal_end,
+        calendar_event_id=cal_event_id,
     )
     await container.call_repository.create_link(link)
 
-    base_url = str(request.base_url).rstrip("/")
-    join_url = f"{base_url}/sync/join/{link_token}"
+    join_url = _resolve_join_url(link_token, body.join_url_base, request)
 
     return CallLinkRead(
         link_token=link_token,
-        channel_id=body.channel_id,
+        channel_id=channel_id,
         call_type="video",
         expires_at=expires_at,
         join_url=join_url,
+        title=calendar_title,
+        scheduled_start_at=cal_start,
+        scheduled_end_at=cal_end,
+        calendar_event_id=cal_event_id,
     )
+
+
+@router.get("/links/scheduled", response_model=list[CallScheduledLinkRead])
+async def list_scheduled_call_links(
+    request: Request,
+    start_at: datetime,
+    end_at: datetime,
+    channel_id: str | None = None,
+    join_url_base: str | None = None,
+) -> list[CallScheduledLinkRead]:
+    context = get_context()
+    container = get_sync_container()
+    company_id = context.active_company.company_id
+    user_id = context.user.user_id
+    rows = await container.call_repository.list_scheduled_calendar_links_for_user(
+        company_id,
+        user_id,
+        range_start=start_at,
+        range_end=end_at,
+        channel_id=channel_id,
+    )
+    out: list[CallScheduledLinkRead] = []
+    for row in rows:
+        if row.scheduled_start_at is None or row.scheduled_end_at is None:
+            continue
+        if row.calendar_event_id is None:
+            continue
+        join_url = _resolve_join_url(row.link_token, join_url_base, request)
+        out.append(
+            CallScheduledLinkRead(
+                link_token=row.link_token,
+                channel_id=row.channel_id,
+                title=row.title,
+                scheduled_start_at=row.scheduled_start_at,
+                scheduled_end_at=row.scheduled_end_at,
+                calendar_event_id=row.calendar_event_id,
+                join_url=join_url,
+                expires_at=row.expires_at,
+            )
+        )
+    return out
+
+
+@router.patch("/links/{link_token}", response_model=CallLinkRead)
+async def patch_call_link(
+    link_token: str,
+    body: CallLinkPatch,
+    request: Request,
+) -> CallLinkRead:
+    context = get_context()
+    container = get_sync_container()
+    company_id = context.active_company.company_id
+    user_id = context.user.user_id
+    link = await container.call_repository.get_link_for_company(link_token, company_id)
+    if link.calendar_event_id is None:
+        raise HTTPException(status_code=400, detail="Патч поддерживается только для календарных ссылок.")
+    if not await container.channel_repository.is_member(
+        link.channel_id, user_id, company_id=company_id
+    ):
+        raise HTTPException(status_code=403, detail="Нет доступа к ссылке.")
+
+    new_start = body.scheduled_start_at if body.scheduled_start_at is not None else link.scheduled_start_at
+    new_end = body.scheduled_end_at if body.scheduled_end_at is not None else link.scheduled_end_at
+    if new_start is None or new_end is None:
+        raise HTTPException(status_code=400, detail="У ссылки должны быть границы расписания.")
+    if new_start >= new_end:
+        raise HTTPException(status_code=400, detail="Некорректный интервал встречи.")
+
+    new_title = body.scheduled_title if body.scheduled_title is not None else link.title
+    now = datetime.now(UTC)
+    new_expires = now + timedelta(hours=_ttl_hours_from_schedule(new_end, now))
+
+    await container.call_repository.update_calendar_link(
+        link_token,
+        company_id,
+        title=new_title,
+        scheduled_start_at=new_start,
+        scheduled_end_at=new_end,
+        expires_at=new_expires,
+    )
+    updated = await container.call_repository.get_link_for_company(link_token, company_id)
+    join_url = _resolve_join_url(link_token, body.join_url_base, request)
+    return CallLinkRead(
+        link_token=updated.link_token,
+        channel_id=updated.channel_id,
+        call_type="video",
+        expires_at=updated.expires_at,
+        join_url=join_url,
+        title=updated.title,
+        scheduled_start_at=updated.scheduled_start_at,
+        scheduled_end_at=updated.scheduled_end_at,
+        calendar_event_id=updated.calendar_event_id,
+    )
+
+
+@router.delete("/links/{link_token}", status_code=204)
+async def delete_call_link(link_token: str) -> None:
+    context = get_context()
+    container = get_sync_container()
+    company_id = context.active_company.company_id
+    user_id = context.user.user_id
+    link = await container.call_repository.get_link_for_company(link_token, company_id)
+    if link.calendar_event_id is None:
+        raise HTTPException(status_code=400, detail="Удаление через этот контракт только для календарных ссылок.")
+    role = await container.channel_repository.get_member_role(link.channel_id, user_id)
+    if link.created_by_user_id != user_id and role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Нет прав удалить эту ссылку.")
+    channel_id = link.channel_id
+    deleted = await container.call_repository.delete_link(link_token, company_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Ссылка не найдена.")
+    ch = await container.channel_repository.get(channel_id)
+    if ch is not None and ch.company_id == company_id and ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
+        await container.channel_repository.delete(channel_id)
 
 
 @router.get("/{call_id}")

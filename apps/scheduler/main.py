@@ -20,27 +20,32 @@ from core.scheduler.models import (
 logger = get_logger(__name__)
 
 CALENDAR_SYNC_TASK_NAME = "calendar_sync_tick"
+CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME = "calendar_sync_meeting_reminder_tick"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 
 
-async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> None:
-    if os.getenv("TESTING") != "true":
-        await ensure_system_company_exists(container)
-    config = settings.calendar_sync
-    if not config.enabled:
-        logger.info("Calendar scheduler sync is disabled")
+async def _ensure_calendar_schedule(
+    *,
+    container,
+    config_enabled: bool,
+    task_name: str,
+    cron: str,
+    log_label: str,
+) -> None:
+    if not config_enabled:
+        logger.info("%s: disabled in config", log_label)
         return
     tasks = await container.scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         filters=PlatformScheduleFilter(
-            task_name=CALENDAR_SYNC_TASK_NAME,
+            task_name=task_name,
             limit=200,
             offset=0,
         ),
     )
     pending_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PENDING]
     if len(pending_tasks) > 0:
-        logger.info("Calendar sync schedule already exists, count=%s", len(pending_tasks))
+        logger.info("%s schedule already exists, count=%s", log_label, len(pending_tasks))
         return
     paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
     if len(paused_tasks) > 0:
@@ -48,14 +53,14 @@ async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> No
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=paused_tasks[0].id,
         )
-        logger.info("Calendar sync schedule resumed: task_id=%s schedule_id=%s", resumed.id, resumed.schedule_id)
+        logger.info("%s schedule resumed: task_id=%s schedule_id=%s", log_label, resumed.id, resumed.schedule_id)
         return
     request = PlatformScheduleCreateRequest(
         target_service="flows",
-        task_name=CALENDAR_SYNC_TASK_NAME,
+        task_name=task_name,
         queue_name="idle",
         schedule_type=PlatformScheduleType.CRON,
-        cron=config.cron,
+        cron=cron,
         timezone="UTC",
         payload={},
     )
@@ -64,7 +69,27 @@ async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> No
         user_id=None,
         request=request,
     )
-    logger.info("Calendar sync schedule created: task_id=%s schedule_id=%s", created.id, created.schedule_id)
+    logger.info("%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id)
+
+
+async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> None:
+    if os.getenv("TESTING") != "true":
+        await ensure_system_company_exists(container)
+    config = settings.calendar_sync
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=config.enabled,
+        task_name=CALENDAR_SYNC_TASK_NAME,
+        cron=config.cron,
+        log_label="Calendar sync",
+    )
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=config.sync_meeting_reminder_enabled,
+        task_name=CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
+        cron=config.sync_meeting_reminder_cron,
+        log_label="Calendar Sync meeting reminder",
+    )
 
 
 async def on_shutdown(app: FastAPI, container) -> None:

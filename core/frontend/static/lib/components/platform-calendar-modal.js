@@ -4,6 +4,7 @@ import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
 import './platform-date-picker.js';
+import './platform-switch.js';
 
 const BASE_TIMEZONE_OPTIONS = [
     'UTC',
@@ -39,6 +40,25 @@ function pad2(value) {
 
 function toDateInputValue(date) {
     return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+/**
+ * Строка YYYY-MM-DD из состояния календаря — это календарный день в локальной зоне,
+ * а new Date('YYYY-MM-DD') в движке — полночь UTC, из‑за чего сетка дня и фильтр событий
+ * расходятся с подписью периода (особенно при отрицательном смещении от UTC).
+ */
+function parseDateInputLocal(isoDate) {
+    if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+        const parsed = new Date(isoDate);
+        if (Number.isNaN(parsed.getTime())) {
+            throw new Error(`Invalid calendar date: ${isoDate}`);
+        }
+        return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0);
+    }
+    const y = Number(isoDate.slice(0, 4));
+    const m = Number(isoDate.slice(5, 7)) - 1;
+    const d = Number(isoDate.slice(8, 10));
+    return new Date(y, m, d, 0, 0, 0, 0);
 }
 
 function toDateTimeInputValue(date) {
@@ -195,6 +215,15 @@ function normalizeEventColor(colorKey) {
     return DEFAULT_EVENT_COLOR;
 }
 
+function eventMetadataHasSyncMeeting(metadata) {
+    if (!metadata || typeof metadata !== 'object') {
+        return false;
+    }
+    return metadata.sync_meeting === '1' || Boolean(metadata.sync_link_token);
+}
+
+const SYNC_LOGO_SRC = '/static/core/assets/service_logos/sync_logo.svg';
+
 export class PlatformCalendarModal extends PlatformModal {
     static properties = {
         ...PlatformModal.properties,
@@ -225,6 +254,7 @@ export class PlatformCalendarModal extends PlatformModal {
         _isCompactLayout: { state: true },
         _dateSheetOpen: { state: true },
         _dateSheetMonthRef: { state: true },
+        _eventDeepLink: { state: true },
     };
 
     static styles = [
@@ -374,6 +404,14 @@ export class PlatformCalendarModal extends PlatformModal {
                 justify-content: center;
                 align-items: center;
                 gap: var(--space-2);
+                padding-left: max(var(--space-2), calc(env(safe-area-inset-left, 0px) + 10px));
+                padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                box-sizing: border-box;
+            }
+
+            .toolbar--compact .toolbar-left .btn-icon {
+                touch-action: manipulation;
+                flex-shrink: 0;
             }
 
             .toolbar--compact .toolbar-right {
@@ -798,6 +836,57 @@ export class PlatformCalendarModal extends PlatformModal {
                 border-color: color-mix(in srgb, #fc3f1d 55%, var(--glass-border-subtle));
                 color: #d9381b;
                 background: color-mix(in srgb, #fc3f1d 12%, var(--glass-solid-medium));
+            }
+
+            .event-badge-sync {
+                gap: 4px;
+            }
+
+            .event-sync-logo-inline {
+                width: 14px;
+                height: 14px;
+                flex-shrink: 0;
+            }
+
+            .event-compose-sync-head {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+
+            .event-compose-sync-row {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                width: 100%;
+            }
+
+            .event-compose-sync-row .event-compose-switch {
+                flex: 0 1 auto;
+                min-width: 0;
+            }
+
+            .event-compose-join-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                color: var(--accent, #99a6f9);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                text-decoration: none;
+                white-space: nowrap;
+                flex: 0 0 auto;
+            }
+
+            .event-compose-join-link:hover {
+                text-decoration: underline;
+            }
+
+            .event-compose-join-link platform-icon {
+                flex-shrink: 0;
+                color: var(--accent, #99a6f9);
             }
 
             .list-view {
@@ -1319,18 +1408,21 @@ export class PlatformCalendarModal extends PlatformModal {
                 flex-wrap: wrap;
             }
 
-            .event-compose-check {
+            .event-compose-switch {
                 display: inline-flex;
                 align-items: center;
-                gap: 10px;
+                flex-shrink: 0;
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 line-height: 1;
             }
 
-            .event-compose-check input[type='checkbox'] {
-                width: 18px;
-                height: 18px;
+            .event-compose-switch platform-switch {
+                --text-primary: var(--text-secondary);
+            }
+
+            .event-compose-switch--spaced {
+                margin-top: var(--space-2);
             }
 
             .event-compose-select {
@@ -1432,7 +1524,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     font-size: var(--text-sm);
                 }
 
-                .event-compose-check {
+                .event-compose-switch {
                     font-size: var(--text-sm);
                 }
 
@@ -1505,7 +1597,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     display: none;
                 }
 
-                .event-compose-check {
+                .event-compose-switch {
                     font-size: var(--text-sm);
                 }
 
@@ -1605,7 +1697,9 @@ export class PlatformCalendarModal extends PlatformModal {
             end_at: toDateTimeInputValue(defaultEnd),
             attendees: [],
             recurrence: 'none',
+            sync_meeting_enabled: false,
         };
+        this._eventDeepLink = null;
         this._integrationForm = {
             username: '',
             app_password: '',
@@ -1683,7 +1777,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _viewRange() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (Number.isNaN(anchor.getTime())) {
             throw new Error(`Invalid anchor date: ${this._anchorDate}`);
         }
@@ -1692,6 +1786,7 @@ export class PlatformCalendarModal extends PlatformModal {
             const end = addDays(start, 1);
             return { start, end };
         }
+        anchor.setHours(12, 0, 0, 0);
         if (this._view === 'week') {
             return { start: startOfWeek(anchor), end: endOfWeek(anchor) };
         }
@@ -1702,20 +1797,22 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _periodLabel() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (this._view === 'day') {
             return anchor.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         }
         if (this._view === 'week') {
+            anchor.setHours(12, 0, 0, 0);
             const start = startOfWeek(anchor);
             const end = addDays(start, 6);
             return `${start.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
         }
+        anchor.setHours(12, 0, 0, 0);
         return anchor.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
     }
 
-    _movePeriod(delta) {
-        const anchor = new Date(this._anchorDate);
+    async _movePeriod(delta) {
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (this._view === 'day') {
             anchor.setDate(anchor.getDate() + delta);
         } else if (this._view === 'week') {
@@ -1724,7 +1821,7 @@ export class PlatformCalendarModal extends PlatformModal {
             anchor.setMonth(anchor.getMonth() + delta);
         }
         this._anchorDate = toDateInputValue(anchor);
-        this._reload();
+        await this._reload();
     }
 
     _onViewChange(view) {
@@ -1743,7 +1840,8 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _monthCells() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
+        anchor.setHours(12, 0, 0, 0);
         const monthStart = startOfMonth(anchor);
         const firstVisible = startOfWeek(monthStart);
         const today = new Date();
@@ -1779,7 +1877,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _compactPeriodLabel() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (Number.isNaN(anchor.getTime())) {
             throw new Error(`Invalid anchor date: ${this._anchorDate}`);
         }
@@ -1787,7 +1885,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _openDateSheet() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (Number.isNaN(anchor.getTime())) {
             throw new Error(`Invalid anchor date: ${this._anchorDate}`);
         }
@@ -1889,7 +1987,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _renderDayTimeline() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (Number.isNaN(anchor.getTime())) {
             throw new Error(`Invalid anchor date: ${this._anchorDate}`);
         }
@@ -1914,7 +2012,7 @@ export class PlatformCalendarModal extends PlatformModal {
             const top = (startMin / daySpanMin) * dayHeightPx;
             const height = Math.max((durMin / daySpanMin) * dayHeightPx, 28);
             const colorKey = normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY]);
-            return { event, top, height, colorKey };
+            return { event, top, height, colorKey, visibleStartMs: startClamped };
         });
         const hours = Array.from({ length: 24 }, (_, h) => h);
         const now = new Date();
@@ -1954,7 +2052,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                     ${showNow && nowTop !== null ? html`
                                         <div class="day-now-line" style=${`top:${nowTop}px`}></div>
                                     ` : ''}
-                                    ${layoutTimed.map(({ event, top, height, colorKey }) => html`
+                                    ${layoutTimed.map(({ event, top, height, colorKey, visibleStartMs }) => html`
                                         <button
                                             type="button"
                                             class="day-event-block event-chip"
@@ -1962,7 +2060,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                             style=${`top:${top}px;height:${height}px`}
                                             @click=${() => this._fillFormFromEvent(event)}
                                         >
-                                            <span class="event-chip-time">${this._eventStartTimeLabel(event)}</span>
+                                            <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
                                             <span class="event-chip-title">${event.title}</span>
                                         </button>
                                     `)}
@@ -2030,15 +2128,23 @@ export class PlatformCalendarModal extends PlatformModal {
         return this._sourceKey(source) === 'platform';
     }
 
+    _formatWallClockFromMs(ms) {
+        const instant = new Date(ms);
+        if (Number.isNaN(instant.getTime())) {
+            throw new Error('Invalid instant for wall clock');
+        }
+        return instant.toLocaleTimeString(this._calendarLocaleTag(), {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    }
+
     _eventStartTimeLabel(event) {
         const startDate = new Date(event.start_at);
         if (Number.isNaN(startDate.getTime())) {
             throw new Error('event.start_at must be valid datetime');
         }
-        return startDate.toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
+        return this._formatWallClockFromMs(startDate.getTime());
     }
 
     _fillFormFromEvent(event) {
@@ -2062,7 +2168,9 @@ export class PlatformCalendarModal extends PlatformModal {
             end_at: toDateTimeInputValue(new Date(event.end_at)),
             attendees: Array.isArray(event.attendees) ? event.attendees.map((item) => toAttendeeTag(item)) : [],
             recurrence: this._ruleToRecurrence(event.recurrence_rule),
+            sync_meeting_enabled: eventMetadataHasSyncMeeting(this._eventMetadata),
         };
+        this._eventDeepLink = typeof event.deep_link === 'string' && event.deep_link !== '' ? event.deep_link : null;
         this._attendeeDraft = '';
         this._attendeeDropdownOpen = false;
         this._eventDialogOpen = true;
@@ -2203,7 +2311,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _openCreateEventDialog(date) {
-        const selectedDate = date instanceof Date ? new Date(date.getTime()) : new Date(this._anchorDate);
+        const selectedDate = date instanceof Date ? new Date(date.getTime()) : parseDateInputLocal(this._anchorDate);
         if (Number.isNaN(selectedDate.getTime())) {
             throw new Error('Invalid date for event dialog');
         }
@@ -2230,7 +2338,9 @@ export class PlatformCalendarModal extends PlatformModal {
             recurrence: 'none',
             start_at: toDateTimeInputValue(startDate),
             end_at: toDateTimeInputValue(endDate),
+            sync_meeting_enabled: false,
         };
+        this._eventDeepLink = null;
         this._selectedEventSource = 'platform';
         this._selectedEventKind = 'event';
         this._selectedEventNamespace = null;
@@ -2328,6 +2438,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     },
                     this._eventAttachments
                 ),
+                sync_meeting: { enabled: Boolean(this._eventForm.sync_meeting_enabled) },
             };
             if (!payload.title) {
                 throw new Error(this._calT('err_title_required'));
@@ -2356,8 +2467,10 @@ export class PlatformCalendarModal extends PlatformModal {
                 location: '',
                 attendees: [],
                 recurrence: 'none',
+                sync_meeting_enabled: false,
             };
             this._eventMetadata = {};
+            this._eventDeepLink = null;
             this._eventAttachments = [];
             this._attendeeDraft = '';
             this._attendeeDropdownOpen = false;
@@ -2384,6 +2497,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._selectedEventNamespace = null;
         this._eventMetadata = {};
         this._eventAttachments = [];
+        this._eventDeepLink = null;
         this._eventDialogOpen = false;
         await this._reload();
     }
@@ -2490,6 +2604,12 @@ export class PlatformCalendarModal extends PlatformModal {
                                     <span class="event-chip-top">
                                         <span class="event-badge" data-source=${this._sourceKey(event.source)}>${this._sourceLabel(event.source)}</span>
                                         <span class="event-badge">${this._kindLabel(event.kind)}</span>
+                                        ${eventMetadataHasSyncMeeting(event.metadata) ? html`
+                                            <span class="event-badge event-badge-sync" data-source="sync">
+                                                <img class="event-sync-logo-inline" src=${SYNC_LOGO_SRC} alt="" />
+                                                ${this._calT('tag_sync')}
+                                            </span>
+                                        ` : ''}
                                     </span>
                                     <span class="event-chip-title">
                                         <span class="event-chip-time">${this._eventStartTimeLabel(event)}</span>${event.title}
@@ -2524,6 +2644,12 @@ export class PlatformCalendarModal extends PlatformModal {
                                     <div class="list-badges">
                                         <span class="event-badge" data-source=${this._sourceKey(event.source)}>${this._sourceLabel(event.source)}</span>
                                         <span class="event-badge">${this._kindLabel(event.kind)}</span>
+                                        ${eventMetadataHasSyncMeeting(event.metadata) ? html`
+                                            <span class="event-badge event-badge-sync" data-source="sync">
+                                                <img class="event-sync-logo-inline" src=${SYNC_LOGO_SRC} alt="" />
+                                                ${this._calT('tag_sync')}
+                                            </span>
+                                        ` : ''}
                                         ${event.namespace ? html`<span class="event-badge">${event.namespace}</span>` : ''}
                                     </div>
                                 </div>
@@ -2678,22 +2804,20 @@ export class PlatformCalendarModal extends PlatformModal {
                             ></platform-date-picker>
                         </div>
                         <div class="event-compose-options">
-                            <label class="event-compose-check">
-                                <input
-                                    type="checkbox"
+                            <div class="event-compose-switch">
+                                <platform-switch
                                     .checked=${Boolean(this._eventForm.all_day)}
-                                    @change=${(e) => this._onEventFormChange('all_day', e.target.checked)}
-                                />
-                                <span>${c('all_day')}</span>
-                            </label>
-                            <label class="event-compose-check">
-                                <input
-                                    type="checkbox"
+                                    .label=${c('all_day')}
+                                    @change=${(e) => this._onEventFormChange('all_day', e.detail.value)}
+                                ></platform-switch>
+                            </div>
+                            <div class="event-compose-switch">
+                                <platform-switch
                                     .checked=${this._eventForm.recurrence !== 'none'}
-                                    @change=${(e) => this._onEventFormChange('recurrence', e.target.checked ? 'weekly' : 'none')}
-                                />
-                                <span>${c('repeat')}</span>
-                            </label>
+                                    .label=${c('repeat')}
+                                    @change=${(e) => this._onEventFormChange('recurrence', e.detail.value ? 'weekly' : 'none')}
+                                ></platform-switch>
+                            </div>
                             <select
                                 class="event-compose-select"
                                 .value=${this._eventForm.timezone}
@@ -2756,14 +2880,38 @@ export class PlatformCalendarModal extends PlatformModal {
                     </div>
                 </div>
 
-                <div class="event-compose-row">
-                    <label class="event-compose-label">${c('label_telemost')}</label>
-                    <div class="event-compose-control">
-                        <button class="event-compose-pill" type="button">
-                            <small>${c('add_video')}</small>
-                        </button>
+                ${this._selectedEventSource === 'platform' && (!this._selectedEventId || this._isEventEditable(this._selectedEventSource)) ? html`
+                    <div class="event-compose-row">
+                        <label class="event-compose-label">
+                            <span class="event-compose-sync-head">
+                                <img class="event-sync-logo-inline" src=${SYNC_LOGO_SRC} alt="" />
+                                ${c('label_sync_meeting')}
+                            </span>
+                        </label>
+                        <div class="event-compose-control">
+                            <div class="event-compose-sync-row">
+                                <div class="event-compose-switch">
+                                    <platform-switch
+                                        .checked=${Boolean(this._eventForm.sync_meeting_enabled)}
+                                        .label=${c('sync_meeting_toggle')}
+                                        @change=${(e) => this._onEventFormChange('sync_meeting_enabled', e.detail.value)}
+                                    ></platform-switch>
+                                </div>
+                                ${this._eventDeepLink ? html`
+                                    <a
+                                        class="event-compose-join-link"
+                                        href=${this._eventDeepLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        <platform-icon name="paperclip" size="16"></platform-icon>
+                                        <span>${c('sync_join_open')}</span>
+                                    </a>
+                                ` : ''}
+                            </div>
+                        </div>
                     </div>
-                </div>
+                ` : ''}
             </div>
 
             <div class="event-compose-footer">
@@ -2863,14 +3011,15 @@ export class PlatformCalendarModal extends PlatformModal {
                             placeholder="default"
                         />
                     </div>
-                    <label class="event-compose-check">
-                        <input
-                            type="checkbox"
+                    <div class="event-compose-switch event-compose-switch--spaced">
+                        <platform-switch
                             .checked=${Boolean(this._integrationForm.notifications_enabled)}
-                            @change=${(e) => this._integrationForm = { ...this._integrationForm, notifications_enabled: e.target.checked }}
-                        />
-                        <span>${c('notifications_new_events')}</span>
-                    </label>
+                            .label=${c('notifications_new_events')}
+                            @change=${(e) => {
+                                this._integrationForm = { ...this._integrationForm, notifications_enabled: e.detail.value };
+                            }}
+                        ></platform-switch>
+                    </div>
                     <div class="hint">
                         ${c('autosync_hint')}
                     </div>
@@ -2919,6 +3068,12 @@ export class PlatformCalendarModal extends PlatformModal {
                                 <div class="event-dialog-subtitle">
                                     <span class="event-badge" data-source=${this._sourceKey(this._selectedEventSource)}>${this._sourceLabel(this._selectedEventSource)}</span>
                                     <span class="event-badge">${this._kindLabel(this._selectedEventKind)}</span>
+                                    ${eventMetadataHasSyncMeeting(this._eventMetadata) ? html`
+                                        <span class="event-badge event-badge-sync" data-source="sync">
+                                            <img class="event-sync-logo-inline" src=${SYNC_LOGO_SRC} alt="" />
+                                            ${this._calT('tag_sync')}
+                                        </span>
+                                    ` : ''}
                                     ${this._selectedEventNamespace ? html`<span class="event-badge">${this._selectedEventNamespace}</span>` : ''}
                                 </div>
                             ` : ''}
@@ -2957,21 +3112,21 @@ export class PlatformCalendarModal extends PlatformModal {
                     <div class="toolbar ${compact ? 'toolbar--compact' : ''}">
                         <div class="toolbar-left">
                             ${compact ? html`
-                                <button class="btn-icon" type="button" @click=${() => this._movePeriod(-1)} aria-label=${v('sheet_prev_day')}>
+                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }} aria-label=${v('sheet_prev_day')}>
                                     <platform-icon name="chevron-left" size="16"></platform-icon>
                                 </button>
                                 <button class="period-date-btn" type="button" @click=${() => this._openDateSheet()} title=${v('pick_date_title')}>
                                     ${this._compactPeriodLabel()}
                                 </button>
-                                <button class="btn-icon" type="button" @click=${() => this._movePeriod(1)} aria-label=${v('sheet_next_day')}>
+                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }} aria-label=${v('sheet_next_day')}>
                                     <platform-icon name="chevron-right" size="16"></platform-icon>
                                 </button>
                             ` : html`
                                 <div class="title">${this._periodLabel()}</div>
-                                <button class="btn-icon" type="button" @click=${() => this._movePeriod(-1)}>
+                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }}>
                                     <platform-icon name="chevron-left" size="16"></platform-icon>
                                 </button>
-                                <button class="btn-icon" type="button" @click=${() => this._movePeriod(1)}>
+                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }}>
                                     <platform-icon name="chevron-right" size="16"></platform-icon>
                                 </button>
                             `}
@@ -2982,7 +3137,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                 type="button"
                                 title=${v('create_event')}
                                 aria-label=${v('create_event')}
-                                @click=${() => this._openCreateEventDialog(new Date(this._anchorDate))}
+                                @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
                             >
                                 <platform-icon name="plus" size="20"></platform-icon>
                             </button>
@@ -3012,7 +3167,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     class="calendar-fab"
                     title=${v('create_event')}
                     aria-label=${v('create_event')}
-                    @click=${() => this._openCreateEventDialog(new Date(this._anchorDate))}
+                    @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
                 >+</button>
             ` : ''}
             ${this._renderDateSheet()}

@@ -23,6 +23,7 @@ class ChannelType(str, Enum):
     DIRECT = "direct"
     GROUP = "group"
     TOPIC = "topic"
+    CALENDAR_MEETING = "calendar_meeting"
 
 
 class ChannelRead(BaseModel):

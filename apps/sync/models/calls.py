@@ -35,12 +35,30 @@ class CallRead(BaseModel):
 
 
 class CallLinkCreate(BaseModel):
-    channel_id: str
+    channel_id: Optional[str] = Field(
+        default=None,
+        description="Канал существующего чата. Не указывать вместе с calendar_event_id.",
+    )
     call_type: CallType = "video"
     ttl_hours: int = Field(default=24, ge=1, le=168)
     call_id: Optional[str] = Field(
         default=None,
         description="Текущий звонок: та же LiveKit-комната, что у участников чата.",
+    )
+    calendar_event_id: Optional[str] = Field(
+        default=None,
+        description="ID события platform calendar: создаётся канал calendar_meeting и ссылка.",
+    )
+    scheduled_title: Optional[str] = None
+    scheduled_start_at: Optional[datetime] = None
+    scheduled_end_at: Optional[datetime] = None
+    calendar_member_user_ids: Optional[list[str]] = Field(
+        default=None,
+        description="Участники канала встречи (platform user_id), без создателя.",
+    )
+    join_url_base: Optional[str] = Field(
+        default=None,
+        description="Публичный origin без завершающего слэша, например https://app.example.com",
     )
 
     @model_validator(mode="before")
@@ -50,6 +68,26 @@ class CallLinkCreate(BaseModel):
             return {**data, "call_type": "video"}
         return data
 
+    @model_validator(mode="after")
+    def _calendar_or_channel(self) -> "CallLinkCreate":
+        if self.calendar_event_id:
+            if self.channel_id is not None:
+                raise ValueError("При calendar_event_id не передавайте channel_id.")
+            if self.scheduled_title is None or self.scheduled_title.strip() == "":
+                raise ValueError("Для календарной ссылки нужен scheduled_title.")
+            if self.scheduled_start_at is None or self.scheduled_end_at is None:
+                raise ValueError("Нужны scheduled_start_at и scheduled_end_at.")
+            if self.scheduled_start_at >= self.scheduled_end_at:
+                raise ValueError("scheduled_start_at должен быть раньше scheduled_end_at.")
+            if self.calendar_member_user_ids is None:
+                raise ValueError("Передайте calendar_member_user_ids (список, может быть пустым).")
+            if self.call_id is not None:
+                raise ValueError("call_id несовместим с календарной ссылкой.")
+        else:
+            if self.channel_id is None or self.channel_id == "":
+                raise ValueError("Укажите channel_id или блок календаря с calendar_event_id.")
+        return self
+
 
 class CallLinkRead(BaseModel):
     link_token: str
@@ -57,6 +95,44 @@ class CallLinkRead(BaseModel):
     call_type: CallType
     expires_at: datetime
     join_url: str
+    title: Optional[str] = None
+    scheduled_start_at: Optional[datetime] = None
+    scheduled_end_at: Optional[datetime] = None
+    calendar_event_id: Optional[str] = None
+
+
+class CallLinkPatch(BaseModel):
+    scheduled_title: Optional[str] = None
+    scheduled_start_at: Optional[datetime] = None
+    scheduled_end_at: Optional[datetime] = None
+    join_url_base: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _has_update(self) -> "CallLinkPatch":
+        if (
+            self.scheduled_title is None
+            and self.scheduled_start_at is None
+            and self.scheduled_end_at is None
+        ):
+            raise ValueError("Укажите хотя бы одно поле для обновления.")
+        if (
+            self.scheduled_start_at is not None
+            and self.scheduled_end_at is not None
+            and self.scheduled_start_at >= self.scheduled_end_at
+        ):
+            raise ValueError("scheduled_start_at должен быть раньше scheduled_end_at.")
+        return self
+
+
+class CallScheduledLinkRead(BaseModel):
+    link_token: str
+    channel_id: str
+    title: Optional[str]
+    scheduled_start_at: datetime
+    scheduled_end_at: datetime
+    calendar_event_id: str
+    join_url: str
+    expires_at: datetime
 
 
 class CallLinkInfo(BaseModel):

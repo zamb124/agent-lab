@@ -465,6 +465,15 @@ export class MeetingsModal extends PlatformModal {
     }
 
     _durationText(meetingDetails) {
+        if (meetingDetails?.meeting_kind === 'scheduled') {
+            const s = meetingDetails.scheduled_start_at;
+            const e = meetingDetails.scheduled_end_at;
+            if (typeof s === 'string' && typeof e === 'string') {
+                const opts = { dateStyle: 'short', timeStyle: 'short' };
+                return `${new Date(s).toLocaleString(undefined, opts)} – ${new Date(e).toLocaleString(undefined, opts)}`;
+            }
+            return this.i18n.t('empty_dash');
+        }
         const startedAt = meetingDetails?.recording?.started_at;
         const endedAt = meetingDetails?.recording?.ended_at;
         if (typeof startedAt !== 'string' || typeof endedAt !== 'string') {
@@ -545,6 +554,7 @@ export class MeetingsModal extends PlatformModal {
         const selectedMeeting = this._selectedMeeting();
         const selectedParticipants = selectedMeeting ? this._meetingParticipants(selectedMeeting) : [];
         const ts = (k, p) => this.i18n.t(k, p ?? {});
+        const isScheduledMeeting = selectedMeeting?.meeting_kind === 'scheduled';
 
         return html`
             <div class="meetings-modal-body">
@@ -667,6 +677,14 @@ export class MeetingsModal extends PlatformModal {
                                     <div class="detail-label">${ts('label_meeting_id')}</div>
                                     <div class="detail-value">${selectedMeeting.meeting_id}</div>
                                 </div>
+                                ${typeof selectedMeeting.join_url === 'string' && selectedMeeting.join_url !== '' ? html`
+                                    <div>
+                                        <div class="detail-label">${ts('label_join_link')}</div>
+                                        <div class="detail-value">
+                                            <a href=${selectedMeeting.join_url} target="_blank" rel="noopener noreferrer">${selectedMeeting.join_url}</a>
+                                        </div>
+                                    </div>
+                                ` : ''}
                             </div>
                             <div class="detail-actions">
                                 ${selectedMeeting.recording?.raw_file_download_url ? html`
@@ -687,34 +705,36 @@ export class MeetingsModal extends PlatformModal {
                                         rel="noopener noreferrer"
                                     >${ts('download_transcript')}</a>
                                 ` : ''}
-                                <button
-                                    type="button"
-                                    class="filter-btn"
-                                    @click=${async () => {
-                                        try {
-                                            await this._exportSelectedMeeting();
-                                        } catch (err) {
-                                            const text = err instanceof Error ? err.message : String(err);
-                                            this.error(text);
-                                        }
-                                    }}
-                                >
-                                    ${ts('export_crm')}
-                                </button>
-                                <button
-                                    type="button"
-                                    class="filter-btn"
-                                    @click=${async () => {
-                                        try {
-                                            await this._retrySelectedMeeting();
-                                        } catch (err) {
-                                            const text = err instanceof Error ? err.message : String(err);
-                                            this.error(text);
-                                        }
-                                    }}
-                                >
-                                    ${ts('retry_processing')}
-                                </button>
+                                ${!isScheduledMeeting ? html`
+                                    <button
+                                        type="button"
+                                        class="filter-btn"
+                                        @click=${async () => {
+                                            try {
+                                                await this._exportSelectedMeeting();
+                                            } catch (err) {
+                                                const text = err instanceof Error ? err.message : String(err);
+                                                this.error(text);
+                                            }
+                                        }}
+                                    >
+                                        ${ts('export_crm')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="filter-btn"
+                                        @click=${async () => {
+                                            try {
+                                                await this._retrySelectedMeeting();
+                                            } catch (err) {
+                                                const text = err instanceof Error ? err.message : String(err);
+                                                this.error(text);
+                                            }
+                                        }}
+                                    >
+                                        ${ts('retry_processing')}
+                                    </button>
+                                ` : ''}
                             </div>
                         ` : html`
                             <div class="meetings-empty">${ts('select_card_hint')}</div>

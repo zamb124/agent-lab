@@ -16,7 +16,10 @@ from apps.idle_worker.broker import broker as idle_broker
 from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
 from core.calendar.service import CalendarReauthRequiredError
-from core.calendar.repositories import CalendarIntegrationSqlRepository
+from core.calendar.repositories import (
+    CalendarEventSqlRepository,
+    CalendarIntegrationSqlRepository,
+)
 from core.logging import get_logger
 from core.models import CalendarEventSource, CalendarProvider
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -293,3 +296,76 @@ async def calendar_sync_tick(
         "events_new": stats.events_new,
         "notifications_sent": stats.notifications_sent,
     }
+
+
+@idle_broker.task(task_name="calendar_sync_meeting_reminder_tick", queue_name="idle")
+async def calendar_sync_meeting_reminder_tick(
+    scheduler_task_id: str | None = None,
+    company_id: str | None = None,
+) -> dict[str, int]:
+    """
+    Напоминание за ~15 минут до start_at: platform-событие с Sync-ссылкой,
+    окно start_at в UTC [now+14m, now+16m). Идемпотентность — metadata.sync_join_reminder_sent_at.
+    """
+    settings = get_settings()
+    config = settings.calendar_sync
+    if not config.sync_meeting_reminder_enabled:
+        return {"events_checked": 0, "notifications_sent": 0}
+
+    if not settings.database.shared_url:
+        raise ValueError("database.shared_url is required for calendar sync meeting reminder task")
+
+    now = datetime.now(timezone.utc)
+    window_start = now + timedelta(minutes=14)
+    window_end = now + timedelta(minutes=16)
+
+    repo = CalendarEventSqlRepository(db_url=settings.database.shared_url)
+    events = await repo.list_platform_sync_meeting_reminder_window(
+        window_start=window_start,
+        window_end=window_end,
+        limit=config.sync_meeting_reminder_limit,
+    )
+    container = get_container()
+    calendar_service = container.calendar_service
+    sent = 0
+    for event in events:
+        action_url = event.deep_link
+        if action_url is None or action_url == "":
+            base = settings.server.platform_public_base_url
+            if base is None or base.strip() == "":
+                raise ValueError(
+                    "server.platform_public_base_url нужен, если у события нет deep_link для напоминания Sync."
+                )
+            token = event.metadata.get("sync_link_token")
+            if not token:
+                raise ValueError(f"У события {event.event_id} нет sync_link_token в metadata.")
+            action_url = f"{base.strip().rstrip('/')}/sync/join/{token}"
+        recipients = await calendar_service.sync_meeting_reminder_recipient_user_ids(event)
+        for user_id in recipients:
+            await notify_user(
+                user_id=user_id,
+                notification=Notification(
+                    type=NotificationType.CALENDAR_SYNC_MEETING_REMINDER,
+                    title="Скоро встреча Sync",
+                    message=f"Через 15 минут: «{event.title}». Перейдите по ссылке, чтобы подключиться.",
+                    service="calendar",
+                    priority="normal",
+                    data={
+                        "event_id": event.event_id,
+                        "company_id": event.company_id,
+                        "start_at": event.start_at.isoformat(),
+                    },
+                    action_url=action_url,
+                ),
+            )
+            sent += 1
+        await calendar_service.mark_sync_meeting_reminder_sent(event.event_id, event.company_id)
+
+    logger.info(
+        "calendar_sync_meeting_reminder_tick done: events=%s notifications=%s scheduler_task_id=%s company_id=%s",
+        len(events),
+        sent,
+        scheduler_task_id,
+        company_id,
+    )
+    return {"events_checked": len(events), "notifications_sent": sent}

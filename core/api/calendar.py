@@ -34,6 +34,12 @@ class CalendarListRequest(BaseModel):
     limit: int = Field(default=1000, ge=1, le=5000)
 
 
+class CalendarSyncMeetingPayload(BaseModel):
+    """Встреча Sync: новый канал и ссылка создаются в Sync при сохранении события (см. CalendarService)."""
+
+    enabled: bool = False
+
+
 class CalendarUpsertRequest(BaseModel):
     title: str
     kind: str = "event"
@@ -53,6 +59,7 @@ class CalendarUpsertRequest(BaseModel):
     series_id: str | None = None
     deep_link: str | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
+    sync_meeting: CalendarSyncMeetingPayload | None = None
 
 
 class CalendarConnectIntegrationRequest(BaseModel):
