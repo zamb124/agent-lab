@@ -22,7 +22,7 @@ from core.utils.invite_tokens import (
     burn_invite_token,
     get_invite_token_service,
 )
-from core.utils.tokens import get_token_service
+from core.utils.tokens import TokenService, get_token_service
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +199,6 @@ async def accept_invite(
         httponly=True,
         secure=is_production,
         samesite="lax",
-        max_age=7200,
+        max_age=TokenService.SESSION_EXPIRES,
     )
     return response

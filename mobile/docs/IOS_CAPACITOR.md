@@ -66,6 +66,10 @@ npx cap open ios
 
 Если конкретный провайдер всё равно требует только системный браузер (политика Google для embedded WebView), понадобится отдельный сценарий: ASWebAuthenticationSession / custom URL scheme или мост одноразового кода — это уже изменения в потоке авторизации, не только конфиг.
 
+### Сессия после закрытия приложения
+
+Сервер должен отдавать **`Set-Cookie`** с **`Max-Age`** (или **`Expires`**) для **`auth_token`** и **`session_id`**, согласованный с TTL JWT сессии (`TokenService.SESSION_EXPIRES` в репозитории). Куки **без** явного срока — это **session cookies**; в WKWebView сессия часто привязана к жизненному циклу процесса, и после свайпа приложения из переключателя задач куки могут пропасть — не потому что iOS «чистит все куки», а из‑за семантики session-cookie в WebKit.
+
 ### Ошибки JS на `oauth.yandex.ru` / «уход в Safari» при входе
 
 Стандартный User-Agent WKWebView отличается от Safari. Яндекс (и другие провайдеры) могут отдавать страницу OAuth, которая в WebView падает с **`SyntaxError`** на своих скриптах (в логах Capacitor будет URL вида `https://oauth.yandex.ru/authorize/allow`). В [`capacitor.config.json`](../capacitor.config.json) задано **`ios.overrideUserAgent`** — строка как у **Mobile Safari**; после изменения обязательно **`npx cap sync ios`**.

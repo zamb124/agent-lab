@@ -3,8 +3,8 @@
  * Обеспечивает офлайн-работу, кэширование и push-уведомления
  */
 
-const STATIC_CACHE_NAME = 'humanitec-static-v3';
-const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v3';
+const STATIC_CACHE_NAME = 'humanitec-static-v4';
+const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v4';
 
 // Статические ресурсы для предварительного кэширования (только пути, доступные на любом сервисе с /static/core)
 const STATIC_ASSETS = [
@@ -63,6 +63,46 @@ function swOrigin() {
   return self.location.origin;
 }
 
+/**
+ * Cache Storage принимает только «полные» ответы: 206 (Range) и прочие неполные ответы дают TypeError при put.
+ */
+function canPutInCache(response) {
+  if (!response || !response.ok) {
+    return false;
+  }
+  if (response.status !== 200) {
+    return false;
+  }
+  if (response.headers.get('Content-Range')) {
+    return false;
+  }
+  return true;
+}
+
+async function putInDynamicCache(request, response) {
+  if (!canPutInCache(response)) {
+    return;
+  }
+  const cache = await caches.open(DYNAMIC_CACHE_NAME);
+  try {
+    await cache.put(request, response.clone());
+  } catch (err) {
+    console.warn('[SW] cache.put пропущен:', request.url, err);
+  }
+}
+
+async function putInStaticCache(request, response) {
+  if (!canPutInCache(response)) {
+    return;
+  }
+  const cache = await caches.open(STATIC_CACHE_NAME);
+  try {
+    await cache.put(request, response.clone());
+  } catch (err) {
+    console.warn('[SW] cache.put пропущен:', request.url, err);
+  }
+}
+
 // Fetch: стратегии кэширования
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -90,7 +130,12 @@ self.addEventListener('fetch', (event) => {
 
   // Сессия и токены: никогда не кэшируем и не отдаём из Cache Storage (иначе устаревший /me ломает auth)
   if (url.pathname.includes('/api/auth/')) {
-    event.respondWith(fetch(request));
+    event.respondWith(
+      fetch(request).catch((err) => {
+        console.error('[SW] auth fetch:', err);
+        return new Response('', { status: 503, statusText: 'Service Unavailable' });
+      })
+    );
     return;
   }
 
@@ -129,10 +174,7 @@ async function cacheFirst(request) {
   
   try {
     const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(STATIC_CACHE_NAME);
-      cache.put(request, response.clone());
-    }
+    await putInStaticCache(request, response);
     return response;
   } catch (error) {
     console.error('[SW] Cache first failed:', error);
@@ -147,10 +189,7 @@ async function cacheFirst(request) {
 async function networkFirst(request) {
   try {
     const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(DYNAMIC_CACHE_NAME);
-      cache.put(request, response.clone());
-    }
+    await putInDynamicCache(request, response);
     return response;
   } catch (error) {
     const cached = await caches.match(request);
@@ -168,10 +207,7 @@ async function networkFirst(request) {
 async function networkFirstWithOffline(request) {
   try {
     const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(DYNAMIC_CACHE_NAME);
-      cache.put(request, response.clone());
-    }
+    await putInDynamicCache(request, response);
     return response;
   } catch (error) {
     const cached = await caches.match(request);

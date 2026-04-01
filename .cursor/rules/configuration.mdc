@@ -77,6 +77,10 @@ settings.server.get_service_url("flows")
 
 Схемы БД — деревья **`migrations/<сервис>/`**, манифест **`migrations/services.json`**. Это не блок `migration` в `conf.json`.
 
+## Куки auth и тенанты
+
+`get_cookie_domain()` в [`core/utils/domain.py`](../../core/utils/domain.py): для прод-доменов и **`*.lvh.me`** — префикс **`.{base}`** (кука на всех субдоменах). Для **`*.localhost`** — **`Domain=localhost`**, чтобы после смены компании (редирект `a.localhost` → `b.localhost`) браузер продолжал слать **`auth_token`** и **`session_id`**. Для IP dev-хоста домен в Set-Cookie не задаётся (host-only).
+
 ## Типичные ошибки
 
 - Неверное имя ENV (одинарное `_`, нижний регистр секций).

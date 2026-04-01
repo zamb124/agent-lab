@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from core.config import get_settings
 from core.models import AuthProvider, AuthRequest
 from core.identity import AuthService
-from core.utils.tokens import get_token_service
+from core.utils.tokens import TokenService, get_token_service
 from core.utils.domain import get_cookie_domain
 
 logger = logging.getLogger(__name__)
@@ -228,6 +228,7 @@ async def auth_callback(
 
     logger.info(f"Устанавливаем cookies: session_id={result.session.session_id}, auth_token={result.token[:8]}..., domain={cookie_domain}, secure={is_production}")
 
+    cookie_max_age = TokenService.SESSION_EXPIRES
     response.set_cookie(
         key="session_id",
         value=result.session.session_id,
@@ -235,6 +236,7 @@ async def auth_callback(
         httponly=True,
         secure=is_production,
         samesite="lax",
+        max_age=cookie_max_age,
     )
     response.set_cookie(
         key="auth_token",
@@ -243,6 +245,7 @@ async def auth_callback(
         httponly=False,
         secure=is_production,
         samesite="lax",
+        max_age=cookie_max_age,
     )
 
     logger.info(f"Успешная авторизация пользователя {result.user.user_id}")
@@ -348,7 +351,7 @@ async def switch_company(
         httponly=True,
         secure=settings.server.env == "production",
         samesite="lax",
-        max_age=7200,
+        max_age=TokenService.SESSION_EXPIRES,
     )
     return response
 

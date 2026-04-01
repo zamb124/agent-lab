@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from core.utils.subdomain import slugify, validate_slug
-from core.utils.tokens import get_token_service
+from core.utils.tokens import TokenService, get_token_service
 from core.utils.domain import get_cookie_domain, build_url
 from core.models.identity_models import Company
 from apps.frontend.dependencies import ContainerDep
@@ -189,7 +189,7 @@ async def create_company(
         httponly=True,
         secure=is_production,
         samesite="lax",
-        max_age=7200
+        max_age=TokenService.SESSION_EXPIRES,
     )
     
     return response

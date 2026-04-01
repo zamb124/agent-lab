@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from core.identity.auth_service import AuthService
 from core.models.identity_models import AuthProvider, AuthRequest
 from core.config import get_settings
+from core.utils.tokens import TokenService
 from core.utils.domain import get_cookie_domain, build_url
 from apps.frontend.dependencies import get_container
 
@@ -109,7 +110,7 @@ async def auth_callback(
         httponly=True,
         secure=is_production,
         samesite="lax",
-        max_age=7200
+        max_age=TokenService.SESSION_EXPIRES,
     )
     
     return response
