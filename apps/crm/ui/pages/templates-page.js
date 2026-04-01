@@ -39,29 +39,6 @@ function createEmptySchemaFieldRow(defaultType = 'string') {
     };
 }
 
-const TEMPLATE_HINTS = {
-    templateName: 'Человекочитаемое название шаблона. Показывается в карточках и модалках выбора пространства. Хорошее название помогает пользователям быстро выбрать правильный бизнес-контекст.',
-    templateDescription: 'Описание назначения шаблона. Используйте 1-2 короткие фразы: какие сущности ожидаются и для каких задач создано пространство.',
-    templateIcon: 'Иконка нужна для визуальной навигации: отображается в карточках шаблонов и в селекторах. Выбирайте понятный символ, который отражает домен шаблона.',
-    typeId: 'Технический идентификатор типа. Должен быть стабильным и уникальным внутри шаблона. Рекомендуемый формат: snake_case, например lead, candidate_profile, incident_note.',
-    typeName: 'Пользовательское имя типа. Это название увидит пользователь в интерфейсе при работе с сущностями и карточками.',
-    parentType: 'Базовый тип поведения. Обычно note для заметок и task для задач. Если выбрать родителем другой тип шаблона, можно построить иерархию специализированных подтипов.',
-    typeIcon: 'Иконка типа отображается в списках, карточках и подсказках. Подберите визуальный маркер, чтобы тип легко различался в плотном интерфейсе.',
-    typeColor: 'Дополнительный цветовой акцент типа. Можно оставить пустым, если акцент не нужен. Если заполняете, используйте единый стиль палитры команды.',
-    weight: 'Коэффициент важности типа для ранжирования/приоритезации в аналитике. 1.0 — нейтрально. Значение выше усиливает приоритет, ниже — ослабляет.',
-    flagIsEvent: 'Если включено, сущности этого типа трактуются как события во времени (например встреча, звонок, инцидент) и могут использоваться в сценариях таймлайна.',
-    flagCheckDuplicates: 'Если включено, система будет проверять дубликаты при извлечении/создании сущностей этого типа. Отключайте только если дубликаты допустимы по бизнес-логике.',
-    typeDescription: 'Подробное пояснение типа для команды: что хранится в этом типе, какие атрибуты обязательны, в каких процессах используется.',
-    typePrompt: 'Подсказка для AI-извлечения и структурирования данных под этот тип. Опишите, какие факты искать, как называть поля и что считать обязательным.',
-    namespaces: 'Ограничение областей использования типа. Тип будет доступен только в отмеченных пространствах. Это помогает держать данные доменно чистыми.',
-    requiredFields: 'Обязательные атрибуты, без которых запись типа считается неполной. Используйте их для критичных данных, которые нужны в каждом объекте.',
-    optionalFields: 'Дополнительные атрибуты для расширенного контекста. Они не обязательны при создании, но повышают качество аналитики и поиска.',
-    fieldKey: 'Системный ключ атрибута (snake_case). Используется в JSON/интеграциях и должен быть стабильным. Пример: candidate_name, deal_stage, severity.',
-    fieldLabel: 'Отображаемое имя поля для пользователя. Можно писать на русском, так как это подпись в UI, а не технический ключ.',
-    fieldType: 'Тип данных атрибута. От него зависит, как поле будет валидироваться и как его интерпретирует AI/поисковый слой.',
-    fieldEnum: 'Для enum можно выбрать готовый набор значений из backend (enum set) или задать собственный список вручную.',
-};
-
 class TemplateCreateModal extends PlatformModal {
     static properties = {
         ...PlatformModal.properties,
@@ -100,10 +77,22 @@ class TemplateCreateModal extends PlatformModal {
         this._icon = 'folder';
         this._saving = false;
         this._iconOptions = [];
+        this._i18nUnsub = null;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
+        super.disconnectedCallback?.();
     }
 
     renderHeader() {
-        return 'Новый шаблон';
+        return this.i18n.t('create_modal.title');
     }
 
     _resolveTemplateIcon(iconName) {
@@ -124,7 +113,7 @@ class TemplateCreateModal extends PlatformModal {
         const templateId = this._templateId.trim();
         const templateName = this._name.trim();
         if (!templateId || !templateName) {
-            this.error('Template ID и название обязательны');
+            this.error(this.i18n.t('create_modal.err_id_name'));
             return;
         }
         this._saving = true;
@@ -142,9 +131,9 @@ class TemplateCreateModal extends PlatformModal {
                 composed: true,
             }));
             this.close();
-            this.success('Шаблон создан');
+            this.success(this.i18n.t('create_modal.success_created'));
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка создания шаблона';
+            const message = error instanceof Error ? error.message : this.i18n.t('create_modal.err_create');
             this.error(message);
             throw error;
         } finally {
@@ -153,22 +142,23 @@ class TemplateCreateModal extends PlatformModal {
     }
 
     renderBody() {
+        const t = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="form-grid">
                 <div class="form-group">
-                    <label class="form-label">Template ID *</label>
+                    <label class="form-label">${t('create_modal.label_template_id')}</label>
                     <input class="form-input mono" .value=${this._templateId} @input=${(e) => { this._templateId = e.target.value; }} />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Название *</label>
+                    <label class="form-label">${t('create_modal.label_name')}</label>
                     <input class="form-input" .value=${this._name} @input=${(e) => { this._name = e.target.value; }} />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Описание</label>
+                    <label class="form-label">${t('create_modal.label_description')}</label>
                     <textarea class="form-textarea" .value=${this._description} @input=${(e) => { this._description = e.target.value; }}></textarea>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Иконка шаблона</label>
+                    <label class="form-label">${t('create_modal.label_template_icon')}</label>
                     <platform-icon-picker
                         .icons=${this._iconOptions}
                         .value=${this._resolveTemplateIcon(this._icon)}
@@ -180,12 +170,13 @@ class TemplateCreateModal extends PlatformModal {
     }
 
     renderFooter() {
+        const t = (k, p) => this.i18n.t(k, p ?? {});
         const submitDisabled = this._saving || !this._templateId.trim() || !this._name.trim();
         return html`
             <div class="footer-actions">
-                <button type="button" class="btn btn-secondary" @click=${() => this.close()}>Отмена</button>
+                <button type="button" class="btn btn-secondary" @click=${() => this.close()}>${t('create_modal.cancel')}</button>
                 <button type="button" class="btn btn-primary" ?disabled=${submitDisabled} @click=${this._onSave}>
-                    ${this._saving ? 'Создание...' : 'Создать'}
+                    ${this._saving ? t('create_modal.creating') : t('create_modal.submit')}
                 </button>
             </div>
         `;
@@ -283,6 +274,7 @@ export class TemplatesPage extends PlatformElement {
         this._showTemplateModal = false;
         this._iconOptions = [];
         this._typeDraft = getDefaultTypeDraft();
+        this._i18nUnsub = null;
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._namespaces = state.namespaces.list || [];
             this._templates = state.namespaces.templates || [];
@@ -291,7 +283,14 @@ export class TemplatesPage extends PlatformElement {
         });
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
     disconnectedCallback() {
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         super.disconnectedCallback();
         this._unsubscribe?.();
     }
@@ -435,7 +434,7 @@ export class TemplatesPage extends PlatformElement {
         const enumSetsMap = new Map(schemaOptions.enum_sets.map((item) => [item.enum_set_id, item.values]));
         const maxFieldsPerSection = Number(schemaOptions?.validation_limits?.max_fields_per_section || 0);
         if (maxFieldsPerSection > 0 && rows.length > maxFieldsPerSection) {
-            throw new Error(`${sectionLabel}: превышен лимит полей (${maxFieldsPerSection})`);
+            throw new Error(this.i18n.t('errors.field_limit', { section: sectionLabel, max: String(maxFieldsPerSection) }));
         }
 
         for (const row of rows) {
@@ -444,15 +443,15 @@ export class TemplatesPage extends PlatformElement {
                 continue;
             }
             if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
-                throw new Error(`${sectionLabel}: ключ "${key}" имеет неверный формат`);
+                throw new Error(this.i18n.t('errors.bad_key', { section: sectionLabel, key }));
             }
             if (seenKeys.has(key)) {
-                throw new Error(`${sectionLabel}: дублируется ключ "${key}"`);
+                throw new Error(this.i18n.t('errors.dup_key', { section: sectionLabel, key }));
             }
             seenKeys.add(key);
             const typeId = String(row?.type || '').trim();
             if (!fieldTypes.has(typeId)) {
-                throw new Error(`${sectionLabel}: неизвестный тип "${typeId}" для "${key}"`);
+                throw new Error(this.i18n.t('errors.unknown_type', { section: sectionLabel, type: typeId, key }));
             }
             const descriptor = {
                 ...(row?.extra && typeof row.extra === 'object' ? row.extra : {}),
@@ -471,14 +470,14 @@ export class TemplatesPage extends PlatformElement {
                 const enumSetId = String(row?.enum_set_id || '').trim();
                 if (enumSetId) {
                     if (!enumSetsMap.has(enumSetId)) {
-                        throw new Error(`${sectionLabel}: enum_set_id "${enumSetId}" не найден`);
+                        throw new Error(this.i18n.t('errors.enum_set_missing', { section: sectionLabel, id: enumSetId }));
                     }
                     descriptor.enum_set_id = enumSetId;
                     descriptor.values = enumSetsMap.get(enumSetId);
                 } else {
                     const values = this._resolveEnumValues(row?.enum_values_text || '');
                     if (values.length === 0) {
-                        throw new Error(`${sectionLabel}: для enum-поля "${key}" нужен enum_set_id или values`);
+                        throw new Error(this.i18n.t('errors.enum_needs_values', { section: sectionLabel, key }));
                     }
                     descriptor.values = values;
                 }
@@ -495,7 +494,8 @@ export class TemplatesPage extends PlatformElement {
             const schema = this._buildSchemaFromRows(rows, sectionLabel);
             return JSON.stringify(schema, null, 2);
         } catch (error) {
-            return `Ошибка: ${error.message}`;
+            const msg = error instanceof Error ? error.message : String(error);
+            return this.i18n.t('errors.preview_prefix', { message: msg });
         }
     }
 
@@ -511,7 +511,7 @@ export class TemplatesPage extends PlatformElement {
             this._selectedTemplateId = templateId;
             await CRMStore.loadNamespaceTemplateDetails(this.services.get('crmApi'), templateId);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка загрузки шаблона';
+            const message = error instanceof Error ? error.message : this.i18n.t('errors.load_template');
             this.error(message);
         }
     }
@@ -528,9 +528,9 @@ export class TemplatesPage extends PlatformElement {
                 icon: this._templateDetails.icon || null,
             });
             await CRMStore.loadNamespaceTemplateDetails(crmApi, this._selectedTemplateId);
-            this.success('Шаблон обновлен');
+            this.success(this.i18n.t('errors.template_updated'));
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка обновления шаблона';
+            const message = error instanceof Error ? error.message : this.i18n.t('errors.template_update_failed');
             this.error(message);
         }
     }
@@ -556,7 +556,7 @@ export class TemplatesPage extends PlatformElement {
     _selectTemplate(templateId) {
         this._selectedTemplateId = templateId;
         CRMStore.loadNamespaceTemplateDetails(this.services.get('crmApi'), templateId).catch((error) => {
-            const message = error instanceof Error ? error.message : 'Ошибка загрузки шаблона';
+            const message = error instanceof Error ? error.message : this.i18n.t('errors.load_template');
             this.error(message);
         });
     }
@@ -594,14 +594,20 @@ export class TemplatesPage extends PlatformElement {
             const typeId = this._typeDraft.type_id.trim();
             const typeName = this._typeDraft.name.trim();
             if (!typeId || !typeName) {
-                this.error('type_id и name обязательны');
+                this.error(this.i18n.t('errors.type_id_name_required'));
                 return;
             }
-            const requiredFields = this._buildSchemaFromRows(this._typeDraft.required_fields_rows, 'required_fields');
-            const optionalFields = this._buildSchemaFromRows(this._typeDraft.optional_fields_rows, 'optional_fields');
+            const requiredFields = this._buildSchemaFromRows(
+                this._typeDraft.required_fields_rows,
+                this.i18n.t('schema_sections.required_fields'),
+            );
+            const optionalFields = this._buildSchemaFromRows(
+                this._typeDraft.optional_fields_rows,
+                this.i18n.t('schema_sections.optional_fields'),
+            );
             for (const key of Object.keys(requiredFields)) {
                 if (Object.prototype.hasOwnProperty.call(optionalFields, key)) {
-                    throw new Error(`Ключ "${key}" не может быть одновременно required и optional`);
+                    throw new Error(this.i18n.t('errors.key_both_sections', { key }));
                 }
             }
             const namespaceIds = Array.isArray(this._typeDraft.namespace_ids) ? this._typeDraft.namespace_ids : [];
@@ -609,7 +615,7 @@ export class TemplatesPage extends PlatformElement {
                 .map((item) => (typeof item === 'string' ? item.trim() : ''))
                 .filter((item) => item.length > 0);
             if (normalizedNamespaceIds.length !== namespaceIds.length) {
-                throw new Error('namespace_ids должен содержать только строки');
+                throw new Error(this.i18n.t('errors.namespace_ids_strings'));
             }
             const crmApi = this.services.get('crmApi');
             await CRMStore.upsertNamespaceTemplateType(crmApi, this._selectedTemplateId, {
@@ -628,9 +634,9 @@ export class TemplatesPage extends PlatformElement {
                 weight_coefficient: Number.parseFloat(this._typeDraft.weight_coefficient || '1') || 1,
             });
             this._typeDraft = getDefaultTypeDraft();
-            this.success('Тип шаблона сохранен');
+            this.success(this.i18n.t('errors.type_saved'));
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка сохранения типа';
+            const message = error instanceof Error ? error.message : this.i18n.t('errors.type_save_failed');
             this.error(message);
         }
     }
@@ -643,40 +649,41 @@ export class TemplatesPage extends PlatformElement {
             const crmApi = this.services.get('crmApi');
             await CRMStore.deleteNamespaceTemplateType(crmApi, this._selectedTemplateId, typeId);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка удаления типа';
+            const message = error instanceof Error ? error.message : this.i18n.t('errors.type_delete_failed');
             this.error(message);
         }
     }
 
     render() {
+        const t = (key, params) => this.i18n.t(key, params ?? {});
         const templateTypes = this._templateDetails?.types || [];
         return html`
             <div class="container">
                 <div class="section">
                     <button class="back-btn" @click=${() => CRMStore.setCurrentView('settings')}>
                         <platform-icon name="arrow-left" size="14"></platform-icon>
-                        Настройки
+                        ${t('page.back_settings')}
                     </button>
                     <div class="hero">
                         <div>
                             <div class="hero-title">
-                                <button class="menu-btn" @click=${this._openSidebar} title="Открыть меню">
+                                <button class="menu-btn" @click=${this._openSidebar} title=${t('page.open_menu')}>
                                     <platform-icon name="menu" size="18"></platform-icon>
                                 </button>
                                 <platform-icon name="settings" size="18"></platform-icon>
-                                Шаблоны пространств
+                                ${t('page.hero_title')}
                             </div>
-                            <div class="hero-subtitle">Управление шаблонами для создания новых пространств и типами сущностей в них.</div>
+                            <div class="hero-subtitle">${t('page.hero_subtitle')}</div>
                         </div>
                     </div>
                     <div class="section-header between">
                         <div class="section-header-main">
                             <platform-icon name="folder" size="18"></platform-icon>
-                            Шаблоны
+                            ${t('page.section_templates')}
                         </div>
                         <button class="save-btn" @click=${this._openTemplateModal}>
                             <platform-icon name="plus" size="14"></platform-icon>
-                            Создать шаблон
+                            ${t('page.create_template')}
                         </button>
                     </div>
                     <div class="grid">
@@ -692,7 +699,7 @@ export class TemplatesPage extends PlatformElement {
                                 <div class="card-text">${template.description || ''}</div>
                                 <div class="template-meta">
                                     <span class="chip mono">${template.template_id}</span>
-                                    <span class="chip">${Array.isArray(template.entity_type_ids) ? template.entity_type_ids.length : 0} типов</span>
+                                    <span class="chip">${t('page.types_count', { count: Array.isArray(template.entity_type_ids) ? template.entity_type_ids.length : 0 })}</span>
                                 </div>
                             </div>
                         `)}
@@ -702,13 +709,13 @@ export class TemplatesPage extends PlatformElement {
                 <div class="section">
                     <div class="section-header">
                         <platform-icon name="edit" size="18"></platform-icon>
-                        Редактор выбранного шаблона
+                        ${t('page.editor_title')}
                     </div>
                     <div class="toolbar">
-                        <span class="chip mono">${this._selectedTemplateId || 'template not selected'}</span>
+                        <span class="chip mono">${this._selectedTemplateId || t('page.template_not_selected')}</span>
                         <button class="save-btn" @click=${this._saveTemplateMeta}>
                             <platform-icon name="save" size="14"></platform-icon>
-                            Сохранить шаблон
+                            ${t('page.save_template')}
                         </button>
                     </div>
 
@@ -717,38 +724,38 @@ export class TemplatesPage extends PlatformElement {
                             <div class="section">
                                 <div class="section-header">
                                     <platform-icon name="folder" size="16"></platform-icon>
-                                    Метаданные шаблона
+                                    ${t('page.meta_title')}
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
-                                        <span>Название</span>
-                                        <platform-help-hint strategy="local" label="Справка: название шаблона" .text=${TEMPLATE_HINTS.templateName}></platform-help-hint>
+                                        <span>${t('page.label_title')}</span>
+                                        <platform-help-hint strategy="local" label=${t('page.help_name')} .text=${this.i18n.t('hints.templateName')}></platform-help-hint>
                                     </label>
                                     <input class="form-input" .value=${this._templateDetails.name || ''} @input=${(e) => { this._templateDetails = { ...this._templateDetails, name: e.target.value }; }} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
-                                        <span>Описание</span>
-                                        <platform-help-hint strategy="local" label="Справка: описание шаблона" .text=${TEMPLATE_HINTS.templateDescription}></platform-help-hint>
+                                        <span>${t('page.label_description_type')}</span>
+                                        <platform-help-hint strategy="local" label=${t('page.help_description')} .text=${this.i18n.t('hints.templateDescription')}></platform-help-hint>
                                     </label>
                                     <textarea class="form-textarea" .value=${this._templateDetails.description || ''} @input=${(e) => { this._templateDetails = { ...this._templateDetails, description: e.target.value }; }}></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
-                                        <span>Иконка</span>
-                                        <platform-help-hint strategy="local" label="Справка: иконка шаблона" .text=${TEMPLATE_HINTS.templateIcon}></platform-help-hint>
+                                        <span>${t('page.label_icon')}</span>
+                                        <platform-help-hint strategy="local" label=${t('page.help_icon')} .text=${this.i18n.t('hints.templateIcon')}></platform-help-hint>
                                     </label>
                                     <platform-icon-picker .icons=${this._iconOptions} .value=${this._resolveTemplateIcon(this._templateDetails.icon)} @change=${(e) => { this._templateDetails = { ...this._templateDetails, icon: e.detail.value }; }}></platform-icon-picker>
                                 </div>
                                 <div class="chips">
                                     <span class="chip mono">${this._templateDetails.template_id}</span>
-                                    <span class="chip">${templateTypes.length} типов</span>
+                                    <span class="chip">${t('page.types_count', { count: templateTypes.length })}</span>
                                 </div>
                             </div>
                             <div class="section">
                                 <div class="section-header">
                                     <platform-icon name="list" size="16"></platform-icon>
-                                    Типы в шаблоне
+                                    ${t('page.types_in_template')}
                                 </div>
                                 <div class="type-grid">
                                     ${templateTypes.map((item) => html`
@@ -758,17 +765,17 @@ export class TemplatesPage extends PlatformElement {
                                                 ${item.name}
                                             </div>
                                             <div class="hint mono">${item.type_id}</div>
-                                            <div class="card-text">${item.description || 'Описание не задано'}</div>
+                                            <div class="card-text">${item.description || t('page.no_description')}</div>
                                             <div class="chips">
                                                 ${(item.namespace_ids || []).map((namespaceId) => html`<span class="chip">${namespaceId}</span>`)}
                                             </div>
                                             <div class="row">
-                                                <button class="save-btn soft-btn" @click=${() => this._editType(item)}>Редактировать</button>
-                                                <button class="save-btn danger-btn" @click=${() => this._deleteType(item.type_id)}>Удалить</button>
+                                                <button class="save-btn soft-btn" @click=${() => this._editType(item)}>${t('page.edit')}</button>
+                                                <button class="save-btn danger-btn" @click=${() => this._deleteType(item.type_id)}>${t('page.delete')}</button>
                                             </div>
                                         </div>
                                     `)}
-                                    ${templateTypes.length === 0 ? html`<div class="card-text">В шаблоне пока нет типов.</div>` : ''}
+                                    ${templateTypes.length === 0 ? html`<div class="card-text">${t('page.no_types_yet')}</div>` : ''}
                                 </div>
                             </div>
                         </div>
@@ -776,86 +783,86 @@ export class TemplatesPage extends PlatformElement {
                         <div class="section">
                             <div class="section-header">
                                 <platform-icon name="plus" size="16"></platform-icon>
-                                Тип шаблона
+                                ${t('page.type_block_title')}
                             </div>
-                            ${Array.isArray(this._schemaOptions?.field_types) ? '' : html`<div class="schema-empty">Загрузка schema options...</div>`}
+                            ${Array.isArray(this._schemaOptions?.field_types) ? '' : html`<div class="schema-empty">${t('page.loading_schema')}</div>`}
                             <div class="form-grid">
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>type_id *</span>
-                                        <platform-help-hint strategy="local" label="Справка: type_id" .text=${TEMPLATE_HINTS.typeId}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label=${t('page.help_type_id')} .text=${this.i18n.t('hints.typeId')}></platform-help-hint>
                                     </label>
                                     <input class="form-input mono" .value=${this._typeDraft.type_id} @input=${(e) => this._onTypeDraftChange('type_id', e.target.value)} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>name *</span>
-                                        <platform-help-hint strategy="local" label="Справка: имя типа" .text=${TEMPLATE_HINTS.typeName}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label=${t('page.help_type_name')} .text=${this.i18n.t('hints.typeName')}></platform-help-hint>
                                     </label>
                                     <input class="form-input" .value=${this._typeDraft.name} @input=${(e) => this._onTypeDraftChange('name', e.target.value)} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>parent_type_id</span>
-                                        <platform-help-hint strategy="local" label="Справка: родительский тип" .text=${TEMPLATE_HINTS.parentType}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label=${t('page.help_parent')} .text=${this.i18n.t('hints.parentType')}></platform-help-hint>
                                     </label>
                                     <select class="form-select mono" .value=${this._typeDraft.parent_type_id} @change=${(e) => this._onTypeDraftChange('parent_type_id', e.target.value)}>
-                                        <option value="">(без родителя)</option>
+                                        <option value="">${t('page.parent_none')}</option>
                                         ${this._getParentTypeOptions().map((typeId) => html`<option value=${typeId}>${typeId}</option>`)}
                                     </select>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
-                                        <span>Иконка</span>
-                                        <platform-help-hint strategy="local" label="Справка: иконка типа" .text=${TEMPLATE_HINTS.typeIcon}></platform-help-hint>
+                                        <span>${t('page.label_icon')}</span>
+                                        <platform-help-hint strategy="local" label=${t('page.help_type_icon')} .text=${this.i18n.t('hints.typeIcon')}></platform-help-hint>
                                     </label>
                                     <platform-icon-picker .icons=${this._iconOptions} .value=${this._resolveTemplateIcon(this._typeDraft.icon)} @change=${(e) => this._onTypeDraftChange('icon', e.detail.value)}></platform-icon-picker>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>color</span>
-                                        <platform-help-hint strategy="local" label="Справка: цвет типа" .text=${TEMPLATE_HINTS.typeColor}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label=${t('page.help_type_color')} .text=${this.i18n.t('hints.typeColor')}></platform-help-hint>
                                     </label>
                                     <input class="form-input" .value=${this._typeDraft.color} @input=${(e) => this._onTypeDraftChange('color', e.target.value)} />
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
                                         <span>weight_coefficient</span>
-                                        <platform-help-hint strategy="local" label="Справка: коэффициент веса" .text=${TEMPLATE_HINTS.weight}></platform-help-hint>
+                                        <platform-help-hint strategy="local" label=${t('page.help_weight')} .text=${this.i18n.t('hints.weight')}></platform-help-hint>
                                     </label>
                                     <input type="number" step="0.1" min="0" class="form-input mono" .value=${this._typeDraft.weight_coefficient} @input=${(e) => this._onTypeDraftChange('weight_coefficient', e.target.value)} />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Флаги</label>
+                                    <label class="form-label">${t('page.flags')}</label>
                                     <div class="flag-row">
                                         <div class="flag-item">
                                             <platform-switch size="sm" label="is_event" .checked=${this._typeDraft.is_event} @change=${(e) => this._onTypeDraftChange('is_event', Boolean(e.detail.value))}></platform-switch>
-                                            <platform-help-hint strategy="local" label="Справка: is_event" .text=${TEMPLATE_HINTS.flagIsEvent}></platform-help-hint>
+                                            <platform-help-hint strategy="local" label=${t('page.help_is_event')} .text=${this.i18n.t('hints.flagIsEvent')}></platform-help-hint>
                                         </div>
                                         <div class="flag-item">
                                             <platform-switch size="sm" label="check_duplicates" .checked=${this._typeDraft.check_duplicates} @change=${(e) => this._onTypeDraftChange('check_duplicates', Boolean(e.detail.value))}></platform-switch>
-                                            <platform-help-hint strategy="local" label="Справка: check_duplicates" .text=${TEMPLATE_HINTS.flagCheckDuplicates}></platform-help-hint>
+                                            <platform-help-hint strategy="local" label=${t('page.help_check_dup')} .text=${this.i18n.t('hints.flagCheckDuplicates')}></platform-help-hint>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
-                                        <span>Описание</span>
-                                        <platform-help-hint strategy="local" label="Справка: описание типа" .text=${TEMPLATE_HINTS.typeDescription}></platform-help-hint>
+                                        <span>${t('page.label_description_type')}</span>
+                                        <platform-help-hint strategy="local" label=${t('page.help_type_desc')} .text=${this.i18n.t('hints.typeDescription')}></platform-help-hint>
                                     </label>
                                     <textarea class="form-textarea" .value=${this._typeDraft.description} @input=${(e) => this._onTypeDraftChange('description', e.target.value)}></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
-                                        <span>Промпт для извлечения</span>
-                                        <platform-help-hint strategy="local" label="Справка: промпт типа" .text=${TEMPLATE_HINTS.typePrompt}></platform-help-hint>
+                                        <span>${t('page.extraction_prompt')}</span>
+                                        <platform-help-hint strategy="local" label=${t('page.help_type_prompt')} .text=${this.i18n.t('hints.typePrompt')}></platform-help-hint>
                                     </label>
                                     <textarea class="form-textarea" .value=${this._typeDraft.prompt} @input=${(e) => this._onTypeDraftChange('prompt', e.target.value)}></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label label-with-hint">
-                                        <span>Разрешенные пространства</span>
-                                        <platform-help-hint strategy="local" label="Справка: пространства типа" .text=${TEMPLATE_HINTS.namespaces}></platform-help-hint>
+                                        <span>${t('page.allowed_namespaces')}</span>
+                                        <platform-help-hint strategy="local" label=${t('page.help_namespaces')} .text=${this.i18n.t('hints.namespaces')}></platform-help-hint>
                                     </label>
                                     <div class="namespace-selector">
                                         ${(this._namespaces || []).map((namespace) => {
@@ -874,100 +881,100 @@ export class TemplatesPage extends PlatformElement {
                                     <div class="schema-section-header">
                                         <span class="label-with-hint">
                                             <span>required_fields</span>
-                                            <platform-help-hint strategy="local" label="Справка: required_fields" .text=${TEMPLATE_HINTS.requiredFields}></platform-help-hint>
+                                            <platform-help-hint strategy="local" label=${t('page.help_required')} .text=${this.i18n.t('hints.requiredFields')}></platform-help-hint>
                                         </span>
-                                        <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('required_fields_rows')} type="button">+ Поле</button>
+                                        <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('required_fields_rows')} type="button">${t('page.add_field')}</button>
                                     </div>
-                                    <div class="hint">key — системный идентификатор, label — название для пользователя, type — тип данных, enum — набор значений.</div>
+                                    <div class="hint">${t('page.schema_hint_required')}</div>
                                     ${Array.isArray(this._typeDraft.required_fields_rows) && this._typeDraft.required_fields_rows.length > 0
                                         ? this._typeDraft.required_fields_rows.map((row, index) => html`
                                             <div class="schema-field-card">
                                                 <div class="schema-field-row">
-                                                    <input class="form-input mono" placeholder="key (например deal_stage)" .value=${row.key || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { key: e.target.value })} />
-                                                    <input class="form-input" placeholder="label (например Стадия сделки)" .value=${row.label || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { label: e.target.value })} />
+                                                    <input class="form-input mono" placeholder=${t('page.ph_key')} .value=${row.key || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { key: e.target.value })} />
+                                                    <input class="form-input" placeholder=${t('page.ph_label')} .value=${row.label || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { label: e.target.value })} />
                                                 </div>
                                                 <div class="schema-field-row">
                                                     <select class="form-select" .value=${row.type || this._getDefaultFieldType()} @change=${(e) => this._updateSchemaRow('required_fields_rows', index, { type: e.target.value })}>
                                                         ${(this._schemaOptions?.field_types || []).map((typeItem) => html`<option value=${typeItem.type_id}>${typeItem.label}</option>`)}
                                                     </select>
-                                                    <input class="form-input" placeholder="description (когда и как заполняется поле)" .value=${row.description || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { description: e.target.value })} />
+                                                    <input class="form-input" placeholder=${t('page.ph_desc_req')} .value=${row.description || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { description: e.target.value })} />
                                                 </div>
                                                 ${this._isEnumType(row.type) ? html`
                                                     <div class="schema-field-row">
                                                         <select class="form-select" .value=${row.enum_set_id || ''} @change=${(e) => this._updateSchemaRow('required_fields_rows', index, { enum_set_id: e.target.value })}>
-                                                            <option value="">Локальные values</option>
+                                                            <option value="">${t('page.enum_local_values')}</option>
                                                             ${(this._schemaOptions?.enum_sets || []).map((setItem) => html`<option value=${setItem.enum_set_id}>${setItem.label}</option>`)}
                                                         </select>
                                                         <input class="form-input" placeholder="values: high, medium, low" .value=${row.enum_values_text || ''} ?disabled=${Boolean(row.enum_set_id)} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { enum_values_text: e.target.value })} />
                                                     </div>
                                                 ` : ''}
                                                 <div class="schema-field-inline">
-                                                    <button class="save-btn danger-btn" type="button" @click=${() => this._removeSchemaRow('required_fields_rows', index)}>Удалить</button>
+                                                    <button class="save-btn danger-btn" type="button" @click=${() => this._removeSchemaRow('required_fields_rows', index)}>${t('page.remove')}</button>
                                                 </div>
                                             </div>
                                         `)
-                                        : html`<div class="schema-empty">Нет полей</div>`
+                                        : html`<div class="schema-empty">${t('page.no_fields')}</div>`
                                     }
                                 </div>
                                 <div class="schema-section">
                                     <div class="schema-section-header">
                                         <span class="label-with-hint">
                                             <span>optional_fields</span>
-                                            <platform-help-hint strategy="local" label="Справка: optional_fields" .text=${TEMPLATE_HINTS.optionalFields}></platform-help-hint>
+                                            <platform-help-hint strategy="local" label=${t('page.help_optional')} .text=${this.i18n.t('hints.optionalFields')}></platform-help-hint>
                                         </span>
-                                        <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('optional_fields_rows')} type="button">+ Поле</button>
+                                        <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('optional_fields_rows')} type="button">${t('page.add_field')}</button>
                                     </div>
-                                    <div class="hint">Для необязательных полей рекомендуйте структуру, но не делайте их блокирующими для сохранения.</div>
+                                    <div class="hint">${t('page.schema_hint_optional')}</div>
                                     ${Array.isArray(this._typeDraft.optional_fields_rows) && this._typeDraft.optional_fields_rows.length > 0
                                         ? this._typeDraft.optional_fields_rows.map((row, index) => html`
                                             <div class="schema-field-card">
                                                 <div class="schema-field-row">
-                                                    <input class="form-input mono" placeholder="key (например budget)" .value=${row.key || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { key: e.target.value })} />
-                                                    <input class="form-input" placeholder="label (например Бюджет)" .value=${row.label || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { label: e.target.value })} />
+                                                    <input class="form-input mono" placeholder=${t('page.ph_key_opt')} .value=${row.key || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { key: e.target.value })} />
+                                                    <input class="form-input" placeholder=${t('page.ph_label_opt')} .value=${row.label || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { label: e.target.value })} />
                                                 </div>
                                                 <div class="schema-field-row">
                                                     <select class="form-select" .value=${row.type || this._getDefaultFieldType()} @change=${(e) => this._updateSchemaRow('optional_fields_rows', index, { type: e.target.value })}>
                                                         ${(this._schemaOptions?.field_types || []).map((typeItem) => html`<option value=${typeItem.type_id}>${typeItem.label}</option>`)}
                                                     </select>
-                                                    <input class="form-input" placeholder="description (что означает поле)" .value=${row.description || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { description: e.target.value })} />
+                                                    <input class="form-input" placeholder=${t('page.ph_desc_opt')} .value=${row.description || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { description: e.target.value })} />
                                                 </div>
                                                 ${this._isEnumType(row.type) ? html`
                                                     <div class="schema-field-row">
                                                         <select class="form-select" .value=${row.enum_set_id || ''} @change=${(e) => this._updateSchemaRow('optional_fields_rows', index, { enum_set_id: e.target.value })}>
-                                                            <option value="">Локальные values</option>
+                                                            <option value="">${t('page.enum_local_values')}</option>
                                                             ${(this._schemaOptions?.enum_sets || []).map((setItem) => html`<option value=${setItem.enum_set_id}>${setItem.label}</option>`)}
                                                         </select>
                                                         <input class="form-input" placeholder="values: high, medium, low" .value=${row.enum_values_text || ''} ?disabled=${Boolean(row.enum_set_id)} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { enum_values_text: e.target.value })} />
                                                     </div>
                                                 ` : ''}
                                                 <div class="schema-field-inline">
-                                                    <button class="save-btn danger-btn" type="button" @click=${() => this._removeSchemaRow('optional_fields_rows', index)}>Удалить</button>
+                                                    <button class="save-btn danger-btn" type="button" @click=${() => this._removeSchemaRow('optional_fields_rows', index)}>${t('page.remove')}</button>
                                                 </div>
                                             </div>
                                         `)
-                                        : html`<div class="schema-empty">Нет полей</div>`
+                                        : html`<div class="schema-empty">${t('page.no_fields')}</div>`
                                     }
                                 </div>
                             </div>
                             <details>
-                                <summary>JSON preview (advanced, read-only)</summary>
+                                <summary>${t('page.json_preview_summary')}</summary>
                                 <div class="form-grid">
                                     <div class="form-group">
-                                        <label class="form-label">required_fields (preview)</label>
-                                        <pre class="schema-preview">${this._getSchemaPreview('required_fields_rows', 'required_fields')}</pre>
+                                        <label class="form-label">${t('page.preview_required')}</label>
+                                        <pre class="schema-preview">${this._getSchemaPreview('required_fields_rows', this.i18n.t('schema_sections.required_fields'))}</pre>
                                     </div>
                                     <div class="form-group">
-                                        <label class="form-label">optional_fields (preview)</label>
-                                        <pre class="schema-preview">${this._getSchemaPreview('optional_fields_rows', 'optional_fields')}</pre>
+                                        <label class="form-label">${t('page.preview_optional')}</label>
+                                        <pre class="schema-preview">${this._getSchemaPreview('optional_fields_rows', this.i18n.t('schema_sections.optional_fields'))}</pre>
                                     </div>
                                 </div>
                             </details>
                             <button class="save-btn" @click=${this._upsertType}>
                                 <platform-icon name="save" size="14"></platform-icon>
-                                Сохранить тип
+                                ${t('page.save_type')}
                             </button>
                         </div>
-                    ` : html`<div class="card-text">Выберите шаблон для редактирования</div>`}
+                    ` : html`<div class="card-text">${t('page.select_template')}</div>`}
                 </div>
             </div>
             ${this._showTemplateModal ? html`

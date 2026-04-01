@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductAgentsPage extends PlatformElement {
@@ -299,7 +300,7 @@ export class ProductAgentsPage extends PlatformElement {
     };
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, 'frontend_products');
+        const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
         return html`
             <div class="page-container">
                 <landing-header></landing-header>

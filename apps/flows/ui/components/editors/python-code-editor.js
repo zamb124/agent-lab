@@ -419,7 +419,7 @@ export class PythonCodeEditor extends PlatformElement {
     }
 
     _notifyCopied() {
-        const message = 'Код скопирован';
+        const message = this.i18n.t('code_editor.copied');
         try {
             this.success(message);
         } catch {
@@ -441,7 +441,7 @@ export class PythonCodeEditor extends PlatformElement {
             await navigator.clipboard.writeText(this.getValue());
             this._notifyCopied();
         } catch {
-            this.error('Не удалось скопировать');
+            this.error(this.i18n.t('code_editor.copy_failed'));
         }
     }
 

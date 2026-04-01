@@ -1,4 +1,6 @@
 /** Превью для строки списка каналов по payload сообщения (как на сервере). */
+import { t } from '@platform/services/i18n/i18n.service.js';
+
 const PREVIEW_MAX = 120;
 
 /**
@@ -7,7 +9,7 @@ const PREVIEW_MAX = 120;
  */
 export function lanePreviewFromMessagePayload(p) {
     if (!p || typeof p !== 'object') {
-        throw new Error('payload сообщения обязателен.');
+        throw new Error(t('lane_preview.err_payload', {}));
     }
     const contents = p.contents;
     if (!Array.isArray(contents) || contents.length === 0) {
@@ -15,11 +17,11 @@ export function lanePreviewFromMessagePayload(p) {
     }
     const sorted = [...contents].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const block = sorted[0];
-    const t = block.type;
+    const blockType = block.type;
     const d = block.data;
-    if (t === 'text/plain') {
+    if (blockType === 'text/plain') {
         if (typeof d?.body !== 'string') {
-            throw new Error('text/plain: ожидается data.body строка.');
+            throw new Error(t('lane_preview.err_plain_body', {}));
         }
         const raw = d.body.trim();
         if (raw === '') {
@@ -30,26 +32,26 @@ export function lanePreviewFromMessagePayload(p) {
         }
         return `${raw.slice(0, PREVIEW_MAX - 1)}…`;
     }
-    if (t === 'code/block') {
-        return '[Код]';
+    if (blockType === 'code/block') {
+        return t('lane_preview.code', {});
     }
-    if (t === 'mock/image') {
-        return '[Изображение]';
+    if (blockType === 'mock/image') {
+        return t('lane_preview.image', {});
     }
-    if (t === 'file/image') {
-        return '[Фото]';
+    if (blockType === 'file/image') {
+        return t('lane_preview.photo', {});
     }
-    if (t === 'file/document') {
-        return '[Файл]';
+    if (blockType === 'file/document') {
+        return t('lane_preview.file', {});
     }
-    if (t === 'file/audio') {
-        return '[Аудио]';
+    if (blockType === 'file/audio') {
+        return t('lane_preview.audio', {});
     }
-    if (t === 'git/reference') {
-        return '[Git]';
+    if (blockType === 'git/reference') {
+        return t('lane_preview.git', {});
     }
-    if (t === 'custom_tool_response') {
-        return '[Инструмент]';
+    if (blockType === 'custom_tool_response') {
+        return t('lane_preview.tool', {});
     }
-    throw new Error(`Неизвестный тип контента для превью: ${t}`);
+    throw new Error(t('lane_preview.err_unknown_type', { type: blockType }));
 }

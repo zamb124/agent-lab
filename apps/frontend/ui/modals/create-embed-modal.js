@@ -242,7 +242,7 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     async _handleCreate() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         if (!this._name.trim()) {
             this.error(td('embed_create_modal.err_name'));
             return;
@@ -304,11 +304,11 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     renderHeader() {
-        return this.i18n.t('embed_create_modal.header', {}, 'dashboard');
+        return this.i18n.t('embed_create_modal.header', {});
     }
 
     renderBody() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         if (this._flowsLoading) {
             return html`<div class="loading-hint">${td('embed_create_modal.loading_flows')}</div>`;
         }
@@ -403,7 +403,7 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     renderFooter() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="actions-row">
                 <button

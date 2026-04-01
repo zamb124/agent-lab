@@ -302,7 +302,7 @@ export class TracingModal extends PlatformModal {
                 <div class="empty-state">
                     <platform-icon name="terminal" size="48"></platform-icon>
                     <p>Нет данных трейсинга</p>
-                    <p style="font-size: var(--text-sm);">Трейсы появятся после выполнения задач</p>
+                    <p style="font-size: var(--text-sm);">${this.i18n.t('tracing_modal.empty_hint')}</p>
                 </div>
             `;
         }

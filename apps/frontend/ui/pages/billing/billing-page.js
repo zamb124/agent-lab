@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '@platform/lib/components/layout/page-header.js';
 
@@ -291,7 +292,7 @@ export class BillingPage extends PlatformElement {
 
     render() {
         const { loading } = this.state.value;
-        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.BILLING);
 
         if (loading) {
             return html`
@@ -317,7 +318,7 @@ export class BillingPage extends PlatformElement {
     _renderBalanceCard() {
         const { subscription } = this.state.value;
         const balance = subscription?.balance ?? 0;
-        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.BILLING);
         const cur = tb('frontend_console.currency_rub');
 
         return html`
@@ -341,7 +342,7 @@ export class BillingPage extends PlatformElement {
         const { subscription } = this.state.value;
         const plan = subscription?.plan ?? 'FREE';
         const planFeatures = this._getPlanFeatures(plan);
-        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.BILLING);
 
         return html`
             <div class="billing-card">
@@ -378,7 +379,7 @@ export class BillingPage extends PlatformElement {
         const monthlyBudget = subscription?.monthly_budget ?? 0;
         const currentSpent = subscription?.current_month_spent ?? 0;
         const percentage = monthlyBudget > 0 ? (currentSpent / monthlyBudget * 100) : 0;
-        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.BILLING);
         const cur = tb('frontend_console.currency_rub');
 
         return html`
@@ -424,7 +425,7 @@ export class BillingPage extends PlatformElement {
         const totalCost = usage.total_cost ?? 0;
         const totalCalls = usage.total_calls ?? 0;
         const byResource = usage.by_resource ?? {};
-        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.BILLING);
         const cur = tb('frontend_console.currency_rub');
 
         return html`
@@ -465,7 +466,7 @@ export class BillingPage extends PlatformElement {
 
     _getPlanFeatures(plan) {
         const p = plan.toUpperCase();
-        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.BILLING);
         const counts = { FREE: 3, BASIC: 4, PREMIUM: 4, ENTERPRISE: 4 };
         const planKey = counts[p] !== undefined ? p : 'FREE';
         const n = counts[planKey];
@@ -485,7 +486,7 @@ export class BillingPage extends PlatformElement {
         modal.addEventListener('close', () => modal.remove());
         modal.addEventListener('topped-up', async () => {
             await this._reloadBilling();
-            this.success(this.i18n.t('frontend_console.topup_success', {}, 'billing'));
+            this.success(this.i18n.t('frontend_console.topup_success', {}, I18nNs.BILLING));
         });
     }
 
@@ -500,11 +501,11 @@ export class BillingPage extends PlatformElement {
     }
 
     _onUpgradeClick() {
-        this.info(this.i18n.t('frontend_console.upgrade_wip', {}, 'billing'));
+        this.info(this.i18n.t('frontend_console.upgrade_wip', {}, I18nNs.BILLING));
     }
 
     _onSetBudgetClick() {
-        this.info(this.i18n.t('frontend_console.budget_wip', {}, 'billing'));
+        this.info(this.i18n.t('frontend_console.budget_wip', {}, I18nNs.BILLING));
     }
 }
 

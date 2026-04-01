@@ -193,7 +193,7 @@ export class BaseNodeEditor extends PlatformElement {
         });
         
         if (!nodeType) {
-            this.error('type ноды отсутствует');
+            this.error(this.i18n.t('base_node_editor.err_no_type'));
             return;
         }
 
@@ -208,14 +208,14 @@ export class BaseNodeEditor extends PlatformElement {
             testPanel.setResult(result);
             
             if (result.valid || result.success) {
-                this.success('Валидация успешна');
+                this.success(this.i18n.t('base_node_editor.validation_ok'));
             } else {
-                this.error(result.error || 'Ошибка валидации');
+                this.error(result.error || this.i18n.t('base_node_editor.validation_failed'));
             }
         } catch (err) {
             console.error('[BaseNodeEditor] Validate error:', err);
             testPanel.setResult({ success: false, error: err.message });
-            this.error('Ошибка валидации: ' + err.message);
+            this.error(this.i18n.t('base_node_editor.validation_error', { message: err.message }));
         }
     }
 
@@ -234,7 +234,7 @@ export class BaseNodeEditor extends PlatformElement {
         });
         
         if (!nodeType) {
-            this.error('type ноды отсутствует');
+            this.error(this.i18n.t('base_node_editor.err_no_type'));
             console.error('[BaseNodeEditor] nodeConfig:', this.nodeConfig);
             return;
         }
@@ -258,14 +258,14 @@ export class BaseNodeEditor extends PlatformElement {
             testPanel.setResult(result);
             
             if (result.success) {
-                this.success('Выполнение успешно');
+                this.success(this.i18n.t('base_node_editor.execute_ok'));
             } else {
-                this.error(result.error || 'Ошибка выполнения');
+                this.error(result.error || this.i18n.t('base_node_editor.execute_failed'));
             }
         } catch (err) {
             console.error('[BaseNodeEditor] Execute error:', err);
             testPanel.setResult({ success: false, error: err.message });
-            this.error('Ошибка выполнения: ' + err.message);
+            this.error(this.i18n.t('base_node_editor.execute_error', { message: err.message }));
         }
     }
 
@@ -281,13 +281,13 @@ export class BaseNodeEditor extends PlatformElement {
         const newId = e.target.value.trim();
         
         if (!newId) {
-            this.error('Node ID не может быть пустым');
+            this.error(this.i18n.t('base_node_editor.node_id_empty'));
             e.target.value = this.nodeId;
             return;
         }
         
         if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(newId)) {
-            this.error('Node ID должен начинаться с буквы и содержать только буквы, цифры и _');
+            this.error(this.i18n.t('base_node_editor.node_id_format'));
             e.target.value = this.nodeId;
             return;
         }
@@ -317,7 +317,7 @@ export class BaseNodeEditor extends PlatformElement {
                     @change=${this._onNodeIdChange}
                     placeholder="my_node_id"
                 />
-                <span class="form-label-hint">Уникальный идентификатор ноды (латиница, цифры, _)</span>
+                <span class="form-label-hint">${this.i18n.t('base_node_editor.node_id_hint')}</span>
             </div>
         `;
     }
@@ -334,38 +334,38 @@ export class BaseNodeEditor extends PlatformElement {
         const config = this.nodeConfig;
         return html`
             <div class="sidebar-section">
-                <div class="sidebar-section-title">Основное</div>
+                <div class="sidebar-section-title">${this.i18n.t('base_node_editor.section_main')}</div>
                 ${this.renderNodeIdField()}
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Имя</span>
+                        <span class="form-label-text">${this.i18n.t('llm_node.field_name')}</span>
                     </div>
                     <input 
                         type="text" 
                         class="form-input"
                         .value=${config.name || ''}
                         @change=${(e) => this._onInputChange('name', e.target.value)}
-                        placeholder="Название ноды"
+                        placeholder=${this.i18n.t('base_node_editor.placeholder_node_name')}
                     />
                 </div>
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Описание</span>
+                        <span class="form-label-text">${this.i18n.t('llm_node.field_description')}</span>
                     </div>
                     <textarea 
                         class="form-input form-textarea"
                         rows="3"
                         .value=${config.description || ''}
                         @change=${(e) => this._onInputChange('description', e.target.value)}
-                        placeholder="Описание назначения"
+                        placeholder=${this.i18n.t('base_node_editor.placeholder_node_description')}
                     ></textarea>
                 </div>
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Теги</span>
+                        <span class="form-label-text">${this.i18n.t('llm_node.field_tags')}</span>
                     </div>
                     <tag-input
                         .tags=${config.tags || []}
@@ -552,7 +552,7 @@ export class BaseNodeEditor extends PlatformElement {
                     class="remove-resource-btn"
                     style="background: none; border: none; padding: 2px; cursor: pointer; color: var(--text-tertiary);"
                     @click=${() => this._removeResource(resource.resource_id || resource.resourceId)}
-                    title="Удалить ресурс"
+                    title=${this.i18n.t('base_node_editor.remove_resource')}
                 >
                     <platform-icon name="x" size="12"></platform-icon>
                 </button>

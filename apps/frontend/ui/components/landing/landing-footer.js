@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingFooter extends PlatformElement {
     static styles = [
@@ -202,7 +203,7 @@ export class LandingFooter extends PlatformElement {
     }
 
     render() {
-        const t = (key, params) => this.i18n.t(key, params ?? {}, 'landing');
+        const t = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.LANDING);
         const year = new Date().getFullYear();
         return html`
             <footer class="footer-container">

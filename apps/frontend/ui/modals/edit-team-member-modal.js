@@ -141,13 +141,13 @@ export class EditTeamMemberModal extends PlatformModal {
         }
         const isCompanyOwner = this._ownerUserId && this._member.user_id === this._ownerUserId;
         if (isCompanyOwner && role === 'owner' && !checked) {
-            this.error(this.i18n.t('team_modal.err_owner_role', {}, 'dashboard'));
+            this.error(this.i18n.t('team_modal.err_owner_role', {}));
             this.requestUpdate();
             return;
         }
         if (!checked) {
             if (this._selectedRoles.length <= 1 && this._selectedRoles.includes(role)) {
-                this.error(this.i18n.t('team_modal.err_one_role', {}, 'dashboard'));
+                this.error(this.i18n.t('team_modal.err_one_role', {}));
                 this.requestUpdate();
                 return;
             }
@@ -159,7 +159,7 @@ export class EditTeamMemberModal extends PlatformModal {
     }
 
     async _handleSave() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         const roles = this._orderedRoles();
         if (roles.length === 0) {
             this.error(td('team_modal.err_one_role'));
@@ -194,11 +194,11 @@ export class EditTeamMemberModal extends PlatformModal {
 
     renderHeader() {
         const name = this._member?.name ?? '';
-        return this.i18n.t('team_modal.header', { name }, 'dashboard');
+        return this.i18n.t('team_modal.header', { name });
     }
 
     renderBody() {
-        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        const td = (k) => this.i18n.t(k, {});
         const isCompanyOwner =
             this._ownerUserId && this._member && this._member.user_id === this._ownerUserId;
         return this._loadingSettings
@@ -207,7 +207,7 @@ export class EditTeamMemberModal extends PlatformModal {
     }
 
     renderFooter() {
-        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        const td = (k) => this.i18n.t(k, {});
         return this._loadingSettings
             ? html``
             : html`
@@ -238,8 +238,8 @@ export class EditTeamMemberModal extends PlatformModal {
     }
 
     _renderRoles(isCompanyOwner) {
-        const roleTitle = (r) => this.i18n.t(`team_roles.${r}`, {}, 'dashboard');
-        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        const roleTitle = (r) => this.i18n.t(`team_roles.${r}`, {});
+        const td = (k) => this.i18n.t(k, {});
         return html`
             ${this._member?.user_id
                 ? html`<p class="member-meta">ID: ${this._member.user_id}</p>`

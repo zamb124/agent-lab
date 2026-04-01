@@ -244,7 +244,7 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     async _handleCreate() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         if (!this._name.trim()) {
             this.error(td('api_key_modal.err_name'));
             return;
@@ -264,7 +264,7 @@ export class CreateApiKeyModal extends PlatformModal {
 
             const secret = result.secret;
             if (!secret) {
-                throw new Error(this.i18n.t('api_key_modal.err_no_secret', {}, 'dashboard'));
+                throw new Error(this.i18n.t('api_key_modal.err_no_secret', {}));
             }
 
             this._createdKey = { ...result, key: secret };
@@ -318,7 +318,7 @@ export class CreateApiKeyModal extends PlatformModal {
         try {
             const ok = document.execCommand('copy');
             if (!ok) {
-                throw new Error(this.i18n.t('api_key_modal.err_copy_cmd', {}, 'dashboard'));
+                throw new Error(this.i18n.t('api_key_modal.err_copy_cmd', {}));
             }
         } finally {
             document.body.removeChild(ta);
@@ -326,7 +326,7 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     async _handleCopy() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         const text = this._createdKey?.key;
         if (!text) {
             this.error(td('api_key_modal.err_no_key'));
@@ -355,7 +355,7 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     renderHeader() {
-        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        const td = (k) => this.i18n.t(k, {});
         return this._createdKey ? td('api_key_modal.header_done') : td('api_key_modal.header_create');
     }
 
@@ -368,7 +368,7 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     _renderForm() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="form-group">
                 <label class="form-label">${td('api_key_modal.label_name')}</label>
@@ -413,7 +413,7 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     _renderFormActions() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="actions-row">
                 <button
@@ -435,7 +435,7 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     _renderSuccess() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="success-message">
                 <div class="success-icon">✓</div>

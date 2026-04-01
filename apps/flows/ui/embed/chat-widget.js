@@ -24,6 +24,8 @@
             this.contextId = `ctx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             this.messages = [];
             this.isOpen = false;
+            /** @type {Record<string, unknown> | null} */
+            this._flowsStrings = null;
             
             this.init();
         }
@@ -31,11 +33,55 @@
         async init() {
             try {
                 await this.loadSettings();
+                await this.loadI18n();
                 this.render();
                 this.attachEventListeners();
             } catch (error) {
                 console.error('[HumanitecChat] Ошибка инициализации:', error);
             }
+        }
+
+        /**
+         * Тексты виджета из GET /api/i18n/{locale} → namespace flows (см. core/i18n/translations).
+         */
+        async loadI18n() {
+            const raw = navigator.language || 'en';
+            const lang = raw.split('-')[0].toLowerCase();
+            const locale = lang === 'ru' ? 'ru' : 'en';
+            const response = await fetch(`${this.baseUrl}/api/i18n/${locale}`);
+            if (!response.ok) {
+                throw new Error(`HumanitecChat: i18n HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            const flows = data.flows;
+            if (
+                !flows ||
+                typeof flows.chat_widget !== 'object' ||
+                flows.chat_widget === null ||
+                typeof flows.chat_widget.err_send !== 'string' ||
+                typeof flows.chat_widget.err_process !== 'string'
+            ) {
+                throw new Error('HumanitecChat: flows.chat_widget i18n incomplete');
+            }
+            this._flowsStrings = flows;
+        }
+
+        /**
+         * @param {string} key путь от корня flows.json, например chat_widget.err_send
+         */
+        _flowsT(key) {
+            const parts = key.split('.');
+            let node = this._flowsStrings;
+            for (const p of parts) {
+                if (node === undefined || node === null) {
+                    throw new Error(`HumanitecChat i18n missing: flows.${key}`);
+                }
+                node = node[p];
+            }
+            if (typeof node !== 'string') {
+                throw new Error(`HumanitecChat i18n not a string: flows.${key}`);
+            }
+            return node;
         }
         
         async loadSettings() {
@@ -400,7 +446,7 @@
             } catch (error) {
                 console.error('[HumanitecChat] Ошибка отправки:', error);
                 this.hideTyping();
-                this.addMessage('Произошла ошибка. Попробуйте снова.', 'assistant');
+                this.addMessage(this._flowsT('chat_widget.err_send'), 'assistant');
             } finally {
                 input.disabled = false;
                 document.getElementById('hc-send').disabled = false;
@@ -429,7 +475,7 @@
                     if (data.error) {
                         console.error('[HumanitecChat] Ошибка от сервера:', data.error);
                         this.hideTyping();
-                        this.addMessage('Ошибка обработки сообщения', 'assistant');
+                        this.addMessage(this._flowsT('chat_widget.err_process'), 'assistant');
                         this.eventSource.close();
                         return;
                     }

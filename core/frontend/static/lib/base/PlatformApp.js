@@ -8,6 +8,7 @@ import { AppEvents } from '../utils/types.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { serviceIdFromBaseUrl, setLastVisitedService } from '../utils/last-visited-service.js';
+import { i18nDefaultNamespaceForBaseUrl } from '../../services/i18n/i18n-default-namespace.js';
 
 // PWA Install Banner для iOS/Android
 import '../components/pwa-install-banner.js';
@@ -135,6 +136,10 @@ export class PlatformApp extends PlatformElement {
         }
         
         await ServiceRegistry.registerCore(this.getBaseUrl());
+        const i18nNs = i18nDefaultNamespaceForBaseUrl(this.getBaseUrl());
+        if (i18nNs.length > 0) {
+            ServiceRegistry.get('i18n').setDefaultNamespace(i18nNs);
+        }
     }
 
     /**

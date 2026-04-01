@@ -276,7 +276,7 @@ export class SchedulerTasksPage extends PlatformElement {
     }
 
     _formatSchedule(task) {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         if (task.schedule_type === 'cron') {
             return td('scheduler_page.schedule_cron', { cron: task.cron ?? '' });
         }
@@ -352,7 +352,7 @@ export class SchedulerTasksPage extends PlatformElement {
     }
 
     async _createSchedule() {
-        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        const td = (k) => this.i18n.t(k, {});
         const targetService = prompt(td('scheduler_page.prompt_target'), 'flows');
         if (!targetService) {
             return;
@@ -391,7 +391,7 @@ export class SchedulerTasksPage extends PlatformElement {
     }
 
     render() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div @click=${() => this._closeActionsMenu()}>
             <page-header title=${td('scheduler_page.title')}></page-header>

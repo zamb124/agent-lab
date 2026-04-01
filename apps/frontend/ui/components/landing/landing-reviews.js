@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingReviews extends PlatformElement {
     static styles = [
@@ -209,7 +210,7 @@ export class LandingReviews extends PlatformElement {
     }
 
     _getReviews() {
-        const t = (key) => this.i18n.t(key, {}, 'landing');
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
         return [
             {
                 name: t('testimonials.slide1_name'),
@@ -263,7 +264,7 @@ export class LandingReviews extends PlatformElement {
         return html`
             <div class="reviews-container">
                 <h2 class="reviews-title">
-                    ${this.i18n.t('testimonials.tag', {}, 'landing')}
+                    ${this.i18n.t('testimonials.tag', {}, I18nNs.LANDING)}
                 </h2>
                 
                 <div class="review-card">

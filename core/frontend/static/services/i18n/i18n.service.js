@@ -15,8 +15,21 @@ class I18nService {
         this._translations = {};
         this._listeners = new Set();
         this._loadedLocales = new Set();
+        /** Namespace для t(key, params) без третьего аргумента (landing до PlatformApp). */
+        this._defaultNamespace = 'landing';
 
         this._detectLocale();
+    }
+
+    getDefaultNamespace() {
+        return this._defaultNamespace;
+    }
+
+    setDefaultNamespace(namespace) {
+        if (typeof namespace !== 'string' || namespace === '') {
+            throw new Error('I18nService.setDefaultNamespace: ожидается непустая строка');
+        }
+        this._defaultNamespace = namespace;
     }
 
     _readCookie(name) {
@@ -105,12 +118,13 @@ class I18nService {
         return this._currentLocale;
     }
 
-    t(key, params = {}, namespace = 'landing') {
+    t(key, params = {}, namespace) {
+        const ns = namespace === undefined ? this._defaultNamespace : namespace;
         const locale = this._currentLocale;
         const translations = this._translations[locale] || this._translations[this._fallbackLocale] || {};
         
         const keys = key.split('.');
-        let value = translations[namespace];
+        let value = translations[ns];
         
         for (const k of keys) {
             if (value && typeof value === 'object') {
@@ -122,7 +136,7 @@ class I18nService {
         }
 
         if (value === undefined) {
-            console.warn(`Translation missing: ${namespace}.${key} [${locale}]`);
+            console.warn(`Translation missing: ${ns}.${key} [${locale}]`);
             return key;
         }
 
@@ -189,22 +203,17 @@ export function useI18n(component) {
     };
 
     return {
-        t: (key, params, namespace = 'landing') => i18n.t(key, params ?? {}, namespace),
+        t: (key, params, namespace) => i18n.t(key, params ?? {}, namespace),
         locale: () => i18n.getCurrentLocale(),
         setLocale: (locale) => i18n.setLocale(locale)
     };
 }
 
-export function t(key, params = {}, namespace = 'landing') {
+export function t(key, params = {}, namespace) {
     return i18n.t(key, params, namespace);
 }
 
-/**
- * Привязка к namespace: const t = createNsT('platform'); t('menu.profile')
- */
-export function createNsT(namespace) {
-    return (key, params = {}) => i18n.t(key, params, namespace);
-}
+export { i18nDefaultNamespaceForBaseUrl, I18nNs } from './i18n-default-namespace.js';
 
 export default i18n;
 

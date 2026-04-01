@@ -266,13 +266,14 @@ export class VariablesModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Переменные';
+        this.title = '';
         this.variables = [];
         this.loading = true;
         this.showAddForm = false;
     }
 
     async showModal() {
+        this.title = this.i18n.t('variables_modal.modal_title');
         super.showModal();
         await this._loadVariables();
     }
@@ -282,7 +283,7 @@ export class VariablesModal extends PlatformModal {
         try {
             this.variables = await this.a2a.get('/api/v1/variables/');
         } catch (error) {
-            this.error(`Ошибка загрузки: ${error.message}`);
+            this.error(this.i18n.t('variables_modal.err_load', { message: error.message }));
             this.variables = [];
         }
         this.loading = false;
@@ -298,26 +299,26 @@ export class VariablesModal extends PlatformModal {
         const secret = formData.get('secret') === 'on';
         
         if (!key || !value) {
-            this.error('Заполните ключ и значение');
+            this.error(this.i18n.t('variables_modal.err_key_value'));
             return;
         }
         
         try {
             await this.a2a.post('/api/v1/variables/', { key, value, secret });
-            this.success(`Переменная "${key}" создана`);
+            this.success(this.i18n.t('variables_modal.var_created', { key }));
             this.showAddForm = false;
             form.reset();
             await this._loadVariables();
         } catch (error) {
-            this.error(`Ошибка: ${error.message}`);
+            this.error(this.i18n.t('mcp_servers.err_with_message', { message: error.message }));
         }
     }
 
     async _deleteVariable(key) {
         const modal = document.createElement('confirm-modal');
-        modal.title = 'Удалить переменную?';
-        modal.message = `Удалить переменную "${key}"?`;
-        modal.confirmText = 'Удалить';
+        modal.title = this.i18n.t('variables_modal.delete_title');
+        modal.message = this.i18n.t('variables_modal.delete_message', { key });
+        modal.confirmText = this.i18n.t('context_menu.delete');
         modal.confirmVariant = 'danger';
         document.body.appendChild(modal);
         
@@ -328,10 +329,10 @@ export class VariablesModal extends PlatformModal {
         
         try {
             await this.a2a.delete(`/api/v1/variables/${key}`);
-            this.success('Переменная удалена');
+            this.success(this.i18n.t('variables_modal.var_deleted'));
             await this._loadVariables();
         } catch (error) {
-            this.error(`Ошибка: ${error.message}`);
+            this.error(this.i18n.t('mcp_servers.err_with_message', { message: error.message }));
         }
     }
 
@@ -344,7 +345,7 @@ export class VariablesModal extends PlatformModal {
             return html`
                 <div class="empty-state">
                     <div class="loading-spinner"></div>
-                    <div>Загрузка...</div>
+                    <div>${this.i18n.t('variables_modal.loading')}</div>
                 </div>
             `;
         }
@@ -354,12 +355,11 @@ export class VariablesModal extends PlatformModal {
 
         return html`
             <div class="info-block">
-                Переменные доступны через <code>@var:имя</code> в конфигурациях агентов и MCP серверов.
-                Секретные переменные скрыты в UI, но доступны при выполнении.
+                ${this.i18n.t('variables_modal.info_block')}
             </div>
             
             ${this.showAddForm ? this._renderAddForm() : html`
-                <button class="add-btn" @click=${this._toggleAddForm} title="Добавить переменную">
+                <button class="add-btn" @click=${this._toggleAddForm} title=${this.i18n.t('variables_modal.add_tooltip')}>
                     <platform-icon name="plus" size="16"></platform-icon>
                 </button>
             `}
@@ -367,7 +367,7 @@ export class VariablesModal extends PlatformModal {
             ${userVars.length === 0 && !this.showAddForm ? html`
                 <div class="empty-state">
                     <platform-icon name="key" size="48"></platform-icon>
-                    <div>Нет пользовательских переменных</div>
+                    <div>${this.i18n.t('variables_modal.empty_user')}</div>
                 </div>
             ` : ''}
             
@@ -379,7 +379,7 @@ export class VariablesModal extends PlatformModal {
             
             ${systemVars.length > 0 ? html`
                 <div style="margin-top: var(--space-4); font-size: var(--text-sm); color: var(--text-tertiary);">
-                    Системные переменные (только чтение):
+                    ${this.i18n.t('variables_modal.system_vars_label')}
                 </div>
                 <div class="vars-list" style="margin-top: var(--space-2);">
                     ${systemVars.map(v => this._renderVarItem(v))}
@@ -391,11 +391,11 @@ export class VariablesModal extends PlatformModal {
     _renderAddForm() {
         return html`
             <form class="add-form" @submit=${this._addVariable}>
-                <div class="form-title">Новая переменная</div>
+                <div class="form-title">${this.i18n.t('variables_modal.form_new')}</div>
                 
                 <div class="form-row">
                     <div>
-                        <label class="form-label">Ключ *</label>
+                        <label class="form-label">${this.i18n.t('variables_modal.field_key')}</label>
                         <input 
                             type="text" 
                             name="key" 
@@ -404,10 +404,10 @@ export class VariablesModal extends PlatformModal {
                             pattern="[a-zA-Z_][a-zA-Z0-9_]*"
                             required 
                         />
-                        <div class="form-hint">Латинские буквы и _</div>
+                        <div class="form-hint">${this.i18n.t('variables_modal.hint_key')}</div>
                     </div>
                     <div>
-                        <label class="form-label">Значение *</label>
+                        <label class="form-label">${this.i18n.t('variables_modal.field_value')}</label>
                         <input 
                             type="text" 
                             name="value" 
@@ -420,12 +420,12 @@ export class VariablesModal extends PlatformModal {
                 
                 <div class="checkbox-row">
                     <input type="checkbox" name="secret" id="secret-checkbox" />
-                    <label for="secret-checkbox">Секретное значение (скрыть в UI)</label>
+                    <label for="secret-checkbox">${this.i18n.t('variables_modal.secret_label')}</label>
                 </div>
                 
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" @click=${this._toggleAddForm}>Отмена</button>
-                    <button type="submit" class="btn btn-primary">Добавить</button>
+                    <button type="button" class="btn btn-secondary" @click=${this._toggleAddForm}>${this.i18n.t('editor.cancel')}</button>
+                    <button type="submit" class="btn btn-primary">${this.i18n.t('variables_modal.add')}</button>
                 </div>
             </form>
         `;
@@ -444,7 +444,7 @@ export class VariablesModal extends PlatformModal {
                     ${!variable.system ? html`
                         <button 
                             class="action-btn delete" 
-                            title="Удалить"
+                            title=${this.i18n.t('variables_modal.title_delete')}
                             @click=${() => this._deleteVariable(variable.key)}
                         >
                             <platform-icon name="trash" size="14"></platform-icon>

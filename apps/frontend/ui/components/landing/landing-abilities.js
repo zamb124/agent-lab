@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingAbilities extends PlatformElement {
     static styles = [
@@ -177,7 +178,7 @@ export class LandingAbilities extends PlatformElement {
     }
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, 'landing');
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
         return html`
             <div class="abilities-container">
                 <h2 class="abilities-title">${t('features.tag')}</h2>

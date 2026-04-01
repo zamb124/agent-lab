@@ -592,7 +592,7 @@ export class SyncSidebar extends PlatformElement {
     }
 
     render() {
-        const ts = (key, params) => this.i18n.t(key, params ?? {}, 'sync_ui');
+        const ts = (key, params) => this.i18n.t(key, params ?? {});
         const { selectedChannelId } = this._chat;
         const sec = this._sectionOpen || { direct: true, spaces: true, channels: true };
         const sidebarChannels = SyncStore.getChannelsForSidebarList();

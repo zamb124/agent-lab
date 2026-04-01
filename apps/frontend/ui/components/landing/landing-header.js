@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingHeader extends PlatformElement {
     static styles = [
@@ -464,7 +465,7 @@ export class LandingHeader extends PlatformElement {
     }
 
     _lt(key) {
-        return this.i18n.t(key, {}, 'landing');
+        return this.i18n.t(key, {}, I18nNs.LANDING);
     }
 
     async _checkAuth() {

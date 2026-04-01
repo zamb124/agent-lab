@@ -233,7 +233,7 @@ export class SettingsPage extends PlatformElement {
     }
 
     render() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const { loading } = this.state.value;
         
         if (loading) {
@@ -286,7 +286,7 @@ export class SettingsPage extends PlatformElement {
     }
 
     _renderCompanyTab() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const { settings } = this.state.value;
         
         return html`
@@ -341,7 +341,7 @@ export class SettingsPage extends PlatformElement {
     }
 
     _renderSecurityTab() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         return html`
             <div class="tab-content">
                 <h2 class="section-title">${td('settings_page.oauth_title')}</h2>
@@ -379,7 +379,7 @@ export class SettingsPage extends PlatformElement {
     }
 
     _renderIntegrationsTab() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         return html`
             <div class="tab-content">
                 <h2 class="section-title">${td('settings_page.integrations_title')}</h2>
@@ -437,7 +437,7 @@ export class SettingsPage extends PlatformElement {
         const companySettings = await this.services.get('settings').getCompanySettings();
         FrontendStore.setCompanySettings(companySettings);
         
-        this.success(this.i18n.t('settings_page.toast_saved', {}, 'dashboard'));
+        this.success(this.i18n.t('settings_page.toast_saved', {}));
     }
 }
 

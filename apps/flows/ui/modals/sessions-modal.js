@@ -218,7 +218,7 @@ export class SessionsModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Сессии';
+        this.title = '';
         this.size = 'xl';
         this.flowId = '';
         this.currentSession = '';
@@ -229,6 +229,7 @@ export class SessionsModal extends PlatformModal {
     }
 
     async showModal() {
+        this.title = this.i18n.t('sessions_modal.modal_title');
         super.showModal();
         await this._loadFlows();
         await this._loadSessions();
@@ -266,23 +267,25 @@ export class SessionsModal extends PlatformModal {
     async _deleteSession(sessionId, e) {
         e.stopPropagation();
         
-        const confirmed = await confirm('Удалить эту сессию?', {
-            title: 'Удаление сессии',
-            confirmText: 'Удалить',
+        const confirmed = await confirm(this.i18n.t('sessions_modal.delete_confirm'), {
+            title: this.i18n.t('sessions_modal.delete_title'),
+            confirmText: this.i18n.t('context_menu.delete'),
+            cancelText: this.i18n.t('editor.cancel'),
             variant: 'danger',
         });
         
         if (!confirmed) return;
         
         await this.a2a.deleteSession(this.selectedFlowId, sessionId);
-        this.success('Сессия удалена');
+        this.success(this.i18n.t('sessions_modal.session_deleted'));
         await this._loadSessions();
     }
 
     _formatDate(dateString) {
         if (!dateString) return '';
         const date = new Date(dateString);
-        return date.toLocaleString('ru-RU', {
+        const locale = this.i18n.getCurrentLocale() === 'en' ? 'en-US' : 'ru-RU';
+        return date.toLocaleString(locale, {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
@@ -312,13 +315,13 @@ export class SessionsModal extends PlatformModal {
 
         return html`
             <div class="filters">
-                <span class="filter-label">Flow:</span>
+                <span class="filter-label">${this.i18n.t('sessions_modal.filter_flow')}</span>
                 <select 
                     class="filter-select" 
                     .value=${this.selectedFlowId}
                     @change=${this._onFlowFilterChange}
                 >
-                    <option value="">Все flows</option>
+                    <option value="">${this.i18n.t('sessions_modal.all_flows')}</option>
                     ${this.flows.map(flowItem => html`
                         <option value="${flowItem.flow_id}">${flowItem.name || flowItem.flow_id}</option>
                     `)}
@@ -328,7 +331,7 @@ export class SessionsModal extends PlatformModal {
             ${this.sessions.length === 0 ? html`
                 <div class="empty-state">
                     <platform-icon name="folder" size="48"></platform-icon>
-                    <p>Нет сохраненных сессий</p>
+                    <p>${this.i18n.t('sessions_modal.empty')}</p>
                 </div>
             ` : html`
                 <div class="sessions-list">
@@ -349,7 +352,7 @@ export class SessionsModal extends PlatformModal {
                                         <span class="session-user">user: ${session.user_id || 'anonymous'}</span>
                                     </div>
                                     <div class="session-first-message">
-                                        ${this._truncate(session.first_message) || 'Нет сообщений'}
+                                        ${this._truncate(session.first_message) || this.i18n.t('sessions_modal.no_messages')}
                                     </div>
                                     <div class="session-meta">
                                         <span class="session-meta-item">
@@ -358,7 +361,7 @@ export class SessionsModal extends PlatformModal {
                                         </span>
                                         <span class="session-meta-item">
                                             <platform-icon name="chat" size="12"></platform-icon>
-                                            ${session.message_count || 0} сообщений
+                                            ${this.i18n.t('sessions_modal.messages_count', { count: session.message_count || 0 })}
                                         </span>
                                     </div>
                                 </div>
@@ -366,14 +369,14 @@ export class SessionsModal extends PlatformModal {
                                     <button 
                                         class="session-btn primary" 
                                         @click=${(e) => { e.stopPropagation(); this._selectSession(session); }}
-                                        title="Продолжить диалог"
+                                        title=${this.i18n.t('sessions_modal.continue_title')}
                                     >
                                         <platform-icon name="play" size="16"></platform-icon>
                                     </button>
                                     <button 
                                         class="session-btn danger" 
                                         @click=${(e) => this._deleteSession(session.session_id, e)}
-                                        title="Удалить"
+                                        title=${this.i18n.t('sessions_modal.delete_btn')}
                                     >
                                         <platform-icon name="delete" size="16"></platform-icon>
                                     </button>
@@ -383,7 +386,7 @@ export class SessionsModal extends PlatformModal {
                     )}
                 </div>
                 <div class="stats">
-                    <span>Всего сессий: ${this.sessions.length}</span>
+                    <span>${this.i18n.t('sessions_modal.total_sessions', { count: this.sessions.length })}</span>
                 </div>
             `}
         `;

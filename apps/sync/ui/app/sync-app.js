@@ -419,6 +419,11 @@ export class SyncApp extends PlatformApp {
         };
     }
 
+    _localeTag() {
+        const loc = this.i18n.getCurrentLocale();
+        return loc === 'en' ? 'en-US' : 'ru-RU';
+    }
+
     setupStore() {
         return SyncStore;
     }
@@ -488,7 +493,7 @@ export class SyncApp extends PlatformApp {
             }
             this._connectWs();
         } catch (err) {
-            console.error('[SyncApp] Ошибка инициализации:', err);
+            console.error('[SyncApp] initialization failed:', err);
             this.redirectToAuth();
         }
     }
@@ -535,7 +540,7 @@ export class SyncApp extends PlatformApp {
     _handleWsMessage(data) {
         const msg = JSON.parse(data);
         if (msg === null || typeof msg !== 'object' || Array.isArray(msg)) {
-            throw new Error('[sync-ws] ожидался JSON-объект.');
+            throw new Error(this.i18n.t('sync_app.ws_json_expected'));
         }
         if (typeof msg.type === 'string' && msg.type !== '') {
             this._dispatchRealtimeEvent(msg);
@@ -560,7 +565,7 @@ export class SyncApp extends PlatformApp {
             }
             return;
         }
-        throw new Error(`[sync-ws] неизвестный кадр WebSocket: ${JSON.stringify(msg)}`);
+        throw new Error(this.i18n.t('sync_app.ws_unknown_frame', { detail: JSON.stringify(msg) }));
     }
 
     _dispatchRealtimeEvent(msg) {
@@ -591,7 +596,7 @@ export class SyncApp extends PlatformApp {
             const auth = this.auth?.user;
             const companyId = auth?.company_id;
             if (typeof companyId !== 'string' || companyId === '') {
-                throw new Error('user.presence: auth.user.company_id обязателен.');
+                throw new Error(this.i18n.t('sync_app.ws_user_presence_company_id'));
             }
             if (p.company_id !== companyId) return;
             SyncStore.applyUserPresence(p);
@@ -600,7 +605,7 @@ export class SyncApp extends PlatformApp {
 
         const p = msg.payload;
         if (!p || typeof p !== 'object') {
-            throw new Error(`${msg.type}: payload обязателен.`);
+            throw new Error(this.i18n.t('sync_app.ws_payload_required', { type: msg.type }));
         }
 
         if (
@@ -645,7 +650,7 @@ export class SyncApp extends PlatformApp {
             const authUser = this.auth?.user;
             const myId = authUser?.id;
             if (typeof myId !== 'string' || myId === '') {
-                throw new Error('channel.read_updated: auth.user.id обязателен.');
+                throw new Error(this.i18n.t('sync_app.ws_channel_read_user_id'));
             }
             if (p.reader_user_id === myId && typeof p.channel_id === 'string') {
                 SyncStore.patchChannelFields(p.channel_id, {
@@ -668,7 +673,7 @@ export class SyncApp extends PlatformApp {
                 const authUser = this.auth?.user;
                 const myId = authUser?.id;
                 if (typeof myId !== 'string' || myId === '') {
-                    throw new Error('message.created: auth.user.id обязателен.');
+                    throw new Error(this.i18n.t('sync_app.ws_message_created_user_id'));
                 }
                 if (senderUserId(p.sender) === myId) {
                     SyncStore.resolveOwnMessageBroadcast(p);
@@ -691,7 +696,7 @@ export class SyncApp extends PlatformApp {
             const authUser = this.auth?.user;
             const myId = authUser?.id;
             if (typeof myId !== 'string' || myId === '') {
-                throw new Error('Нет user id для синхронизации списка каналов.');
+                throw new Error(this.i18n.t('sync_app.ws_no_user_id_channel_list'));
             }
             const preview = lanePreviewFromMessagePayload(p);
             const patch = {
@@ -728,7 +733,7 @@ export class SyncApp extends PlatformApp {
                 && SyncStore.normalizeSyncChannelId(p.channel_id) === selectedNorm
             ) {
                 const mid = p.message_id;
-                if (typeof mid !== 'string') throw new Error('message.reaction_changed: нет message_id.');
+                if (typeof mid !== 'string') throw new Error(this.i18n.t('sync_app.ws_reaction_no_message_id'));
                 SyncStore.mergeMessageFields(mid, { reactions: p.reactions });
             }
             return;
@@ -756,7 +761,7 @@ export class SyncApp extends PlatformApp {
                 && SyncStore.normalizeSyncChannelId(p.channel_id) === selectedNorm
             ) {
                 const mid = p.message_id;
-                if (typeof mid !== 'string') throw new Error('message.status_changed: нет message_id.');
+                if (typeof mid !== 'string') throw new Error(this.i18n.t('sync_app.ws_status_no_message_id'));
                 SyncStore.mergeMessageFields(mid, { status: p.status });
             }
             return;
@@ -855,7 +860,7 @@ export class SyncApp extends PlatformApp {
                 const overlay = this.renderRoot?.querySelector('call-overlay');
                 overlay?.setRecordingStatus?.(
                     'failed',
-                    p.error || this.i18n.t('recording_error_default', {}, 'sync_ui'),
+                    p.error || this.i18n.t('recording_error_default', {}),
                 );
             }
             return;
@@ -873,7 +878,7 @@ export class SyncApp extends PlatformApp {
             SyncStore.upsertMeeting(p);
             const errorText = (typeof p.error === 'string' && p.error !== '')
                 ? p.error
-                : this.i18n.t('meeting_processing_error', {}, 'sync_ui');
+                : this.i18n.t('meeting_processing_error', {});
             console.error(`[sync] ${msg.type}: ${errorText}`, p);
             if (this._activeCall?.call_id === p.call_id) {
                 const overlay = this.renderRoot?.querySelector('call-overlay');
@@ -899,7 +904,7 @@ export class SyncApp extends PlatformApp {
             return;
         }
 
-        throw new Error(`[sync-ws] неизвестное realtime-событие: ${msg.type}`);
+        throw new Error(this.i18n.t('sync_app.ws_unknown_realtime', { type: msg.type }));
     }
 
     _buildNamesMap() {
@@ -963,7 +968,7 @@ export class SyncApp extends PlatformApp {
     async _acceptCall(callId) {
         this._incomingCall = null;
         const ws = this.services.get('syncWs');
-        if (!ws) throw new Error('syncWs не инициализирован при accept.');
+        if (!ws) throw new Error(this.i18n.t('sync_app.err_sync_ws_not_initialized'));
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
         ws.sendJson({ id, type: 'call.accept', payload: { call_id: callId } });
@@ -1006,7 +1011,7 @@ export class SyncApp extends PlatformApp {
     _sendCallRecordingWs(callId, action) {
         if (typeof callId !== 'string' || callId === '') return;
         if (action !== 'start' && action !== 'stop') {
-            throw new Error('action должен быть start или stop.');
+            throw new Error(this.i18n.t('sync_app.err_recording_action'));
         }
         const ws = this.services.get('syncWs');
         if (!ws) return;
@@ -1071,7 +1076,7 @@ export class SyncApp extends PlatformApp {
             try {
                 this._handleWsMessage(data);
             } catch (e) {
-                console.error('[sync-ws] ошибка обработки кадра:', e, { raw: data });
+                console.error('[sync-ws] frame handler error:', e, { raw: data });
             }
         });
 
@@ -1143,19 +1148,20 @@ export class SyncApp extends PlatformApp {
             const title = channel ? SyncStore.channelDisplayTitle(channel) : channelId;
             options.push({ channelId, title });
         }
-        options.sort((left, right) => left.title.localeCompare(right.title, 'ru'));
+        const loc = this.i18n.getCurrentLocale();
+        options.sort((left, right) => left.title.localeCompare(right.title, loc));
         return options;
     }
 
     _formatMeetingDate(isoValue) {
         if (typeof isoValue !== 'string' || isoValue === '') {
-            return '—';
+            return this.i18n.t('empty_dash');
         }
         const date = new Date(isoValue);
         if (Number.isNaN(date.getTime())) {
-            return '—';
+            return this.i18n.t('empty_dash');
         }
-        return new Intl.DateTimeFormat('ru-RU', {
+        return new Intl.DateTimeFormat(this._localeTag(), {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
@@ -1166,7 +1172,7 @@ export class SyncApp extends PlatformApp {
 
     _channelName(channelId) {
         if (typeof channelId !== 'string' || channelId === '') {
-            return '—';
+            return this.i18n.t('empty_dash');
         }
         const channel = SyncStore.state.channels.list.find((item) => item.id === channelId);
         if (!channel) {
@@ -1185,15 +1191,15 @@ export class SyncApp extends PlatformApp {
 
     _statusLabel(exportStatus) {
         if (exportStatus === 'done') {
-            return this.i18n.t('export_status.done', {}, 'sync_ui');
+            return this.i18n.t('export_status.done', {});
         }
         if (exportStatus === 'pending') {
-            return this.i18n.t('export_status.pending', {}, 'sync_ui');
+            return this.i18n.t('export_status.pending', {});
         }
         if (exportStatus === 'failed') {
-            return this.i18n.t('export_status.failed', {}, 'sync_ui');
+            return this.i18n.t('export_status.failed', {});
         }
-        return '—';
+        return this.i18n.t('empty_dash');
     }
 
     _selectedMeeting() {
@@ -1231,12 +1237,12 @@ export class SyncApp extends PlatformApp {
         const startedAt = meetingDetails?.recording?.started_at;
         const endedAt = meetingDetails?.recording?.ended_at;
         if (typeof startedAt !== 'string' || typeof endedAt !== 'string') {
-            return '—';
+            return this.i18n.t('empty_dash');
         }
         const startedMs = Date.parse(startedAt);
         const endedMs = Date.parse(endedAt);
         if (Number.isNaN(startedMs) || Number.isNaN(endedMs) || endedMs <= startedMs) {
-            return '—';
+            return this.i18n.t('empty_dash');
         }
         const diffSeconds = Math.round((endedMs - startedMs) / 1000);
         const hours = Math.floor(diffSeconds / 3600);
@@ -1250,14 +1256,14 @@ export class SyncApp extends PlatformApp {
 
     async _openMeetingDetails(meetingId) {
         if (typeof meetingId !== 'string' || meetingId === '') {
-            throw new Error('meetingId обязателен.');
+            throw new Error(this.i18n.t('sync_app.err_meeting_id_required'));
         }
         const syncApi = this.services.get('syncApi');
         this._meetingsDetailsLoadingId = meetingId;
         const details = await syncApi.getMeeting(meetingId);
         if (!details || typeof details !== 'object' || !details.meeting) {
             this._meetingsDetailsLoadingId = null;
-            throw new Error('Некорректный ответ details встречи.');
+            throw new Error(this.i18n.t('sync_app.err_meeting_details_invalid'));
         }
         const selected = {
             ...details.meeting,
@@ -1275,7 +1281,7 @@ export class SyncApp extends PlatformApp {
     async _exportSelectedMeeting() {
         const selected = this._selectedMeeting();
         if (!selected || typeof selected.meeting_id !== 'string' || selected.meeting_id === '') {
-            throw new Error('meeting_id обязателен.');
+            throw new Error(this.i18n.t('sync_app.err_meeting_id_operation'));
         }
         const syncApi = this.services.get('syncApi');
         await syncApi.exportMeetingToCrm(selected.meeting_id, null);
@@ -1286,7 +1292,7 @@ export class SyncApp extends PlatformApp {
     async _retrySelectedMeeting() {
         const selected = this._selectedMeeting();
         if (!selected || typeof selected.meeting_id !== 'string' || selected.meeting_id === '') {
-            throw new Error('meeting_id обязателен.');
+            throw new Error(this.i18n.t('sync_app.err_meeting_id_operation'));
         }
         const syncApi = this.services.get('syncApi');
         await syncApi.retryMeetingProcessing(selected.meeting_id);
@@ -1314,7 +1320,7 @@ export class SyncApp extends PlatformApp {
         const meetingChannelOptions = this._meetingChannelOptions(meetingsState.list);
         const selectedMeeting = this._selectedMeeting();
         const selectedParticipants = selectedMeeting ? this._meetingParticipants(selectedMeeting) : [];
-        const ts = (k, p) => this.i18n.t(k, p ?? {}, 'sync_ui');
+        const ts = (k, p) => this.i18n.t(k, p ?? {});
 
         return html`
             <div class="sidebar" ?inert=${callUiLocked}>
@@ -1400,7 +1406,7 @@ export class SyncApp extends PlatformApp {
         const statusClass = `meeting-status ${meeting.export_status}`;
         const badgeColor = `background:hsl(${hueFromString(meeting.channel_id)} 48% 42%)`;
         const details = this._meetingDetailsById[meeting.meeting_id];
-        const duration = details ? this._durationText(details) : '—';
+        const duration = details ? this._durationText(details) : ts('empty_dash');
         return html`
                                         <button
                                             type="button"
@@ -1451,7 +1457,7 @@ export class SyncApp extends PlatformApp {
                                         </div>
                                         <div>
                                             <div class="detail-label">${ts('label_participants')}</div>
-                                            <div class="detail-value">${selectedParticipants.length > 0 ? selectedParticipants.join(', ') : '—'}</div>
+                                            <div class="detail-value">${selectedParticipants.length > 0 ? selectedParticipants.join(', ') : ts('empty_dash')}</div>
                                         </div>
                                         <div>
                                             <div class="detail-label">${ts('label_meeting_id')}</div>

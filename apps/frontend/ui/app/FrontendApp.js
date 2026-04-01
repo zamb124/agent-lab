@@ -365,7 +365,7 @@ export class FrontendApp extends PlatformApp {
         }
 
         if (!this._servicesInitialized || !this._authChecked) {
-            const t = (k) => this.i18n.t(k, {}, 'dashboard');
+            const t = (k) => this.i18n.t(k, {});
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
@@ -375,7 +375,7 @@ export class FrontendApp extends PlatformApp {
         }
 
         if (!this._isAuthenticated) {
-            const t = (k) => this.i18n.t(k, {}, 'dashboard');
+            const t = (k) => this.i18n.t(k, {});
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
@@ -391,7 +391,7 @@ export class FrontendApp extends PlatformApp {
         ) {
             this._dashboardLastServiceRedirectDone = true;
             if (replaceLocationToLastVisitedNonFrontendService()) {
-                const t = (k) => this.i18n.t(k, {}, 'dashboard');
+                const t = (k) => this.i18n.t(k, {});
                 return html`
                     <div class="loading-container">
                         <div class="loading-spinner"></div>

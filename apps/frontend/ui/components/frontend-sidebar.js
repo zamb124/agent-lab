@@ -198,7 +198,7 @@ export class FrontendSidebar extends PlatformElement {
 
     render() {
         const { currentView } = this.state.value;
-        const t = (key) => this.i18n.t(key, {}, 'dashboard');
+        const t = (key) => this.i18n.t(key, {});
 
         return html`
             <platform-sidebar

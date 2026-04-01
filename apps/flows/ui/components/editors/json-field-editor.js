@@ -614,7 +614,7 @@ export class JsonFieldEditor extends PlatformElement {
     }
 
     _notifyCopied() {
-        this.success('Скопировано');
+        this.success(this.i18n.t('json_field_editor.copied'));
     }
 
     async _copyValue() {
@@ -635,7 +635,7 @@ export class JsonFieldEditor extends PlatformElement {
             this._notifyCopied();
         } catch (e) {
             console.warn('Copy failed:', e);
-            this.error('Не удалось скопировать');
+            this.error(this.i18n.t('json_field_editor.copy_failed'));
         }
     }
 
@@ -665,7 +665,7 @@ export class JsonFieldEditor extends PlatformElement {
                     type="button"
                     class="editor-btn"
                     @click=${this._copyValue}
-                    title="Копировать"
+                    title=${this.i18n.t('json_field_editor.copy_title')}
                 >
                     <platform-icon name="copy" size="12"></platform-icon>
                 </button>
@@ -673,7 +673,7 @@ export class JsonFieldEditor extends PlatformElement {
                     type="button"
                     class="editor-btn ${this._fullscreen ? 'active' : ''}"
                     @click=${this._toggleFullscreen}
-                    title="${this._fullscreen ? 'Выйти из полноэкранного режима (Esc)' : 'На весь экран'}"
+                    title="${this._fullscreen ? this.i18n.t('json_field_editor.fs_exit') : this.i18n.t('json_field_editor.fs_enter')}"
                 >
                     <platform-icon
                         name="${this._fullscreen ? 'minimize' : 'maximize'}"
@@ -699,7 +699,7 @@ export class JsonFieldEditor extends PlatformElement {
                     <button
                         type="button"
                         class="json-fs-fab"
-                        title="На весь экран"
+                        title=${this.i18n.t('json_field_editor.fs_enter')}
                         ?hidden=${!showFab}
                         @click=${this._toggleFullscreen}
                     >

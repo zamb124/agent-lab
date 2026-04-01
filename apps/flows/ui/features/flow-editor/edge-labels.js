@@ -2,10 +2,11 @@
  * EdgeLabelsManager - управление отображением условий на линиях связи
  */
 export class EdgeLabelsManager {
-    constructor(canvasElement, editor, onLabelClick) {
+    constructor(canvasElement, editor, onLabelClick, host) {
         this.canvasElement = canvasElement;
         this.editor = editor;
         this.onLabelClick = onLabelClick;
+        this._host = host;
         this.labels = new Map();
         
         this._setupContainer();
@@ -73,7 +74,7 @@ export class EdgeLabelsManager {
         }
         
         label.textContent = condition;
-        label.title = `Условие: ${condition}`;
+        label.title = this._host.i18n.t('edge_labels.condition_title', { condition });
         
         this._updateLabelPosition(fromId, toId);
     }
@@ -99,7 +100,7 @@ export class EdgeLabelsManager {
         
         if (label) {
             label.textContent = condition;
-            label.title = `Условие: ${condition}`;
+            label.title = this._host.i18n.t('edge_labels.condition_title', { condition });
             this._updateLabelPosition(fromId, toId);
         } else {
             this.add(fromId, toId, condition);

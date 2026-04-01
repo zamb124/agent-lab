@@ -214,6 +214,10 @@ export class SpaceSettingsModal extends PlatformModal {
         this._unsubscribe?.();
     }
 
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
+    }
+
     close() {
         SyncStore.closeSpaceSettings();
         super.close();
@@ -242,7 +246,7 @@ export class SpaceSettingsModal extends PlatformModal {
         const syncApi = this.services.get('syncApi');
         const res = await syncApi.uploadFile(file);
         if (typeof res?.file_id !== 'string' || res.file_id === '' || typeof res?.url !== 'string' || res.url === '') {
-            throw new Error('Некорректный ответ загрузки файла (нет file_id или url).');
+            throw new Error(this._tp('space_settings.err_upload'));
         }
         this._avatarUrl = res.url;
     }
@@ -251,7 +255,7 @@ export class SpaceSettingsModal extends PlatformModal {
         const create = SyncStore.state.ui.spaceSettingsCreate;
         const name = this._name.trim();
         if (!name) {
-            throw new Error('Название пространства обязательно.');
+            throw new Error(this._tp('space_settings.err_name_required'));
         }
         this._saving = true;
         try {
@@ -262,7 +266,7 @@ export class SpaceSettingsModal extends PlatformModal {
             const autoExportTranscriptToCrm = this._autoExportTranscriptToCrm;
             const autoExportSummaryToCrm = this._autoExportSummaryToCrm;
             if ((autoExportTranscriptToCrm || autoExportSummaryToCrm) && namespace === '') {
-                throw new Error('Для автоэкспорта укажите namespace.');
+                throw new Error(this._tp('space_settings.err_export_namespace'));
             }
             if (create) {
                 const created = await syncApi.createSpace(name, description);
@@ -288,7 +292,7 @@ export class SpaceSettingsModal extends PlatformModal {
             }
             const id = this._spaceId;
             if (typeof id !== 'string' || id === '') {
-                throw new Error('Пространство не выбрано.');
+                throw new Error(this._tp('space_settings.err_not_selected'));
             }
             await syncApi.updateSpace(id, {
                 name,
@@ -307,7 +311,9 @@ export class SpaceSettingsModal extends PlatformModal {
 
     renderHeader() {
         const ui = SyncStore.state.ui;
-        return ui.spaceSettingsCreate ? 'Создать пространство' : 'Настройки пространства';
+        return ui.spaceSettingsCreate
+            ? this._tp('space_settings.header_create')
+            : this._tp('space_settings.header_edit');
     }
 
     renderBody() {
@@ -317,11 +323,13 @@ export class SpaceSettingsModal extends PlatformModal {
         if (!isCreate && (typeof id !== 'string' || id === '')) {
             return html``;
         }
-        const descLabel = isCreate ? 'Описание (опционально)' : 'Описание';
+        const descLabel = isCreate
+            ? this._tp('space_settings.desc_optional')
+            : this._tp('space_settings.desc');
         const av = this._avatarUrl.trim();
         return html`
             <div class="field">
-                <label class="label">Название</label>
+                <label class="label">${this._tp('space_settings.field_name')}</label>
                 <input
                     class="input"
                     .value=${this._name}
@@ -343,7 +351,7 @@ export class SpaceSettingsModal extends PlatformModal {
             </div>
 
             <div class="field">
-                <label class="label">Аватар</label>
+                <label class="label">${this._tp('space_settings.field_avatar')}</label>
                 ${av ? html`<img class="avatar-preview" src=${av} alt="" />` : ''}
                 <input
                     type="file"
@@ -352,8 +360,8 @@ export class SpaceSettingsModal extends PlatformModal {
                     accept="image/*"
                     @change=${(e) => {
                         this._pickFile(e).catch((err) => {
-                            const t = err instanceof Error ? err.message : String(err);
-                            this.error(t);
+                            const errMsg = err instanceof Error ? err.message : String(err);
+                            this.error(errMsg);
                         });
                     }}
                 />
@@ -366,12 +374,12 @@ export class SpaceSettingsModal extends PlatformModal {
                         if (el) el.click();
                     }}
                 >
-                    Загрузить изображение
+                    ${this._tp('space_settings.upload_image')}
                 </button>
             </div>
 
             <div class="field">
-                <label class="label">Namespace (общий для CRM/RAG)</label>
+                <label class="label">${this._tp('space_settings.namespace_label')}</label>
                 <input
                     class="input"
                     list="space-settings-namespace-options"
@@ -386,13 +394,13 @@ export class SpaceSettingsModal extends PlatformModal {
                     `)}
                 </datalist>
                 ${this._crmNamespacesLoading ? html`
-                    <div class="label" style="margin-top:8px;">Загрузка namespace...</div>
+                    <div class="label" style="margin-top:8px;">${this._tp('space_settings.namespace_loading')}</div>
                 ` : ''}
             </div>
 
             <div class="field">
                 <div class="switch-row">
-                    <span class="switch-label">Автоэкспорт транскрипта в CRM</span>
+                    <span class="switch-label">${this._tp('space_settings.auto_export_transcript')}</span>
                     <platform-switch
                         .checked=${this._autoExportTranscriptToCrm}
                         @change=${(e) => {
@@ -401,7 +409,7 @@ export class SpaceSettingsModal extends PlatformModal {
                     ></platform-switch>
                 </div>
                 <div class="switch-row">
-                    <span class="switch-label">Автоэкспорт summary в CRM</span>
+                    <span class="switch-label">${this._tp('space_settings.auto_export_summary')}</span>
                     <platform-switch
                         .checked=${this._autoExportSummaryToCrm}
                         @change=${(e) => {
@@ -432,19 +440,19 @@ export class SpaceSettingsModal extends PlatformModal {
             return html``;
         }
         const primaryLabel = isCreate
-            ? (this._saving ? 'Создаём…' : 'Создать')
-            : (this._saving ? 'Сохранение…' : 'Сохранить');
+            ? (this._saving ? this._tp('space_settings.creating') : this._tp('space_settings.create'))
+            : (this._saving ? this._tp('space_settings.saving') : this._tp('space_settings.save'));
         return html`
             <div class="actions">
-                <button type="button" class="btn" @click=${this._onCancel}>Отмена</button>
+                <button type="button" class="btn" @click=${this._onCancel}>${this._tp('chat_view.cancel')}</button>
                 <button
                     type="button"
                     class="btn btn-primary"
                     ?disabled=${this._saving}
                     @click=${() => {
                         this._submit().catch((err) => {
-                            const t = err instanceof Error ? err.message : String(err);
-                            this.error(t);
+                            const errMsg = err instanceof Error ? err.message : String(err);
+                            this.error(errMsg);
                             this._saving = false;
                         });
                     }}

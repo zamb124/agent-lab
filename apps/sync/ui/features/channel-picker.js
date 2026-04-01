@@ -154,7 +154,7 @@ export class ChannelPicker extends PlatformElement {
     }
 
     render() {
-        const ts = (key, params) => this.i18n.t(key, params ?? {}, 'sync_ui');
+        const ts = (key, params) => this.i18n.t(key, params ?? {});
         const channels = SyncStore.getChannelsForPickerList();
         const loading = this._channels.loading;
         const hasFilter = Array.isArray(this._sidebarSpaceFilterIds) && this._sidebarSpaceFilterIds.length > 0;

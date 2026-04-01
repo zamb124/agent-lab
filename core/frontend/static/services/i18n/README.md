@@ -16,10 +16,10 @@
 ### 1. Импорт
 
 ```javascript
-import { i18n, useI18n, t, createNsT } from '@platform/services/i18n/i18n.service.js';
+import { i18n, useI18n, t } from '@platform/services/i18n/i18n.service.js';
 ```
 
-После `registerCore` в компонентах доступен **`this.i18n`** (`PlatformElement`); не присваивайте результат `useI18n` в **`this.i18n`** — перезапишете геттер. Для фиксированного namespace: `const tp = createNsT('platform');` и далее `tp('menu.settings')`.
+После `registerCore` в компонентах доступен **`this.i18n`** (`PlatformElement`); не присваивайте результат `useI18n` в **`this.i18n`** — перезапишете геттер. Вызов **`this.i18n.t(key, params)`** без третьего аргумента использует **дефолтный namespace**: после **`initServices`** **`PlatformApp`** выставляет его через **`i18n.setDefaultNamespace`** по правилу из **`i18n-default-namespace.js`** — сегмент пути **`getBaseUrl()`** без ведущего `/` совпадает с именем JSON (например `/crm` → `crm.json`). Дополнительные бандлы (не основной slug SPA): **`import { I18nNs } from '@platform/services/i18n/i18n.service.js'`** и **`this.i18n.t(key, params, I18nNs.BILLING)`** (также **`I18nNs.LANDING`**, **`I18nNs.PLATFORM`**, **`I18nNs.FRONTEND_PRODUCTS`**) — реестр в **`i18n-default-namespace.js`**.
 
 ### 2. Использование в Lit компоненте
 
@@ -72,12 +72,11 @@ render() {
 Переводы организованы по namespace (файлам):
 
 ```javascript
-// Для landing.json
-t('hero.title')           // landing.hero.title
-t('header.login')         // landing.header.login
+// Без третьего аргумента — ключ внутри текущего дефолтного namespace (см. PlatformApp / setDefaultNamespace)
+t('hero.title')
 
-// Для других namespace
-t('title', {}, 'common')  // common.title
+// Явный другой бандл
+t('title', {}, 'common')
 ```
 
 ## API
@@ -100,18 +99,19 @@ const locale = i18n.getCurrentLocale(); // 'ru' | 'en'
 
 ### `i18n.t(key: string, params?: object, namespace?: string): string`
 
-Получает перевод по ключу.
+Получает перевод по ключу. Если **`namespace`** не передан, используется **`i18n.getDefaultNamespace()`** (изначально **`landing`**, приложение может выставить в **`initServices`**).
 
 ```javascript
-// Простое использование
 i18n.t('hero.title')
 
-// С параметрами
-i18n.t('hello', { name: 'John' })  // "Hello, {{name}}" → "Hello, John"
+i18n.t('hello', { name: 'John' })
 
-// С другим namespace
 i18n.t('submit', {}, 'common')
 ```
+
+### `i18n.setDefaultNamespace(namespace: string): void` / `i18n.getDefaultNamespace(): string`
+
+Дефолтный бандл для вызовов **`t`** без третьего аргумента. После **`registerCore`** задаётся из **`PlatformApp.initServices`** по **`i18nDefaultNamespaceForBaseUrl(getBaseUrl())`** ([`i18n-default-namespace.js`](./i18n-default-namespace.js)).
 
 ### `i18n.subscribe(callback: Function): Function`
 

@@ -666,12 +666,12 @@ export class ChatView extends PlatformElement {
 
     _getTitle() {
         const { focusedThreadId, selectedChannelId } = this._chat;
-        if (focusedThreadId) return this.i18n.t('chat_view.title_thread', {}, 'sync_ui');
-        if (!selectedChannelId) return this.i18n.t('chat_view.title_pick_channel', {}, 'sync_ui');
+        if (focusedThreadId) return this.i18n.t('chat_view.title_thread', {});
+        if (!selectedChannelId) return this.i18n.t('chat_view.title_pick_channel', {});
         const ch = this._selectedChannel();
         if (!ch) return selectedChannelId;
         if (SyncStore.isHiddenSyncChannelName(ch.name)) {
-            return this.i18n.t('chat_view.title_meeting', {}, 'sync_ui');
+            return this.i18n.t('chat_view.title_meeting', {});
         }
         if (ch.type === 'direct' && ch.peer && typeof ch.peer.display_name === 'string') {
             return ch.peer.display_name;
@@ -687,7 +687,7 @@ export class ChatView extends PlatformElement {
             ? ch.peer.display_name
             : (ch.name ?? ch.id);
         if (focusedThreadId) {
-            return this.i18n.t('chat_view.thread_subtitle', { channel: chLabel, thread_id: focusedThreadId }, 'sync_ui');
+            return this.i18n.t('chat_view.thread_subtitle', { channel: chLabel, thread_id: focusedThreadId });
         }
         if (ch.type === 'direct' && ch.peer && typeof ch.peer.user_id === 'string' && ch.peer.user_id !== '') {
             return SyncStore.getPeerPresenceSubtitle(ch.peer.user_id);
@@ -699,7 +699,7 @@ export class ChatView extends PlatformElement {
      * Слева в шапке: как в sync-channel-row — только аватар канала (или peer в DM), иначе инициалы.
      */
     _headerLeadingGraphic(channel) {
-        const ts = (key, params) => this.i18n.t(key, params ?? {}, 'sync_ui');
+        const ts = (key, params) => this.i18n.t(key, params ?? {});
         if (!channel) {
             return html``;
         }
@@ -750,7 +750,7 @@ export class ChatView extends PlatformElement {
 
     _openHeaderPeerProfile(peer) {
         if (!peer || typeof peer.user_id !== 'string' || peer.user_id === '') {
-            throw new Error(this.i18n.t('chat_view.err_peer_user_id', {}, 'sync_ui'));
+            throw new Error(this.i18n.t('chat_view.err_peer_user_id', {}));
         }
         const members = SyncStore.state.companyMembers?.list ?? [];
         const cm = members.find(m => m.user_id === peer.user_id);
@@ -787,7 +787,7 @@ export class ChatView extends PlatformElement {
         this.updateComplete.then(async () => {
             const ml = this._messageListEl();
             if (!ml) {
-                throw new Error(this.i18n.t('chat_view.err_message_list', {}, 'sync_ui'));
+                throw new Error(this.i18n.t('chat_view.err_message_list', {}));
             }
             await ml.scrollToMessageId(targetId);
             SyncStore.flashMessageHighlight(targetId);
@@ -800,7 +800,7 @@ export class ChatView extends PlatformElement {
     async _deleteSelected() {
         const syncApi = this.services.get('syncApi');
         const channelId = this._chat.selectedChannelId;
-        if (!channelId) throw new Error(this.i18n.t('chat_view.err_channel_not_selected', {}, 'sync_ui'));
+        if (!channelId) throw new Error(this.i18n.t('chat_view.err_channel_not_selected', {}));
         const ids = this._ui.selectedMessageIds;
         for (const mid of ids) {
             await syncApi.deleteMessage(channelId, mid);
@@ -813,7 +813,7 @@ export class ChatView extends PlatformElement {
     async _forwardSelectedToChannel(toChannelId) {
         const syncApi = this.services.get('syncApi');
         const fromId = this._chat.selectedChannelId;
-        if (!fromId) throw new Error(this.i18n.t('chat_view.err_channel_not_selected', {}, 'sync_ui'));
+        if (!fromId) throw new Error(this.i18n.t('chat_view.err_channel_not_selected', {}));
         const ids = this._ui.selectedMessageIds;
         for (const mid of ids) {
             await syncApi.forwardMessage(fromId, mid, toChannelId, null);
@@ -836,7 +836,7 @@ export class ChatView extends PlatformElement {
         const syncApi = this.services.get('syncApi');
         const fwd = this._ui.forwardMessage;
         const fromId = this._chat.selectedChannelId;
-        if (!fwd?.id || !fromId) throw new Error(this.i18n.t('chat_view.err_no_forward_message', {}, 'sync_ui'));
+        if (!fwd?.id || !fromId) throw new Error(this.i18n.t('chat_view.err_no_forward_message', {}));
         await syncApi.forwardMessage(fromId, fwd.id, toChannelId, null);
         SyncStore.setForwardModal(false, null);
         await SyncStore.loadMessages(syncApi, fromId);
@@ -877,7 +877,7 @@ export class ChatView extends PlatformElement {
         if (typeof spaceId !== 'string' || spaceId === '') {
             const first = this._spaces.list[0];
             if (!first?.id) {
-                this.error(this.i18n.t('chat_view.create_space_for_meeting', {}, 'sync_ui'));
+                this.error(this.i18n.t('chat_view.create_space_for_meeting', {}));
                 return;
             }
             spaceId = first.id;
@@ -896,7 +896,7 @@ export class ChatView extends PlatformElement {
     }
 
     render() {
-        const ts = (key, params) => this.i18n.t(key, params ?? {}, 'sync_ui');
+        const ts = (key, params) => this.i18n.t(key, params ?? {});
         const { selectedChannelId, focusedThreadId } = this._chat;
         const selectedChannel = this._selectedChannel();
         const pins = selectedChannel?.pinned_message_ids;

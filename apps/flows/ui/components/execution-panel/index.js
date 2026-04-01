@@ -62,10 +62,7 @@ export class ExecutionPanel extends PlatformElement {
     }
 
     get persistContextHelpText() {
-        return (
-            'Включено: каждый запуск использует тот же contextId — продолжается один state сессии. '
-            + 'Выключено: каждый запуск с новым контекстом.'
-        );
+        return this.i18n.t('execution_panel.persist_context_help');
     }
 
     _onPersistToggleClick() {

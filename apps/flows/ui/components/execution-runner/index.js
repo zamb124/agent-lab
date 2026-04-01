@@ -68,7 +68,7 @@ export class ExecutionRunner extends PlatformElement {
         }
 
         if (!this.flowId) {
-            this.error('flow-id не указан');
+            this.error(this.i18n.t('execution_runner.err_flow_id'));
             return;
         }
 
@@ -107,7 +107,7 @@ export class ExecutionRunner extends PlatformElement {
                 const fileParts = await this._prepareFileParts(files);
                 // Добавляем информацию о файлах к сообщению
                 const fileInfo = fileParts.map(f => f.text || f.name || 'file').join(', ');
-                messageText = `${message}\n\nПрикрепленные файлы: ${fileInfo}`;
+                messageText = `${message}${this.i18n.t('execution_runner.files_attached', { files: fileInfo })}`;
             }
 
             console.log('[ExecutionRunner] Отправка breakpoints:', breakpoints);
@@ -187,7 +187,7 @@ export class ExecutionRunner extends PlatformElement {
                 ? event.error.message 
                 : typeof event.error === 'string' 
                     ? event.error 
-                    : 'Неизвестная ошибка';
+                    : this.i18n.t('execution_runner.err_unknown');
             this.emit('execution-error', { error: errorMessage });
             return;
         }
@@ -243,7 +243,7 @@ export class ExecutionRunner extends PlatformElement {
         } else if (artifactName.startsWith('node_error_')) {
             const nodeId = data?.node_id || artifactName.replace('node_error_', '');
             if (nodeId) {
-                const errorMessage = data?.error || 'Ошибка выполнения ноды';
+                const errorMessage = data?.error || this.i18n.t('execution_runner.err_node');
                 console.log('[ExecutionRunner] Ошибка ноды:', nodeId, errorMessage);
                 
                 this._nodeErrors.set(nodeId, errorMessage);
@@ -304,7 +304,7 @@ export class ExecutionRunner extends PlatformElement {
                 console.log('[ExecutionRunner] message object:', message);
                 const text = this._extractTextFromMessage(message);
                 console.log('[ExecutionRunner] Extracted error text:', text);
-                this.emit('execution-error', { error: text || 'Выполнение завершилось с ошибкой' });
+                this.emit('execution-error', { error: text || this.i18n.t('execution_runner.err_failed') });
             } else if (state === 'input-required' || state === 'input_required') {
                 const metadata = event.metadata || {};
                 

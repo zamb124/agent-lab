@@ -76,7 +76,7 @@ export class FlowEditorPage extends PlatformElement {
                 }
             } catch (error) {
                 console.error('[FlowEditorPage] Failed to load flow:', error);
-                this.error('Ошибка загрузки агента: ' + error.message);
+                this.error(this.i18n.t('editor.load_agent_error', { message: error.message }));
             }
         } else {
             console.warn('[FlowEditorPage] No flowId provided!');
@@ -268,7 +268,11 @@ export class FlowEditorPage extends PlatformElement {
             await FlowsStore.refreshPreviewExecutionState(this.flowId, this.a2a, skillId);
         }
         
-        this.success(`Переключено на ${skillId === 'base' ? 'базовый флоу' : 'skill: ' + skillId}`);
+        if (skillId === 'base') {
+            this.success(this.i18n.t('editor.skill_switched_base'));
+        } else {
+            this.success(this.i18n.t('editor.skill_switched_named', { id: skillId }));
+        }
     }
 
     _onSaveCurrentSkillData(e) {
@@ -372,7 +376,7 @@ export class FlowEditorPage extends PlatformElement {
             canvas.showNodeError(nodeId, error);
         }
         
-        this.error(`Ошибка в ноде "${nodeId}"`);
+        this.error(this.i18n.t('editor.node_error', { nodeId }));
     }
 
     _onBreakpointHit(e) {
@@ -402,7 +406,7 @@ export class FlowEditorPage extends PlatformElement {
             FlowsStore.setPreviewExecutionStateFromBreakpoint(stateSnapshot);
         }
         
-        this.info(`Breakpoint hit на ноде "${nodeId}". Нажмите "Продолжить выполнение" для resume.`);
+        this.info(this.i18n.t('editor.breakpoint_hit', { nodeId }));
     }
 
     _onExecutionComplete(e) {
@@ -412,7 +416,7 @@ export class FlowEditorPage extends PlatformElement {
         
         if (executionPanel) {
             executionPanel.setRunning(false);
-            executionPanel.showResult(result || 'Выполнение завершено');
+            executionPanel.showResult(result || this.i18n.t('editor.execution_done_fallback'));
             executionPanel.clearBreakpoint();
         }
         FlowsStore.setAgentExecutionRunning(false);
@@ -434,7 +438,7 @@ export class FlowEditorPage extends PlatformElement {
             });
         }
         
-        this.success('Выполнение завершено');
+        this.success(this.i18n.t('editor.execution_finished_toast'));
     }
 
     _onInputRequired(e) {
@@ -481,7 +485,7 @@ export class FlowEditorPage extends PlatformElement {
             });
         }
         
-        this.error('Ошибка выполнения');
+        this.error(this.i18n.t('editor.execution_error'));
     }
 
     _onBreakpointsChanged(e) {
@@ -520,7 +524,7 @@ export class FlowEditorPage extends PlatformElement {
         
         FlowsStore.updateVariables(newVariables);
         this._checkForChanges();
-        this.success(`Переменная "${name}" удалена`);
+        this.success(this.i18n.t('editor.variable_deleted', { name }));
     }
 
     _onVariableSaved(e) {
@@ -551,7 +555,7 @@ export class FlowEditorPage extends PlatformElement {
         }
 
         this._checkForChanges();
-        this.success(`Переменная "${name}" сохранена`);
+        this.success(this.i18n.t('editor.variable_saved', { name }));
     }
 
     _onBreakpointCleared(e) {
@@ -565,7 +569,7 @@ export class FlowEditorPage extends PlatformElement {
 
     _onShowState(e) {
         const { contextId, taskId } = e.detail;
-        this.info(`Opening state viewer for context: ${contextId}, task: ${taskId}`);
+        this.info(this.i18n.t('editor.state_viewer_opening', { contextId, taskId }));
         
         const modal = document.createElement('state-modal');
         modal.contextId = contextId;
@@ -805,7 +809,7 @@ export class FlowEditorPage extends PlatformElement {
         await this._updateCanvasDirectly(editorState.skillsData, editorState.inheritedData);
         this._initialConfigHash = this._calculateConfigHash();
         this._hasUnsavedChanges = false;
-        this.success('Агент переинициализирован из репозитория');
+        this.success(this.i18n.t('editor.reinit_success'));
     }
 
     async _onFlowReloadFromBundle(e) {
@@ -827,12 +831,12 @@ export class FlowEditorPage extends PlatformElement {
             return;
         }
         const agreed = await confirm(
-            'Агент будет переинициализирован из bundle в репозитории. Несохранённые правки в редакторе будут потеряны.',
+            this.i18n.t('editor.reinit_confirm_message'),
             {
-                title: 'Переинициализация из репозитория',
+                title: this.i18n.t('editor.reinit_confirm_title'),
                 variant: 'warning',
-                confirmText: 'Переинициализировать',
-                cancelText: 'Отмена',
+                confirmText: this.i18n.t('editor.reinit_confirm_ok'),
+                cancelText: this.i18n.t('editor.cancel'),
             },
         );
         if (!agreed) {
@@ -897,7 +901,7 @@ export class FlowEditorPage extends PlatformElement {
             }
             
             this._checkForChanges();
-            this.success(`Node ID: ${oldId} → ${newId}`);
+            this.success(this.i18n.t('editor.node_id_renamed', { oldId, newId }));
         }
     }
 
@@ -941,17 +945,17 @@ export class FlowEditorPage extends PlatformElement {
             
             await this.a2a.saveFlowConfig(this.flowId, updatedConfig);
             
-            this.success('Flow сохранён, перезагрузка...');
+            this.success(this.i18n.t('editor.save_reloading'));
             
             const currentSkillId = this.state.value.currentSkillId;
             await FlowsStore.loadFlow(this.flowId, this.a2a, currentSkillId);
             
             FlowsStore.setDirty(false);
-            this.success('Flow успешно обновлён');
+            this.success(this.i18n.t('editor.save_updated'));
             this.emit('flow-saved', { flowId: this.flowId });
         } catch (error) {
             console.error('[FlowEditorPage] Save error:', error);
-            this.error('Ошибка сохранения: ' + error.message);
+            this.error(this.i18n.t('editor.save_error', { message: error.message }));
         }
     }
 
@@ -978,22 +982,21 @@ export class FlowEditorPage extends PlatformElement {
         }
         
         this._confirmModal.showModal({
-            title: 'Несохраненные изменения',
-            subtitle: 'У вас есть несохраненные изменения',
-            message: 'Вы хотите сохранить изменения перед выходом из редактора?',
+            title: this.i18n.t('editor.unsaved_title'),
+            subtitle: this.i18n.t('editor.unsaved_subtitle'),
+            message: this.i18n.t('editor.unsaved_message'),
             variant: 'warning',
-            confirmText: 'Сохранить и выйти',
-            cancelText: 'Отменить',
+            confirmText: this.i18n.t('editor.unsaved_confirm'),
+            cancelText: this.i18n.t('editor.unsaved_cancel'),
             confirmVariant: 'primary',
         });
         
-        // Добавляем третью кнопку "Выйти без сохранения"
         const footer = this._confirmModal.shadowRoot.querySelector('.modal-footer');
         if (footer && !footer.querySelector('.discard-btn')) {
             const discardBtn = document.createElement('button');
             discardBtn.type = 'button';
             discardBtn.className = 'modal-btn danger discard-btn';
-            discardBtn.textContent = 'Выйти без сохранения';
+            discardBtn.textContent = this.i18n.t('editor.unsaved_discard');
             discardBtn.addEventListener('click', () => {
                 this._confirmModal.close();
                 this._closeEditor();
@@ -1075,11 +1078,11 @@ export class FlowEditorPage extends PlatformElement {
                         <button 
                             class="floating-panel-btn expand-btn" 
                             @click=${this._toggleExpanded} 
-                            title="${panelExpanded ? 'Свернуть' : 'Развернуть'}"
+                            title="${panelExpanded ? this.i18n.t('editor.panel_collapse') : this.i18n.t('editor.panel_expand')}"
                         >
                             <platform-icon name="${panelExpanded ? 'minimize' : 'maximize'}" size="16"></platform-icon>
                         </button>
-                        <button class="floating-panel-btn" @click=${this._closePanel} title="Закрыть">
+                        <button class="floating-panel-btn" @click=${this._closePanel} title="${this.i18n.t('editor.panel_close')}">
                             <platform-icon name="x" size="16"></platform-icon>
                         </button>
                     </div>
@@ -1139,11 +1142,11 @@ export class FlowEditorPage extends PlatformElement {
                         <button 
                             class="floating-panel-btn expand-btn" 
                             @click=${this._toggleExpanded} 
-                            title="${panelExpanded ? 'Свернуть' : 'Развернуть'}"
+                            title="${panelExpanded ? this.i18n.t('editor.panel_collapse') : this.i18n.t('editor.panel_expand')}"
                         >
                             <platform-icon name="${panelExpanded ? 'minimize' : 'maximize'}" size="16"></platform-icon>
                         </button>
-                        <button class="floating-panel-btn" @click=${this._closePanel} title="Закрыть">
+                        <button class="floating-panel-btn" @click=${this._closePanel} title="${this.i18n.t('editor.panel_close')}">
                             <platform-icon name="x" size="16"></platform-icon>
                         </button>
                     </div>
@@ -1362,7 +1365,7 @@ export class FlowEditorPage extends PlatformElement {
             await this.a2a.saveFlowConfig(this.flowId, updatedConfig);
             await FlowsStore.loadFlow(this.flowId, this.a2a, this.state.value.currentSkillId);
             
-            this.success(`Триггер ${enabled ? 'включен' : 'отключен'}`);
+            this.success(enabled ? this.i18n.t('editor.trigger_enabled') : this.i18n.t('editor.trigger_disabled'));
         }
     }
 
@@ -1378,7 +1381,7 @@ export class FlowEditorPage extends PlatformElement {
             await this.a2a.saveFlowConfig(this.flowId, updatedConfig);
             await FlowsStore.loadFlow(this.flowId, this.a2a, this.state.value.currentSkillId);
             
-            this.success(`Триггер "${triggerId}" удален`);
+            this.success(this.i18n.t('editor.trigger_deleted', { id: triggerId }));
         }
     }
 
@@ -1395,7 +1398,7 @@ export class FlowEditorPage extends PlatformElement {
         await this.a2a.saveFlowConfig(this.flowId, updatedConfig);
         await FlowsStore.loadFlow(this.flowId, this.a2a, this.state.value.currentSkillId);
         
-        this.success(`Триггер "${triggerId}" сохранен`);
+        this.success(this.i18n.t('editor.trigger_saved', { id: triggerId }));
     }
 
     _renderHiddenComponents() {

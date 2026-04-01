@@ -463,7 +463,8 @@ export class NoteContent extends PlatformElement {
             }
 
             .summary-card {
-                background: rgba(153, 166, 249, 0.2);
+                background: var(--crm-surface-elevated);
+                border: 1px solid rgba(153, 166, 249, 0.4);
             }
 
             .tasks-card {
@@ -833,14 +834,29 @@ export class NoteContent extends PlatformElement {
             }
 
             @media (max-width: 1279px) {
+                :host {
+                    height: auto;
+                    min-height: 100%;
+                }
+
                 .layout {
                     grid-template-columns: minmax(0, 1fr);
+                    height: auto;
+                    min-height: 0;
+                    align-content: start;
+                    grid-template-rows: auto auto;
                 }
 
                 .note-main,
                 .sidebar {
                     width: 100%;
                     max-width: 100%;
+                }
+
+                .note-main.is-editing {
+                    height: auto;
+                    min-height: min(72dvh, 640px);
+                    grid-template-rows: auto minmax(260px, min(58dvh, 520px));
                 }
             }
 

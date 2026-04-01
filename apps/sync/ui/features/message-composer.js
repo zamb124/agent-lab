@@ -566,7 +566,7 @@ export class MessageComposer extends PlatformElement {
     }
 
     _ts(key, params) {
-        return this.i18n.t(key, params ?? {}, 'sync_ui');
+        return this.i18n.t(key, params ?? {});
     }
 
     _shortUsernameForReply(displayName) {

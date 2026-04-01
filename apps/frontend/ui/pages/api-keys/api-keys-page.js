@@ -244,7 +244,7 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     render() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         return html`
             <page-header 
                 title=${td('api_keys_page.title')} 
@@ -265,7 +265,7 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     _renderContent() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const { loading, keys } = this.state.value;
         
         if (loading) {
@@ -295,7 +295,7 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     _renderKeyCard(key) {
-        const t = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const t = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="key-card">
                 <div class="key-header">
@@ -368,15 +368,15 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     _onCopyKey(key) {
-        this.info(this.i18n.t('api_keys_page.info_no_full_key', {}, 'dashboard'));
+        this.info(this.i18n.t('api_keys_page.info_no_full_key', {}));
     }
 
     _onEditKey(key) {
-        this.info(this.i18n.t('api_keys_page.info_wip', {}, 'dashboard'));
+        this.info(this.i18n.t('api_keys_page.info_wip', {}));
     }
 
     async _onRevokeKey(key) {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         const confirmed = confirm(td('api_keys_page.confirm_revoke', { name: key.name }));
         if (!confirmed) return;
         

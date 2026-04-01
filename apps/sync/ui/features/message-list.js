@@ -61,21 +61,6 @@ function localDayKey(iso) {
     return `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}`;
 }
 
-function formatDayDividerLabel(iso) {
-    const msgDate = new Date(iso);
-    if (Number.isNaN(msgDate.getTime())) return '';
-    const msgStart = startOfLocalDay(msgDate);
-    const todayStart = startOfLocalDay(new Date());
-    const diffDays = Math.round((todayStart - msgStart) / 86400000);
-    if (diffDays === 0) return 'Сегодня';
-    if (diffDays === 1) return 'Вчера';
-    return msgDate.toLocaleDateString('ru-RU', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-    });
-}
-
 function buildListItems(messages) {
     const items = [];
     let prevDayKey = null;
@@ -268,6 +253,28 @@ export class MessageList extends PlatformElement {
         this._listResizeObs = null;
         /** @type {HTMLElement | null} */
         this._listResizeTarget = null;
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
+    }
+
+    _formatDayDividerLabel(iso) {
+        const msgDate = new Date(iso);
+        if (Number.isNaN(msgDate.getTime())) return '';
+        const msgStart = startOfLocalDay(msgDate);
+        const todayStart = startOfLocalDay(new Date());
+        const diffDays = Math.round((todayStart - msgStart) / 86400000);
+        if (diffDays === 0) return this._tp('message_list.today');
+        if (diffDays === 1) return this._tp('message_list.yesterday');
+        const loc = this.i18n.getCurrentLocale();
+        return msgDate.toLocaleDateString(loc === 'ru' ? 'ru-RU' : 'en-US', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+        });
     }
 
     _regenerateSkeletonPlan() {
@@ -290,6 +297,7 @@ export class MessageList extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._unsubscribe = SyncStore.subscribe(state => {
             const loading = state.messages.loading;
             if (loading && !this._wasLoading) {
@@ -330,6 +338,8 @@ export class MessageList extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._unsubscribe?.();
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
         this._detachListResizeObserver();
@@ -404,7 +414,7 @@ export class MessageList extends PlatformElement {
         }
         const syncApi = this.services.get('syncApi');
         if (!syncApi) {
-            throw new Error('syncApi сервис не найден.');
+            throw new Error(this._tp('message_list.err_sync_api'));
         }
         const prevHeight = listEl.scrollHeight;
         const prevTop = listEl.scrollTop;
@@ -444,35 +454,35 @@ export class MessageList extends PlatformElement {
      */
     async scrollToMessageId(messageId) {
         if (typeof messageId !== 'string' || messageId === '') {
-            throw new Error('messageId обязателен.');
+            throw new Error(this._tp('message_list.err_message_id'));
         }
         const list = this.shadowRoot?.querySelector('.list');
         if (!list) {
-            throw new Error('Список сообщений не готов.');
+            throw new Error(this._tp('message_list.err_list_not_ready'));
         }
         const syncApi = this.services.get('syncApi');
         if (!syncApi) {
-            throw new Error('syncApi сервис не найден.');
+            throw new Error(this._tp('message_list.err_sync_api'));
         }
         let bubble = list.querySelector(`message-bubble[data-msg-id="${CSS.escape(messageId)}"]`);
         let pagesLoaded = 0;
         while (!bubble) {
             if (!this.channelId) {
-                throw new Error('Канал не выбран.');
+                throw new Error(this._tp('message_list.err_channel'));
             }
             const history = SyncStore.getMessageHistoryState(this.channelId);
             if (!history.hasMoreOlder) {
-                throw new Error(`Сообщение ${messageId} не найдено в доступной истории.`);
+                throw new Error(this._tp('message_list.err_message_not_found', { id: messageId }));
             }
             const prevHeight = list.scrollHeight;
             const prevTop = list.scrollTop;
             const older = await SyncStore.loadOlderMessages(syncApi, this.channelId);
             if (!Array.isArray(older) || older.length === 0) {
-                throw new Error(`Сообщение ${messageId} не найдено в доступной истории.`);
+                throw new Error(this._tp('message_list.err_message_not_found', { id: messageId }));
             }
             pagesLoaded += 1;
             if (pagesLoaded > 300) {
-                throw new Error('Превышен лимит дозагрузки истории для перехода к сообщению.');
+                throw new Error(this._tp('message_list.err_history_limit'));
             }
             await this.updateComplete;
             const nextHeight = list.scrollHeight;
@@ -489,7 +499,7 @@ export class MessageList extends PlatformElement {
     async _onScrollToMessage(e) {
         const id = e.detail?.messageId;
         if (typeof id !== 'string' || id === '') {
-            this.error('messageId обязателен.');
+            this.error(this._tp('message_list.err_message_id'));
             return;
         }
         try {
@@ -518,7 +528,7 @@ export class MessageList extends PlatformElement {
                 <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
                     <div class="messages-loading-bar" aria-busy="true" aria-live="polite">
                         <glass-spinner size="md"></glass-spinner>
-                        <span class="messages-loading-label">Загрузка сообщений…</span>
+                        <span class="messages-loading-label">${this._tp('message_list.loading_messages')}</span>
                     </div>
                     <div class="skeleton-list" aria-hidden="true">
                         ${plan.map((row, i) => {
@@ -549,18 +559,18 @@ export class MessageList extends PlatformElement {
 
         return html`
             <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
-                ${filtered.length === 0 ? html`<div class="empty-text">Сообщений пока нет.</div>` : ''}
+                ${filtered.length === 0 ? html`<div class="empty-text">${this._tp('message_list.empty_messages')}</div>` : ''}
                 ${this._loadingOlder ? html`
                     <div class="messages-loading-bar" aria-live="polite">
                         <glass-spinner size="sm"></glass-spinner>
-                        <span class="messages-loading-label">Подгружаем историю…</span>
+                        <span class="messages-loading-label">${this._tp('message_list.loading_history')}</span>
                     </div>
                 ` : ''}
                 ${items.map((item) => {
                     if (item.kind === 'day') {
                         return html`
                             <div class="day-divider">
-                                <span>${formatDayDividerLabel(item.sentAt)}</span>
+                                <span>${this._formatDayDividerLabel(item.sentAt)}</span>
                             </div>
                         `;
                     }

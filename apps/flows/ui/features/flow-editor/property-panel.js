@@ -67,28 +67,17 @@ export class PropertyPanel extends PlatformElement {
         
         // Если это новая нода (нет code/prompt), добавляем дефолтные значения
         if (!config.code && !config.prompt && !config.name) {
-            const DEFAULT_CODE = `async def run(state):
-    """
-    Обработка state.
-    
-    Args:
-        state: Текущее состояние
-    
-    Returns:
-        Измененный state
-    """
-    return state
-`;
+            const defaultCode = this.i18n.t('node_defaults.python_stub');
             
             const defaults = {
-                'llm_node': { name: 'Новый LLM-узел', prompt: '', code: null },
-                'code': { name: 'Новая функция', code: DEFAULT_CODE },
-                'function': { name: 'Новая функция', code: DEFAULT_CODE },
-                'flow': { name: 'Вложенный flow', flow_id: '' },
-                'external_api': { name: 'Новый API', url: '', method: 'GET' },
-                'remote_flow': { name: 'Новый удалённый flow (A2A)', url: '' },
-                'mcp': { name: 'MCP Tool', server_id: '', tool_name: '' },
-                'channel': { name: 'Send to Channel', channel: 'telegram', action: 'send_message', channel_config: {} },
+                'llm_node': { name: this.i18n.t('node_defaults.name_llm_node'), prompt: '', code: null },
+                'code': { name: this.i18n.t('node_defaults.name_function'), code: defaultCode },
+                'function': { name: this.i18n.t('node_defaults.name_function'), code: defaultCode },
+                'flow': { name: this.i18n.t('node_defaults.name_flow'), flow_id: '' },
+                'external_api': { name: this.i18n.t('node_defaults.name_api'), url: '', method: 'GET' },
+                'remote_flow': { name: this.i18n.t('node_defaults.name_remote_flow'), url: '' },
+                'mcp': { name: this.i18n.t('node_defaults.name_mcp'), server_id: '', tool_name: '' },
+                'channel': { name: this.i18n.t('node_defaults.name_channel'), channel: 'telegram', action: 'send_message', channel_config: {} },
             };
             
             const typeDefaults = defaults[config.type] || {};

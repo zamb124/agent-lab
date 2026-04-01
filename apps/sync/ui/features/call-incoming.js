@@ -135,10 +135,17 @@ class CallIncoming extends PlatformElement {
         super();
         this._ringing = true;
         this._audio = null;
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this.style.setProperty(
             '--platform-modal-layer-z',
             String(nextModalLayerZIndex()),
@@ -148,6 +155,8 @@ class CallIncoming extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._stopRinging();
     }
 
@@ -188,14 +197,14 @@ class CallIncoming extends PlatformElement {
                         </svg>
                     </div>
                     <div class="info">
-                        <div class="label">Входящий звонок</div>
-                        <div class="title">${this.channelName ?? 'Звонок'}</div>
+                        <div class="label">${this._tp('call_incoming.incoming_label')}</div>
+                        <div class="title">${this.channelName ?? this._tp('chat_view.call')}</div>
                         <div class="subtitle">${this.callerName}</div>
                     </div>
                 </div>
                 <div class="actions">
-                    <button class="btn btn-accept" @click=${this._accept}>Принять</button>
-                    <button class="btn btn-decline" @click=${this._decline}>Отклонить</button>
+                    <button class="btn btn-accept" @click=${this._accept}>${this._tp('call_incoming.accept')}</button>
+                    <button class="btn btn-decline" @click=${this._decline}>${this._tp('call_incoming.decline')}</button>
                 </div>
             </div>
         `;

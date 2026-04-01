@@ -191,6 +191,8 @@ export class SyncDirectMemberRow extends PlatformElement {
 
     constructor() {
         super();
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
         this.member = null;
         this.active = false;
         this.iconOnly = false;
@@ -200,8 +202,13 @@ export class SyncDirectMemberRow extends PlatformElement {
         this._typingPeersByChannel = s.typingPeersByChannel ?? {};
     }
 
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
+    }
+
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._unsubscribe = SyncStore.subscribe((state) => {
             this._peerPresenceByUserId = state.peerPresenceByUserId ?? {};
             this._typingPeersByChannel = state.typingPeersByChannel ?? {};
@@ -210,6 +217,8 @@ export class SyncDirectMemberRow extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._avatarRetry.cancel();
         this._unsubscribe?.();
     }
@@ -242,7 +251,7 @@ export class SyncDirectMemberRow extends PlatformElement {
         return html`
             <div class="avatar-wrap">
                 ${inner}
-                ${on ? html`<span class="peer-online-dot" title="Онлайн" aria-hidden="true"></span>` : ''}
+                ${on ? html`<span class="peer-online-dot" title=${this._tp('direct_member.online_title')} aria-hidden="true"></span>` : ''}
             </div>
         `;
     }

@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingAbout extends PlatformElement {
     static styles = [
@@ -256,7 +257,7 @@ export class LandingAbout extends PlatformElement {
     }
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, 'landing');
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
         return html`
             <div class="about-container">
                 <div class="about-header">

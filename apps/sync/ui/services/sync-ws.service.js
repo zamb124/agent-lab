@@ -1,3 +1,5 @@
+import { t } from '@platform/services/i18n/i18n.service.js';
+
 /**
  * SyncWsService — управление WebSocket подключением к /sync/ws
  *
@@ -94,7 +96,7 @@ export class SyncWsService {
 
     sendJson(payload) {
         if (!this._socket || this._socket.readyState !== WebSocket.OPEN) {
-            throw new Error('WebSocket не подключен.');
+            throw new Error(t('composer.err_ws', {}));
         }
         this._socket.send(JSON.stringify(payload));
     }

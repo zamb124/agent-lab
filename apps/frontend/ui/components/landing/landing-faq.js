@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 const FAQ_SLOT_COUNT = 10;
 
@@ -178,7 +179,7 @@ export class LandingFaq extends PlatformElement {
     }
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, 'landing');
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
         const slots = Array.from({ length: FAQ_SLOT_COUNT }, (_, i) => i + 1);
         return html`
             <div class="faq-container">

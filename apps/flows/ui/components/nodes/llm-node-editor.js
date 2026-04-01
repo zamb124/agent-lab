@@ -392,12 +392,12 @@ export class LlmNodeEditor extends BaseNodeEditor {
             return;
         }
         const agreed = await confirm(
-            'Агент будет переинициализирован из bundle в репозитории. Несохранённые правки в редакторе будут потеряны.',
+            this.i18n.t('editor.reinit_confirm_message'),
             {
-                title: 'Переинициализация из репозитория',
+                title: this.i18n.t('editor.reinit_confirm_title'),
                 variant: 'warning',
-                confirmText: 'Переинициализировать',
-                cancelText: 'Отмена',
+                confirmText: this.i18n.t('editor.reinit_confirm_ok'),
+                cancelText: this.i18n.t('editor.cancel'),
             },
         );
         if (!agreed) {
@@ -418,7 +418,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
         return {
             type: 'object',
             properties: {
-                result: { type: 'string', description: 'Результат выполнения' }
+                result: { type: 'string', description: this.i18n.t('llm_node.schema_result_description') }
             },
             required: ['result']
         };
@@ -611,7 +611,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
     async _generatePromptAI() {
         const prompt = this.nodeConfig.prompt || '';
         if (!prompt.trim()) {
-            console.warn('Введите начальный промпт');
+            console.warn('[LlmNodeEditor] Enter an initial prompt first');
             return;
         }
         
@@ -628,7 +628,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 
                 this._updateConfig('prompt', improved);
             } catch (error) {
-                console.error('Ошибка генерации промпта:', error);
+                console.error('[LlmNodeEditor] Prompt generation failed:', error);
             }
         }
         
@@ -673,7 +673,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                             newTools.push(toolId);
                         }
                     } catch (error) {
-                        console.warn(`Не удалось загрузить tool ${toolId}, добавляем как ссылку`);
+                        console.warn(`[LlmNodeEditor] Could not load tool ${toolId}, using reference`);
                         newTools.push(toolId);
                     }
                 }
@@ -879,7 +879,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
 
     renderFields() {
         if (!this.nodeConfig) {
-            return html`<div>Загрузка...</div>`;
+            return html`<div>${this.i18n.t('llm_node.loading')}</div>`;
         }
         
         const config = this.nodeConfig;
@@ -891,33 +891,33 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Имя</span>
+                        <span class="form-label-text">${this.i18n.t('llm_node.field_name')}</span>
                     </div>
                     <input 
                         type="text" 
                         class="form-input"
                         .value=${config.name || ''}
                         @change=${(e) => this._onInputChange('name', e.target.value)}
-                        placeholder="Название агента"
+                        placeholder=${this.i18n.t('llm_node.placeholder_agent_name')}
                     />
                 </div>
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Описание</span>
+                        <span class="form-label-text">${this.i18n.t('llm_node.field_description')}</span>
                     </div>
                     <textarea 
                         class="form-input form-textarea"
                         .value=${config.description || ''}
                         @change=${(e) => this._onInputChange('description', e.target.value)}
-                        placeholder="Описание назначения"
+                        placeholder=${this.i18n.t('llm_node.placeholder_description')}
                         rows="2"
                     ></textarea>
                 </div>
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Теги</span>
+                        <span class="form-label-text">${this.i18n.t('llm_node.field_tags')}</span>
                     </div>
                     <tag-input 
                         .tags=${config.tags || []}
@@ -930,8 +930,8 @@ export class LlmNodeEditor extends BaseNodeEditor {
                     <prompt-editor
                         .value=${config.prompt || ''}
                         .variables=${this.flowVariables || {}}
-                        label="Промпт"
-                        placeholder="Ты - полезный ассистент..."
+                        label=${this.i18n.t('llm_node.prompt_label')}
+                        placeholder=${this.i18n.t('llm_node.prompt_placeholder')}
                         min-height="150"
                         .aiLoading=${this.aiLoading}
                         @change=${(e) => this._onInputChange('prompt', e.detail.value)}
@@ -956,31 +956,31 @@ export class LlmNodeEditor extends BaseNodeEditor {
 
                 <div class="section">
                     <div class="section-header">
-                        <span class="section-title">Область истории для LLM</span>
+                        <span class="section-title">${this.i18n.t('llm_node.section_messages_history')}</span>
                     </div>
                     <div class="loop-config">
                         <span class="form-label-hint">
-                            Полный диалог хранится в state; в модель уходит только выбранный срез (без удаления истории).
+                            ${this.i18n.t('llm_node.messages_history_hint')}
                         </span>
                         <div class="loop-config-row" style="margin-top: var(--space-2);">
                             <div class="form-label">
-                                <span class="form-label-text">Контекст для запросов к модели</span>
+                                <span class="form-label-text">${this.i18n.t('llm_node.messages_filter_label')}</span>
                             </div>
                             <select
                                 class="form-input form-select"
                                 .value=${this.messagesFilterMode === 'custom' ? 'custom' : this.messagesFilterMode}
                                 @change=${this._onMessagesFilterPresetChange}
                             >
-                                <option value="all">Весь flow (all)</option>
-                                <option value="own">Только эта нода (own)</option>
-                                <option value="custom">Выбранные ноды</option>
+                                <option value="all">${this.i18n.t('llm_node.messages_filter_all')}</option>
+                                <option value="own">${this.i18n.t('llm_node.messages_filter_own')}</option>
+                                <option value="custom">${this.i18n.t('llm_node.messages_filter_custom')}</option>
                             </select>
                         </div>
                         ${this.messagesFilterMode === 'custom'
                             ? html`
                                   <div class="messages-filter-nodes">
                                       ${(this.graphNodes || []).length === 0
-                                          ? html`<span class="form-label-hint">Нет нод в конфиге flow.</span>`
+                                          ? html`<span class="form-label-hint">${this.i18n.t('llm_node.messages_filter_no_nodes')}</span>`
                                           : (this.graphNodes || []).map(
                                                 (n) => html`
                                                     <label class="messages-filter-node-label">
@@ -1008,11 +1008,11 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 
                 <div class="section">
                     <div class="section-header mode-toggle-header">
-                        <span class="section-title">Режим вывода</span>
+                        <span class="section-title">${this.i18n.t('llm_node.section_output_mode')}</span>
                         <button
                             type="button"
                             class="reload-from-bundle-btn"
-                            title="Переинициализировать агента из репозитория (bundle)"
+                            title=${this.i18n.t('llm_node.reload_from_bundle_title')}
                             ?disabled=${!this._canReloadFromBundle() || this.reloadFromBundleLoading}
                             @click=${this._onReloadFromBundle}
                         >
@@ -1040,7 +1040,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                 Structured Output
                             </label>
                         </div>
-                        <span class="form-label-hint">Tools Mode: агент использует инструменты. Structured Output: JSON Schema для ответа.</span>
+                        <span class="form-label-hint">${this.i18n.t('llm_node.output_mode_hint')}</span>
                         
                         ${this.structuredOutput ? html`
                             <div class="loop-config-row" style="margin-top: var(--space-3);">
@@ -1051,7 +1051,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                     bounded
                                     .value=${JSON.stringify(this.outputSchema, null, 2)}
                                     min-height="120"
-                                    hint="JSON Schema для структурированного вывода"
+                                    hint=${this.i18n.t('llm_node.structured_schema_hint')}
                                     @change=${this._onOutputSchemaJsonChange}
                                 ></json-field-editor>
                             </div>
@@ -1074,10 +1074,10 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                 .value=${this.loopMode}
                                 @change=${this._onLoopModeChange}
                             >
-                                <option value="auto">Auto - текст завершает агента</option>
-                                <option value="explicit">Explicit - только через exit tool</option>
+                                <option value="auto">${this.i18n.t('llm_node.loop_mode_auto')}</option>
+                                <option value="explicit">${this.i18n.t('llm_node.loop_mode_explicit')}</option>
                             </select>
-                            <span class="form-label-hint">Auto: текстовый ответ = завершение. Explicit: только через finish tool.</span>
+                            <span class="form-label-hint">${this.i18n.t('llm_node.loop_mode_hint')}</span>
                         </div>
                         
                         ${this.loopMode === 'explicit' ? html`
@@ -1096,7 +1096,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                         return html`<option value="${toolId}">${toolName}</option>`;
                                     })}
                                 </select>
-                                <span class="form-label-hint">Какой tool завершает цикл агента</span>
+                                <span class="form-label-hint">${this.i18n.t('llm_node.exit_tool_hint')}</span>
                             </div>
                             
                             <div class="checkbox-row">
@@ -1106,9 +1106,9 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                     .checked=${this.strict}
                                     @change=${this._onStrictChange}
                                 />
-                                <label for="strict-mode">Строгий режим</label>
+                                <label for="strict-mode">${this.i18n.t('llm_node.strict_mode_label')}</label>
                             </div>
-                            <span class="form-label-hint">Если включен - текст без exit tool вызывает reminder.</span>
+                            <span class="form-label-hint">${this.i18n.t('llm_node.strict_mode_hint')}</span>
                             
                             ${this.strict ? html`
                                 <div class="loop-config-row">
@@ -1120,9 +1120,9 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                         rows="2"
                                         .value=${this.reminderMessage}
                                         @change=${this._onReminderMessageChange}
-                                        placeholder="Ты не вызвал tool для завершения..."
+                                        placeholder=${this.i18n.t('llm_node.reminder_placeholder')}
                                     ></textarea>
-                                    <span class="form-label-hint">Кастомное напоминание (опционально)</span>
+                                    <span class="form-label-hint">${this.i18n.t('llm_node.reminder_hint')}</span>
                                 </div>
                             ` : ''}
                         ` : ''}
@@ -1139,17 +1139,17 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                 .value=${this.maxIterations}
                                 @change=${this._onMaxIterationsChange}
                             />
-                            <span class="form-label-hint">Максимум итераций перед принудительным выходом</span>
+                            <span class="form-label-hint">${this.i18n.t('llm_node.max_iterations_hint')}</span>
                         </div>
                     </div>
                 </div>
                 
                 <div class="section">
                     <div class="section-header">
-                        <span class="section-title">Инструменты</span>
+                        <span class="section-title">${this.i18n.t('llm_node.section_tools')}</span>
                         <div class="tools-actions">
-                            <button class="section-add-btn" @click=${this._onAddInlineTool}>Inline ▼</button>
-                            <button class="section-add-btn" @click=${this._onAddTool}>+ Добавить</button>
+                            <button class="section-add-btn" @click=${this._onAddInlineTool}>${this.i18n.t('llm_node.inline_menu')}</button>
+                            <button class="section-add-btn" @click=${this._onAddTool}>${this.i18n.t('llm_node.add_tool')}</button>
                             
                             ${this.showAddMenu ? html`
                                 <div class="tools-add-menu" @click=${(e) => e.stopPropagation()}>
@@ -1202,7 +1202,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                     </div>
                                 `;
                             })
-                            : html`<div class="empty-tools">Нет инструментов</div>`
+                            : html`<div class="empty-tools">${this.i18n.t('llm_node.empty_tools')}</div>`
                         }
                     </div>
                 </div>

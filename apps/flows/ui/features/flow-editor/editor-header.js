@@ -255,7 +255,7 @@ export class EditorHeader extends PlatformElement {
         return html`
             <header class="header">
                 <div class="header-left">
-                    <button class="back-btn" @click=${this._onBack} title="Назад">
+                    <button class="back-btn" @click=${this._onBack} title=${this.i18n.t('editor_header.back')}>
                         <platform-icon name="arrow-left" size="20"></platform-icon>
                     </button>
                     
@@ -284,7 +284,7 @@ export class EditorHeader extends PlatformElement {
                             type="button"
                             class="mode-btn ${this.mode === 'run' ? 'active' : ''} ${this.agentExecutionRunning ? 'agent-stop' : ''}"
                             @click=${this._onRunModeButtonClick}
-                            title=${this.agentExecutionRunning ? 'Остановить' : 'Run'}
+                            title=${this.agentExecutionRunning ? this.i18n.t('editor_header.stop') : this.i18n.t('editor_header.run')}
                         >
                             <platform-icon
                                 name="${this.agentExecutionRunning ? 'stop' : 'play'}"
@@ -294,7 +294,7 @@ export class EditorHeader extends PlatformElement {
                         <button
                             type="button"
                             class="mode-btn"
-                            title="Переинициализировать агента из репозитория (bundle)"
+                            title=${this.i18n.t('llm_node.reload_from_bundle_title')}
                             ?disabled=${!this._canReloadFromBundle() || this.reloadFromBundleLoading}
                             @click=${this._onReloadFromBundleClick}
                         >

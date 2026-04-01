@@ -72,7 +72,7 @@ export class EmbedCodeModal extends PlatformModal {
             const data = await this.services.get('embed').getCode(embedId);
             this._code = data.html_code;
         } catch (error) {
-            const message = error instanceof Error ? error.message : this.i18n.t('embed_code_modal.load_error', {}, 'dashboard');
+            const message = error instanceof Error ? error.message : this.i18n.t('embed_code_modal.load_error', {});
             this.error(message);
             throw error;
         } finally {
@@ -110,7 +110,7 @@ export class EmbedCodeModal extends PlatformModal {
         try {
             const ok = document.execCommand('copy');
             if (!ok) {
-                throw new Error(this.i18n.t('embed_code_modal.err_copy_cmd', {}, 'dashboard'));
+                throw new Error(this.i18n.t('embed_code_modal.err_copy_cmd', {}));
             }
         } finally {
             document.body.removeChild(ta);
@@ -118,7 +118,7 @@ export class EmbedCodeModal extends PlatformModal {
     }
 
     async _handleCopy() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         if (!this._code) {
             this.error(td('embed_code_modal.err_no_code'));
             return;
@@ -133,11 +133,11 @@ export class EmbedCodeModal extends PlatformModal {
     }
 
     renderHeader() {
-        return this.i18n.t('embed_code_modal.header', {}, 'dashboard');
+        return this.i18n.t('embed_code_modal.header', {});
     }
 
     renderHeaderActions() {
-        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        const td = (k) => this.i18n.t(k, {});
         if (this._loading || !this._code) {
             return html``;
         }
@@ -155,7 +155,7 @@ export class EmbedCodeModal extends PlatformModal {
     }
 
     renderBody() {
-        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        const td = (k) => this.i18n.t(k, {});
         return this._loading
             ? html`<div class="loading-state">${td('embed_code_modal.loading')}</div>`
             : html`

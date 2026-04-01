@@ -273,6 +273,7 @@ class CallJoinPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         try {
             await Promise.all([this._fetchLinkInfo(), this._fetchCurrentUser()]);
         } finally {
@@ -281,16 +282,27 @@ class CallJoinPage extends PlatformElement {
         }
     }
 
+    disconnectedCallback() {
+        super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
+    }
+
     async _fetchLinkInfo() {
         try {
             const res = await fetch(`${API_BASE}/join/${token}`);
             if (!res.ok) {
-                this._error = res.status === 404 ? 'Ссылка не найдена или истекла.' : 'Ошибка загрузки информации о звонке.';
+                this._error = res.status === 404
+                    ? this._tp('call_join.err_link_expired')
+                    : this._tp('call_join.err_load_info');
                 return;
             }
             this._linkInfo = await res.json();
         } catch {
-            this._error = 'Не удалось загрузить информацию о звонке.';
+            this._error = this._tp('call_join.err_load_failed');
         }
     }
 
@@ -319,8 +331,9 @@ class CallJoinPage extends PlatformElement {
                 };
             const res = await fetch(`${API_BASE}/join/${token}`, fetchOptions);
             if (!res.ok) {
-                const err = await res.json().catch(() => ({ detail: 'Ошибка входа.' }));
-                throw new Error(err.detail || 'Ошибка входа.');
+                const fallback = this._tp('call_join.err_join');
+                const err = await res.json().catch(() => ({ detail: fallback }));
+                throw new Error(err.detail || fallback);
             }
             this._joinData = await res.json();
         } catch (e) {
@@ -398,16 +411,16 @@ class CallJoinPage extends PlatformElement {
                         <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
                     </svg>
                 </div>
-                <h1>Приглашение на звонок</h1>
+                <h1>${this._tp('call_join.title')}</h1>
             </div>
 
             <div class="meta">
-                ${channelLabel ? html`<span>Канал: ${channelLabel}</span>` : ''}
+                ${channelLabel ? html`<span>${this._tp('call_join.channel_label')} ${channelLabel}</span>` : ''}
                 <div class="organizer-row">
                     <div class="organizer-avatar">${this._renderOrganizerAvatar(this._linkInfo)}</div>
                     <div class="organizer-text">
                         <div class="organizer-name">${this._linkInfo.creator_display_name}</div>
-                        <div class="organizer-label">Организатор</div>
+                        <div class="organizer-label">${this._tp('call_join.organizer')}</div>
                     </div>
                 </div>
             </div>
@@ -421,14 +434,14 @@ class CallJoinPage extends PlatformElement {
                         ?disabled=${this._loading}
                         @click=${this._join}
                     >
-                        ${this._loading ? html`<div class="spinner"></div>` : `Войти как ${this._currentUser.name ?? this._currentUser.user_id}`}
+                        ${this._loading ? html`<div class="spinner"></div>` : this._tp('call_join.join_as', { name: this._currentUser.name ?? this._currentUser.user_id })}
                     </button>
                 `
                 : html`
                     <div class="guest-join-row">
                         <input
                             type="text"
-                            placeholder="Ваше имя"
+                            placeholder=${this._tp('call_join.guest_placeholder')}
                             maxlength="64"
                             .value=${this._guestName}
                             @input=${e => this._guestName = e.target.value}
@@ -440,14 +453,14 @@ class CallJoinPage extends PlatformElement {
                             ?disabled=${!this._canJoin() || this._loading}
                             @click=${this._join}
                         >
-                            ${this._loading ? html`<div class="spinner"></div>` : 'Как гость'}
+                            ${this._loading ? html`<div class="spinner"></div>` : this._tp('call_join.guest_button')}
                         </button>
                     </div>
 
-                    <div class="divider">или</div>
+                    <div class="divider">${this._tp('call_join.divider_or')}</div>
 
                     <button class="btn btn-ghost" @click=${this._loginRedirect}>
-                        Войти в аккаунт
+                        ${this._tp('call_join.login_account')}
                     </button>
                 `
             }

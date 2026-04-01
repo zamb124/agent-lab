@@ -189,7 +189,7 @@ export class DashboardHeader extends PlatformElement {
     }
 
     render() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         return html`
             <header class="header">
                 <a href="/dashboard" class="logo" @click=${(e) => this._handleNavigation('/dashboard', e)}>

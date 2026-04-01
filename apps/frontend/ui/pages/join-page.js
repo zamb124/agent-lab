@@ -265,12 +265,12 @@ export class JoinPage extends PlatformElement {
             const data = await resp.json();
 
             if (!resp.ok) {
-                const msg = data.detail || this.i18n.t('join_page.accept_error', {}, 'dashboard');
+                const msg = data.detail || this.i18n.t('join_page.accept_error', {});
                 if (resp.status === 410) {
                     this._error = data.detail;
                     this._state = 'expired';
                 } else if (resp.status === 403) {
-                    this._error = this.i18n.t('join_page.invalid_platform', {}, 'dashboard');
+                    this._error = this.i18n.t('join_page.invalid_platform', {});
                     this._state = 'invalid';
                 } else if (resp.status === 404) {
                     this._error = data.detail;
@@ -287,7 +287,7 @@ export class JoinPage extends PlatformElement {
             this._alreadyMember = data.already_member;
             this._state = 'success';
         } catch (e) {
-            this._error = this.i18n.t('join_page.network_error', {}, 'dashboard');
+            this._error = this.i18n.t('join_page.network_error', {});
             this._state = 'error';
         } finally {
             this._loading = false;
@@ -307,7 +307,7 @@ export class JoinPage extends PlatformElement {
                 window.location.href = data.auth_url;
             }
         } catch (e) {
-            this._error = this.i18n.t('join_page.oauth_error', {}, 'dashboard');
+            this._error = this.i18n.t('join_page.oauth_error', {});
             this._loading = false;
         }
     }
@@ -326,8 +326,8 @@ export class JoinPage extends PlatformElement {
     }
 
     _renderBody() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
-        const roleLabel = (r) => this.i18n.t(`team_roles.${r}`, {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
+        const roleLabel = (r) => this.i18n.t(`team_roles.${r}`, {});
         switch (this._state) {
             case 'loading':
             case 'accepting':

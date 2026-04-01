@@ -1,5 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { FrontendStore } from '../store/frontend.store.js';
 import { openUrlSameWindowOrTab } from '@platform/lib/utils/native-app-shell.js';
 import '@platform/lib/components/company-modal.js';
@@ -266,7 +267,7 @@ export class DashboardPage extends PlatformElement {
 
     render() {
         const { servicesLoading, billingLoading } = this.state.value;
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
 
         if (servicesLoading && billingLoading) {
             return html`
@@ -293,8 +294,8 @@ export class DashboardPage extends PlatformElement {
     }
 
     _renderServices() {
-        const tp = (key, params) => this.i18n.t(key, params ?? {}, 'platform');
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const tp = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.PLATFORM);
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const services = [
             {
                 id: 'flows',
@@ -365,7 +366,7 @@ export class DashboardPage extends PlatformElement {
 
         const targetPort = servicePortById[serviceId];
         if (!targetPort) {
-            throw new Error(this.i18n.t('console_home.err_unknown_service', { id: serviceId }, 'dashboard'));
+            throw new Error(this.i18n.t('console_home.err_unknown_service', { id: serviceId }));
         }
 
         if (window.location.port === targetPort) {
@@ -384,7 +385,7 @@ export class DashboardPage extends PlatformElement {
     }
 
     _renderQuickActions() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const actions = [
             {
                 iconName: 'share',
@@ -434,7 +435,7 @@ export class DashboardPage extends PlatformElement {
 
     _renderStats() {
         const { subscription, servicesStatus } = this.state.value;
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
 
         const balance = subscription?.balance ?? 0;
         const spent = subscription?.current_month_spent ?? 0;

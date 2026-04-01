@@ -759,7 +759,7 @@ export class CodeEditor extends PlatformElement {
     }
 
     _notifyCopied() {
-        const message = 'Код скопирован';
+        const message = this.i18n.t('code_editor.copied');
         try {
             this.success(message);
         } catch {
@@ -794,7 +794,7 @@ export class CodeEditor extends PlatformElement {
             this._notifyCopied();
         } catch (e) {
             console.warn('Copy failed:', e);
-            this.error('Не удалось скопировать');
+            this.error(this.i18n.t('code_editor.copy_failed'));
         }
     }
 
@@ -945,7 +945,7 @@ export class CodeEditor extends PlatformElement {
                 `)}
                 ${this._templates.length === 0 ? html`
                     <div class="template-item">
-                        <span class="template-desc">Нет шаблонов</span>
+                        <span class="template-desc">${this.i18n.t('code_editor.no_templates')}</span>
                     </div>
                 ` : ''}
             </div>
@@ -959,7 +959,7 @@ export class CodeEditor extends PlatformElement {
             <div class="editor-wrapper">
                 ${this.showHeader ? html`
                     <div class="editor-header">
-                        <span class="editor-title">Код</span>
+                        <span class="editor-title">${this.i18n.t('code_editor.title_code')}</span>
                         <div class="editor-actions">
                             ${this.showLanguageSwitch ? html`
                                 <div class="lang-toggle">
@@ -989,7 +989,7 @@ export class CodeEditor extends PlatformElement {
                                         @click=${this._toggleTemplates}
                                     >
                                         <platform-icon name="file" size="12"></platform-icon>
-                                        Шаблоны
+                                        ${this.i18n.t('code_editor.templates')}
                                     </button>
                                     ${this._renderTemplatesDropdown()}
                                 </div>
@@ -1006,7 +1006,7 @@ export class CodeEditor extends PlatformElement {
                                 <platform-icon name="copy" size="12"></platform-icon>
                             </button>
                             
-                            <button class="editor-btn" @click=${this._toggleFullscreen} title="${this._fullscreen ? 'Свернуть' : 'На весь экран'}">
+                            <button class="editor-btn" @click=${this._toggleFullscreen} title="${this._fullscreen ? this.i18n.t('code_editor.fullscreen_min') : this.i18n.t('code_editor.fullscreen_max')}">
                                 <platform-icon name="${this._fullscreen ? 'minimize' : 'maximize'}" size="12"></platform-icon>
                             </button>
                         </div>

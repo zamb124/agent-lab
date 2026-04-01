@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/glass-button.js';
@@ -193,13 +194,13 @@ export class LandingCta extends PlatformElement {
         event.preventDefault();
 
         if (!this.formData.name || !this.formData.email) {
-            this.warning(this.i18n.t('cta.toast_required', {}, 'landing'));
+            this.warning(this.i18n.t('cta.toast_required', {}, I18nNs.LANDING));
             return;
         }
 
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(this.formData.email)) {
-            this.warning(this.i18n.t('cta.toast_email_invalid', {}, 'landing'));
+            this.warning(this.i18n.t('cta.toast_email_invalid', {}, I18nNs.LANDING));
             return;
         }
 
@@ -215,20 +216,20 @@ export class LandingCta extends PlatformElement {
             });
 
             if (response.ok) {
-                this.success(this.i18n.t('cta.toast_success', {}, 'landing'));
+                this.success(this.i18n.t('cta.toast_success', {}, I18nNs.LANDING));
                 this._closeModal();
             } else {
-                this.error(this.i18n.t('cta.toast_error', {}, 'landing'));
+                this.error(this.i18n.t('cta.toast_error', {}, I18nNs.LANDING));
             }
         } catch {
-            this.error(this.i18n.t('cta.toast_error', {}, 'landing'));
+            this.error(this.i18n.t('cta.toast_error', {}, I18nNs.LANDING));
         } finally {
             this.isSubmitting = false;
         }
     }
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, 'landing');
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
         return html`
             <div class="blur-bg-primary"></div>
             <div class="blur-bg-white"></div>

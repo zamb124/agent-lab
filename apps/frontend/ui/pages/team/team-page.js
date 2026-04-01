@@ -265,7 +265,7 @@ export class TeamPage extends PlatformElement {
     }
 
     render() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         return html`
             <page-header title=${td('team_page.title')}>
                 <button slot="actions" class="primary-button" @click=${this._onCopyInviteLink}>
@@ -278,7 +278,7 @@ export class TeamPage extends PlatformElement {
     }
 
     _renderContent() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const { members, loading } = this.state.value;
         
         if (loading) {
@@ -306,8 +306,8 @@ export class TeamPage extends PlatformElement {
     }
 
     _renderMemberCard(member) {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
-        const roleLabel = (r) => this.i18n.t(`team_roles.${r}`, {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
+        const roleLabel = (r) => this.i18n.t(`team_roles.${r}`, {});
         const initials = this._getInitials(member.name);
         const retry = this._getAvatarRetry(member.user_id);
         const originalUrl = member.avatar_url ?? null;
@@ -373,7 +373,7 @@ export class TeamPage extends PlatformElement {
     }
 
     async _onCopyInviteLink() {
-        const td = (key) => this.i18n.t(key, {}, 'dashboard');
+        const td = (key) => this.i18n.t(key, {});
         let result;
         try {
             result = await this.services.get('team').generateInviteLink('developer');
@@ -405,7 +405,7 @@ export class TeamPage extends PlatformElement {
     }
 
     async _onRemoveMember(member) {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const confirmed = confirm(td('team_page.confirm_remove', { name: member.name }));
         if (!confirmed) return;
         

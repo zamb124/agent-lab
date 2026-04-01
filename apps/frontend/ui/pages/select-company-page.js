@@ -242,7 +242,7 @@ export class SelectCompanyPage extends PlatformElement {
     }
 
     render() {
-        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         if (this.loading) {
             return html`
                 <div class="container">
@@ -304,7 +304,7 @@ export class SelectCompanyPage extends PlatformElement {
     }
 
     _getRoleLabel(role) {
-        const td = (key) => this.i18n.t(key, {}, 'dashboard');
+        const td = (key) => this.i18n.t(key, {});
         const labels = {
             owner: td('select_company.role_owner'),
             admin: td('select_company.role_admin'),

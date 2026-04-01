@@ -158,7 +158,7 @@ export class FlowsSidebar extends PlatformElement {
         const elementConstructor = customElements.get('flow-create-modal');
         
         if (!elementConstructor) {
-            this.error('Модальное окно не загружено');
+            this.error(this.i18n.t('flows_sidebar.err_modal_not_loaded'));
             return;
         }
         
@@ -174,13 +174,13 @@ export class FlowsSidebar extends PlatformElement {
             
             try {
                 const createdFlow = await FlowsStore.createFlow(config, this.a2a);
-                this.success(`Flow "${createdFlow.name}" создан`);
+                this.success(this.i18n.t('flows_sidebar.flow_created', { name: createdFlow.name }));
                 
                 setTimeout(() => {
                     this._editFlow(createdFlow.flow_id);
                 }, 100);
             } catch (error) {
-                this.error(`Ошибка создания: ${error.message}`);
+                this.error(this.i18n.t('flows_sidebar.err_create', { message: error.message }));
             }
         });
         
@@ -261,9 +261,9 @@ export class FlowsSidebar extends PlatformElement {
 
     async _deleteFlow(flowId) {
         const modal = document.createElement('confirm-modal');
-        modal.title = 'Удалить flow?';
-        modal.message = `Вы уверены что хотите удалить flow "${flowId}"? Это действие необратимо.`;
-        modal.confirmText = 'Удалить';
+        modal.title = this.i18n.t('flows_sidebar.delete_flow_title');
+        modal.message = this.i18n.t('flows_sidebar.delete_flow_message', { id: flowId });
+        modal.confirmText = this.i18n.t('context_menu.delete');
         modal.confirmVariant = 'danger';
         document.body.appendChild(modal);
         
@@ -274,18 +274,18 @@ export class FlowsSidebar extends PlatformElement {
         
         try {
             await FlowsStore.deleteFlow(flowId, this.a2a);
-            this.success('Flow удалён');
+            this.success(this.i18n.t('flows_sidebar.flow_deleted'));
         } catch (error) {
-            this.error(`Ошибка удаления: ${error.message}`);
+            this.error(this.i18n.t('flows_sidebar.err_delete', { message: error.message }));
             throw error;
         }
     }
 
     async _deleteSkill(flowId, skillId) {
         const modal = document.createElement('confirm-modal');
-        modal.title = 'Удалить скилл?';
-        modal.message = `Вы уверены что хотите удалить скилл "${skillId}"?`;
-        modal.confirmText = 'Удалить';
+        modal.title = this.i18n.t('flows_sidebar.delete_skill_title');
+        modal.message = this.i18n.t('flows_sidebar.delete_skill_message', { id: skillId });
+        modal.confirmText = this.i18n.t('context_menu.delete');
         modal.confirmVariant = 'danger';
         document.body.appendChild(modal);
         
@@ -296,9 +296,9 @@ export class FlowsSidebar extends PlatformElement {
         
         try {
             await FlowsStore.deleteSkill(flowId, skillId, this.a2a);
-            this.success('Скилл удален');
+            this.success(this.i18n.t('flows_sidebar.skill_deleted'));
         } catch (error) {
-            this.error(`Ошибка удаления: ${error.message}`);
+            this.error(this.i18n.t('flows_sidebar.err_delete', { message: error.message }));
             throw error;
         }
     }
@@ -322,11 +322,11 @@ export class FlowsSidebar extends PlatformElement {
                 @collapse-change=${(e) => this.collapsed = e.detail.collapsed}
                 @mobile-change=${(e) => this.mobileOpen = e.detail.open}
             >
-                <sidebar-section title="Все flows" icon="folder" ?collapsed=${this.collapsed}>
+                <sidebar-section title=${this.i18n.t('flows_sidebar.section_all_flows')} icon="folder" ?collapsed=${this.collapsed}>
                     <button 
                         slot="actions"
                         class="create-btn" 
-                        title="Создать flow" 
+                        title=${this.i18n.t('flows_sidebar.create_flow_tooltip')} 
                         @click=${this._createFlow}
                     >
                         <platform-icon name="plus" size="12"></platform-icon>
@@ -356,7 +356,7 @@ export class FlowsSidebar extends PlatformElement {
                         </a>
                         <button class="footer-link" @click=${this._openSessions}>
                             <platform-icon name="chat" size="16"></platform-icon>
-                            <span>Сессии</span>
+                            <span>${this.i18n.t('flows_sidebar.footer_sessions')}</span>
                         </button>
                         <button class="footer-link" @click=${this._openMCPServers}>
                             <platform-icon name="cloud" size="16"></platform-icon>

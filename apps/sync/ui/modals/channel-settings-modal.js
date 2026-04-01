@@ -370,6 +370,10 @@ export class ChannelSettingsModal extends PlatformModal {
         this._unsub?.();
     }
 
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
+    }
+
     updated(changed) {
         super.updated(changed);
         const ch = this.channel;
@@ -414,7 +418,7 @@ export class ChannelSettingsModal extends PlatformModal {
             const syncApi = this.services.get('syncApi');
             const rows = await syncApi.getChannelMembers(channelId);
             if (!Array.isArray(rows)) {
-                throw new Error('Ожидался массив участников канала.');
+                throw new Error(this._tp('channel_settings.err_members_array'));
             }
             this._members = rows;
         } catch (e) {
@@ -449,7 +453,7 @@ export class ChannelSettingsModal extends PlatformModal {
         const syncApi = this.services.get('syncApi');
         const res = await syncApi.uploadFile(file);
         if (typeof res?.file_id !== 'string' || res.file_id === '' || typeof res?.url !== 'string' || res.url === '') {
-            throw new Error('Некорректный ответ загрузки файла (нет file_id или url).');
+            throw new Error(this._tp('channel_settings.err_upload_response'));
         }
         this._editAvatarUrl = res.url;
     }
@@ -457,15 +461,15 @@ export class ChannelSettingsModal extends PlatformModal {
     async _createChannel() {
         const ch = this.channel;
         if (!ch) {
-            throw new Error('Канал не выбран.');
+            throw new Error(this._tp('channel_settings.err_no_channel'));
         }
         const spaceId = ch.space_id;
         if (typeof spaceId !== 'string' || spaceId === '') {
-            throw new Error('Сначала выбери пространство слева.');
+            throw new Error(this._tp('channel_settings.err_pick_space'));
         }
         const name = this._editName.trim();
         if (!name) {
-            throw new Error('Имя канала обязательно.');
+            throw new Error(this._tp('channel_settings.err_name_required'));
         }
         this._savingProfile = true;
         this._error = null;
@@ -521,11 +525,11 @@ export class ChannelSettingsModal extends PlatformModal {
     async _saveChannelProfile() {
         const ch = this.channel;
         if (!ch?.id) {
-            throw new Error('Канал не выбран.');
+            throw new Error(this._tp('channel_settings.err_no_channel'));
         }
         const name = this._editName.trim();
         if (!name) {
-            throw new Error('Имя канала обязательно.');
+            throw new Error(this._tp('channel_settings.err_name_required'));
         }
         this._savingProfile = true;
         this._error = null;
@@ -638,7 +642,7 @@ export class ChannelSettingsModal extends PlatformModal {
     async _submitAdds() {
         const channelId = this.channel?.id;
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(this._tp('channel_settings.err_channel_id'));
         }
         const ids = Object.keys(this._selectedForAdd);
         if (ids.length === 0) return;
@@ -668,7 +672,9 @@ export class ChannelSettingsModal extends PlatformModal {
         if (!this.channel) {
             return '';
         }
-        return this.createMode ? 'Создать канал' : 'Настройки канала';
+        return this.createMode
+            ? this._tp('channel_settings.header_create')
+            : this._tp('channel_settings.header_edit');
     }
 
     /**
@@ -678,14 +684,14 @@ export class ChannelSettingsModal extends PlatformModal {
      */
     _spaceNameForMeta(spaceId) {
         if (typeof spaceId !== 'string' || spaceId === '') {
-            throw new Error('spaceId обязателен.');
+            throw new Error(this._tp('channel_settings.err_space_id'));
         }
         const sp = this._spacesList.find(x => x.id === spaceId);
         if (!sp) {
-            throw new Error('Пространство не найдено в списке. Обнови страницу.');
+            throw new Error(this._tp('channel_settings.err_space_not_found'));
         }
         if (typeof sp.name !== 'string' || sp.name.trim() === '') {
-            throw new Error('У пространства нет имени.');
+            throw new Error(this._tp('channel_settings.err_space_no_name'));
         }
         return sp.name.trim();
     }
@@ -699,11 +705,14 @@ export class ChannelSettingsModal extends PlatformModal {
         const candidates = this._candidatesForAdd();
         const pickCount = this._selectedCount();
 
-        const metaLine = createMode
-            ? (typeof ch.space_id === 'string' && ch.space_id !== ''
-                ? `Пространство: ${this._spaceNameForMeta(ch.space_id)}`
-                : 'Выбери пространство в списке слева.')
-            : `${typeof ch.name === 'string' && ch.name.trim() !== '' ? ch.name : ch.id} · ${ch.type}${ch.space_id ? ` · ${this._spaceNameForMeta(ch.space_id)}` : ''}`;
+        let metaLine;
+        if (createMode) {
+            metaLine = typeof ch.space_id === 'string' && ch.space_id !== ''
+                ? this._tp('channel_settings.meta_space_prefix', { name: this._spaceNameForMeta(ch.space_id) })
+                : this._tp('channel_settings.meta_pick_space');
+        } else {
+            metaLine = `${typeof ch.name === 'string' && ch.name.trim() !== '' ? ch.name : ch.id} · ${ch.type}${ch.space_id ? ` · ${this._spaceNameForMeta(ch.space_id)}` : ''}`;
+        }
 
         const av = this._editAvatarUrl.trim();
 
@@ -715,9 +724,9 @@ export class ChannelSettingsModal extends PlatformModal {
             ${!createMode && typeof ch.id === 'string' && ch.id !== ''
                 ? html`
                     <div class="field">
-                        <label class="field-label">Уведомления</label>
+                        <label class="field-label">${this._tp('channel_settings.notifications')}</label>
                         <div class="switch-row">
-                            <span class="switch-label">Не беспокоить (без уведомлений о новых сообщениях)</span>
+                            <span class="switch-label">${this._tp('channel_settings.mute_label')}</span>
                             <platform-switch
                                 .checked=${Boolean(ch.notifications_muted)}
                                 .disabled=${this._savingMute}
@@ -732,11 +741,11 @@ export class ChannelSettingsModal extends PlatformModal {
                 : ''}
 
             <div class="field">
-                <label class="field-label">Название</label>
+                <label class="field-label">${this._tp('channel_settings.field_name')}</label>
                 <input
                     type="text"
                     class="field-input"
-                    placeholder="Название канала"
+                    placeholder=${this._tp('channel_settings.placeholder_name')}
                     .value=${this._editName}
                     @input=${(e) => {
                         this._editName = e.target.value;
@@ -745,7 +754,7 @@ export class ChannelSettingsModal extends PlatformModal {
             </div>
 
             <div class="field">
-                <label class="field-label">Аватар</label>
+                <label class="field-label">${this._tp('channel_settings.field_avatar')}</label>
                 ${av
                     ? html`<img class="avatar-preview" src=${av} alt="" />`
                     : ''}
@@ -767,14 +776,14 @@ export class ChannelSettingsModal extends PlatformModal {
                         const el = this.shadowRoot?.getElementById('ch-profile-avatar-file');
                         if (el) el.click();
                     }}
-                >Загрузить изображение</button>
+                >${this._tp('channel_settings.upload_image')}</button>
             </div>
 
             ${createMode ? '' : html`
             <div class="members-block">
-            <div class="section-label">Участники</div>
+            <div class="section-label">${this._tp('channel_settings.section_members')}</div>
             ${this._loading
-                ? html`<div class="modal-meta">Загрузка…</div>`
+                ? html`<div class="modal-meta">${this._tp('channel_settings.loading')}</div>`
                 : html`
                     <div class="scroll-list">
                         ${this._members.map((r) => html`
@@ -800,20 +809,20 @@ export class ChannelSettingsModal extends PlatformModal {
                     class="btn btn-primary"
                     ?disabled=${this._adding}
                     @click=${() => { this._pickOpen = !this._pickOpen; }}
-                >${this._pickOpen ? 'Скрыть добавление' : 'Добавить участников'}</button>
+                >${this._pickOpen ? this._tp('channel_settings.toggle_hide_add') : this._tp('channel_settings.toggle_add_members')}</button>
             </div>
 
             ${this._pickOpen ? html`
                 <input
                     type="search"
                     class="search"
-                    placeholder="Поиск по имени или id…"
+                    placeholder=${this._tp('channel_settings.search_placeholder')}
                     .value=${this._search}
                     @input=${(e) => { this._search = e.target.value; }}
                 />
                 <div class="pick-scroll">
                     ${candidates.length === 0
-                        ? html`<div class="modal-meta" style="padding:var(--space-3)">Нет пользователей для добавления.</div>`
+                        ? html`<div class="modal-meta" style="padding:var(--space-3)">${this._tp('channel_settings.no_candidates')}</div>`
                         : candidates.map((m) => html`
                             <label class="pick-row">
                                 <input
@@ -843,7 +852,7 @@ export class ChannelSettingsModal extends PlatformModal {
                                 this._adding = false;
                             });
                         }}
-                    >Добавить выбранных (${pickCount})</button>
+                    >${this._tp('channel_settings.add_selected', { count: pickCount })}</button>
                 </div>
             ` : ''}
             </div>
@@ -857,11 +866,11 @@ export class ChannelSettingsModal extends PlatformModal {
         }
         const createMode = this.createMode;
         const primaryLabel = createMode
-            ? (this._savingProfile ? 'Создаём…' : 'Создать')
-            : (this._savingProfile ? 'Сохранение…' : 'Сохранить');
+            ? (this._savingProfile ? this._tp('channel_settings.creating') : this._tp('channel_settings.create'))
+            : (this._savingProfile ? this._tp('channel_settings.saving') : this._tp('channel_settings.save'));
         return html`
             <div class="actions">
-                <button type="button" class="btn" @click=${this._close}>Отмена</button>
+                <button type="button" class="btn" @click=${this._close}>${this._tp('chat_view.cancel')}</button>
                 <button
                     type="button"
                     class="btn btn-primary"

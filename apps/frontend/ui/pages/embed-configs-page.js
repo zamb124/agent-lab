@@ -179,7 +179,7 @@ export class EmbedConfigsPage extends PlatformElement {
     }
 
     _handleEdit(embedId) {
-        this.info(this.i18n.t('embed_page.info_wip', {}, 'dashboard'));
+        this.info(this.i18n.t('embed_page.info_wip', {}));
     }
 
     _handleGetCode(embedId) {
@@ -190,7 +190,7 @@ export class EmbedConfigsPage extends PlatformElement {
     }
 
     async _handleDelete(embedId) {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         const confirmed = confirm(td('embed_page.confirm_delete'));
         if (!confirmed) return;
         
@@ -200,7 +200,7 @@ export class EmbedConfigsPage extends PlatformElement {
     }
 
     render() {
-        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         const { loading, configs } = this.state.value;
         
         if (loading) {

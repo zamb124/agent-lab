@@ -50,6 +50,20 @@ export class NoteViewModal extends PlatformModal {
                 color: var(--text-secondary);
             }
 
+            @media (max-width: 1279px) {
+                .note-view-shell {
+                    height: auto;
+                    min-height: 100%;
+                    overflow-y: visible;
+                }
+
+                .note-view-shell > note-content {
+                    flex: 0 0 auto;
+                    height: auto;
+                    min-height: 0;
+                }
+            }
+
             @media (max-width: 767px) {
                 .note-view-shell {
                     padding: 0;

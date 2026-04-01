@@ -20,15 +20,16 @@ import './message-context-menu.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-audio-message-player.js';
 
-function formatMessageTime(iso) {
+function formatMessageTime(iso, locale) {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const loc = locale === 'ru' ? 'ru-RU' : 'en-US';
+    return d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
 }
 
-function toShortUsername(displayName) {
+function toShortUsername(displayName, defaultLabel) {
     const raw = (displayName || '').trim();
-    if (raw === '') return 'Пользователь';
+    if (raw === '') return defaultLabel;
     const parts = raw.split(/\s+/).filter(p => p.trim() !== '');
     const nonEmail = parts.filter(p => !p.includes('@'));
     if (nonEmail.length > 0) return nonEmail.join(' ');
@@ -37,9 +38,9 @@ function toShortUsername(displayName) {
     return raw;
 }
 
-function initialsForAvatar(displayName) {
-    const label = toShortUsername(displayName);
-    if (label === 'Пользователь') return '?';
+function initialsForAvatar(displayName, defaultLabel) {
+    const label = toShortUsername(displayName, defaultLabel);
+    if (label === defaultLabel) return '?';
     const parts = label.split(/\s+/).filter(Boolean);
     if (parts.length >= 2) {
         const a = parts[0][0] ?? '';
@@ -75,9 +76,10 @@ function extractPlainText(msg) {
 /**
  * @param {string} body
  * @param {{ _openMentionProfile: (id: string) => void }} host
+ * @param {(key: string, params?: Record<string, unknown>) => string} tp
  */
-function renderPlainTextMessage(body, host) {
-    if (typeof body !== 'string') throw new Error('Некорректный text/plain контент.');
+function renderPlainTextMessage(body, host, tp) {
+    if (typeof body !== 'string') throw new Error(tp('bubble.err_plain'));
     const re = new RegExp(SYNC_MENTION_IN_TEXT_RE.source, SYNC_MENTION_IN_TEXT_RE.flags);
     const membersList = SyncStore.state.companyMembers?.list;
     const chunks = [];
@@ -105,7 +107,7 @@ function renderPlainTextMessage(body, host) {
                           class="msg-mention msg-mention--interactive"
                           role="button"
                           tabindex="0"
-                          title="Профиль"
+                          title=${tp('bubble.profile_title')}
                           @pointerdown=${(e) => e.stopPropagation()}
                           @click=${(e) => {
                               e.stopPropagation();
@@ -124,11 +126,11 @@ function renderPlainTextMessage(body, host) {
     `;
 }
 
-function _formatFileSize(bytes) {
-    if (bytes < 1024) return `${bytes} Б`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} ГБ`;
+function _formatFileSize(bytes, tp) {
+    if (bytes < 1024) return tp('bubble.file_size_b', { n: bytes });
+    if (bytes < 1024 * 1024) return tp('bubble.file_size_kb', { n: (bytes / 1024).toFixed(1) });
+    if (bytes < 1024 * 1024 * 1024) return tp('bubble.file_size_mb', { n: (bytes / (1024 * 1024)).toFixed(1) });
+    return tp('bubble.file_size_gb', { n: (bytes / (1024 * 1024 * 1024)).toFixed(1) });
 }
 
 const _svgImageDownload = html`
@@ -140,34 +142,35 @@ const _svgImageDownload = html`
 /** file_id, которые уже вернули 404/ошибку загрузки, чтобы не дергать download повторно на каждом ререндере. */
 const _unavailableFileIds = new Set();
 
-function markFileUnavailable(fileId) {
+function markFileUnavailable(fileId, tp) {
     if (typeof fileId !== 'string' || fileId === '') {
-        throw new Error('markFileUnavailable: fileId обязателен.');
+        throw new Error(tp('bubble.err_mark_file_id'));
     }
     _unavailableFileIds.add(fileId);
 }
 
-function isFileUnavailable(fileId) {
+function isFileUnavailable(fileId, tp) {
     if (typeof fileId !== 'string' || fileId === '') {
-        throw new Error('isFileUnavailable: fileId обязателен.');
+        throw new Error(tp('bubble.err_check_file_id'));
     }
     return _unavailableFileIds.has(fileId);
 }
 
 /**
  * @param {object} content
- * @param {{ _openMentionProfile: (id: string) => void }} host
+ * @param {{ _openMentionProfile: (id: string) => void, requestUpdate: () => void }} host
+ * @param {(key: string, params?: Record<string, unknown>) => string} tp
  */
-function renderContent(content, host) {
+function renderContent(content, host, tp) {
     if (content.type === 'text/plain') {
         const body = content.data?.body;
-        if (typeof body !== 'string') throw new Error('Некорректный text/plain контент.');
-        return renderPlainTextMessage(body, host);
+        if (typeof body !== 'string') throw new Error(tp('bubble.err_plain'));
+        return renderPlainTextMessage(body, host, tp);
     }
     if (content.type === 'code/block') {
         const { language, source } = content.data ?? {};
         if (typeof language !== 'string' || typeof source !== 'string') {
-            throw new Error('Некорректный code/block контент.');
+            throw new Error(tp('bubble.err_code_block'));
         }
         return html`
             <div class="code-block">
@@ -178,9 +181,9 @@ function renderContent(content, host) {
     }
     if (content.type === 'mock/image') {
         const fileId = content.data?.file_id;
-        if (typeof fileId !== 'string') throw new Error('Некорректный mock/image контент.');
-        if (isFileUnavailable(fileId)) {
-            return html`<div class="file-missing">Файл недоступен (${fileId})</div>`;
+        if (typeof fileId !== 'string') throw new Error(tp('bubble.err_mock_image'));
+        if (isFileUnavailable(fileId, tp)) {
+            return html`<div class="file-missing">${tp('bubble.file_missing', { id: fileId })}</div>`;
         }
         const src = `/sync/api/v1/files/download/${fileId}`;
         const alt = typeof content.data?.alt_text === 'string' ? content.data.alt_text : '';
@@ -194,7 +197,7 @@ function renderContent(content, host) {
                         alt=${alt}
                         loading="lazy"
                         @error=${() => {
-                            markFileUnavailable(fileId);
+                            markFileUnavailable(fileId, tp);
                             host.requestUpdate();
                         }}
                     >
@@ -203,7 +206,7 @@ function renderContent(content, host) {
                         href=${src}
                         download=${dlName}
                         target="_blank"
-                        title="Скачать"
+                        title=${tp('bubble.download_title')}
                         @click=${(e) => e.stopPropagation()}
                     >${_svgImageDownload}</a>
                 </div>
@@ -212,9 +215,9 @@ function renderContent(content, host) {
     }
     if (content.type === 'file/image') {
         const { file_id: fileId, filename } = content.data ?? {};
-        if (typeof fileId !== 'string') throw new Error('Некорректный file/image контент.');
-        if (isFileUnavailable(fileId)) {
-            return html`<div class="file-missing">Файл недоступен (${fileId})</div>`;
+        if (typeof fileId !== 'string') throw new Error(tp('bubble.err_file_image'));
+        if (isFileUnavailable(fileId, tp)) {
+            return html`<div class="file-missing">${tp('bubble.file_missing', { id: fileId })}</div>`;
         }
         const src = `/sync/api/v1/files/download/${fileId}`;
         const label = typeof filename === 'string' && filename.trim() !== '' ? filename.trim() : `file-${fileId.slice(0, 12)}`;
@@ -227,7 +230,7 @@ function renderContent(content, host) {
                         alt=${label}
                         loading="lazy"
                         @error=${() => {
-                            markFileUnavailable(fileId);
+                            markFileUnavailable(fileId, tp);
                             host.requestUpdate();
                         }}
                     >
@@ -236,7 +239,7 @@ function renderContent(content, host) {
                         href=${src}
                         download=${label}
                         target="_blank"
-                        title="Скачать"
+                        title=${tp('bubble.download_title')}
                         @click=${(e) => e.stopPropagation()}
                     >${_svgImageDownload}</a>
                 </div>
@@ -246,10 +249,10 @@ function renderContent(content, host) {
     }
     if (content.type === 'file/document') {
         const { file_id: fileId, filename, mime_type: mimeType, size } = content.data ?? {};
-        if (typeof fileId !== 'string') throw new Error('Некорректный file/document контент.');
+        if (typeof fileId !== 'string') throw new Error(tp('bubble.err_file_document'));
         const downloadUrl = `/sync/api/v1/files/download/${fileId}`;
-        const label = filename ?? 'Файл';
-        const sizeLabel = typeof size === 'number' ? _formatFileSize(size) : '';
+        const label = filename ?? tp('bubble.file_fallback');
+        const sizeLabel = typeof size === 'number' ? _formatFileSize(size, tp) : '';
         return html`
             <a class="file-card" href=${downloadUrl} download=${label} target="_blank">
                 <div class="file-card-icon">
@@ -262,7 +265,7 @@ function renderContent(content, host) {
                     <span class="file-card-name">${label}</span>
                     ${sizeLabel ? html`<span class="file-card-size">${sizeLabel}</span>` : ''}
                 </div>
-                <div class="file-card-dl" title="Скачать">
+                <div class="file-card-dl" title=${tp('bubble.download_title')}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                         <path d="M12 3v13M5 15l7 7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                         <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -282,7 +285,7 @@ function renderContent(content, host) {
             transcription_error: transcriptionError,
         } = content.data ?? {};
         if (typeof fileId !== 'string' || fileId === '') {
-            throw new Error('Некорректный file/audio контент.');
+            throw new Error(tp('bubble.err_file_audio'));
         }
         const src = `/sync/api/v1/files/download/${fileId}`;
         const safeDurationMs = typeof durationMs === 'number' && Number.isFinite(durationMs) ? durationMs : 0;
@@ -310,15 +313,15 @@ function renderContent(content, host) {
     }
     if (content.type === 'git/reference') {
         const gitRefId = content.data?.git_ref_id;
-        if (typeof gitRefId !== 'string') throw new Error('Некорректный git/reference контент.');
+        if (typeof gitRefId !== 'string') throw new Error(tp('bubble.err_git_ref'));
         return html`<div class="content-ref">Git: ${gitRefId}</div>`;
     }
     if (content.type === 'custom_tool_response') {
         const toolName = content.data?.tool_name;
-        if (typeof toolName !== 'string') throw new Error('Некорректный custom_tool_response контент.');
+        if (typeof toolName !== 'string') throw new Error(tp('bubble.err_tool_response'));
         return html`<div class="content-ref">Tool: ${toolName}</div>`;
     }
-    throw new Error(`Неподдерживаемый тип контента: ${content.type}`);
+    throw new Error(tp('bubble.err_content_type', { type: content.type }));
 }
 
 const checkSingle = html`
@@ -1001,10 +1004,17 @@ export class MessageBubble extends PlatformElement {
         this._unsubCompanyMembers = null;
         /** @type {unknown} */
         this._companyMembersListRef = null;
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._companyMembersListRef = SyncStore.state.companyMembers?.list;
         this._unsubCompanyMembers = SyncStore.subscribe(() => {
             const next = SyncStore.state.companyMembers?.list;
@@ -1017,6 +1027,8 @@ export class MessageBubble extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._avatarRetry.cancel();
         this._unsubCompanyMembers?.();
         this._unsubCompanyMembers = null;
@@ -1046,10 +1058,11 @@ export class MessageBubble extends PlatformElement {
     _renderAvatarSlot() {
         const sender = this.msg.sender;
         if (!sender || typeof sender.user_id !== 'string') {
-            throw new Error('Сообщение без отправителя.');
+            throw new Error(this._tp('bubble.err_no_sender'));
         }
-        const shortName = toShortUsername(sender.display_name ?? '');
-        const initials = initialsForAvatar(sender.display_name ?? '');
+        const defaultUser = this._tp('composer.default_user_short');
+        const shortName = toShortUsername(sender.display_name ?? '', defaultUser);
+        const initials = initialsForAvatar(sender.display_name ?? '', defaultUser);
         const hue = hueFromUserId(sender.user_id);
         const initialsStyle = `background: hsl(${hue} 48% 42%);`;
         const originalUrl = sender.avatar_url ?? null;
@@ -1072,7 +1085,7 @@ export class MessageBubble extends PlatformElement {
                         this._profileUser = sender;
                         this._profileOpen = true;
                     }}
-                    aria-label=${`Профиль: ${shortName}`}
+                    aria-label=${this._tp('bubble.profile_aria', { name: shortName })}
                 >
                     ${face}
                 </button>
@@ -1099,7 +1112,7 @@ export class MessageBubble extends PlatformElement {
 
     _openMentionProfile(userId) {
         if (typeof userId !== 'string' || userId === '') {
-            throw new Error('userId обязателен для профиля по упоминанию.');
+            throw new Error(this._tp('bubble.err_mention_user'));
         }
         const members = SyncStore.state.companyMembers?.list ?? [];
         const cm = members.find(m => m.user_id === userId);
@@ -1185,8 +1198,8 @@ export class MessageBubble extends PlatformElement {
         const { kind, emoji } = e.detail;
         const syncApi = this.services.get('syncApi');
         const { msg, channelId } = this;
-        if (!msg?.id) throw new Error('Нет сообщения.');
-        if (!channelId) throw new Error('Нет channelId.');
+        if (!msg?.id) throw new Error(this._tp('bubble.err_no_message'));
+        if (!channelId) throw new Error(this._tp('bubble.err_no_channel'));
 
         if (kind === 'reply') {
             SyncStore.setReplyToMessage(msg);
@@ -1194,7 +1207,7 @@ export class MessageBubble extends PlatformElement {
         }
         if (kind === 'copy') {
             const text = extractPlainText(msg);
-            if (text === '') throw new Error('Нет текста для копирования.');
+            if (text === '') throw new Error(this._tp('bubble.err_no_copy_text'));
             await copyTextToClipboard(text);
             return;
         }
@@ -1229,7 +1242,7 @@ export class MessageBubble extends PlatformElement {
         }
         if (kind === 'react') {
             if (typeof emoji !== 'string' || emoji.trim() === '') {
-                throw new Error('emoji обязателен.');
+                throw new Error(this._tp('bubble.err_emoji'));
             }
             await syncApi.reactMessage(channelId, msg.id, emoji);
         }
@@ -1249,7 +1262,7 @@ export class MessageBubble extends PlatformElement {
         }
         const nm = typeof f.channel_name === 'string' ? f.channel_name.trim() : '';
         const label = nm !== '' ? nm : f.channel_id;
-        return { tip: `Переслано из «${label}»` };
+        return { tip: this._tp('bubble.forwarded_from', { label }) };
     }
 
     _onReplyPreviewClick(e) {
@@ -1257,17 +1270,17 @@ export class MessageBubble extends PlatformElement {
         e.preventDefault();
         const pid = this.msg?.parent_message_id;
         if (typeof pid !== 'string' || pid === '') {
-            throw new Error('parent_message_id обязателен.');
+            throw new Error(this._tp('bubble.err_parent_id'));
         }
         this.emit('scroll-to-message', { messageId: pid });
     }
 
     async _requestAudioTranscription() {
         if (typeof this.channelId !== 'string' || this.channelId === '') {
-            throw new Error('channelId обязателен для расшифровки аудио.');
+            throw new Error(this._tp('bubble.err_channel_transcribe'));
         }
         if (typeof this.msg?.id !== 'string' || this.msg.id === '') {
-            throw new Error('message.id обязателен для расшифровки аудио.');
+            throw new Error(this._tp('bubble.err_message_transcribe'));
         }
         const syncApi = this.services.get('syncApi');
         const updated = await syncApi.transcribeMessage(this.channelId, this.msg.id);
@@ -1291,12 +1304,13 @@ export class MessageBubble extends PlatformElement {
             : parentIsOwn
               ? 'reply-quote--parent-own'
               : 'reply-quote--parent-other';
-        const who = p ? toShortUsername(p.sender?.display_name ?? '') : 'Сообщение';
+        const defaultUser = this._tp('composer.default_user_short');
+        const who = p ? toShortUsername(p.sender?.display_name ?? '', defaultUser) : this._tp('bubble.default_message');
         const membersList = SyncStore.state.companyMembers?.list;
         const snippetRaw = p
             ? plainTextSnippetWithMentionLabels(extractPlainText(p), membersList, 160)
             : '';
-        const snippet = snippetRaw !== '' ? snippetRaw : 'Сообщение';
+        const snippet = snippetRaw !== '' ? snippetRaw : this._tp('bubble.default_message');
 
         return html`
             <button type="button" class="reply-quote ${quoteClass}" @click=${this._onReplyPreviewClick}>
@@ -1326,10 +1340,10 @@ export class MessageBubble extends PlatformElement {
         const { status, sent_at } = msg;
 
         if (status === 'failed') {
-            return html`<span class="bubble-time status-failed">Ошибка</span>`;
+            return html`<span class="bubble-time status-failed">${this._tp('bubble.status_error')}</span>`;
         }
 
-        const timeStr = formatMessageTime(sent_at);
+        const timeStr = formatMessageTime(sent_at, this.i18n.getCurrentLocale());
 
         if (!isOwn) {
             return html`<span class="bubble-time">${timeStr}</span>`;
@@ -1402,20 +1416,20 @@ export class MessageBubble extends PlatformElement {
                                             this._profileOpen = true;
                                         }}
                                     >
-                                        ${toShortUsername(msg.sender?.display_name ?? '')}
+                                        ${toShortUsername(msg.sender?.display_name ?? '', this._tp('composer.default_user_short'))}
                                     </button>
                                 ` : ''}
-                                ${hasEdited ? html`<span class="edited-badge">изм.</span>` : ''}
+                                ${hasEdited ? html`<span class="edited-badge">${this._tp('bubble.edited_short')}</span>` : ''}
                             </div>
                             ${hasHeaderEnd ? html`
                                 <div class="bubble-header-end">
                                     ${this._isPinned() ? html`
-                                        <span class="pin-mark" title="Закреплено">
+                                        <span class="pin-mark" title=${this._tp('bubble.pinned_title')}>
                                             <platform-icon name="target" size="12"></platform-icon>
                                         </span>
                                     ` : ''}
                                     ${canFocusThread ? html`
-                                        <button class="thread-btn" @click=${this._focusThread}>Тред</button>
+                                        <button class="thread-btn" @click=${this._focusThread}>${this._tp('bubble.thread')}</button>
                                     ` : ''}
                                 </div>
                             ` : ''}
@@ -1425,7 +1439,7 @@ export class MessageBubble extends PlatformElement {
                     <div class="bubble-body">
                         <div class="bubble-contents">
                             <div class="contents-inner">
-                                ${sorted.map(c => renderContent(c, this))}
+                                ${sorted.map(c => renderContent(c, this, (k, p) => this._tp(k, p)))}
                             </div>
                         </div>
                         ${this._renderTimeMeta()}

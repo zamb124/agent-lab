@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingPlans extends PlatformElement {
     static styles = [
@@ -271,7 +272,7 @@ export class LandingPlans extends PlatformElement {
     }
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, 'landing');
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
         return html`
             <div class="plans-container">
                 <h2 class="plans-title">${t('plans.title')}</h2>
