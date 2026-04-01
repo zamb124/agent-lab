@@ -264,7 +264,16 @@ export class BillingPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this._loadBilling();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadBilling() {
@@ -282,17 +291,18 @@ export class BillingPage extends PlatformElement {
 
     render() {
         const { loading } = this.state.value;
-        
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+
         if (loading) {
             return html`
                 <div class="loading-state">
-                    Загрузка...
+                    ${tb('frontend_console.loading')}
                 </div>
             `;
         }
 
         return html`
-            <page-header title="Биллинг"></page-header>
+            <page-header title=${tb('frontend_console.page_title')}></page-header>
 
             <div class="billing-grid">
                 ${this._renderBalanceCard()}
@@ -307,19 +317,21 @@ export class BillingPage extends PlatformElement {
     _renderBalanceCard() {
         const { subscription } = this.state.value;
         const balance = subscription?.balance ?? 0;
-        
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const cur = tb('frontend_console.currency_rub');
+
         return html`
             <div class="billing-card">
                 <div class="card-header">
-                    <h2 class="card-title">Баланс</h2>
+                    <h2 class="card-title">${tb('frontend_console.balance_title')}</h2>
                     <span class="card-icon">B</span>
                 </div>
                 
-                <h3 class="balance-amount">${balance.toFixed(0)} Р</h3>
-                <p class="balance-label">Доступно на счете</p>
+                <h3 class="balance-amount">${balance.toFixed(0)} ${cur}</h3>
+                <p class="balance-label">${tb('frontend_console.balance_available')}</p>
                 
                 <button class="primary-button" @click=${this._onTopUpClick}>
-                    Пополнить баланс
+                    ${tb('frontend_console.top_up')}
                 </button>
             </div>
         `;
@@ -329,11 +341,12 @@ export class BillingPage extends PlatformElement {
         const { subscription } = this.state.value;
         const plan = subscription?.plan ?? 'FREE';
         const planFeatures = this._getPlanFeatures(plan);
-        
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+
         return html`
             <div class="billing-card">
                 <div class="card-header">
-                    <h2 class="card-title">Тарифный план</h2>
+                    <h2 class="card-title">${tb('frontend_console.plan_title')}</h2>
                     <span class="card-icon">P</span>
                 </div>
                 
@@ -353,7 +366,7 @@ export class BillingPage extends PlatformElement {
                 
                 ${plan === 'FREE' ? html`
                     <button class="primary-button" @click=${this._onUpgradeClick}>
-                        Перейти на Pro
+                        ${tb('frontend_console.upgrade_pro')}
                     </button>
                 ` : ''}
             </div>
@@ -365,23 +378,25 @@ export class BillingPage extends PlatformElement {
         const monthlyBudget = subscription?.monthly_budget ?? 0;
         const currentSpent = subscription?.current_month_spent ?? 0;
         const percentage = monthlyBudget > 0 ? (currentSpent / monthlyBudget * 100) : 0;
-        
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const cur = tb('frontend_console.currency_rub');
+
         return html`
             <div class="billing-card">
                 <div class="card-header">
-                    <h2 class="card-title">Месячный лимит</h2>
+                    <h2 class="card-title">${tb('frontend_console.budget_title')}</h2>
                     <span class="card-icon">L</span>
                 </div>
                 
                 <div class="budget-info">
                     <div class="budget-row">
-                        <span class="budget-label">Потрачено</span>
-                        <span class="budget-value">${currentSpent.toFixed(2)} Р</span>
+                        <span class="budget-label">${tb('frontend_console.spent')}</span>
+                        <span class="budget-value">${currentSpent.toFixed(2)} ${cur}</span>
                     </div>
                     <div class="budget-row">
-                        <span class="budget-label">Лимит</span>
+                        <span class="budget-label">${tb('frontend_console.limit')}</span>
                         <span class="budget-value">
-                            ${monthlyBudget > 0 ? `${monthlyBudget.toFixed(0)} Р` : 'Не установлен'}
+                            ${monthlyBudget > 0 ? `${monthlyBudget.toFixed(0)} ${cur}` : tb('frontend_console.limit_not_set')}
                         </span>
                     </div>
                 </div>
@@ -393,7 +408,7 @@ export class BillingPage extends PlatformElement {
                 ` : ''}
                 
                 <button class="primary-button" @click=${this._onSetBudgetClick}>
-                    ${monthlyBudget > 0 ? 'Изменить лимит' : 'Установить лимит'}
+                    ${monthlyBudget > 0 ? tb('frontend_console.change_limit') : tb('frontend_console.set_limit')}
                 </button>
             </div>
         `;
@@ -401,7 +416,7 @@ export class BillingPage extends PlatformElement {
 
     _renderUsageSection() {
         const { usage } = this.state.value;
-        
+
         if (!usage) {
             return html``;
         }
@@ -409,23 +424,25 @@ export class BillingPage extends PlatformElement {
         const totalCost = usage.total_cost ?? 0;
         const totalCalls = usage.total_calls ?? 0;
         const byResource = usage.by_resource ?? {};
-        
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const cur = tb('frontend_console.currency_rub');
+
         return html`
             <div class="usage-section">
-                <h2 class="section-title">Статистика использования</h2>
+                <h2 class="section-title">${tb('frontend_console.usage_title')}</h2>
                 
                 <div class="usage-grid">
                     <div class="usage-stat">
-                        <div class="stat-value">${totalCost.toFixed(2)} Р</div>
-                        <div class="stat-label">Всего потрачено</div>
+                        <div class="stat-value">${totalCost.toFixed(2)} ${cur}</div>
+                        <div class="stat-label">${tb('frontend_console.total_spent')}</div>
                     </div>
                     <div class="usage-stat">
                         <div class="stat-value">${totalCalls}</div>
-                        <div class="stat-label">Всего вызовов</div>
+                        <div class="stat-label">${tb('frontend_console.total_calls')}</div>
                     </div>
                     <div class="usage-stat">
                         <div class="stat-value">${Object.keys(byResource).length}</div>
-                        <div class="stat-label">Использовано ресурсов</div>
+                        <div class="stat-label">${tb('frontend_console.resources_used')}</div>
                     </div>
                 </div>
                 
@@ -435,8 +452,8 @@ export class BillingPage extends PlatformElement {
                             <div class="resource-item">
                                 <div class="resource-name">${name}</div>
                                 <div class="resource-stats">
-                                    <div class="resource-cost">${stats.cost.toFixed(2)} Р</div>
-                                    <div class="resource-calls">${stats.calls} вызовов</div>
+                                    <div class="resource-cost">${stats.cost.toFixed(2)} ${cur}</div>
+                                    <div class="resource-calls">${tb('frontend_console.resource_calls', { count: String(stats.calls) })}</div>
                                 </div>
                             </div>
                         `)}
@@ -447,45 +464,19 @@ export class BillingPage extends PlatformElement {
     }
 
     _getPlanFeatures(plan) {
-        const features = {
-            FREE: {
-                description: 'Бесплатный тариф для начала работы',
-                features: [
-                    '100 запросов в месяц',
-                    'Базовые агенты',
-                    'Community поддержка',
-                ],
-            },
-            BASIC: {
-                description: 'Для небольших проектов',
-                features: [
-                    '10,000 запросов в месяц',
-                    'Все типы агентов',
-                    'Email поддержка',
-                    'API доступ',
-                ],
-            },
-            PREMIUM: {
-                description: 'Для профессионалов',
-                features: [
-                    '100,000 запросов в месяц',
-                    'Приоритетная поддержка',
-                    'Расширенная аналитика',
-                    'Кастомизация',
-                ],
-            },
-            ENTERPRISE: {
-                description: 'Для крупных компаний',
-                features: [
-                    'Неограниченные запросы',
-                    '24/7 поддержка',
-                    'SLA гарантии',
-                    'Персональный менеджер',
-                ],
-            },
+        const p = plan.toUpperCase();
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, 'billing');
+        const counts = { FREE: 3, BASIC: 4, PREMIUM: 4, ENTERPRISE: 4 };
+        const planKey = counts[p] !== undefined ? p : 'FREE';
+        const n = counts[planKey];
+        const featureList = [];
+        for (let i = 1; i <= n; i += 1) {
+            featureList.push(tb(`frontend_console.plan_${planKey}_f${i}`));
+        }
+        return {
+            description: tb(`frontend_console.plan_${planKey}_description`),
+            features: featureList,
         };
-        
-        return features[plan.toUpperCase()] ?? features.FREE;
     }
 
     _onTopUpClick() {
@@ -494,7 +485,7 @@ export class BillingPage extends PlatformElement {
         modal.addEventListener('close', () => modal.remove());
         modal.addEventListener('topped-up', async () => {
             await this._reloadBilling();
-            this.success('Баланс пополнен');
+            this.success(this.i18n.t('frontend_console.topup_success', {}, 'billing'));
         });
     }
 
@@ -509,11 +500,11 @@ export class BillingPage extends PlatformElement {
     }
 
     _onUpgradeClick() {
-        this.info('Функция смены тарифа в разработке');
+        this.info(this.i18n.t('frontend_console.upgrade_wip', {}, 'billing'));
     }
 
     _onSetBudgetClick() {
-        this.info('Функция установки лимита в разработке');
+        this.info(this.i18n.t('frontend_console.budget_wip', {}, 'billing'));
     }
 }
 

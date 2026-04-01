@@ -257,59 +257,71 @@ export class LandingPlans extends PlatformElement {
         }
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'landing');
         return html`
             <div class="plans-container">
-                <h2 class="plans-title">/ Наши решения</h2>
+                <h2 class="plans-title">${t('plans.title')}</h2>
                 
                 <div class="plans-grid">
                     <div class="plan-card">
-                        <div class="plan-badge">SELF-SERVICE</div>
-                        <h3 class="plan-name">Самостоятельно</h3>
+                        <div class="plan-badge">${t('plans.self_badge')}</div>
+                        <h3 class="plan-name">${t('plans.self_name')}</h3>
                         <p class="plan-description">
-                            Все сервисы платформы доступны без ограничений. 
-                            Платите только за то, что используете.
+                            ${t('plans.self_description')}
                         </p>
                         <ul class="plan-features">
-                            <li>AI Studio — конструктор агентов</li>
-                            <li>Knowledge Base — база знаний с поиском</li>
-                            <li>NetWorkle — умная записная книжка</li>
-                            <li>Все интеграции и API</li>
-                            <li>Документация и обучающие материалы</li>
+                            <li>${t('plans.self_li1')}</li>
+                            <li>${t('plans.self_li2')}</li>
+                            <li>${t('plans.self_li3')}</li>
+                            <li>${t('plans.self_li4')}</li>
+                            <li>${t('plans.self_li5')}</li>
                         </ul>
                         <p class="plan-target">
-                            Оплата по факту: сколько использовали — столько заплатили
+                            ${t('plans.self_target')}
                         </p>
                         <button 
                             class=${classMap({ 'plan-cta': true, 'transparent': true })}
                             @click=${() => this._handleCTA('constructor')}
                         >
-                            Начать бесплатно
+                            ${t('plans.self_cta')}
                         </button>
                     </div>
                     
                     <div class=${classMap({ 'plan-card': true, 'premium': true })}>
-                        <div class="plan-badge">С ПОДДЕРЖКОЙ</div>
-                        <h3 class="plan-name">Команда</h3>
+                        <div class="plan-badge">${t('plans.team_badge')}</div>
+                        <h3 class="plan-name">${t('plans.team_name')}</h3>
                         <p class="plan-description">
-                            Всё из Self-service плюс персональная поддержка от команды платформы.
-                            Поможем настроить и масштабировать.
+                            ${t('plans.team_description')}
                         </p>
                         <ul class="plan-features">
-                            <li>Всё из тарифа Self-service</li>
-                            <li>Персональный менеджер</li>
-                            <li>Помощь в настройке агентов и базы знаний</li>
-                            <li>Консультации по автоматизации процессов</li>
-                            <li>Приоритетная техподдержка</li>
+                            <li>${t('plans.team_li1')}</li>
+                            <li>${t('plans.team_li2')}</li>
+                            <li>${t('plans.team_li3')}</li>
+                            <li>${t('plans.team_li4')}</li>
+                            <li>${t('plans.team_li5')}</li>
                         </ul>
                         <p class="plan-target">
-                            Для тех, кто хочет получить максимум от платформы
+                            ${t('plans.team_target')}
                         </p>
                         <button 
                             class=${classMap({ 'plan-cta': true, 'primary': true })}
                             @click=${() => this._handleCTA('expert')}
                         >
-                            Оставить заявку
+                            ${t('plans.team_cta')}
                         </button>
                     </div>
                 </div>

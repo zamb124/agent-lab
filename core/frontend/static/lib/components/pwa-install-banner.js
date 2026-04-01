@@ -1,4 +1,5 @@
 import { LitElement, html, css } from 'lit';
+import { i18n } from '../../services/i18n/i18n.service.js';
 
 /**
  * PWA Install Banner - показывает инструкцию установки на iOS
@@ -151,8 +152,16 @@ export class PWAInstallBanner extends LitElement {
 
     connectedCallback() {
         super.connectedCallback();
-        // Проверяем и показываем баннер при монтировании
+        this._i18nUnsub = i18n.subscribe(() => this.requestUpdate());
         setTimeout(() => this._checkAndShow(), 2000);
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     _detectPlatform() {
@@ -233,6 +242,7 @@ export class PWAInstallBanner extends LitElement {
     }
 
     _renderIOSBanner() {
+        const t = (key) => i18n.t(key, {}, 'shell');
         return html`
             <div class="banner">
                 <div class="content">
@@ -242,18 +252,18 @@ export class PWAInstallBanner extends LitElement {
                         </svg>
                     </div>
                     <div class="text">
-                        <div class="title">Установите Humanitec</div>
-                        <div class="description">Добавьте на главный экран для быстрого доступа</div>
+                        <div class="title">${t('pwa.install_title')}</div>
+                        <div class="description">${t('pwa.ios_description')}</div>
                         <div class="ios-steps">
-                            <span>Нажмите</span>
+                            <span>${t('pwa.ios_tap')}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                             </svg>
-                            <span>затем "На экран Домой"</span>
+                            <span>${t('pwa.ios_home')}</span>
                         </div>
                     </div>
                     <div class="actions">
-                        <button class="btn btn-secondary" @click=${this._dismiss}>Позже</button>
+                        <button class="btn btn-secondary" @click=${this._dismiss}>${t('pwa.later')}</button>
                     </div>
                 </div>
             </div>
@@ -261,6 +271,7 @@ export class PWAInstallBanner extends LitElement {
     }
 
     _renderInstallBanner() {
+        const t = (key) => i18n.t(key, {}, 'shell');
         return html`
             <div class="banner">
                 <div class="content">
@@ -270,12 +281,12 @@ export class PWAInstallBanner extends LitElement {
                         </svg>
                     </div>
                     <div class="text">
-                        <div class="title">Установите Humanitec</div>
-                        <div class="description">Работайте офлайн и получайте уведомления</div>
+                        <div class="title">${t('pwa.install_title')}</div>
+                        <div class="description">${t('pwa.install_description')}</div>
                     </div>
                     <div class="actions">
-                        <button class="btn btn-secondary" @click=${this._dismiss}>Позже</button>
-                        <button class="btn btn-primary" @click=${this._install}>Установить</button>
+                        <button class="btn btn-secondary" @click=${this._dismiss}>${t('pwa.later')}</button>
+                        <button class="btn btn-primary" @click=${this._install}>${t('pwa.install')}</button>
                     </div>
                 </div>
             </div>

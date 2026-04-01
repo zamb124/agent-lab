@@ -119,10 +119,15 @@ export class DashboardHeader extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         window.addEventListener('popstate', this._handleLocationChange.bind(this));
     }
 
     disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         super.disconnectedCallback();
         window.removeEventListener('popstate', this._handleLocationChange.bind(this));
     }
@@ -184,6 +189,7 @@ export class DashboardHeader extends PlatformElement {
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         return html`
             <header class="header">
                 <a href="/dashboard" class="logo" @click=${(e) => this._handleNavigation('/dashboard', e)}>
@@ -217,14 +223,14 @@ export class DashboardHeader extends PlatformElement {
                         class="nav-link ${this._isActive('/billing') ? 'active' : ''}"
                         @click=${(e) => this._handleNavigation('/billing', e)}
                     >
-                        Биллинг
+                        ${td('dashboard_header.billing')}
                     </a>
                 </nav>
 
                 <div class="user-menu">
                     <company-switcher></company-switcher>
                     <button class="user-button" @click=${this._handleLogout}>
-                        Выйти
+                        ${td('dashboard_header.logout')}
                     </button>
                 </div>
             </header>

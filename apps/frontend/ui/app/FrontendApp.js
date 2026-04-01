@@ -159,6 +159,15 @@ export class FrontendApp extends PlatformApp {
     connectedCallback() {
         this._syncCurrentViewFromPathname();
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     setupStore() {
@@ -356,19 +365,21 @@ export class FrontendApp extends PlatformApp {
         }
 
         if (!this._servicesInitialized || !this._authChecked) {
+            const t = (k) => this.i18n.t(k, {}, 'dashboard');
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Загрузка Frontend...</div>
+                    <div class="loading-text">${t('frontend_app.loading')}</div>
                 </div>
             `;
         }
 
         if (!this._isAuthenticated) {
+            const t = (k) => this.i18n.t(k, {}, 'dashboard');
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Перенаправление на вход...</div>
+                    <div class="loading-text">${t('frontend_app.redirect_login')}</div>
                 </div>
             `;
         }
@@ -380,10 +391,11 @@ export class FrontendApp extends PlatformApp {
         ) {
             this._dashboardLastServiceRedirectDone = true;
             if (replaceLocationToLastVisitedNonFrontendService()) {
+                const t = (k) => this.i18n.t(k, {}, 'dashboard');
                 return html`
                     <div class="loading-container">
                         <div class="loading-spinner"></div>
-                        <div class="loading-text">Загрузка...</div>
+                        <div class="loading-text">${t('frontend_app.loading_short')}</div>
                     </div>
                 `;
             }

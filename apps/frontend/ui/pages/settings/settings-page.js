@@ -211,7 +211,16 @@ export class SettingsPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this._loadSettings();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadSettings() {
@@ -224,37 +233,38 @@ export class SettingsPage extends PlatformElement {
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         const { loading } = this.state.value;
         
         if (loading) {
             return html`
                 <div class="loading-state">
-                    Загрузка...
+                    ${td('settings_page.loading')}
                 </div>
             `;
         }
 
         return html`
-            <page-header title="Настройки"></page-header>
+            <page-header title=${td('settings_page.title')}></page-header>
 
             <div class="tabs">
                 <button 
                     class="tab ${this._activeTab === 'company' ? 'active' : ''}"
                     @click=${() => this._setTab('company')}
                 >
-                    Компания
+                    ${td('settings_page.tab_company')}
                 </button>
                 <button 
                     class="tab ${this._activeTab === 'security' ? 'active' : ''}"
                     @click=${() => this._setTab('security')}
                 >
-                    Безопасность
+                    ${td('settings_page.tab_security')}
                 </button>
                 <button 
                     class="tab ${this._activeTab === 'integrations' ? 'active' : ''}"
                     @click=${() => this._setTab('integrations')}
                 >
-                    Интеграции
+                    ${td('settings_page.tab_integrations')}
                 </button>
             </div>
 
@@ -276,15 +286,16 @@ export class SettingsPage extends PlatformElement {
     }
 
     _renderCompanyTab() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         const { settings } = this.state.value;
         
         return html`
             <div class="tab-content">
-                <h2 class="section-title">Информация о компании</h2>
+                <h2 class="section-title">${td('settings_page.company_section')}</h2>
                 
                 <form @submit=${this._onSaveCompany}>
                     <div class="form-group">
-                        <label class="form-label">Название компании</label>
+                        <label class="form-label">${td('settings_page.label_company_name')}</label>
                         <input
                             type="text"
                             class="form-input"
@@ -295,7 +306,7 @@ export class SettingsPage extends PlatformElement {
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Subdomain</label>
+                        <label class="form-label">${td('settings_page.label_subdomain')}</label>
                         <input
                             type="text"
                             class="form-input"
@@ -303,12 +314,12 @@ export class SettingsPage extends PlatformElement {
                             disabled
                         />
                         <div class="form-help">
-                            Поддомен нельзя изменить после создания
+                            ${td('settings_page.subdomain_help')}
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Месячный лимит расходов (Р)</label>
+                        <label class="form-label">${td('settings_page.label_monthly_budget')}</label>
                         <input
                             type="number"
                             class="form-input"
@@ -317,12 +328,12 @@ export class SettingsPage extends PlatformElement {
                             min="0"
                         />
                         <div class="form-help">
-                            0 = без ограничений
+                            ${td('settings_page.budget_help')}
                         </div>
                     </div>
 
                     <button type="submit" class="primary-button">
-                        Сохранить изменения
+                        ${td('settings_page.save')}
                     </button>
                 </form>
             </div>
@@ -330,49 +341,51 @@ export class SettingsPage extends PlatformElement {
     }
 
     _renderSecurityTab() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         return html`
             <div class="tab-content">
-                <h2 class="section-title">OAuth Провайдеры</h2>
+                <h2 class="section-title">${td('settings_page.oauth_title')}</h2>
                 
                 <div class="info-box">
-                    Настройте методы авторизации для вашей команды
+                    ${td('settings_page.oauth_info')}
                 </div>
 
                 <div class="providers-grid">
                     <div class="provider-card">
                         <div class="provider-icon">Y</div>
                         <h3 class="provider-name">Yandex</h3>
-                        <span class="provider-status">Активен</span>
+                        <span class="provider-status">${td('settings_page.provider_active')}</span>
                     </div>
                     
                     <div class="provider-card">
                         <div class="provider-icon">G</div>
                         <h3 class="provider-name">Google</h3>
-                        <span class="provider-status">Активен</span>
+                        <span class="provider-status">${td('settings_page.provider_active')}</span>
                     </div>
                     
                     <div class="provider-card">
                         <div class="provider-icon">H</div>
                         <h3 class="provider-name">GitHub</h3>
-                        <span class="provider-status">Активен</span>
+                        <span class="provider-status">${td('settings_page.provider_active')}</span>
                     </div>
                 </div>
 
-                <h2 class="section-title">Активные сессии</h2>
+                <h2 class="section-title">${td('settings_page.sessions_title')}</h2>
                 <div class="info-box">
-                    Список активных сессий будет доступен в следующей версии
+                    ${td('settings_page.sessions_placeholder')}
                 </div>
             </div>
         `;
     }
 
     _renderIntegrationsTab() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         return html`
             <div class="tab-content">
-                <h2 class="section-title">Доступные интеграции</h2>
+                <h2 class="section-title">${td('settings_page.integrations_title')}</h2>
                 
                 <div class="info-box">
-                    Интеграции позволяют подключить внешние сервисы к вашей платформе
+                    ${td('settings_page.integrations_info')}
                 </div>
 
                 <div class="providers-grid">
@@ -380,7 +393,7 @@ export class SettingsPage extends PlatformElement {
                         <div class="provider-icon">T</div>
                         <h3 class="provider-name">Telegram</h3>
                         <button class="primary-button" style="margin-top: var(--space-3); width: 100%;">
-                            Подключить
+                            ${td('settings_page.connect')}
                         </button>
                     </div>
                     
@@ -388,7 +401,7 @@ export class SettingsPage extends PlatformElement {
                         <div class="provider-icon">S</div>
                         <h3 class="provider-name">Slack</h3>
                         <button class="primary-button" style="margin-top: var(--space-3); width: 100%;">
-                            Подключить
+                            ${td('settings_page.connect')}
                         </button>
                     </div>
                     
@@ -396,7 +409,7 @@ export class SettingsPage extends PlatformElement {
                         <div class="provider-icon">W</div>
                         <h3 class="provider-name">Webhooks</h3>
                         <button class="primary-button" style="margin-top: var(--space-3); width: 100%;">
-                            Настроить
+                            ${td('settings_page.configure')}
                         </button>
                     </div>
                 </div>
@@ -424,7 +437,7 @@ export class SettingsPage extends PlatformElement {
         const companySettings = await this.services.get('settings').getCompanySettings();
         FrontendStore.setCompanySettings(companySettings);
         
-        this.success('Настройки сохранены');
+        this.success(this.i18n.t('settings_page.toast_saved', {}, 'dashboard'));
     }
 }
 

@@ -50,6 +50,19 @@ export class EmbedCodeModal extends PlatformModal {
         this._loading = false;
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     async show(embedId) {
         this._embedId = embedId;
         this.open = true;
@@ -59,7 +72,7 @@ export class EmbedCodeModal extends PlatformModal {
             const data = await this.services.get('embed').getCode(embedId);
             this._code = data.html_code;
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка загрузки кода виджета';
+            const message = error instanceof Error ? error.message : this.i18n.t('embed_code_modal.load_error', {}, 'dashboard');
             this.error(message);
             throw error;
         } finally {
@@ -97,7 +110,7 @@ export class EmbedCodeModal extends PlatformModal {
         try {
             const ok = document.execCommand('copy');
             if (!ok) {
-                throw new Error('Команда копирования не выполнена');
+                throw new Error(this.i18n.t('embed_code_modal.err_copy_cmd', {}, 'dashboard'));
             }
         } finally {
             document.body.removeChild(ta);
@@ -105,26 +118,26 @@ export class EmbedCodeModal extends PlatformModal {
     }
 
     async _handleCopy() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         if (!this._code) {
-            this.error('Нет кода для копирования');
+            this.error(td('embed_code_modal.err_no_code'));
             return;
         }
         try {
             await this._copyToClipboard(this._code);
-            this.success('Код скопирован в буфер обмена');
+            this.success(td('embed_code_modal.toast_copied'));
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            this.error(
-                `Не удалось скопировать: ${msg}. Откройте сайт по HTTPS или скопируйте вручную.`,
-            );
+            this.error(td('embed_code_modal.err_copy_failed', { msg }));
         }
     }
 
     renderHeader() {
-        return 'Код для встраивания';
+        return this.i18n.t('embed_code_modal.header', {}, 'dashboard');
     }
 
     renderHeaderActions() {
+        const td = (k) => this.i18n.t(k, {}, 'dashboard');
         if (this._loading || !this._code) {
             return html``;
         }
@@ -132,8 +145,8 @@ export class EmbedCodeModal extends PlatformModal {
             <button
                 type="button"
                 class="header-btn"
-                title="Скопировать код"
-                aria-label="Скопировать код"
+                title=${td('embed_code_modal.copy_title')}
+                aria-label=${td('embed_code_modal.copy_title')}
                 @click=${this._handleCopy}
             >
                 <platform-icon name="copy" size="16"></platform-icon>
@@ -142,11 +155,12 @@ export class EmbedCodeModal extends PlatformModal {
     }
 
     renderBody() {
+        const td = (k) => this.i18n.t(k, {}, 'dashboard');
         return this._loading
-            ? html`<div class="loading-state">Загрузка...</div>`
+            ? html`<div class="loading-state">${td('embed_code_modal.loading')}</div>`
             : html`
                 <p class="modal-description">
-                    Вставьте этот код на свой сайт перед закрывающим тегом &lt;/body&gt;:
+                    ${td('embed_code_modal.description')}
                 </p>
                 <div class="code-block">${this._code}</div>
             `;

@@ -16,8 +16,10 @@
 ### 1. Импорт
 
 ```javascript
-import { i18n, useI18n, t } from '@platform/services/i18n/i18n.service.js';
+import { i18n, useI18n, t, createNsT } from '@platform/services/i18n/i18n.service.js';
 ```
+
+После `registerCore` в компонентах доступен **`this.i18n`** (`PlatformElement`); не присваивайте результат `useI18n` в **`this.i18n`** — перезапишете геттер. Для фиксированного namespace: `const tp = createNsT('platform');` и далее `tp('menu.settings')`.
 
 ### 2. Использование в Lit компоненте
 

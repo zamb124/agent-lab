@@ -277,7 +277,7 @@ export class CompanyModal extends PlatformElement {
     async _checkSlugAvailability() {
         if (!this.companySlug || this.companySlug.length < 3) {
             this.slugAvailable = null;
-            this.slugError = this.companySlug ? 'Минимум 3 символа' : '';
+            this.slugError = this.companySlug ? this.i18n.t('company.slug_min', {}, 'shell') : '';
             return;
         }
 
@@ -289,11 +289,11 @@ export class CompanyModal extends PlatformElement {
             this.slugAvailable = data.available;
             
             if (!data.available) {
-                this.slugError = 'Этот адрес уже занят';
+                this.slugError = this.i18n.t('company.slug_taken', {}, 'shell');
             }
         } catch (error) {
             console.error('Error checking slug:', error);
-            this.slugError = 'Ошибка проверки доступности';
+            this.slugError = this.i18n.t('company.slug_check_error', {}, 'shell');
         } finally {
             this.slugChecking = false;
         }
@@ -303,17 +303,17 @@ export class CompanyModal extends PlatformElement {
         e.preventDefault();
         
         if (!this.companyName.trim()) {
-            this.error = 'Введите название компании';
+            this.error = this.i18n.t('company.error_name_required', {}, 'shell');
             return;
         }
 
         if (!this.companySlug || this.companySlug.length < 3) {
-            this.error = 'Введите корректный адрес компании';
+            this.error = this.i18n.t('company.error_slug_invalid', {}, 'shell');
             return;
         }
 
         if (this.slugAvailable === false) {
-            this.error = 'Адрес компании уже занят';
+            this.error = this.i18n.t('company.error_slug_taken', {}, 'shell');
             return;
         }
 
@@ -338,6 +338,19 @@ export class CompanyModal extends PlatformElement {
         }
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     _handleContentClick(e) {
         // Предотвращаем закрытие модалки при клике на содержимое
         e.stopPropagation();
@@ -352,30 +365,31 @@ export class CompanyModal extends PlatformElement {
     }
 
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'shell');
         return html`
             <div class="modal-overlay" @click=${this._handleOverlayClick}>
                 <div class="modal-content" @click=${this._handleContentClick}>
                 <div class="modal-header">
-                    <h2 class="modal-title">Создание компании</h2>
-                    <p class="modal-subtitle">Для начала работы создайте компанию</p>
+                    <h2 class="modal-title">${t('company.create_title')}</h2>
+                    <p class="modal-subtitle">${t('company.create_subtitle')}</p>
                 </div>
 
                 <form @submit=${this.handleSubmit}>
                     <div class="form-group">
-                        <label class="form-label">Название компании</label>
+                        <label class="form-label">${t('company.name_label')}</label>
                         <input
                             type="text"
                             class="form-input"
                             .value=${this.companyName}
                             @input=${this._handleNameInput}
-                            placeholder="Моя компания"
+                            placeholder=${t('company.name_placeholder')}
                             ?disabled=${this.loading}
                             required
                         />
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Адрес компании</label>
+                        <label class="form-label">${t('company.slug_label')}</label>
                         <div class="input-wrapper">
                             <input
                                 type="text"
@@ -405,7 +419,7 @@ export class CompanyModal extends PlatformElement {
                         ${this.slugError ? html`
                             <div class="slug-error">${this.slugError}</div>
                         ` : html`
-                            <div class="slug-hint">Только латинские буквы, цифры и дефис</div>
+                            <div class="slug-hint">${t('company.slug_hint')}</div>
                         `}
                     </div>
 
@@ -415,7 +429,7 @@ export class CompanyModal extends PlatformElement {
                             class="button button-primary"
                             ?disabled=${this.loading || this.slugChecking || this.slugAvailable === false}
                         >
-                            ${this.loading ? 'Создание...' : 'Создать'}
+                            ${this.loading ? t('company.creating') : t('company.submit')}
                         </button>
                     </div>
 

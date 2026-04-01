@@ -345,12 +345,17 @@ export class ProductSyncPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this.addEventListener('open-auth-modal', this._handleOpenAuthModal);
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         this.removeEventListener('open-auth-modal', this._handleOpenAuthModal);
+        super.disconnectedCallback();
     }
 
     _handleOpenAuthModal = () => {
@@ -361,6 +366,7 @@ export class ProductSyncPage extends PlatformElement {
     };
 
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'frontend_products');
         return html`
             <div class="page-container">
                 <landing-header></landing-header>
@@ -369,14 +375,13 @@ export class ProductSyncPage extends PlatformElement {
                     <div class="hero-icon">
                         <img src="/static/core/assets/service_logos/sync_logo.svg" alt="Sync" />
                     </div>
-                    <span class="hero-badge">Чат и видеозвонки для команды</span>
-                    <h1 class="hero-title">Sync</h1>
+                    <span class="hero-badge">${t('sync.hero_badge')}</span>
+                    <h1 class="hero-title">${t('sync.hero_title')}</h1>
                     <p class="hero-description">
-                        Каналы, личные переписки и треды в реальном времени. Видеозвонки с демонстрацией экрана,
-                        контекст Git рядом с обсуждением и уведомления, если вы не в чате.
+                        ${t('sync.hero_description')}
                     </p>
                     <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Открыть Sync
+                        ${t('sync.cta_try')}
                     </button>
                 </section>
                 
@@ -384,37 +389,33 @@ export class ProductSyncPage extends PlatformElement {
                     <div class="features-grid">
                         <div class="feature-card">
                             <div class="feature-icon">💬</div>
-                            <h3 class="feature-title">Каналы и треды</h3>
+                            <h3 class="feature-title">${t('sync.f1_title')}</h3>
                             <p class="feature-description">
-                                Командные каналы, личные сообщения и ветки обсуждений — история сохраняется,
-                                новые сообщения приходят без перезагрузки страницы.
+                                ${t('sync.f1_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">📹</div>
-                            <h3 class="feature-title">Видеозвонки</h3>
+                            <h3 class="feature-title">${t('sync.f2_title')}</h3>
                             <p class="feature-description">
-                                Звонки из чата: камера, микрофон, демонстрация экрана. Гостевые ссылки для
-                                подключения внешних участников.
+                                ${t('sync.f2_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">🔗</div>
-                            <h3 class="feature-title">Git в контексте</h3>
+                            <h3 class="feature-title">${t('sync.f3_title')}</h3>
                             <p class="feature-description">
-                                Привязывайте обсуждения к репозиториям и веткам — команда видит, о чём
-                                речь в коде.
+                                ${t('sync.f3_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">🔔</div>
-                            <h3 class="feature-title">Уведомления</h3>
+                            <h3 class="feature-title">${t('sync.f4_title')}</h3>
                             <p class="feature-description">
-                                Если вас нет в открытом чате, платформа может напомнить о новом сообщении
-                                или упоминании.
+                                ${t('sync.f4_desc')}
                             </p>
                         </div>
                     </div>
@@ -422,37 +423,37 @@ export class ProductSyncPage extends PlatformElement {
                 
                 <section class="how-it-works">
                     <div class="how-it-works-container">
-                        <h2 class="how-it-works-title">Как это работает</h2>
+                        <h2 class="how-it-works-title">${t('sync.how_title')}</h2>
                         <div class="steps-grid">
                             <div class="step-item">
                                 <div class="step-number">1</div>
                                 <div class="step-content">
-                                    <h3>Вход в компанию</h3>
-                                    <p>После входа вы видите пространства и каналы своей компании — изоляция данных между организациями.</p>
+                                    <h3>${t('sync.s1_h')}</h3>
+                                    <p>${t('sync.s1_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">2</div>
                                 <div class="step-content">
-                                    <h3>Выбор канала</h3>
-                                    <p>Откройте общий канал или напишите коллеге в личку; внутри канала можно вести треды по темам.</p>
+                                    <h3>${t('sync.s2_h')}</h3>
+                                    <p>${t('sync.s2_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">3</div>
                                 <div class="step-content">
-                                    <h3>Звонок при необходимости</h3>
-                                    <p>Из чата запускается видеозвонок: участники комнаты подключаются, можно показать экран.</p>
+                                    <h3>${t('sync.s3_h')}</h3>
+                                    <p>${t('sync.s3_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">4</div>
                                 <div class="step-content">
-                                    <h3>Ни одного пропущенного смысла</h3>
-                                    <p>История переписки и вложения остаются в канале; при отсутствии в сети помогут уведомления.</p>
+                                    <h3>${t('sync.s4_h')}</h3>
+                                    <p>${t('sync.s4_p')}</p>
                                 </div>
                             </div>
                         </div>
@@ -460,65 +461,65 @@ export class ProductSyncPage extends PlatformElement {
                 </section>
                 
                 <section class="benefits">
-                    <h2 class="benefits-title">Зачем командам Sync</h2>
+                    <h2 class="benefits-title">${t('sync.benefits_title')}</h2>
                     <div class="benefits-grid">
                         <div class="benefit-item">
                             <div class="benefit-icon">⚡</div>
                             <div class="benefit-content">
-                                <h3>Один интерфейс</h3>
-                                <p>Не нужно переключаться между мессенджером и таск-трекером для обсуждения кода и задач.</p>
+                                <h3>${t('sync.b1_h')}</h3>
+                                <p>${t('sync.b1_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">🛡️</div>
                             <div class="benefit-content">
-                                <h3>Данные компании</h3>
-                                <p>Переписка и файлы внутри контура вашей организации на платформе Humanitec.</p>
+                                <h3>${t('sync.b2_h')}</h3>
+                                <p>${t('sync.b2_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">👀</div>
                             <div class="benefit-content">
-                                <h3>Онлайн и статус</h3>
-                                <p>Видно, кто из коллег сейчас в сети, чтобы выбрать удобный момент для звонка.</p>
+                                <h3>${t('sync.b3_h')}</h3>
+                                <p>${t('sync.b3_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">🧩</div>
                             <div class="benefit-content">
-                                <h3>Рядом с остальными сервисами</h3>
-                                <p>Sync дополняет AI Studio, Knowledge Base и NetWorkle — единый вход с дашборда.</p>
+                                <h3>${t('sync.b4_h')}</h3>
+                                <p>${t('sync.b4_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">👤</div>
                             <div class="benefit-content">
-                                <h3>Упоминания</h3>
-                                <p>Отметьте коллегу в сообщении — он получит отдельное уведомление о важном контексте.</p>
+                                <h3>${t('sync.b5_h')}</h3>
+                                <p>${t('sync.b5_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">📎</div>
                             <div class="benefit-content">
-                                <h3>Вложения</h3>
-                                <p>Обмен файлами в сообщениях, чтобы договорённости и артефакты оставались в истории.</p>
+                                <h3>${t('sync.b6_h')}</h3>
+                                <p>${t('sync.b6_p')}</p>
                             </div>
                         </div>
                     </div>
                 </section>
                 
                 <section class="cta-section">
-                    <h2 class="cta-title">Подключите команду к Sync</h2>
-                    <p class="cta-subtitle">Войдите под учётной записью компании — чат откроется с дашборда.</p>
+                    <h2 class="cta-title">${t('sync.cta_title')}</h2>
+                    <p class="cta-subtitle">${t('sync.cta_subtitle')}</p>
                     <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Войти и открыть
+                        ${t('sync.cta_button')}
                     </button>
-                    <a href="/" class="back-link">← Вернуться на главную</a>
+                    <a href="/" class="back-link">${t('sync.back_home')}</a>
                 </section>
                 
                 <landing-footer></landing-footer>

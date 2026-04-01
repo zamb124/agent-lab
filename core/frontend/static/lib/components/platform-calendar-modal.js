@@ -1262,7 +1262,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Календарь';
+        this.title = '';
         this._view = 'month';
         this._anchorDate = toDateInputValue(new Date());
         this._events = [];
@@ -1314,6 +1314,15 @@ export class PlatformCalendarModal extends PlatformModal {
             sync_outbound_enabled: true,
             notifications_enabled: true,
         };
+    }
+
+    willUpdate(changedProperties) {
+        super.willUpdate(changedProperties);
+        this.title = this.i18n.t('title', {}, 'calendar');
+    }
+
+    _calT(key, params = {}) {
+        return this.i18n.t(key, params, 'calendar');
     }
 
     async showModal() {
@@ -1459,7 +1468,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _sourceLabel(source) {
         const key = this._sourceKey(source);
         if (key === 'platform') {
-            return 'Платформа';
+            return this._calT('source_platform');
         }
         if (key === 'crm') {
             return 'NetWorkle';
@@ -1476,27 +1485,27 @@ export class PlatformCalendarModal extends PlatformModal {
         if (key === 'yandex') {
             return 'Yandex';
         }
-        return key ? key.toUpperCase() : 'Неизвестно';
+        return key ? key.toUpperCase() : this._calT('unknown');
     }
 
     _kindLabel(kind) {
         const key = this._kindKey(kind);
         if (key === 'event') {
-            return 'Событие';
+            return this._calT('kind_event');
         }
         if (key === 'meeting') {
-            return 'Встреча';
+            return this._calT('kind_meeting');
         }
         if (key === 'task') {
-            return 'Задача';
+            return this._calT('kind_task');
         }
         if (key === 'note') {
-            return 'Заметка';
+            return this._calT('kind_note');
         }
         if (key === 'call') {
-            return 'Звонок';
+            return this._calT('kind_call');
         }
-        return key ? key : 'событие';
+        return key ? key : this._calT('kind_generic');
     }
 
     _isEventEditable(source) {
@@ -1587,7 +1596,7 @@ export class PlatformCalendarModal extends PlatformModal {
             return;
         }
         if (!EMAIL_PATTERN.test(normalized)) {
-            this.error('Введите корректный email');
+            this.error(this._calT('error_email_invalid'));
             return;
         }
         const current = this._attendeeTags();
@@ -1774,7 +1783,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._saving = true;
         try {
             if (this._selectedEventId && !this._isEventEditable(this._selectedEventSource)) {
-                throw new Error(`События источника ${this._sourceLabel(this._selectedEventSource)} редактируются в своем сервисе`);
+                throw new Error(this._calT('err_edit_remote', { label: this._sourceLabel(this._selectedEventSource) }));
             }
             const payload = {
                 title: this._eventForm.title.trim(),
@@ -1803,13 +1812,13 @@ export class PlatformCalendarModal extends PlatformModal {
                 ),
             };
             if (!payload.title) {
-                throw new Error('Название события обязательно');
+                throw new Error(this._calT('err_title_required'));
             }
             if (!payload.kind) {
-                throw new Error('Тип события обязателен');
+                throw new Error(this._calT('err_kind_required'));
             }
             if (new Date(payload.start_at) >= new Date(payload.end_at)) {
-                throw new Error('Дата окончания должна быть позже даты начала');
+                throw new Error(this._calT('err_end_after_start'));
             }
             if (this._selectedEventId) {
                 await this.calendarApi.updateEvent(this._selectedEventId, payload);
@@ -1837,7 +1846,7 @@ export class PlatformCalendarModal extends PlatformModal {
             this._eventDialogOpen = false;
             await this._reload();
         } catch (error) {
-            this.error(error instanceof Error ? error.message : 'Не удалось сохранить событие');
+            this.error(error instanceof Error ? error.message : this._calT('error_save_event'));
         } finally {
             this._saving = false;
         }
@@ -1845,10 +1854,10 @@ export class PlatformCalendarModal extends PlatformModal {
 
     async _deleteSelectedEvent() {
         if (!this._selectedEventId) {
-            throw new Error('Не выбрано событие для удаления');
+            throw new Error(this._calT('err_no_event_selected'));
         }
         if (!this._isEventEditable(this._selectedEventSource)) {
-            throw new Error(`События источника ${this._sourceLabel(this._selectedEventSource)} удаляются в своем сервисе`);
+            throw new Error(this._calT('err_delete_remote', { label: this._sourceLabel(this._selectedEventSource) }));
         }
         await this.calendarApi.deleteEvent(this._selectedEventId);
         this._selectedEventId = null;
@@ -1865,7 +1874,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._saving = true;
         if (this._activeProvider === 'google') {
             this._saving = false;
-            throw new Error('Google подключается через OAuth-кнопку');
+            throw new Error(this._calT('err_google_oauth_only'));
         }
         const payload = {
             provider: this._activeProvider,
@@ -1883,11 +1892,11 @@ export class PlatformCalendarModal extends PlatformModal {
         };
         if (!payload.username) {
             this._saving = false;
-            throw new Error('Username обязателен');
+            throw new Error(this._calT('err_username_required'));
         }
         if (!payload.access_token) {
             this._saving = false;
-            throw new Error('Пароль приложения обязателен');
+            throw new Error(this._calT('err_app_password_required'));
         }
         await this.calendarApi.connectIntegration(payload);
         this._saving = false;
@@ -1935,7 +1944,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _renderMonth() {
-        const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+        const weekdays = [1, 2, 3, 4, 5, 6, 7].map((i) => this._calT(`weekday_${i}`));
         const cells = this._monthCells();
         return html`
             <div class="month-grid">
@@ -1984,7 +1993,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     <article class="section">
                         <div class="section-title">${row.label}</div>
                         ${row.events.length === 0 ? html`
-                            <div class="hint">Событий нет</div>
+                            <div class="hint">${this._calT('events_empty')}</div>
                         ` : row.events.map((event) => html`
                             <button
                                 class="list-item ${this._selectedEventId === event.event_id ? 'active' : ''}"
@@ -2010,11 +2019,14 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _renderEventForm() {
-        const submitLabel = this._saving ? 'Сохранение...' : (this._selectedEventId ? 'Сохранить' : 'Создать');
+        const submitLabel = this._saving
+            ? this._calT('compose_saving')
+            : (this._selectedEventId ? this._calT('compose_save') : this._calT('compose_create'));
+        const c = (key, params) => this._calT(key, params);
         return html`
             <div class="event-compose">
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Название</label>
+                    <label class="event-compose-label">${c('label_title')}</label>
                     <div class="event-compose-control">
                         <input
                             class="event-compose-title-input"
@@ -2031,10 +2043,10 @@ export class PlatformCalendarModal extends PlatformModal {
                         <div class="event-compose-pills">
                             <button class="event-compose-pill" type="button" @click=${() => { this._showDescriptionField = !this._showDescriptionField; }}>
                                 <span>+</span>
-                                <small>Описание</small>
+                                <small>${c('label_description')}</small>
                             </button>
                             <button class="event-compose-pill" type="button" @click=${this._triggerAttachmentSelect} ?disabled=${this._uploadingAttachments}>
-                                <small>Прикрепить файл</small>
+                                <small>${c('label_attach')}</small>
                             </button>
                         </div>
                         ${this._eventAttachments.length > 0 ? html`
@@ -2055,7 +2067,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                             class="event-compose-attachment-remove"
                                             type="button"
                                             @click=${() => this._removeAttachment(attachment.file_id)}
-                                            title="Убрать файл"
+                                            title=${c('remove_file')}
                                         >
                                             ×
                                         </button>
@@ -2068,7 +2080,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
                 ${this._showDescriptionField ? html`
                     <div class="event-compose-row">
-                        <label class="event-compose-label">Описание</label>
+                        <label class="event-compose-label">${c('label_description')}</label>
                         <div class="event-compose-control">
                             <textarea
                                 class="event-compose-textarea"
@@ -2081,7 +2093,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 ` : ''}
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Участники</label>
+                    <label class="event-compose-label">${c('label_attendees')}</label>
                     <div class="event-compose-control">
                         <div class="attendees-picker">
                             <div class="attendees-tags">
@@ -2091,7 +2103,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                         <button
                                             class="attendee-tag-remove"
                                             type="button"
-                                            title="Удалить участника"
+                                            title=${c('remove_attendee')}
                                             @click=${() => this._removeAttendee(attendee.email)}
                                         >
                                             ×
@@ -2112,7 +2124,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                         this._attendeeDropdownOpen = true;
                                     }}
                                     @keydown=${(event) => this._onAttendeeInputKeyDown(event)}
-                                    placeholder="Введите email или выберите пользователя"
+                                    placeholder=${c('attendee_placeholder')}
                                 />
                             </div>
                             ${this._attendeeDropdownOpen && this._attendeeSuggestions().length > 0 ? html`
@@ -2130,7 +2142,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 </div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Время и дата</label>
+                    <label class="event-compose-label">${c('label_datetime')}</label>
                     <div class="event-compose-time-layout">
                         <div class="event-compose-time-row">
                             <platform-date-picker
@@ -2154,7 +2166,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                     .checked=${Boolean(this._eventForm.all_day)}
                                     @change=${(e) => this._onEventFormChange('all_day', e.target.checked)}
                                 />
-                                <span>Весь день</span>
+                                <span>${c('all_day')}</span>
                             </label>
                             <label class="event-compose-check">
                                 <input
@@ -2162,7 +2174,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                     .checked=${this._eventForm.recurrence !== 'none'}
                                     @change=${(e) => this._onEventFormChange('recurrence', e.target.checked ? 'weekly' : 'none')}
                                 />
-                                <span>Повторять</span>
+                                <span>${c('repeat')}</span>
                             </label>
                             <select
                                 class="event-compose-select"
@@ -2178,7 +2190,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 </div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Цвет</label>
+                    <label class="event-compose-label">${c('label_color')}</label>
                     <div class="event-compose-control">
                         <div class="event-color-palette">
                             ${EVENT_COLOR_OPTIONS.map((color) => html`
@@ -2195,7 +2207,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 </div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Тип</label>
+                    <label class="event-compose-label">${c('label_type')}</label>
                     <div class="event-compose-control">
                         <select
                             class="event-compose-select"
@@ -2203,11 +2215,11 @@ export class PlatformCalendarModal extends PlatformModal {
                             @change=${(e) => this._onEventFormChange('kind', e.target.value)}
                             ?disabled=${this._selectedEventId && !this._isEventEditable(this._selectedEventSource)}
                         >
-                            <option value="event">Событие</option>
-                            <option value="meeting">Встреча</option>
-                            <option value="task">Задача</option>
-                            <option value="note">Заметка</option>
-                            <option value="call">Звонок</option>
+                            <option value="event">${c('kind_event')}</option>
+                            <option value="meeting">${c('kind_meeting')}</option>
+                            <option value="task">${c('kind_task')}</option>
+                            <option value="note">${c('kind_note')}</option>
+                            <option value="call">${c('kind_call')}</option>
                         </select>
                     </div>
                 </div>
@@ -2215,22 +2227,22 @@ export class PlatformCalendarModal extends PlatformModal {
                 <div class="event-compose-divider"></div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Место</label>
+                    <label class="event-compose-label">${c('label_location')}</label>
                     <div class="event-compose-control">
                         <input
                             class="event-compose-input"
                             .value=${this._eventForm.location}
                             @input=${(e) => this._onEventFormChange('location', e.target.value)}
-                            placeholder="Введите адрес или место"
+                            placeholder=${c('location_placeholder')}
                         />
                     </div>
                 </div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Телемост</label>
+                    <label class="event-compose-label">${c('label_telemost')}</label>
                     <div class="event-compose-control">
                         <button class="event-compose-pill" type="button">
-                            <small>Добавить видеовстречу</small>
+                            <small>${c('add_video')}</small>
                         </button>
                     </div>
                 </div>
@@ -2239,10 +2251,10 @@ export class PlatformCalendarModal extends PlatformModal {
             <div class="event-compose-footer">
                 <div class="event-compose-footer-left">
                     ${this._selectedEventId && this._isEventEditable(this._selectedEventSource) ? html`
-                        <button class="btn btn-danger" type="button" @click=${this._deleteSelectedEvent} ?disabled=${this._saving}>Удалить</button>
+                        <button class="btn btn-danger" type="button" @click=${this._deleteSelectedEvent} ?disabled=${this._saving}>${c('delete')}</button>
                     ` : ''}
                     ${this._selectedEventId && !this._isEventEditable(this._selectedEventSource) ? html`
-                        <span class="event-source-hint">Редактирование доступно в сервисе ${this._sourceLabel(this._selectedEventSource)}</span>
+                        <span class="event-source-hint">${c('edit_in_service', { source: this._sourceLabel(this._selectedEventSource) })}</span>
                     ` : ''}
                 </div>
                 <button
@@ -2260,9 +2272,10 @@ export class PlatformCalendarModal extends PlatformModal {
     _renderIntegrations() {
         const providers = ['google', 'yandex'];
         const activeIntegration = this._integrations.find((item) => item.provider === this._activeProvider) || null;
+        const c = (key, params) => this._calT(key, params);
         return html`
             <section class="section">
-                <div class="section-title">Интеграции календаря</div>
+                <div class="section-title">${c('integrations_title')}</div>
                 <div class="integration-tabs">
                     ${providers.map((provider) => html`
                         <button
@@ -2277,26 +2290,30 @@ export class PlatformCalendarModal extends PlatformModal {
 
                 ${this._activeProvider === 'google' ? html`
                     <div class="hint">
-                        Подключение Google выполняется через OAuth. После перехода откроется окно согласия Google.
+                        ${c('google_oauth_hint')}
                     </div>
                     <div class="hint">
-                        Автосинхронизация работает в фоне каждую минуту.
+                        ${c('autosync_hint')}
                     </div>
                     ${activeIntegration ? html`
                         <div class="hint">
-                            Уведомления: ${activeIntegration.settings?.notifications_enabled === false ? 'выключены' : 'включены'}
+                            ${c('notifications_label', {
+                                state: activeIntegration.settings?.notifications_enabled === false
+                                    ? c('notifications_off')
+                                    : c('notifications_on'),
+                            })}
                         </div>
                     ` : ''}
                     <div class="actions">
                         <button class="btn btn-primary" type="button" @click=${() => this._startGoogleConnect()}>
-                            ${activeIntegration ? 'Переподключить Google' : 'Подключить Google'}
+                            ${activeIntegration ? c('reconnect_google') : c('connect_google')}
                         </button>
                         <button class="btn btn-secondary" type="button" @click=${() => this._runSync('google')} ?disabled=${this._syncing || !activeIntegration}>
-                            ${this._syncing ? 'Синхронизация...' : 'Синхронизировать'}
+                            ${this._syncing ? c('syncing') : c('sync')}
                         </button>
                         ${activeIntegration ? html`
                             <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('google')}>
-                                Отключить
+                                ${c('disconnect')}
                             </button>
                         ` : ''}
                     </div>
@@ -2311,12 +2328,12 @@ export class PlatformCalendarModal extends PlatformModal {
                         />
                     </div>
                     <div class="row">
-                        <label class="form-label">Пароль приложения (CalDAV)</label>
+                        <label class="form-label">${c('yandex_app_password')}</label>
                         <input
                             class="form-input"
                             .value=${this._integrationForm.app_password}
                             @input=${(e) => this._integrationForm = { ...this._integrationForm, app_password: e.target.value }}
-                            placeholder="Пароль приложения Yandex ID"
+                            placeholder=${c('yandex_password_placeholder')}
                         />
                     </div>
                     <div class="row">
@@ -2334,22 +2351,22 @@ export class PlatformCalendarModal extends PlatformModal {
                             .checked=${Boolean(this._integrationForm.notifications_enabled)}
                             @change=${(e) => this._integrationForm = { ...this._integrationForm, notifications_enabled: e.target.checked }}
                         />
-                        <span>Уведомления о новых событиях</span>
+                        <span>${c('notifications_new_events')}</span>
                     </label>
                     <div class="hint">
-                        Автосинхронизация работает в фоне каждую минуту.
+                        ${c('autosync_hint')}
                     </div>
 
                     <div class="actions">
                         <button class="btn btn-primary" type="button" @click=${this._saveIntegration} ?disabled=${this._saving}>
-                            Сохранить подключение
+                            ${c('save_connection')}
                         </button>
                         <button class="btn btn-secondary" type="button" @click=${() => this._runSync('yandex')} ?disabled=${this._syncing || !activeIntegration}>
-                            ${this._syncing ? 'Синхронизация...' : 'Синхронизировать'}
+                            ${this._syncing ? c('syncing') : c('sync')}
                         </button>
                         ${activeIntegration ? html`
                             <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('yandex')}>
-                                Отключить
+                                ${c('disconnect')}
                             </button>
                         ` : ''}
                     </div>
@@ -2362,7 +2379,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                 <div>${integration.provider.toUpperCase()} / ${integration.settings?.default_calendar_id || 'no-calendar'}</div>
                                 <div class="hint">updated: ${new Date(integration.updated_at).toLocaleString('ru-RU')}</div>
                             </div>
-                            <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(integration.provider)}>Отключить</button>
+                            <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(integration.provider)}>${c('disconnect')}</button>
                         </div>
                     `)}
                 </div>
@@ -2379,7 +2396,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <section class="event-dialog" @click=${(e) => e.stopPropagation()}>
                     <div class="event-dialog-header">
                         <div>
-                            <div class="event-dialog-title">${this._selectedEventId ? 'Редактирование события' : 'Новое событие'}</div>
+                            <div class="event-dialog-title">${this._selectedEventId ? this._calT('dialog_edit') : this._calT('dialog_new')}</div>
                             ${this._selectedEventId ? html`
                                 <div class="event-dialog-subtitle">
                                     <span class="event-badge" data-source=${this._sourceKey(this._selectedEventSource)}>${this._sourceLabel(this._selectedEventSource)}</span>
@@ -2402,7 +2419,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _renderCalendarPanel() {
         if (this._loading) {
-            return html`<div class="hint">Загрузка календаря...</div>`;
+            return html`<div class="hint">${this._calT('loading')}</div>`;
         }
         if (this._view === 'month') {
             return this._renderMonth();
@@ -2411,6 +2428,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     renderBody() {
+        const v = (key) => this._calT(key);
         return html`
             <div class="calendar-shell">
                 <section class="calendar-main">
@@ -2426,17 +2444,17 @@ export class PlatformCalendarModal extends PlatformModal {
                         </div>
                         <div class="toolbar-right">
                             <button class="btn btn-primary" type="button" @click=${() => this._openCreateEventDialog(new Date(this._anchorDate))}>
-                                Создать событие
+                                ${v('create_event')}
                             </button>
                             <div class="advanced-toggle">
                                 <button class="btn btn-secondary" type="button" @click=${() => { this._showAdvanced = !this._showAdvanced; }}>
-                                    ${this._showAdvanced ? 'Скрыть дополнительно' : 'Дополнительно'}
+                                    ${this._showAdvanced ? v('advanced_hide') : v('advanced_show')}
                                 </button>
                             </div>
                             <div class="view-segment">
-                                <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>День</button>
-                                <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>Неделя</button>
-                                <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>Месяц</button>
+                                <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>${v('view_day')}</button>
+                                <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>${v('view_week')}</button>
+                                <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>${v('view_month')}</button>
                             </div>
                         </div>
                     </div>

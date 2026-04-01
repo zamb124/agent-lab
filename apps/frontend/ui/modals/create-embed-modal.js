@@ -173,7 +173,16 @@ export class CreateEmbedModal extends PlatformModal {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this._loadFlows();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadFlows() {
@@ -233,19 +242,20 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     async _handleCreate() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         if (!this._name.trim()) {
-            this.error('Введите название виджета');
+            this.error(td('embed_create_modal.err_name'));
             return;
         }
 
         if (!this._flowId.trim()) {
-            this.error('Выберите flow');
+            this.error(td('embed_create_modal.err_flow'));
             return;
         }
 
         const flow = this._selectedFlow();
         if (!flow) {
-            this.error('Выберите корректный flow');
+            this.error(td('embed_create_modal.err_flow_invalid'));
             return;
         }
 
@@ -271,7 +281,7 @@ export class CreateEmbedModal extends PlatformModal {
             const configs = await this.services.get('embed').list();
             FrontendStore.setEmbedConfigs(configs);
 
-            this.success('Виджет успешно создан');
+            this.success(td('embed_create_modal.toast_created'));
             this._handleClose();
             this.dispatchEvent(new CustomEvent('created'));
         } catch (e) {
@@ -294,12 +304,13 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     renderHeader() {
-        return 'Создать виджет';
+        return this.i18n.t('embed_create_modal.header', {}, 'dashboard');
     }
 
     renderBody() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         if (this._flowsLoading) {
-            return html`<div class="loading-hint">Загрузка списка flows...</div>`;
+            return html`<div class="loading-hint">${td('embed_create_modal.loading_flows')}</div>`;
         }
 
         const skillEntries = this._skillChoices();
@@ -307,41 +318,41 @@ export class CreateEmbedModal extends PlatformModal {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Название виджета</label>
+                <label class="form-label">${td('embed_create_modal.label_name')}</label>
                 <input
                     class="form-input"
                     type="text"
-                    placeholder="Чат-поддержка"
+                    placeholder=${td('embed_create_modal.placeholder_name')}
                     .value=${this._name}
                     @input=${(e) => { this._name = e.target.value; this.requestUpdate(); }}
                     ?disabled=${this._loading}
                 />
-                <div class="form-hint">Краткое описание виджета</div>
+                <div class="form-hint">${td('embed_create_modal.name_hint')}</div>
             </div>
 
             <div class="flow-skill-row ${showSkill ? 'flow-skill-row--split' : ''}">
                 <div class="form-group">
-                    <label class="form-label">Flow (агент)</label>
+                    <label class="form-label">${td('embed_create_modal.label_flow')}</label>
                     <select
                         class="form-select"
                         .value=${this._flowId}
                         @change=${(e) => this._onFlowChange(e)}
                         ?disabled=${this._loading}
                     >
-                        <option value="">Выберите flow</option>
+                        <option value="">${td('embed_create_modal.flow_placeholder')}</option>
                         ${this._flowsList().map(
                             (f) => html`
                                 <option value=${f.flow_id}>${f.name} (${f.flow_id})</option>
                             `,
                         )}
                     </select>
-                    <div class="form-hint">Список из сервиса flows для текущей компании</div>
+                    <div class="form-hint">${td('embed_create_modal.flow_hint')}</div>
                 </div>
 
                 ${showSkill
                     ? html`
                           <div class="form-group">
-                              <label class="form-label">Skill</label>
+                              <label class="form-label">${td('embed_create_modal.label_skill')}</label>
                               <select
                                   class="form-select"
                                   .value=${this._skillId}
@@ -356,35 +367,35 @@ export class CreateEmbedModal extends PlatformModal {
                                       `,
                                   )}
                               </select>
-                              <div class="form-hint">Точка входа внутри flow</div>
+                              <div class="form-hint">${td('embed_create_modal.skill_hint')}</div>
                           </div>
                       `
                     : this._flowId
                       ? html`
                             <div class="form-group flows-hint">
-                                Skill: default (внешний flow или нет skills в конфиге).
+                                ${td('embed_create_modal.skill_default_hint')}
                             </div>
                         `
                       : html``}
             </div>
 
             <div class="form-group">
-                <label class="form-label">Позиция на странице</label>
+                <label class="form-label">${td('embed_create_modal.position_label')}</label>
                 <div class="position-options">
-                    ${this._renderPositionOption('bottom-right', '↘', 'Справа внизу')}
-                    ${this._renderPositionOption('bottom-left', '↙', 'Слева внизу')}
-                    ${this._renderPositionOption('center', '◎', 'По центру')}
-                    ${this._renderPositionOption('fullscreen', '⛶', 'На весь экран')}
+                    ${this._renderPositionOption('bottom-right', '↘', td('embed_create_modal.pos_br'))}
+                    ${this._renderPositionOption('bottom-left', '↙', td('embed_create_modal.pos_bl'))}
+                    ${this._renderPositionOption('center', '◎', td('embed_create_modal.pos_center'))}
+                    ${this._renderPositionOption('fullscreen', '⛶', td('embed_create_modal.pos_full'))}
                 </div>
             </div>
 
             <div class="form-group">
                 <div class="theme-label-row">
-                    <span class="form-label">Тема оформления</span>
-                    <div class="theme-chips" role="group" aria-label="Тема оформления виджета">
-                        ${this._renderThemeChip('light', 'sun', 'Светлая')}
-                        ${this._renderThemeChip('dark', 'moon', 'Тёмная')}
-                        ${this._renderThemeChip('auto', 'theme-auto', 'Как в системе')}
+                    <span class="form-label">${td('embed_create_modal.theme_label')}</span>
+                    <div class="theme-chips" role="group" aria-label=${td('embed_create_modal.theme_group_aria')}>
+                        ${this._renderThemeChip('light', 'sun', td('embed_create_modal.theme_light'))}
+                        ${this._renderThemeChip('dark', 'moon', td('embed_create_modal.theme_dark'))}
+                        ${this._renderThemeChip('auto', 'theme-auto', td('embed_create_modal.theme_auto'))}
                     </div>
                 </div>
             </div>
@@ -392,6 +403,7 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     renderFooter() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         return html`
             <div class="actions-row">
                 <button
@@ -399,14 +411,14 @@ export class CreateEmbedModal extends PlatformModal {
                     @click=${this._handleClose}
                     ?disabled=${this._loading}
                 >
-                    Отмена
+                    ${td('embed_create_modal.cancel')}
                 </button>
                 <button
                     class="btn btn-primary"
                     @click=${this._handleCreate}
                     ?disabled=${this._loading || this._flowsLoading}
                 >
-                    ${this._loading ? 'Создание...' : 'Создать виджет'}
+                    ${this._loading ? td('embed_create_modal.creating') : td('embed_create_modal.submit')}
                 </button>
             </div>
         `;

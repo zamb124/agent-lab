@@ -226,39 +226,53 @@ export class LandingAdvantages extends PlatformElement {
         `
     ];
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'landing');
         return html`
             <div class="blur-bg-primary"></div>
             <div class="blur-bg-white"></div>
             
             <div class="advantages-container">
                 <h2 class="advantages-title">
-                    Обеспечим впечатляющие результаты вашему бизнесу
+                    ${t('advantages.title')}
                 </h2>
                 
                 <div class="advantages-grid">
                     <a href="/products/agents" class="advantage-badge advantage-link">
-                        AI Studio — конструктор агентов без кода
+                        ${t('advantages.badge_agents')}
                     </a>
                     
                     <a href="/products/rag" class="advantage-badge advantage-link">
-                        Knowledge Base — умный поиск по документам
+                        ${t('advantages.badge_rag')}
                     </a>
                     
                     <a href="/products/crm" class="advantage-badge advantage-badge--featured advantage-link">
-                        NetWorkle — граф связей вашего бизнеса
+                        ${t('advantages.badge_crm')}
                     </a>
                     
                     <a href="/products/sync" class="advantage-badge advantage-link">
-                        Sync — чат и видеозвонки для команды
+                        ${t('advantages.badge_sync')}
                     </a>
                     
                     <div class="advantage-badge">
-                        Запуск первого агента за 1 день
+                        ${t('advantages.badge_day1')}
                     </div>
                     
                     <div class="advantage-badge">
-                        On-premise или облако — вы выбираете
+                        ${t('advantages.badge_onprem')}
                     </div>
                 </div>
             </div>

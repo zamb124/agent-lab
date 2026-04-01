@@ -263,8 +263,8 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         if (me) {
             if (me.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
                 msg =
-                    'Этот файл в формате, который на iPhone не воспроизводится (часто WebM). '
-                    + 'Новые голосовые с телефона сохраняются в совместимом формате.';
+                    'Формат не поддерживается в Safari на iPhone (часто старые WebM). '
+                    + 'Новые голосовые перекодируются на сервере в M4A.';
             } else if (me.code === MediaError.MEDIA_ERR_NETWORK) {
                 msg = 'Не удалось загрузить аудио (сеть).';
             } else if (me.code === MediaError.MEDIA_ERR_DECODE) {

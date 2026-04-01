@@ -1,7 +1,0 @@
-# Идентификатор приложения (совпадает с Xcode / Capacitor)
-app_identifier(ENV.fetch("FASTLANE_APP_IDENTIFIER", "ru.humanitec.app"))
-
-# Команда App Store Connect (10 символов), см. Membership в Apple Developer
-if ENV["FASTLANE_TEAM_ID"]
-  team_id(ENV["FASTLANE_TEAM_ID"])
-end

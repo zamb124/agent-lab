@@ -243,10 +243,19 @@ export class TeamPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this.services.get('auth').validateToken();
         this._canManageTeam = this._computeCanManageTeam();
         this.requestUpdate();
         await this._loadMembers();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadMembers() {
@@ -256,10 +265,11 @@ export class TeamPage extends PlatformElement {
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         return html`
-            <page-header title="Команда">
+            <page-header title=${td('team_page.title')}>
                 <button slot="actions" class="primary-button" @click=${this._onCopyInviteLink}>
-                    + Скопировать ссылку-приглашение
+                    ${td('team_page.copy_invite')}
                 </button>
             </page-header>
 
@@ -268,20 +278,21 @@ export class TeamPage extends PlatformElement {
     }
 
     _renderContent() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         const { members, loading } = this.state.value;
         
         if (loading) {
-            return html`<div class="loading-state">Загрузка...</div>`;
+            return html`<div class="loading-state">${td('team_page.loading')}</div>`;
         }
 
         if (members.length === 0) {
             return html`
                 <div class="empty-state">
                     <div class="empty-icon">T</div>
-                    <h2 class="empty-title">Нет участников</h2>
-                    <p class="empty-description">Скопируйте ссылку-приглашение и отправьте коллеге</p>
+                    <h2 class="empty-title">${td('team_page.empty_title')}</h2>
+                    <p class="empty-description">${td('team_page.empty_description')}</p>
                     <button class="primary-button" @click=${this._onCopyInviteLink}>
-                        Скопировать ссылку-приглашение
+                        ${td('team_page.copy_invite_action')}
                     </button>
                 </div>
             `;
@@ -295,6 +306,8 @@ export class TeamPage extends PlatformElement {
     }
 
     _renderMemberCard(member) {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const roleLabel = (r) => this.i18n.t(`team_roles.${r}`, {}, 'dashboard');
         const initials = this._getInitials(member.name);
         const retry = this._getAvatarRetry(member.user_id);
         const originalUrl = member.avatar_url ?? null;
@@ -317,7 +330,7 @@ export class TeamPage extends PlatformElement {
                     ` : ''}
                     <div class="member-roles">
                         ${member.roles.map((role) => html`
-                            <span class="role-badge ${role}">${role}</span>
+                            <span class="role-badge ${role}">${roleLabel(role)}</span>
                         `)}
                     </div>
                 </div>
@@ -327,7 +340,7 @@ export class TeamPage extends PlatformElement {
                         ? html`
                               <button
                                   class="icon-button"
-                                  title="Изменить роль"
+                                  title=${td('team_page.edit_role')}
                                   @click=${() => this._onEditRole(member)}
                               >
                                   E
@@ -336,7 +349,7 @@ export class TeamPage extends PlatformElement {
                                   ? html`
                                         <button
                                             class="icon-button danger"
-                                            title="Удалить"
+                                            title=${td('team_page.remove')}
                                             @click=${() => this._onRemoveMember(member)}
                                         >
                                             X
@@ -360,19 +373,20 @@ export class TeamPage extends PlatformElement {
     }
 
     async _onCopyInviteLink() {
+        const td = (key) => this.i18n.t(key, {}, 'dashboard');
         let result;
         try {
             result = await this.services.get('team').generateInviteLink('developer');
         } catch {
-            this.error('Не удалось создать ссылку-приглашение');
+            this.error(td('team_page.err_invite'));
             return;
         }
 
         try {
             await copyTextToClipboard(result.invite_url);
-            this.success('Ссылка-приглашение скопирована в буфер обмена');
+            this.success(td('team_page.toast_invite_copied'));
         } catch {
-            this.error('Ссылка создана, но буфер обмена недоступен. Откройте ответ API и скопируйте invite_url.');
+            this.error(td('team_page.err_clipboard'));
         }
     }
 
@@ -391,12 +405,13 @@ export class TeamPage extends PlatformElement {
     }
 
     async _onRemoveMember(member) {
-        const confirmed = confirm(`Удалить ${member.name} из команды?`);
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const confirmed = confirm(td('team_page.confirm_remove', { name: member.name }));
         if (!confirmed) return;
         
         await this.services.get('team').removeMember(member.user_id);
         await this._reloadMembers();
-        this.success(`${member.name} удален из команды`);
+        this.success(td('team_page.toast_removed', { name: member.name }));
     }
 }
 

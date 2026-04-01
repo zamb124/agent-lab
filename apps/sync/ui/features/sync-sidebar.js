@@ -497,10 +497,12 @@ export class SyncSidebar extends PlatformElement {
         this._directSearch = '';
         this._typingPeersByChannel = s.typingPeersByChannel ?? {};
         this._sidebarSpaceFilterIds = s.ui.sidebarSpaceFilterIds ?? [];
+        this._i18nUnsub = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._unsubscribe = SyncStore.subscribe(state => {
             this._spaces = state.spaces;
             this._channels = state.channels;
@@ -514,6 +516,8 @@ export class SyncSidebar extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._unsubscribe?.();
     }
 
@@ -588,6 +592,7 @@ export class SyncSidebar extends PlatformElement {
     }
 
     render() {
+        const ts = (key, params) => this.i18n.t(key, params ?? {}, 'sync_ui');
         const { selectedChannelId } = this._chat;
         const sec = this._sectionOpen || { direct: true, spaces: true, channels: true };
         const sidebarChannels = SyncStore.getChannelsForSidebarList();
@@ -614,25 +619,25 @@ export class SyncSidebar extends PlatformElement {
                         <button
                             type="button"
                             class="sidebar-adhoc-btn"
-                            title="Создать Sync: служебный канал и звонок"
+                            title=${ts('sidebar.create_sync_title')}
                             @click=${this._requestAdhocCall}
                         >
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <polygon points="23 7 16 12 23 17 23 7"/>
                                 <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                             </svg>
-                            <span class="sidebar-adhoc-label">Создать Sync</span>
+                            <span class="sidebar-adhoc-label">${ts('sidebar.create_sync_label')}</span>
                         </button>
                     </div>
                     <div class="sidebar-adhoc-row" style="padding-top:0;">
                         <button
                             type="button"
                             class="sidebar-adhoc-btn"
-                            title="Открыть встречи"
+                            title=${ts('sidebar.open_meetings_title')}
                             @click=${this._openMeetings}
                         >
                             <platform-icon name="calendar" size="16"></platform-icon>
-                            <span class="sidebar-adhoc-label">Встречи</span>
+                            <span class="sidebar-adhoc-label">${ts('sidebar.meetings_label')}</span>
                         </button>
                     </div>
                     <div class="channels-section">
@@ -644,24 +649,24 @@ export class SyncSidebar extends PlatformElement {
                                 <platform-icon name="chevron-down" size="14"></platform-icon>
                             </span>
                             <platform-icon name="user" size="16"></platform-icon>
-                            <span class="section-title">Личные</span>
+                            <span class="section-title">${ts('sidebar.direct_section')}</span>
                         </div>
                         ${sec.direct ? html`
                             <input
                                 type="search"
                                 class="direct-search"
-                                placeholder="Поиск по имени или id..."
-                                aria-label="Поиск участников компании"
+                                placeholder=${ts('sidebar.direct_search_placeholder')}
+                                aria-label=${ts('sidebar.direct_search_aria')}
                                 .value=${this._directSearch}
                                 @input=${(e) => { this._directSearch = e.target.value; }}
                                 @click=${(e) => e.stopPropagation()}
                             />
                             <div class="section-scroll">
                                 ${this._companyMembers.loading
-                                    ? html`<div class="loading-text">Загрузка...</div>`
+                                    ? html`<div class="loading-text">${ts('sidebar.loading')}</div>`
                                     : ''}
                                 ${!this._companyMembers.loading && memberRows.length === 0
-                                    ? html`<div class="section-empty">Нет совпадений или других участников</div>`
+                                    ? html`<div class="section-empty">${ts('sidebar.direct_empty')}</div>`
                                     : ''}
                                 ${memberRows.map((member) => html`
                                     <sync-direct-member-row
@@ -677,19 +682,19 @@ export class SyncSidebar extends PlatformElement {
 
                     <div class="channels-section">
                         <div class="space-filters-header">
-                            <span class="section-title">Пространства</span>
+                            <span class="section-title">${ts('sidebar.spaces_section')}</span>
                             <button
                                 type="button"
                                 class="add-btn"
-                                title="Создать пространство"
-                                aria-label="Создать пространство"
+                                title=${ts('sidebar.create_space_title')}
+                                aria-label=${ts('sidebar.create_space_aria')}
                                 @click=${() => SyncStore.openSpaceSettingsCreate()}
                             >+</button>
                         </div>
                         <div class="space-tags-scroll">
-                            ${this._spaces.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
+                            ${this._spaces.loading ? html`<div class="loading-text">${ts('sidebar.loading')}</div>` : ''}
                             ${!this._spaces.loading && spaceList.length === 0
-                                ? html`<div class="section-empty space-tags-empty">Нет пространств. Нажми +.</div>`
+                                ? html`<div class="section-empty space-tags-empty">${ts('sidebar.spaces_empty')}</div>`
                                 : ''}
                             ${spaceList.map((space) => html`
                                 <div
@@ -703,8 +708,8 @@ export class SyncSidebar extends PlatformElement {
                                     <button
                                         type="button"
                                         class="space-chip-gear"
-                                        title="Настройки пространства"
-                                        aria-label="Настройки пространства"
+                                        title=${ts('sidebar.space_settings_title')}
+                                        aria-label=${ts('sidebar.space_settings_aria')}
                                         @click=${(e) => {
                                             e.stopPropagation();
                                             SyncStore.openSpaceSettings(space.id);
@@ -720,14 +725,14 @@ export class SyncSidebar extends PlatformElement {
                     <div class="channels-section">
                         <div class="section-header section-header--static">
                             <platform-icon name="chat" size="16"></platform-icon>
-                            <span class="section-title">Каналы</span>
+                            <span class="section-title">${ts('sidebar.channels_section')}</span>
                             ${spaceList.length > 0
         ? html`
                             <button
                                 type="button"
                                 class="add-btn"
-                                title="Создать канал"
-                                aria-label="Создать канал"
+                                title=${ts('sidebar.create_channel_title')}
+                                aria-label=${ts('sidebar.create_channel_aria')}
                                 style="margin-left:auto"
                                 @click=${() => this._openChannelCreate()}
                             >+</button>
@@ -735,14 +740,14 @@ export class SyncSidebar extends PlatformElement {
         : ''}
                         </div>
                         <div class="section-scroll section-scroll--channels">
-                            ${this._channels.loading ? html`<div class="loading-text">Загрузка...</div>` : ''}
+                            ${this._channels.loading ? html`<div class="loading-text">${ts('sidebar.loading')}</div>` : ''}
                             ${!this._channels.loading && spaceList.length === 0
-                                ? html`<div class="section-empty">Сначала создай пространство.</div>`
+                                ? html`<div class="section-empty">${ts('sidebar.create_space_first')}</div>`
                                 : ''}
                             ${!this._channels.loading && spaceList.length > 0 && sidebarChannels.length === 0
                                 ? html`<div class="section-empty">${hasActiveFilter
-                                    ? 'Нет каналов в выбранных пространствах.'
-                                    : 'Каналов пока нет.'}</div>`
+                                    ? ts('sidebar.no_channels_filtered')
+                                    : ts('sidebar.no_channels_yet')}</div>`
                                 : ''}
                             ${sidebarChannels.map((channel) => {
                                     const showGear = channel.type !== 'direct';
@@ -761,7 +766,7 @@ export class SyncSidebar extends PlatformElement {
                                             <button
                                                 type="button"
                                                 class="call-indicator"
-                                                title="Идёт звонок — войти"
+                                                title=${ts('sidebar.call_active_title')}
                                                 @click=${(e) => {
                                                     e.stopPropagation();
                                                     this.dispatchEvent(new CustomEvent('join-call-channel', {
@@ -771,15 +776,15 @@ export class SyncSidebar extends PlatformElement {
                                                 }}
                                             >
                                                 <span class="call-dot"></span>
-                                                Войти
+                                                ${ts('sidebar.call_join')}
                                             </button>
                                         ` : ''}
                                         ${showGear ? html`
                                             <button
                                                 type="button"
                                                 class="row-gear"
-                                                title="Настройки канала"
-                                                aria-label="Настройки канала"
+                                                title=${ts('sidebar.channel_settings_title')}
+                                                aria-label=${ts('sidebar.channel_settings_aria')}
                                                 @click=${(e) => {
                                                     e.stopPropagation();
                                                     SyncStore.openChannelSettings(channel.id);

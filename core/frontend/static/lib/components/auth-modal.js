@@ -144,6 +144,19 @@ export class AuthModal extends PlatformElement {
         this.returnPath = '';
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
         if (changedProperties.has('open') && this.open) {
@@ -165,7 +178,7 @@ export class AuthModal extends PlatformElement {
             const authUrl = await this.auth.startOAuth(provider, rp);
             window.location.href = authUrl;
         } catch (error) {
-            this.error = error.message || 'Ошибка при запуске авторизации';
+            this.error = error.message || this.i18n.t('auth.oauth_error', {}, 'shell');
             this.loading = false;
         }
     }
@@ -177,13 +190,14 @@ export class AuthModal extends PlatformElement {
     }
 
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'shell');
         return html`
             <div class="modal-content">
                 <button class="close-button" @click=${this.close}>×</button>
                 
                 <div class="modal-header">
-                    <h2 class="modal-title">Вход в Humanitec</h2>
-                    <p class="modal-subtitle">Выберите способ авторизации</p>
+                    <h2 class="modal-title">${t('auth.title')}</h2>
+                    <p class="modal-subtitle">${t('auth.subtitle')}</p>
                 </div>
 
                 <div class="providers">
@@ -193,7 +207,7 @@ export class AuthModal extends PlatformElement {
                         ?disabled=${this.loading}
                     >
                         <img src="/static/frontend/assets/icons/providers/yandex.svg" class="provider-icon" alt="Yandex">
-                        <span>Войти через Яндекс</span>
+                        <span>${t('auth.yandex')}</span>
                     </button>
 
                     <button 
@@ -202,7 +216,7 @@ export class AuthModal extends PlatformElement {
                         ?disabled=${this.loading}
                     >
                         <img src="/static/frontend/assets/icons/providers/google.svg" class="provider-icon" alt="Google">
-                        <span>Войти через Google</span>
+                        <span>${t('auth.google')}</span>
                     </button>
 
                     <button 
@@ -211,7 +225,7 @@ export class AuthModal extends PlatformElement {
                         ?disabled=${this.loading}
                     >
                         <img src="/static/frontend/assets/icons/providers/github.svg" class="provider-icon" alt="GitHub">
-                        <span>Войти через GitHub</span>
+                        <span>${t('auth.github')}</span>
                     </button>
                 </div>
 

@@ -232,10 +232,15 @@ export class SchedulerTasksPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this._load();
     }
 
     disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         super.disconnectedCallback();
     }
 
@@ -266,18 +271,20 @@ export class SchedulerTasksPage extends PlatformElement {
         if (Number.isNaN(date.getTime())) {
             throw new Error(`Invalid date value: ${value}`);
         }
-        return date.toLocaleString('ru-RU', { hour12: false });
+        const loc = this.i18n.getCurrentLocale() === 'en' ? 'en-US' : 'ru-RU';
+        return date.toLocaleString(loc, { hour12: false });
     }
 
     _formatSchedule(task) {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         if (task.schedule_type === 'cron') {
-            return `CRON: ${task.cron}`;
+            return td('scheduler_page.schedule_cron', { cron: task.cron ?? '' });
         }
         if (task.schedule_type === 'interval') {
-            return `Каждые ${task.interval_seconds} сек.`;
+            return td('scheduler_page.schedule_interval', { sec: String(task.interval_seconds ?? '') });
         }
         if (task.schedule_type === 'one_time') {
-            return `Один раз: ${this._formatDate(task.run_at)}`;
+            return td('scheduler_page.schedule_once', { at: this._formatDate(task.run_at) });
         }
         throw new Error(`Unknown schedule_type: ${task.schedule_type}`);
     }
@@ -345,19 +352,20 @@ export class SchedulerTasksPage extends PlatformElement {
     }
 
     async _createSchedule() {
-        const targetService = prompt('target_service (например flows)', 'flows');
+        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        const targetService = prompt(td('scheduler_page.prompt_target'), 'flows');
         if (!targetService) {
             return;
         }
-        const taskName = prompt('task_name (например sync_llm_models_task)', 'sync_llm_models_task');
+        const taskName = prompt(td('scheduler_page.prompt_task'), 'sync_llm_models_task');
         if (!taskName) {
             return;
         }
-        const scheduleType = prompt('schedule_type: cron | interval | one_time', 'interval');
+        const scheduleType = prompt(td('scheduler_page.prompt_schedule_type'), 'interval');
         if (!scheduleType) {
             return;
         }
-        const payloadRaw = prompt('payload JSON', '{}');
+        const payloadRaw = prompt(td('scheduler_page.prompt_payload'), '{}');
         if (payloadRaw === null) {
             return;
         }
@@ -370,11 +378,11 @@ export class SchedulerTasksPage extends PlatformElement {
             payload,
         };
         if (scheduleType === 'cron') {
-            request.cron = prompt('cron', '*/5 * * * *');
+            request.cron = prompt(td('scheduler_page.prompt_cron'), '*/5 * * * *');
         } else if (scheduleType === 'interval') {
-            request.interval_seconds = Number(prompt('interval_seconds', '60'));
+            request.interval_seconds = Number(prompt(td('scheduler_page.prompt_interval'), '60'));
         } else if (scheduleType === 'one_time') {
-            request.run_at = prompt('run_at ISO8601', new Date(Date.now() + 60000).toISOString());
+            request.run_at = prompt(td('scheduler_page.prompt_run_at'), new Date(Date.now() + 60000).toISOString());
         } else {
             throw new Error(`Unknown schedule_type: ${scheduleType}`);
         }
@@ -383,12 +391,13 @@ export class SchedulerTasksPage extends PlatformElement {
     }
 
     render() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         return html`
             <div @click=${() => this._closeActionsMenu()}>
-            <page-header title="Scheduler задачи"></page-header>
+            <page-header title=${td('scheduler_page.title')}></page-header>
 
             <div class="toolbar">
-                <button @click=${() => this._createSchedule()}>Create</button>
+                <button @click=${() => this._createSchedule()}>${td('scheduler_page.create')}</button>
                 <select
                     .value=${this.statusFilter}
                     @change=${(event) => {
@@ -396,7 +405,7 @@ export class SchedulerTasksPage extends PlatformElement {
                         this._load();
                     }}
                 >
-                    <option value="">Все статусы</option>
+                    <option value="">${td('scheduler_page.filter_all_status')}</option>
                     <option value="pending">pending</option>
                     <option value="paused">paused</option>
                     <option value="executed">executed</option>
@@ -415,25 +424,25 @@ export class SchedulerTasksPage extends PlatformElement {
             </div>
 
             ${this.loading
-                ? html`<div>Загрузка...</div>`
+                ? html`<div>${td('scheduler_page.loading')}</div>`
                 : html`
                       <div class="table-wrap">
                           <table>
                               <thead>
                                   <tr>
-                                      <th>ID</th>
-                                      <th>Service</th>
-                                      <th>Task</th>
-                                      <th>Status</th>
-                                      <th>Schedule</th>
-                                      <th>Actions</th>
+                                      <th>${td('scheduler_page.th_id')}</th>
+                                      <th>${td('scheduler_page.th_service')}</th>
+                                      <th>${td('scheduler_page.th_task')}</th>
+                                      <th>${td('scheduler_page.th_status')}</th>
+                                      <th>${td('scheduler_page.th_schedule')}</th>
+                                      <th>${td('scheduler_page.th_actions')}</th>
                                   </tr>
                               </thead>
                               <tbody>
                                   ${this.tasks.length === 0
                                       ? html`
                                             <tr>
-                                                <td class="empty" colspan="6">Задач пока нет.</td>
+                                                <td class="empty" colspan="6">${td('scheduler_page.empty')}</td>
                                             </tr>
                                         `
                                       : this.tasks.map(
@@ -448,14 +457,14 @@ export class SchedulerTasksPage extends PlatformElement {
                                                     <td>
                                                         ${this._formatSchedule(task)}
                                                         <div class="schedule-secondary">
-                                                            Следующий запуск: ${this._formatDate(task.next_run_at)}
+                                                            ${td('scheduler_page.next_run')} ${this._formatDate(task.next_run_at)}
                                                         </div>
                                                     </td>
                                                     <td class="actions-cell">
                                                         <div class="actions-menu">
                                                             <button
                                                                 class="actions-trigger"
-                                                                title="Действия"
+                                                                title=${td('scheduler_page.actions_title')}
                                                                 @click=${(event) => this._toggleActionsMenu(task.id, event)}
                                                             >
                                                                 ...
@@ -516,19 +525,19 @@ export class SchedulerTasksPage extends PlatformElement {
                   `}
             <glass-modal
                 size="lg"
-                title="Redis snapshot"
+                title=${td('scheduler_page.redis_title')}
                 ?open=${this.redisSnapshotModalOpen}
                 @modal-closed=${() => this._closeRedisSnapshotModal()}
             >
                 <div slot="content">
                     ${this.redisSnapshotLoading
-                        ? html`<div>Загрузка...</div>`
+                        ? html`<div>${td('scheduler_page.redis_loading')}</div>`
                         : this.redisSnapshot
                           ? html`<pre class="redis-json">${JSON.stringify(this.redisSnapshot, null, 2)}</pre>`
-                          : html`<div>Нет данных.</div>`}
+                          : html`<div>${td('scheduler_page.redis_empty')}</div>`}
                 </div>
                 <div slot="actions">
-                    <button @click=${() => this._closeRedisSnapshotModal()}>Закрыть</button>
+                    <button @click=${() => this._closeRedisSnapshotModal()}>${td('scheduler_page.close')}</button>
                 </div>
             </glass-modal>
             </div>

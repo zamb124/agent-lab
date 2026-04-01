@@ -323,12 +323,17 @@ export class ProductRagPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this.addEventListener('open-auth-modal', this._handleOpenAuthModal);
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         this.removeEventListener('open-auth-modal', this._handleOpenAuthModal);
+        super.disconnectedCallback();
     }
 
     _handleOpenAuthModal = () => {
@@ -339,6 +344,7 @@ export class ProductRagPage extends PlatformElement {
     };
 
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'frontend_products');
         return html`
             <div class="page-container">
                 <landing-header></landing-header>
@@ -347,14 +353,13 @@ export class ProductRagPage extends PlatformElement {
                     <div class="hero-icon">
                         <img src="/static/core/assets/service_logos/rag_logo.svg" alt="Knowledge Base" />
                     </div>
-                    <span class="hero-badge">База знаний с AI-поиском</span>
-                    <h1 class="hero-title">Knowledge Base</h1>
+                    <span class="hero-badge">${t('rag.hero_badge')}</span>
+                    <h1 class="hero-title">${t('rag.hero_title')}</h1>
                     <p class="hero-description">
-                        Загрузите документы компании — и ваши AI-агенты смогут отвечать на вопросы 
-                        клиентов и сотрудников, опираясь на актуальную информацию.
+                        ${t('rag.hero_description')}
                     </p>
                     <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Загрузить документы
+                        ${t('rag.cta_try')}
                     </button>
                 </section>
                 
@@ -362,37 +367,33 @@ export class ProductRagPage extends PlatformElement {
                     <div class="features-grid">
                         <div class="feature-card">
                             <div class="feature-icon">📄</div>
-                            <h3 class="feature-title">Любые форматы</h3>
+                            <h3 class="feature-title">${t('rag.f1_title')}</h3>
                             <p class="feature-description">
-                                PDF, Word, Excel, текстовые файлы — загружайте документы 
-                                в привычных форматах.
+                                ${t('rag.f1_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">🔍</div>
-                            <h3 class="feature-title">Умный поиск</h3>
+                            <h3 class="feature-title">${t('rag.f2_title')}</h3>
                             <p class="feature-description">
-                                Находит информацию по смыслу, а не только по ключевым словам. 
-                                Задавайте вопросы обычным языком.
+                                ${t('rag.f2_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">🤖</div>
-                            <h3 class="feature-title">Связь с агентами</h3>
+                            <h3 class="feature-title">${t('rag.f3_title')}</h3>
                             <p class="feature-description">
-                                AI-агенты автоматически используют базу знаний для точных 
-                                и релевантных ответов.
+                                ${t('rag.f3_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">🔒</div>
-                            <h3 class="feature-title">Безопасность</h3>
+                            <h3 class="feature-title">${t('rag.f4_title')}</h3>
                             <p class="feature-description">
-                                Ваши документы хранятся изолированно. Доступ только для 
-                                вашей компании.
+                                ${t('rag.f4_desc')}
                             </p>
                         </div>
                     </div>
@@ -400,53 +401,53 @@ export class ProductRagPage extends PlatformElement {
                 
                 <section class="benefits">
                     <div class="benefits-container">
-                        <h2 class="benefits-title">Как Knowledge Base помогает бизнесу</h2>
+                        <h2 class="benefits-title">${t('rag.benefits_title')}</h2>
                         <div class="benefits-grid">
                             <div class="benefit-item">
                                 <div class="benefit-icon">⚡</div>
                                 <div class="benefit-content">
-                                    <h3>Мгновенные ответы</h3>
-                                    <p>Сотрудники и клиенты получают информацию за секунды, а не ищут часами в документах.</p>
+                                    <h3>${t('rag.b1_h')}</h3>
+                                    <p>${t('rag.b1_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-icon">🎓</div>
                                 <div class="benefit-content">
-                                    <h3>Обучение новичков</h3>
-                                    <p>Новые сотрудники быстрее входят в курс дела — база знаний отвечает на все вопросы.</p>
+                                    <h3>${t('rag.b2_h')}</h3>
+                                    <p>${t('rag.b2_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-icon">📞</div>
                                 <div class="benefit-content">
-                                    <h3>Разгрузка поддержки</h3>
-                                    <p>Типовые вопросы закрывает AI-агент с базой знаний. Люди занимаются сложными случаями.</p>
+                                    <h3>${t('rag.b3_h')}</h3>
+                                    <p>${t('rag.b3_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-icon">📖</div>
                                 <div class="benefit-content">
-                                    <h3>Единый источник правды</h3>
-                                    <p>Вся информация в одном месте. Нет расхождений между версиями документов.</p>
+                                    <h3>${t('rag.b4_h')}</h3>
+                                    <p>${t('rag.b4_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-icon">🔄</div>
                                 <div class="benefit-content">
-                                    <h3>Легкое обновление</h3>
-                                    <p>Загрузили новый документ — агенты сразу используют актуальную информацию.</p>
+                                    <h3>${t('rag.b5_h')}</h3>
+                                    <p>${t('rag.b5_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-icon">💡</div>
                                 <div class="benefit-content">
-                                    <h3>Сохранение экспертизы</h3>
-                                    <p>Знания ключевых сотрудников остаются в компании, даже если они уходят.</p>
+                                    <h3>${t('rag.b6_h')}</h3>
+                                    <p>${t('rag.b6_p')}</p>
                                 </div>
                             </div>
                         </div>
@@ -454,42 +455,42 @@ export class ProductRagPage extends PlatformElement {
                 </section>
                 
                 <section class="use-cases">
-                    <h2 class="use-cases-title">Что можно загрузить</h2>
+                    <h2 class="use-cases-title">${t('rag.use_cases_title')}</h2>
                     <div class="use-cases-grid">
                         <div class="use-case-item">
                             <span class="use-case-icon">📋</span>
-                            <span class="use-case-text">Инструкции и регламенты</span>
+                            <span class="use-case-text">${t('rag.uc1')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-icon">❓</span>
-                            <span class="use-case-text">FAQ и базы ответов</span>
+                            <span class="use-case-text">${t('rag.uc2')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-icon">📦</span>
-                            <span class="use-case-text">Каталоги товаров</span>
+                            <span class="use-case-text">${t('rag.uc3')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-icon">📝</span>
-                            <span class="use-case-text">Договоры и шаблоны</span>
+                            <span class="use-case-text">${t('rag.uc4')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-icon">🎓</span>
-                            <span class="use-case-text">Учебные материалы</span>
+                            <span class="use-case-text">${t('rag.uc5')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-icon">📊</span>
-                            <span class="use-case-text">Отчеты и аналитика</span>
+                            <span class="use-case-text">${t('rag.uc6')}</span>
                         </div>
                     </div>
                 </section>
                 
                 <section class="cta-section">
-                    <h2 class="cta-title">Превратите документы в умного помощника</h2>
-                    <p class="cta-subtitle">Загрузите первые файлы и протестируйте поиск</p>
+                    <h2 class="cta-title">${t('rag.cta_title')}</h2>
+                    <p class="cta-subtitle">${t('rag.cta_subtitle')}</p>
                     <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Начать бесплатно
+                        ${t('rag.cta_button')}
                     </button>
-                    <a href="/" class="back-link">← Вернуться на главную</a>
+                    <a href="/" class="back-link">${t('rag.back_home')}</a>
                 </section>
                 
                 <landing-footer></landing-footer>

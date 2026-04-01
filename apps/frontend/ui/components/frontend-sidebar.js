@@ -157,6 +157,19 @@ export class FrontendSidebar extends PlatformElement {
         }));
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     toggleCollapse() {
         this.collapsed = !this.collapsed;
         this.emit('collapse-change', { collapsed: this.collapsed });
@@ -185,6 +198,7 @@ export class FrontendSidebar extends PlatformElement {
 
     render() {
         const { currentView } = this.state.value;
+        const t = (key) => this.i18n.t(key, {}, 'dashboard');
 
         return html`
             <platform-sidebar
@@ -203,7 +217,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="chart" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Dashboard</span>
+                        <span class="nav-label">${t('console_sidebar.dashboard')}</span>
                     </button>
 
                     <button
@@ -213,7 +227,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="user" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Команда</span>
+                        <span class="nav-label">${t('console_sidebar.team')}</span>
                     </button>
 
                     <button
@@ -223,7 +237,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="key" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">API Ключи</span>
+                        <span class="nav-label">${t('console_sidebar.api_keys')}</span>
                     </button>
 
                     <button
@@ -233,7 +247,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="clipboard" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Биллинг</span>
+                        <span class="nav-label">${t('console_sidebar.billing')}</span>
                     </button>
 
                     <button
@@ -243,7 +257,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="chat" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Embed Виджеты</span>
+                        <span class="nav-label">${t('console_sidebar.embed')}</span>
                     </button>
 
                     <button
@@ -253,7 +267,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="settings" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Настройки</span>
+                        <span class="nav-label">${t('console_sidebar.settings')}</span>
                     </button>
 
                     <button
@@ -263,17 +277,17 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="clock" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Scheduler</span>
+                        <span class="nav-label">${t('console_sidebar.scheduler')}</span>
                     </button>
                 </nav>
 
                 <div class="services-section" data-hide-collapsed>
-                    <div class="section-title">Документация</div>
+                    <div class="section-title">${t('console_sidebar.docs_section')}</div>
                     <a class="service-link" href="/documentation">
                         <span class="nav-icon">
                             <platform-icon name="book-open" size="18"></platform-icon>
                         </span>
-                        <span>Humanitec Docs</span>
+                        <span>${t('console_sidebar.docs_link')}</span>
                     </a>
                 </div>
 

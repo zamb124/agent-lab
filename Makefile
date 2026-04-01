@@ -1,6 +1,6 @@
 .PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base
 .PHONY: dev-up dev-down dev-logs dev-minio-restart test test-down test-unit test-integration prod-up prod-down prod-logs
-.PHONY: test-frontend test-rag run-rag check-ui-canon
+.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
@@ -78,6 +78,10 @@ test-frontend:
 check-ui-canon:
 	@./scripts/check_ui_canon.sh
 
+# JSON переводы ru/en: парсинг и парность имён файлов в корне locales
+check-i18n:
+	@./scripts/check_i18n.sh
+
 # RAG тесты (с pgvector и MinIO)
 test-rag:
 	@echo "🧪 Запуск RAG тестов (pgvector + MinIO)..."
@@ -109,13 +113,6 @@ prod-restart:
 	@echo "🔄 Перезапуск Production окружения..."
 	docker-compose -f docker-compose-prod.yaml restart
 	@echo "✅ Сервисы перезапущены"
-
-# ============================================================================
-# Магазины: скриншоты для App Store (6.7", см. mobile/store-listing/README.md)
-# ============================================================================
-
-store-screenshots-ios:
-	uv run python mobile/scripts/capture_app_store_screenshots.py
 
 # ============================================================================
 # Старые команды (используют docker-compose.yml)

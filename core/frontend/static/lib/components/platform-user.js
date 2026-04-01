@@ -10,6 +10,7 @@
  */
 
 import { html, css } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { openUrlSameWindowOrTab } from '../utils/native-app-shell.js';
 import { AppEvents } from '../utils/types.js';
@@ -55,10 +56,16 @@ export class PlatformUser extends PlatformElement {
         this._companyAlignmentIntervalId = null;
         this._companyAlignmentInFlight = false;
         this._companyAlignmentQueued = false;
+        this._i18nUnsub = null;
+    }
+
+    _pt(key, params = {}) {
+        return this.i18n.t(key, params, 'platform');
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._loadUser();
         window.addEventListener(AppEvents.AUTH_CHANGE, () => this._loadUser());
         document.addEventListener('click', this._boundDocumentClick);
@@ -72,6 +79,10 @@ export class PlatformUser extends PlatformElement {
     }
 
     disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         super.disconnectedCallback();
         this._avatarRetry.cancel();
         document.removeEventListener('click', this._boundDocumentClick);
@@ -238,39 +249,24 @@ export class PlatformUser extends PlatformElement {
         this.requestUpdate();
     }
 
-    _serviceApps() {
+    _serviceAppEntries() {
         return [
-            {
-                id: 'flows',
-                name: 'Flows',
-                logo: '/static/core/assets/service_logos/agents_logo.svg',
-                description: 'Конструктор flow: графы, skills и интеграции',
-            },
-            {
-                id: 'crm',
-                name: 'NetWorkle',
-                logo: '/static/core/assets/service_logos/crm_logo.svg',
-                description: 'Управление контактами и Knowledge Graph',
-            },
-            {
-                id: 'rag',
-                name: 'RAG',
-                logo: '/static/core/assets/service_logos/rag_logo.svg',
-                description: 'Управление документами и поиск',
-            },
-            {
-                id: 'sync',
-                name: 'Sync',
-                logo: '/static/core/assets/service_logos/sync_logo.svg',
-                description: 'Инженерный чат с Git-интеграцией',
-            },
-            {
-                id: 'frontend',
-                name: 'Console',
-                logo: '/static/core/assets/service_logos/frontend_logo.svg',
-                description: 'Humanitec: консоль платформы',
-            },
+            { id: 'flows', logo: '/static/core/assets/service_logos/agents_logo.svg' },
+            { id: 'crm', logo: '/static/core/assets/service_logos/crm_logo.svg' },
+            { id: 'rag', logo: '/static/core/assets/service_logos/rag_logo.svg' },
+            { id: 'sync', logo: '/static/core/assets/service_logos/sync_logo.svg' },
+            { id: 'frontend', logo: '/static/core/assets/service_logos/frontend_logo.svg' },
         ];
+    }
+
+    async _setUiLocale(lang, e) {
+        e.stopPropagation();
+        try {
+            await this.i18n.setLocale(lang);
+        } catch (err) {
+            this.error(err instanceof Error ? err.message : String(err));
+            throw err;
+        }
     }
 
     _openServiceApp(serviceId, event) {
@@ -363,16 +359,17 @@ export class PlatformUser extends PlatformElement {
             await this.auth.switchCompany(companyId);
             const company = this.companies.find((item) => item.company_id === companyId);
             if (!company?.subdomain) {
-                throw new Error('Не найден subdomain для выбранной компании');
+                throw new Error(this._pt('company.subdomain_missing'));
             }
-            this.success('Компания изменена');
+            this.success(this._pt('company.switched'));
             this._broadcastCompanySwitch(company);
             const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
             const targetUrl = buildCompanySubdomainUrl(company.subdomain, targetPath);
             window.location.href = targetUrl;
         } catch (error) {
             console.error('[PlatformUser] Failed to switch company:', error);
-            this.error(`Ошибка смены компании: ${error.message}`);
+            const msg = error instanceof Error ? error.message : String(error);
+            this.error(this._pt('company.switch_error', { message: msg }));
         }
     }
 
@@ -526,15 +523,17 @@ export class PlatformUser extends PlatformElement {
 
         const currentCompanyName = this._getCompanyName(this.user.active_company_id || this.user.company_id);
         const hasMultipleCompanies = this.companies.length > 1;
+        const uiLocale = this.i18n.getCurrentLocale();
 
         return html`
             <div class="user-container">
-                <button class="user-button" @click=${this._toggleMenu} title="Меню пользователя">
+                <button class="user-button" @click=${this._toggleMenu} title=${this._pt('menu.user_button_title')}>
                     ${this._renderAvatar()}
                     <div class="user-info">
-                        <div class="user-name">${this.user.name || 'Пользователь'}</div>
+                        <div class="user-name">${this.user.name || this._pt('menu.user_fallback')}</div>
                         <div class="user-email">${this.user.emails?.[0] || ''}</div>
                     </div>
+                    <span class="user-lang-badge" aria-hidden="true">${uiLocale.toUpperCase()}</span>
                     <platform-icon name="chevron-down" size="12" class="chevron ${this._menuOpen ? 'open' : ''}"></platform-icon>
                 </button>
 
@@ -542,20 +541,20 @@ export class PlatformUser extends PlatformElement {
                     <div class="user-menu">
                         <button class="menu-item apps-item" @click=${this._toggleAppsMenu}>
                             <img class="apps-menu-logo" src="/static/core/assets/service_logos/agents_logo.svg" alt="" />
-                            <span>Apps</span>
+                            <span>${this._pt('menu.apps')}</span>
                             <platform-icon name="chevron-right" size="12" class="expand-icon ${this._appsMenuOpen ? 'open' : ''}"></platform-icon>
                         </button>
 
                         ${this._appsMenuOpen ? html`
                             <div class="apps-grid">
-                                ${this._serviceApps().map((service) => html`
+                                ${this._serviceAppEntries().map((service) => html`
                                     <button class="app-card" @click=${(event) => this._openServiceApp(service.id, event)}>
                                         <span class="app-card-header">
                                             <img class="app-logo" src="${service.logo}" alt="" />
                                             <platform-icon name="arrow-right" size="16" class="app-go-icon"></platform-icon>
                                         </span>
-                                        <span class="app-card-name">${service.name}</span>
-                                        <span class="app-card-description">${service.description}</span>
+                                        <span class="app-card-name">${this._pt(`apps.${service.id}.name`)}</span>
+                                        <span class="app-card-description">${this._pt(`apps.${service.id}.description`)}</span>
                                     </button>
                                 `)}
                             </div>
@@ -565,7 +564,7 @@ export class PlatformUser extends PlatformElement {
 
                         <button class="menu-item" @click=${this._openProfileModal}>
                             <platform-icon name="user" size="18" class="menu-icon"></platform-icon>
-                            <span>Профиль</span>
+                            <span>${this._pt('menu.profile')}</span>
                         </button>
                         
                         ${hasMultipleCompanies ? html`
@@ -602,29 +601,47 @@ export class PlatformUser extends PlatformElement {
                         
                         <button class="menu-item" @click=${this._openSettings}>
                             <platform-icon name="settings" size="18" class="menu-icon"></platform-icon>
-                            <span>Настройки</span>
+                            <span>${this._pt('menu.settings')}</span>
                         </button>
 
                         <button class="menu-item" @click=${this._openCalendar}>
                             <platform-icon name="calendar" size="18" class="menu-icon"></platform-icon>
-                            <span>Календарь</span>
+                            <span>${this._pt('menu.calendar')}</span>
                         </button>
                         
                         <button class="menu-item" @click=${this._openDocumentation}>
                             <platform-icon name="book-open" size="18" class="menu-icon"></platform-icon>
-                            <span>Документация</span>
+                            <span>${this._pt('menu.documentation')}</span>
                         </button>
+
+                        <div class="lang-row" @click=${(e) => e.stopPropagation()}>
+                            <platform-icon name="globe" size="18" class="menu-icon"></platform-icon>
+                            <span class="lang-row-label">${this._pt('menu.language')}</span>
+                            <div class="lang-switcher" role="group" aria-label=${this._pt('menu.language')}>
+                                <button
+                                    type="button"
+                                    class=${classMap({ 'lang-option': true, active: uiLocale === 'en' })}
+                                    @click=${(e) => this._setUiLocale('en', e)}
+                                >en</button>
+                                <span class="lang-separator" aria-hidden="true">|</span>
+                                <button
+                                    type="button"
+                                    class=${classMap({ 'lang-option': true, active: uiLocale === 'ru' })}
+                                    @click=${(e) => this._setUiLocale('ru', e)}
+                                >ru</button>
+                            </div>
+                        </div>
                         
                         <button class="menu-item" @click=${this._toggleTheme}>
                             <platform-icon name="${this.theme?.isDark ? 'sun' : 'moon'}" size="18" class="menu-icon"></platform-icon>
-                            <span>${this.theme?.isDark ? 'Светлая тема' : 'Темная тема'}</span>
+                            <span>${this.theme?.isDark ? this._pt('menu.theme_light') : this._pt('menu.theme_dark')}</span>
                         </button>
                         
                         <div class="menu-divider"></div>
                         
                         <button class="menu-item danger" @click=${this._logout}>
                             <platform-icon name="logout" size="18" class="menu-icon"></platform-icon>
-                            <span>Выйти</span>
+                            <span>${this._pt('menu.logout')}</span>
                         </button>
                     </div>
                 ` : ''}
@@ -650,6 +667,43 @@ export class PlatformUser extends PlatformElement {
                 display: none;
             }
 
+            .user-lang-badge {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                box-sizing: border-box;
+                min-width: 30px;
+                height: 22px;
+                padding: 0 7px;
+                font-size: 10px;
+                font-weight: var(--font-semibold);
+                line-height: 1;
+                letter-spacing: 0.04em;
+                color: var(--text-secondary);
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                pointer-events: none;
+            }
+
+            :host-context(platform-sidebar[collapsed]) .user-lang-badge {
+                position: absolute;
+                top: -4px;
+                right: -4px;
+                min-width: 16px;
+                height: 13px;
+                padding: 0 3px;
+                font-size: 8px;
+                font-weight: var(--font-bold);
+                margin: 0;
+                color: var(--text-primary);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
+                border-radius: 4px;
+                z-index: 1;
+            }
+
             :host-context(platform-sidebar[collapsed]) .user-container {
                 display: flex;
                 justify-content: center;
@@ -659,6 +713,7 @@ export class PlatformUser extends PlatformElement {
             }
 
             :host-context(platform-sidebar[collapsed]) .user-button {
+                position: relative;
                 justify-content: center;
                 align-items: center;
                 width: 40px;
@@ -673,6 +728,7 @@ export class PlatformUser extends PlatformElement {
                 border-radius: var(--radius-full);
                 box-shadow: none;
                 box-sizing: border-box;
+                overflow: visible;
             }
 
             :host-context(platform-sidebar[collapsed]) .user-button:hover {
@@ -1016,6 +1072,55 @@ export class PlatformUser extends PlatformElement {
                 color: var(--accent);
                 display: flex;
                 align-items: center;
+            }
+
+            .lang-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .lang-row-label {
+                flex: 1;
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                min-width: 0;
+            }
+
+            .lang-switcher {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                flex-shrink: 0;
+            }
+
+            .lang-option {
+                padding: 4px 6px;
+                background: transparent;
+                border: none;
+                cursor: pointer;
+                font-size: var(--text-xs);
+                font-family: inherit;
+                color: var(--text-tertiary);
+                transition: color var(--duration-fast);
+            }
+
+            .lang-option.active {
+                color: var(--text-primary);
+                font-weight: var(--font-semibold);
+            }
+
+            .lang-option:hover {
+                color: var(--accent);
+            }
+
+            .lang-separator {
+                color: var(--text-tertiary);
+                opacity: 0.5;
+                user-select: none;
             }
 
             .menu-divider {

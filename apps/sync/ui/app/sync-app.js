@@ -450,6 +450,7 @@ export class SyncApp extends PlatformApp {
     async connectedCallback() {
         try {
             await super.connectedCallback();
+            this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
 
             if (!this._mobileShellMqBound) {
                 this._mobileShellMqBound = true;
@@ -493,6 +494,10 @@ export class SyncApp extends PlatformApp {
     }
 
     disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         super.disconnectedCallback?.();
         if (this._mobileShellMqBound) {
             this._mobileShellMqBound = false;
@@ -848,7 +853,10 @@ export class SyncApp extends PlatformApp {
                     recording_started_by_user_id: '',
                 };
                 const overlay = this.renderRoot?.querySelector('call-overlay');
-                overlay?.setRecordingStatus?.('failed', p.error || 'Ошибка записи');
+                overlay?.setRecordingStatus?.(
+                    'failed',
+                    p.error || this.i18n.t('recording_error_default', {}, 'sync_ui'),
+                );
             }
             return;
         }
@@ -863,7 +871,9 @@ export class SyncApp extends PlatformApp {
         }
         if (msg.type === 'call.transcript.failed' || msg.type === 'call.summary.failed') {
             SyncStore.upsertMeeting(p);
-            const errorText = (typeof p.error === 'string' && p.error !== '') ? p.error : 'Ошибка обработки встречи';
+            const errorText = (typeof p.error === 'string' && p.error !== '')
+                ? p.error
+                : this.i18n.t('meeting_processing_error', {}, 'sync_ui');
             console.error(`[sync] ${msg.type}: ${errorText}`, p);
             if (this._activeCall?.call_id === p.call_id) {
                 const overlay = this.renderRoot?.querySelector('call-overlay');
@@ -1174,9 +1184,15 @@ export class SyncApp extends PlatformApp {
     }
 
     _statusLabel(exportStatus) {
-        if (exportStatus === 'done') return 'готово';
-        if (exportStatus === 'pending') return 'в работе';
-        if (exportStatus === 'failed') return 'ошибка';
+        if (exportStatus === 'done') {
+            return this.i18n.t('export_status.done', {}, 'sync_ui');
+        }
+        if (exportStatus === 'pending') {
+            return this.i18n.t('export_status.pending', {}, 'sync_ui');
+        }
+        if (exportStatus === 'failed') {
+            return this.i18n.t('export_status.failed', {}, 'sync_ui');
+        }
         return '—';
     }
 
@@ -1298,6 +1314,7 @@ export class SyncApp extends PlatformApp {
         const meetingChannelOptions = this._meetingChannelOptions(meetingsState.list);
         const selectedMeeting = this._selectedMeeting();
         const selectedParticipants = selectedMeeting ? this._meetingParticipants(selectedMeeting) : [];
+        const ts = (k, p) => this.i18n.t(k, p ?? {}, 'sync_ui');
 
         return html`
             <div class="sidebar" ?inert=${callUiLocked}>
@@ -1326,8 +1343,8 @@ export class SyncApp extends PlatformApp {
                 >
                     <div class="meetings-modal" @click=${(e) => e.stopPropagation()}>
                         <div class="meetings-header">
-                            <div class="meetings-title">Встречи компании</div>
-                            <button type="button" class="back-btn" @click=${() => SyncStore.closeMeetingsPanel()}>Закрыть</button>
+                            <div class="meetings-title">${ts('meetings_title')}</div>
+                            <button type="button" class="back-btn" @click=${() => SyncStore.closeMeetingsPanel()}>${ts('close')}</button>
                         </div>
                         <div class="meetings-controls">
                             <select
@@ -1338,7 +1355,7 @@ export class SyncApp extends PlatformApp {
                                     this._meetingsChannelFilter = nextValue;
                                 }}
                             >
-                                <option value="all">Все каналы</option>
+                                <option value="all">${ts('all_channels')}</option>
                                 ${meetingChannelOptions.map((item) => html`
                                     <option value=${item.channelId}>${item.title}</option>
                                 `)}
@@ -1368,14 +1385,14 @@ export class SyncApp extends PlatformApp {
         this._meetingsDateTo = '';
     }}
                             >
-                                Сбросить фильтры
+                                ${ts('reset_filters')}
                             </button>
                         </div>
                         <div class="meetings-body">
                             <div class="meetings-list">
-                                ${meetingsState.loading ? html`<div class="meetings-empty">Загрузка встреч...</div>` : ''}
+                                ${meetingsState.loading ? html`<div class="meetings-empty">${ts('loading_meetings')}</div>` : ''}
                                 ${!meetingsState.loading && filteredMeetings.length === 0
-                                    ? html`<div class="meetings-empty">По фильтрам ничего не найдено.</div>`
+                                    ? html`<div class="meetings-empty">${ts('empty_filtered')}</div>`
                                     : ''}
                                 ${filteredMeetings.map((meeting) => {
         const isActive = selectedMeeting?.meeting_id === meeting.meeting_id;
@@ -1404,40 +1421,40 @@ export class SyncApp extends PlatformApp {
                                                 </span>
                                                 <span class=${statusClass}>${this._statusLabel(meeting.export_status)}</span>
                                             </div>
-                                            <div class="meeting-meta">Дата: ${this._formatMeetingDate(meeting.created_at)}</div>
-                                            <div class="meeting-meta">Длительность: ${duration}</div>
-                                            <div class="meeting-meta">meeting_id: ${meeting.meeting_id.slice(0, 12)}...</div>
-                                            ${loading ? html`<div class="meeting-meta">Загрузка деталей...</div>` : ''}
+                                            <div class="meeting-meta">${ts('meta_date')} ${this._formatMeetingDate(meeting.created_at)}</div>
+                                            <div class="meeting-meta">${ts('meta_duration')} ${duration}</div>
+                                            <div class="meeting-meta">${ts('meta_meeting_id')} ${meeting.meeting_id.slice(0, 12)}...</div>
+                                            ${loading ? html`<div class="meeting-meta">${ts('loading_details')}</div>` : ''}
                                         </button>
                                     `;
     })}
                             </div>
                             <div class="meetings-detail">
                                 ${selectedMeeting ? html`
-                                    <div class="meetings-title">Детали встречи</div>
+                                    <div class="meetings-title">${ts('meeting_details')}</div>
                                     <div class="detail-grid">
                                         <div>
-                                            <div class="detail-label">Канал</div>
+                                            <div class="detail-label">${ts('label_channel')}</div>
                                             <div class="detail-value">${this._channelName(selectedMeeting.channel_id)}</div>
                                         </div>
                                         <div>
-                                            <div class="detail-label">Дата</div>
+                                            <div class="detail-label">${ts('label_date')}</div>
                                             <div class="detail-value">${this._formatMeetingDate(selectedMeeting.created_at)}</div>
                                         </div>
                                         <div>
-                                            <div class="detail-label">Длительность</div>
+                                            <div class="detail-label">${ts('label_duration')}</div>
                                             <div class="detail-value">${this._durationText(selectedMeeting)}</div>
                                         </div>
                                         <div>
-                                            <div class="detail-label">Статус</div>
+                                            <div class="detail-label">${ts('label_status')}</div>
                                             <div class="detail-value">${this._statusLabel(selectedMeeting.export_status)}</div>
                                         </div>
                                         <div>
-                                            <div class="detail-label">Участники</div>
+                                            <div class="detail-label">${ts('label_participants')}</div>
                                             <div class="detail-value">${selectedParticipants.length > 0 ? selectedParticipants.join(', ') : '—'}</div>
                                         </div>
                                         <div>
-                                            <div class="detail-label">meeting_id</div>
+                                            <div class="detail-label">${ts('label_meeting_id')}</div>
                                             <div class="detail-value">${selectedMeeting.meeting_id}</div>
                                         </div>
                                     </div>
@@ -1449,7 +1466,7 @@ export class SyncApp extends PlatformApp {
                                                 download
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                            >Скачать запись</a>
+                                            >${ts('download_recording')}</a>
                                         ` : ''}
                                         ${selectedMeeting.transcript_text_download_url ? html`
                                             <a
@@ -1458,7 +1475,7 @@ export class SyncApp extends PlatformApp {
                                                 download
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                            >Скачать транскрипт</a>
+                                            >${ts('download_transcript')}</a>
                                         ` : ''}
                                         <button
                                             type="button"
@@ -1472,7 +1489,7 @@ export class SyncApp extends PlatformApp {
             }
         }}
                                         >
-                                            Экспорт в CRM
+                                            ${ts('export_crm')}
                                         </button>
                                         <button
                                             type="button"
@@ -1486,11 +1503,11 @@ export class SyncApp extends PlatformApp {
             }
         }}
                                         >
-                                            Повторить обработку
+                                            ${ts('retry_processing')}
                                         </button>
                                     </div>
                                 ` : html`
-                                    <div class="meetings-empty">Выберите карточку встречи в списке слева.</div>
+                                    <div class="meetings-empty">${ts('select_card_hint')}</div>
                                 `}
                             </div>
                         </div>

@@ -124,10 +124,12 @@ export class ChannelPicker extends PlatformElement {
         this._channels = s.channels;
         this._chat = s.chat;
         this._sidebarSpaceFilterIds = s.ui.sidebarSpaceFilterIds ?? [];
+        this._i18nUnsub = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._unsubscribe = SyncStore.subscribe(state => {
             this._channels = state.channels;
             this._chat = state.chat;
@@ -137,6 +139,8 @@ export class ChannelPicker extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._unsubscribe?.();
     }
 
@@ -150,30 +154,31 @@ export class ChannelPicker extends PlatformElement {
     }
 
     render() {
+        const ts = (key, params) => this.i18n.t(key, params ?? {}, 'sync_ui');
         const channels = SyncStore.getChannelsForPickerList();
         const loading = this._channels.loading;
         const hasFilter = Array.isArray(this._sidebarSpaceFilterIds) && this._sidebarSpaceFilterIds.length > 0;
 
         return html`
-            <div class="hint">Выбери канал</div>
+            <div class="hint">${ts('chat_view.title_pick_channel')}</div>
             <div class="adhoc-row">
                 <button type="button" class="adhoc-btn" @click=${this._emitAdhocRequest}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polygon points="23 7 16 12 23 17 23 7"/>
                         <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                     </svg>
-                    Создать Sync
+                    ${ts('sidebar.create_sync_label')}
                 </button>
                 <div class="adhoc-hint">
-                    Создаётся служебный канал встречи и сразу запускается видеозвонок. Канал скрыт в списках.
+                    ${ts('channel_picker.adhoc_description')}
                 </div>
             </div>
-            ${loading ? html`<div class="hint">Загрузка...</div>` : ''}
+            ${loading ? html`<div class="hint">${ts('sidebar.loading')}</div>` : ''}
             <div class="grid">
                 ${channels.length === 0 && !loading
                     ? html`<div class="empty">${hasFilter
-                        ? 'Нет каналов в выбранных пространствах.'
-                        : 'Каналов пока нет.'}</div>`
+                        ? ts('sidebar.no_channels_filtered')
+                        : ts('sidebar.no_channels_yet')}</div>`
                     : ''}
                 ${channels.map((ch) => {
                     const title = ch.type === 'direct' && ch.peer?.display_name

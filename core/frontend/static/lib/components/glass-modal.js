@@ -755,11 +755,16 @@ export class GlassModal extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         document.addEventListener('keydown', this._boundEscape);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         this._clearPortalCloseHooks();
         document.removeEventListener('keydown', this._boundEscape);
         document.removeEventListener('mousemove', this._boundMouseMove);
@@ -801,6 +806,7 @@ export class GlassModal extends PlatformElement {
             this.open && this._panelEnterActive ? 'panel-enter-active' : '',
         ].filter(Boolean).join(' ');
 
+        const tm = (key) => this.i18n.t(key, {}, 'shell');
         return html`
             <div class="modal-svg-hidden" aria-hidden="true">
                 <svg width="0" height="0">
@@ -840,7 +846,7 @@ export class GlassModal extends PlatformElement {
                             <button
                                 class="header-btn fullscreen-btn"
                                 @click=${this.toggleFullscreen}
-                                title="${this._isFullscreen ? 'Свернуть' : 'На весь экран'}"
+                                title="${this._isFullscreen ? tm('modal.fullscreen_exit') : tm('modal.fullscreen_enter')}"
                             >
                                 <platform-icon
                                     name="${this._isFullscreen ? 'minimize' : 'maximize'}"
@@ -850,7 +856,7 @@ export class GlassModal extends PlatformElement {
                             <button
                                 class="header-btn"
                                 @click=${() => this.close()}
-                                title="Закрыть"
+                                title=${tm('modal.close')}
                             >
                                 <platform-icon name="close" size="16"></platform-icon>
                             </button>

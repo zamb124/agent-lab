@@ -8,7 +8,9 @@
 |------|----------|
 | **iOS** — Capacitor, Xcode, safe area, иконки, OAuth | [`docs/IOS_CAPACITOR.md`](docs/IOS_CAPACITOR.md) |
 | **Android** — TWA, Digital Asset Links, Bubblewrap | [`android/README.md`](android/README.md) |
-| **Витрина App Store** — тексты, скриншоты, fastlane | [`store-listing/README.md`](store-listing/README.md), [`fastlane/README.md`](fastlane/README.md) |
+| **App Store** — где кликать в Apple | [`docs/APPLE_MANUAL.md`](docs/APPLE_MANUAL.md) |
+| **App Store** — поля и тексты Humanitec | [`docs/APP_STORE_HUMANITEC.md`](docs/APP_STORE_HUMANITEC.md) |
+| **App Store** — ресайз скриншотов под слоты ASC | [`screens/README.md`](screens/README.md), `uv run python mobile/screens/generate_app_store_screenshots.py` |
 
 ## Проверки PWA (production)
 
@@ -23,7 +25,7 @@
 - **Только веб:** деплой `core/` и `apps/` — TWA и Capacitor подхватывают изменения **без** нового бинарника, пока не меняются `applicationId` / bundle id, signing, домен, критичные нативные плагины или разрешения в манифестах.
 - **Новый билд:** смена package/bundle id, новые разрешения (Info.plist / AndroidManifest), обновление Capacitor/Bubblewrap/SDK по требованию магазина, нативные плагины (push и т.д.).
 - **Версии:** Android — монотонно `versionCode`; iOS — `CFBundleShortVersionString` / `CFBundleVersion` по правилам Apple.
-- **Витрина из репозитория:** [`store-listing/metadata/`](store-listing/metadata/), загрузка — [`fastlane/README.md`](fastlane/README.md); скриншоты — `uv run python mobile/scripts/capture_app_store_screenshots.py` или `make store-screenshots-ios` из корня репо.
+- **Витрина App Store:** тексты и скриншоты — только вручную в [App Store Connect](https://appstoreconnect.apple.com); чеклист — [`docs/APPLE_MANUAL.md`](docs/APPLE_MANUAL.md).
 - **CI:** подпись только в защищённых ветках; секреты не в git. PWA по URL: [`.github/workflows/README.md`](../.github/workflows/README.md) (`PWA_LIGHTHOUSE_URL`).
 
 ## Связь с репозиторием
@@ -65,9 +67,7 @@ mobile/
   docs/RU_OPS_ACCOUNTS.md
   docs/PUSH_PARITY_APNS.md
   docs/QA_MATRIX_TEMPLATE.md
-  store-listing/metadata/
-  fastlane/
-  scripts/capture_app_store_screenshots.py
+  docs/APPLE_MANUAL.md
   scripts/generate_humanitec_pwa_icons.py   # корень репо: scripts/generate_humanitec_pwa_icons.py
   lighthouserc.cjs
   capacitor.config.json

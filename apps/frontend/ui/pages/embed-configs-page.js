@@ -141,8 +141,17 @@ export class EmbedConfigsPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this.updateComplete;
         await this._loadConfigs();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadConfigs() {
@@ -170,7 +179,7 @@ export class EmbedConfigsPage extends PlatformElement {
     }
 
     _handleEdit(embedId) {
-        this.info('Функция редактирования в разработке');
+        this.info(this.i18n.t('embed_page.info_wip', {}, 'dashboard'));
     }
 
     _handleGetCode(embedId) {
@@ -181,52 +190,54 @@ export class EmbedConfigsPage extends PlatformElement {
     }
 
     async _handleDelete(embedId) {
-        const confirmed = confirm('Удалить виджет? Это действие нельзя отменить.');
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const confirmed = confirm(td('embed_page.confirm_delete'));
         if (!confirmed) return;
         
         await this.services.get('embed').deleteConfig(embedId);
         await this._reloadConfigs();
-        this.success('Виджет удален');
+        this.success(td('embed_page.toast_deleted'));
     }
 
     render() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         const { loading, configs } = this.state.value;
         
         if (loading) {
-            return html`<div class="loading-state">Загрузка...</div>`;
+            return html`<div class="loading-state">${td('console_home.loading')}</div>`;
         }
 
         if (configs.length === 0) {
             return html`
-                <page-header title="Встраиваемые виджеты">
-                    <button slot="actions" class="primary-button" @click=${this._handleCreate}>Создать виджет</button>
+                <page-header title=${td('embed_page.title')}>
+                    <button slot="actions" class="primary-button" @click=${this._handleCreate}>${td('embed_page.create')}</button>
                 </page-header>
                 <div class="empty-state">
                     <div class="empty-icon">E</div>
-                    <h2 class="empty-title">Нет виджетов</h2>
-                    <p class="empty-description">Создайте первый встраиваемый виджет</p>
+                    <h2 class="empty-title">${td('embed_page.empty_title')}</h2>
+                    <p class="empty-description">${td('embed_page.empty_description')}</p>
                     <button class="primary-button" @click=${this._handleCreate}>
-                        Создать виджет
+                        ${td('embed_page.create')}
                     </button>
                 </div>
             `;
         }
 
         return html`
-            <page-header title="Встраиваемые виджеты">
-                <button slot="actions" class="primary-button" @click=${this._handleCreate}>Создать виджет</button>
+            <page-header title=${td('embed_page.title')}>
+                <button slot="actions" class="primary-button" @click=${this._handleCreate}>${td('embed_page.create')}</button>
             </page-header>
             
             <div class="configs-table">
                 <table>
                     <thead>
                         <tr>
-                            <th>Название</th>
-                            <th>Flow</th>
-                            <th>Skill</th>
-                            <th>Статус</th>
-                            <th>Использований</th>
-                            <th>Действия</th>
+                            <th>${td('embed_page.col_name')}</th>
+                            <th>${td('embed_page.col_flow')}</th>
+                            <th>${td('embed_page.col_skill')}</th>
+                            <th>${td('embed_page.col_status')}</th>
+                            <th>${td('embed_page.col_usage')}</th>
+                            <th>${td('embed_page.col_actions')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -246,21 +257,21 @@ export class EmbedConfigsPage extends PlatformElement {
                                         <button 
                                             class="btn-icon" 
                                             @click=${() => this._handleGetCode(config.embed_id)}
-                                            title="Получить код"
+                                            title=${td('embed_page.get_code')}
                                         >
                                             C
                                         </button>
                                         <button 
                                             class="btn-icon" 
                                             @click=${() => this._handleEdit(config.embed_id)}
-                                            title="Редактировать"
+                                            title=${td('embed_page.edit')}
                                         >
                                             E
                                         </button>
                                         <button 
                                             class="btn-icon" 
                                             @click=${() => this._handleDelete(config.embed_id)}
-                                            title="Удалить"
+                                            title=${td('embed_page.delete')}
                                         >
                                             X
                                         </button>

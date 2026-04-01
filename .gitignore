@@ -37,3 +37,7 @@ docs/video/*.mov
 
 # Android TWA Digital Asset Links (копия из assetlinks.json.example, значения под прод)
 core/frontend/pwa/assetlinks.json
+/AuthKey_2A85V3258V.p8
+
+# Сгенерированные скриншоты App Store (исходники в mobile/screens/source/)
+mobile/screens/generated/

@@ -2,6 +2,7 @@
  * Landing Hero - Главная секция лендинга
  */
 import { html, css } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
 export class LandingHero extends PlatformElement {
@@ -209,6 +210,19 @@ export class LandingHero extends PlatformElement {
         `
     ];
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     _handleCTA() {
         const ctaSection = document.querySelector('landing-cta');
         if (ctaSection) {
@@ -217,6 +231,7 @@ export class LandingHero extends PlatformElement {
     }
 
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'landing');
         return html`
             <div class="hero-container">
                 <h1 class="hero-title">HUMANITEC</h1>
@@ -224,21 +239,21 @@ export class LandingHero extends PlatformElement {
                     <div class="hero-image-wrapper">
                         <img 
                             src="/static/frontend/assets/images/main_img.png" 
-                            alt="Humanitec Platform"
+                            alt=${t('hero.image_alt')}
                             class="hero-image"
                         />
                     </div>
                     
                 <p class="hero-text-left">
-                    Доверьте процессы<br>AI-агентам
+                    ${unsafeHTML(t('hero.trust_process'))}
                         </p>
                         
                         <button class="hero-cta" @click=${this._handleCTA}>
-                            Запустить цифровых сотрудников
+                            ${t('hero.start_button')}
                         </button>
                         
                 <p class="hero-text-right">
-                    Эволюция вашего<br>бизнеса уже здесь
+                    ${unsafeHTML(t('hero.evolution'))}
                         </p>
             </div>
         `;

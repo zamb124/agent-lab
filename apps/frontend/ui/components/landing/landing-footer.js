@@ -179,6 +179,19 @@ export class LandingFooter extends PlatformElement {
         `
     ];
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     _legalUrl(pathname) {
         const params = new URLSearchParams(window.location.search);
         const lang = params.get('lang');
@@ -189,6 +202,8 @@ export class LandingFooter extends PlatformElement {
     }
 
     render() {
+        const t = (key, params) => this.i18n.t(key, params ?? {}, 'landing');
+        const year = new Date().getFullYear();
         return html`
             <footer class="footer-container">
                 <div class="footer-content">
@@ -200,19 +215,19 @@ export class LandingFooter extends PlatformElement {
                     </div>
                     
                     <div class="footer-right">
-                        <a href="#" class="footer-link">Документация</a>
+                        <a href="#" class="footer-link">${t('footer.docs')}</a>
                     </div>
                 </div>
                 
                 <div class="footer-bottom">
-                    <p class="footer-copy">© 2025 Humanitec</p>
+                    <p class="footer-copy">${t('footer.copyright', { year })}</p>
                     
                     <div class="footer-legal">
                         <a href=${this._legalUrl('/policy')} class="footer-legal-link">
-                            Политика конфиденциальности
+                            ${t('footer.privacy')}
                         </a>
                         <a href=${this._legalUrl('/terms')} class="footer-legal-link">
-                            Пользовательское соглашение
+                            ${t('footer.terms')}
                         </a>
                     </div>
                 </div>

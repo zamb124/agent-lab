@@ -45,6 +45,7 @@ export class PlatformElement extends LitElement {
     get auth() { return ServiceRegistry.auth; }
     get a2a() { return ServiceRegistry.a2a; }
     get theme() { return ServiceRegistry.theme; }
+    get i18n() { return ServiceRegistry.i18n; }
     get notify() { return ServiceRegistry.notify; }
     get icon() { return ServiceRegistry.icon; }
     get companies() { return ServiceRegistry.companies; }

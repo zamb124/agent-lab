@@ -2,6 +2,7 @@
  * Landing About - О нас и статистика
  */
 import { html, css } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
 export class LandingAbout extends PlatformElement {
@@ -241,61 +242,74 @@ export class LandingAbout extends PlatformElement {
         `
     ];
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'landing');
         return html`
             <div class="about-container">
                 <div class="about-header">
                     <h2 class="about-title">
-                        Humanitec — ваша команда AI-сотрудников
+                        ${t('about.title')}
                     </h2>
                     <p class="about-description">
-                        Платформа с инструментами для автоматизации и командной работы: AI-агенты, база знаний,
-                        граф контактов и Sync — чат с видеозвонками и контекстом Git. Освобождаем время для роста.
+                        ${t('about.subtitle_landing')}
                     </p>
                 </div>
                 
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-value">25+</div>
-                        <p class="stat-label">встроенных<br>инструментов</p>
+                        <div class="stat-value">${t('about.metric_tools_value')}</div>
+                        <p class="stat-label">${unsafeHTML(t('about.metric_tools_label'))}</p>
                     </div>
                     
                     <div class="stat-card">
-                        <div class="stat-value">500+</div>
-                        <p class="stat-label">вариантов<br>AI-моделей</p>
+                        <div class="stat-value">${t('about.metric_models_value')}</div>
+                        <p class="stat-label">${unsafeHTML(t('about.metric_models_label'))}</p>
                     </div>
                     
                     <div class="stat-card">
-                        <div class="stat-value">50 ₽</div>
-                        <p class="stat-label">для старта<br>на платформе</p>
+                        <div class="stat-value">${t('about.metric_start_value')}</div>
+                        <p class="stat-label">${unsafeHTML(t('about.metric_start_label'))}</p>
                     </div>
                     
                     <div class="stat-card">
-                        <div class="stat-value">∞</div>
-                        <p class="stat-label">возможности<br>автоматизации</p>
+                        <div class="stat-value">${t('about.metric_auto_value')}</div>
+                        <p class="stat-label">${unsafeHTML(t('about.metric_auto_label'))}</p>
                     </div>
                 </div>
                 
                 <div class="integrations">
-                    <h3 class="integrations-title">Продукты и возможности</h3>
+                    <h3 class="integrations-title">${t('about.integrations_title')}</h3>
                     
                     <div class="integrations-cloud">
-                        <a href="/products/agents" class="integration-badge product">AI Studio</a>
-                        <span class="integration-badge">Telegram</span>
-                        <span class="integration-badge highlight">Распознавание речи</span>
-                        <a href="/products/rag" class="integration-badge product">Knowledge Base</a>
-                        <span class="integration-badge">WhatsApp</span>
-                        <span class="integration-badge">REST API</span>
-                        <span class="integration-badge highlight">PDF & Word</span>
-                        <a href="/products/crm" class="integration-badge product">NetWorkle</a>
-                        <a href="/products/sync" class="integration-badge product">Sync</a>
-                        <span class="integration-badge">Email</span>
-                        <span class="integration-badge highlight">Граф связей</span>
-                        <span class="integration-badge">amoCRM</span>
-                        <span class="integration-badge">Webhooks</span>
-                        <span class="integration-badge highlight">Семантический поиск</span>
-                        <span class="integration-badge">Python SDK</span>
-                        <span class="integration-badge highlight">500+ AI-моделей</span>
+                        <a href="/products/agents" class="integration-badge product">${t('about.integ_ai_studio')}</a>
+                        <span class="integration-badge">${t('about.integ_telegram')}</span>
+                        <span class="integration-badge highlight">${t('about.integ_speech')}</span>
+                        <a href="/products/rag" class="integration-badge product">${t('about.integ_kb')}</a>
+                        <span class="integration-badge">${t('about.integ_whatsapp')}</span>
+                        <span class="integration-badge">${t('about.integ_rest')}</span>
+                        <span class="integration-badge highlight">${t('about.integ_pdf')}</span>
+                        <a href="/products/crm" class="integration-badge product">${t('about.integ_networkle')}</a>
+                        <a href="/products/sync" class="integration-badge product">${t('about.integ_sync')}</a>
+                        <span class="integration-badge">${t('about.integ_email')}</span>
+                        <span class="integration-badge highlight">${t('about.integ_graph')}</span>
+                        <span class="integration-badge">${t('about.integ_amocrm')}</span>
+                        <span class="integration-badge">${t('about.integ_webhooks')}</span>
+                        <span class="integration-badge highlight">${t('about.integ_semantic')}</span>
+                        <span class="integration-badge">${t('about.integ_python_sdk')}</span>
+                        <span class="integration-badge highlight">${t('about.integ_models_500')}</span>
                     </div>
                 </div>
             </div>

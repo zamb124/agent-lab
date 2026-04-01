@@ -51,6 +51,7 @@ from core.api.companies import router as core_companies_router
 from core.push.router import router as push_router
 from core.push.service import init_web_push_service
 from core.app.pwa_routes import register_platform_pwa_routes
+from core.app.i18n_routes import register_platform_i18n_routes
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +333,9 @@ def create_service_app(
     if include_platform_pwa:
         register_platform_pwa_routes(app, project_root)
         logger.info("PWA: /manifest.json, /sw.js, /offline.html")
+
+    register_platform_i18n_routes(app, project_root)
+    logger.info("I18n: GET /api/i18n/{locale}")
 
     # Health endpoints
     @app.get("/health")

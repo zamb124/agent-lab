@@ -163,24 +163,36 @@ export class LandingAbilities extends PlatformElement {
         `
     ];
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'landing');
         return html`
             <div class="abilities-container">
-                <h2 class="abilities-title">/ Возможности платформы</h2>
+                <h2 class="abilities-title">${t('features.tag')}</h2>
                 
                 <div class="ability-item">
                     <div class="ability-image">🚀</div>
                     <div class="ability-content">
-                        <h3 class="ability-name">Запуск за часы, а не месяцы</h3>
+                        <h3 class="ability-name">${t('features.feature1_title')}</h3>
                         <p class="ability-description">
-                            Не тратьте время и деньги на разработку с нуля. Используйте готовые
-                            сервисы: создавайте AI-агентов, общайтесь в Sync, управляйте контактами в NetWorkle,
-                            храните документы в Knowledge Base. Всё уже настроено и работает.
+                            ${t('features.feature1_description')}
                         </p>
                         <ul class="ability-features">
-                            <li>Готовые решения для типовых задач</li>
-                            <li>Запуск первого агента за 1 день</li>
-                            <li>Не нужна команда разработчиков</li>
+                            <li>${t('features.feature1_li1')}</li>
+                            <li>${t('features.feature1_li2')}</li>
+                            <li>${t('features.feature1_li3')}</li>
                         </ul>
                     </div>
                 </div>
@@ -188,16 +200,14 @@ export class LandingAbilities extends PlatformElement {
                 <div class="ability-item">
                     <div class="ability-image">💰</div>
                     <div class="ability-content">
-                        <h3 class="ability-name">Платите только за результат</h3>
+                        <h3 class="ability-name">${t('features.feature2_title')}</h3>
                         <p class="ability-description">
-                            Никаких скрытых платежей и абонентской платы. Начните с 50 рублей, 
-                            платите только за то, что используете. Видите каждую копейку 
-                            в детальной статистике расходов.
+                            ${t('features.feature2_description')}
                         </p>
                         <ul class="ability-features">
-                            <li>Старт от 50₽ без обязательств</li>
-                            <li>Оплата только за использование</li>
-                            <li>Полная прозрачность расходов</li>
+                            <li>${t('features.feature2_li1')}</li>
+                            <li>${t('features.feature2_li2')}</li>
+                            <li>${t('features.feature2_li3')}</li>
                         </ul>
                     </div>
                 </div>
@@ -205,16 +215,14 @@ export class LandingAbilities extends PlatformElement {
                 <div class="ability-item">
                     <div class="ability-image">📈</div>
                     <div class="ability-content">
-                        <h3 class="ability-name">Масштаб без головной боли</h3>
+                        <h3 class="ability-name">${t('features.feature3_title')}</h3>
                         <p class="ability-description">
-                            Ваши агенты работают 24/7 без выходных, больничных и отпусков. 
-                            Обрабатывают тысячи запросов одновременно. Обновляйте логику работы 
-                            на лету, без остановки сервиса.
+                            ${t('features.feature3_description')}
                         </p>
                         <ul class="ability-features">
-                            <li>Работа 24/7 без перерывов</li>
-                            <li>Обработка тысяч запросов в день</li>
-                            <li>Обновления без простоя</li>
+                            <li>${t('features.feature3_li1')}</li>
+                            <li>${t('features.feature3_li2')}</li>
+                            <li>${t('features.feature3_li3')}</li>
                         </ul>
                     </div>
                 </div>
@@ -222,16 +230,14 @@ export class LandingAbilities extends PlatformElement {
                 <div class="ability-item">
                     <div class="ability-image">🔒</div>
                     <div class="ability-content">
-                        <h3 class="ability-name">Ваши данные под контролем</h3>
+                        <h3 class="ability-name">${t('features.feature4_title')}</h3>
                         <p class="ability-description">
-                            Все данные хранятся в вашей базе, не передаются третьим лицам. 
-                            Полная изоляция между компаниями. Интегрируйте с любыми 
-                            вашими системами через API.
+                            ${t('features.feature4_description')}
                         </p>
                         <ul class="ability-features">
-                            <li>Данные только в вашей базе</li>
-                            <li>Полная изоляция компаний</li>
-                            <li>Интеграция с любыми системами</li>
+                            <li>${t('features.feature4_li1')}</li>
+                            <li>${t('features.feature4_li2')}</li>
+                            <li>${t('features.feature4_li3')}</li>
                         </ul>
                     </div>
                 </div>

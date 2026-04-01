@@ -2,15 +2,10 @@
  * Flows Builder - Entry Point
  */
 
-console.log('Flows Builder загружается...');
-
-// Импортируем главное приложение - оно автоматически инициализирует все сервисы
 import './app/FlowsApp.js';
 
-// Редактор кода (platform chat / flow editor); не только через ленивые импорты нод
 import './components/editors/code-editor.js';
 
-// Импортируем компоненты из core/frontend
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-form-modal.js';
 import '@platform/lib/components/platform-icon.js';
@@ -69,5 +64,3 @@ import './features/flow-editor/flow-canvas/index.js';
 import './features/flow-editor/bottom-toolbar.js';
 import './features/flow-editor/property-panel.js';
 import './features/flow-editor/skills-tabs/index.js';
-
-console.log('Flows Builder инициализирован');

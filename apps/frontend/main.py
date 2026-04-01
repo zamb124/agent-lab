@@ -2,11 +2,10 @@
 Frontend Service - FastAPI приложение для управления платформой
 """
 import logging
-import json
 import os
 import re
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional
 from pydantic import BaseModel, field_validator
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -128,43 +127,6 @@ async def create_lead(lead: LeadRequest):
         "success": True,
         "message": "Заявка принята. Мы свяжемся с вами в ближайшее время."
     }
-
-
-@app.get("/api/i18n/{locale}")
-async def get_translations(locale: str) -> JSONResponse:
-    """
-    Получение переводов для указанной локали
-    
-    Args:
-        locale: Код языка (ru, en)
-    
-    Returns:
-        JSON с переводами для всех namespace
-    """
-    if locale not in ["ru", "en"]:
-        raise HTTPException(status_code=400, detail="Unsupported locale")
-    
-    translations_path = Path(__file__).parent.parent.parent / "core" / "i18n" / "translations" / locale
-    
-    if not translations_path.exists():
-        raise HTTPException(status_code=404, detail=f"Translations not found for locale: {locale}")
-    
-    translations: Dict[str, Any] = {}
-    
-    for file_path in translations_path.glob("*.json"):
-        namespace = file_path.stem
-        
-        if namespace.startswith("_"):
-            continue
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                translations[namespace] = json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading translation file {file_path}: {e}")
-            continue
-    
-    return JSONResponse(content=translations)
 
 
 @app.get("/api/public/legal")

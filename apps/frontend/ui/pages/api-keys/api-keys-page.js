@@ -216,7 +216,16 @@ export class ApiKeysPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._loadKeys();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadKeys() {
@@ -235,19 +244,20 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         return html`
             <page-header 
-                title="API Ключи" 
-                subtitle="Управление ключами для интеграций с платформой"
+                title=${td('api_keys_page.title')} 
+                subtitle=${td('api_keys_page.subtitle')}
             >
                 <button slot="actions" class="primary-button" @click=${this._onCreateClick}>
-                    + Создать ключ
+                    ${td('api_keys_page.create')}
                 </button>
             </page-header>
 
             <div class="info-box">
-                <strong>Важно:</strong> Секретный ключ показывается только один раз при создании.
-                Сохраните его в безопасном месте. Если ключ утерян, создайте новый.
+                <strong>${td('api_keys_page.info_lead')}</strong>
+                ${td('api_keys_page.info_body')}
             </div>
 
             ${this._renderContent()}
@@ -255,22 +265,23 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     _renderContent() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         const { loading, keys } = this.state.value;
         
         if (loading) {
-            return html`<div class="loading-state">Загрузка...</div>`;
+            return html`<div class="loading-state">${td('console_home.loading')}</div>`;
         }
 
         if (keys.length === 0) {
             return html`
                 <div class="empty-state">
                     <div class="empty-icon">K</div>
-                    <h2 class="empty-title">Нет API ключей</h2>
+                    <h2 class="empty-title">${td('api_keys_page.empty_title')}</h2>
                     <p class="empty-description">
-                        Создайте первый ключ для интеграции с платформой
+                        ${td('api_keys_page.empty_description')}
                     </p>
                     <button class="primary-button" @click=${this._onCreateClick}>
-                        Создать ключ
+                        ${td('api_keys_page.create_key')}
                     </button>
                 </div>
             `;
@@ -284,6 +295,7 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     _renderKeyCard(key) {
+        const t = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         return html`
             <div class="key-card">
                 <div class="key-header">
@@ -291,21 +303,21 @@ export class ApiKeysPage extends PlatformElement {
                     <div class="key-actions">
                         <button 
                             class="icon-button" 
-                            title="Копировать"
+                            title=${t('api_keys_page.copy_title')}
                             @click=${() => this._onCopyKey(key)}
                         >
                             C
                         </button>
                         <button 
                             class="icon-button" 
-                            title="Редактировать"
+                            title=${t('api_keys_page.edit_title')}
                             @click=${() => this._onEditKey(key)}
                         >
                             E
                         </button>
                         <button 
                             class="icon-button danger" 
-                            title="Отозвать"
+                            title=${t('api_keys_page.revoke_title')}
                             @click=${() => this._onRevokeKey(key)}
                         >
                             X
@@ -323,15 +335,15 @@ export class ApiKeysPage extends PlatformElement {
 
                 <div class="key-meta">
                     <div class="meta-item">
-                        <span>Создан: ${this._formatDate(key.created_at)}</span>
+                        <span>${t('api_keys_page.created')} ${this._formatDate(key.created_at)}</span>
                     </div>
                     ${key.last_used ? html`
                         <div class="meta-item">
-                            <span>Использован: ${this._formatDate(key.last_used)}</span>
+                            <span>${t('api_keys_page.used')} ${this._formatDate(key.last_used)}</span>
                         </div>
                     ` : html`
                         <div class="meta-item">
-                            <span>Никогда не использовался</span>
+                            <span>${t('api_keys_page.never_used')}</span>
                         </div>
                     `}
                 </div>
@@ -341,7 +353,8 @@ export class ApiKeysPage extends PlatformElement {
 
     _formatDate(dateStr) {
         const date = new Date(dateStr);
-        return date.toLocaleDateString('ru-RU', {
+        const loc = this.i18n.getCurrentLocale() === 'en' ? 'en-US' : 'ru-RU';
+        return date.toLocaleDateString(loc, {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -355,20 +368,21 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     _onCopyKey(key) {
-        this.info('Полный ключ недоступен. Показан только при создании.');
+        this.info(this.i18n.t('api_keys_page.info_no_full_key', {}, 'dashboard'));
     }
 
     _onEditKey(key) {
-        this.info('Функция в разработке');
+        this.info(this.i18n.t('api_keys_page.info_wip', {}, 'dashboard'));
     }
 
     async _onRevokeKey(key) {
-        const confirmed = confirm(`Отозвать ключ "${key.name}"? Это действие нельзя отменить.`);
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
+        const confirmed = confirm(td('api_keys_page.confirm_revoke', { name: key.name }));
         if (!confirmed) return;
         
         await this.services.get('apiKeys').revoke(key.key_id);
         await this._reloadKeys();
-        this.success('API ключ отозван');
+        this.success(td('api_keys_page.toast_revoked'));
     }
 }
 

@@ -1,0 +1,73 @@
+{
+  "auth": {
+    "title": "Вход в Humanitec",
+    "subtitle": "Выберите способ авторизации",
+    "yandex": "Войти через Яндекс",
+    "google": "Войти через Google",
+    "github": "Войти через GitHub",
+    "oauth_error": "Ошибка при запуске авторизации"
+  },
+  "pwa": {
+    "install_title": "Установите Humanitec",
+    "ios_description": "Добавьте на главный экран для быстрого доступа",
+    "ios_tap": "Нажмите",
+    "ios_home": "затем «На экран Домой»",
+    "later": "Позже",
+    "install_description": "Работайте офлайн и получайте уведомления",
+    "install": "Установить"
+  },
+  "modal": {
+    "fullscreen_exit": "Свернуть",
+    "fullscreen_enter": "На весь экран",
+    "close": "Закрыть"
+  },
+  "sidebar": {
+    "expand": "Развернуть сайдбар",
+    "collapse": "Свернуть сайдбар"
+  },
+  "profile": {
+    "title": "Редактирование профиля",
+    "loading": "Загрузка данных пользователя...",
+    "first_name_label": "Имя",
+    "first_name_placeholder": "Имя",
+    "last_name_label": "Фамилия",
+    "last_name_placeholder": "Фамилия",
+    "display_name_label": "Отображаемое имя",
+    "display_name_placeholder": "Как показывать в интерфейсе",
+    "email_label": "Email",
+    "email_locked": "Email нельзя изменить",
+    "bio_label": "О себе",
+    "bio_placeholder": "Расскажите о себе",
+    "bio_max_hint": "Максимум 4000 символов",
+    "language_label": "Язык интерфейса",
+    "lang_ru": "Русский",
+    "lang_en": "English",
+    "company_label": "Компания:",
+    "roles_label": "Роли:",
+    "company_empty": "Не указана",
+    "error_name_required": "Имя обязательно",
+    "error_name_length": "Имя не должно превышать 100 символов",
+    "error_bio_length": "Описание не должно превышать 4000 символов",
+    "success_updated": "Профиль обновлен",
+    "error_update_prefix": "Ошибка обновления:"
+  },
+  "form_modal": {
+    "unsaved_close": "У вас есть несохраненные изменения. Закрыть без сохранения?"
+  },
+  "company": {
+    "create_title": "Создание компании",
+    "create_subtitle": "Для начала работы создайте компанию",
+    "name_label": "Название компании",
+    "name_placeholder": "Моя компания",
+    "slug_label": "Адрес компании",
+    "slug_hint": "Только латинские буквы, цифры и дефис",
+    "slug_min": "Минимум 3 символа",
+    "slug_taken": "Этот адрес уже занят",
+    "slug_check_error": "Ошибка проверки доступности",
+    "error_name_required": "Введите название компании",
+    "error_slug_invalid": "Введите корректный адрес компании",
+    "error_slug_taken": "Адрес компании уже занят",
+    "creating": "Создание...",
+    "submit": "Создать"
+  }
+}

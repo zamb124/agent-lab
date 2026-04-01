@@ -558,10 +558,12 @@ export class ChatView extends PlatformElement {
         this._boundDocPointerHeaderMore = this._onDocPointerDownHeaderMore.bind(this);
         this._boundWindowResize = () => this._checkMobileViewport();
         this._boundWindowAdhoc = () => void this._startAdHocCall();
+        this._i18nUnsub = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         document.addEventListener('pointerdown', this._boundDocPointerHeaderMore, true);
         window.addEventListener('resize', this._boundWindowResize);
         this._checkMobileViewport();
@@ -585,6 +587,8 @@ export class ChatView extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._headerAvatarRetry.cancel();
         document.removeEventListener('pointerdown', this._boundDocPointerHeaderMore, true);
         window.removeEventListener('resize', this._boundWindowResize);
@@ -662,12 +666,12 @@ export class ChatView extends PlatformElement {
 
     _getTitle() {
         const { focusedThreadId, selectedChannelId } = this._chat;
-        if (focusedThreadId) return 'Тред';
-        if (!selectedChannelId) return 'Выбери канал';
+        if (focusedThreadId) return this.i18n.t('chat_view.title_thread', {}, 'sync_ui');
+        if (!selectedChannelId) return this.i18n.t('chat_view.title_pick_channel', {}, 'sync_ui');
         const ch = this._selectedChannel();
         if (!ch) return selectedChannelId;
         if (SyncStore.isHiddenSyncChannelName(ch.name)) {
-            return 'Встреча';
+            return this.i18n.t('chat_view.title_meeting', {}, 'sync_ui');
         }
         if (ch.type === 'direct' && ch.peer && typeof ch.peer.display_name === 'string') {
             return ch.peer.display_name;
@@ -682,7 +686,9 @@ export class ChatView extends PlatformElement {
         const chLabel = ch.type === 'direct' && ch.peer?.display_name
             ? ch.peer.display_name
             : (ch.name ?? ch.id);
-        if (focusedThreadId) return `Канал: ${chLabel} • thread_id: ${focusedThreadId}`;
+        if (focusedThreadId) {
+            return this.i18n.t('chat_view.thread_subtitle', { channel: chLabel, thread_id: focusedThreadId }, 'sync_ui');
+        }
         if (ch.type === 'direct' && ch.peer && typeof ch.peer.user_id === 'string' && ch.peer.user_id !== '') {
             return SyncStore.getPeerPresenceSubtitle(ch.peer.user_id);
         }
@@ -693,6 +699,7 @@ export class ChatView extends PlatformElement {
      * Слева в шапке: как в sync-channel-row — только аватар канала (или peer в DM), иначе инициалы.
      */
     _headerLeadingGraphic(channel) {
+        const ts = (key, params) => this.i18n.t(key, params ?? {}, 'sync_ui');
         if (!channel) {
             return html``;
         }
@@ -717,8 +724,8 @@ export class ChatView extends PlatformElement {
                 <button
                     type="button"
                     class="header-peer-hit"
-                    title="Профиль"
-                    aria-label="Открыть профиль собеседника"
+                    title=${ts('chat_view.peer_profile_title')}
+                    aria-label=${ts('chat_view.peer_profile_aria')}
                     @click=${(e) => {
                         e.stopPropagation();
                         this._openHeaderPeerProfile(p);
@@ -743,7 +750,7 @@ export class ChatView extends PlatformElement {
 
     _openHeaderPeerProfile(peer) {
         if (!peer || typeof peer.user_id !== 'string' || peer.user_id === '') {
-            throw new Error('peer.user_id обязателен для профиля в шапке.');
+            throw new Error(this.i18n.t('chat_view.err_peer_user_id', {}, 'sync_ui'));
         }
         const members = SyncStore.state.companyMembers?.list ?? [];
         const cm = members.find(m => m.user_id === peer.user_id);
@@ -780,7 +787,7 @@ export class ChatView extends PlatformElement {
         this.updateComplete.then(async () => {
             const ml = this._messageListEl();
             if (!ml) {
-                throw new Error('message-list не найден.');
+                throw new Error(this.i18n.t('chat_view.err_message_list', {}, 'sync_ui'));
             }
             await ml.scrollToMessageId(targetId);
             SyncStore.flashMessageHighlight(targetId);
@@ -793,7 +800,7 @@ export class ChatView extends PlatformElement {
     async _deleteSelected() {
         const syncApi = this.services.get('syncApi');
         const channelId = this._chat.selectedChannelId;
-        if (!channelId) throw new Error('Канал не выбран.');
+        if (!channelId) throw new Error(this.i18n.t('chat_view.err_channel_not_selected', {}, 'sync_ui'));
         const ids = this._ui.selectedMessageIds;
         for (const mid of ids) {
             await syncApi.deleteMessage(channelId, mid);
@@ -806,7 +813,7 @@ export class ChatView extends PlatformElement {
     async _forwardSelectedToChannel(toChannelId) {
         const syncApi = this.services.get('syncApi');
         const fromId = this._chat.selectedChannelId;
-        if (!fromId) throw new Error('Канал не выбран.');
+        if (!fromId) throw new Error(this.i18n.t('chat_view.err_channel_not_selected', {}, 'sync_ui'));
         const ids = this._ui.selectedMessageIds;
         for (const mid of ids) {
             await syncApi.forwardMessage(fromId, mid, toChannelId, null);
@@ -829,7 +836,7 @@ export class ChatView extends PlatformElement {
         const syncApi = this.services.get('syncApi');
         const fwd = this._ui.forwardMessage;
         const fromId = this._chat.selectedChannelId;
-        if (!fwd?.id || !fromId) throw new Error('Нет сообщения для пересылки.');
+        if (!fwd?.id || !fromId) throw new Error(this.i18n.t('chat_view.err_no_forward_message', {}, 'sync_ui'));
         await syncApi.forwardMessage(fromId, fwd.id, toChannelId, null);
         SyncStore.setForwardModal(false, null);
         await SyncStore.loadMessages(syncApi, fromId);
@@ -870,7 +877,7 @@ export class ChatView extends PlatformElement {
         if (typeof spaceId !== 'string' || spaceId === '') {
             const first = this._spaces.list[0];
             if (!first?.id) {
-                this.error('Создайте пространство в сайдбаре, чтобы начать встречу.');
+                this.error(this.i18n.t('chat_view.create_space_for_meeting', {}, 'sync_ui'));
                 return;
             }
             spaceId = first.id;
@@ -889,6 +896,7 @@ export class ChatView extends PlatformElement {
     }
 
     render() {
+        const ts = (key, params) => this.i18n.t(key, params ?? {}, 'sync_ui');
         const { selectedChannelId, focusedThreadId } = this._chat;
         const selectedChannel = this._selectedChannel();
         const pins = selectedChannel?.pinned_message_ids;
@@ -941,7 +949,7 @@ export class ChatView extends PlatformElement {
                     <button
                         type="button"
                         class="header-channel-hit"
-                        title="Настройки канала"
+                        title=${ts('chat_view.channel_settings_title')}
                         @click=${this._openChannelSettings}
                     >
                         ${headerLead}
@@ -971,8 +979,8 @@ export class ChatView extends PlatformElement {
                     <button
                         type="button"
                         class=${classMap({ 'mobile-menu-btn': true, hidden: !showMobileMenuBtn })}
-                        title="Открыть меню"
-                        aria-label="Открыть меню"
+                        title=${ts('chat_view.open_menu_title')}
+                        aria-label=${ts('chat_view.open_menu_aria')}
                         @click=${this._openMobileSidebar}
                     >
                         <platform-icon name="hamburger" size="20"></platform-icon>
@@ -986,8 +994,8 @@ export class ChatView extends PlatformElement {
                                 <button
                                     type="button"
                                     class="icon-btn header-more-trigger"
-                                    title="Ещё"
-                                    aria-label="Дополнительные действия"
+                                    title=${ts('chat_view.more_title')}
+                                    aria-label=${ts('chat_view.more_aria')}
                                     aria-expanded=${this._headerMoreOpen ? 'true' : 'false'}
                                     aria-haspopup="true"
                                     @click=${this._toggleHeaderMoreMenu}
@@ -1016,7 +1024,7 @@ export class ChatView extends PlatformElement {
                                                     <polygon points="23 7 16 12 23 17 23 7"/>
                                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                                                 </svg>
-                                                <span>Звонок</span>
+                                                <span>${ts('chat_view.call')}</span>
                                             </button>
                                         ` : ''}
                                         ${focusedThreadId ? html`
@@ -1029,7 +1037,7 @@ export class ChatView extends PlatformElement {
     }}
                                             >
                                                 <platform-icon name="chevron-left" size="16"></platform-icon>
-                                                <span>Назад</span>
+                                                <span>${ts('chat_view.back')}</span>
                                             </button>
                                         ` : html`
                                             <button
@@ -1042,7 +1050,7 @@ export class ChatView extends PlatformElement {
     }}
                                             >
                                                 <platform-icon name="list" size="16"></platform-icon>
-                                                <span>Треды</span>
+                                                <span>${ts('chat_view.threads')}</span>
                                             </button>
                                         `}
                                     </div>
@@ -1052,7 +1060,7 @@ export class ChatView extends PlatformElement {
                             <span class="ws-badge ${this._wsState}">${this._wsState}</span>
 
                             ${selectedChannelId ? html`
-                            <button type="button" class="icon-btn" title="Звонок в этом канале" aria-label="Звонок в этом канале" @click=${this._startCall}>
+                            <button type="button" class="icon-btn" title=${ts('chat_view.call_in_channel_title')} aria-label=${ts('chat_view.call_in_channel_aria')} @click=${this._startCall}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polygon points="23 7 16 12 23 17 23 7"/>
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
@@ -1063,13 +1071,13 @@ export class ChatView extends PlatformElement {
                             ${focusedThreadId ? html`
                             <button type="button" class="back-btn" @click=${() => SyncStore.setFocusedThread(null)}>
                                 <platform-icon name="chevron-left" size="14"></platform-icon>
-                                Назад
+                                ${ts('chat_view.back')}
                             </button>
                         ` : html`
                             <button
                                 type="button"
                                 class="icon-btn"
-                                title="Треды"
+                                title=${ts('chat_view.threads_title')}
                                 ?disabled=${!selectedChannelId}
                                 @click=${() => SyncStore.setThreadDrawerOpen(true)}
                             >
@@ -1086,30 +1094,30 @@ export class ChatView extends PlatformElement {
                     <channel-picker @sync-request-adhoc-call=${() => void this._startAdHocCall()}></channel-picker>
                 ` : html`
                     ${pinCount > 0 && !focusedThreadId ? html`
-                        <div class="pin-strip" @click=${this._onPinStripClick} title="Перейти к закреплённому">
+                        <div class="pin-strip" @click=${this._onPinStripClick} title=${ts('chat_view.pin_strip_title')}>
                             <platform-icon name="target" size="14"></platform-icon>
-                            <span>Закреплённые сообщения (${pinCount}) — нажмите для перехода по кругу</span>
+                            <span>${ts('chat_view.pinned_messages', { count: pinCount })}</span>
                         </div>
                     ` : ''}
                     ${selMode ? html`
                         <div class="selection-bar">
-                            <span>Выбрано: ${selIds.length}</span>
+                            <span>${ts('chat_view.selected_count', { count: selIds.length })}</span>
                             <div class="selection-actions">
                                 <button type="button" class="back-btn" @click=${() => {
         SyncStore.setSelectionMode(false);
-    }}>Отмена</button>
+    }}>${ts('chat_view.cancel')}</button>
                                 <button
                                     type="button"
                                     class="back-btn"
                                     ?disabled=${selIds.length === 0}
                                     @click=${() => SyncStore.setForwardModal(true, null)}
-                                >Переслать</button>
+                                >${ts('chat_view.forward')}</button>
                                 <button
                                     type="button"
                                     class="back-btn"
                                     ?disabled=${selIds.length === 0}
                                     @click=${this._deleteSelected}
-                                >Удалить</button>
+                                >${ts('chat_view.delete')}</button>
                             </div>
                         </div>
                     ` : ''}
@@ -1124,8 +1132,8 @@ export class ChatView extends PlatformElement {
         if (e.target === e.currentTarget) SyncStore.setForwardModal(false, null);
     }}>
                     <div class="modal-box" @click=${(e) => e.stopPropagation()}>
-                        <div class="modal-title">Куда переслать</div>
-                        ${forwardDestinations.length === 0 ? html`<p class="header-subtitle">Нет других каналов.</p>` : ''}
+                        <div class="modal-title">${ts('chat_view.forward_modal_title')}</div>
+                        ${forwardDestinations.length === 0 ? html`<p class="header-subtitle">${ts('chat_view.no_other_channels')}</p>` : ''}
                         <div class="forward-channel-list">
                             ${forwardDestinations.map(c => html`
                             <sync-channel-row
@@ -1143,7 +1151,7 @@ export class ChatView extends PlatformElement {
                             ></sync-channel-row>
                         `)}
                         </div>
-                        <button type="button" class="back-btn" style="margin-top:var(--space-3)" @click=${() => SyncStore.setForwardModal(false, null)}>Закрыть</button>
+                        <button type="button" class="back-btn" style="margin-top:var(--space-3)" @click=${() => SyncStore.setForwardModal(false, null)}>${ts('close')}</button>
                     </div>
                 </div>
             ` : ''}

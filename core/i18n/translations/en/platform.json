@@ -1,0 +1,42 @@
+{
+  "menu": {
+    "user_button_title": "User menu",
+    "apps": "Apps",
+    "profile": "Profile",
+    "settings": "Settings",
+    "calendar": "Calendar",
+    "documentation": "Documentation",
+    "theme_light": "Light theme",
+    "theme_dark": "Dark theme",
+    "logout": "Log out",
+    "language": "Language",
+    "user_fallback": "User"
+  },
+  "apps": {
+    "flows": {
+      "name": "Flows",
+      "description": "Flow builder: graphs, skills, and integrations"
+    },
+    "crm": {
+      "name": "NetWorkle",
+      "description": "Contacts and knowledge graph"
+    },
+    "rag": {
+      "name": "RAG",
+      "description": "Documents and search"
+    },
+    "sync": {
+      "name": "Sync",
+      "description": "Engineering chat with Git integration"
+    },
+    "frontend": {
+      "name": "Console",
+      "description": "Humanitec platform console"
+    }
+  },
+  "company": {
+    "switched": "Company switched",
+    "switch_error": "Could not switch company: {{message}}",
+    "subdomain_missing": "Subdomain not found for the selected company"
+  }
+}

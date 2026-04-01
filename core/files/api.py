@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from core.files.audio_transcode import AudioTranscodeError
 from core.files.models import FileRecord, FileResponse
 from core.files.processors import FileProcessor
 from core.files.s3_client import S3ClientFactory
@@ -94,13 +95,19 @@ def build_file_api_router(
 
         repo = get_file_repo()
         processor = FileProcessor(file_repository=repo)
-        file_record = await processor.process_file_from_bytes(
-            data=data,
-            original_name=original_name,
-            content_type=content_type,
-            uploaded_by=user_id,
-            public=True,
-        )
+        try:
+            file_record = await processor.process_file_from_bytes(
+                data=data,
+                original_name=original_name,
+                content_type=content_type,
+                uploaded_by=user_id,
+                public=True,
+            )
+        except AudioTranscodeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc),
+            ) from exc
         file_record = file_record.model_copy(update={
             "company_id": company_id,
             "checksum": checksum,

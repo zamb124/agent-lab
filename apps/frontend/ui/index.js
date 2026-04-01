@@ -2,18 +2,12 @@
  * Platform Management - Entry Point
  */
 
-console.log('🚀 Platform Management загружается...');
-
-// Импортируем главное приложение - оно автоматически инициализирует все сервисы
 import './app/FrontendApp.js';
 
-// Импортируем sidebar
 import './components/frontend-sidebar.js';
 
-// Импортируем core компоненты
 import '@platform/lib/components/platform-user.js';
 
-// Импортируем страницы
 import './pages/landing-page.js';
 import './pages/select-company-page.js';
 import './pages/join-page.js';
@@ -42,5 +36,3 @@ import './components/landing/landing-reviews.js';
 import './components/landing/landing-faq.js';
 import './components/landing/landing-cta.js';
 import './components/landing/landing-footer.js';
-
-console.log('✅ Platform Management инициализирован');

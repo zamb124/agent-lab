@@ -212,7 +212,16 @@ export class DashboardPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._loadData();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadData() {
@@ -257,11 +266,12 @@ export class DashboardPage extends PlatformElement {
 
     render() {
         const { servicesLoading, billingLoading } = this.state.value;
-        
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+
         if (servicesLoading && billingLoading) {
             return html`
                 <div class="loading-state">
-                    <p>Загрузка...</p>
+                    <p>${td('console_home.loading')}</p>
                 </div>
             `;
         }
@@ -270,8 +280,8 @@ export class DashboardPage extends PlatformElement {
 
         return html`
             <page-header 
-                title="Добро пожаловать" 
-                subtitle="${user?.name ?? 'Пользователь'}"
+                title=${td('console_home.welcome_title')}
+                subtitle="${user?.name ?? td('console_home.user_fallback')}"
             ></page-header>
             
             ${this._renderServices()}
@@ -283,36 +293,38 @@ export class DashboardPage extends PlatformElement {
     }
 
     _renderServices() {
+        const tp = (key, params) => this.i18n.t(key, params ?? {}, 'platform');
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         const services = [
             {
                 id: 'flows',
-                name: 'Flows',
+                name: tp('apps.flows.name'),
                 logo: '/static/core/assets/service_logos/agents_logo.svg',
-                description: 'Конструктор flow: графы, skills и интеграции',
+                description: tp('apps.flows.description'),
             },
             {
                 id: 'crm',
-                name: 'NetWorkle',
+                name: tp('apps.crm.name'),
                 logo: '/static/core/assets/service_logos/crm_logo.svg',
-                description: 'Управление контактами и Knowledge Graph',
+                description: tp('apps.crm.description'),
             },
             {
                 id: 'rag',
-                name: 'RAG',
+                name: tp('apps.rag.name'),
                 logo: '/static/core/assets/service_logos/rag_logo.svg',
-                description: 'Управление документами и поиск',
+                description: tp('apps.rag.description'),
             },
             {
                 id: 'sync',
-                name: 'Sync',
+                name: tp('apps.sync.name'),
                 logo: '/static/core/assets/service_logos/sync_logo.svg',
-                description: 'Инженерный чат с Git-интеграцией',
+                description: tp('apps.sync.description'),
             },
         ];
 
         return html`
             <div class="services-section">
-                <h2 class="section-title">Сервисы</h2>
+                <h2 class="section-title">${td('console_home.services_title')}</h2>
                 <div class="services-grid">
                     ${services.map((service) => this._renderServiceCard(service))}
                 </div>
@@ -353,7 +365,7 @@ export class DashboardPage extends PlatformElement {
 
         const targetPort = servicePortById[serviceId];
         if (!targetPort) {
-            throw new Error(`Неизвестный сервис для dashboard ссылки: ${serviceId}`);
+            throw new Error(this.i18n.t('console_home.err_unknown_service', { id: serviceId }, 'dashboard'));
         }
 
         if (window.location.port === targetPort) {
@@ -372,36 +384,37 @@ export class DashboardPage extends PlatformElement {
     }
 
     _renderQuickActions() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
         const actions = [
             {
                 iconName: 'share',
-                title: 'Пригласить участника',
-                description: 'Добавить нового члена команды',
+                title: td('console_home.quick_invite_title'),
+                description: td('console_home.quick_invite_desc'),
                 action: () => FrontendStore.setCurrentView('team'),
             },
             {
                 iconName: 'key',
-                title: 'Создать API ключ',
-                description: 'Новый ключ для интеграций',
+                title: td('console_home.quick_api_title'),
+                description: td('console_home.quick_api_desc'),
                 action: () => FrontendStore.setCurrentView('api-keys'),
             },
             {
                 iconName: 'chat',
-                title: 'Добавить Embed виджет',
-                description: 'Создать новый чат-виджет',
+                title: td('console_home.quick_embed_title'),
+                description: td('console_home.quick_embed_desc'),
                 action: () => FrontendStore.setCurrentView('embed-configs'),
             },
             {
                 iconName: 'clipboard',
-                title: 'Пополнить баланс',
-                description: 'Управление биллингом',
+                title: td('console_home.quick_billing_title'),
+                description: td('console_home.quick_billing_desc'),
                 action: () => FrontendStore.setCurrentView('billing'),
             },
         ];
 
         return html`
             <div class="quick-actions-section">
-                <h2 class="section-title">Быстрые действия</h2>
+                <h2 class="section-title">${td('console_home.quick_actions_title')}</h2>
                 <div class="quick-actions">
                     ${actions.map((action) => html`
                         <div class="action-card" @click=${action.action}>
@@ -421,34 +434,37 @@ export class DashboardPage extends PlatformElement {
 
     _renderStats() {
         const { subscription, servicesStatus } = this.state.value;
-        
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+
         const balance = subscription?.balance ?? 0;
         const spent = subscription?.current_month_spent ?? 0;
         const plan = subscription?.plan ?? 'FREE';
-        
+
         const statuses = Object.values(servicesStatus);
         const healthyCount = statuses.filter((s) => s.status === 'healthy').length;
         const totalCount = statuses.length;
-        
+
+        const cur = td('console_home.currency_rub');
+
         return html`
             <div class="stats-section">
-                <h2 class="section-title">Статистика использования</h2>
+                <h2 class="section-title">${td('console_home.stats_title')}</h2>
                 <div class="stats-grid">
                     <div class="stat-item">
-                        <div class="stat-value">${balance.toFixed(0)} Р</div>
-                        <div class="stat-label">Баланс</div>
+                        <div class="stat-value">${balance.toFixed(0)} ${cur}</div>
+                        <div class="stat-label">${td('console_home.stat_balance')}</div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-value">${spent.toFixed(0)} Р</div>
-                        <div class="stat-label">Потрачено в месяце</div>
+                        <div class="stat-value">${spent.toFixed(0)} ${cur}</div>
+                        <div class="stat-label">${td('console_home.stat_spent_month')}</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-value">${plan.toUpperCase()}</div>
-                        <div class="stat-label">Тарифный план</div>
+                        <div class="stat-label">${td('console_home.stat_plan')}</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-value">${healthyCount}/${totalCount}</div>
-                        <div class="stat-label">Сервисы онлайн</div>
+                        <div class="stat-label">${td('console_home.stat_services_online')}</div>
                     </div>
                 </div>
             </div>

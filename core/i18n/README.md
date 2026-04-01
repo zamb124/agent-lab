@@ -75,6 +75,16 @@ app/i18n/
 - **Меньше конфликтов** - каждый работает со своим модулем
 - **Быстрая загрузка** - можно загружать только нужные модули
 
+### HTTP API и Lit SPA
+
+- Эндпоинт **`GET /api/i18n/{locale}`** (`locale`: `ru` | `en`) подключается в **`create_service_app`** через **`core/app/i18n_routes.py`** на всех сервисах; тело — объединение всех `*.json` из **`core/i18n/translations/{locale}/`** (файлы с префиксом `_` не отдаются).
+- Клиентский движок: **`core/frontend/static/services/i18n/i18n.service.js`**, регистрация в **`ServiceRegistry.registerCore`** как **`i18n`**, в компонентах — **`this.i18n`** (`PlatformElement`).
+- Смена языка в UI: **`localStorage`** (`locale`), cookie **`language`**, атриут **`lang`** у `<html>` — в одну линию с определением языка в **`core/middleware/auth/context_factory.py`** (cookie `language` и `Accept-Language`).
+
+### Python API
+
+- Строки для пользователей из бэкенда — через **`TranslationManager`** / **`t()`** в **`core/i18n/service.py`**; язык запроса — **`get_context().language`**, если контекст установлен (после выставления cookie из SPA язык совпадает с UI).
+
 ### Ручное редактирование
 
 Редактируйте нужный модуль напрямую:

@@ -345,12 +345,17 @@ export class ProductCrmPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this.addEventListener('open-auth-modal', this._handleOpenAuthModal);
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         this.removeEventListener('open-auth-modal', this._handleOpenAuthModal);
+        super.disconnectedCallback();
     }
 
     _handleOpenAuthModal = () => {
@@ -361,6 +366,7 @@ export class ProductCrmPage extends PlatformElement {
     };
 
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'frontend_products');
         return html`
             <div class="page-container">
                 <landing-header></landing-header>
@@ -369,14 +375,13 @@ export class ProductCrmPage extends PlatformElement {
                     <div class="hero-icon">
                         <img src="/static/core/assets/service_logos/crm_logo.svg" alt="NetWorkle" />
                     </div>
-                    <span class="hero-badge">Умная записная книжка</span>
-                    <h1 class="hero-title">NetWorkle</h1>
+                    <span class="hero-badge">${t('crm.hero_badge')}</span>
+                    <h1 class="hero-title">${t('crm.hero_title')}</h1>
                     <p class="hero-description">
-                        Записываете заметки после встреч и звонков — система сама находит упоминания контактов, 
-                        компаний и сделок, строя граф связей вашего бизнеса.
+                        ${t('crm.hero_description')}
                     </p>
                     <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Попробовать бесплатно
+                        ${t('crm.cta_try')}
                     </button>
                 </section>
                 
@@ -384,37 +389,33 @@ export class ProductCrmPage extends PlatformElement {
                     <div class="features-grid">
                         <div class="feature-card">
                             <div class="feature-icon">✨</div>
-                            <h3 class="feature-title">AI-структуризация</h3>
+                            <h3 class="feature-title">${t('crm.f1_title')}</h3>
                             <p class="feature-description">
-                                Пишите как удобно — AI сам выделит контакты, даты, задачи 
-                                и ключевые темы.
+                                ${t('crm.f1_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">🕸️</div>
-                            <h3 class="feature-title">Граф связей</h3>
+                            <h3 class="feature-title">${t('crm.f2_title')}</h3>
                             <p class="feature-description">
-                                Видите все связи между людьми, компаниями и проектами 
-                                на интерактивной карте.
+                                ${t('crm.f2_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">🔍</div>
-                            <h3 class="feature-title">Умный поиск</h3>
+                            <h3 class="feature-title">${t('crm.f3_title')}</h3>
                             <p class="feature-description">
-                                Ищите по смыслу: "о чем говорили с Иваном в прошлом месяце" — 
-                                и получаете ответ.
+                                ${t('crm.f3_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
                             <div class="feature-icon">📎</div>
-                            <h3 class="feature-title">Файлы и документы</h3>
+                            <h3 class="feature-title">${t('crm.f4_title')}</h3>
                             <p class="feature-description">
-                                Прикрепляйте документы к заметкам. AI индексирует содержимое 
-                                для поиска.
+                                ${t('crm.f4_desc')}
                             </p>
                         </div>
                     </div>
@@ -422,37 +423,37 @@ export class ProductCrmPage extends PlatformElement {
                 
                 <section class="how-it-works">
                     <div class="how-it-works-container">
-                        <h2 class="how-it-works-title">Как это работает</h2>
+                        <h2 class="how-it-works-title">${t('crm.how_title')}</h2>
                         <div class="steps-grid">
                             <div class="step-item">
                                 <div class="step-number">1</div>
                                 <div class="step-content">
-                                    <h3>Записываете заметку</h3>
-                                    <p>После звонка или встречи пишите в свободной форме — что обсудили, о чем договорились.</p>
+                                    <h3>${t('crm.s1_h')}</h3>
+                                    <p>${t('crm.s1_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">2</div>
                                 <div class="step-content">
-                                    <h3>AI анализирует текст</h3>
-                                    <p>Система находит имена, компании, даты, суммы и автоматически создает связи.</p>
+                                    <h3>${t('crm.s2_h')}</h3>
+                                    <p>${t('crm.s2_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">3</div>
                                 <div class="step-content">
-                                    <h3>Граф растет</h3>
-                                    <p>Каждая заметка добавляет узлы и связи. Видите полную картину отношений.</p>
+                                    <h3>${t('crm.s3_h')}</h3>
+                                    <p>${t('crm.s3_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">4</div>
                                 <div class="step-content">
-                                    <h3>Находите мгновенно</h3>
-                                    <p>Нужна информация — спрашиваете обычным языком и получаете точный ответ.</p>
+                                    <h3>${t('crm.s4_h')}</h3>
+                                    <p>${t('crm.s4_p')}</p>
                                 </div>
                             </div>
                         </div>
@@ -460,65 +461,65 @@ export class ProductCrmPage extends PlatformElement {
                 </section>
                 
                 <section class="benefits">
-                    <h2 class="benefits-title">Почему предприниматели выбирают NetWorkle</h2>
+                    <h2 class="benefits-title">${t('crm.benefits_title')}</h2>
                     <div class="benefits-grid">
                         <div class="benefit-item">
                             <div class="benefit-icon">🧠</div>
                             <div class="benefit-content">
-                                <h3>Ничего не забудете</h3>
-                                <p>Вся история коммуникаций в одном месте. Кто, когда, о чем — находится за секунды.</p>
+                                <h3>${t('crm.b1_h')}</h3>
+                                <p>${t('crm.b1_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">🤝</div>
                             <div class="benefit-content">
-                                <h3>Видите связи</h3>
-                                <p>Понимаете, кто кого знает, какие компании связаны, кто может представить нужного человека.</p>
+                                <h3>${t('crm.b2_h')}</h3>
+                                <p>${t('crm.b2_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">⏰</div>
                             <div class="benefit-content">
-                                <h3>Экономите время</h3>
-                                <p>Не нужно структурировать данные вручную. AI делает это автоматически.</p>
+                                <h3>${t('crm.b3_h')}</h3>
+                                <p>${t('crm.b3_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">📈</div>
                             <div class="benefit-content">
-                                <h3>Растете с системой</h3>
-                                <p>Чем больше заметок — тем умнее система. База знаний накапливается годами.</p>
+                                <h3>${t('crm.b4_h')}</h3>
+                                <p>${t('crm.b4_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">👥</div>
                             <div class="benefit-content">
-                                <h3>Командная работа</h3>
-                                <p>Делитесь контактами и историей с командой. Новый менеджер быстро входит в курс дела.</p>
+                                <h3>${t('crm.b5_h')}</h3>
+                                <p>${t('crm.b5_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-icon">🔐</div>
                             <div class="benefit-content">
-                                <h3>Безопасность данных</h3>
-                                <p>Ваши заметки и контакты хранятся изолированно. Полный контроль над доступом.</p>
+                                <h3>${t('crm.b6_h')}</h3>
+                                <p>${t('crm.b6_p')}</p>
                             </div>
                         </div>
                     </div>
                 </section>
                 
                 <section class="cta-section">
-                    <h2 class="cta-title">Начните строить свой граф связей</h2>
-                    <p class="cta-subtitle">Первые 100 заметок — бесплатно</p>
+                    <h2 class="cta-title">${t('crm.cta_title')}</h2>
+                    <p class="cta-subtitle">${t('crm.cta_subtitle')}</p>
                     <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Создать аккаунт
+                        ${t('crm.cta_button')}
                     </button>
-                    <a href="/" class="back-link">← Вернуться на главную</a>
+                    <a href="/" class="back-link">${t('crm.back_home')}</a>
                 </section>
                 
                 <landing-footer></landing-footer>

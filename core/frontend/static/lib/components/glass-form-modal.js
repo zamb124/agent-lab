@@ -37,7 +37,8 @@ export class PlatformFormModal extends PlatformModal {
     }
 
     close() {
-        if (this.isDirty && !confirm('У вас есть несохраненные изменения. Закрыть без сохранения?')) {
+        const msg = this.i18n.t('form_modal.unsaved_close', {}, 'shell');
+        if (this.isDirty && !confirm(msg)) {
             return;
         }
         super.close();

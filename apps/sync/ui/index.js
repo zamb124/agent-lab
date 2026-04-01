@@ -1,5 +1,5 @@
 /**
- * Sync Chat UI — точка входа
+ * Sync Chat UI entry point
  */
 
 import '@platform/lib/components/platform-notification-manager.js';

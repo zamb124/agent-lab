@@ -8,7 +8,7 @@
 |-------------|----------|
 | Android TWA, Bubblewrap, сборка AAB | [`android/README.md`](../android/README.md) |
 | iOS Capacitor, WKWebView, Xcode | [`IOS_CAPACITOR.md`](IOS_CAPACITOR.md) |
-| Тексты и скриншоты App Store, fastlane | [`../store-listing/README.md`](../store-listing/README.md), [`../fastlane/README.md`](../fastlane/README.md) |
+| App Store (что заполнять в Apple вручную) | [`APPLE_MANUAL.md`](APPLE_MANUAL.md) |
 | Web Push vs APNs на iOS (опционально) | [`PUSH_PARITY_APNS.md`](PUSH_PARITY_APNS.md) |
 | Матрица ручных тестов перед релизом | [`QA_MATRIX_TEMPLATE.md`](QA_MATRIX_TEMPLATE.md) |
 

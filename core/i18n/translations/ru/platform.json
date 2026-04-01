@@ -1,0 +1,42 @@
+{
+  "menu": {
+    "user_button_title": "Меню пользователя",
+    "apps": "Apps",
+    "profile": "Профиль",
+    "settings": "Настройки",
+    "calendar": "Календарь",
+    "documentation": "Документация",
+    "theme_light": "Светлая тема",
+    "theme_dark": "Тёмная тема",
+    "logout": "Выйти",
+    "language": "Язык",
+    "user_fallback": "Пользователь"
+  },
+  "apps": {
+    "flows": {
+      "name": "Flows",
+      "description": "Конструктор flow: графы, skills и интеграции"
+    },
+    "crm": {
+      "name": "NetWorkle",
+      "description": "Управление контактами и Knowledge Graph"
+    },
+    "rag": {
+      "name": "RAG",
+      "description": "Управление документами и поиск"
+    },
+    "sync": {
+      "name": "Sync",
+      "description": "Инженерный чат с Git-интеграцией"
+    },
+    "frontend": {
+      "name": "Console",
+      "description": "Humanitec: консоль платформы"
+    }
+  },
+  "company": {
+    "switched": "Компания изменена",
+    "switch_error": "Ошибка смены компании: {{message}}",
+    "subdomain_missing": "Не найден subdomain для выбранной компании"
+  }
+}

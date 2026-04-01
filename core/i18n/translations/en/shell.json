@@ -1,0 +1,73 @@
+{
+  "auth": {
+    "title": "Sign in to Humanitec",
+    "subtitle": "Choose a sign-in method",
+    "yandex": "Continue with Yandex",
+    "google": "Continue with Google",
+    "github": "Continue with GitHub",
+    "oauth_error": "Could not start authorization"
+  },
+  "pwa": {
+    "install_title": "Install Humanitec",
+    "ios_description": "Add to your home screen for quick access",
+    "ios_tap": "Tap",
+    "ios_home": "then \"Add to Home Screen\"",
+    "later": "Later",
+    "install_description": "Work offline and receive notifications",
+    "install": "Install"
+  },
+  "modal": {
+    "fullscreen_exit": "Exit full screen",
+    "fullscreen_enter": "Full screen",
+    "close": "Close"
+  },
+  "sidebar": {
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
+  },
+  "profile": {
+    "title": "Edit profile",
+    "loading": "Loading user data...",
+    "first_name_label": "First name",
+    "first_name_placeholder": "First name",
+    "last_name_label": "Last name",
+    "last_name_placeholder": "Last name",
+    "display_name_label": "Display name",
+    "display_name_placeholder": "Shown in the interface",
+    "email_label": "Email",
+    "email_locked": "Email cannot be changed",
+    "bio_label": "About",
+    "bio_placeholder": "Tell us about yourself",
+    "bio_max_hint": "Up to 4000 characters",
+    "language_label": "Interface language",
+    "lang_ru": "Russian",
+    "lang_en": "English",
+    "company_label": "Company:",
+    "roles_label": "Roles:",
+    "company_empty": "Not set",
+    "error_name_required": "Name is required",
+    "error_name_length": "Name must be at most 100 characters",
+    "error_bio_length": "Bio must be at most 4000 characters",
+    "success_updated": "Profile updated",
+    "error_update_prefix": "Update failed:"
+  },
+  "form_modal": {
+    "unsaved_close": "You have unsaved changes. Close without saving?"
+  },
+  "company": {
+    "create_title": "Create company",
+    "create_subtitle": "Create a company to get started",
+    "name_label": "Company name",
+    "name_placeholder": "My company",
+    "slug_label": "Company URL",
+    "slug_hint": "Latin letters, digits, and hyphens only",
+    "slug_min": "At least 3 characters",
+    "slug_taken": "This URL is already taken",
+    "slug_check_error": "Could not check availability",
+    "error_name_required": "Enter a company name",
+    "error_slug_invalid": "Enter a valid company URL",
+    "error_slug_taken": "This company URL is already taken",
+    "creating": "Creating...",
+    "submit": "Create"
+  }
+}

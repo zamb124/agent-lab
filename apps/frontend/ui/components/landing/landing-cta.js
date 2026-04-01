@@ -150,6 +150,19 @@ export class LandingCta extends PlatformElement {
         };
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     _openModal() {
         this.showModal = true;
     }
@@ -180,13 +193,13 @@ export class LandingCta extends PlatformElement {
         event.preventDefault();
 
         if (!this.formData.name || !this.formData.email) {
-            this.warning('Пожалуйста, заполните обязательные поля');
+            this.warning(this.i18n.t('cta.toast_required', {}, 'landing'));
             return;
         }
 
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(this.formData.email)) {
-            this.warning('Пожалуйста, введите корректный email');
+            this.warning(this.i18n.t('cta.toast_email_invalid', {}, 'landing'));
             return;
         }
 
@@ -202,36 +215,37 @@ export class LandingCta extends PlatformElement {
             });
 
             if (response.ok) {
-                this.success('Заявка успешно отправлена! Мы свяжемся с вами в ближайшее время.');
+                this.success(this.i18n.t('cta.toast_success', {}, 'landing'));
                 this._closeModal();
             } else {
-                this.error('Произошла ошибка. Попробуйте позже или свяжитесь с нами напрямую.');
+                this.error(this.i18n.t('cta.toast_error', {}, 'landing'));
             }
         } catch {
-            this.error('Произошла ошибка. Попробуйте позже или свяжитесь с нами напрямую.');
+            this.error(this.i18n.t('cta.toast_error', {}, 'landing'));
         } finally {
             this.isSubmitting = false;
         }
     }
 
     render() {
+        const t = (key) => this.i18n.t(key, {}, 'landing');
         return html`
             <div class="blur-bg-primary"></div>
             <div class="blur-bg-white"></div>
             
             <div class="cta-container">
                 <h2 class="cta-title">
-                    Автоматизируйте ваш бизнес с Humanitec
+                    ${t('cta.title_plain')}
                 </h2>
                 
                 <button class="cta-button" @click=${this._openModal}>
-                    Оставить заявку
+                    ${t('cta.button')}
                 </button>
             </div>
             
             ${this.showModal ? html`
                 <glass-modal
-                    title="Оставить заявку"
+                    title=${t('cta.modal_title')}
                     @close=${this._closeModal}
                 >
                     <form @submit=${this._handleSubmit}>
@@ -239,7 +253,7 @@ export class LandingCta extends PlatformElement {
                             <div class="form-row">
                                 <glass-input
                                     type="text"
-                                    placeholder="Ваше имя *"
+                                    placeholder=${t('cta.placeholder_name')}
                                     .value=${this.formData.name}
                                     @input=${(e) => this._handleInput('name', e)}
                                     required
@@ -247,7 +261,7 @@ export class LandingCta extends PlatformElement {
                                 
                                 <glass-input
                                     type="email"
-                                    placeholder="Email *"
+                                    placeholder=${t('cta.placeholder_email')}
                                     .value=${this.formData.email}
                                     @input=${(e) => this._handleInput('email', e)}
                                     required
@@ -257,14 +271,14 @@ export class LandingCta extends PlatformElement {
                             <div class="form-row">
                                 <glass-input
                                     type="tel"
-                                    placeholder="Телефон"
+                                    placeholder=${t('cta.placeholder_phone')}
                                     .value=${this.formData.phone}
                                     @input=${(e) => this._handleInput('phone', e)}
                                 ></glass-input>
                                 
                                 <glass-input
                                     type="text"
-                                    placeholder="Компания"
+                                    placeholder=${t('cta.placeholder_company')}
                                     .value=${this.formData.company}
                                     @input=${(e) => this._handleInput('company', e)}
                                 ></glass-input>
@@ -272,7 +286,7 @@ export class LandingCta extends PlatformElement {
                             
                             <glass-input
                                 type="text"
-                                placeholder="Комментарий"
+                                placeholder=${t('cta.placeholder_comment')}
                                 .value=${this.formData.comment}
                                 @input=${(e) => this._handleInput('comment', e)}
                             ></glass-input>
@@ -284,7 +298,7 @@ export class LandingCta extends PlatformElement {
                             ?loading=${this.isSubmitting}
                             ?disabled=${this.isSubmitting}
                         >
-                            ${this.isSubmitting ? 'Отправка...' : 'Отправить заявку'}
+                            ${this.isSubmitting ? t('cta.submit_sending') : t('cta.submit_idle')}
                         </glass-button>
                     </form>
                 </glass-modal>

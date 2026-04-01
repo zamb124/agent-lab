@@ -12,6 +12,10 @@ from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
 
 from core.files.s3_client import S3ClientFactory, S3Client
+from core.files.audio_transcode import (
+    audio_needs_ios_compatible_transcode,
+    transcode_audio_bytes_to_m4a_aac,
+)
 from core.files.models import (
     AudioMetadata,
     AudioTranscriptionStatus,
@@ -89,6 +93,17 @@ class FileProcessor:
             content_type, _ = mimetypes.guess_type(original_name)
             if not content_type:
                 content_type = "application/octet-stream"
+
+        if audio_needs_ios_compatible_transcode(content_type):
+            src_suffix = Path(original_name).suffix
+            if src_suffix == "":
+                src_suffix = ".webm"
+            data = await transcode_audio_bytes_to_m4a_aac(data, src_suffix)
+            content_type = "audio/mp4"
+            stem = Path(original_name).stem
+            if stem == "" or stem == ".":
+                stem = "voice"
+            original_name = f"{stem}.m4a"
 
         file_hash = hashlib.sha256(data).hexdigest()[:16]
         extension = Path(original_name).suffix or ".bin"

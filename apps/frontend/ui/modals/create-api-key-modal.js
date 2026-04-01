@@ -20,6 +20,16 @@ const ALLOWED_API_KEY_SCOPES = [
 
 const ALLOWED_SCOPE_SET = new Set(ALLOWED_API_KEY_SCOPES);
 
+const API_KEY_SCOPE_ROWS = [
+    { id: 'agents:read', nameKey: 'scope_agents_read_name', descKey: 'scope_agents_read_desc' },
+    { id: 'agents:write', nameKey: 'scope_agents_write_name', descKey: 'scope_agents_write_desc' },
+    { id: 'crm:read', nameKey: 'scope_crm_read_name', descKey: 'scope_crm_read_desc' },
+    { id: 'crm:write', nameKey: 'scope_crm_write_name', descKey: 'scope_crm_write_desc' },
+    { id: 'rag:read', nameKey: 'scope_rag_read_name', descKey: 'scope_rag_read_desc' },
+    { id: 'rag:write', nameKey: 'scope_rag_write_name', descKey: 'scope_rag_write_desc' },
+    { id: 'billing:read', nameKey: 'scope_billing_read_name', descKey: 'scope_billing_read_desc' },
+];
+
 export class CreateApiKeyModal extends PlatformModal {
     static styles = [
         PlatformModal.styles,
@@ -204,16 +214,19 @@ export class CreateApiKeyModal extends PlatformModal {
         this._name = '';
         this._scopes = [];
         this._createdKey = null;
+    }
 
-        this._availableScopes = [
-            { id: 'agents:read', name: 'Чтение агентов (Flows)', description: 'Просмотр flows и связанных данных' },
-            { id: 'agents:write', name: 'Запись агентов (Flows)', description: 'Создание и изменение flows' },
-            { id: 'crm:read', name: 'Чтение CRM', description: 'Просмотр сущностей и графа' },
-            { id: 'crm:write', name: 'Запись CRM', description: 'Создание и изменение данных CRM' },
-            { id: 'rag:read', name: 'Чтение RAG', description: 'Просмотр документов и поиск' },
-            { id: 'rag:write', name: 'Запись RAG', description: 'Загрузка и изменение коллекций' },
-            { id: 'billing:read', name: 'Чтение биллинга', description: 'Просмотр баланса и тарифа' },
-        ];
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     _onScopeChange(scopeId, checked) {
@@ -231,14 +244,15 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     async _handleCreate() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         if (!this._name.trim()) {
-            this.error('Введите название ключа');
+            this.error(td('api_key_modal.err_name'));
             return;
         }
 
         const scopes = this._scopes.filter((s) => ALLOWED_SCOPE_SET.has(s));
         if (scopes.length === 0) {
-            this.error('Выберите хотя бы одну область доступа');
+            this.error(td('api_key_modal.err_scopes'));
             return;
         }
 
@@ -250,7 +264,7 @@ export class CreateApiKeyModal extends PlatformModal {
 
             const secret = result.secret;
             if (!secret) {
-                throw new Error('Сервер не вернул секрет ключа');
+                throw new Error(this.i18n.t('api_key_modal.err_no_secret', {}, 'dashboard'));
             }
 
             this._createdKey = { ...result, key: secret };
@@ -273,7 +287,7 @@ export class CreateApiKeyModal extends PlatformModal {
                 ...prev.filter((k) => k.key_id !== result.key_id),
             ]);
 
-            this.success('API ключ успешно создан');
+            this.success(td('api_key_modal.toast_created'));
             this.requestUpdate();
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -304,7 +318,7 @@ export class CreateApiKeyModal extends PlatformModal {
         try {
             const ok = document.execCommand('copy');
             if (!ok) {
-                throw new Error('Команда копирования не выполнена');
+                throw new Error(this.i18n.t('api_key_modal.err_copy_cmd', {}, 'dashboard'));
             }
         } finally {
             document.body.removeChild(ta);
@@ -312,19 +326,18 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     async _handleCopy() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         const text = this._createdKey?.key;
         if (!text) {
-            this.error('Нет данных ключа для копирования');
+            this.error(td('api_key_modal.err_no_key'));
             return;
         }
         try {
             await this._copyToClipboard(text);
-            this.success('Ключ скопирован в буфер обмена');
+            this.success(td('api_key_modal.toast_key_copied'));
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            this.error(
-                `Не удалось скопировать: ${msg}. Откройте сайт по HTTPS или скопируйте ключ вручную.`,
-            );
+            this.error(td('api_key_modal.err_copy_failed', { msg }));
         }
     }
 
@@ -342,7 +355,8 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     renderHeader() {
-        return this._createdKey ? 'Ключ создан' : 'Создать API ключ';
+        const td = (k) => this.i18n.t(k, {}, 'dashboard');
+        return this._createdKey ? td('api_key_modal.header_done') : td('api_key_modal.header_create');
     }
 
     renderBody() {
@@ -354,13 +368,14 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     _renderForm() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         return html`
             <div class="form-group">
-                <label class="form-label">Название ключа</label>
+                <label class="form-label">${td('api_key_modal.label_name')}</label>
                 <input
                     class="form-input"
                     type="text"
-                    placeholder="Мой API ключ"
+                    placeholder=${td('api_key_modal.placeholder_name')}
                     .value=${this._name}
                     @input=${(e) => { this._name = e.target.value; this.requestUpdate(); }}
                     ?disabled=${this._loading}
@@ -368,9 +383,9 @@ export class CreateApiKeyModal extends PlatformModal {
             </div>
 
             <div class="form-group">
-                <label class="form-label">Области доступа</label>
+                <label class="form-label">${td('api_key_modal.label_scopes')}</label>
                 <div class="scopes-list">
-                    ${this._availableScopes.map((scope) => html`
+                    ${API_KEY_SCOPE_ROWS.map((scope) => html`
                         <label class="scope-label">
                             <div
                                 class="form-item ${this._scopes.includes(scope.id) ? 'selected' : ''}"
@@ -379,8 +394,8 @@ export class CreateApiKeyModal extends PlatformModal {
                                     ${this._scopes.includes(scope.id) ? '✓' : ''}
                                 </div>
                                 <div class="form-item-content">
-                                    <div class="form-item-title">${scope.name}</div>
-                                    <div class="form-item-description">${scope.description}</div>
+                                    <div class="form-item-title">${td(`api_key_modal.${scope.nameKey}`)}</div>
+                                    <div class="form-item-description">${td(`api_key_modal.${scope.descKey}`)}</div>
                                 </div>
                             </div>
                             <input
@@ -398,6 +413,7 @@ export class CreateApiKeyModal extends PlatformModal {
     }
 
     _renderFormActions() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         return html`
             <div class="actions-row">
                 <button
@@ -405,32 +421,33 @@ export class CreateApiKeyModal extends PlatformModal {
                     @click=${this._handleClose}
                     ?disabled=${this._loading}
                 >
-                    Отмена
+                    ${td('api_key_modal.cancel')}
                 </button>
                 <button
                     class="btn btn-primary"
                     @click=${this._handleCreate}
                     ?disabled=${this._loading}
                 >
-                    ${this._loading ? 'Создание...' : 'Создать ключ'}
+                    ${this._loading ? td('api_key_modal.creating') : td('api_key_modal.submit')}
                 </button>
             </div>
         `;
     }
 
     _renderSuccess() {
+        const td = (k, p) => this.i18n.t(k, p ?? {}, 'dashboard');
         return html`
             <div class="success-message">
                 <div class="success-icon">✓</div>
-                <h3 class="success-title">API ключ создан!</h3>
+                <h3 class="success-title">${td('api_key_modal.success_title')}</h3>
 
                 <div class="key-row">
                     <div class="key-display">${this._createdKey.key}</div>
                     <button
                         type="button"
                         class="copy-key-btn"
-                        title="Скопировать ключ"
-                        aria-label="Скопировать ключ"
+                        title=${td('api_key_modal.copy_aria')}
+                        aria-label=${td('api_key_modal.copy_aria')}
                         @click=${this._handleCopy}
                     >
                         <platform-icon name="copy" size="20"></platform-icon>
@@ -438,8 +455,8 @@ export class CreateApiKeyModal extends PlatformModal {
                 </div>
 
                 <p class="warning-text">
-                    <strong>Важно:</strong> Сохраните этот ключ в безопасном месте.<br/>
-                    Он больше не будет показан.
+                    <strong>${td('api_key_modal.warning_lead')}</strong> ${td('api_key_modal.warning_line1')}
+                    <br/>${td('api_key_modal.warning_line2')}
                 </p>
             </div>
         `;

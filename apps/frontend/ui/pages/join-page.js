@@ -8,6 +8,7 @@
  *  - Токен истёк / использован / поддельный: понятная ошибка
  */
 import { html, css } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { AuthService } from '@platform/services/auth.service.js';
 import '@platform/lib/components/auth-modal.js';
@@ -208,7 +209,16 @@ export class JoinPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this._init();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     get _baseUrl() {
@@ -255,12 +265,12 @@ export class JoinPage extends PlatformElement {
             const data = await resp.json();
 
             if (!resp.ok) {
-                const msg = data.detail || 'Ошибка принятия приглашения';
+                const msg = data.detail || this.i18n.t('join_page.accept_error', {}, 'dashboard');
                 if (resp.status === 410) {
                     this._error = data.detail;
                     this._state = 'expired';
                 } else if (resp.status === 403) {
-                    this._error = 'Ссылка недействительна. Возможно, она была создана не для этой платформы.';
+                    this._error = this.i18n.t('join_page.invalid_platform', {}, 'dashboard');
                     this._state = 'invalid';
                 } else if (resp.status === 404) {
                     this._error = data.detail;
@@ -277,7 +287,7 @@ export class JoinPage extends PlatformElement {
             this._alreadyMember = data.already_member;
             this._state = 'success';
         } catch (e) {
-            this._error = 'Ошибка сети. Проверьте подключение и попробуйте снова.';
+            this._error = this.i18n.t('join_page.network_error', {}, 'dashboard');
             this._state = 'error';
         } finally {
             this._loading = false;
@@ -297,7 +307,7 @@ export class JoinPage extends PlatformElement {
                 window.location.href = data.auth_url;
             }
         } catch (e) {
-            this._error = 'Ошибка запуска авторизации';
+            this._error = this.i18n.t('join_page.oauth_error', {}, 'dashboard');
             this._loading = false;
         }
     }
@@ -316,45 +326,47 @@ export class JoinPage extends PlatformElement {
     }
 
     _renderBody() {
+        const td = (key, params) => this.i18n.t(key, params ?? {}, 'dashboard');
+        const roleLabel = (r) => this.i18n.t(`team_roles.${r}`, {}, 'dashboard');
         switch (this._state) {
             case 'loading':
             case 'accepting':
                 return html`
                     <div class="loading-spinner"></div>
-                    <p class="subtitle">${this._state === 'accepting' ? 'Вступаем в компанию...' : 'Загрузка...'}</p>
+                    <p class="subtitle">${this._state === 'accepting' ? td('join_page.accepting') : td('join_page.loading')}</p>
                 `;
 
             case 'no-token':
                 return html`
-                    <h1 class="title">Ссылка недействительна</h1>
-                    <p class="subtitle">В ссылке отсутствует токен приглашения.</p>
+                    <h1 class="title">${td('join_page.no_token_title')}</h1>
+                    <p class="subtitle">${td('join_page.no_token_text')}</p>
                 `;
 
             case 'needs-auth':
                 return html`
-                    <h1 class="title">Вас пригласили!</h1>
-                    <p class="subtitle">Войдите в аккаунт, чтобы принять приглашение в компанию.</p>
+                    <h1 class="title">${td('join_page.needs_auth_title')}</h1>
+                    <p class="subtitle">${td('join_page.needs_auth_subtitle')}</p>
 
                     <button
                         class="provider-button"
                         ?disabled=${this._loading}
                         @click=${() => this._startOAuth('yandex')}
                     >
-                        Войти через Яндекс
+                        ${td('join_page.login_yandex')}
                     </button>
                     <button
                         class="provider-button"
                         ?disabled=${this._loading}
                         @click=${() => this._startOAuth('google')}
                     >
-                        Войти через Google
+                        ${td('join_page.login_google')}
                     </button>
                     <button
                         class="provider-button"
                         ?disabled=${this._loading}
                         @click=${() => this._startOAuth('github')}
                     >
-                        Войти через GitHub
+                        ${td('join_page.login_github')}
                     </button>
 
                     ${this._error ? html`<div class="error-box">${this._error}</div>` : ''}
@@ -363,41 +375,43 @@ export class JoinPage extends PlatformElement {
             case 'success':
                 return html`
                     <h1 class="title">
-                        ${this._alreadyMember ? 'Вы уже в команде' : 'Добро пожаловать!'}
+                        ${this._alreadyMember ? td('join_page.success_already_title') : td('join_page.success_welcome_title')}
                     </h1>
                     <div class="success-box">
-                        ${this._alreadyMember
-                            ? html`Вы уже являетесь участником компании <strong>${this._companyName}</strong>.`
-                            : html`Вы вступили в компанию <strong>${this._companyName}</strong>.`}
+                        ${unsafeHTML(
+                            this._alreadyMember
+                                ? td('join_page.success_already_body', { name: this._companyName ?? '' })
+                                : td('join_page.success_joined_body', { name: this._companyName ?? '' }),
+                        )}
                     </div>
-                    ${this._role ? html`<div class="role-badge">${this._role}</div>` : ''}
+                    ${this._role ? html`<div class="role-badge">${roleLabel(this._role)}</div>` : ''}
                     <button class="primary-button" @click=${this._goToDashboard}>
-                        Перейти в панель управления
+                        ${td('join_page.go_dashboard')}
                     </button>
                 `;
 
             case 'expired':
                 return html`
-                    <h1 class="title">Ссылка устарела</h1>
-                    <div class="error-box">${this._error || 'Срок действия ссылки-приглашения истёк. Попросите отправить новую.'}</div>
+                    <h1 class="title">${td('join_page.expired_title')}</h1>
+                    <div class="error-box">${this._error || td('join_page.expired_fallback')}</div>
                 `;
 
             case 'invalid':
                 return html`
-                    <h1 class="title">Недействительная ссылка</h1>
-                    <div class="error-box">${this._error || 'Ссылка-приглашение недействительна или была подделана.'}</div>
+                    <h1 class="title">${td('join_page.invalid_title')}</h1>
+                    <div class="error-box">${this._error || td('join_page.invalid_fallback')}</div>
                 `;
 
             case 'not-found':
                 return html`
-                    <h1 class="title">Компания не найдена</h1>
-                    <div class="error-box">${this._error || 'Компания, в которую вас пригласили, не существует или была удалена.'}</div>
+                    <h1 class="title">${td('join_page.not_found_title')}</h1>
+                    <div class="error-box">${this._error || td('join_page.not_found_fallback')}</div>
                 `;
 
             default:
                 return html`
-                    <h1 class="title">Что-то пошло не так</h1>
-                    <div class="error-box">${this._error || 'Неизвестная ошибка. Попробуйте позже.'}</div>
+                    <h1 class="title">${td('join_page.error_title')}</h1>
+                    <div class="error-box">${this._error || td('join_page.error_fallback')}</div>
                 `;
         }
     }

@@ -15,7 +15,7 @@ export class FlowsCatalogService extends BaseService {
         const data = await this.get('/flows/api/v1/flows/');
         if (!Array.isArray(data)) {
             throw new Error(
-                `Ожидался массив flows от GET /flows/api/v1/flows/, получен ${typeof data}`,
+                `Expected array from GET /flows/api/v1/flows/, got ${typeof data}`,
             );
         }
         return data;
