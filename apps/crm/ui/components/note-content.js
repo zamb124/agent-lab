@@ -4,6 +4,7 @@ import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
+import { CRMStore } from '../store/crm.store.js';
 
 function getLocalIsoDate() {
     const now = new Date();
@@ -41,6 +42,16 @@ export class NoteContent extends PlatformElement {
         _draftVoiceMode: { state: true },
         _draftManualVoiceId: { state: true },
         _draftContextEntityId: { state: true },
+        _voiceSearchOpen: { state: true },
+        _voiceSearchQuery: { state: true },
+        _voiceSearchResults: { state: true },
+        _voiceSearchLoading: { state: true },
+        _voiceLookupLabel: { state: true },
+        _ctxSearchOpen: { state: true },
+        _ctxSearchQuery: { state: true },
+        _ctxSearchResults: { state: true },
+        _ctxSearchLoading: { state: true },
+        _ctxLookupLabel: { state: true },
     };
 
     static styles = [
@@ -123,10 +134,96 @@ export class NoteContent extends PlatformElement {
             .note-edit-meta {
                 margin-top: 8px;
                 display: grid;
-                grid-template-columns: minmax(0, 240px) minmax(0, 220px);
                 gap: 12px;
                 align-items: center;
+            }
+
+            .note-edit-meta.note-meta-subtype-date {
+                grid-template-columns: minmax(0, 240px) minmax(0, 220px);
                 max-width: 520px;
+                margin-top: 6px;
+                gap: 10px;
+            }
+
+            .note-edit-meta.voice-context-row {
+                grid-template-columns: 1fr;
+                max-width: 100%;
+                margin-top: 4px;
+                gap: 8px;
+            }
+
+            .note-voice-stack,
+            .note-context-stack {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                min-width: 0;
+            }
+
+            .note-field-label {
+                display: block;
+                margin: 0 0 2px 0;
+                font-size: 12px;
+                font-weight: 500;
+                line-height: 16px;
+                color: var(--text-secondary);
+                text-transform: none;
+                letter-spacing: normal;
+            }
+
+            @media (min-width: 768px) {
+                .note-main.is-editing .note-header {
+                    gap: 16px;
+                    align-items: flex-start;
+                }
+
+                .note-edit-meta.voice-context-row {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                    gap: 12px 20px;
+                    align-items: start;
+                    max-width: min(720px, 100%);
+                }
+
+                .note-voice-stack,
+                .note-context-stack {
+                    gap: 5px;
+                }
+
+                .voice-context-row .form-select {
+                    min-height: 36px;
+                    padding: 6px 10px;
+                    font-size: 14px;
+                    line-height: 18px;
+                    border-radius: 10px;
+                }
+
+                .voice-context-row .entity-search-clear {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 10px;
+                }
+
+                .voice-context-row .entity-search-input {
+                    min-height: 36px;
+                    padding: 8px 10px;
+                    font-size: 14px;
+                    line-height: 18px;
+                    border-radius: 10px;
+                }
+
+                .note-meta-subtype-date .form-select {
+                    min-height: 36px;
+                    padding: 6px 10px;
+                    font-size: 14px;
+                    border-radius: 10px;
+                }
+
+                .note-meta-subtype-date .note-date-picker {
+                    --platform-date-picker-labeled-height: 36px;
+                    --platform-date-picker-value-size: var(--text-base);
+                    --platform-date-picker-labeled-padding: 0 10px;
+                }
             }
 
             .note-subtype-select {
@@ -141,6 +238,105 @@ export class NoteContent extends PlatformElement {
                 --platform-date-picker-labeled-padding: 0 12px;
                 --platform-date-picker-label-size: var(--text-xs);
                 --platform-date-picker-value-size: var(--text-lg);
+            }
+
+            .entity-search-wrap {
+                position: relative;
+                width: 100%;
+                min-width: 0;
+            }
+
+            .entity-search-input-row {
+                display: flex;
+                align-items: stretch;
+                gap: 8px;
+            }
+
+            .entity-search-input-row .entity-search-input {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .entity-search-clear {
+                flex-shrink: 0;
+                width: 44px;
+                height: 44px;
+                border: 1px solid var(--crm-stroke);
+                border-radius: 12px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: var(--crm-surface-muted);
+                color: rgba(34, 34, 34, 0.45);
+            }
+
+            .entity-search-clear:hover {
+                border-color: var(--crm-stroke-strong);
+                color: var(--text-primary);
+            }
+
+            .entity-search-panel {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 100%;
+                margin-top: 4px;
+                max-height: 220px;
+                overflow-y: auto;
+                padding: 8px;
+                border-radius: 12px;
+                background: var(--crm-surface-elevated);
+                border: 1px solid var(--crm-stroke);
+                box-shadow: 0 8px 24px rgba(34, 34, 34, 0.12);
+                z-index: 50;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transform: translateY(-4px);
+                transition: opacity var(--duration-fast), visibility var(--duration-fast), transform var(--duration-fast);
+            }
+
+            .entity-search-panel.is-open {
+                opacity: 1;
+                visibility: visible;
+                pointer-events: auto;
+                transform: translateY(0);
+            }
+
+            .entity-search-hint {
+                padding: 8px 10px;
+                font-size: 13px;
+                line-height: 18px;
+                color: rgba(34, 34, 34, 0.45);
+            }
+
+            .entity-search-row-btn {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 2px;
+                width: 100%;
+                padding: 8px 10px;
+                border: none;
+                border-radius: 8px;
+                text-align: left;
+                cursor: pointer;
+                background: transparent;
+                color: var(--text-primary);
+                font-size: 14px;
+                line-height: 18px;
+            }
+
+            .entity-search-row-btn:hover {
+                background: rgba(34, 34, 34, 0.05);
+            }
+
+            .entity-search-row-secondary {
+                font-size: 12px;
+                line-height: 16px;
+                color: rgba(34, 34, 34, 0.45);
             }
 
             .note-actions {
@@ -424,6 +620,14 @@ export class NoteContent extends PlatformElement {
                 font-size: 28px;
                 line-height: 34px;
                 font-weight: 700;
+            }
+
+            @media (min-width: 768px) {
+                .note-main.is-editing .note-title-input {
+                    font-size: 22px;
+                    line-height: 28px;
+                    padding: 6px 10px;
+                }
             }
 
             .note-text-input {
@@ -925,7 +1129,18 @@ export class NoteContent extends PlatformElement {
                     line-height: 24px;
                 }
 
-                .note-edit-meta {
+                .note-edit-meta.note-meta-subtype-date {
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                    max-width: 100%;
+                }
+
+                .note-meta-subtype-date .note-date-picker {
+                    --platform-date-picker-labeled-height: 40px;
+                    --platform-date-picker-value-size: var(--text-base);
+                    --platform-date-picker-labeled-padding: 0 10px;
+                }
+
+                .note-edit-meta.voice-context-row {
                     grid-template-columns: 1fr;
                     max-width: 100%;
                 }
@@ -1026,6 +1241,44 @@ export class NoteContent extends PlatformElement {
         this._draftVoiceMode = 'default';
         this._draftManualVoiceId = '';
         this._draftContextEntityId = '';
+        this._voiceSearchOpen = false;
+        this._voiceSearchQuery = '';
+        this._voiceSearchResults = [];
+        this._voiceSearchLoading = false;
+        this._voiceLookupLabel = '';
+        this._ctxSearchOpen = false;
+        this._ctxSearchQuery = '';
+        this._ctxSearchResults = [];
+        this._ctxSearchLoading = false;
+        this._ctxLookupLabel = '';
+        this._voiceSearchTimer = 0;
+        this._ctxSearchTimer = 0;
+        this._onDocPointerDown = null;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._onDocPointerDown = (e) => {
+            const path = e.composedPath();
+            if (path.includes(this)) {
+                return;
+            }
+            this._voiceSearchOpen = false;
+            this._ctxSearchOpen = false;
+            this.requestUpdate();
+        };
+        document.addEventListener('pointerdown', this._onDocPointerDown, true);
+    }
+
+    disconnectedCallback() {
+        document.removeEventListener('pointerdown', this._onDocPointerDown, true);
+        if (this._voiceSearchTimer) {
+            window.clearTimeout(this._voiceSearchTimer);
+        }
+        if (this._ctxSearchTimer) {
+            window.clearTimeout(this._ctxSearchTimer);
+        }
+        super.disconnectedCallback();
     }
 
     _syncVoiceContextDraftsFromGraph() {
@@ -1033,6 +1286,14 @@ export class NoteContent extends PlatformElement {
             this._draftVoiceMode = 'default';
             this._draftManualVoiceId = '';
             this._draftContextEntityId = '';
+            this._voiceLookupLabel = '';
+            this._ctxLookupLabel = '';
+            this._voiceSearchQuery = '';
+            this._ctxSearchQuery = '';
+            this._voiceSearchOpen = false;
+            this._ctxSearchOpen = false;
+            this._voiceSearchResults = [];
+            this._ctxSearchResults = [];
             return;
         }
         const rels = Array.isArray(this.relationships) ? this.relationships : [];
@@ -1047,6 +1308,165 @@ export class NoteContent extends PlatformElement {
             this._draftManualVoiceId = '';
         }
         this._draftContextEntityId = ctx && typeof ctx.target_entity_id === 'string' ? ctx.target_entity_id : '';
+        this._refreshDraftEntityLabelsFromRelated();
+    }
+
+    _entityNameFromRelated(entityId) {
+        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+            return '';
+        }
+        if (!Array.isArray(this.relatedEntities)) {
+            return '';
+        }
+        const found = this.relatedEntities.find((e) => e && e.entity_id === entityId);
+        if (!found || typeof found.name !== 'string') {
+            return '';
+        }
+        const trimmed = found.name.trim();
+        return trimmed.length > 0 ? trimmed : '';
+    }
+
+    _refreshDraftEntityLabelsFromRelated() {
+        const vid = typeof this._draftManualVoiceId === 'string' ? this._draftManualVoiceId.trim() : '';
+        const cid = typeof this._draftContextEntityId === 'string' ? this._draftContextEntityId.trim() : '';
+        if (!vid) {
+            this._voiceLookupLabel = '';
+        } else {
+            const fromRel = this._entityNameFromRelated(vid);
+            if (fromRel.length > 0) {
+                this._voiceLookupLabel = fromRel;
+            }
+        }
+        if (!cid) {
+            this._ctxLookupLabel = '';
+        } else {
+            const fromRel = this._entityNameFromRelated(cid);
+            if (fromRel.length > 0) {
+                this._ctxLookupLabel = fromRel;
+            }
+        }
+    }
+
+    _readNamespaceForSearch() {
+        const current = CRMStore.state.namespaces.current;
+        if (!current) {
+            throw new Error('Current namespace is required for entity search');
+        }
+        if (typeof current === 'string') {
+            const name = current.trim();
+            if (name.length === 0) {
+                throw new Error('Current namespace name is empty');
+            }
+            return name;
+        }
+        if (typeof current === 'object' && current !== null && typeof current.name === 'string') {
+            const name = current.name.trim();
+            if (name.length === 0) {
+                throw new Error('Current namespace name is empty');
+            }
+            return name;
+        }
+        throw new Error('Invalid current namespace');
+    }
+
+    _getContextAnchorTypeIdSet() {
+        if (!Array.isArray(this.entityTypes)) {
+            throw new Error('entityTypes must be array');
+        }
+        const ids = new Set();
+        for (const item of this.entityTypes) {
+            if (item && item.is_context_anchor === true && typeof item.type_id === 'string' && item.type_id.trim().length > 0) {
+                ids.add(item.type_id.trim());
+            }
+        }
+        return ids;
+    }
+
+    _scheduleVoicePickSearch(mode) {
+        if (mode === 'voice') {
+            if (this._voiceSearchTimer) {
+                window.clearTimeout(this._voiceSearchTimer);
+            }
+            this._voiceSearchTimer = window.setTimeout(() => {
+                void this._runEntityPickSearch('voice');
+            }, 300);
+        } else {
+            if (this._ctxSearchTimer) {
+                window.clearTimeout(this._ctxSearchTimer);
+            }
+            this._ctxSearchTimer = window.setTimeout(() => {
+                void this._runEntityPickSearch('context');
+            }, 300);
+        }
+    }
+
+    async _runEntityPickSearch(mode) {
+        const isVoice = mode === 'voice';
+        const query = isVoice ? this._voiceSearchQuery : this._ctxSearchQuery;
+        const trimmed = typeof query === 'string' ? query.trim() : '';
+        if (isVoice) {
+            this._voiceSearchLoading = true;
+        } else {
+            this._ctxSearchLoading = true;
+        }
+        this.requestUpdate();
+        if (trimmed.length < 2) {
+            if (isVoice) {
+                this._voiceSearchResults = [];
+                this._voiceSearchLoading = false;
+            } else {
+                this._ctxSearchResults = [];
+                this._ctxSearchLoading = false;
+            }
+            this.requestUpdate();
+            return;
+        }
+        const crmApi = this.crmApi;
+        if (!crmApi) {
+            throw new Error('crmApi is required');
+        }
+        const namespace = this._readNamespaceForSearch();
+        const raw = await crmApi.searchEntities(trimmed, { namespace, limit: 20 });
+        const list = Array.isArray(raw) ? raw : [];
+        let filtered;
+        if (isVoice) {
+            filtered = list.filter((e) => e && e.entity_type === 'contact');
+        } else {
+            const allowed = this._getContextAnchorTypeIdSet();
+            filtered = list.filter((e) => e && typeof e.entity_type === 'string' && allowed.has(e.entity_type));
+        }
+        if (isVoice) {
+            this._voiceSearchResults = filtered;
+            this._voiceSearchLoading = false;
+        } else {
+            this._ctxSearchResults = filtered;
+            this._ctxSearchLoading = false;
+        }
+        this.requestUpdate();
+    }
+
+    async _ensureDraftEntityLabels() {
+        if (!this.editable) {
+            return;
+        }
+        const crmApi = this.crmApi;
+        if (!crmApi) {
+            throw new Error('crmApi is required');
+        }
+        const vid = typeof this._draftManualVoiceId === 'string' ? this._draftManualVoiceId.trim() : '';
+        const cid = typeof this._draftContextEntityId === 'string' ? this._draftContextEntityId.trim() : '';
+        if (this._draftVoiceMode === 'manual' && vid.length > 0 && this._voiceLookupLabel.length === 0) {
+            const entity = await crmApi.getEntity(vid);
+            const name = typeof entity?.name === 'string' ? entity.name.trim() : '';
+            this._voiceLookupLabel = name.length > 0 ? name : vid;
+            this.requestUpdate();
+        }
+        if (cid.length > 0 && this._ctxLookupLabel.length === 0) {
+            const entity = await crmApi.getEntity(cid);
+            const name = typeof entity?.name === 'string' ? entity.name.trim() : '';
+            this._ctxLookupLabel = name.length > 0 ? name : cid;
+            this.requestUpdate();
+        }
     }
 
     willUpdate(changedProperties) {
@@ -1067,6 +1487,16 @@ export class NoteContent extends PlatformElement {
             && (changedProperties.has('note') || changedProperties.has('editable') || changedProperties.has('relationships'))
         ) {
             this._syncVoiceContextDraftsFromGraph();
+        }
+        if (this.editable && changedProperties.has('relatedEntities')) {
+            this._refreshDraftEntityLabelsFromRelated();
+        }
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (this.editable) {
+            queueMicrotask(() => void this._ensureDraftEntityLabels());
         }
     }
 
@@ -1378,15 +1808,248 @@ export class NoteContent extends PlatformElement {
     }
 
     _onVoiceModeChange(event) {
-        this._draftVoiceMode = event.target.value;
+        const next = event.target.value;
+        this._draftVoiceMode = next;
+        if (next !== 'manual') {
+            this._draftManualVoiceId = '';
+            this._voiceLookupLabel = '';
+            this._voiceSearchQuery = '';
+            this._voiceSearchOpen = false;
+            this._voiceSearchResults = [];
+        }
     }
 
-    _onManualVoiceInput(event) {
-        this._draftManualVoiceId = event.target.value;
+    _voicePickInputValue() {
+        if (this._voiceSearchOpen) {
+            return this._voiceSearchQuery;
+        }
+        const id = typeof this._draftManualVoiceId === 'string' ? this._draftManualVoiceId.trim() : '';
+        if (id.length > 0) {
+            return this._voiceLookupLabel || id;
+        }
+        return '';
     }
 
-    _onContextEntityInput(event) {
-        this._draftContextEntityId = event.target.value;
+    _ctxPickInputValue() {
+        if (this._ctxSearchOpen) {
+            return this._ctxSearchQuery;
+        }
+        const id = typeof this._draftContextEntityId === 'string' ? this._draftContextEntityId.trim() : '';
+        if (id.length > 0) {
+            return this._ctxLookupLabel || id;
+        }
+        return '';
+    }
+
+    _onVoicePickInput(event) {
+        const value = event.target.value;
+        this._voiceSearchQuery = value;
+        this._draftManualVoiceId = '';
+        this._voiceLookupLabel = '';
+        this._voiceSearchOpen = true;
+        this._scheduleVoicePickSearch('voice');
+    }
+
+    _onVoicePickFocus() {
+        this._voiceSearchOpen = true;
+        if (this._voiceSearchQuery.trim().length === 0) {
+            const id = typeof this._draftManualVoiceId === 'string' ? this._draftManualVoiceId.trim() : '';
+            if (id.length > 0) {
+                this._voiceSearchQuery = this._voiceLookupLabel || '';
+            }
+        }
+        this._scheduleVoicePickSearch('voice');
+    }
+
+    _onCtxPickInput(event) {
+        const value = event.target.value;
+        this._ctxSearchQuery = value;
+        this._draftContextEntityId = '';
+        this._ctxLookupLabel = '';
+        this._ctxSearchOpen = true;
+        this._scheduleVoicePickSearch('context');
+    }
+
+    _onCtxPickFocus() {
+        this._ctxSearchOpen = true;
+        if (this._ctxSearchQuery.trim().length === 0) {
+            const id = typeof this._draftContextEntityId === 'string' ? this._draftContextEntityId.trim() : '';
+            if (id.length > 0) {
+                this._ctxSearchQuery = this._ctxLookupLabel || '';
+            }
+        }
+        this._scheduleVoicePickSearch('context');
+    }
+
+    _onVoicePickSelect(entity) {
+        if (!entity || typeof entity.entity_id !== 'string' || entity.entity_id.trim().length === 0) {
+            throw new Error('entity_id is required');
+        }
+        if (entity.entity_type !== 'contact') {
+            throw new Error('Voice entity must be contact');
+        }
+        this._draftManualVoiceId = entity.entity_id.trim();
+        const name = typeof entity.name === 'string' ? entity.name.trim() : '';
+        this._voiceLookupLabel = name.length > 0 ? name : entity.entity_id.trim();
+        this._voiceSearchQuery = '';
+        this._voiceSearchOpen = false;
+        this._voiceSearchResults = [];
+    }
+
+    _onCtxPickSelect(entity) {
+        if (!entity || typeof entity.entity_id !== 'string' || entity.entity_id.trim().length === 0) {
+            throw new Error('entity_id is required');
+        }
+        const allowed = this._getContextAnchorTypeIdSet();
+        if (!allowed.has(entity.entity_type)) {
+            throw new Error('Context entity type must be a context anchor');
+        }
+        this._draftContextEntityId = entity.entity_id.trim();
+        const name = typeof entity.name === 'string' ? entity.name.trim() : '';
+        this._ctxLookupLabel = name.length > 0 ? name : entity.entity_id.trim();
+        this._ctxSearchQuery = '';
+        this._ctxSearchOpen = false;
+        this._ctxSearchResults = [];
+    }
+
+    _clearVoicePick() {
+        this._draftManualVoiceId = '';
+        this._voiceLookupLabel = '';
+        this._voiceSearchQuery = '';
+        this._voiceSearchOpen = false;
+        this._voiceSearchResults = [];
+    }
+
+    _clearCtxPick() {
+        this._draftContextEntityId = '';
+        this._ctxLookupLabel = '';
+        this._ctxSearchQuery = '';
+        this._ctxSearchOpen = false;
+        this._ctxSearchResults = [];
+    }
+
+    _renderVoiceEntityPick() {
+        const hasId = (typeof this._draftManualVoiceId === 'string' && this._draftManualVoiceId.trim().length > 0);
+        const inputValue = this._voicePickInputValue();
+        const placeholder = this.i18n.t('note_content.contact_placeholder');
+        const panelOpen = this._voiceSearchOpen;
+        const loading = this._voiceSearchLoading;
+        const results = Array.isArray(this._voiceSearchResults) ? this._voiceSearchResults : [];
+        const queryTrim = (this._voiceSearchQuery || '').trim();
+        return html`
+            <div class="entity-search-wrap">
+                <div class="entity-search-input-row">
+                    <input
+                        class="form-input entity-search-input"
+                        type="text"
+                        autocomplete="off"
+                        placeholder=${placeholder}
+                        .value=${inputValue}
+                        @input=${this._onVoicePickInput}
+                        @focus=${this._onVoicePickFocus}
+                        aria-autocomplete="list"
+                        aria-expanded=${panelOpen ? 'true' : 'false'}
+                    />
+                    <button
+                        type="button"
+                        class="entity-search-clear"
+                        title=${this.i18n.t('note_content.entity_pick_clear_aria')}
+                        aria-label=${this.i18n.t('note_content.entity_pick_clear_aria')}
+                        ?hidden=${!hasId && queryTrim.length === 0}
+                        @click=${this._clearVoicePick}
+                    >
+                        <platform-icon name="close" size="18"></platform-icon>
+                    </button>
+                </div>
+                <div
+                    class="entity-search-panel ${panelOpen ? 'is-open' : ''}"
+                    role="listbox"
+                    aria-label=${this.i18n.t('note_content.entity_pick_list_label')}
+                    @click=${(e) => e.stopPropagation()}
+                >
+                    ${loading ? html`<div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_loading')}</div>` : ''}
+                    ${!loading && panelOpen && queryTrim.length < 2 ? html`
+                        <div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_min_query')}</div>
+                    ` : ''}
+                    ${!loading && panelOpen && queryTrim.length >= 2 && results.length === 0 ? html`
+                        <div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_no_results')}</div>
+                    ` : ''}
+                    ${results.map((entity) => html`
+                        <button
+                            type="button"
+                            class="entity-search-row-btn"
+                            role="option"
+                            @click=${() => this._onVoicePickSelect(entity)}
+                        >
+                            <span>${this._getText(entity.name, entity.entity_id)}</span>
+                            <span class="entity-search-row-secondary">${this._getText(entity.entity_type, '')}</span>
+                        </button>
+                    `)}
+                </div>
+            </div>
+        `;
+    }
+
+    _renderCtxEntityPick() {
+        const hasId = (typeof this._draftContextEntityId === 'string' && this._draftContextEntityId.trim().length > 0);
+        const inputValue = this._ctxPickInputValue();
+        const placeholder = this.i18n.t('note_content.anchor_placeholder');
+        const panelOpen = this._ctxSearchOpen;
+        const loading = this._ctxSearchLoading;
+        const results = Array.isArray(this._ctxSearchResults) ? this._ctxSearchResults : [];
+        const queryTrim = (this._ctxSearchQuery || '').trim();
+        return html`
+            <div class="entity-search-wrap">
+                <div class="entity-search-input-row">
+                    <input
+                        class="form-input entity-search-input"
+                        type="text"
+                        autocomplete="off"
+                        placeholder=${placeholder}
+                        .value=${inputValue}
+                        @input=${this._onCtxPickInput}
+                        @focus=${this._onCtxPickFocus}
+                        aria-autocomplete="list"
+                        aria-expanded=${panelOpen ? 'true' : 'false'}
+                    />
+                    <button
+                        type="button"
+                        class="entity-search-clear"
+                        title=${this.i18n.t('note_content.entity_pick_clear_aria')}
+                        aria-label=${this.i18n.t('note_content.entity_pick_clear_aria')}
+                        ?hidden=${!hasId && queryTrim.length === 0}
+                        @click=${this._clearCtxPick}
+                    >
+                        <platform-icon name="close" size="18"></platform-icon>
+                    </button>
+                </div>
+                <div
+                    class="entity-search-panel ${panelOpen ? 'is-open' : ''}"
+                    role="listbox"
+                    aria-label=${this.i18n.t('note_content.entity_pick_list_label')}
+                    @click=${(e) => e.stopPropagation()}
+                >
+                    ${loading ? html`<div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_loading')}</div>` : ''}
+                    ${!loading && panelOpen && queryTrim.length < 2 ? html`
+                        <div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_min_query')}</div>
+                    ` : ''}
+                    ${!loading && panelOpen && queryTrim.length >= 2 && results.length === 0 ? html`
+                        <div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_no_results')}</div>
+                    ` : ''}
+                    ${results.map((entity) => html`
+                        <button
+                            type="button"
+                            class="entity-search-row-btn"
+                            role="option"
+                            @click=${() => this._onCtxPickSelect(entity)}
+                        >
+                            <span>${this._getText(entity.name, entity.entity_id)}</span>
+                            <span class="entity-search-row-secondary">${this._getText(entity.entity_type, '')}</span>
+                        </button>
+                    `)}
+                </div>
+            </div>
+        `;
     }
 
     _emitCancelEdit() {
@@ -1509,7 +2172,7 @@ export class NoteContent extends PlatformElement {
                                     @input=${this._onTitleInput}
                                     placeholder=${this.i18n.t('note_content.title_placeholder')}
                                 />
-                                <div class="note-edit-meta">
+                                <div class="note-edit-meta note-meta-subtype-date">
                                     <select
                                         class="form-select note-subtype-select"
                                         .value=${this._draftSubtype}
@@ -1530,37 +2193,27 @@ export class NoteContent extends PlatformElement {
                                     ></platform-date-picker>
                                 </div>
                                 <div class="note-edit-meta voice-context-row">
-                                    <label class="form-label">${this.i18n.t('note_content.note_voice')}</label>
-                                    <select
-                                        class="form-select"
-                                        .value=${this._draftVoiceMode}
-                                        @change=${this._onVoiceModeChange}
-                                    >
-                                        <option value="default">${this.i18n.t('note_content.voice_default')}</option>
-                                        <option value="self">${this.i18n.t('note_content.voice_self')}</option>
-                                        <option value="none">${this.i18n.t('note_content.voice_none')}</option>
-                                        <option value="manual">${this.i18n.t('note_content.voice_manual')}</option>
-                                    </select>
-                                    ${this._draftVoiceMode === 'manual' ? html`
-                                        <input
-                                            class="form-input mono"
-                                            type="text"
-                                            placeholder=${this.i18n.t('note_content.contact_placeholder')}
-                                            .value=${this._draftManualVoiceId}
-                                            @input=${this._onManualVoiceInput}
-                                        />
-                                    ` : ''}
-                                    <label class="form-label">${this.i18n.t('note_content.context_anchor')}</label>
-                                    <input
-                                        class="form-input mono"
-                                        type="text"
-                                        placeholder=${this.i18n.t('note_content.anchor_placeholder')}
-                                        .value=${this._draftContextEntityId}
-                                        @input=${this._onContextEntityInput}
-                                    />
+                                    <div class="note-voice-stack">
+                                        <label class="note-field-label">${this.i18n.t('note_content.note_voice')}</label>
+                                        <select
+                                            class="form-select"
+                                            .value=${this._draftVoiceMode}
+                                            @change=${this._onVoiceModeChange}
+                                        >
+                                            <option value="default">${this.i18n.t('note_content.voice_default')}</option>
+                                            <option value="self">${this.i18n.t('note_content.voice_self')}</option>
+                                            <option value="none">${this.i18n.t('note_content.voice_none')}</option>
+                                            <option value="manual">${this.i18n.t('note_content.voice_manual')}</option>
+                                        </select>
+                                        ${this._draftVoiceMode === 'manual' ? this._renderVoiceEntityPick() : ''}
+                                    </div>
+                                    <div class="note-context-stack">
+                                        <label class="note-field-label">${this.i18n.t('note_content.context_anchor')}</label>
+                                        ${this._renderCtxEntityPick()}
+                                    </div>
                                 </div>
                             ` : html`<h2 class="note-title">${noteTitle}</h2>`}
-                            <p class="note-date">${noteDate}</p>
+                            ${this.editable ? '' : html`<p class="note-date">${noteDate}</p>`}
                             ${!this.editable && noteSubtypeLabel.length > 0 ? html`
                                 <p class="note-subtype">
                                     <platform-icon name="tag" size="14"></platform-icon>

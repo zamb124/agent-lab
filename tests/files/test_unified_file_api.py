@@ -98,6 +98,35 @@ async def test_sync_download_returns_original_content(sync_client, auth_headers_
     assert dl.status_code == 200, dl.text
     assert dl.content == content
     assert dl.headers["content-type"] == "application/octet-stream"
+    assert dl.headers.get("accept-ranges", "").lower() == "bytes"
+    assert dl.headers.get("content-length") == str(len(content))
+
+
+@pytest.mark.asyncio
+async def test_sync_download_partial_content_range(sync_client, auth_headers_system):
+    """GET с Range — 206, фрагмент и Content-Range (нужно Safari/iOS для <audio>)."""
+    _skip_if_s3_disabled()
+
+    content = b"abcdefgh"
+    r = await sync_client.post(
+        "/sync/api/v1/files/",
+        headers=auth_headers_system,
+        files={"file": ("slice.bin", io.BytesIO(content), "application/octet-stream")},
+    )
+    assert r.status_code == 200, r.text
+    file_id = r.json()["file_id"]
+
+    headers = {**auth_headers_system, "Range": "bytes=2-4"}
+    dl = await sync_client.get(
+        f"/sync/api/v1/files/download/{file_id}",
+        headers=headers,
+    )
+    assert dl.status_code == 206, dl.text
+    assert dl.content == b"cde"
+    assert dl.headers.get("accept-ranges", "").lower() == "bytes"
+    cr = dl.headers.get("content-range", "")
+    assert cr == "bytes 2-4/8"
+    assert dl.headers.get("content-length") == "3"
 
 
 @pytest.mark.asyncio

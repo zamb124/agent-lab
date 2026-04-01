@@ -423,6 +423,13 @@ endpoint_url = "http://127.0.0.1:9000"   # ❌
 **CRM-вложения** (`apps/crm/api/attachments.py`) — вложения к сущностям CRM идут в RAG
 (чтобы стать поисковыми документами). Они не хранятся через generic file router.
 
+**CRM summary artifacts** (`DailySummaryArtifactService`, `apps/crm/services/daily_summary_artifact_service.py`) — JSON-снимки сводок в дефолтном bucket (рядом с Redis-кэшем):
+
+- день: `crm/daily_summary/v1/{company_id}/{namespace_or_all}/{YYYY-MM-DD}.json`
+- период: `crm/period_summary/v1/{company_id}/{namespace_or_all}/{date_from}_{date_to}.json`
+
+Запись только через этот сервис; произвольные S3-клиенты в `apps/crm` для этих путей не дублировать.
+
 ### Запрещённые паттерны
 
 - `file_record.direct_s3_url` — свойство удалено, прямые S3 URL запрещены в ответах

@@ -15,10 +15,11 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import Response, StreamingResponse
 
 from core.files.audio_transcode import AudioTranscodeError
+from core.files.http_range import RangeNotSatisfiableError
 from core.files.models import FileRecord, FileResponse
 from core.files.processors import FileProcessor
 from core.files.s3_client import S3ClientFactory
@@ -118,8 +119,13 @@ def build_file_api_router(
         logger.info(f"Файл загружен: {file_record.file_id} ({original_name}, {len(data)} байт)")
         return FileResponse.from_record(file_record)
 
-    @router.get("/download/{file_id}", response_class=StreamingResponse, summary="Скачать файл")
-    async def download_file(file_id: str) -> StreamingResponse:
+    @router.get(
+        "/download/{file_id}",
+        response_class=StreamingResponse,
+        summary="Скачать файл",
+        response_model=None,
+    )
+    async def download_file(file_id: str, request: Request) -> StreamingResponse | Response:
         repo = get_file_repo()
         file_record = await repo.get(file_id)
         if file_record is None:
@@ -141,11 +147,20 @@ def build_file_api_router(
             if not isinstance(content_type, str) or content_type == "":
                 content_type = "application/octet-stream"
             s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
-            return await stream_s3_file(
-                s3_client=s3_client,
-                s3_key=s3_key,
-                content_type=content_type,
-            )
+            range_raw = request.headers.get("range")
+            range_header = range_raw.strip() if isinstance(range_raw, str) else None
+            try:
+                return await stream_s3_file(
+                    s3_client=s3_client,
+                    s3_key=s3_key,
+                    content_type=content_type,
+                    range_header=range_header,
+                )
+            except RangeNotSatisfiableError as exc:
+                return Response(
+                    status_code=416,
+                    headers={"Content-Range": f"bytes */{exc.total_size}"},
+                )
 
         storage_url = getattr(file_record, "storage_url", None)
         if not isinstance(storage_url, str) or storage_url == "":

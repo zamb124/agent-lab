@@ -301,6 +301,19 @@ export class CRMAPIService extends BaseService {
         });
     }
 
+    async getPeriodSummary(dateFrom, dateTo, options = {}) {
+        if (!dateFrom || !dateTo) {
+            throw new Error('dateFrom and dateTo are required');
+        }
+        const namespace = options.namespace;
+        return this.post('/entities/period-summary', {
+            date_from: dateFrom,
+            date_to: dateTo,
+            namespace: namespace ?? null,
+            force_rebuild: options.forceRebuild === true,
+        });
+    }
+
     // === GRANTS ===
 
     async getEntityGrants(entityId) {

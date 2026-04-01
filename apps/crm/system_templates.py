@@ -18,6 +18,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "weight_coefficient": 1.0,
         "required_fields": {"summary": {"type": "string", "label": "Краткое содержание"}},
         "optional_fields": {"note_date": {"type": "date", "label": "Дата заметки"}},
+        "is_context_anchor": False,
     },
     {
         "type_id": "meeting",
@@ -35,6 +36,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
             "location": {"type": "string", "label": "Место"},
             "decisions": {"type": "string", "label": "Решения"},
         },
+        "is_context_anchor": False,
     },
     {
         "type_id": "call",
@@ -52,6 +54,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
             "duration": {"type": "string", "label": "Длительность"},
             "outcome": {"type": "string", "label": "Итог"},
         },
+        "is_context_anchor": False,
     },
     {
         "type_id": "task",
@@ -69,6 +72,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
             "due_date": {"type": "date", "label": "Срок"},
             "priority": {"type": "enum", "values": ["low", "medium", "high", "urgent"]},
         },
+        "is_context_anchor": False,
     },
     {
         "type_id": "contact",
@@ -84,6 +88,48 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "required_fields": {"display_name": {"type": "string", "label": "Имя"}},
         "optional_fields": {"role": {"type": "string", "label": "Роль"}},
         "is_context_anchor": False,
+    },
+]
+
+COMMON_NAMESPACE_ANCHOR_TYPES = [
+    {
+        "type_id": "topic",
+        "name": "Тема",
+        "description": "Направление или поток работы: к какой линии разговора относится заметка (не отдельный человек и не разовое событие).",
+        "prompt": "Извлекай название темы, границы и связь с проектом или организацией.",
+        "required_fields": {"title": {"type": "string", "label": "Название темы"}},
+        "optional_fields": {"scope": {"type": "string", "label": "Область"}},
+        "icon": "layers",
+        "color": "#3949AB",
+        "is_event": False,
+        "check_duplicates": False,
+        "is_context_anchor": True,
+    },
+    {
+        "type_id": "organization",
+        "name": "Организация",
+        "description": "Объединяющая сущность: компания, подразделение или юрлицо — контекст заметок об организации.",
+        "prompt": "Извлекай организацию, отрасль и роль в контексте.",
+        "required_fields": {"name": {"type": "string", "label": "Название"}},
+        "optional_fields": {"industry": {"type": "string", "label": "Отрасль"}},
+        "icon": "database",
+        "color": "#455A64",
+        "is_event": False,
+        "check_duplicates": True,
+        "is_context_anchor": True,
+    },
+    {
+        "type_id": "project",
+        "name": "Проект",
+        "description": "Инициатива с целями и границами: заметка относится к работе целиком, а не к одному шагу.",
+        "prompt": "Извлекай название проекта, статус и ключевые вехи.",
+        "required_fields": {"title": {"type": "string", "label": "Название"}},
+        "optional_fields": {"status": {"type": "string", "label": "Статус"}},
+        "icon": "folder",
+        "color": "#5E35B1",
+        "is_event": False,
+        "check_duplicates": True,
+        "is_context_anchor": True,
     },
 ]
 
@@ -273,7 +319,7 @@ SYSTEM_RELATIONSHIP_TYPE_TEMPLATES = [
     {
         "type_id": "in_context",
         "name": "В контексте",
-        "description": "Заметка привязана к якорной сущности (сделка, лид и т.д.)",
+        "description": "Заметка привязана к объекту контекста: тема, проект, организация или объект работы (сделка, решение), не к заметке и не к отдельному контакту.",
         "is_system": True,
         "is_directed": True,
         "prompt": None,
@@ -294,7 +340,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
             {
                 "type_id": "lead",
                 "name": "Лид",
-                "description": "Потенциальный клиент",
+                "description": "Объект воронки (возможность): контекст заметок о сделке в целом, не замена контакту.",
                 "prompt": "Извлекай потенциальных клиентов и стадию квалификации.",
                 "required_fields": {"source": {"type": "string"}, "stage": {"type": "string"}},
                 "optional_fields": {"budget": {"type": "number"}},
@@ -307,7 +353,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
             {
                 "type_id": "deal",
                 "name": "Сделка",
-                "description": "Коммерческая сделка",
+                "description": "Коммерческая сделка как объект работы: якорь для заметок о переговорах и условиях.",
                 "prompt": "Извлекай сумму, стадию и вероятность закрытия сделки.",
                 "required_fields": {"amount": {"type": "number"}, "stage": {"type": "string"}},
                 "optional_fields": {"close_date": {"type": "date"}},
@@ -317,7 +363,8 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "check_duplicates": True,
                 "is_context_anchor": True,
             },
-        ],
+        ]
+        + COMMON_NAMESPACE_ANCHOR_TYPES,
     },
     {
         "template_id": "development",
@@ -336,12 +383,12 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#D32F2F",
                 "is_event": True,
                 "check_duplicates": True,
-                "is_context_anchor": True,
+                "is_context_anchor": False,
             },
             {
                 "type_id": "decision",
                 "name": "Архитектурное решение",
-                "description": "Принятое техрешение",
+                "description": "Зафиксированное решение как контекст для связанных заметок и последствий.",
                 "prompt": "Извлекай решение, причины и последствия.",
                 "required_fields": {"decision": {"type": "string"}},
                 "optional_fields": {"alternatives": {"type": "array"}},
@@ -351,7 +398,8 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "check_duplicates": False,
                 "is_context_anchor": True,
             },
-        ],
+        ]
+        + COMMON_NAMESPACE_ANCHOR_TYPES,
     },
     {
         "template_id": "hr",
@@ -370,7 +418,7 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#8E24AA",
                 "is_event": False,
                 "check_duplicates": True,
-                "is_context_anchor": True,
+                "is_context_anchor": False,
             },
             {
                 "type_id": "interview",
@@ -383,9 +431,10 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#00897B",
                 "is_event": True,
                 "check_duplicates": False,
-                "is_context_anchor": True,
+                "is_context_anchor": False,
             },
-        ],
+        ]
+        + COMMON_NAMESPACE_ANCHOR_TYPES,
     },
 ]
 

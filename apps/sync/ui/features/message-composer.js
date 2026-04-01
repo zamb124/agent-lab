@@ -131,6 +131,10 @@ export class MessageComposer extends PlatformElement {
                 justify-content: center;
                 transition: all var(--duration-fast);
                 flex-shrink: 0;
+                user-select: none;
+                -webkit-user-select: none;
+                -webkit-touch-callout: none;
+                touch-action: manipulation;
             }
 
             .icon-btn:hover {
@@ -1377,6 +1381,7 @@ export class MessageComposer extends PlatformElement {
         if (!this._isMobile || !this._canStartHoldRecording()) {
             return;
         }
+        e.preventDefault();
         this._sendHoldPointerId = e.pointerId;
         this._isRecordHoldActive = true;
         this._clearSendHoldTimer();

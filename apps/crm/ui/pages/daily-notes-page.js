@@ -729,6 +729,7 @@ export class DailyNotesPage extends PlatformElement {
 
     _onMobileSearch(event) {
         this._query = event.detail?.query || '';
+        CRMStore.setNotesPageSearchQuery(this._query);
     }
 
     _getCurrentNamespaceName() {
@@ -749,21 +750,19 @@ export class DailyNotesPage extends PlatformElement {
         const { from, to } = CRMStore.getDailyNotesRange();
         this._dateFrom = from;
         this._dateTo = to;
-        if (from !== to) {
-            this._loadingSummary = false;
-            this._summaryText = this.i18n.t('daily_notes_page.summary_need_single_day');
-            this._summaryEntities = [];
-            this._summaryGeneratedAt = '';
-            this._summaryRevalidating = false;
-            return;
-        }
         this._loadingSummary = true;
         try {
             const crmApi = this.services.get('crmApi');
-            const response = await crmApi.getDailySummary(from, {
-                forceRebuild,
-                namespace: this._getCurrentNamespaceName(),
-            });
+            const ns = this._getCurrentNamespaceName();
+            const response = from !== to
+                ? await crmApi.getPeriodSummary(from, to, {
+                    forceRebuild,
+                    namespace: ns,
+                })
+                : await crmApi.getDailySummary(from, {
+                    forceRebuild,
+                    namespace: ns,
+                });
             this._applySummaryPayload(response);
             if (!waitForWsUpdate) {
                 this._loadingSummary = false;
@@ -828,6 +827,27 @@ export class DailyNotesPage extends PlatformElement {
             if (payloadNamespace !== selectedNamespace) {
                 return;
             }
+            const st = payload.summary_state;
+            if (st && st.period === true) {
+                if (this._dateFrom === this._dateTo) {
+                    return;
+                }
+                if (st.date_from !== this._dateFrom || st.date_to !== this._dateTo) {
+                    return;
+                }
+                this._loadingSummary = false;
+                const genAt =
+                    typeof st.generated_at === 'string' && st.generated_at.trim().length > 0
+                        ? st.generated_at
+                        : new Date().toISOString();
+                this._applySummaryPayload({
+                    summary: typeof st.summary === 'string' ? st.summary : '',
+                    entities: Array.isArray(st.entities) ? st.entities : [],
+                    revalidating: false,
+                    generated_at: genAt,
+                });
+                return;
+            }
             if (this._dateFrom !== this._dateTo || payload.date !== this._dateFrom) {
                 return;
             }
@@ -868,6 +888,7 @@ export class DailyNotesPage extends PlatformElement {
         }
         await this._reloadNotesForSelectedDate();
         await this._loadVisibleNoteEntities();
+        void this._loadDailySummary();
         this.requestUpdate();
     }
 
@@ -915,6 +936,7 @@ export class DailyNotesPage extends PlatformElement {
 
     _onSearchInput(event) {
         this._query = event.target.value;
+        CRMStore.setNotesPageSearchQuery(this._query);
         this._loadVisibleNoteEntities();
     }
 
@@ -972,9 +994,6 @@ export class DailyNotesPage extends PlatformElement {
     }
 
     async _onRefreshSummary() {
-        if (this._dateFrom !== this._dateTo) {
-            return;
-        }
         await this._loadDailySummary({ forceRebuild: true, waitForWsUpdate: true });
     }
 
@@ -1231,6 +1250,16 @@ export class DailyNotesPage extends PlatformElement {
         });
     }
 
+    _summaryPanelTitle() {
+        if (this._dateFrom !== this._dateTo) {
+            return this.i18n.t('daily_notes_page.summary_panel_title_period', {
+                from: this._dateFrom,
+                to: this._dateTo,
+            });
+        }
+        return this.i18n.t('daily_notes_page.summary_panel_title_daily');
+    }
+
     _summaryMetaLine() {
         if (this._loadingSummary) {
             return this.i18n.t('daily_notes_page.summary_generating');
@@ -1252,9 +1281,9 @@ export class DailyNotesPage extends PlatformElement {
                     <span class="summary-title-icon">
                         <platform-icon name="ai" size="24" colored></platform-icon>
                     </span>
-                    <span class="summary-title-text">Daily summary</span>
+                    <span class="summary-title-text">${this._summaryPanelTitle()}</span>
                 </h3>
-                <button class="summary-refresh-btn" type="button" title=${this.i18n.t('refresh', {}, 'common')} @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary || this._dateFrom !== this._dateTo}>
+                <button class="summary-refresh-btn" type="button" title=${this.i18n.t('refresh', {}, 'common')} @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
                     <platform-icon
                         class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
                         name="refresh"
@@ -1291,11 +1320,11 @@ export class DailyNotesPage extends PlatformElement {
                     </button>
                 </div>
                 <label class="search-box">
-                    <platform-icon name="ai" size="14" colored></platform-icon>
+                    <platform-icon name="search" size="14"></platform-icon>
                     <input
                         class="search-input"
                         type="text"
-                        placeholder=${this.i18n.t('daily_notes_page.search_placeholder')}
+                        placeholder=${this.i18n.t('search.placeholder')}
                         .value=${this._query}
                         @input=${this._onSearchInput}
                     />

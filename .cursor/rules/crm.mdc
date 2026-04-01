@@ -8,6 +8,7 @@ description: "CRM NetWorkle система управления сущностя
 ## UI: i18n
 
 - Тексты **`apps/crm/ui`** — **`this.i18n.t('группа.ключ')`**, namespace по умолчанию **`crm`** (`/crm`), файлы **`core/i18n/translations/{ru,en}/crm.json`**, парность и **`make check-i18n`**.
+- **Мобильный хедер CRM** (`< 768px`): единая строка **`crm-mobile-app-header`** в **`crm-app.js`** — заголовок или поле поиска (иконка поиска + input) в той же линии для **notes / entities / tasks**. Синхрон строки поиска: **`CRMStore.ui.notesPageSearchQuery`**, **`tasksListSearchQuery`**, фильтр **`entities.filters.search`**. Глобальная кнопка «AI» в шелле не используется (анализ заметок — в контексте карточки / модалки).
 - Непереведённый хардкод (после фильтра `//` / `*`): **`uv run python scripts/report_ui_i18n_gaps.py --app crm`**; сводка **`--summary`**.
 - Оболочка приложения и заголовки экранов: **`app_shell`** (в т.ч. **`app_shell.views.*`**, **`app_shell.sidebar.*`**); навигация дублирует **`nav.*`**, **`pages.*`**, **`filters.all`** где строки совпадают.
 
@@ -56,26 +57,31 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
 ### Daily Summary (event-driven, SWR)
 
 - `POST /crm/api/v1/entities/daily-summary` работает в режиме stale-while-revalidate:
-  - возвращает последнее `summary` из Redis state;
-  - при `miss/stale` ставит фоновую задачу и отдает `revalidating=true`.
+  - возвращает последнее `summary` из Redis state (при cold miss — гидратация из S3, если `source_version` совпадает);
+  - при `miss/stale` для дня **с заметками** ставит фоновую задачу и отдает `revalidating=true`.
+- **Пустой день** (заметок нет): LLM и TaskIQ не запускаются; детерминированный текст через `compute_daily_summary` + запись в Redis и S3 (`_materialize_empty_daily_summary` / путь `get_daily_summary_cached`).
+- `POST /crm/api/v1/entities/period-summary` (`date_from`, `date_to`, `namespace`): сводка за диапазон — merge готовых дневных сводок (A2A skill `period_summarize_merge` в bundle `crm`), с дозагрузкой только дней без актуального артефакта; лимит дней — `CRMSettings.period_summary_max_days`.
+- **Контракт Redis + S3:** Redis — hot cache и флаги revalidating/lock; S3 — долговечные JSON-снимки (ключи в `s3_minio.mdc`, `DailySummaryArtifactService`). После успешного пересчёта пишутся оба уровня. Версия периода — агрегат по дням (`_collect_period_days_bundle`); расхождение с кэшем → пересчёт.
 - Доставка нового summary на UI выполняется push-событием через WebSocket:
-  - после успешного `crm_rebuild_daily_summary` воркер отправляет `crm_daily_summary_updated`;
-  - payload содержит `event=crm.daily_summary.updated`, `date`, `namespace`, `summary_state`;
+  - после успешного `crm_rebuild_daily_summary` — `crm_daily_summary_updated`, в `summary_state` однодневный payload;
+  - после `crm_rebuild_period_summary` — то же уведомление, `summary_state.period=true`, поля `date_from`, `date_to`, `generated_at`;
   - фронтенд не использует polling для ожидания завершения пересчета.
-- **Заметки (список daily notes):** при `create` / `update` / `delete` note `EntityService` рассылает `NotificationType.CRM_NOTE_UPDATED` (`crm_note_updated`) через тот же канал, что и daily summary (`notify_user` → Redis `platform:notifications` → WS `/crm/ws/notifications`). Получатели совпадают с daily summary: `resolve_user_ids_for_namespace_broadcast` в `apps/crm/services/namespace_notification_recipients.py` (участники компании + гранты на `namespace`). В `data` обязательны: `event=crm.note.updated`, `company_id`, `namespace` (после нормализации как у summary: `all` для пустого), `note_id`, `note_date` (ISO дата или `null`), `action` ∈ `created` | `updated` | `deleted`. Страница `daily-notes-page.js` перезагружает список заметок и кэш карточек, если открыты тот же `namespace` и `note_date` попадает в выбранный период (`CRMStore` `ui.dailyNotesRange` `from`/`to`); при отсутствии `note_date` клиент событие игнорирует. Фильтр списка заметок: `date_from` / `date_to` в API. Daily summary на UI запрашивается только если `from === to`; push `crm_daily_summary_updated` обрабатывается в этом же однодневном режиме.
-- Redis контракт состояния:
+- **Заметки (список daily notes):** при `create` / `update` / `delete` note `EntityService` рассылает `NotificationType.CRM_NOTE_UPDATED` (`crm_note_updated`) через тот же канал, что и daily summary (`notify_user` → Redis `platform:notifications` → WS `/crm/ws/notifications`). Получатели совпадают с daily summary: `resolve_user_ids_for_namespace_broadcast` в `apps/crm/services/namespace_notification_recipients.py` (участники компании + гранты на `namespace`). В `data` обязательны: `event=crm.note.updated`, `company_id`, `namespace` (после нормализации как у summary: `all` для пустого), `note_id`, `note_date` (ISO дата или `null`), `action` ∈ `created` | `updated` | `deleted`. Страница `daily-notes-page.js` перезагружает список заметок и кэш карточек, если открыты тот же `namespace` и `note_date` попадает в выбранный период (`CRMStore` `ui.dailyNotesRange` `from`/`to`); при отсутствии `note_date` клиент событие игнорирует. Фильтр списка заметок: `date_from` / `date_to` в API. Сводка: при `from === to` — `daily-summary`; при диапазоне — `period-summary`; WS обрабатывает оба варианта.
+- Redis контракт состояния (daily):
   - ключ state: `crm:daily_summary:v1:{company}:{namespace_or_all}:{date}:state`;
   - lock: `...:lock` (`SET NX EX`);
   - revalidating flag: `...:revalidating`.
-- `source_version` обязателен и строится из заметок дня: `notes_count`, `max_updated_at`.
+- Redis контракт period: `crm:period_summary:v1:{company}:{namespace_or_all}:{date_from}__{date_to}:state` (и аналогично `:lock`, `:revalidating`).
+- `source_version` дня обязателен и строится из заметок дня: `notes_count`, `max_updated_at`.
 - Пересчёт текста (`compute_daily_summary`): только заметки с `attributes.ai_analysis_applied_at` (ставится при успешном `apply_analysis_draft`). Карточки — `_note_to_summary_card`. Алгоритм слияния — раздел **Chunked async** (`map_reduce_tree` + skills `summarize_chunk` / `summarize_merge`). Из ответа A2A: `_extract_data_from_a2a_response` понимает `data.res` как JSON-строку или уже как объект; `_extract_json_from_text` — markdown-блок, целую строку и подстроку от первой `{` до последней `}`. Если `summary` пустой, но есть `highlights` / `key_events`, текст для UI собирается в `_compose_summary_fallback_from_structured`.
-- Триггеры пересчета:
+- Триггеры пересчета daily:
   - после `create/update/delete` note в `EntityService`;
   - в `update` note с изменением `note_date` пересчитываются обе даты (старая и новая).
 - Фоновая обработка:
   - отдельный TaskIQ worker `apps.crm_worker` с queue `crm`;
-  - задача `crm_rebuild_daily_summary` пересчитывает и сохраняет state;
-  - задача `crm_reconcile_daily_summary` периодически доставляет пропущенные пересчеты.
+  - задача `crm_rebuild_daily_summary` пересчитывает и сохраняет state (+ S3);
+  - задача `crm_rebuild_period_summary` — период;
+  - задача `crm_reconcile_daily_summary` периодически доставляет пропущенные пересчеты daily.
 ┌─────────────────────────────────────────────────────────────┐
 │  crm_entities (атрибуты)       │   PostgreSQL (relations)   │
 ├────────────────────────────────┼────────────────────────────┤
@@ -98,7 +104,7 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
   - Связь: `document_id` -> `entity_id`
 
 **PostgreSQL:**
-- `EntityType` - типы сущностей runtime (минимальное ядро: `note`, `task`; остальное создается из template); флаг `is_context_anchor` — тип может быть целью связи «заметка в контексте» (`in_context`).
+- `EntityType` - типы сущностей runtime (минимальное ядро: `note`, `task`; остальное создается из template); флаг `is_context_anchor` — тип может быть целью связи «заметка в контексте» (`in_context`). Якорь по смыслу: тема, проект, организация, объект работы (сделка, архитектурное решение и т.п.), не заметка и не атомарный контакт/задача; шаблоны в `apps/crm/system_templates.py` (`COMMON_NAMESPACE_ANCHOR_TYPES`, доменные типы в `NAMESPACE_TEMPLATE_SEEDS`).
 - `RelationshipType` - типы связей (системные включают: mentions, linked, related_to, parent_of, child_of, assigned_to, belongs_to, follows_up, blocks, blocked_by, duplicates, **note_voice**, **in_context**)
 - `Relationship` - связи между entities (source → target, weight, metadata)
 - `AccessGrant` - права доступа (public, user, company, с ролями viewer/editor/admin)
@@ -108,7 +114,7 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
 ### Заметки: голос и контекст на графе
 
 - **Аудит vs голос:** поле `CRMEntity.user_id` — кто технически создал запись. «От чьего имени» смысл заметки задаётся ребром **`note_voice`** (заметка → сущность-голос, обычно контакт или персона пользователя).
-- **`in_context`:** заметка → сущность-якорь; цель должна иметь `EntityType.is_context_anchor=True` (сделка, лид, проект и т.д. по настройке пространства).
+- **`in_context`:** заметка → сущность-якорь; цель должна иметь `EntityType.is_context_anchor=True`. Не использовать якорем типы `note`/`meeting`/`call`; контакт и задача — не якоря по умолчанию; в шаблонах — `topic`, `organization`, `project`, плюс доменные объекты работы (лид, сделка, решение) по выбору продукта.
 - API создания/обновления заметки: опциональные `voice_entity_id`, `context_entity_id`; синхронизация рёбер в `EntityService` (источник правды — таблица `relationships`, не дублировать только в `attributes`).
 - **`Namespace.crm_settings`** (модель `NamespaceCRMSettings` в core): `show_note_voice_ui`, `default_note_voice` (`self` | `none` | `last`), опционально `default_context_entity_id`; обновление через CRM API namespace (поле `crm_settings`).
 - Персона пользователя на графе: `UserPersonService`, эндпоинт `GET /crm/api/v1/entities/person-entity/self` — контакт «Я» для выбора голоса.

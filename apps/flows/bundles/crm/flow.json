@@ -94,6 +94,25 @@
       },
       "edges": []
     },
+    "period_summarize_merge": {
+      "name": "Period Summary Merge",
+      "description": "Слияние дневных CRM-сводок в сводку за диапазон дат",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/period_summarize_merge.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/summarize.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
     "call_summary": {
       "name": "Call Summary",
       "description": "Структурированное summary встречи по транскрипту",

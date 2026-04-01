@@ -441,7 +441,7 @@ export class TasksPage extends PlatformElement {
                 }
 
                 .search-box {
-                    min-height: 36px;
+                    display: none;
                 }
 
                 .toolbar-actions {
@@ -513,13 +513,23 @@ export class TasksPage extends PlatformElement {
         this._draggingTaskId = null;
         this._dndInsert = null;
         this._dndSourceStatus = null;
+        this._currentNamespace = null;
 
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._isMobile = state.ui.isMobile;
+
+            const prevNs = this._currentNamespace;
+            this._currentNamespace = state.namespaces.current;
+            const prevName = this._resolveNamespaceName(prevNs);
+            const nextName = this._resolveNamespaceName(this._currentNamespace);
+            if (prevName !== nextName && prevName !== null) {
+                this._loadTasks();
+            }
         });
 
         this._onTasksCreate = this._onTasksCreate.bind(this);
         this._onTasksRefresh = this._onTasksRefresh.bind(this);
+        this._onMobileSearch = this._onMobileSearch.bind(this);
         this._suppressTaskClick = false;
     }
 
@@ -527,6 +537,7 @@ export class TasksPage extends PlatformElement {
         super.connectedCallback();
         window.addEventListener('tasks-create', this._onTasksCreate);
         window.addEventListener('tasks-refresh', this._onTasksRefresh);
+        window.addEventListener('crm-mobile-search', this._onMobileSearch);
     }
 
     disconnectedCallback() {
@@ -534,6 +545,7 @@ export class TasksPage extends PlatformElement {
         this._unsubscribe?.();
         window.removeEventListener('tasks-create', this._onTasksCreate);
         window.removeEventListener('tasks-refresh', this._onTasksRefresh);
+        window.removeEventListener('crm-mobile-search', this._onMobileSearch);
     }
 
     async firstUpdated() {
@@ -546,6 +558,28 @@ export class TasksPage extends PlatformElement {
 
     _onTasksRefresh() {
         this._loadTasks();
+    }
+
+    _onMobileSearch(event) {
+        this._filter = typeof event.detail?.query === 'string' ? event.detail.query : '';
+    }
+
+    _onTasksSearchInput(event) {
+        this._filter = event.target.value;
+        CRMStore.setTasksListSearchQuery(this._filter);
+    }
+
+    _resolveNamespaceName(ns) {
+        if (!ns) {
+            return null;
+        }
+        if (typeof ns === 'string') {
+            return ns;
+        }
+        if (typeof ns === 'object' && typeof ns.name === 'string') {
+            return ns.name;
+        }
+        throw new Error('Invalid namespace value');
     }
 
     async _loadTasks() {
@@ -817,9 +851,9 @@ export class TasksPage extends PlatformElement {
                         <input
                             class="search-input"
                             type="text"
-                            placeholder=${this.i18n.t('search', {}, 'common')}
+                            placeholder=${this.i18n.t('search.placeholder')}
                             .value=${this._filter}
-                            @input=${(e) => { this._filter = e.target.value; }}
+                            @input=${this._onTasksSearchInput}
                         />
                     </label>
                     <div class="toolbar-actions">

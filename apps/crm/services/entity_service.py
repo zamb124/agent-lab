@@ -11,7 +11,7 @@ from collections import deque
 from typing import List, Optional, Dict, Any, Tuple, Set, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 import uuid
 import re
 
@@ -37,6 +37,7 @@ from apps.crm.services.attachment_service import AttachmentService
 from apps.crm.services.user_person_service import UserPersonService
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
+from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
 from core.clients.a2a_client import A2AClient
 from core.context import get_context
@@ -44,7 +45,7 @@ from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
 from core.models.identity_models import Namespace, NamespaceCRMSettings
 import json
-from datetime import datetime as dt
+
 logger = get_logger(__name__)
 from core.config import get_settings
 from apps.crm.config import get_crm_settings
@@ -52,6 +53,23 @@ from core.utils.chunked_async import map_reduce_tree, run_chunked_map
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
 _DAILY_SUMMARY_CARD_SNIPPET_MAX = 500
+
+
+def _iter_iso_dates_inclusive(date_from: str, date_to: str) -> list[str]:
+    start = date.fromisoformat(date_from)
+    end = date.fromisoformat(date_to)
+    if end < start:
+        raise ValueError("date_to must be >= date_from")
+    out: list[str] = []
+    cur = start
+    while cur <= end:
+        out.append(cur.isoformat())
+        cur += timedelta(days=1)
+    return out
+
+
+def _canonical_json(obj: Any) -> str:
+    return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
 
 ANALYSIS_DRAFT_APPLY_MAX_ROUNDS = 3
 
@@ -109,6 +127,7 @@ class EntityService:
         attachment_service: AttachmentService,
         a2a_client: A2AClient,
         daily_summary_cache_service: DailySummaryCacheService,
+        daily_summary_artifact_service: DailySummaryArtifactService,
         user_person_service: UserPersonService,
     ):
         self._entity_repo = entity_repo
@@ -119,6 +138,7 @@ class EntityService:
         self._attachment_service = attachment_service
         self._a2a_client = a2a_client
         self._daily_summary_cache_service = daily_summary_cache_service
+        self._daily_summary_artifact_service = daily_summary_artifact_service
         self._user_person_service = user_person_service
     
     def _get_company_id(self) -> str:
@@ -1944,13 +1964,127 @@ class EntityService:
         )
         return self._extract_data_from_a2a_response(response)
 
+    async def _call_period_summarize_merge_skill(
+        self,
+        partial_payloads: List[Dict[str, Any]],
+        date_from: str,
+        date_to: str,
+        namespace: Optional[str],
+    ) -> Dict[str, Any]:
+        company_id = self._get_company_id()
+        settings = get_settings()
+        flows_base = settings.server.get_flows_service_url().rstrip("/")
+        variables = {
+            "partials_json": json.dumps(partial_payloads, ensure_ascii=False),
+            "date_from": date_from,
+            "date_to": date_to,
+            "namespace": self._normalize_namespace(namespace),
+        }
+        response = await self._a2a_client.send_task(
+            base_url=f"{flows_base}/flows/api/v1/crm",
+            content="Period summary: merge daily summaries",
+            skill_id="period_summarize_merge",
+            metadata={"variables": variables, "company_id": company_id},
+        )
+        return self._extract_data_from_a2a_response(response)
+
+    async def _persist_daily_summary_state(
+        self,
+        *,
+        company_id: str,
+        date_str: str,
+        namespace: Optional[str],
+        state: Dict[str, Any],
+    ) -> None:
+        await self._daily_summary_cache_service.set_state(
+            company_id=company_id,
+            namespace=namespace,
+            date_str=date_str,
+            state=state,
+        )
+        await self._daily_summary_artifact_service.put_daily_payload(
+            company_id=company_id,
+            namespace=namespace,
+            date_str=date_str,
+            payload=state,
+        )
+
+    async def _materialize_empty_daily_summary(
+        self,
+        date_str: str,
+        namespace: Optional[str],
+        *,
+        company_id: str,
+    ) -> Dict[str, Any]:
+        summary_core = await self.compute_daily_summary(date_str=date_str, namespace=namespace)
+        state = {
+            **summary_core,
+            "revalidating": False,
+            "stale": False,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await self._daily_summary_cache_service.clear_revalidating(
+            company_id=company_id,
+            namespace=namespace,
+            date_str=date_str,
+        )
+        await self._persist_daily_summary_state(
+            company_id=company_id,
+            date_str=date_str,
+            namespace=namespace,
+            state=state,
+        )
+        return state
+
+    async def _try_hydrate_daily_from_s3(
+        self,
+        *,
+        company_id: str,
+        date_str: str,
+        namespace: Optional[str],
+        current_version: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        payload = await self._daily_summary_artifact_service.get_daily_payload(
+            company_id=company_id,
+            namespace=namespace,
+            date_str=date_str,
+        )
+        if payload is None:
+            return None
+        cached_v = payload.get("source_version")
+        if _canonical_json(cached_v) != _canonical_json(current_version):
+            return None
+        await self._daily_summary_cache_service.set_state(
+            company_id=company_id,
+            namespace=namespace,
+            date_str=date_str,
+            state=payload,
+        )
+        return payload
+
+    async def _collect_period_days_bundle(
+        self,
+        date_from: str,
+        date_to: str,
+        namespace: Optional[str],
+    ) -> Dict[str, Any]:
+        days = _iter_iso_dates_inclusive(date_from, date_to)
+        day_entries: List[Dict[str, Any]] = []
+        for d in days:
+            _, ver = await self._collect_notes_and_source_version(
+                date_str=d,
+                namespace=namespace,
+            )
+            day_entries.append({"date": d, "source_version": ver})
+        return {"days": day_entries}
+
     async def compute_daily_summary(
         self,
         date_str: str,
         namespace: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Синхронно вычисляет summary для даты и namespace (map-reduce по чанкам заметок с AI)."""
-        dt.fromisoformat(date_str)
+        datetime.fromisoformat(date_str)
 
         notes, source_version = await self._collect_notes_and_source_version(
             date_str=date_str,
@@ -2081,10 +2215,10 @@ class EntityService:
                 "stale": False,
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             }
-            await self._daily_summary_cache_service.set_state(
+            await self._persist_daily_summary_state(
                 company_id=company_id,
-                namespace=namespace,
                 date_str=date_str,
+                namespace=namespace,
                 state=state,
             )
             await self._daily_summary_cache_service.clear_revalidating(
@@ -2114,6 +2248,18 @@ class EntityService:
     ) -> bool:
         """Ставит задачу пересчета summary, если она ещё не в процессе."""
         company_id = self._get_company_id()
+        notes_empty_check, _ = await self._collect_notes_and_source_version(
+            date_str=date_str,
+            namespace=namespace,
+        )
+        if len(notes_empty_check) == 0:
+            await self._materialize_empty_daily_summary(
+                date_str=date_str,
+                namespace=namespace,
+                company_id=company_id,
+            )
+            return True
+
         became_revalidating = await self._daily_summary_cache_service.set_revalidating(
             company_id=company_id,
             namespace=namespace,
@@ -2145,6 +2291,17 @@ class EntityService:
         """Публичный alias для event-driven invalidation."""
         return await self.enqueue_daily_summary_rebuild(date_str=date_str, namespace=namespace)
 
+    @staticmethod
+    def _normalize_summary_entity_list(cached_entities: Any) -> list[str]:
+        normalized_entities: list[str] = []
+        if isinstance(cached_entities, list):
+            for entity_name in cached_entities:
+                if isinstance(entity_name, str):
+                    normalized = entity_name.strip()
+                    if normalized:
+                        normalized_entities.append(normalized)
+        return normalized_entities
+
     async def get_daily_summary_cached(
         self,
         date_str: str,
@@ -2153,17 +2310,62 @@ class EntityService:
     ) -> Dict[str, Any]:
         """Возвращает summary по SWR: stale-while-revalidate."""
         company_id = self._get_company_id()
-        dt.fromisoformat(date_str)
+        datetime.fromisoformat(date_str)
 
-        _, current_version = await self._collect_notes_and_source_version(
+        notes, current_version = await self._collect_notes_and_source_version(
             date_str=date_str,
             namespace=namespace,
         )
+
+        if len(notes) == 0:
+            cached_state = await self._daily_summary_cache_service.get_state(
+                company_id=company_id,
+                namespace=namespace,
+                date_str=date_str,
+            )
+            if (
+                not force_rebuild
+                and cached_state is not None
+                and _canonical_json(cached_state.get("source_version"))
+                == _canonical_json(current_version)
+            ):
+                normalized_entities = self._normalize_summary_entity_list(cached_state.get("entities"))
+                return {
+                    **cached_state,
+                    "entities": normalized_entities,
+                    "source_version": current_version,
+                    "revalidating": False,
+                    "stale": False,
+                }
+            fresh = await self._materialize_empty_daily_summary(
+                date_str=date_str,
+                namespace=namespace,
+                company_id=company_id,
+            )
+            normalized_entities = self._normalize_summary_entity_list(fresh.get("entities"))
+            return {
+                **fresh,
+                "entities": normalized_entities,
+                "source_version": current_version,
+                "revalidating": False,
+                "stale": False,
+            }
+
         cached_state = await self._daily_summary_cache_service.get_state(
             company_id=company_id,
             namespace=namespace,
             date_str=date_str,
         )
+        if cached_state is None:
+            hydrated = await self._try_hydrate_daily_from_s3(
+                company_id=company_id,
+                date_str=date_str,
+                namespace=namespace,
+                current_version=current_version,
+            )
+            if hydrated is not None:
+                cached_state = hydrated
+
         is_revalidating = await self._daily_summary_cache_service.is_revalidating(
             company_id=company_id,
             namespace=namespace,
@@ -2191,15 +2393,8 @@ class EntityService:
 
         cached_version = cached_state.get("source_version")
         cached_stale = cached_state.get("stale") is True
-        is_stale = cached_version != current_version
-        cached_entities = cached_state.get("entities")
-        normalized_entities: list[str] = []
-        if isinstance(cached_entities, list):
-            for entity_name in cached_entities:
-                if isinstance(entity_name, str):
-                    normalized = entity_name.strip()
-                    if normalized:
-                        normalized_entities.append(normalized)
+        is_stale = _canonical_json(cached_version) != _canonical_json(current_version)
+        normalized_entities = self._normalize_summary_entity_list(cached_state.get("entities"))
 
         if is_stale and not is_revalidating:
             await self.enqueue_daily_summary_rebuild(date_str=date_str, namespace=namespace)
@@ -2209,6 +2404,364 @@ class EntityService:
             **cached_state,
             "entities": normalized_entities,
             "source_version": current_version if is_stale else cached_version,
+            "revalidating": is_revalidating,
+            "stale": is_stale or force_rebuild or cached_stale or is_revalidating,
+        }
+
+    async def _ensure_daily_payload_for_period(
+        self,
+        date_str: str,
+        namespace: Optional[str],
+        *,
+        company_id: str,
+    ) -> Dict[str, Any]:
+        """Дневная сводка для merge периода: Redis/S3 или пересчёт."""
+        notes, ver = await self._collect_notes_and_source_version(
+            date_str=date_str,
+            namespace=namespace,
+        )
+        if len(notes) == 0:
+            empty_core = await self.compute_daily_summary(date_str=date_str, namespace=namespace)
+            return {**empty_core, "generated_at": None}
+
+        cached = await self._daily_summary_cache_service.get_state(
+            company_id=company_id,
+            namespace=namespace,
+            date_str=date_str,
+        )
+        if cached is not None and _canonical_json(cached.get("source_version")) == _canonical_json(ver):
+            return cached
+
+        hydrated = await self._try_hydrate_daily_from_s3(
+            company_id=company_id,
+            date_str=date_str,
+            namespace=namespace,
+            current_version=ver,
+        )
+        if hydrated is not None:
+            return hydrated
+
+        summary_core = await self.compute_daily_summary(date_str=date_str, namespace=namespace)
+        state = {
+            **summary_core,
+            "revalidating": False,
+            "stale": False,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await self._persist_daily_summary_state(
+            company_id=company_id,
+            date_str=date_str,
+            namespace=namespace,
+            state=state,
+        )
+        return state
+
+    async def compute_period_summary(
+        self,
+        date_from: str,
+        date_to: str,
+        namespace: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Сводка за диапазон: merge готовых дневных сводок (при необходимости досчитывает день)."""
+        datetime.fromisoformat(date_from)
+        datetime.fromisoformat(date_to)
+        days = _iter_iso_dates_inclusive(date_from, date_to)
+        max_days = get_crm_settings().period_summary_max_days
+        if len(days) > max_days:
+            raise ValueError(
+                f"Period too long: {len(days)} days (max {max_days})"
+            )
+
+        company_id = self._get_company_id()
+        period_bundle = await self._collect_period_days_bundle(date_from, date_to, namespace)
+        partials: List[Dict[str, Any]] = []
+        for d in days:
+            day_payload = await self._ensure_daily_payload_for_period(
+                d,
+                namespace,
+                company_id=company_id,
+            )
+            partials.append(
+                {
+                    "date": d,
+                    "summary": day_payload.get("summary", ""),
+                    "entities": day_payload.get("entities", []),
+                }
+            )
+
+        structured = await self._call_period_summarize_merge_skill(
+            partials,
+            date_from,
+            date_to,
+            namespace,
+        )
+        summary_text = self._extract_summary_from_payload(structured)
+        if summary_text is None and isinstance(structured, dict):
+            s = structured.get("summary")
+            summary_text = s if isinstance(s, str) else None
+        if summary_text is None:
+            summary_text = ""
+        if isinstance(structured, dict) and (
+            not isinstance(summary_text, str) or not summary_text.strip()
+        ):
+            fallback = self._compose_summary_fallback_from_structured(structured)
+            if fallback.strip():
+                summary_text = fallback
+        summary_entities = self._extract_string_list_from_payload(structured, "entities")
+        if not summary_entities:
+            summary_entities = self._extract_entities_from_text_mentions(summary_text)
+        if not summary_entities:
+            merged: list[str] = []
+            for p in partials:
+                for name in p.get("entities") or []:
+                    if isinstance(name, str) and name.strip() and name.strip() not in merged:
+                        merged.append(name.strip())
+            summary_entities = merged[:12]
+
+        return {
+            "date_from": date_from,
+            "date_to": date_to,
+            "namespace": self._normalize_namespace(namespace),
+            "summary": summary_text,
+            "entities": summary_entities[:12],
+            "source_version": period_bundle,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    async def rebuild_period_summary(
+        self,
+        date_from: str,
+        date_to: str,
+        namespace: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        company_id = self._get_company_id()
+        lock_ok = await self._daily_summary_cache_service.acquire_period_rebuild_lock(
+            company_id=company_id,
+            namespace=namespace,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        if not lock_ok:
+            existing = await self._daily_summary_cache_service.get_period_state(
+                company_id=company_id,
+                namespace=namespace,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            if existing is None:
+                return {
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "namespace": self._normalize_namespace(namespace),
+                    "summary": "",
+                    "entities": [],
+                    "revalidating": True,
+                    "stale": True,
+                    "source_version": await self._collect_period_days_bundle(
+                        date_from, date_to, namespace
+                    ),
+                }
+            existing["revalidating"] = True
+            existing["stale"] = True
+            return existing
+        try:
+            summary = await self.compute_period_summary(
+                date_from=date_from,
+                date_to=date_to,
+                namespace=namespace,
+            )
+            state = {
+                **summary,
+                "revalidating": False,
+                "stale": False,
+            }
+            await self._daily_summary_cache_service.set_period_state(
+                company_id=company_id,
+                namespace=namespace,
+                date_from=date_from,
+                date_to=date_to,
+                state=state,
+            )
+            await self._daily_summary_artifact_service.put_period_payload(
+                company_id=company_id,
+                namespace=namespace,
+                date_from=date_from,
+                date_to=date_to,
+                payload=state,
+            )
+            await self._daily_summary_cache_service.clear_period_revalidating(
+                company_id=company_id,
+                namespace=namespace,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            return state
+        except Exception:
+            await self._daily_summary_cache_service.clear_period_revalidating(
+                company_id=company_id,
+                namespace=namespace,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            raise
+        finally:
+            await self._daily_summary_cache_service.release_period_rebuild_lock(
+                company_id=company_id,
+                namespace=namespace,
+                date_from=date_from,
+                date_to=date_to,
+            )
+
+    async def enqueue_period_summary_rebuild(
+        self,
+        date_from: str,
+        date_to: str,
+        namespace: Optional[str] = None,
+    ) -> bool:
+        company_id = self._get_company_id()
+        became = await self._daily_summary_cache_service.set_period_revalidating(
+            company_id=company_id,
+            namespace=namespace,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        if not became:
+            return False
+        from apps.crm_worker.tasks.daily_summary_tasks import rebuild_period_summary_task
+        from core.context import get_context
+
+        context = get_context()
+        auth_token = context.auth_token if context else None
+        user_id = context.user.user_id if context and context.user else None
+
+        await rebuild_period_summary_task.kiq(
+            company_id=company_id,
+            date_from=date_from,
+            date_to=date_to,
+            namespace=self._normalize_namespace(namespace),
+            reason="event",
+            auth_token=auth_token,
+            user_id=user_id,
+        )
+        return True
+
+    async def _try_hydrate_period_from_s3(
+        self,
+        *,
+        company_id: str,
+        date_from: str,
+        date_to: str,
+        namespace: Optional[str],
+        current_bundle: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        payload = await self._daily_summary_artifact_service.get_period_payload(
+            company_id=company_id,
+            namespace=namespace,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        if payload is None:
+            return None
+        if _canonical_json(payload.get("source_version")) != _canonical_json(current_bundle):
+            return None
+        await self._daily_summary_cache_service.set_period_state(
+            company_id=company_id,
+            namespace=namespace,
+            date_from=date_from,
+            date_to=date_to,
+            state=payload,
+        )
+        return payload
+
+    async def get_period_summary_cached(
+        self,
+        date_from: str,
+        date_to: str,
+        namespace: Optional[str] = None,
+        force_rebuild: bool = False,
+    ) -> Dict[str, Any]:
+        datetime.fromisoformat(date_from)
+        datetime.fromisoformat(date_to)
+        days = _iter_iso_dates_inclusive(date_from, date_to)
+        max_days = get_crm_settings().period_summary_max_days
+        if len(days) > max_days:
+            raise ValueError(
+                f"Period too long: {len(days)} days (max {max_days})"
+            )
+
+        company_id = self._get_company_id()
+        current_bundle = await self._collect_period_days_bundle(
+            date_from, date_to, namespace
+        )
+
+        cached_state = await self._daily_summary_cache_service.get_period_state(
+            company_id=company_id,
+            namespace=namespace,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        if cached_state is None:
+            hydrated = await self._try_hydrate_period_from_s3(
+                company_id=company_id,
+                date_from=date_from,
+                date_to=date_to,
+                namespace=namespace,
+                current_bundle=current_bundle,
+            )
+            if hydrated is not None:
+                cached_state = hydrated
+
+        is_revalidating = await self._daily_summary_cache_service.is_period_revalidating(
+            company_id=company_id,
+            namespace=namespace,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+        if force_rebuild and not is_revalidating:
+            await self.enqueue_period_summary_rebuild(
+                date_from=date_from,
+                date_to=date_to,
+                namespace=namespace,
+            )
+            is_revalidating = True
+
+        if cached_state is None:
+            if not is_revalidating:
+                await self.enqueue_period_summary_rebuild(
+                    date_from=date_from,
+                    date_to=date_to,
+                    namespace=namespace,
+                )
+            return {
+                "date_from": date_from,
+                "date_to": date_to,
+                "namespace": self._normalize_namespace(namespace),
+                "summary": "",
+                "entities": [],
+                "generated_at": None,
+                "source_version": current_bundle,
+                "revalidating": True,
+                "stale": True,
+            }
+
+        cached_version = cached_state.get("source_version")
+        cached_stale = cached_state.get("stale") is True
+        is_stale = _canonical_json(cached_version) != _canonical_json(current_bundle)
+        normalized_entities = self._normalize_summary_entity_list(cached_state.get("entities"))
+
+        if is_stale and not is_revalidating:
+            await self.enqueue_period_summary_rebuild(
+                date_from=date_from,
+                date_to=date_to,
+                namespace=namespace,
+            )
+            is_revalidating = True
+
+        return {
+            **cached_state,
+            "entities": normalized_entities,
+            "source_version": current_bundle if is_stale else cached_version,
             "revalidating": is_revalidating,
             "stale": is_stale or force_rebuild or cached_stale or is_revalidating,
         }

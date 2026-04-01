@@ -405,6 +405,27 @@ async def get_daily_summary(
     return summary
 
 
+@router.post("/period-summary")
+async def get_period_summary(
+    request: Dict[str, Any],
+    service: EntityService = Depends(get_entity_service),
+):
+    """Сводка заметок за диапазон дат (merge дневных сводок)."""
+    date_from = request.get("date_from")
+    date_to = request.get("date_to")
+    if date_from is None or date_to is None:
+        raise HTTPException(status_code=400, detail="date_from and date_to are required")
+    namespace = request.get("namespace")
+    force_rebuild = request.get("force_rebuild") is True
+    summary = await service.get_period_summary_cached(
+        date_from=date_from,
+        date_to=date_to,
+        namespace=namespace,
+        force_rebuild=force_rebuild,
+    )
+    return summary
+
+
 @router.get("/{entity_id}/card")
 async def get_entity_card(
     entity_id: str,

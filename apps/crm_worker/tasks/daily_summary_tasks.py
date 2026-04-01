@@ -144,6 +144,54 @@ async def rebuild_daily_summary_task(
     return state
 
 
+@broker.task(task_name="crm_rebuild_period_summary", queue_name="crm")
+async def rebuild_period_summary_task(
+    company_id: str,
+    date_from: str,
+    date_to: str,
+    namespace: Optional[str] = None,
+    reason: str = "event",
+    auth_token: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Пересчитывает и сохраняет period summary в Redis и S3."""
+    resolved_auth_token = auth_token
+    if resolved_auth_token is None:
+        resolved_auth_token = await _build_auth_token_for_company(company_id=company_id, user_id=user_id)
+    _set_crm_context(
+        company_id=company_id,
+        namespace=namespace,
+        auth_token=resolved_auth_token,
+        user_id=user_id,
+    )
+    container = get_crm_container()
+    state = await container.entity_service.rebuild_period_summary(
+        date_from=date_from,
+        date_to=date_to,
+        namespace=namespace,
+    )
+    if state.get("revalidating") is False and state.get("stale") is False:
+        await _notify_daily_summary_updated(
+            company_id=company_id,
+            date_str=date_from,
+            namespace=namespace,
+            summary_state={
+                "period": True,
+                "date_from": date_from,
+                "date_to": date_to,
+                "summary": state.get("summary", ""),
+                "entities": state.get("entities", []),
+                "generated_at": state.get("generated_at"),
+            },
+        )
+    logger.info(
+        "CRM period summary rebuilt: "
+        f"company_id={company_id}, namespace={namespace or 'all'}, "
+        f"from={date_from}, to={date_to}, reason={reason}"
+    )
+    return state
+
+
 @broker.task(task_name="crm_reconcile_daily_summary", queue_name="crm")
 async def reconcile_daily_summary_task(days_back: int = 1) -> dict[str, Any]:
     """

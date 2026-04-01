@@ -241,6 +241,8 @@ const baseStore = new BaseStore('crm', {
         isMobile: false,
         filterTags: [],
         searchQuery: '',
+        notesPageSearchQuery: '',
+        tasksListSearchQuery: '',
         collapsedPanels: {},
         dailyNotesRange: {
             from: getTodayIsoDate(),
@@ -1317,6 +1319,24 @@ export const CRMStore = {
     setSearchQuery(query) {
         baseStore.setState((s) => ({
             ui: { ...s.ui, searchQuery: query }
+        }));
+    },
+
+    setNotesPageSearchQuery(query) {
+        if (typeof query !== 'string') {
+            throw new Error('notesPageSearchQuery must be a string');
+        }
+        baseStore.setState((s) => ({
+            ui: { ...s.ui, notesPageSearchQuery: query },
+        }));
+    },
+
+    setTasksListSearchQuery(query) {
+        if (typeof query !== 'string') {
+            throw new Error('tasksListSearchQuery must be a string');
+        }
+        baseStore.setState((s) => ({
+            ui: { ...s.ui, tasksListSearchQuery: query },
         }));
     },
     

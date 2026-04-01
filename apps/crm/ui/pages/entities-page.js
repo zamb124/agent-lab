@@ -744,7 +744,7 @@ export class EntitiesPage extends PlatformElement {
                             <input
                                 class="search-input"
                                 type="text"
-                                placeholder=${this.i18n.t('search', {}, 'common')}
+                                placeholder=${this.i18n.t('search.placeholder')}
                                 .value=${this._query}
                                 @input=${this._onSearchInput}
                             />

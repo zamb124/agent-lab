@@ -21,6 +21,7 @@ import '../modals/share-modal.js';
 import '../modals/access-request-modal.js';
 import '../modals/namespace-modal.js';
 import '../components/crm-sidebar.js';
+import '../components/crm-mobile-app-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/layout/platform-island.js';
 
@@ -32,6 +33,7 @@ export class CRMApp extends PlatformApp {
         _showNamespaceModal: { state: true },
         _showAiModal: { state: true },
         _mobileSearchOpen: { state: true },
+        _mobileSearchInputValue: { state: true },
     };
 
     static styles = [
@@ -86,7 +88,7 @@ export class CRMApp extends PlatformApp {
                 min-height: 0;
             }
 
-            .mobile-app-header {
+            .mobile-shell-header-wrap {
                 display: none;
             }
 
@@ -139,125 +141,9 @@ export class CRMApp extends PlatformApp {
                     overflow: visible;
                 }
 
-                .mobile-app-header {
-                    display: flex;
-                    align-items: center;
-                    gap: var(--space-2);
-                    padding: max(var(--space-2), env(safe-area-inset-top, 0px)) var(--space-3) var(--space-2);
-                    background: var(--crm-surface-muted);
-                    border-bottom: 1px solid var(--crm-stroke);
+                .mobile-shell-header-wrap {
+                    display: block;
                     flex-shrink: 0;
-                }
-
-                .mobile-menu-btn {
-                    width: 36px;
-                    height: 36px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border-radius: var(--radius-md);
-                    background: transparent;
-                    border: 1px solid var(--crm-stroke);
-                    color: var(--text-primary);
-                    cursor: pointer;
-                    flex-shrink: 0;
-                }
-
-                .mobile-menu-btn:hover {
-                    background: var(--crm-surface);
-                }
-
-                .mobile-header-title {
-                    flex: 1;
-                    font-size: var(--text-lg);
-                    font-weight: 700;
-                    color: var(--text-primary);
-                    min-width: 0;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-
-                .mobile-action-btn {
-                    width: 36px;
-                    height: 36px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border-radius: var(--radius-md);
-                    background: var(--crm-daily-notes-cta-bg);
-                    border: none;
-                    color: var(--text-inverse);
-                    cursor: pointer;
-                    flex-shrink: 0;
-                    transition: background var(--duration-fast);
-                }
-
-                .mobile-action-btn:hover {
-                    background: var(--crm-daily-notes-cta-hover);
-                }
-
-                .mobile-search-row {
-                    display: flex;
-                    align-items: center;
-                    gap: var(--space-2);
-                    padding: 0 var(--space-3) var(--space-2);
-                    background: var(--crm-surface-muted);
-                    animation: search-slide-down 0.15s ease-out;
-                }
-
-                @keyframes search-slide-down {
-                    from { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
-                    to { opacity: 1; max-height: 50px; }
-                }
-
-                .mobile-search-input {
-                    flex: 1;
-                    min-width: 0;
-                    height: 36px;
-                    border: 1px solid var(--crm-stroke);
-                    border-radius: var(--radius-full);
-                    background: var(--crm-surface);
-                    color: var(--text-primary);
-                    font-size: var(--text-sm);
-                    padding: 0 var(--space-3) 0 var(--space-8);
-                    outline: none;
-                }
-
-                .mobile-search-input:focus {
-                    border-color: var(--accent);
-                }
-
-                .mobile-search-icon {
-                    position: absolute;
-                    left: var(--space-5);
-                    pointer-events: none;
-                    color: var(--text-tertiary);
-                }
-
-                .mobile-search-wrapper {
-                    position: relative;
-                    flex: 1;
-                    display: flex;
-                    align-items: center;
-                }
-
-                .mobile-search-close {
-                    width: 28px;
-                    height: 28px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border: none;
-                    border-radius: var(--radius-md);
-                    background: transparent;
-                    color: var(--text-tertiary);
-                    cursor: pointer;
-                    flex-shrink: 0;
-                }
-
-                .mobile-search-close:hover {
-                    color: var(--text-primary);
                 }
 
                 platform-island {
@@ -274,6 +160,7 @@ export class CRMApp extends PlatformApp {
         this._showNamespaceModal = false;
         this._showAiModal = false;
         this._mobileSearchOpen = false;
+        this._mobileSearchInputValue = '';
         this._resizeObserver = null;
         this._searchDebounce = null;
     }
@@ -357,15 +244,42 @@ export class CRMApp extends PlatformApp {
         }));
     }
 
-    _toggleMobileSearch() {
-        this._mobileSearchOpen = !this._mobileSearchOpen;
-        if (!this._mobileSearchOpen) {
-            this._dispatchSearchQuery('');
+    _hydrateMobileSearchInputFromView() {
+        if (this._currentView === 'entities') {
+            this._mobileSearchInputValue = CRMStore.state.entities.filters.search || '';
+            return;
+        }
+        if (this._currentView === 'notes') {
+            this._mobileSearchInputValue = CRMStore.state.ui.notesPageSearchQuery || '';
+            return;
+        }
+        if (this._currentView === 'tasks') {
+            this._mobileSearchInputValue = CRMStore.state.ui.tasksListSearchQuery || '';
         }
     }
 
-    _onMobileSearchInput(event) {
-        const query = event.target.value;
+    _toggleMobileSearch() {
+        if (this._mobileSearchOpen) {
+            this._closeMobileSearch();
+            return;
+        }
+        this._hydrateMobileSearchInputFromView();
+        this._mobileSearchOpen = true;
+    }
+
+    _closeMobileSearch() {
+        if (!this._mobileSearchOpen) {
+            return;
+        }
+        this._mobileSearchOpen = false;
+        this._dispatchSearchQuery('');
+        this._mobileSearchInputValue = '';
+    }
+
+    _onHeaderSearchInput(event) {
+        const raw = event.detail?.value;
+        const query = typeof raw === 'string' ? raw : '';
+        this._mobileSearchInputValue = query;
         if (this._searchDebounce) {
             clearTimeout(this._searchDebounce);
         }
@@ -382,6 +296,15 @@ export class CRMApp extends PlatformApp {
             CRMStore.loadEntities(crmApi);
         }
         if (this._currentView === 'notes') {
+            CRMStore.setNotesPageSearchQuery(query);
+            window.dispatchEvent(new CustomEvent('crm-mobile-search', {
+                detail: { query },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        if (this._currentView === 'tasks') {
+            CRMStore.setTasksListSearchQuery(query);
             window.dispatchEvent(new CustomEvent('crm-mobile-search', {
                 detail: { query },
                 bubbles: true,
@@ -494,6 +417,7 @@ export class CRMApp extends PlatformApp {
                 actionTitle: v('tasks.action_title'),
                 extraIcon: 'refresh',
                 extraTitle: v('tasks.extra_title'),
+                searchable: true,
             },
             calendar: { title: v('calendar.title'), actionIcon: null },
             settings: { title: v('settings.title'), actionIcon: null },
@@ -594,44 +518,24 @@ export class CRMApp extends PlatformApp {
             </div>
             <div class="main">
                 ${this._isMobile ? html`
-                    <div class="mobile-app-header">
-                        <button class="mobile-menu-btn" type="button" @click=${this._openSidebar} title=${this.i18n.t('app_shell.mobile_menu')}>
-                            <platform-icon name="menu" size="18"></platform-icon>
-                        </button>
-                        <span class="mobile-header-title">${viewCfg.title}</span>
-                        ${viewCfg.searchable ? html`
-                            <button class="mobile-menu-btn" type="button" @click=${this._toggleMobileSearch} title=${this.i18n.t('app_shell.mobile_search')}>
-                                <platform-icon name="search" size="16"></platform-icon>
-                            </button>
-                        ` : ''}
-                        ${viewCfg.extraIcon ? html`
-                            <button class="mobile-menu-btn" type="button" @click=${this._onMobileExtra} title="${viewCfg.extraTitle || ''}">
-                                <platform-icon name="${viewCfg.extraIcon}" size="16"></platform-icon>
-                            </button>
-                        ` : ''}
-                        ${viewCfg.actionIcon ? html`
-                            <button class="mobile-action-btn" type="button" @click=${this._onMobileAction} title="${viewCfg.actionTitle || ''}">
-                                <platform-icon name="${viewCfg.actionIcon}" size="18"></platform-icon>
-                            </button>
-                        ` : ''}
+                    <div class="mobile-shell-header-wrap">
+                        <crm-mobile-app-header
+                            .headerTitle=${viewCfg.title}
+                            ?searchable=${!!viewCfg.searchable}
+                            ?searchOpen=${this._mobileSearchOpen}
+                            .searchValue=${this._mobileSearchInputValue}
+                            .extraIcon=${viewCfg.extraIcon || ''}
+                            .extraTitle=${viewCfg.extraTitle || ''}
+                            .actionIcon=${viewCfg.actionIcon || ''}
+                            .actionTitle=${viewCfg.actionTitle || ''}
+                            @header-menu=${this._openSidebar}
+                            @header-toggle-search=${this._toggleMobileSearch}
+                            @header-search-input=${this._onHeaderSearchInput}
+                            @header-search-close=${this._closeMobileSearch}
+                            @header-extra=${this._onMobileExtra}
+                            @header-action=${this._onMobileAction}
+                        ></crm-mobile-app-header>
                     </div>
-                    ${this._mobileSearchOpen ? html`
-                        <div class="mobile-search-row">
-                            <div class="mobile-search-wrapper">
-                                <platform-icon class="mobile-search-icon" name="ai" size="14" colored></platform-icon>
-                                <input
-                                    class="mobile-search-input"
-                                    type="text"
-                                    placeholder=${this.i18n.t('search.placeholder')}
-                                    autofocus
-                                    @input=${this._onMobileSearchInput}
-                                />
-                            </div>
-                            <button class="mobile-search-close" type="button" @click=${this._toggleMobileSearch}>
-                                <platform-icon name="close" size="14"></platform-icon>
-                            </button>
-                        </div>
-                    ` : ''}
                 ` : ''}
                 <platform-island padding=${this._isMobile ? 'none' : 'md'} ?safe-bottom=${this._isMobile}>
                     ${this._renderContent()}

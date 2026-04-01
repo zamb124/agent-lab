@@ -72,6 +72,12 @@ class CRMSettings(BaseSettings):
         le=64,
         description="Максимум параллельных A2A-вызовов на один уровень map-reduce daily summary",
     )
+    period_summary_max_days: int = Field(
+        default=31,
+        ge=1,
+        le=366,
+        description="Максимум календарных дней в одном запросе period summary (CRM)",
+    )
 
 
 _crm_settings: Optional[CRMSettings] = None

@@ -23,6 +23,18 @@ def _set_test_context() -> None:
     )
 
 
+def _analyzed_note() -> SimpleNamespace:
+    return SimpleNamespace(
+        entity_id="n-1",
+        updated_at=None,
+        name="n1",
+        entity_subtype=None,
+        description="d",
+        tags=[],
+        attributes={"ai_analysis_applied_at": "2026-01-01T00:00:00+00:00"},
+    )
+
+
 def _build_service() -> EntityService:
     entity_type_repo = AsyncMock()
     entity_type_repo.get_by_type_id = AsyncMock(
@@ -30,6 +42,11 @@ def _build_service() -> EntityService:
     )
     namespace_repo = AsyncMock()
     namespace_repo.get = AsyncMock(return_value=SimpleNamespace(name="default"))
+    artifact_service = AsyncMock()
+    artifact_service.put_daily_payload = AsyncMock()
+    artifact_service.get_daily_payload = AsyncMock(return_value=None)
+    artifact_service.put_period_payload = AsyncMock()
+    artifact_service.get_period_payload = AsyncMock(return_value=None)
     return EntityService(
         entity_repo=AsyncMock(),
         entity_type_repo=entity_type_repo,
@@ -39,6 +56,7 @@ def _build_service() -> EntityService:
         attachment_service=AsyncMock(),
         a2a_client=AsyncMock(),
         daily_summary_cache_service=AsyncMock(),
+        daily_summary_artifact_service=artifact_service,
         user_person_service=AsyncMock(),
     )
 
@@ -47,6 +65,9 @@ def _build_service() -> EntityService:
 async def test_enqueue_daily_summary_rebuild_deduplicates(monkeypatch):
     _set_test_context()
     service = _build_service()
+    service._collect_notes_and_source_version = AsyncMock(
+        return_value=([_analyzed_note()], {"notes_count": 1, "max_updated_at": None})
+    )
     service._daily_summary_cache_service.set_revalidating = AsyncMock(side_effect=[True, False])
 
     import apps.crm_worker.tasks.daily_summary_tasks as summary_tasks_module
@@ -92,7 +113,10 @@ async def test_get_daily_summary_cached_miss_enqueues_rebuild():
     _set_test_context()
     service = _build_service()
     service._collect_notes_and_source_version = AsyncMock(
-        return_value=([], {"notes_count": 0, "max_updated_at": None})
+        return_value=(
+            [_analyzed_note()],
+            {"notes_count": 1, "max_updated_at": "2026-03-28T11:00:00+00:00"},
+        )
     )
     service._daily_summary_cache_service.get_state = AsyncMock(return_value=None)
     service._daily_summary_cache_service.is_revalidating = AsyncMock(return_value=False)
@@ -109,11 +133,34 @@ async def test_get_daily_summary_cached_miss_enqueues_rebuild():
 
 
 @pytest.mark.asyncio
+async def test_get_daily_summary_cached_empty_day_no_enqueue():
+    _set_test_context()
+    service = _build_service()
+    service._collect_notes_and_source_version = AsyncMock(
+        return_value=([], {"notes_count": 0, "max_updated_at": None})
+    )
+    service._daily_summary_cache_service.get_state = AsyncMock(return_value=None)
+    service._daily_summary_cache_service.clear_revalidating = AsyncMock()
+    service.enqueue_daily_summary_rebuild = AsyncMock(return_value=True)
+
+    payload = await service.get_daily_summary_cached(date_str="2026-03-28", namespace=None)
+
+    assert payload["revalidating"] is False
+    assert payload["stale"] is False
+    assert "2026-03-28" in payload["summary"]
+    service.enqueue_daily_summary_rebuild.assert_not_awaited()
+    service._daily_summary_artifact_service.put_daily_payload.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_daily_summary_cached_marks_stale_and_requeues():
     _set_test_context()
     service = _build_service()
     service._collect_notes_and_source_version = AsyncMock(
-        return_value=([], {"notes_count": 3, "max_updated_at": "2026-03-28T11:00:00+00:00"})
+        return_value=(
+            [_analyzed_note()],
+            {"notes_count": 3, "max_updated_at": "2026-03-28T11:00:00+00:00"},
+        )
     )
     service._daily_summary_cache_service.get_state = AsyncMock(
         return_value={
@@ -138,11 +185,115 @@ async def test_get_daily_summary_cached_marks_stale_and_requeues():
 
 
 @pytest.mark.asyncio
+async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss():
+    _set_test_context()
+    service = _build_service()
+    ver = {"notes_count": 1, "max_updated_at": "2026-03-28T11:00:00+00:00"}
+    service._collect_notes_and_source_version = AsyncMock(
+        return_value=([_analyzed_note()], ver)
+    )
+    service._daily_summary_cache_service.get_state = AsyncMock(return_value=None)
+    service._daily_summary_artifact_service.get_daily_payload = AsyncMock(
+        return_value={
+            "date": "2026-03-28",
+            "summary": "from s3",
+            "entities": ["Acme"],
+            "source_version": ver,
+            "generated_at": "2026-03-28T12:00:00+00:00",
+        }
+    )
+    service._daily_summary_cache_service.is_revalidating = AsyncMock(return_value=False)
+    service.enqueue_daily_summary_rebuild = AsyncMock(return_value=True)
+
+    payload = await service.get_daily_summary_cached(date_str="2026-03-28", namespace=None)
+
+    assert payload["summary"] == "from s3"
+    assert payload["entities"] == ["Acme"]
+    assert payload["revalidating"] is False
+    service.enqueue_daily_summary_rebuild.assert_not_awaited()
+    service._daily_summary_cache_service.set_state.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_period_summary_cached_period_too_long_raises(monkeypatch):
+    _set_test_context()
+    service = _build_service()
+
+    def _tiny_period_settings():
+        return SimpleNamespace(period_summary_max_days=1)
+
+    monkeypatch.setattr(entity_service_module, "get_crm_settings", _tiny_period_settings)
+
+    with pytest.raises(ValueError, match="Period too long"):
+        await service.get_period_summary_cached(
+            date_from="2026-03-28",
+            date_to="2026-03-29",
+            namespace=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_period_summary_cached_miss_enqueues_period_rebuild():
+    _set_test_context()
+    service = _build_service()
+    service._collect_notes_and_source_version = AsyncMock(
+        return_value=([], {"notes_count": 0, "max_updated_at": None})
+    )
+    service._daily_summary_cache_service.get_period_state = AsyncMock(return_value=None)
+    service._daily_summary_cache_service.is_period_revalidating = AsyncMock(return_value=False)
+    service.enqueue_period_summary_rebuild = AsyncMock(return_value=True)
+
+    payload = await service.get_period_summary_cached(
+        date_from="2026-03-28",
+        date_to="2026-03-29",
+        namespace=None,
+    )
+
+    assert payload["revalidating"] is True
+    assert payload["stale"] is True
+    service.enqueue_period_summary_rebuild.assert_awaited_once_with(
+        date_from="2026-03-28",
+        date_to="2026-03-29",
+        namespace=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_compute_period_summary_calls_merge_skill_for_range():
+    _set_test_context()
+    service = _build_service()
+    service._collect_notes_and_source_version = AsyncMock(
+        return_value=([], {"notes_count": 0, "max_updated_at": None})
+    )
+    service._call_period_summarize_merge_skill = AsyncMock(
+        return_value={"summary": "Итог периода", "entities": ["Org"]}
+    )
+
+    payload = await service.compute_period_summary(
+        date_from="2026-03-28",
+        date_to="2026-03-29",
+        namespace=None,
+    )
+
+    assert payload["summary"] == "Итог периода"
+    assert payload["entities"] == ["Org"]
+    assert payload["date_from"] == "2026-03-28"
+    assert payload["date_to"] == "2026-03-29"
+    service._call_period_summarize_merge_skill.assert_awaited_once()
+    call_kw = service._call_period_summarize_merge_skill.call_args[0][0]
+    assert len(call_kw) == 2
+    assert {p["date"] for p in call_kw} == {"2026-03-28", "2026-03-29"}
+
+
+@pytest.mark.asyncio
 async def test_get_daily_summary_cached_force_rebuild_on_fresh_cache():
     _set_test_context()
     service = _build_service()
     service._collect_notes_and_source_version = AsyncMock(
-        return_value=([], {"notes_count": 2, "max_updated_at": "2026-03-28T11:00:00+00:00"})
+        return_value=(
+            [_analyzed_note()],
+            {"notes_count": 2, "max_updated_at": "2026-03-28T11:00:00+00:00"},
+        )
     )
     service._daily_summary_cache_service.get_state = AsyncMock(
         return_value={

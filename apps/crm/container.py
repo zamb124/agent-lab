@@ -103,6 +103,12 @@ class CRMContainer(BaseContainer):
 
         settings = get_settings()
         return DailySummaryCacheService(redis_url=settings.database.redis_url)
+
+    @lazy
+    def daily_summary_artifact_service(self):
+        from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
+
+        return DailySummaryArtifactService()
     
     @lazy
     def company_init_service(self):
@@ -145,6 +151,7 @@ class CRMContainer(BaseContainer):
             attachment_service=self.attachment_service,
             a2a_client=A2AClient(timeout=300.0),
             daily_summary_cache_service=self.daily_summary_cache_service,
+            daily_summary_artifact_service=self.daily_summary_artifact_service,
             user_person_service=self.user_person_service,
         )
     
