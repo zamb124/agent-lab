@@ -163,6 +163,7 @@
     "remove": "Remove",
     "err_invite": "Could not create invite link",
     "toast_invite_copied": "Invite link copied to clipboard",
+    "toast_invite_shared": "Link sent via the share sheet",
     "err_clipboard": "Link created, but clipboard is unavailable. Open the API response and copy invite_url.",
     "confirm_remove": "Remove {{name}} from the team?",
     "toast_removed": "{{name}} was removed from the team"

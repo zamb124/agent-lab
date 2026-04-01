@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
+import { isStandaloneOrNativeAppShell } from '@platform/lib/utils/native-app-shell.js';
 import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '../../modals/edit-team-member-modal.js';
@@ -372,6 +373,28 @@ export class TeamPage extends PlatformElement {
         return name[0].toUpperCase();
     }
 
+    async _shareInviteUrl(url) {
+        if (typeof navigator.share !== 'function') {
+            return 'unavailable';
+        }
+        const payloads = [{ url }, { url, text: url }];
+        for (const data of payloads) {
+            if (typeof navigator.canShare === 'function' && !navigator.canShare(data)) {
+                continue;
+            }
+            try {
+                await navigator.share(data);
+                return 'shared';
+            } catch (err) {
+                const name = err && typeof err === 'object' && 'name' in err ? err.name : '';
+                if (name === 'AbortError') {
+                    return 'aborted';
+                }
+            }
+        }
+        return 'failed';
+    }
+
     async _onCopyInviteLink() {
         const td = (key) => this.i18n.t(key, {});
         let result;
@@ -382,12 +405,29 @@ export class TeamPage extends PlatformElement {
             return;
         }
 
+        const url = result.invite_url;
+        const shell = typeof window !== 'undefined' && isStandaloneOrNativeAppShell();
+
         try {
-            await copyTextToClipboard(result.invite_url);
+            await copyTextToClipboard(url);
             this.success(td('team_page.toast_invite_copied'));
+            return;
         } catch {
-            this.error(td('team_page.err_clipboard'));
+            if (!shell) {
+                this.error(td('team_page.err_clipboard'));
+                return;
+            }
         }
+
+        const shareOutcome = await this._shareInviteUrl(url);
+        if (shareOutcome === 'shared') {
+            this.success(td('team_page.toast_invite_shared'));
+            return;
+        }
+        if (shareOutcome === 'aborted') {
+            return;
+        }
+        this.error(td('team_page.err_clipboard'));
     }
 
     async _reloadMembers() {

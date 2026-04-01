@@ -381,37 +381,38 @@ export class DailyNotesPage extends PlatformElement {
             .summary-header {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) auto;
-                align-items: center;
+                align-items: start;
                 gap: var(--space-2);
                 margin-bottom: var(--space-2);
             }
 
             .summary-title {
-                display: inline-flex;
-                align-items: center;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-start;
                 gap: var(--space-2);
-                font-size: 32px;
+                margin: 0;
+                min-width: 0;
+            }
+
+            .summary-title-text {
+                flex: 1 1 12rem;
+                min-width: 0;
+                white-space: normal;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                font-size: var(--text-xl);
                 font-weight: 700;
-                line-height: 1.05;
+                line-height: 1.35;
                 background: var(--crm-summary-title-gradient);
                 -webkit-background-clip: text;
                 background-clip: text;
                 -webkit-text-fill-color: transparent;
-                margin: 0;
-                min-width: 0;
-                flex-wrap: nowrap;
-                white-space: nowrap;
-            }
-
-            .summary-title-text {
-                display: inline-block;
-                min-width: 0;
-                white-space: nowrap;
             }
 
             .summary-title-icon {
-                width: 44px;
-                height: 44px;
+                width: 36px;
+                height: 36px;
                 border-radius: var(--radius-full);
                 display: inline-flex;
                 align-items: center;
@@ -426,8 +427,8 @@ export class DailyNotesPage extends PlatformElement {
             }
 
             .summary-refresh-btn {
-                width: 28px;
-                height: 28px;
+                width: 32px;
+                height: 32px;
                 border-radius: var(--radius-full);
                 border: none;
                 background: transparent;
@@ -437,18 +438,24 @@ export class DailyNotesPage extends PlatformElement {
                 justify-content: center;
                 cursor: pointer;
                 flex-shrink: 0;
+                margin-top: 2px;
             }
 
             .summary-refresh-btn:hover {
                 color: var(--accent-tertiary);
             }
 
+            .summary-refresh-btn:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
             .summary-refresh-icon.spinning {
-                animation: summary-refresh-spin 0.9s linear infinite;
+                animation: summary-ai-rebuild-spin 0.9s linear infinite;
                 transform-origin: center;
             }
 
-            @keyframes summary-refresh-spin {
+            @keyframes summary-ai-rebuild-spin {
                 from {
                     transform: rotate(0deg);
                 }
@@ -506,6 +513,26 @@ export class DailyNotesPage extends PlatformElement {
                 background: var(--crm-summary-chip-rose-bg);
             }
 
+            .summary-chip--clickable {
+                cursor: pointer;
+                font-family: inherit;
+                text-align: left;
+            }
+
+            .summary-chip--clickable:hover {
+                filter: brightness(1.12);
+            }
+
+            .summary-chip--clickable:focus-visible {
+                outline: 2px solid var(--accent-tertiary);
+                outline-offset: 2px;
+            }
+
+            .summary-chip--clickable:disabled {
+                cursor: default;
+                filter: none;
+            }
+
             .empty {
                 border: 1px dashed var(--crm-stroke);
                 border-radius: var(--radius-xl);
@@ -536,8 +563,13 @@ export class DailyNotesPage extends PlatformElement {
                     grid-template-columns: 1fr;
                     align-items: stretch;
                 }
-                .summary-title {
-                    font-size: 30px;
+                .summary-title-text {
+                    font-size: var(--text-lg);
+                }
+
+                .summary-title-icon {
+                    width: 32px;
+                    height: 32px;
                 }
                 .summary-text {
                     font-size: var(--text-lg);
@@ -952,8 +984,8 @@ export class DailyNotesPage extends PlatformElement {
         const start = v.start;
         const end = v.end;
         if (typeof start !== 'string' || typeof end !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-            const today = CRMStore.todayIsoDate();
-            CRMStore.setDailyNotesRange({ from: today, to: today });
+            const wk = CRMStore.defaultDailyNotesRange();
+            CRMStore.setDailyNotesRange({ from: wk.from, to: wk.to });
         } else {
             CRMStore.setDailyNotesRange({ from: start, to: end });
         }
@@ -977,6 +1009,7 @@ export class DailyNotesPage extends PlatformElement {
             limit: 300,
         });
         this._notes = Array.isArray(notes) ? notes : [];
+        await this._loadVisibleNoteEntities();
     }
 
     async _onCreateNote() {
@@ -1075,6 +1108,59 @@ export class DailyNotesPage extends PlatformElement {
     _getSummaryChipTone(index) {
         const tones = ['blue', 'cyan', 'orange', 'rose'];
         return tones[index % tones.length];
+    }
+
+    _normalizeSummaryChipLookupKey(label) {
+        if (typeof label !== 'string') {
+            return null;
+        }
+        let s = label.trim();
+        if (!s) {
+            return null;
+        }
+        if (s.startsWith('@')) {
+            s = s.slice(1).trim();
+        }
+        s = s.replace(/^["'([{]+|["')\]}.,;:!?]+$/g, '').trim();
+        if (!s) {
+            return null;
+        }
+        return s.toLowerCase();
+    }
+
+    _buildSummaryEntityLookupMap() {
+        const map = new Map();
+        const lists = Object.values(this._noteEntitiesByNoteId);
+        for (let i = 0; i < lists.length; i += 1) {
+            const related = lists[i];
+            if (!Array.isArray(related)) {
+                continue;
+            }
+            for (let j = 0; j < related.length; j += 1) {
+                const ent = related[j];
+                if (!ent || typeof ent !== 'object' || typeof ent.entity_id !== 'string' || !ent.entity_id.trim()) {
+                    continue;
+                }
+                if (ent.entity_type === 'note') {
+                    continue;
+                }
+                const rawName = typeof ent.name === 'string' ? ent.name : '';
+                const key = this._normalizeSummaryChipLookupKey(rawName);
+                if (!key || map.has(key)) {
+                    continue;
+                }
+                map.set(key, ent);
+            }
+        }
+        return map;
+    }
+
+    _resolveEntityForSummaryChip(displayLabel, lookupMap) {
+        const key = this._normalizeSummaryChipLookupKey(displayLabel);
+        if (!key) {
+            return null;
+        }
+        return lookupMap.get(key) ?? null;
     }
 
     async _loadCurrentUser() {
@@ -1275,19 +1361,21 @@ export class DailyNotesPage extends PlatformElement {
     }
 
     _renderSummaryContent(summaryTags) {
+        const summaryEntityLookup = this._buildSummaryEntityLookupMap();
         return html`
             <div class="summary-header">
                 <h3 class="summary-title">
                     <span class="summary-title-icon">
-                        <platform-icon name="ai" size="24" colored></platform-icon>
+                        <platform-icon name="ai" size="20" colored></platform-icon>
                     </span>
                     <span class="summary-title-text">${this._summaryPanelTitle()}</span>
                 </h3>
-                <button class="summary-refresh-btn" type="button" title=${this.i18n.t('refresh', {}, 'common')} @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
+                <button class="summary-refresh-btn" type="button" title=${this.i18n.t('daily_notes_page.summary_rebuild_tooltip')} @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
                     <platform-icon
                         class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
-                        name="refresh"
-                        size="18"
+                        name="ai"
+                        size="20"
+                        colored
                     ></platform-icon>
                 </button>
             </div>
@@ -1296,12 +1384,29 @@ export class DailyNotesPage extends PlatformElement {
             </div>
             <p class="summary-text">${this._summaryText}</p>
             <div class="summary-tags">
-                ${summaryTags.map((tag, index) => html`
-                    <span class="summary-chip ${this._getSummaryChipTone(index)}">
-                        <platform-icon name="file" size="14"></platform-icon>
-                        ${tag}
-                    </span>
-                `)}
+                ${summaryTags.map((tag, index) => {
+                    const tone = this._getSummaryChipTone(index);
+                    const resolved = this._resolveEntityForSummaryChip(tag, summaryEntityLookup);
+                    if (resolved) {
+                        return html`
+                            <button
+                                type="button"
+                                class="summary-chip summary-chip--clickable ${tone}"
+                                title=${this.i18n.t('daily_notes_page.summary_entity_open')}
+                                @click=${(event) => this._openEntityModal(resolved, event)}
+                            >
+                                <platform-icon name="file" size="14"></platform-icon>
+                                ${tag}
+                            </button>
+                        `;
+                    }
+                    return html`
+                        <span class="summary-chip ${tone}">
+                            <platform-icon name="file" size="14"></platform-icon>
+                            ${tag}
+                        </span>
+                    `;
+                })}
             </div>
         `;
     }
@@ -1417,7 +1522,7 @@ export class DailyNotesPage extends PlatformElement {
             </div>
 
             ${this._isMobile ? html`
-                <button class="summary-fab" type="button" @click=${() => { this._summaryOpen = true; }} title="Daily summary">
+                <button class="summary-fab" type="button" @click=${() => { this._summaryOpen = true; }} title=${this.i18n.t('daily_notes_page.summary_fab_open')}>
                     <platform-icon name="ai" size="24" colored></platform-icon>
                 </button>
             ` : ''}

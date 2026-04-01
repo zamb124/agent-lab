@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
-from core.utils.domain import get_cookie_domain
+from core.utils.domain import extract_base_domain, get_cookie_domain, is_local
 from core.utils.invite_tokens import (
     INVITE_EXPIRES_SECONDS,
     burn_invite_token,
@@ -94,9 +94,11 @@ async def generate_invite(
     svc = get_invite_token_service()
     token, _ = svc.create(company_id=company.company_id, role=body.role)
 
-    host = request.headers.get("host", "")
+    raw_host = request.headers.get("host", "").strip()
     scheme = "https" if request.headers.get("x-forwarded-proto") == "https" else "http"
-    invite_url = f"{scheme}://{host}/join?token={token}"
+    # Apex без slug: Universal Links /join и одна AASA (см. invites.mdc).
+    netloc = raw_host if is_local(raw_host) else extract_base_domain(raw_host)
+    invite_url = f"{scheme}://{netloc}/join?token={token}"
 
     logger.info(
         f"Сгенерирован инвайт для компании {company.company_id}, "

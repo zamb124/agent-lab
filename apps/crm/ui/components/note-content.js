@@ -372,12 +372,12 @@ export class NoteContent extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            .refresh-icon.spinning {
-                animation: note-refresh-spin 0.9s linear infinite;
+            .summary-rebuild-icon.spinning {
+                animation: note-ai-rebuild-spin 0.9s linear infinite;
                 transform-origin: center;
             }
 
-            @keyframes note-refresh-spin {
+            @keyframes note-ai-rebuild-spin {
                 from {
                     transform: rotate(0deg);
                 }
@@ -2337,8 +2337,8 @@ export class NoteContent extends PlatformElement {
                                     @click=${this._emitSummaryRefresh}
                                 >
                                     <platform-icon
-                                        class="refresh-icon ${this.processingEntities ? 'spinning' : ''}"
-                                        name="refresh"
+                                        class="summary-rebuild-icon ${this.processingEntities ? 'spinning' : ''}"
+                                        name="ai"
                                         size="18"
                                         colored
                                     ></platform-icon>

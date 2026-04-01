@@ -7,12 +7,30 @@ import { BaseStore, deepMerge } from '@platform/lib/store/BaseStore.js';
 const LAST_NAMESPACE_STORAGE_KEY = 'crm:last-namespace-by-company';
 const ALL_NAMESPACES_SENTINEL = '__ALL__';
 
-function getTodayIsoDate() {
-    const now = new Date();
-    const year = String(now.getFullYear());
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
+const DAILY_NOTES_RANGE_PERSIST_VERSION = 2;
+
+function formatLocalYmd(date) {
+    const year = String(date.getFullYear());
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+function getTodayIsoDate() {
+    return formatLocalYmd(new Date());
+}
+
+/** Понедельник–воскресенье, локальный календарь (ISO-неделя). */
+function getCurrentWeekRangeIso() {
+    const now = new Date();
+    const jsDay = now.getDay();
+    const offsetMonday = jsDay === 0 ? -6 : 1 - jsDay;
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetMonday);
+    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+    return {
+        from: formatLocalYmd(monday),
+        to: formatLocalYmd(sunday),
+    };
 }
 
 function getUtcTodayIsoDate() {
@@ -46,10 +64,18 @@ function crmPersistMerge(persistedState, currentState) {
     const merged = deepMerge(currentState, persistedState);
     const persistedUi = persistedState?.ui;
     if (persistedUi && typeof persistedUi.dailyNotesDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(persistedUi.dailyNotesDate)) {
-        const d = persistedUi.dailyNotesDate;
         merged.ui = {
             ...merged.ui,
-            dailyNotesRange: { from: d, to: d },
+            dailyNotesRange: getCurrentWeekRangeIso(),
+            dailyNotesRangePersistVersion: DAILY_NOTES_RANGE_PERSIST_VERSION,
+        };
+    }
+    const persistedRangeVersion = persistedState?.ui?.dailyNotesRangePersistVersion;
+    if (persistedRangeVersion !== DAILY_NOTES_RANGE_PERSIST_VERSION) {
+        merged.ui = {
+            ...merged.ui,
+            dailyNotesRange: getCurrentWeekRangeIso(),
+            dailyNotesRangePersistVersion: DAILY_NOTES_RANGE_PERSIST_VERSION,
         };
     }
     return merged;
@@ -244,10 +270,8 @@ const baseStore = new BaseStore('crm', {
         notesPageSearchQuery: '',
         tasksListSearchQuery: '',
         collapsedPanels: {},
-        dailyNotesRange: {
-            from: getTodayIsoDate(),
-            to: getTodayIsoDate(),
-        },
+        dailyNotesRange: getCurrentWeekRangeIso(),
+        dailyNotesRangePersistVersion: DAILY_NOTES_RANGE_PERSIST_VERSION,
     },
     ai: {
         suggestions: [],
@@ -273,6 +297,7 @@ const baseStore = new BaseStore('crm', {
             sidebarOpen: state.ui.sidebarOpen,
             collapsedPanels: state.ui.collapsedPanels,
             dailyNotesRange: state.ui.dailyNotesRange,
+            dailyNotesRangePersistVersion: state.ui.dailyNotesRangePersistVersion,
         }
     })
 });
@@ -376,8 +401,16 @@ export const CRMStore = {
     setDailyNotesRange({ from, to }) {
         const normalized = normalizeDailyNotesRange(from, to);
         baseStore.setState((s) => ({
-            ui: { ...s.ui, dailyNotesRange: normalized },
+            ui: {
+                ...s.ui,
+                dailyNotesRange: normalized,
+                dailyNotesRangePersistVersion: DAILY_NOTES_RANGE_PERSIST_VERSION,
+            },
         }));
+    },
+
+    defaultDailyNotesRange() {
+        return getCurrentWeekRangeIso();
     },
 
     todayIsoDate() {

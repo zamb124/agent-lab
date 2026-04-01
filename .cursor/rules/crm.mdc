@@ -9,6 +9,8 @@ description: "CRM NetWorkle система управления сущностя
 
 - Тексты **`apps/crm/ui`** — **`this.i18n.t('группа.ключ')`**, namespace по умолчанию **`crm`** (`/crm`), файлы **`core/i18n/translations/{ru,en}/crm.json`**, парность и **`make check-i18n`**.
 - **Мобильный хедер CRM** (`< 768px`): единая строка **`crm-mobile-app-header`** в **`crm-app.js`** — заголовок или поле поиска (иконка поиска + input) в той же линии для **notes / entities / tasks**. Синхрон строки поиска: **`CRMStore.ui.notesPageSearchQuery`**, **`tasksListSearchQuery`**, фильтр **`entities.filters.search`**. Глобальная кнопка «AI» в шелле не используется (анализ заметок — в контексте карточки / модалки).
+- **Daily notes — период по умолчанию:** `CRMStore.ui.dailyNotesRange` при первом заходе и при миграции persist — **текущая календарная неделя (пн–вс, локальная зона)**; `dailyNotesRangePersistVersion === 2` в persist, при отсутствии версии в сохранённом состоянии merge подставляет неделю. Сброс при невалидном выборе в date-picker — снова неделя (`defaultDailyNotesRange`).
+- **Чипы сущностей в блоке сводки** (`daily-notes-page`): если имя из ответа API совпадает (нормализация как у CRM) с `name` сущности из `related_entities` заметок периода, чип — кнопка → `entity-modal`; иначе остаётся нередактируемым `span`.
 - Непереведённый хардкод (после фильтра `//` / `*`): **`uv run python scripts/report_ui_i18n_gaps.py --app crm`**; сводка **`--summary`**.
 - Оболочка приложения и заголовки экранов: **`app_shell`** (в т.ч. **`app_shell.views.*`**, **`app_shell.sidebar.*`**); навигация дублирует **`nav.*`**, **`pages.*`**, **`filters.all`** где строки совпадают.
 
