@@ -329,6 +329,8 @@ export const MyAppStore = {
 
 У `BaseStore` для persist доступны `partialize` и опционально `persistMerge(persistedState, currentState)` (кастомное слияние, например миграция полей в `ui`). Именованный экспорт `deepMerge` из `BaseStore.js` можно использовать внутри `persistMerge`.
 
+Devtools: в **`core/frontend/static/assets/js/zustand-bundle.js`** обработчик сообщений Redux DevTools (подписка `connection.subscribe`) защищён от некорректных кадров расширения: `try/catch`, проверка `action` после `JSON.parse`, тип **`DISPATCH.payload`**, ветка **`IMPORT_STATE`** без `nextLiftedState` / `computedStates`.
+
 ---
 
 ## Подписка на Store в Компонентах
