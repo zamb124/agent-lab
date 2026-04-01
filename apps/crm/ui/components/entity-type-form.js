@@ -17,19 +17,6 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import { COLOR_PALETTE } from '@platform/lib/utils/color-palette.js';
 
-const HINTS = {
-    typeId: 'Технический идентификатор типа (snake_case). После создания не меняется.',
-    typeName: 'Отображаемое имя типа для пользователя в интерфейсе.',
-    parentType: 'Базовый тип поведения: note (заметки) или task (задачи).',
-    typeIcon: 'Иконка типа в карточках и списках.',
-    typeColor: 'Цветовой акцент типа. Можно оставить пустым.',
-    typeDescription: 'Что хранится в этом типе, какие атрибуты обязательны.',
-    typePrompt: 'Подсказка для AI-извлечения данных под этот тип.',
-    flagIsEvent: 'Если включено, сущности этого типа трактуются как события (встреча, звонок).',
-    flagCheckDuplicates: 'Если включено, система будет проверять дубликаты при создании.',
-    flagContextAnchor: 'Сделки, лиды и подобные типы — вокруг них можно группировать заметки (контекст на графе).',
-};
-
 export class EntityTypeForm extends PlatformElement {
     static properties = {
         mode: { type: String },
@@ -138,12 +125,12 @@ export class EntityTypeForm extends PlatformElement {
     _onSave() {
         const typeId = this.mode === 'create' ? (this.draft.type_id || '').trim() : this.typeId;
         if (!typeId) {
-            this.error('type_id обязателен');
+            this.error(this.i18n.t('entity_type_form.err_type_id_required'));
             return;
         }
         const name = (this.draft.name || '').trim();
         if (!name) {
-            this.error('Название обязательно');
+            this.error(this.i18n.t('entity_type_form.err_name_required'));
             return;
         }
         this.dispatchEvent(new CustomEvent('type-saved', {
@@ -172,7 +159,9 @@ export class EntityTypeForm extends PlatformElement {
 
     render() {
         const isCreate = this.mode === 'create';
-        const title = isCreate ? 'Новый тип сущности' : `Редактирование: ${this.typeId}`;
+        const title = isCreate
+            ? this.i18n.t('entity_type_form.title_create')
+            : this.i18n.t('entity_type_form.title_edit', { id: this.typeId });
         const iconOptions = this.icon?.availableIcons || [];
 
         return html`
@@ -182,38 +171,40 @@ export class EntityTypeForm extends PlatformElement {
                         <platform-icon name=${isCreate ? 'plus' : 'edit'} size="14"></platform-icon>
                         ${title}
                     </div>
-                    <button class="save-btn soft-btn" @click=${this._onCancel}>Отмена</button>
+                    <button class="save-btn soft-btn" @click=${this._onCancel}>${this.i18n.t('cancel', {}, 'common')}</button>
                 </div>
-                ${isCreate ? html`<div class="hint">type_id задается один раз при создании и не меняется.</div>` : html`<div class="hint">type_id неизменяем. Можно редактировать остальные поля.</div>`}
+                ${isCreate
+                    ? html`<div class="hint">${this.i18n.t('entity_type_form.hint_type_id_once')}</div>`
+                    : html`<div class="hint">${this.i18n.t('entity_type_form.hint_type_id_readonly')}</div>`}
                 <div class="form-grid">
                     ${isCreate ? html`
                         <div class="form-group">
                             <label class="form-label label-with-hint">
-                                <span>type_id *</span>
-                                <platform-help-hint strategy="local" label="Справка: type_id" .text=${HINTS.typeId}></platform-help-hint>
+                                <span>${this.i18n.t('entity_type_form.label_type_id')}</span>
+                                <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_type_id')} .text=${this.i18n.t('hints.typeId')}></platform-help-hint>
                             </label>
                             <input class="form-input mono" placeholder="snake_case_id" .value=${this.draft.type_id || ''} @input=${(e) => this._update('type_id', e.target.value)} />
                         </div>
                     ` : html`
                         <div class="form-group">
-                            <label class="form-label">type_id</label>
+                            <label class="form-label">${this.i18n.t('entity_type_form.label_type_id_ro')}</label>
                             <input class="form-input mono" .value=${this.typeId} disabled />
                         </div>
                     `}
                     <div class="form-group">
                         <label class="form-label label-with-hint">
-                            <span>Название *</span>
-                            <platform-help-hint strategy="local" label="Справка: имя типа" .text=${HINTS.typeName}></platform-help-hint>
+                            <span>${this.i18n.t('entity_type_form.label_name')}</span>
+                            <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_type_name')} .text=${this.i18n.t('hints.typeName')}></platform-help-hint>
                         </label>
                         <input class="form-input" .value=${this.draft.name || ''} @input=${(e) => this._update('name', e.target.value)} />
                     </div>
                     <div class="form-group">
                         <label class="form-label label-with-hint">
-                            <span>Родительский тип</span>
-                            <platform-help-hint strategy="local" label="Справка: parent_type_id" .text=${HINTS.parentType}></platform-help-hint>
+                            <span>${this.i18n.t('entity_type_form.label_parent')}</span>
+                            <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_parent')} .text=${this.i18n.t('hints.parentType')}></platform-help-hint>
                         </label>
                         <select class="form-select mono" .value=${this.draft.parent_type_id || ''} @change=${(e) => this._update('parent_type_id', e.target.value)}>
-                            <option value="">(без родителя)</option>
+                            <option value="">${this.i18n.t('entity_type_form.parent_none')}</option>
                             <option value="note">note</option>
                             <option value="task">task</option>
                         </select>
@@ -221,8 +212,8 @@ export class EntityTypeForm extends PlatformElement {
                     ${iconOptions.length > 0 ? html`
                         <div class="form-group">
                             <label class="form-label label-with-hint">
-                                <span>Иконка</span>
-                                <platform-help-hint strategy="local" label="Справка: иконка" .text=${HINTS.typeIcon}></platform-help-hint>
+                                <span>${this.i18n.t('entity_type_form.label_icon')}</span>
+                                <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_icon')} .text=${this.i18n.t('hints.typeIcon')}></platform-help-hint>
                             </label>
                             <platform-icon-picker .icons=${iconOptions} .value=${this.draft.icon || 'folder'} @change=${(e) => this._update('icon', e.detail.value)}></platform-icon-picker>
                         </div>
@@ -230,10 +221,10 @@ export class EntityTypeForm extends PlatformElement {
                     <div class="form-group color-compose-span">
                         <div class="color-compose-row">
                             <div class="color-compose-label-wrap">
-                                <span class="color-compose-label">Цвет</span>
-                                <platform-help-hint strategy="local" label="Справка: цвет" .text=${HINTS.typeColor}></platform-help-hint>
+                                <span class="color-compose-label">${this.i18n.t('entity_type_form.label_color')}</span>
+                                <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_color')} .text=${this.i18n.t('hints.typeColor')}></platform-help-hint>
                             </div>
-                            <div class="etype-color-palette" role="group" aria-label="Палитра">
+                            <div class="etype-color-palette" role="group" aria-label=${this.i18n.t('entity_type_form.palette_aria')}>
                                 ${COLOR_PALETTE.map((entry) => html`
                                     <button
                                         type="button"
@@ -247,33 +238,33 @@ export class EntityTypeForm extends PlatformElement {
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Флаги</label>
+                        <label class="form-label">${this.i18n.t('entity_type_form.label_flags')}</label>
                         <div class="flag-row">
                             <div class="flag-item">
                                 <platform-switch size="sm" label="is_event" .checked=${Boolean(this.draft.is_event)} @change=${(e) => this._update('is_event', Boolean(e.detail.value))}></platform-switch>
-                                <platform-help-hint strategy="local" label="Справка: is_event" .text=${HINTS.flagIsEvent}></platform-help-hint>
+                                <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_is_event')} .text=${this.i18n.t('hints.flagIsEvent')}></platform-help-hint>
                             </div>
                             <div class="flag-item">
                                 <platform-switch size="sm" label="check_duplicates" .checked=${this.draft.check_duplicates !== false} @change=${(e) => this._update('check_duplicates', Boolean(e.detail.value))}></platform-switch>
-                                <platform-help-hint strategy="local" label="Справка: check_duplicates" .text=${HINTS.flagCheckDuplicates}></platform-help-hint>
+                                <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_check_duplicates')} .text=${this.i18n.t('hints.flagCheckDuplicates')}></platform-help-hint>
                             </div>
                             <div class="flag-item">
                                 <platform-switch size="sm" label="is_context_anchor" .checked=${Boolean(this.draft.is_context_anchor)} @change=${(e) => this._update('is_context_anchor', Boolean(e.detail.value))}></platform-switch>
-                                <platform-help-hint strategy="local" label="Справка: якорь контекста" .text=${HINTS.flagContextAnchor}></platform-help-hint>
+                                <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_context_anchor')} .text=${this.i18n.t('hints.flagContextAnchor')}></platform-help-hint>
                             </div>
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label label-with-hint">
-                            <span>Описание</span>
-                            <platform-help-hint strategy="local" label="Справка: описание" .text=${HINTS.typeDescription}></platform-help-hint>
+                            <span>${this.i18n.t('entity_type_form.label_description')}</span>
+                            <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_description')} .text=${this.i18n.t('hints.typeDescription')}></platform-help-hint>
                         </label>
                         <textarea class="form-textarea" .value=${this.draft.description || ''} @input=${(e) => this._update('description', e.target.value)}></textarea>
                     </div>
                     <div class="form-group">
                         <label class="form-label label-with-hint">
-                            <span>Промпт для AI</span>
-                            <platform-help-hint strategy="local" label="Справка: промпт" .text=${HINTS.typePrompt}></platform-help-hint>
+                            <span>${this.i18n.t('entity_type_form.label_ai_prompt')}</span>
+                            <platform-help-hint strategy="local" label=${this.i18n.t('entity_type_form.help_prompt')} .text=${this.i18n.t('hints.typePrompt')}></platform-help-hint>
                         </label>
                         <textarea class="form-textarea" .value=${this.draft.prompt || ''} @input=${(e) => this._update('prompt', e.target.value)}></textarea>
                     </div>
@@ -281,7 +272,11 @@ export class EntityTypeForm extends PlatformElement {
                 <div class="actions">
                     <button class="save-btn" ?disabled=${this.saving} @click=${this._onSave}>
                         <platform-icon name="save" size="14"></platform-icon>
-                        ${this.saving ? 'Сохранение...' : (isCreate ? 'Создать тип' : 'Сохранить тип')}
+                        ${this.saving
+                            ? this.i18n.t('entity_type_form.saving')
+                            : isCreate
+                              ? this.i18n.t('entity_type_form.submit_create')
+                              : this.i18n.t('entity_type_form.submit_save')}
                     </button>
                 </div>
             </div>

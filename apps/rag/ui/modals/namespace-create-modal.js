@@ -91,29 +91,29 @@ export class NamespaceCreateModal extends PlatformModal {
             <div class="modal-overlay" @click=${this._handleClose}>
                 <div class="modal md" @click=${(e) => e.stopPropagation()}>
                     <div class="modal-header">
-                        <h2 class="modal-title">Создать namespace</h2>
+                        <h2 class="modal-title">${this.i18n.t('modals.create_namespace.title')}</h2>
                         <button class="close-button" @click=${this._handleClose}>✕</button>
                     </div>
                     <div class="modal-content">
                         <div class="form">
                             <div class="form-group">
-                                <label class="form-label">Название</label>
+                                <label class="form-label">${this.i18n.t('modals.create_namespace.name_label')}</label>
                                 <input 
                                     class="form-input"
                                     type="text" 
-                                    placeholder="my-namespace"
+                                    placeholder=${this.i18n.t('modals.create_namespace.name_placeholder')}
                                     .value=${this._name}
                                     @input=${this._handleNameChange}
                                 />
                                 <span class="form-hint">
-                                    Уникальное имя для namespace (латиница, цифры, дефисы)
+                                    ${this.i18n.t('modals.create_namespace.name_hint')}
                                 </span>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">Описание</label>
+                                <label class="form-label">${this.i18n.t('modals.create_namespace.description_label')}</label>
                                 <textarea 
                                     class="form-textarea"
-                                    placeholder="Опишите назначение namespace..."
+                                    placeholder=${this.i18n.t('modals.create_namespace.description_placeholder')}
                                     .value=${this._description}
                                     @input=${this._handleDescriptionChange}
                                     rows="3"
@@ -123,14 +123,14 @@ export class NamespaceCreateModal extends PlatformModal {
                     </div>
                     <div class="modal-actions">
                         <button class="btn btn-secondary" @click=${this._handleClose}>
-                            Отмена
+                            ${this.i18n.t('modals.create_namespace.cancel')}
                         </button>
                         <button 
                             class="btn btn-primary" 
                             @click=${this._handleSubmit}
                             ?disabled=${!this._name.trim() || this._loading}
                         >
-                            ${this._loading ? 'Создание...' : 'Создать'}
+                            ${this._loading ? this.i18n.t('modals.create_namespace.creating') : this.i18n.t('modals.create_namespace.create')}
                         </button>
                     </div>
                 </div>

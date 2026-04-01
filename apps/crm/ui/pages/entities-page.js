@@ -701,8 +701,8 @@ export class EntitiesPage extends PlatformElement {
     render() {
         const baseTypes = this._getBaseTypes();
         const statuses = [
-            { id: 'active', label: 'Активные' },
-            { id: 'archived', label: 'Архив' },
+            { id: 'active', label: this.i18n.t('entities_page.status_active') },
+            { id: 'archived', label: this.i18n.t('entities_page.status_archived') },
         ];
 
         const listActive = !this._isMobile || this._mobileTab === 'list';
@@ -717,7 +717,7 @@ export class EntitiesPage extends PlatformElement {
                         @click=${() => this._onMobileTab('list')}
                     >
                         <platform-icon name="list" size="14"></platform-icon>
-                        Список
+                        ${this.i18n.t('entities_page.tab_list')}
                     </button>
                     <button
                         class="mobile-tab ${this._mobileTab === 'card' ? 'active' : ''}"
@@ -726,17 +726,17 @@ export class EntitiesPage extends PlatformElement {
                         ?disabled=${!this._currentEntityId}
                     >
                         <platform-icon name="file" size="14"></platform-icon>
-                        Карточка
+                        ${this.i18n.t('entities_page.tab_card')}
                     </button>
                 </div>
             ` : ''}
 
             ${listActive ? html`
                 <div class="page-toolbar">
-                    ${!this._isMobile ? html`<div class="section-label">Сущности</div>` : ''}
+                    ${!this._isMobile ? html`<div class="section-label">${this.i18n.t('entities.title')}</div>` : ''}
                     <div class="top-row">
                         <div class="title">
-                            Сущности
+                            ${this.i18n.t('entities.title')}
                             <span class="entities-count">(${this._entities.length})</span>
                         </div>
                         <label class="search-box">
@@ -744,12 +744,12 @@ export class EntitiesPage extends PlatformElement {
                             <input
                                 class="search-input"
                                 type="text"
-                                placeholder="Поиск"
+                                placeholder=${this.i18n.t('search', {}, 'common')}
                                 .value=${this._query}
                                 @input=${this._onSearchInput}
                             />
                         </label>
-                        <button class="cta-btn" type="button" @click=${this._onCreateEntity}>Создать</button>
+                        <button class="cta-btn" type="button" @click=${this._onCreateEntity}>${this.i18n.t('create', {}, 'common')}</button>
                     </div>
                     <div class="filters-row">
                         ${baseTypes.map((type) => html`
@@ -775,7 +775,7 @@ export class EntitiesPage extends PlatformElement {
                         ${this._hasActiveFilters() ? html`
                             <button class="clear-filters-btn" type="button" @click=${this._onClearFilters}>
                                 <platform-icon name="close" size="12"></platform-icon>
-                                Сбросить
+                                ${this.i18n.t('filters.clear')}
                             </button>
                         ` : ''}
                     </div>
@@ -786,12 +786,12 @@ export class EntitiesPage extends PlatformElement {
                 <section class="list-panel ${listActive ? 'mobile-active' : ''}">
                     <div class="cards-scroll">
                         ${this._loading ? html`
-                            <div class="empty">Загрузка...</div>
+                            <div class="empty">${this.i18n.t('loading', {}, 'common')}</div>
                         ` : this._entities.length === 0 ? html`
                             <div class="empty">
                                 <platform-icon name="database" size="40"></platform-icon>
-                                <span>Нет сущностей</span>
-                                <span style="font-size: var(--text-sm)">Создайте первую или измените фильтры</span>
+                                <span>${this.i18n.t('entities.empty')}</span>
+                                <span style="font-size: var(--text-sm)">${this.i18n.t('entities_page.empty_filters_hint')}</span>
                             </div>
                         ` : html`
                             <div class="cards-grid">

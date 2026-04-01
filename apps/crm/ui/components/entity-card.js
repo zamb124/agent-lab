@@ -439,7 +439,7 @@ export class EntityCard extends PlatformElement {
         if (typeof request?.user_id === 'string' && request.user_id.trim().length > 0) {
             return request.user_id;
         }
-        return 'Пользователь';
+        return this.i18n.t('entity_card.requester_fallback');
     }
 
     async _loadPendingRequests() {
@@ -551,7 +551,7 @@ export class EntityCard extends PlatformElement {
 
         return html`
             <div class="section">
-                <div class="section-title">Атрибуты</div>
+                <div class="section-title">${this.i18n.t('entities.attributes')}</div>
                 <div class="attributes-grid">
                     ${Object.entries(attributes).map(([key, value]) => html`
                         <div class="attribute-item">
@@ -571,7 +571,7 @@ export class EntityCard extends PlatformElement {
 
         return html`
             <div class="section">
-                <div class="section-title">Связанные сущности</div>
+                <div class="section-title">${this.i18n.t('entity_card.related_entities')}</div>
                 <div class="related-list">
                     ${this._relatedEntities.map(entity => {
                         const typeConfig = this._getEntityTypeConfig(entity);
@@ -605,10 +605,10 @@ export class EntityCard extends PlatformElement {
         if (!this._graphVisible) {
             return html`
                 <div class="section">
-                    <div class="section-title">Граф связей</div>
+                    <div class="section-title">${this.i18n.t('entity_card.graph_section')}</div>
                     <button class="show-graph-btn" type="button" @click=${this._onShowGraph}>
                         <platform-icon name="link" size="16"></platform-icon>
-                        Показать граф связей
+                        ${this.i18n.t('entity_card.show_graph')}
                     </button>
                 </div>
             `;
@@ -616,7 +616,7 @@ export class EntityCard extends PlatformElement {
 
         return html`
             <div class="section">
-                <div class="section-title">Граф связей</div>
+                <div class="section-title">${this.i18n.t('entity_card.graph_section')}</div>
                 <mini-graph-preview
                     .entityId=${this.entityId}
                     .maxDepth=${5}
@@ -633,14 +633,14 @@ export class EntityCard extends PlatformElement {
         }
         return html`
             <div class="section">
-                <div class="section-title">Запросы доступа</div>
+                <div class="section-title">${this.i18n.t('entity_card.access_requests')}</div>
                 ${this._requestsLoading ? html`
                     <div class="request-item">
-                        <div class="request-message">Загрузка запросов...</div>
+                        <div class="request-message">${this.i18n.t('entity_card.requests_loading')}</div>
                     </div>
                 ` : this._pendingAccessRequests.length === 0 ? html`
                     <div class="request-item">
-                        <div class="request-message">Нет ожидающих запросов</div>
+                        <div class="request-message">${this.i18n.t('entity_card.requests_empty')}</div>
                     </div>
                 ` : html`
                     <div class="requests-list">
@@ -648,7 +648,7 @@ export class EntityCard extends PlatformElement {
                             const requestId = this._resolveRequestId(request);
                             const message = request?.message && typeof request.message === 'string'
                                 ? request.message
-                                : 'Без комментария';
+                                : this.i18n.t('entity_card.no_comment');
                             return html`
                                 <div class="request-item">
                                     <div class="request-title">${this._resolveRequesterLabel(request)}</div>
@@ -660,7 +660,7 @@ export class EntityCard extends PlatformElement {
                                             ?disabled=${this._processingRequestId === requestId}
                                             @click=${() => this._rejectRequest(request)}
                                         >
-                                            Отклонить
+                                            ${this.i18n.t('entity_card.request_reject')}
                                         </button>
                                         <button
                                             class="request-btn approve"
@@ -668,7 +668,7 @@ export class EntityCard extends PlatformElement {
                                             ?disabled=${this._processingRequestId === requestId}
                                             @click=${() => this._approveRequest(request)}
                                         >
-                                            Одобрить
+                                            ${this.i18n.t('entity_card.request_approve')}
                                         </button>
                                     </div>
                                 </div>
@@ -685,9 +685,9 @@ export class EntityCard extends PlatformElement {
             return html`
                 <div class="empty-state">
                     <platform-icon name="book-open" size="56"></platform-icon>
-                    <div>Выберите сущность</div>
+                    <div>${this.i18n.t('entity_card.empty_pick_title')}</div>
                     <div style="font-size: var(--text-sm);">
-                        из списка слева
+                        ${this.i18n.t('entity_card.empty_pick_subtitle')}
                     </div>
                 </div>
             `;
@@ -696,7 +696,7 @@ export class EntityCard extends PlatformElement {
         if (this._loading || !this._entity) {
             return html`
                 <div class="empty-state">
-                    <div>Загрузка...</div>
+                    <div>${this.i18n.t('loading', {}, 'common')}</div>
                 </div>
             `;
         }
@@ -726,11 +726,11 @@ export class EntityCard extends PlatformElement {
 
                 <div class="header-actions">
                     ${this._isOwner ? html`
-                        <button class="icon-btn" @click=${this._onEdit} title="Редактировать">
+                        <button class="icon-btn" @click=${this._onEdit} title=${this.i18n.t('edit', {}, 'common')}>
                             <platform-icon name="edit" size="16"></platform-icon>
                         </button>
                     ` : html`
-                        <button class="icon-btn" @click=${this._onRequestAccess} title="Запросить доступ">
+                        <button class="icon-btn" @click=${this._onRequestAccess} title=${this.i18n.t('entity_card.request_access_tooltip')}>
                             <platform-icon name="lock" size="16"></platform-icon>
                         </button>
                     `}
@@ -740,14 +740,14 @@ export class EntityCard extends PlatformElement {
             <div class="content">
                 ${this._entity.description ? html`
                     <div class="section">
-                        <div class="section-title">Описание</div>
+                        <div class="section-title">${this.i18n.t('tasks.description')}</div>
                         <div class="description">${this._entity.description}</div>
                     </div>
                 ` : ''}
 
                 ${this._entity.tags?.length > 0 ? html`
                     <div class="section">
-                        <div class="section-title">Теги</div>
+                        <div class="section-title">${this.i18n.t('tasks.tags')}</div>
                         <div class="tags-list">
                             ${this._entity.tags.map(tag => html`
                                 <span class="tag">${tag}</span>

@@ -548,17 +548,20 @@ export class MiniGraphPreview extends PlatformElement {
         const canIncrease = maxL > 0 && this._displayDepth < maxL;
 
         if (this._loading) {
-            return html`<div style="${boxStyle}" class="mini-empty">Загрузка графа...</div>`;
+            return html`<div style="${boxStyle}" class="mini-empty">${this.i18n.t('graph.mini_loading')}</div>`;
         }
         if (this._error) {
             return html`<div style="${boxStyle}" class="mini-empty">${this._error}</div>`;
         }
         if (!this._loading && this._fetchedNodes.length === 0 && this.entityId) {
-            return html`<div style="${boxStyle}" class="mini-empty">Нет связей</div>`;
+            return html`<div style="${boxStyle}" class="mini-empty">${this.i18n.t('graph.mini_no_edges')}</div>`;
         }
 
         const depthCap = Math.max(maxL, 1);
-        const depthLabel = `Уровень ${this._displayDepth} из ${depthCap}`;
+        const depthLabel = this.i18n.t('graph.mini_depth_level', {
+            current: String(this._displayDepth),
+            max: String(depthCap),
+        });
 
         return html`
             <div style="${boxStyle}">
@@ -566,7 +569,7 @@ export class MiniGraphPreview extends PlatformElement {
                     <button
                         type="button"
                         class="mini-depth-btn"
-                        title="Меньше уровней"
+                        title=${this.i18n.t('graph.mini_depth_less')}
                         ?disabled=${!canDecrease}
                         @click=${this._onDecreaseDepth}
                     >\u2212</button>
@@ -574,7 +577,7 @@ export class MiniGraphPreview extends PlatformElement {
                     <button
                         type="button"
                         class="mini-depth-btn"
-                        title="Больше уровней"
+                        title=${this.i18n.t('graph.mini_depth_more')}
                         ?disabled=${!canIncrease}
                         @click=${this._onIncreaseDepth}
                     >+</button>

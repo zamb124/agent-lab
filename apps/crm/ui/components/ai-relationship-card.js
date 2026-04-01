@@ -1,5 +1,5 @@
 /**
- * AI Relationship Card - Карточка предложенной связи
+ * Карточка предложенной связи (AI).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -141,14 +141,17 @@ export class AIRelationshipCard extends PlatformElement {
         const note = this.draftNote;
         if (note && note.draft_entity_id === draftEntityId) {
             return {
-                name: typeof note.name === 'string' && note.name.trim().length > 0 ? note.name : 'Заметка',
+                name:
+                    typeof note.name === 'string' && note.name.trim().length > 0
+                        ? note.name
+                        : this.i18n.t('ai_relationship.note_default_name'),
                 typeLabel: typeof note.entity_type === 'string' ? note.entity_type : 'note',
             };
         }
         const rows = Array.isArray(this.draftEntities) ? this.draftEntities : [];
         const row = rows.find((e) => e && e.draft_entity_id === draftEntityId);
         if (!row) {
-            throw new Error(`Нет сущности черновика с draft_entity_id=${draftEntityId}`);
+            throw new Error(`Draft entity not found: draft_entity_id=${draftEntityId}`);
         }
         const name = typeof row.name === 'string' && row.name.trim().length > 0 ? row.name : '?';
         const typeLabel = typeof row.entity_type === 'string' ? row.entity_type : '';
@@ -168,7 +171,11 @@ export class AIRelationshipCard extends PlatformElement {
             };
         }
         
-        return { icon: 'link', color: 'var(--text-tertiary)', label: typeId || 'Связь' };
+        return {
+            icon: 'link',
+            color: 'var(--text-tertiary)',
+            label: typeId || this.i18n.t('ai_relationship.relationship_fallback'),
+        };
     }
 
     _resolveIconName(iconName) {
@@ -198,7 +205,11 @@ export class AIRelationshipCard extends PlatformElement {
                         <platform-icon name="${this._resolveIconName(config.icon)}" size="16"></platform-icon>
                     </span>
                     <span class="type-label">${config.label}</span>
-                    <button class="confirm-btn" @click=${this._onConfirm} title="Подтвердить">
+                    <button
+                        class="confirm-btn"
+                        @click=${this._onConfirm}
+                        title=${this.i18n.t('confirm', {}, 'common')}
+                    >
                         <platform-icon name="check" size="12"></platform-icon>
                     </button>
                 </div>

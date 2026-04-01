@@ -266,7 +266,9 @@ export class EntityModal extends PlatformModal {
     }
 
     renderHeader() {
-        return this._isEditing ? 'Редактировать сущность' : 'Новая сущность';
+        return this._isEditing
+            ? this.i18n.t('entity_modal.header_edit')
+            : this.i18n.t('entity_modal.header_create');
     }
 
     _getBaseTypes() {
@@ -335,7 +337,7 @@ export class EntityModal extends PlatformModal {
 
     async _onSave() {
         if (!this._formData.name.trim()) {
-            this.error('Название обязательно');
+            this.error(this.i18n.t('entity_modal.err_name_required'));
             return;
         }
 
@@ -364,16 +366,18 @@ export class EntityModal extends PlatformModal {
 
             if (this._isEditing) {
                 await CRMStore.updateEntity(crmApi, this.entityId, data);
-                this.success('Сущность обновлена');
+                this.success(this.i18n.t('entity_modal.success_updated'));
             } else {
                 await CRMStore.createEntity(crmApi, data);
-                this.success('Сущность создана');
+                this.success(this.i18n.t('entity_modal.success_created'));
             }
 
             this.dispatchEvent(new CustomEvent('saved'));
             this.close();
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка сохранения сущности';
+            const message = error instanceof Error
+                ? error.message
+                : this.i18n.t('entity_modal.err_save');
             this.error(message);
             throw error;
         } finally {
@@ -396,7 +400,7 @@ export class EntityModal extends PlatformModal {
         return html`
             <div class="form-grid">
                 <div class="form-group">
-                    <label class="form-label">Тип</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_type')}</label>
                     ${baseTypes.length > 0 ? html`
                         <div class="type-chips">
                             ${baseTypes.map(type => html`
@@ -411,13 +415,13 @@ export class EntityModal extends PlatformModal {
                             `)}
                         </div>
                     ` : html`
-                        <div class="no-types-message">Загрузка типов...</div>
+                        <div class="no-types-message">${this.i18n.t('entity_modal.loading_types')}</div>
                     `}
                 </div>
 
                 ${subtypes.length > 0 ? html`
                     <div class="form-group">
-                        <label class="form-label">Подтип</label>
+                        <label class="form-label">${this.i18n.t('entity_modal.label_subtype')}</label>
                         <div class="type-chips">
                             ${subtypes.map(type => html`
                                 <button
@@ -434,32 +438,32 @@ export class EntityModal extends PlatformModal {
                 ` : ''}
 
                 <div class="form-group">
-                    <label class="form-label">Название *</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_name')}</label>
                     <input
                         type="text"
                         class="form-input"
-                        placeholder="Введите название"
+                        placeholder=${this.i18n.t('entity_modal.placeholder_name')}
                         .value=${this._formData.name}
                         @input=${this._onNameInput}
                     />
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Описание</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_description')}</label>
                     <textarea
                         class="form-textarea"
                         rows="4"
-                        placeholder="Введите описание"
+                        placeholder=${this.i18n.t('entity_modal.placeholder_description')}
                         .value=${this._formData.description}
                         @input=${this._onDescriptionInput}
                     ></textarea>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Теги</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_tags')}</label>
                     <tag-input
                         .tags=${this._formData.tags}
-                        placeholder="Введите тег и нажмите Enter"
+                        placeholder=${this.i18n.t('tasks.tags_placeholder')}
                         @change=${this._onTagsChange}
                     ></tag-input>
                 </div>
@@ -467,7 +471,7 @@ export class EntityModal extends PlatformModal {
                 ${isTask ? html`
                     <div class="form-row">
                         <div class="form-group">
-                            <label class="form-label">Дедлайн</label>
+                            <label class="form-label">${this.i18n.t('entity_modal.label_due')}</label>
                             <platform-date-picker
                                 class="task-date-picker"
                                 mode="date"
@@ -477,37 +481,37 @@ export class EntityModal extends PlatformModal {
                             ></platform-date-picker>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Приоритет</label>
+                            <label class="form-label">${this.i18n.t('entity_modal.label_priority')}</label>
                             <select
                                 class="form-select"
                                 .value=${this._formData.priority || ''}
                                 @change=${this._onPriorityChange}
                             >
-                                <option value="">Не указан</option>
-                                <option value="low">Низкий</option>
-                                <option value="medium">Средний</option>
-                                <option value="high">Высокий</option>
-                                <option value="urgent">Срочный</option>
+                                <option value="">${this.i18n.t('entity_modal.priority_unset')}</option>
+                                <option value="low">${this.i18n.t('tasks.priority_low')}</option>
+                                <option value="medium">${this.i18n.t('tasks.priority_medium')}</option>
+                                <option value="high">${this.i18n.t('tasks.priority_high')}</option>
+                                <option value="urgent">${this.i18n.t('tasks.priority_urgent')}</option>
                             </select>
                         </div>
                     </div>
                 ` : ''}
 
                 <div class="attributes-section">
-                    <label class="form-label">Дополнительные атрибуты</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_extra_attributes')}</label>
                     ${this._attributeRows.map((row, index) => html`
                         <div class="attribute-row">
                             <input
                                 type="text"
                                 class="form-input"
-                                placeholder="Ключ"
+                                placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
                                 .value=${row.key}
                                 @input=${(e) => this._onAttributeKeyChange(index, e.target.value)}
                             />
                             <input
                                 type="text"
                                 class="form-input"
-                                placeholder="Значение"
+                                placeholder=${this.i18n.t('ai_entity_card.attr_value_placeholder')}
                                 .value=${row.value}
                                 @input=${(e) => this._onAttributeValueChange(index, e.target.value)}
                             />
@@ -525,7 +529,7 @@ export class EntityModal extends PlatformModal {
                         class="add-attribute-btn"
                         @click=${this._onAddAttribute}
                     >
-                        + Добавить атрибут
+                        ${this.i18n.t('entity_modal.add_attribute')}
                     </button>
                 </div>
             </div>
@@ -540,7 +544,7 @@ export class EntityModal extends PlatformModal {
                     class="btn btn-secondary"
                     @click=${() => this.close()}
                 >
-                    Отмена
+                    ${this.i18n.t('cancel', {}, 'common')}
                 </button>
                 <button
                     type="button"
@@ -548,7 +552,9 @@ export class EntityModal extends PlatformModal {
                     ?disabled=${this._saving}
                     @click=${this._onSave}
                 >
-                    ${this._saving ? 'Сохранение...' : 'Сохранить'}
+                    ${this._saving
+                        ? this.i18n.t('entity_modal.saving')
+                        : this.i18n.t('save', {}, 'common')}
                 </button>
             </div>
         `;

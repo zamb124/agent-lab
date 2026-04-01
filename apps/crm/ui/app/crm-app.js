@@ -24,17 +24,6 @@ import '../components/crm-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/layout/platform-island.js';
 
-const VIEW_CONFIG = {
-    notes: { title: 'Ежедневник', actionIcon: 'plus', actionTitle: 'Добавить заметку', searchable: true },
-    entities: { title: 'Сущности', actionIcon: 'plus', actionTitle: 'Создать сущность', searchable: true },
-    graph: { title: 'Граф связей', actionIcon: null },
-    tasks: { title: 'Задачи', actionIcon: 'plus', actionTitle: 'Создать задачу', extraIcon: 'refresh', extraTitle: 'Обновить' },
-    calendar: { title: 'Календарь', actionIcon: null },
-    settings: { title: 'Настройки', actionIcon: null },
-    templates: { title: 'Шаблоны', actionIcon: null },
-    spaces: { title: 'Пространства', actionIcon: null },
-};
-
 export class CRMApp extends PlatformApp {
     static properties = {
         ...PlatformApp.properties,
@@ -483,8 +472,38 @@ export class CRMApp extends PlatformApp {
         return this._renderPlaceholder(this._currentView);
     }
 
+    _getViewConfig() {
+        const v = (id) => this.i18n.t(`app_shell.views.${id}`);
+        return {
+            notes: {
+                title: v('notes.title'),
+                actionIcon: 'plus',
+                actionTitle: v('notes.action_title'),
+                searchable: true,
+            },
+            entities: {
+                title: v('entities.title'),
+                actionIcon: 'plus',
+                actionTitle: v('entities.action_title'),
+                searchable: true,
+            },
+            graph: { title: v('graph.title'), actionIcon: null },
+            tasks: {
+                title: v('tasks.title'),
+                actionIcon: 'plus',
+                actionTitle: v('tasks.action_title'),
+                extraIcon: 'refresh',
+                extraTitle: v('tasks.extra_title'),
+            },
+            calendar: { title: v('calendar.title'), actionIcon: null },
+            settings: { title: v('settings.title'), actionIcon: null },
+            templates: { title: v('templates.title'), actionIcon: null },
+            spaces: { title: v('spaces.title'), actionIcon: null },
+        };
+    }
+
     _renderPlaceholder(view) {
-        const cfg = VIEW_CONFIG[view];
+        const cfg = this._getViewConfig()[view];
         const viewName = cfg?.title || view;
         const icons = {
             graph: 'network',
@@ -499,7 +518,7 @@ export class CRMApp extends PlatformApp {
                     <platform-icon name="${icons[view] || 'folder'}" size="48"></platform-icon>
                 </div>
                 <h2>${viewName}</h2>
-                <p>Раздел в разработке</p>
+                <p>${this.i18n.t('app_shell.under_development')}</p>
             </div>
         `;
     }
@@ -564,7 +583,7 @@ export class CRMApp extends PlatformApp {
             return html`<app-loader></app-loader>`;
         }
 
-        const viewCfg = VIEW_CONFIG[this._currentView] || { title: this._currentView, actionIcon: null };
+        const viewCfg = this._getViewConfig()[this._currentView] || { title: this._currentView, actionIcon: null };
 
         return html`
             <div class="sidebar">
@@ -576,12 +595,12 @@ export class CRMApp extends PlatformApp {
             <div class="main">
                 ${this._isMobile ? html`
                     <div class="mobile-app-header">
-                        <button class="mobile-menu-btn" type="button" @click=${this._openSidebar} title="Меню">
+                        <button class="mobile-menu-btn" type="button" @click=${this._openSidebar} title=${this.i18n.t('app_shell.mobile_menu')}>
                             <platform-icon name="menu" size="18"></platform-icon>
                         </button>
                         <span class="mobile-header-title">${viewCfg.title}</span>
                         ${viewCfg.searchable ? html`
-                            <button class="mobile-menu-btn" type="button" @click=${this._toggleMobileSearch} title="Поиск">
+                            <button class="mobile-menu-btn" type="button" @click=${this._toggleMobileSearch} title=${this.i18n.t('app_shell.mobile_search')}>
                                 <platform-icon name="search" size="16"></platform-icon>
                             </button>
                         ` : ''}
@@ -603,7 +622,7 @@ export class CRMApp extends PlatformApp {
                                 <input
                                     class="mobile-search-input"
                                     type="text"
-                                    placeholder="Поиск..."
+                                    placeholder=${this.i18n.t('search.placeholder')}
                                     autofocus
                                     @input=${this._onMobileSearchInput}
                                 />

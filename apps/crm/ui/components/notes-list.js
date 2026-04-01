@@ -193,7 +193,7 @@ export class NotesList extends CRMPanel {
     constructor() {
         super();
         this.panelId = 'notes-list';
-        this.panelTitle = 'Заметки';
+        this.panelTitle = '';
         this.panelIcon = 'doc-detail';
         
         this.state = this.use(s => ({
@@ -203,7 +203,12 @@ export class NotesList extends CRMPanel {
             loading: s.loading,
         }));
     }
-    
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.panelTitle = this.i18n.t('notes.title');
+    }
+
     _formatDate(dateString) {
         if (!dateString) return '';
         
@@ -214,19 +219,26 @@ export class NotesList extends CRMPanel {
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
         
-        if (diffMins < 1) return 'Только что';
-        if (diffMins < 60) return `${diffMins} мин назад`;
-        if (diffHours < 24) return `${diffHours} ч назад`;
-        if (diffDays < 7) return `${diffDays} дн назад`;
-        
-        return date.toLocaleDateString('ru-RU', { 
-            day: 'numeric', 
-            month: 'short' 
+        if (diffMins < 1) return this.i18n.t('notes_list.time_just_now');
+        if (diffMins < 60) {
+            return this.i18n.t('notes_list.time_mins_ago', { count: String(diffMins) });
+        }
+        if (diffHours < 24) {
+            return this.i18n.t('notes_list.time_hours_ago', { count: String(diffHours) });
+        }
+        if (diffDays < 7) {
+            return this.i18n.t('notes_list.time_days_ago', { count: String(diffDays) });
+        }
+
+        const loc = this.i18n.getCurrentLocale() === 'ru' ? 'ru-RU' : 'en-US';
+        return date.toLocaleDateString(loc, {
+            day: 'numeric',
+            month: 'short',
         });
     }
-    
+
     _getPreview(description) {
-        if (!description) return 'Новая заметка...';
+        if (!description) return this.i18n.t('notes_list.preview_empty');
         return description.substring(0, 100);
     }
     
@@ -238,12 +250,12 @@ export class NotesList extends CRMPanel {
     async _onNewNote() {
         const crmApi = this.services.get('crmApi');
         await CRMStore.createNote(crmApi, {
-            name: 'Новая заметка',
+            name: this.i18n.t('notes_list.new_note_default_name'),
             description: '',
             note_date: getLocalIsoDate(),
         });
-        
-        this.success('Заметка создана');
+
+        this.success(this.i18n.t('notes_list.success_created'));
     }
     
     _onSearchInput(e) {
@@ -253,11 +265,11 @@ export class NotesList extends CRMPanel {
     async _onDeleteNote(e, noteId) {
         e.stopPropagation();
         
-        if (!confirm('Удалить заметку?')) return;
-        
+        if (!confirm(this.i18n.t('notes_list.confirm_delete'))) return;
+
         const crmApi = this.services.get('crmApi');
         await CRMStore.deleteNote(crmApi, noteId);
-        this.success('Заметка удалена');
+        this.success(this.i18n.t('notes_list.success_deleted'));
     }
     
     _filterNotes(notes, searchQuery) {
@@ -275,7 +287,7 @@ export class NotesList extends CRMPanel {
             <button 
                 class="btn-icon primary"
                 @click=${this._onNewNote}
-                title="Новая заметка"
+                title=${this.i18n.t('notes_list.new_note_tooltip')}
             >
                 <platform-icon name="plus" size="16"></platform-icon>
             </button>
@@ -288,7 +300,7 @@ export class NotesList extends CRMPanel {
         if (loading) {
             return html`
                 <div class="loading">
-                    <div>Загрузка заметок...</div>
+                    <div>${this.i18n.t('notes_list.loading_notes')}</div>
                 </div>
             `;
         }
@@ -300,7 +312,7 @@ export class NotesList extends CRMPanel {
                 <input 
                     type="text"
                     class="search-box"
-                    placeholder="Поиск..."
+                    placeholder=${this.i18n.t('notes_list.search_placeholder')}
                     .value=${searchQuery}
                     @input=${this._onSearchInput}
                 />
@@ -312,9 +324,9 @@ export class NotesList extends CRMPanel {
                         <div class="empty-icon">
                             <platform-icon name="book-open" size="56"></platform-icon>
                         </div>
-                        <div>Нет заметок</div>
+                        <div>${this.i18n.t('notes_list.empty')}</div>
                         <div style="margin-top: var(--space-2); font-size: var(--text-sm);">
-                            Создайте первую заметку
+                            ${this.i18n.t('notes_list.empty_cta')}
                         </div>
                     </div>
                 ` : filteredNotes.map(note => html`
@@ -324,7 +336,7 @@ export class NotesList extends CRMPanel {
                     >
                         <button 
                             class="delete-btn" 
-                            title="Удалить"
+                            title=${this.i18n.t('notes_list.delete_tooltip')}
                             @click=${(e) => this._onDeleteNote(e, note.entity_id)}
                         >
                             <platform-icon name="trash" size="14"></platform-icon>

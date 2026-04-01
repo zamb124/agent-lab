@@ -6,16 +6,6 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-switch.js';
 
-const SPACES_HINTS = {
-    namespaceDescription: 'Описание текущего пространства. Изменение описания не влияет на существующие сущности и доступно всегда.',
-    namespaceAllowedTypes: 'Типы, которые можно создавать в этом пространстве. Используемые типы нельзя убрать. Новые типы можно добавить всегда.',
-    typePrompt: 'Подсказка для AI-извлечения и структурирования данных под этот тип.',
-    typeDescription: 'Подробное пояснение типа: что хранится, какие атрибуты обязательны, в каких процессах используется.',
-    crmShowVoiceUi: 'Показывать в форме заметки блок выбора «от чьего имени».',
-    crmDefaultVoice: 'Значение по умолчанию для новой заметки: персона пользователя, без голоса или последний выбор в сессии.',
-    crmDefaultContext: 'Необязательный entity_id якоря контекста по умолчанию для новых заметок в этом пространстве.',
-};
-
 export class SpacesPage extends PlatformElement {
     static properties = {
         _namespaces: { state: true },
@@ -158,6 +148,16 @@ export class SpacesPage extends PlatformElement {
         window.dispatchEvent(new CustomEvent('platform-sidebar-open', { bubbles: true, composed: true }));
     }
 
+    _spaceHints() {
+        return {
+            namespaceDescription: this.i18n.t('spaces_page.hint_namespace_description'),
+            namespaceAllowedTypes: this.i18n.t('spaces_page.hint_namespace_allowed_types'),
+            crmShowVoiceUi: this.i18n.t('spaces_page.hint_crm_voice_ui'),
+            crmDefaultVoice: this.i18n.t('spaces_page.hint_crm_default_voice'),
+            crmDefaultContext: this.i18n.t('spaces_page.hint_crm_default_context'),
+        };
+    }
+
     _resolveAllowedTypes(namespaceName) {
         return this._entityTypes.filter((entityType) => {
             const namespaceIds = Array.isArray(entityType.namespace_ids) ? entityType.namespace_ids : [];
@@ -186,7 +186,7 @@ export class SpacesPage extends PlatformElement {
                 : [];
             this._selectedNamespaceCrmDraft = this._mergeNamespaceCrmDraft(selectedNamespace);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка загрузки настроек пространства';
+            const message = error instanceof Error ? error.message : this.i18n.t('spaces_page.err_load');
             this.error(message);
         }
     }
@@ -266,9 +266,9 @@ export class SpacesPage extends PlatformElement {
             await this._saveNamespaceSettings();
             await CRMStore.loadNamespaceEditability(crmApi, this._selectedNamespaceName);
             this._showCreateForm = false;
-            this.success('Тип создан и добавлен в пространство');
+            this.success(this.i18n.t('spaces_page.success_type_created'));
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка создания типа';
+            const message = error instanceof Error ? error.message : this.i18n.t('spaces_page.err_type_create');
             this.error(message);
         } finally {
             this._createSaving = false;
@@ -286,9 +286,9 @@ export class SpacesPage extends PlatformElement {
             await CRMStore.loadEntityTypes(crmApi);
             this._editingTypeId = null;
             this._editingTypeDraft = null;
-            this.success('Тип обновлен');
+            this.success(this.i18n.t('spaces_page.success_type_updated'));
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка обновления типа';
+            const message = error instanceof Error ? error.message : this.i18n.t('spaces_page.err_type_update');
             this.error(message);
         }
     }
@@ -315,9 +315,9 @@ export class SpacesPage extends PlatformElement {
             };
             const crmApi = this.services.get('crmApi');
             await CRMStore.updateExistingNamespace(crmApi, this._selectedNamespaceName, payload);
-            this.success('Пространство сохранено');
+            this.success(this.i18n.t('spaces_page.success_namespace_saved'));
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка сохранения пространства';
+            const message = error instanceof Error ? error.message : this.i18n.t('spaces_page.err_namespace_save');
             this.error(message);
         }
     }
@@ -328,7 +328,7 @@ export class SpacesPage extends PlatformElement {
             const locked = this._isTypeLocked(entityType.type_id);
             if (locked) {
                 return html`
-                    <button type="button" class="namespace-pill locked active" disabled title="Тип используется сущностями, нельзя убрать">
+                    <button type="button" class="namespace-pill locked active" disabled title=${this.i18n.t('spaces_page.type_locked_title')}>
                         <platform-icon name="lock" size="10"></platform-icon>
                         ${entityType.name}
                     </button>
@@ -375,7 +375,7 @@ export class SpacesPage extends PlatformElement {
     _renderAllowedTypeCards() {
         const allowedTypes = this._resolveAllowedTypes(this._selectedNamespaceName);
         if (allowedTypes.length === 0) {
-            return html`<div class="card-text">Нет разрешенных типов в пространстве</div>`;
+            return html`<div class="card-text">${this.i18n.t('spaces_page.no_allowed_types')}</div>`;
         }
         return html`
             <div class="type-grid">
@@ -386,12 +386,12 @@ export class SpacesPage extends PlatformElement {
                             <div class="type-edit-header">
                                 <div class="type-edit-title">
                                     ${entityType.name}
-                                    ${locked ? html`<platform-icon name="lock" size="12" title="Используется сущностями"></platform-icon>` : ''}
+                                    ${locked ? html`<platform-icon name="lock" size="12" title=${this.i18n.t('spaces_page.type_in_use_title')}></platform-icon>` : ''}
                                 </div>
-                                <button class="save-btn soft-btn" @click=${() => this._startEditType(entityType)}>Редактировать</button>
+                                <button class="save-btn soft-btn" @click=${() => this._startEditType(entityType)}>${this.i18n.t('spaces_page.edit')}</button>
                             </div>
                             <div class="hint mono">${entityType.type_id}</div>
-                            <div class="card-text">${entityType.description || 'Описание не задано'}</div>
+                            <div class="card-text">${entityType.description || this.i18n.t('spaces_page.no_description')}</div>
                         </div>
                     `;
                 })}
@@ -400,23 +400,24 @@ export class SpacesPage extends PlatformElement {
     }
 
     render() {
+        const spaceHints = this._spaceHints();
         return html`
             <div class="container">
                 <div class="section">
                     <button class="back-btn" @click=${() => CRMStore.setCurrentView('settings')}>
                         <platform-icon name="arrow-left" size="14"></platform-icon>
-                        Настройки
+                        ${this.i18n.t('spaces_page.sidebar_title')}
                     </button>
                     <div class="hero">
                         <div>
                             <div class="hero-title">
-                                <button class="menu-btn" @click=${this._openSidebar} title="Открыть меню">
+                                <button class="menu-btn" @click=${this._openSidebar} title=${this.i18n.t('settings_hub.open_menu')}>
                                     <platform-icon name="menu" size="18"></platform-icon>
                                 </button>
                                 <platform-icon name="folder" size="18"></platform-icon>
-                                Настройки пространств
+                                ${this.i18n.t('spaces_page.hero_title')}
                             </div>
-                            <div class="hero-subtitle">Управление пространствами компании: описания, разрешенные типы, редактирование метаданных типов.</div>
+                            <div class="hero-subtitle">${this.i18n.t('spaces_page.hero_subtitle')}</div>
                         </div>
                     </div>
                     <div class="namespace-card-grid">
@@ -426,7 +427,7 @@ export class SpacesPage extends PlatformElement {
                                 @click=${() => this._selectNamespaceForEditing(namespace.name)}
                             >
                                 <div class="namespace-card-title">${namespace.name}</div>
-                                <div class="card-text">${namespace.description || 'Описание не задано'}</div>
+                                <div class="card-text">${namespace.description || this.i18n.t('spaces_page.no_description')}</div>
                                 <div class="chips">
                                     ${this._resolveAllowedTypes(namespace.name).map((entityType) => html`<span class="chip">${entityType.name}</span>`)}
                                 </div>
@@ -439,23 +440,22 @@ export class SpacesPage extends PlatformElement {
                     <div class="section">
                         <div class="section-header">
                             <platform-icon name="edit" size="16"></platform-icon>
-                            Редактор пространства: ${this._selectedNamespaceName}
+                            ${this.i18n.t('spaces_page.editor_title', { name: this._selectedNamespaceName })}
                         </div>
-                        ${this._namespaceEditorLoading ? html`<div class="schema-empty">Загрузка ограничений пространства...</div>` : ''}
+                        ${this._namespaceEditorLoading ? html`<div class="schema-empty">${this.i18n.t('spaces_page.loading_constraints')}</div>` : ''}
                         ${this._selectedNamespaceEditability ? html`
                             <div class="namespace-info">
-                                Сущностей: ${this._selectedNamespaceEditability.entity_count}.
-                                Добавлять новые типы можно всегда.
+                                ${this.i18n.t('spaces_page.entity_count_line', { count: String(this._selectedNamespaceEditability.entity_count) })}
                                 ${this._selectedNamespaceEditability.locked_type_ids?.length > 0
-                                    ? html` Типы с данными (${this._selectedNamespaceEditability.locked_type_ids.join(', ')}) нельзя убрать.`
+                                    ? html`${this.i18n.t('spaces_page.locked_types_suffix', { ids: this._selectedNamespaceEditability.locked_type_ids.join(', ') })}`
                                     : ''}
                             </div>
                         ` : ''}
                         <div class="form-grid">
                             <div class="form-group">
                                 <label class="form-label label-with-hint">
-                                    <span>Описание пространства</span>
-                                    <platform-help-hint strategy="local" label="Справка: описание пространства" .text=${SPACES_HINTS.namespaceDescription}></platform-help-hint>
+                                    <span>${this.i18n.t('spaces_page.label_namespace_description')}</span>
+                                    <platform-help-hint strategy="local" label=${this.i18n.t('spaces_page.help_label_namespace')} .text=${spaceHints.namespaceDescription}></platform-help-hint>
                                 </label>
                                 <textarea
                                     class="form-textarea"
@@ -465,28 +465,28 @@ export class SpacesPage extends PlatformElement {
                             </div>
                             <div class="form-group">
                                 <label class="form-label label-with-hint">
-                                    <span>Разрешенные типы</span>
-                                    <platform-help-hint strategy="local" label="Справка: разрешенные типы" .text=${SPACES_HINTS.namespaceAllowedTypes}></platform-help-hint>
+                                    <span>${this.i18n.t('spaces_page.label_allowed_types')}</span>
+                                    <platform-help-hint strategy="local" label=${this.i18n.t('spaces_page.help_label_allowed_types')} .text=${spaceHints.namespaceAllowedTypes}></platform-help-hint>
                                 </label>
                                 <div class="namespace-selector">
                                     ${this._renderTypePills()}
                                 </div>
                                 ${this._selectedNamespaceEditability ? html`
                                     <div class="chips">
-                                        <span class="chip">Сущностей: ${this._selectedNamespaceEditability.entity_count}</span>
+                                        <span class="chip">${this.i18n.t('spaces_page.chip_entity_count', { count: String(this._selectedNamespaceEditability.entity_count) })}</span>
                                         ${(this._selectedNamespaceEditability.used_type_ids || []).map((typeId) => html`<span class="chip mono">${typeId}</span>`)}
                                     </div>
                                 ` : ''}
                             </div>
                             <div class="form-group">
                                 <label class="form-label label-with-hint">
-                                    <span>CRM: заметки</span>
-                                    <platform-help-hint strategy="local" label="Справка: голос заметки" .text=${SPACES_HINTS.crmShowVoiceUi}></platform-help-hint>
+                                    <span>${this.i18n.t('spaces_page.crm_notes_block')}</span>
+                                    <platform-help-hint strategy="local" label=${this.i18n.t('spaces_page.help_label_voice')} .text=${spaceHints.crmShowVoiceUi}></platform-help-hint>
                                 </label>
                                 <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;">
                                     <platform-switch
                                         size="sm"
-                                        label="Показывать выбор голоса"
+                                        label=${this.i18n.t('spaces_page.toggle_voice_label')}
                                         .checked=${Boolean(this._selectedNamespaceCrmDraft.show_note_voice_ui)}
                                         @change=${(e) => this._updateNamespaceCrmDraft('show_note_voice_ui', Boolean(e.detail.value))}
                                     ></platform-switch>
@@ -494,8 +494,8 @@ export class SpacesPage extends PlatformElement {
                             </div>
                             <div class="form-group">
                                 <label class="form-label label-with-hint">
-                                    <span>Голос по умолчанию</span>
-                                    <platform-help-hint strategy="local" label="Справка: дефолт голоса" .text=${SPACES_HINTS.crmDefaultVoice}></platform-help-hint>
+                                    <span>${this.i18n.t('spaces_page.default_voice')}</span>
+                                    <platform-help-hint strategy="local" label=${this.i18n.t('spaces_page.help_label_default_voice')} .text=${spaceHints.crmDefaultVoice}></platform-help-hint>
                                 </label>
                                 <select
                                     class="form-input"
@@ -503,19 +503,19 @@ export class SpacesPage extends PlatformElement {
                                     .value=${this._selectedNamespaceCrmDraft.default_note_voice}
                                     @change=${(e) => this._updateNamespaceCrmDraft('default_note_voice', e.target.value)}
                                 >
-                                    <option value="self">Я (персона пользователя)</option>
-                                    <option value="none">Без голоса</option>
-                                    <option value="last">Последний выбор</option>
+                                    <option value="self">${this.i18n.t('spaces_page.voice_self')}</option>
+                                    <option value="none">${this.i18n.t('spaces_page.voice_none')}</option>
+                                    <option value="last">${this.i18n.t('spaces_page.voice_last')}</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label class="form-label label-with-hint">
-                                    <span>Контекст по умолчанию (entity_id)</span>
-                                    <platform-help-hint strategy="local" label="Справка: якорь по умолчанию" .text=${SPACES_HINTS.crmDefaultContext}></platform-help-hint>
+                                    <span>${this.i18n.t('spaces_page.default_context_label')}</span>
+                                    <platform-help-hint strategy="local" label=${this.i18n.t('spaces_page.help_label_context')} .text=${spaceHints.crmDefaultContext}></platform-help-hint>
                                 </label>
                                 <input
                                     class="form-input mono"
-                                    placeholder="опционально"
+                                    placeholder=${this.i18n.t('spaces_page.optional_placeholder')}
                                     .value=${this._selectedNamespaceCrmDraft.default_context_entity_id}
                                     @input=${(e) => this._updateNamespaceCrmDraft('default_context_entity_id', e.target.value)}
                                 />
@@ -523,7 +523,7 @@ export class SpacesPage extends PlatformElement {
                         </div>
                         <button class="save-btn" ?disabled=${this._namespaceEditorSaving} @click=${this._saveNamespaceSettings}>
                             <platform-icon name="save" size="14"></platform-icon>
-                            ${this._namespaceEditorSaving ? 'Сохранение...' : 'Сохранить пространство'}
+                            ${this._namespaceEditorSaving ? this.i18n.t('entity_modal.saving') : this.i18n.t('spaces_page.save_namespace')}
                         </button>
                     </div>
 
@@ -531,21 +531,21 @@ export class SpacesPage extends PlatformElement {
                         <div class="section-header" style="justify-content: space-between;">
                             <div style="display: inline-flex; align-items: center; gap: var(--space-2);">
                                 <platform-icon name="list" size="16"></platform-icon>
-                                Типы в пространстве
+                                ${this.i18n.t('spaces_page.types_in_space')}
                             </div>
                             ${!this._showCreateForm ? html`
                                 <button class="save-btn" @click=${this._openCreateForm}>
                                     <platform-icon name="plus" size="14"></platform-icon>
-                                    Добавить тип
+                                    ${this.i18n.t('spaces_page.add_type')}
                                 </button>
                             ` : ''}
                         </div>
-                        <div class="hint">Можно редактировать название, описание и промпт. Идентификатор (type_id) неизменяем.</div>
+                        <div class="hint">${this.i18n.t('spaces_page.types_hint')}</div>
                         ${this._renderCreateForm()}
                         ${this._renderAllowedTypeCards()}
                         ${this._renderTypeEditor()}
                     </div>
-                ` : html`<div class="section"><div class="card-text">Выберите пространство для редактирования</div></div>`}
+                ` : html`<div class="section"><div class="card-text">${this.i18n.t('spaces_page.pick_space')}</div></div>`}
             </div>
         `;
     }

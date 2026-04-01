@@ -5,6 +5,12 @@ description: "CRM NetWorkle система управления сущностя
 
 # CRM Service - Правила
 
+## UI: i18n
+
+- Тексты **`apps/crm/ui`** — **`this.i18n.t('группа.ключ')`**, namespace по умолчанию **`crm`** (`/crm`), файлы **`core/i18n/translations/{ru,en}/crm.json`**, парность и **`make check-i18n`**.
+- Непереведённый хардкод (после фильтра `//` / `*`): **`uv run python scripts/report_ui_i18n_gaps.py --app crm`**; сводка **`--summary`**.
+- Оболочка приложения и заголовки экранов: **`app_shell`** (в т.ч. **`app_shell.views.*`**, **`app_shell.sidebar.*`**); навигация дублирует **`nav.*`**, **`pages.*`**, **`filters.all`** где строки совпадают.
+
 ## Назначение сервиса
 
 `NetWorkle/CRM` — универсальный движок рабочих пространств компании.

@@ -45,7 +45,7 @@ export class NoteGraphModal extends PlatformModal {
     }
 
     renderHeader() {
-        return 'Граф связей';
+        return this.i18n.t('entity_card.graph_section');
     }
 
     renderBody() {

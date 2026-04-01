@@ -652,7 +652,7 @@ export class MessageBubble extends PlatformElement {
             .msg-text {
                 font-size: var(--text-base);
                 color: var(--text-primary);
-                /* pre-wrap в колонке flex раздувает блок по высоте; pre-line сохраняет \n из текста */
+                /* pre-wrap in flex column inflates height; pre-line keeps line breaks */
                 white-space: pre-line;
                 overflow-wrap: anywhere;
                 word-break: normal;

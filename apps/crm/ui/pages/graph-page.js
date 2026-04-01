@@ -607,7 +607,7 @@ export class GraphPage extends PlatformElement {
         this._overviewSeedEntityIds = [];
         this._showSidePanel = false;
         this._canvasPathState = 'idle';
-        this._canvasPathHint = 'Режим обзора';
+        this._canvasPathHint = this.i18n.t('graph_page.hint_browse');
         this._labelMode = 'adaptive';
         this._timelineStartPercent = 0;
         this._timelineEndPercent = 100;
@@ -999,7 +999,7 @@ export class GraphPage extends PlatformElement {
         this._hideContextMenu();
         this._pathSourceId = nodeId;
         this._canvasPathState = 'pick_target';
-        this._canvasPathHint = 'Кликни на вторую сущность (target)';
+        this._canvasPathHint = this.i18n.t('graph_page.hint_click_target');
         this._viewMode = 'path';
     }
 
@@ -1030,7 +1030,7 @@ export class GraphPage extends PlatformElement {
             this._timelineReloadTimer = null;
             this._loadGraphData().catch((error) => {
                 const message = error instanceof Error ? error.message : String(error);
-                this.error(`Ошибка таймлайна: ${message}`);
+                this.error(this.i18n.t('graph_page.err_timeline', { message }));
             });
         }, 220);
     }
@@ -1071,7 +1071,7 @@ export class GraphPage extends PlatformElement {
         this._viewMode = 'influence';
         this._defaultOverviewActive = true;
         this._canvasPathState = 'idle';
-        this._canvasPathHint = 'Режим обзора';
+        this._canvasPathHint = this.i18n.t('graph_page.hint_browse');
         this._shortestPathEdges = [];
         await this._rebuildGraphByMode();
     }
@@ -1123,7 +1123,7 @@ export class GraphPage extends PlatformElement {
 
     _startCanvasPathPicking() {
         this._canvasPathState = 'pick_source';
-        this._canvasPathHint = 'Кликни на первую сущность (source)';
+        this._canvasPathHint = this.i18n.t('graph_page.hint_click_source');
         this._viewMode = 'path';
         this._entitySearchQuery = '';
         this._shortestPathEdges = [];
@@ -1134,7 +1134,7 @@ export class GraphPage extends PlatformElement {
 
     async _resetCanvasPathPicking() {
         this._canvasPathState = 'idle';
-        this._canvasPathHint = 'Режим обзора';
+        this._canvasPathHint = this.i18n.t('graph_page.hint_browse');
         this._pathSourceId = '';
         this._pathTargetId = '';
         this._shortestPathEdges = [];
@@ -1143,7 +1143,7 @@ export class GraphPage extends PlatformElement {
 
     async _swapCanvasPathEndpoints() {
         if (!this._pathSourceId || !this._pathTargetId) {
-            throw new Error('Нужно выбрать source и target');
+            throw new Error('Select source and target');
         }
         const sourceId = this._pathSourceId;
         this._pathSourceId = this._pathTargetId;
@@ -1182,25 +1182,25 @@ export class GraphPage extends PlatformElement {
             this._pathSourceId = node.id;
             this._pathTargetId = '';
             this._canvasPathState = 'pick_target';
-            this._canvasPathHint = 'Кликни на вторую сущность (target)';
+            this._canvasPathHint = this.i18n.t('graph_page.hint_click_target');
             return;
         }
         if (this._canvasPathState === 'pick_target') {
             if (node.id === this._pathSourceId) {
-                this._canvasPathHint = 'Выбери другую сущность для target';
-                this.warning('Source и target должны быть разными');
+                this._canvasPathHint = this.i18n.t('graph_page.hint_pick_other_target');
+                this.warning(this.i18n.t('graph_page.warn_source_target_same'));
                 return;
             }
             this._pathTargetId = node.id;
             this._canvasPathState = 'built';
-            this._canvasPathHint = 'Маршрут построен';
+            this._canvasPathHint = this.i18n.t('graph_page.hint_route_built');
             this._buildPathGraph().catch((error) => {
                 const message = error instanceof Error ? error.message : String(error);
-                this.error(`Ошибка построения маршрута: ${message}`);
+                this.error(this.i18n.t('graph_page.err_path_build', { message }));
             });
             return;
         }
-        this._canvasPathHint = 'Режим обзора';
+        this._canvasPathHint = this.i18n.t('graph_page.hint_browse');
     }
 
 
@@ -1279,11 +1279,11 @@ export class GraphPage extends PlatformElement {
             const result = await executor();
             this._backendOperationResult = JSON.stringify(result, null, 2);
             await this._loadGraphData();
-            this.success(`Выполнено: ${actionLabel}`);
+            this.success(this.i18n.t('graph_page.success_action', { action: actionLabel }));
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             this._backendOperationResult = `Error: ${message}`;
-            this.error(`Ошибка операции ${actionLabel}: ${message}`);
+            this.error(this.i18n.t('graph_page.err_operation_named', { action: actionLabel, message }));
         } finally {
             this._backendLoading = false;
         }
@@ -1724,8 +1724,8 @@ export class GraphPage extends PlatformElement {
         const undirectedExists = response.undirected_exists === true && response.undirected_path.length > 0;
         if (!directedExists && !undirectedExists) {
             this._shortestPathEdges = [];
-            this._canvasPathHint = 'Маршрут не найден';
-            this.warning(`Маршрут не найден: ${this._pathSourceId} -> ${this._pathTargetId}`);
+            this._canvasPathHint = this.i18n.t('graph_page.hint_route_not_found');
+            this.warning(this.i18n.t('graph_page.warn_path_not_found', { source: this._pathSourceId, target: this._pathTargetId }));
             return;
         }
         const mergedPathEdges = this._mergePathEdgesByKind(response.edges, response.undirected_edges);
@@ -1758,7 +1758,7 @@ export class GraphPage extends PlatformElement {
         this._graphNodes = nodes;
         this._graphEdges = mergedPathEdges;
         this._canvasPathState = 'built';
-        this._canvasPathHint = 'Маршруты построены: directed + undirected';
+        this._canvasPathHint = this.i18n.t('graph_page.hint_routes_dual');
     }
 
     _onOpenEntity(entityId) {
@@ -1777,7 +1777,7 @@ export class GraphPage extends PlatformElement {
         }
         if (this._viewMode !== 'path') {
             this._canvasPathState = 'idle';
-            this._canvasPathHint = 'Режим обзора';
+            this._canvasPathHint = this.i18n.t('graph_page.hint_browse');
         }
         this._rebuildGraphByMode();
     }
@@ -1828,10 +1828,10 @@ export class GraphPage extends PlatformElement {
         }
         const snapshot = this._getVisibleGraphSnapshot();
         if (snapshot.isEmpty) {
-            this.warning('По фильтру ничего не найдено');
+            this.warning(this.i18n.t('graph_page.warn_filter_empty'));
             return;
         }
-        this.success(`Отфильтровано узлов: ${snapshot.nodes.length}`);
+        this.success(this.i18n.t('graph_page.success_filtered', { count: String(snapshot.nodes.length) }));
     }
 
     _getBackendOperations() {
@@ -1930,11 +1930,11 @@ export class GraphPage extends PlatformElement {
             const result = await method.apply(this.crmApi, parsedArgs);
             this._backendOperationResult = JSON.stringify(result, null, 2);
             await this._loadGraphData();
-            this.success(`Операция выполнена: ${operation.label}`);
+            this.success(this.i18n.t('graph_page.success_operation', { label: operation.label }));
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             this._backendOperationResult = `Error: ${message}`;
-            this.error(`Ошибка операции: ${message}`);
+            this.error(this.i18n.t('graph_page.err_operation', { message }));
         } finally {
             this._backendLoading = false;
         }
@@ -1969,21 +1969,21 @@ export class GraphPage extends PlatformElement {
         const entityTypeColors = this._getNamespaceEntityTypeColors();
         const relTypeColors = this._getRelationshipTypeColors();
         const toolbarActions = [
-            { id: 'fit', label: 'Вписать граф' },
-            { id: 'path_mode', label: 'Режим выбора маршрута' },
-            { id: 'swap_path', label: 'Поменять source/target' },
-            { id: 'reset_path', label: 'Сбросить маршрут' },
-            { id: 'depth_plus', label: 'Увеличить глубину' },
-            { id: 'depth_minus', label: 'Уменьшить глубину' },
-            { id: 'filter_rel_type', label: 'Фильтр по типу связи' },
-            { id: 'labels_mode', label: 'Переключить режим лейблов' },
-            { id: 'reset_view', label: 'Сбросить вид' },
+            { id: 'fit', label: this.i18n.t('graph_page.toolbar_fit') },
+            { id: 'path_mode', label: this.i18n.t('graph_page.toolbar_path_mode') },
+            { id: 'swap_path', label: this.i18n.t('graph_page.toolbar_swap') },
+            { id: 'reset_path', label: this.i18n.t('graph_page.toolbar_reset_path') },
+            { id: 'depth_plus', label: this.i18n.t('graph_page.toolbar_depth_plus') },
+            { id: 'depth_minus', label: this.i18n.t('graph_page.toolbar_depth_minus') },
+            { id: 'filter_rel_type', label: this.i18n.t('graph_page.toolbar_filter_rel_type') },
+            { id: 'labels_mode', label: this.i18n.t('graph_page.toolbar_labels_mode') },
+            { id: 'reset_view', label: this.i18n.t('graph_page.toolbar_reset_view') },
         ];
         const toolbarToggles = [
-            { id: 'search', label: 'Показать/скрыть поиск', active: this._panelVisibility.search },
-            { id: 'timeline', label: 'Показать/скрыть timeline', active: this._panelVisibility.timeline },
-            { id: 'legend', label: 'Показать/скрыть легенду', active: this._panelVisibility.legend },
-            { id: 'meta', label: 'Показать/скрыть статистику', active: this._panelVisibility.meta },
+            { id: 'search', label: this.i18n.t('graph_page.panel_toggle_search'), active: this._panelVisibility.search },
+            { id: 'timeline', label: this.i18n.t('graph_page.panel_toggle_timeline'), active: this._panelVisibility.timeline },
+            { id: 'legend', label: this.i18n.t('graph_page.panel_toggle_legend'), active: this._panelVisibility.legend },
+            { id: 'meta', label: this.i18n.t('graph_page.panel_toggle_meta'), active: this._panelVisibility.meta },
         ];
         return html`
             <div class="canvas-layout">
@@ -2015,7 +2015,7 @@ export class GraphPage extends PlatformElement {
                         .modes=${VIEW_MODES}
                         @search-input=${(e) => { this._entitySearchQuery = e.detail.query; }}
                         @search-clear=${this._clearCanvasSearchFilter}
-                        @mode-change=${(e) => { this._viewMode = e.detail.mode; if (e.detail.mode !== 'influence') { this._defaultOverviewActive = false; } if (e.detail.mode !== 'path') { this._canvasPathState = 'idle'; this._canvasPathHint = 'Режим обзора'; } this._rebuildGraphByMode(); }}
+                        @mode-change=${(e) => { this._viewMode = e.detail.mode; if (e.detail.mode !== 'influence') { this._defaultOverviewActive = false; } if (e.detail.mode !== 'path') { this._canvasPathState = 'idle'; this._canvasPathHint = this.i18n.t('graph_page.hint_browse'); } this._rebuildGraphByMode(); }}
                         @refresh=${this._loadGraphData}
                     ></graph-search-pill>
 
@@ -2029,10 +2029,10 @@ export class GraphPage extends PlatformElement {
                     ></graph-timeline>
 
                     <div class="overlay-card overlay-meta ${this._panelVisibility.meta ? '' : 'panel-hidden'}">
-                        <span class="meta-pill">режим: ${this._viewMode}</span>
-                        <span class="meta-pill">глубина: ${this._maxDepth}</span>
-                        <span class="meta-pill">узлов: ${visibleGraph.nodes.length}</span>
-                        <span class="meta-pill">связей: ${visibleGraph.edges.length}</span>
+                        <span class="meta-pill">${this.i18n.t('graph_page.meta_mode')} ${this._viewMode}</span>
+                        <span class="meta-pill">${this.i18n.t('graph_page.meta_depth')} ${this._maxDepth}</span>
+                        <span class="meta-pill">${this.i18n.t('graph_page.meta_nodes')} ${visibleGraph.nodes.length}</span>
+                        <span class="meta-pill">${this.i18n.t('graph_page.meta_edges')} ${visibleGraph.edges.length}</span>
                     </div>
 
                     <graph-toolbar
@@ -2053,7 +2053,7 @@ export class GraphPage extends PlatformElement {
                     ></graph-legend>
 
                     ${visibleGraph.isFiltered && visibleGraph.isEmpty ? html`
-                        <div class="empty-search-state">По текущему фильтру совпадений нет</div>
+                        <div class="empty-search-state">${this.i18n.t('graph_page.empty_search')}</div>
                     ` : ''}
 
                     <graph-context-menu
@@ -2072,7 +2072,7 @@ export class GraphPage extends PlatformElement {
                     ></graph-context-menu>
 
                     <details class="advanced-drawer">
-                        <summary>Advanced операции и диагностика</summary>
+                        <summary>${this.i18n.t('graph_page.advanced_summary')}</summary>
                         <div class="advanced-content">
                             <details class="section-collapsible">
                                 <summary>Backend runner</summary>
@@ -2082,16 +2082,16 @@ export class GraphPage extends PlatformElement {
                                     </select>
                                     <textarea class="textarea" .value=${this._backendOperationArgs} @input=${this._onBackendArgsInput}></textarea>
                                     <div class="row">
-                                        <button class="btn btn-secondary" type="button" @click=${this._injectSelectedNodeToArgs}>Подставить selected node</button>
+                                        <button class="btn btn-secondary" type="button" @click=${this._injectSelectedNodeToArgs}>${this.i18n.t('graph_page.inject_selected')}</button>
                                         <button class="btn btn-primary" type="button" ?disabled=${this._backendLoading} @click=${this._runBackendOperation}>
-                                            ${this._backendLoading ? 'Выполняю...' : 'Выполнить'}
+                                            ${this._backendLoading ? this.i18n.t('graph_page.executing') : this.i18n.t('graph_page.execute')}
                                         </button>
                                     </div>
                                 </div>
                             </details>
 
                             <details class="section-collapsible">
-                                <summary>Матрица покрытия API</summary>
+                                <summary>${this.i18n.t('graph_page.api_matrix')}</summary>
                                 <div class="section-collapsible-content">
                                     <div class="small">native: ${coveredNativeCount}, json-only: ${coveredJsonCount}, not-covered: ${uncoveredCount}</div>
                                     <div class="result-box">${coverageMatrix.map((item) => `${item.method} -> ${item.status}`).join('\n')}</div>
@@ -2099,25 +2099,25 @@ export class GraphPage extends PlatformElement {
                             </details>
 
                             <details class="section-collapsible">
-                                <summary>Быстрые native действия</summary>
+                                <summary>${this.i18n.t('graph_page.quick_native')}</summary>
                                 <div class="section-collapsible-content">
                                     <div class="row">
-                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._focusSelectedNode}>Фокус на выбранном узле</button>
-                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._expandFromSelected}>Раскрыть соседей</button>
-                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._isolateSelectedNeighborhood}>Оставить окружение</button>
-                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._revealNextLevel}>Следующий уровень</button>
+                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._focusSelectedNode}>${this.i18n.t('graph_page.focus_selected')}</button>
+                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._expandFromSelected}>${this.i18n.t('graph_page.expand_neighbors')}</button>
+                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._isolateSelectedNeighborhood}>${this.i18n.t('graph_page.isolate_neighborhood')}</button>
+                                        <button class="btn btn-secondary" type="button" ?disabled=${this._backendLoading} @click=${this._revealNextLevel}>${this.i18n.t('graph_page.next_level')}</button>
                                     </div>
                                     <div class="section-grid">
-                                        <input class="toolbar-input" type="text" .value=${this._attachmentEntityId} placeholder="entity_id для вложения" @input=${this._onAttachmentEntityIdInput} />
+                                        <input class="toolbar-input" type="text" .value=${this._attachmentEntityId} placeholder=${this.i18n.t('graph_page.attach_placeholder')} @input=${this._onAttachmentEntityIdInput} />
                                         <input type="file" @change=${this._onAttachmentFileChange} />
                                     </div>
-                                    <button class="btn btn-secondary" type="button" @click=${this._uploadAttachment}>Загрузить вложение</button>
+                                    <button class="btn btn-secondary" type="button" @click=${this._uploadAttachment}>${this.i18n.t('graph_page.upload_attachment')}</button>
                                 </div>
                             </details>
 
                             <div class="section">
-                                <div class="section-title">Результат операции</div>
-                                <div class="result-box">${this._backendOperationResult || 'Пока нет выполненных операций'}</div>
+                                <div class="section-title">${this.i18n.t('graph_page.op_result_title')}</div>
+                                <div class="result-box">${this._backendOperationResult || this.i18n.t('graph_page.op_result_empty')}</div>
                             </div>
                         </div>
                     </details>

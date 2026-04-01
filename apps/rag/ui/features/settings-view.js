@@ -81,16 +81,16 @@ export class SettingsView extends PlatformElement {
         
         return html`
             <page-header 
-                title="Настройки" 
-                subtitle="Конфигурация RAG Service"
+                title=${this.i18n.t('settings_view.title')} 
+                subtitle=${this.i18n.t('settings_view.subtitle')}
             ></page-header>
             
             <div class="settings-grid">
                 <div class="setting-card">
                     <div class="setting-header">
                         <div>
-                            <div class="setting-title">Текущий провайдер</div>
-                            <div class="setting-description">Активный RAG провайдер для хранения документов</div>
+                            <div class="setting-title">${this.i18n.t('settings_view.current_provider')}</div>
+                            <div class="setting-description">${this.i18n.t('settings_view.current_provider_desc')}</div>
                         </div>
                     </div>
                     <div class="setting-value">${currentProvider}</div>
@@ -99,26 +99,25 @@ export class SettingsView extends PlatformElement {
                 <div class="setting-card">
                     <div class="setting-header">
                         <div>
-                            <div class="setting-title">Использование</div>
-                            <div class="setting-description">Текущее использование ресурсов</div>
+                            <div class="setting-title">${this.i18n.t('settings_view.usage')}</div>
+                            <div class="setting-description">${this.i18n.t('settings_view.usage_desc')}</div>
                         </div>
                     </div>
                     <div style="display: flex; gap: var(--space-4); margin-top: var(--space-3);">
                         <div>
-                            <div class="setting-description">Страницы</div>
+                            <div class="setting-description">${this.i18n.t('settings_view.pages')}</div>
                             <div class="setting-value">${usage.pages} / ${usage.maxPages}</div>
                         </div>
                         <div>
-                            <div class="setting-description">Запросы</div>
+                            <div class="setting-description">${this.i18n.t('settings_view.queries')}</div>
                             <div class="setting-value">${usage.retrievals} / ${usage.maxRetrievals}</div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="info-box">
-                    <strong>О RAG Service</strong><br/>
-                    Retrieval Augmented Generation (RAG) позволяет использовать ваши документы для улучшения ответов AI.
-                    Документы разбиваются на части, векторизуются и сохраняются для быстрого семантического поиска.
+                    <strong>${this.i18n.t('settings_view.about_title')}</strong><br/>
+                    ${this.i18n.t('settings_view.about_text')}
                 </div>
             </div>
         `;

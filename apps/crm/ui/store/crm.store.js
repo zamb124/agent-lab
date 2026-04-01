@@ -646,7 +646,7 @@ export const CRMStore = {
                 let noteRow = await crmApi.getEntity(noteId);
                 const serverDraft = noteRow.attributes?.ai_analysis_draft;
                 if (!serverDraft || typeof serverDraft.draft_version !== 'number') {
-                    throw new Error('Сервер не сохранил черновик analyze: ожидается attributes.ai_analysis_draft с draft_version');
+                    throw new Error('Server did not persist analyze draft: expected attributes.ai_analysis_draft with draft_version');
                 }
 
                 if (noteSummaryText.length > 0) {
@@ -659,7 +659,7 @@ export const CRMStore = {
 
                 const draftSnapshot = noteRow.attributes?.ai_analysis_draft;
                 if (!draftSnapshot || typeof draftSnapshot.draft_version !== 'number') {
-                    throw new Error('После обновления заметки потерян ai_analysis_draft');
+                    throw new Error('ai_analysis_draft missing after note update');
                 }
 
                 baseStore.setState((s) => ({
@@ -729,7 +729,7 @@ export const CRMStore = {
             throw new Error('AI draft is not available for this note');
         }
         if (typeof draft.draft_version !== 'number') {
-            throw new Error('Некорректный черновик: ожидается draft_version (серверная схема)');
+            throw new Error('Invalid draft: expected draft_version (server schema)');
         }
         const draftEntities = Array.isArray(draft.entities) ? draft.entities : [];
         const draftRelationships = Array.isArray(draft.relationships) ? draft.relationships : [];
@@ -793,7 +793,7 @@ export const CRMStore = {
                 continue;
             }
             if (typeof s.draft_entity_id !== 'string' || s.draft_entity_id.trim().length === 0) {
-                throw new Error('У каждой сущности черновика должен быть draft_entity_id');
+                throw new Error('Each draft entity must have draft_entity_id');
             }
             if (s.dedup_action === 'merge' && typeof s.dedup_existing_id === 'string' && s.dedup_existing_id.trim().length > 0) {
                 map.set(s.draft_entity_id, s.dedup_existing_id.trim());
@@ -855,7 +855,7 @@ export const CRMStore = {
 
         if (canPatch && isRelationshipSuggestion(item)) {
             if (typeof item.draft_relationship_id !== 'string' || item.draft_relationship_id.trim().length === 0) {
-                throw new Error('У связи нет draft_relationship_id');
+                throw new Error('Relationship suggestion missing draft_relationship_id');
             }
             const patched = await crmApi.patchNoteAnalysisDraft(noteId, {
                 expected_version: draftPack.draft_version,
@@ -1158,13 +1158,13 @@ export const CRMStore = {
         const tid = suggestion.target_draft_entity_id;
         if (typeof sid !== 'string' || sid.trim().length === 0
             || typeof tid !== 'string' || tid.trim().length === 0) {
-            throw new Error('У связи черновика нужны source_draft_entity_id и target_draft_entity_id');
+            throw new Error('Draft relationship requires source_draft_entity_id and target_draft_entity_id');
         }
         const sourceId = map.get(sid);
         const targetId = map.get(tid);
         if (!sourceId || !targetId) {
             throw new Error(
-                'Нельзя создать связь: сначала подтвердите сущности или убедитесь, что для merge задан dedup_existing_id.',
+                'Cannot create relationship: confirm entities first or set dedup_existing_id for merge.',
             );
         }
 
@@ -1254,12 +1254,12 @@ export const CRMStore = {
 
         const currentNoteId = baseStore.state.entities.currentNoteId;
         if (!currentNoteId) {
-            throw new Error('Применение черновика: нужна активная заметка (currentNoteId)');
+            throw new Error('Applying draft requires active note (currentNoteId)');
         }
 
         const draft = baseStore.state.ai.draftByNoteId[currentNoteId];
         if (!draft || typeof draft.draft_version !== 'number') {
-            throw new Error('На сервере нет черновика analyze для этой заметки; выполните analyze с note_id');
+            throw new Error('No analyze draft on server for this note; run analyze with note_id');
         }
 
         const applyResult = await crmApi.applyNoteAnalysisDraft(currentNoteId);

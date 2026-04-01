@@ -1,5 +1,5 @@
 /**
- * AI Entity Card - Карточка предложенной сущности с редактированием
+ * Карточка предложенной сущности (AI) с редактированием полей.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -8,13 +8,6 @@ import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
-
-const PRIORITY_OPTIONS = [
-    { value: 'low', label: 'Низкий' },
-    { value: 'medium', label: 'Средний' },
-    { value: 'high', label: 'Высокий' },
-    { value: 'urgent', label: 'Срочный' },
-];
 
 export class AIEntityCard extends PlatformElement {
     static properties = {
@@ -366,7 +359,20 @@ export class AIEntityCard extends PlatformElement {
             };
         }
         
-        return { icon: 'file', color: 'var(--text-tertiary)', label: baseType || 'Сущность' };
+        return {
+            icon: 'file',
+            color: 'var(--text-tertiary)',
+            label: baseType || this.i18n.t('ai_entity_card.entity_fallback'),
+        };
+    }
+
+    _getPriorityOptions() {
+        return [
+            { value: 'low', label: this.i18n.t('tasks.priority_low') },
+            { value: 'medium', label: this.i18n.t('tasks.priority_medium') },
+            { value: 'high', label: this.i18n.t('tasks.priority_high') },
+            { value: 'urgent', label: this.i18n.t('tasks.priority_urgent') },
+        ];
     }
 
     _getSubtypeOptions() {
@@ -437,20 +443,20 @@ export class AIEntityCard extends PlatformElement {
     _getDedupBadge() {
         const action = this.suggestion.dedup_action;
         const confidence = this.suggestion.dedup_confidence;
-        
+
         if (action === 'merge') {
             const confidencePercent = Math.round((confidence || 0) * 100);
             return {
                 class: 'existing',
-                label: 'Existing',
-                confidence: confidencePercent
+                label: this.i18n.t('ai_entity_card.dedup_merge'),
+                confidence: confidencePercent,
             };
         }
-        
+
         return {
             class: 'new',
-            label: 'New',
-            confidence: null
+            label: this.i18n.t('ai_entity_card.dedup_new'),
+            confidence: null,
         };
     }
 
@@ -461,6 +467,7 @@ export class AIEntityCard extends PlatformElement {
         const subtypeOptions = this._getSubtypeOptions();
         const dedupBadge = this._getDedupBadge();
         const isUpdate = this.suggestion.dedup_action === 'merge';
+        const priorityOptions = this._getPriorityOptions();
 
         return html`
             <div class="card">
@@ -478,7 +485,12 @@ export class AIEntityCard extends PlatformElement {
                     ${this.suggestion.entity_subtype ? html`
                         <span class="type-badge">${this.suggestion.entity_subtype}</span>
                     ` : ''}
-                    <button type="button" class="confirm-btn" @click=${this._onConfirm} title="${isUpdate ? 'Обновить' : 'Создать'}">
+                    <button
+                        type="button"
+                        class="confirm-btn"
+                        @click=${this._onConfirm}
+                        title="${isUpdate ? this.i18n.t('ai_entity_card.update') : this.i18n.t('ai_entity_card.create')}"
+                    >
                         <platform-icon name="${isUpdate ? 'arrow-up' : 'check'}" size="14"></platform-icon>
                     </button>
                 </div>
@@ -486,40 +498,41 @@ export class AIEntityCard extends PlatformElement {
                 <div class="card-body">
                     ${isUpdate && this.suggestion.dedup_existing_name ? html`
                         <div class="existing-info">
-                            Будет обновлено: <strong>${this.suggestion.dedup_existing_name}</strong>
+                            ${this.i18n.t('ai_entity_card.will_update_prefix')}
+                            <strong>${this.suggestion.dedup_existing_name}</strong>
                         </div>
                     ` : ''}
 
                     <div class="field-group">
-                        <label class="field-label">Название</label>
+                        <label class="field-label">${this.i18n.t('entities.name')}</label>
                         <input
                             type="text"
                             class="field-input"
                             .value=${this.suggestion.name || ''}
                             @input=${(e) => this._onFieldChange('name', e)}
-                            placeholder="Введите название"
+                            placeholder=${this.i18n.t('ai_entity_card.name_placeholder')}
                         />
                     </div>
 
                     <div class="field-group">
-                        <label class="field-label">Описание</label>
+                        <label class="field-label">${this.i18n.t('tasks.description')}</label>
                         <textarea
                             class="field-input field-textarea"
                             .value=${this.suggestion.description || ''}
                             @input=${(e) => this._onFieldChange('description', e)}
-                            placeholder="Описание..."
+                            placeholder=${this.i18n.t('ai_entity_card.description_placeholder')}
                         ></textarea>
                     </div>
 
                     ${isNote && subtypeOptions.length > 0 ? html`
                         <div class="field-group">
-                            <label class="field-label">Подтип</label>
+                            <label class="field-label">${this.i18n.t('ai_entity_card.subtype_label')}</label>
                             <select
                                 class="field-input field-select"
                                 .value=${this.suggestion.entity_subtype || ''}
                                 @change=${(e) => this._onFieldChange('entity_subtype', e)}
                             >
-                                <option value="">Без подтипа</option>
+                                <option value="">${this.i18n.t('ai_entity_card.no_subtype')}</option>
                                 ${subtypeOptions.map(opt => html`
                                     <option value=${opt.value}>${opt.label}</option>
                                 `)}
@@ -530,7 +543,7 @@ export class AIEntityCard extends PlatformElement {
                     <div class="row">
                         ${isNote ? html`
                             <div class="field-group">
-                                <label class="field-label">Дата</label>
+                                <label class="field-label">${this.i18n.t('notes.date')}</label>
                                 <platform-date-picker
                                     class="field-input"
                                     mode="date"
@@ -543,7 +556,7 @@ export class AIEntityCard extends PlatformElement {
 
                         ${isTask ? html`
                             <div class="field-group">
-                                <label class="field-label">Дедлайн</label>
+                                <label class="field-label">${this.i18n.t('tasks.due_date')}</label>
                                 <platform-date-picker
                                     class="field-input"
                                     mode="date"
@@ -553,13 +566,13 @@ export class AIEntityCard extends PlatformElement {
                                 ></platform-date-picker>
                             </div>
                             <div class="field-group">
-                                <label class="field-label">Приоритет</label>
+                                <label class="field-label">${this.i18n.t('tasks.priority')}</label>
                                 <select
                                     class="field-input field-select"
                                     .value=${this.suggestion.priority || 'medium'}
                                     @change=${(e) => this._onFieldChange('priority', e)}
                                 >
-                                    ${PRIORITY_OPTIONS.map(opt => html`
+                                    ${priorityOptions.map(opt => html`
                                         <option value=${opt.value}>${opt.label}</option>
                                     `)}
                                 </select>
@@ -569,14 +582,19 @@ export class AIEntityCard extends PlatformElement {
 
                     <div class="attributes-section">
                         <div class="attributes-header">
-                            <span class="attributes-title">Атрибуты</span>
-                            <button type="button" class="add-attr-btn" @click=${this._addAttribute} title="Добавить атрибут">
+                            <span class="attributes-title">${this.i18n.t('ai_entity_card.attributes')}</span>
+                            <button
+                                type="button"
+                                class="add-attr-btn"
+                                @click=${this._addAttribute}
+                                title=${this.i18n.t('ai_entity_card.add_attribute_title')}
+                            >
                                 <platform-icon name="plus" size="14"></platform-icon>
                             </button>
                         </div>
 
                         ${this._attributes.length === 0 ? html`
-                            <div class="empty-attributes">Нет атрибутов</div>
+                            <div class="empty-attributes">${this.i18n.t('ai_entity_card.empty_attributes')}</div>
                         ` : this._attributes.map((attr, i) => html`
                             <div class="attribute-row">
                                 <input
@@ -584,20 +602,20 @@ export class AIEntityCard extends PlatformElement {
                                     class="field-input attr-key"
                                     .value=${attr.key}
                                     @input=${(e) => this._onAttributeChange(i, 'key', e)}
-                                    placeholder="Ключ"
+                                    placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
                                 />
                                 <input
                                     type="text"
                                     class="field-input attr-value"
                                     .value=${attr.value}
                                     @input=${(e) => this._onAttributeChange(i, 'value', e)}
-                                    placeholder="Значение"
+                                    placeholder=${this.i18n.t('ai_entity_card.attr_value_placeholder')}
                                 />
                                 <button
                                     type="button"
                                     class="remove-attr-btn"
                                     @click=${() => this._removeAttribute(i)}
-                                    title="Удалить"
+                                    title=${this.i18n.t('delete', {}, 'common')}
                                 >
                                     <platform-icon name="close" size="12"></platform-icon>
                                 </button>

@@ -728,11 +728,11 @@ export class AIAnalysisModal extends PlatformModal {
 
     _getLoadingMessage() {
         const messages = [
-            'Проверяю текст...',
-            'Выделяю сущности...',
-            'Строю связи...',
-            'Формирую задачи...',
-            'Готовлю итоговый анализ...',
+            this.i18n.t('ai_analysis_modal.loading_1'),
+            this.i18n.t('ai_analysis_modal.loading_2'),
+            this.i18n.t('ai_analysis_modal.loading_3'),
+            this.i18n.t('ai_analysis_modal.loading_4'),
+            this.i18n.t('ai_analysis_modal.loading_5'),
         ];
         if (this._loadingProgress >= 99) {
             return messages[messages.length - 1];
@@ -761,7 +761,7 @@ export class AIAnalysisModal extends PlatformModal {
         if (typeof task.name === 'string' && task.name.length > 0) {
             return task.name;
         }
-        return 'Задача';
+        return this.i18n.t('ai_analysis_modal.task_fallback');
     }
 
     _getTaskDoneState(currentDoneMap, task) {
@@ -986,7 +986,7 @@ export class AIAnalysisModal extends PlatformModal {
                 return draft.note.description.trim();
             }
         }
-        return 'AI-summary пока не сформирована.';
+        return this.i18n.t('ai_analysis_modal.summary_empty');
     }
 
     _getScoreValue(item) {
@@ -1016,13 +1016,13 @@ export class AIAnalysisModal extends PlatformModal {
             : null;
         if (isExisting) {
             return {
-                label: 'Existing',
+                label: this.i18n.t('ai_analysis_modal.dedup_existing'),
                 className: 'existing',
                 confidence,
             };
         }
         return {
-            label: 'New',
+            label: this.i18n.t('ai_analysis_modal.dedup_new'),
             className: '',
             confidence: null,
         };
@@ -1083,7 +1083,7 @@ export class AIAnalysisModal extends PlatformModal {
 
     _getRelationshipTypeLabel(typeId) {
         if (typeof typeId !== 'string' || typeId.trim().length === 0) {
-            return 'Связь';
+            return this.i18n.t('ai_analysis_modal.relationship_fallback');
         }
         const typeConfig = this._relationshipTypes.find((item) => item?.type_id === typeId);
         if (typeConfig && typeof typeConfig.name === 'string' && typeConfig.name.trim().length > 0) {
@@ -1094,14 +1094,14 @@ export class AIAnalysisModal extends PlatformModal {
 
     _humanizeRelationshipTypeId(typeId) {
         const typeAliases = {
-            attended: 'Участие во встрече',
-            works_at: 'Работает в',
-            involved_organization: 'Вовлеченная организация',
-            documents: 'Связь с документом',
-            mentions: 'Упоминание',
+            attended: 'ai_analysis_modal.rel_type_attended',
+            works_at: 'ai_analysis_modal.rel_type_works_at',
+            involved_organization: 'ai_analysis_modal.rel_type_involved_organization',
+            documents: 'ai_analysis_modal.rel_type_documents',
+            mentions: 'ai_analysis_modal.rel_type_mentions',
         };
         if (Object.prototype.hasOwnProperty.call(typeAliases, typeId)) {
-            return typeAliases[typeId];
+            return this.i18n.t(typeAliases[typeId]);
         }
         const normalized = typeId
             .split('_')
@@ -1109,25 +1109,25 @@ export class AIAnalysisModal extends PlatformModal {
             .filter((part) => part.length > 0)
             .join(' ');
         if (normalized.length === 0) {
-            return 'Связь';
+            return this.i18n.t('ai_analysis_modal.relationship_fallback');
         }
         return normalized.charAt(0).toUpperCase() + normalized.slice(1);
     }
 
     _draftEndpointLabel(draftEntityId) {
         if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
-            throw new Error('draft_entity_id конца связи обязателен');
+            throw new Error('draft_entity_id is required for relationship endpoint');
         }
         const ctx = CRMStore.state.ai.analyzeContextNote;
         if (ctx?.draft_entity_id === draftEntityId) {
             if (typeof ctx.name === 'string' && ctx.name.trim().length > 0) {
                 return ctx.name.trim();
             }
-            return 'Заметка';
+            return this.i18n.t('note_content.note_title_fallback');
         }
         const row = this._suggestions.find((s) => s?.draft_entity_id === draftEntityId && s.entity_type);
         if (!row || typeof row.name !== 'string' || row.name.trim().length === 0) {
-            throw new Error(`Нет подписи для draft_entity_id=${draftEntityId}`);
+            throw new Error(`No label for draft_entity_id=${draftEntityId}`);
         }
         return row.name.trim();
     }
@@ -1154,7 +1154,7 @@ export class AIAnalysisModal extends PlatformModal {
 
     _getRelationshipDisplay(item) {
         if (!isRelationshipSuggestion(item)) {
-            throw new Error('Ожидалась связь черновика (draft_relationship_id)');
+            throw new Error('Expected draft relationship (draft_relationship_id)');
         }
         const sourceLabel = this._draftEndpointLabel(item.source_draft_entity_id);
         const targetLabel = this._draftEndpointLabel(item.target_draft_entity_id);
@@ -1220,7 +1220,7 @@ export class AIAnalysisModal extends PlatformModal {
         return html`
             <span class="analysis-header-title">
                 <platform-icon name="ai" size="32" colored></platform-icon>
-                AI-анализ
+                ${this.i18n.t('ai_analysis_modal.header_title')}
             </span>
         `;
     }
@@ -1252,7 +1252,7 @@ export class AIAnalysisModal extends PlatformModal {
                     <article class="block ai-summary">
                         <h3 class="block-title gradient-title">
                             <platform-icon name="ai" size="15" colored></platform-icon>
-                            AI-summary
+                            ${this.i18n.t('ai_analysis_modal.block_summary_title')}
                         </h3>
                         <p class="summary-text">${noteText}</p>
                         <div class="chips">
@@ -1266,7 +1266,7 @@ export class AIAnalysisModal extends PlatformModal {
                     </article>
 
                     <article class="block tasks-wrap">
-                        <h3 class="block-title">Предложенные задачи</h3>
+                        <h3 class="block-title">${this.i18n.t('ai_analysis_modal.suggested_tasks_title')}</h3>
                         <div class="tasks-list">
                             ${this._taskStates.map((task) => html`
                                 <label class="task-row ${task.done ? 'done' : ''}">
@@ -1283,7 +1283,7 @@ export class AIAnalysisModal extends PlatformModal {
                             <input
                                 class="task-input"
                                 type="text"
-                                placeholder="Введите задачу + Enter"
+                                placeholder=${this.i18n.t('ai_analysis_modal.task_input_placeholder')}
                                 .value=${this._taskDraft}
                                 @input=${this._onTaskDraftInput}
                                 @keydown=${this._onTaskDraftKeydown}
@@ -1324,7 +1324,7 @@ export class AIAnalysisModal extends PlatformModal {
                                             <div style="min-width:0;flex:1;">
                                                 ${isRelationship ? html`
                                                     <div class="connection-name">${relationshipTypeLabel}</div>
-                                                    <div class="relationship-type">Связь: ${relationshipDisplay.sourceLabel} -> ${relationshipDisplay.targetLabel}</div>
+                                                    <div class="relationship-type">${this.i18n.t('ai_analysis_modal.relationship_line', { source: relationshipDisplay.sourceLabel, target: relationshipDisplay.targetLabel })}</div>
                                                     <div class="relationship-line">
                                                         <span class="relationship-entity">${relationshipDisplay.sourceLabel}</span>
                                                         <span class="relationship-arrow">
@@ -1335,7 +1335,7 @@ export class AIAnalysisModal extends PlatformModal {
                                                             type="button"
                                                             ?disabled=${relationshipDisplay.objectId.length === 0}
                                                             @click=${() => this._openEntityModalById(relationshipDisplay.objectId)}
-                                                            title="Открыть сущность"
+                                                            title=${this.i18n.t('ai_analysis_modal.open_entity_title')}
                                                         >
                                                             ${relationshipDisplay.objectLabel}
                                                         </button>
@@ -1375,7 +1375,7 @@ export class AIAnalysisModal extends PlatformModal {
                                         </div>
                                         ${dedupBadge.className === 'existing' ? html`
                                             <div class="existing-hint">
-                                                Будет обновлено:
+                                                ${this.i18n.t('ai_entity_card.will_update_prefix')}
                                                 ${existingEntityRef.existingId.length > 0 ? html`
                                                     <button
                                                         class="existing-link"
@@ -1385,16 +1385,16 @@ export class AIAnalysisModal extends PlatformModal {
                                                         ${existingEntityRef.existingName || existingEntityRef.existingId}
                                                     </button>
                                                 ` : html`
-                                                    ${existingEntityRef.existingName || 'Существующая сущность'}
+                                                    ${existingEntityRef.existingName || this.i18n.t('ai_analysis_modal.existing_entity_fallback')}
                                                 `}
                                             </div>
                                         ` : ''}
                                         <div class="score-track">
                                             <div class="score-fill ${theme}" style=${`width:${score}%;`}></div>
-                                            <div class="score-label">Score - ${score}%</div>
+                                            <div class="score-label">${this.i18n.t('ai_analysis_modal.score_label', { value: String(score) })}</div>
                                         </div>
                                         <button class="attr-toggle" type="button" @click=${() => this._toggleSuggestionExpanded(uiKey)}>
-                                            ${expanded ? 'Скрыть атрибуты' : 'Показать атрибуты'}
+                                            ${expanded ? this.i18n.t('ai_analysis_modal.toggle_attrs_hide') : this.i18n.t('ai_analysis_modal.toggle_attrs_show')}
                                         </button>
                                         ${expanded ? html`
                                             <div class="attrs-panel">
@@ -1418,18 +1418,18 @@ export class AIAnalysisModal extends PlatformModal {
                                                 <div class="attr-add-row">
                                                     <input
                                                         class="attr-input"
-                                                        placeholder="Ключ"
+                                                        placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
                                                         .value=${draft.key}
                                                         @input=${(event) => this._onAttributeDraftInput(suggestionIndex, 'key', event)}
                                                     />
                                                     <input
                                                         class="attr-input"
-                                                        placeholder="Значение"
+                                                        placeholder=${this.i18n.t('ai_entity_card.attr_value_placeholder')}
                                                         .value=${draft.value}
                                                         @input=${(event) => this._onAttributeDraftInput(suggestionIndex, 'value', event)}
                                                     />
                                                     <button class="attr-add-btn" type="button" @click=${() => this._onAddAttribute(suggestionIndex)}>
-                                                        Добавить
+                                                        ${this.i18n.t('ai_analysis_modal.add_attribute_row')}
                                                     </button>
                                                 </div>
                                             </div>
@@ -1452,7 +1452,9 @@ export class AIAnalysisModal extends PlatformModal {
             this.dispatchEvent(new CustomEvent('saved'));
             this.close();
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка сохранения AI-анализа';
+            const message = error instanceof Error
+                ? error.message
+                : this.i18n.t('ai_analysis_modal.err_save');
             this.error(message);
             throw error;
         } finally {
@@ -1467,7 +1469,7 @@ export class AIAnalysisModal extends PlatformModal {
         if (typeof item.entity_type === 'string' && item.entity_type.length > 0) {
             return item.entity_type;
         }
-        return 'Связь';
+        return this.i18n.t('ai_analysis_modal.relationship_fallback');
     }
 
     _getConnectionSubtitle(item) {
@@ -1477,20 +1479,20 @@ export class AIAnalysisModal extends PlatformModal {
         if (typeof item.entity_type === 'string' && item.entity_type.length > 0) {
             return item.entity_type;
         }
-        return 'Объект';
+        return this.i18n.t('ai_analysis_modal.object_fallback');
     }
 
     renderFooter() {
         return html`
             <div class="footer-actions">
-                <button class="btn btn-secondary" type="button" @click=${() => this.close()}>К заметке</button>
+                <button class="btn btn-secondary" type="button" @click=${() => this.close()}>${this.i18n.t('ai_analysis_modal.back_to_note')}</button>
                 <button
                     class="btn ${this._analyzing || this.loading ? 'btn-disabled' : 'btn-primary'}"
                     type="button"
                     ?disabled=${this._saving || this._analyzing || this.loading}
                     @click=${this._onSave}
                 >
-                    ${this._saving ? 'Сохранение...' : 'Сохранить'}
+                    ${this._saving ? this.i18n.t('entity_modal.saving') : this.i18n.t('save', {}, 'common')}
                 </button>
             </div>
         `;

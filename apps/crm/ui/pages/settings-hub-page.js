@@ -3,21 +3,6 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 
-const SETTINGS_SECTIONS = [
-    {
-        id: 'templates',
-        title: 'Шаблоны пространств',
-        description: 'Создание и редактирование шаблонов для новых пространств. Полный контроль типов сущностей, полей и промптов.',
-        icon: 'settings',
-    },
-    {
-        id: 'spaces',
-        title: 'Настройки пространств',
-        description: 'Управление типами и описаниями текущих пространств компании. Безопасное добавление и редактирование.',
-        icon: 'folder',
-    },
-];
-
 export class SettingsHubPage extends PlatformElement {
     static styles = [
         PlatformElement.styles,
@@ -72,24 +57,42 @@ export class SettingsHubPage extends PlatformElement {
         CRMStore.setCurrentView(sectionId);
     }
 
+    _settingsSections() {
+        return [
+            {
+                id: 'templates',
+                icon: 'settings',
+                title: this.i18n.t('settings_hub.card_templates_title'),
+                description: this.i18n.t('settings_hub.card_templates_description'),
+            },
+            {
+                id: 'spaces',
+                icon: 'folder',
+                title: this.i18n.t('settings_hub.card_spaces_title'),
+                description: this.i18n.t('settings_hub.card_spaces_description'),
+            },
+        ];
+    }
+
     render() {
+        const sections = this._settingsSections();
         return html`
             <div class="container">
                 <div class="section">
                     <div class="hero">
                         <div>
                             <div class="hero-title">
-                                <button class="menu-btn" @click=${this._openSidebar} title="Открыть меню">
+                                <button class="menu-btn" @click=${this._openSidebar} title=${this.i18n.t('settings_hub.open_menu')}>
                                     <platform-icon name="menu" size="18"></platform-icon>
                                 </button>
                                 <platform-icon name="settings" size="18"></platform-icon>
-                                Настройки CRM
+                                ${this.i18n.t('settings_hub.hero_title')}
                             </div>
-                            <div class="hero-subtitle">Выберите раздел для настройки</div>
+                            <div class="hero-subtitle">${this.i18n.t('settings_hub.hero_subtitle')}</div>
                         </div>
                     </div>
                     <div class="cards-grid">
-                        ${SETTINGS_SECTIONS.map((section) => html`
+                        ${sections.map((section) => html`
                             <div class="settings-card" @click=${() => this._navigateTo(section.id)}>
                                 <div class="card-icon-wrap">
                                     <platform-icon name=${section.icon} size="24"></platform-icon>

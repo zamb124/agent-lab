@@ -143,7 +143,7 @@ export class NamespaceModal extends PlatformModal {
     }
 
     renderHeader() {
-        return 'Новое пространство';
+        return this.i18n.t('namespace_modal.header');
     }
 
     _onNameInput(e) {
@@ -174,7 +174,7 @@ export class NamespaceModal extends PlatformModal {
 
     async _onSave() {
         if (!this._name.trim()) {
-            this.error('Название обязательно');
+            this.error(this.i18n.t('namespace_modal.err_name_required'));
             return;
         }
 
@@ -188,7 +188,7 @@ export class NamespaceModal extends PlatformModal {
                 this._templateId
             );
 
-            this.success('Пространство создано');
+            this.success(this.i18n.t('namespace_modal.success_created'));
             this.dispatchEvent(new CustomEvent('saved', {
                 detail: { name: this._name.trim() },
                 bubbles: true,
@@ -196,7 +196,9 @@ export class NamespaceModal extends PlatformModal {
             }));
             this.close();
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка создания пространства';
+            const message = error instanceof Error
+                ? error.message
+                : this.i18n.t('namespace_modal.err_create');
             this.error(message);
             throw error;
         } finally {
@@ -208,7 +210,7 @@ export class NamespaceModal extends PlatformModal {
         return html`
             <div class="form-grid">
                 <div class="form-group">
-                    <label class="form-label">Шаблон *</label>
+                    <label class="form-label">${this.i18n.t('namespace_modal.label_template')}</label>
                     <div class="template-grid">
                         ${this._templates.map((template) => html`
                             <button
@@ -220,36 +222,36 @@ export class NamespaceModal extends PlatformModal {
                                     <platform-icon name=${this._resolveTemplateIcon(template.icon)} size="16"></platform-icon>
                                     ${template.name}
                                 </div>
-                                <div class="template-description">${template.description || 'Без описания'}</div>
+                                <div class="template-description">${template.description || this.i18n.t('note_content.no_description')}</div>
                                 <div class="template-id">${template.template_id}</div>
                             </button>
                         `)}
                     </div>
                     <div class="hint">
-                        Пространство создается с преднастроенными типами сущностей.
+                        ${this.i18n.t('namespace_modal.template_hint')}
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Название *</label>
+                    <label class="form-label">${this.i18n.t('namespace_modal.label_name')}</label>
                     <input
                         type="text"
                         class="form-input"
-                        placeholder="Например: personal, work, project-x"
+                        placeholder=${this.i18n.t('namespace_modal.name_placeholder')}
                         .value=${this._name}
                         @input=${this._onNameInput}
                     />
                     <div class="hint">
-                        Уникальный идентификатор пространства. Рекомендуется латиница и snake_case.
+                        ${this.i18n.t('namespace_modal.name_hint')}
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Описание</label>
+                    <label class="form-label">${this.i18n.t('namespace_modal.label_description')}</label>
                     <textarea
                         class="form-textarea"
                         rows="3"
-                        placeholder="Опишите назначение пространства"
+                        placeholder=${this.i18n.t('namespace_modal.desc_placeholder')}
                         .value=${this._description}
                         @input=${this._onDescriptionInput}
                     ></textarea>
@@ -266,7 +268,7 @@ export class NamespaceModal extends PlatformModal {
                     class="btn btn-secondary"
                     @click=${() => this.close()}
                 >
-                    Отмена
+                    ${this.i18n.t('cancel', {}, 'common')}
                 </button>
                 <button
                     type="button"
@@ -274,7 +276,9 @@ export class NamespaceModal extends PlatformModal {
                     ?disabled=${this._saving || !this._name.trim()}
                     @click=${this._onSave}
                 >
-                    ${this._saving ? 'Создание...' : 'Создать'}
+                    ${this._saving
+                        ? this.i18n.t('namespace_modal.creating')
+                        : this.i18n.t('namespace_modal.submit')}
                 </button>
             </div>
         `;

@@ -337,9 +337,9 @@ export class CRMSidebar extends PlatformElement {
             >
                 <div slot="header">
                     <div class="namespace-selector" data-hide-collapsed>
-                        <span class="namespace-label">Пространство</span>
+                        <span class="namespace-label">${this.i18n.t('app_shell.sidebar.namespace')}</span>
                         <select @change=${this._onNamespaceChange}>
-                            <option value="">Все</option>
+                            <option value="">${this.i18n.t('filters.all')}</option>
                             ${this._namespaces.map(ns => html`
                                 <option
                                     value=${ns.name}
@@ -352,7 +352,7 @@ export class CRMSidebar extends PlatformElement {
                         <button
                             class="namespace-add-btn"
                             @click=${this._openNamespaceModal}
-                            title="Создать пространство"
+                            title=${this.i18n.t('app_shell.sidebar.create_space')}
                         >
                             <platform-icon name="plus" size="14"></platform-icon>
                         </button>
@@ -367,7 +367,7 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper notes">
                             <platform-icon name="list" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Заметки</span>
+                        <span class="nav-label">${this.i18n.t('nav.notes')}</span>
                         ${this._notesCount > 0 ? html`
                             <span class="nav-count">${this._notesCount}</span>
                         ` : ''}
@@ -379,7 +379,7 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper entities">
                             <platform-icon name="database" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Сущности</span>
+                        <span class="nav-label">${this.i18n.t('nav.entities')}</span>
                     </button>
                     <button
                         class="nav-item ${this._currentView === 'graph' ? 'active' : ''}"
@@ -388,12 +388,12 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper graph">
                             <platform-icon name="share" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Граф связей</span>
+                        <span class="nav-label">${this.i18n.t('pages.graph')}</span>
                     </button>
                 </div>
 
                 <div class="nav-section">
-                    <div class="nav-title">Организация</div>
+                    <div class="nav-title">${this.i18n.t('app_shell.sidebar.org_section')}</div>
                     <button
                         class="nav-item ${this._currentView === 'tasks' ? 'active' : ''}"
                         @click=${() => this._navigate('tasks')}
@@ -401,7 +401,7 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper tasks">
                             <platform-icon name="check" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Задачи</span>
+                        <span class="nav-label">${this.i18n.t('nav.tasks')}</span>
                     </button>
                     <button
                         class="nav-item ${['settings', 'templates', 'spaces'].includes(this._currentView) ? 'active' : ''}"
@@ -410,7 +410,7 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper settings">
                             <platform-icon name="settings" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Настройки</span>
+                        <span class="nav-label">${this.i18n.t('nav.settings')}</span>
                     </button>
                 </div>
 

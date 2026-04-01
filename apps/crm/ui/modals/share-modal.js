@@ -132,8 +132,8 @@ export class ShareModal extends PlatformModal {
 
     renderHeader() {
         return this.shareType === 'user'
-            ? 'Поделиться с пользователем'
-            : 'Поделиться с компанией';
+            ? this.i18n.t('grants.share_user')
+            : this.i18n.t('grants.share_company');
     }
 
     _onTargetIdInput(e) {
@@ -151,8 +151,8 @@ export class ShareModal extends PlatformModal {
     async _onShare() {
         if (!this._targetId.trim()) {
             this.error(this.shareType === 'user'
-                ? 'Введите ID пользователя'
-                : 'Введите ID компании'
+                ? this.i18n.t('share_modal.err_enter_user_id')
+                : this.i18n.t('share_modal.err_enter_company_id')
             );
             return;
         }
@@ -163,16 +163,18 @@ export class ShareModal extends PlatformModal {
 
             if (this.shareType === 'user') {
                 await CRMStore.grantToUser(crmApi, this.entityId, this._targetId.trim(), this._role);
-                this.success('Доступ предоставлен пользователю');
+                this.success(this.i18n.t('share_modal.success_user'));
             } else {
                 await CRMStore.grantToCompany(crmApi, this.entityId, this._targetId.trim(), this._role);
-                this.success('Доступ предоставлен компании');
+                this.success(this.i18n.t('share_modal.success_company'));
             }
 
             this.dispatchEvent(new CustomEvent('shared'));
             this.close();
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка предоставления доступа';
+            const message = error instanceof Error
+                ? error.message
+                : this.i18n.t('share_modal.err_share');
             this.error(message);
             throw error;
         } finally {
@@ -181,15 +183,17 @@ export class ShareModal extends PlatformModal {
     }
 
     renderBody() {
-        const targetLabel = this.shareType === 'user' ? 'ID пользователя' : 'ID компании';
+        const targetLabel = this.shareType === 'user'
+            ? this.i18n.t('share_modal.label_user_id')
+            : this.i18n.t('share_modal.label_company_id');
         const targetPlaceholder = this.shareType === 'user'
-            ? 'Введите user_id'
-            : 'Введите company_id';
+            ? this.i18n.t('share_modal.placeholder_user_id')
+            : this.i18n.t('share_modal.placeholder_company_id');
 
         return html`
             <div class="form-grid">
                 <div class="form-group">
-                    <label class="form-label">${targetLabel} *</label>
+                    <label class="form-label">${targetLabel}</label>
                     <input
                         type="text"
                         class="form-input"
@@ -200,7 +204,7 @@ export class ShareModal extends PlatformModal {
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Уровень доступа</label>
+                    <label class="form-label">${this.i18n.t('share_modal.label_access_level')}</label>
                     <div class="role-chips">
                         <button
                             type="button"
@@ -209,9 +213,9 @@ export class ShareModal extends PlatformModal {
                         >
                             <div class="role-title">
                                 <platform-icon name="eye" size="14"></platform-icon>
-                                <span>Просмотр</span>
+                                <span>${this.i18n.t('grants.role_viewer')}</span>
                             </div>
-                            <div class="role-description">Только чтение</div>
+                            <div class="role-description">${this.i18n.t('share_modal.role_viewer_desc')}</div>
                         </button>
                         <button
                             type="button"
@@ -220,9 +224,9 @@ export class ShareModal extends PlatformModal {
                         >
                             <div class="role-title">
                                 <platform-icon name="edit" size="14"></platform-icon>
-                                <span>Редактор</span>
+                                <span>${this.i18n.t('grants.role_editor')}</span>
                             </div>
-                            <div class="role-description">Чтение и запись</div>
+                            <div class="role-description">${this.i18n.t('share_modal.role_editor_desc')}</div>
                         </button>
                         <button
                             type="button"
@@ -231,15 +235,15 @@ export class ShareModal extends PlatformModal {
                         >
                             <div class="role-title">
                                 <platform-icon name="settings" size="14"></platform-icon>
-                                <span>Админ</span>
+                                <span>${this.i18n.t('grants.role_admin')}</span>
                             </div>
-                            <div class="role-description">Полный доступ</div>
+                            <div class="role-description">${this.i18n.t('share_modal.role_admin_desc')}</div>
                         </button>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Срок действия (опционально)</label>
+                    <label class="form-label">${this.i18n.t('share_modal.label_expires_optional')}</label>
                     <platform-date-picker
                         class="form-input"
                         mode="date"
@@ -260,7 +264,7 @@ export class ShareModal extends PlatformModal {
                     class="btn btn-secondary"
                     @click=${() => this.close()}
                 >
-                    Отмена
+                    ${this.i18n.t('cancel', {}, 'common')}
                 </button>
                 <button
                     type="button"
@@ -268,7 +272,9 @@ export class ShareModal extends PlatformModal {
                     ?disabled=${this._saving || !this._targetId.trim()}
                     @click=${this._onShare}
                 >
-                    ${this._saving ? 'Сохранение...' : 'Предоставить доступ'}
+                    ${this._saving
+                        ? this.i18n.t('share_modal.saving')
+                        : this.i18n.t('share_modal.submit_grant')}
                 </button>
             </div>
         `;

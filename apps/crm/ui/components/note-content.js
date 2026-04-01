@@ -1119,16 +1119,16 @@ export class NoteContent extends PlatformElement {
 
     _getSummaryMeta() {
         if (typeof this.summaryGeneratedAt === 'string' && this.summaryGeneratedAt.trim().length > 0) {
-            return `Сгенерирована в ${this.summaryGeneratedAt}`;
+            return this.i18n.t('note_content.summary_generated_at', { time: this.summaryGeneratedAt });
         }
         if (
             this.hasAnalysisDraft
             && typeof this.analysisDraftGeneratedAt === 'string'
             && this.analysisDraftGeneratedAt.trim().length > 0
         ) {
-            return `Есть черновик анализа от ${this.analysisDraftGeneratedAt}`;
+            return this.i18n.t('note_content.analysis_draft_at', { time: this.analysisDraftGeneratedAt });
         }
-        return 'Нажмите обновить для генерации summary';
+        return this.i18n.t('note_content.summary_prompt');
     }
 
     _getEntityAvatarUrl(entity) {
@@ -1178,7 +1178,7 @@ export class NoteContent extends PlatformElement {
 
     _getRelationshipTypeLabel(relationshipType) {
         if (typeof relationshipType !== 'string' || relationshipType.trim().length === 0) {
-            return 'Связь';
+            return this.i18n.t('note_content.relationship');
         }
         if (!Array.isArray(this.relationshipTypes)) {
             throw new Error('relationshipTypes must be array');
@@ -1196,13 +1196,13 @@ export class NoteContent extends PlatformElement {
 
     _getEntityLabelById(entityId) {
         if (typeof entityId !== 'string' || entityId.trim().length === 0) {
-            return 'Неизвестная сущность';
+            return this.i18n.t('note_content.unknown_entity');
         }
         if (!Array.isArray(this.relatedEntities)) {
             throw new Error('relatedEntities must be an array');
         }
         if (this.note?.entity_id === entityId) {
-            return this._getText(this.note?.name, 'Текущая заметка');
+            return this._getText(this.note?.name, this.i18n.t('note_content.current_note_fallback'));
         }
         const foundEntity = this.relatedEntities.find((entity) => entity?.entity_id === entityId);
         if (!foundEntity) {
@@ -1234,7 +1234,7 @@ export class NoteContent extends PlatformElement {
         if (typeof rawWeight !== 'number' || !Number.isFinite(rawWeight)) {
             return '';
         }
-        return `Вес: ${rawWeight.toFixed(2)}`;
+        return this.i18n.t('note_content.weight_label', { value: rawWeight.toFixed(2) });
     }
 
     _getNoteSubtypeOptions() {
@@ -1259,7 +1259,7 @@ export class NoteContent extends PlatformElement {
     _getAttachmentName(attachment) {
         return this._getText(
             attachment?.filename,
-            this._getText(attachment?.document_name, this._getText(attachment?.document_id, 'Файл')),
+            this._getText(attachment?.document_name, this._getText(attachment?.document_id, this.i18n.t('note_content.file_fallback'))),
         );
     }
 
@@ -1358,12 +1358,12 @@ export class NoteContent extends PlatformElement {
     _emitSaveNote() {
         const title = this._draftTitle.trim();
         if (title.length === 0) {
-            throw new Error('Название заметки не может быть пустым');
+            throw new Error(this.i18n.t('note_content.err_empty_title'));
         }
         const subtype = this._draftSubtype.trim();
         const noteDate = this._draftNoteDate.trim();
         if (noteDate.length === 0) {
-            throw new Error('Дата заметки не выбрана');
+            throw new Error(this.i18n.t('note_content.err_no_date'));
         }
         this.emit('save-note', {
             noteId: this.note.entity_id,
@@ -1424,7 +1424,7 @@ export class NoteContent extends PlatformElement {
     _renderMarkdown(text) {
         const escaped = this._escapeHtml(text);
         if (escaped.length === 0) {
-            return html`<p class="note-text">Без описания</p>`;
+            return html`<p class="note-text">${this.i18n.t('note_content.no_description')}</p>`;
         }
         if (window.marked && typeof window.marked.parse === 'function') {
             const htmlContent = window.marked.parse(escaped, {
@@ -1485,8 +1485,8 @@ export class NoteContent extends PlatformElement {
             throw new Error('note is required');
         }
 
-        const noteText = this.editable ? this._draftText : this._getText(this.note.description, 'Без описания');
-        const noteTitle = this.editable ? this._draftTitle : this._getText(this.note.name, 'Заметка');
+        const noteText = this.editable ? this._draftText : this._getText(this.note.description, this.i18n.t('note_content.no_description'));
+        const noteTitle = this.editable ? this._draftTitle : this._getText(this.note.name, this.i18n.t('note_content.note_title_fallback'));
         const noteDate = this._formatNoteDate(this.note.note_date || this.note.updated_at || this.note.created_at);
         const noteSubtypeLabel = this._getNoteSubtypeLabel();
         const noteSubtypeOptions = this._getNoteSubtypeOptions();
@@ -1507,7 +1507,7 @@ export class NoteContent extends PlatformElement {
                                     type="text"
                                     .value=${noteTitle}
                                     @input=${this._onTitleInput}
-                                    placeholder="Название заметки"
+                                    placeholder=${this.i18n.t('note_content.title_placeholder')}
                                 />
                                 <div class="note-edit-meta">
                                     <select
@@ -1515,7 +1515,7 @@ export class NoteContent extends PlatformElement {
                                         .value=${this._draftSubtype}
                                         @change=${this._onSubtypeChange}
                                     >
-                                        <option value="">Без подтипа</option>
+                                        <option value="">${this.i18n.t('note_content.no_subtype')}</option>
                                         ${noteSubtypeOptions.map((item) => html`
                                             <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
                                         `)}
@@ -1524,37 +1524,37 @@ export class NoteContent extends PlatformElement {
                                         class="note-date-picker"
                                         mode="date"
                                         value-format="iso"
-                                        label="Дата"
+                                        label=${this.i18n.t('notes.date')}
                                         .value=${this._draftNoteDate}
                                         @change=${this._onNoteDateChange}
                                     ></platform-date-picker>
                                 </div>
                                 <div class="note-edit-meta voice-context-row">
-                                    <label class="form-label">Голос заметки</label>
+                                    <label class="form-label">${this.i18n.t('note_content.note_voice')}</label>
                                     <select
                                         class="form-select"
                                         .value=${this._draftVoiceMode}
                                         @change=${this._onVoiceModeChange}
                                     >
-                                        <option value="default">По умолчанию (неймспейс)</option>
-                                        <option value="self">Я</option>
-                                        <option value="none">Без голоса</option>
-                                        <option value="manual">Контакт (id)</option>
+                                        <option value="default">${this.i18n.t('note_content.voice_default')}</option>
+                                        <option value="self">${this.i18n.t('note_content.voice_self')}</option>
+                                        <option value="none">${this.i18n.t('note_content.voice_none')}</option>
+                                        <option value="manual">${this.i18n.t('note_content.voice_manual')}</option>
                                     </select>
                                     ${this._draftVoiceMode === 'manual' ? html`
                                         <input
                                             class="form-input mono"
                                             type="text"
-                                            placeholder="entity_id контакта"
+                                            placeholder=${this.i18n.t('note_content.contact_placeholder')}
                                             .value=${this._draftManualVoiceId}
                                             @input=${this._onManualVoiceInput}
                                         />
                                     ` : ''}
-                                    <label class="form-label">Контекст (якорь)</label>
+                                    <label class="form-label">${this.i18n.t('note_content.context_anchor')}</label>
                                     <input
                                         class="form-input mono"
                                         type="text"
-                                        placeholder="entity_id сделки/лида (необязательно)"
+                                        placeholder=${this.i18n.t('note_content.anchor_placeholder')}
                                         .value=${this._draftContextEntityId}
                                         @input=${this._onContextEntityInput}
                                     />
@@ -1573,8 +1573,8 @@ export class NoteContent extends PlatformElement {
                                 <button
                                     class="round-btn attach-header-btn"
                                     type="button"
-                                    title="Вложения: добавить файл"
-                                    aria-label=${`Вложения, файлов: ${attachments.length}. Нажмите, чтобы добавить файл.`}
+                                    title=${this.i18n.t('note_content.attach_add_title')}
+                                    aria-label=${this.i18n.t('note_content.attach_aria', { count: String(attachments.length) })}
                                     ?disabled=${this.draftMode || this.processingAttachment}
                                     @click=${this._openFilePicker}
                                 >
@@ -1583,7 +1583,7 @@ export class NoteContent extends PlatformElement {
                                 </button>
                                 <div class="attach-dropdown-panel" role="tooltip" @click=${(e) => e.stopPropagation()}>
                                     ${attachments.length === 0 ? html`
-                                        <div class="attach-dropdown-empty">Нет вложений</div>
+                                        <div class="attach-dropdown-empty">${this.i18n.t('note_content.no_attachments')}</div>
                                     ` : attachments.map((attachment) => html`
                                         <div class="attach-dropdown-row">
                                             <span class="attach-dropdown-name" title=${this._getAttachmentName(attachment)}>
@@ -1592,7 +1592,7 @@ export class NoteContent extends PlatformElement {
                                             <button
                                                 class="attach-dropdown-remove"
                                                 type="button"
-                                                title="Удалить файл"
+                                                title=${this.i18n.t('note_content.remove_file')}
                                                 ?disabled=${this.processingAttachment || this.draftMode}
                                                 @click=${() => this._emitDeleteAttachment(attachment)}
                                             >
@@ -1611,7 +1611,7 @@ export class NoteContent extends PlatformElement {
                             <button
                                 class="round-btn"
                                 type="button"
-                                title="Поделиться"
+                                title=${this.i18n.t('note_content.share')}
                                 ?disabled=${this.draftMode}
                                 @click=${this._emitShareNote}
                             >
@@ -1620,7 +1620,7 @@ export class NoteContent extends PlatformElement {
                             <button
                                 class="round-btn danger"
                                 type="button"
-                                title="Удалить"
+                                title=${this.i18n.t('delete', {}, 'common')}
                                 ?disabled=${this.deletingNote || this.draftMode}
                                 @click=${this._emitDeleteNote}
                             >
@@ -1633,7 +1633,7 @@ export class NoteContent extends PlatformElement {
                                     ?disabled=${this.savingNote}
                                     @click=${this._emitCancelEdit}
                                 >
-                                    Отмена
+                                    ${this.i18n.t('cancel', {}, 'common')}
                                 </button>
                                 <button
                                     class="edit-btn"
@@ -1641,10 +1641,10 @@ export class NoteContent extends PlatformElement {
                                     ?disabled=${this.savingNote}
                                     @click=${this._emitSaveNote}
                                 >
-                                    ${this.savingNote ? 'Сохранение...' : 'Сохранить'}
+                                    ${this.savingNote ? this.i18n.t('note_content.saving') : this.i18n.t('save', {}, 'common')}
                                 </button>
                             ` : html`
-                                <button class="edit-btn" type="button" @click=${this._emitEditNote}>Редактировать</button>
+                                <button class="edit-btn" type="button" @click=${this._emitEditNote}>${this.i18n.t('edit', {}, 'common')}</button>
                             `}
                         </div>
                     </div>
@@ -1653,7 +1653,7 @@ export class NoteContent extends PlatformElement {
                             class="form-textarea note-text-input"
                             .value=${noteText}
                             @input=${this._onTextInput}
-                            placeholder="Введите текст заметки"
+                            placeholder=${this.i18n.t('notes.placeholder')}
                         ></textarea>
                     ` : this._renderMarkdown(noteText)}
                 </section>
@@ -1663,14 +1663,14 @@ export class NoteContent extends PlatformElement {
                         <div class="card-header">
                             <h3 class="summary-title">
                                 <platform-icon name="ai" size="24" colored></platform-icon>
-                                AI summary заметки
+                                ${this.i18n.t('note_content.ai_summary_title')}
                             </h3>
                             <div class="summary-actions">
                                 ${this.hasAnalysisDraft ? html`
                                     <button
                                         class="round-btn analysis-draft"
                                         type="button"
-                                        title="Открыть черновик анализа"
+                                        title=${this.i18n.t('note_content.open_draft_analysis')}
                                         @click=${this._emitOpenAnalysisDraft}
                                     >
                                         <platform-icon name="ai" size="18" colored></platform-icon>
@@ -1679,7 +1679,7 @@ export class NoteContent extends PlatformElement {
                                 <button
                                     class="round-btn"
                                     type="button"
-                                    title="Обновить"
+                                    title=${this.i18n.t('note_content.refresh')}
                                     ?disabled=${this.processingEntities || this.draftMode}
                                     @click=${this._emitSummaryRefresh}
                                 >
@@ -1693,7 +1693,7 @@ export class NoteContent extends PlatformElement {
                             </div>
                         </div>
                         <p class="summary-meta">${this._getSummaryMeta()}</p>
-                        <p class="summary-text">${this._getText(this.summaryText, 'Нет summary')}</p>
+                        <p class="summary-text">${this._getText(this.summaryText, this.i18n.t('note_content.no_summary'))}</p>
                         <div class="summary-tags">
                             ${summaryTags.map((tag) => html`
                                 <span class="summary-tag">
@@ -1705,7 +1705,7 @@ export class NoteContent extends PlatformElement {
                     </section>
 
                     <section class="card tasks-card">
-                        <h3 class="tasks-title">Связанные задачи</h3>
+                        <h3 class="tasks-title">${this.i18n.t('note_content.related_tasks')}</h3>
                         <div class="tasks-list">
                             ${taskEntities.map((task) => {
                                 const taskCompleted = task?.status === 'done' || task?.status === 'completed';
@@ -1715,9 +1715,9 @@ export class NoteContent extends PlatformElement {
                                             <span class="checkbox ${taskCompleted ? 'checked' : ''}">
                                                 ${taskCompleted ? html`<platform-icon name="check" size="14"></platform-icon>` : ''}
                                             </span>
-                                            <span class="task-text ${taskCompleted ? 'completed' : ''}">${this._getText(task.name, 'Задача')}</span>
+                                            <span class="task-text ${taskCompleted ? 'completed' : ''}">${this._getText(task.name, this.i18n.t('note_content.task_fallback'))}</span>
                                         </div>
-                                        <button class="task-remove" type="button" aria-label="Удалить">
+                                        <button class="task-remove" type="button" aria-label=${this.i18n.t('delete', {}, 'common')}>
                                             <platform-icon name="close" size="14"></platform-icon>
                                         </button>
                                     </div>
@@ -1727,7 +1727,7 @@ export class NoteContent extends PlatformElement {
                     </section>
 
                     <section class="entities-section">
-                        <h3 class="entities-title">Связанные сущности</h3>
+                        <h3 class="entities-title">${this.i18n.t('note_content.related_entities')}</h3>
                         ${nonTaskEntities.map((entity, index) => {
                             const tone = this._getEntityTone(index);
                             const avatarUrl = this._getEntityAvatarUrl(entity);
@@ -1741,12 +1741,12 @@ export class NoteContent extends PlatformElement {
                                 >
                                     <span class="entity-avatar" style=${this._getEntityAvatarStyle(entity, tone)}>
                                         ${avatarUrl
-                                            ? html`<img src=${avatarUrl} alt=${this._getText(entity.name, 'Entity')} />`
+                                            ? html`<img src=${avatarUrl} alt=${this._getText(entity.name, this.i18n.t('ai_entity_card.entity_fallback'))} />`
                                             : html`<platform-icon name=${entityIcon} size="28"></platform-icon>`}
                                     </span>
                                     <span class="entity-data">
                                         <span>
-                                            <p class="entity-name">${this._getText(entity.name, 'Entity')}</p>
+                                            <p class="entity-name">${this._getText(entity.name, this.i18n.t('ai_entity_card.entity_fallback'))}</p>
                                             <p class="entity-subtitle">${this._getEntitySubtitle(entity)}</p>
                                         </span>
                                         <span class="entity-score">
@@ -1763,7 +1763,7 @@ export class NoteContent extends PlatformElement {
 
                     <section class="relationships-section">
                         <div class="section-toolbar">
-                            <h3 class="relationships-title">Связи</h3>
+                            <h3 class="relationships-title">${this.i18n.t('note_content.relationships')}</h3>
                         </div>
                         ${relationships.map((relationship) => {
                             const sourceId = this._getText(relationship.source_entity_id, '');
@@ -1808,7 +1808,7 @@ export class NoteContent extends PlatformElement {
                                                 ?disabled=${this.processingRelationship || this.draftMode}
                                                 @click=${() => this._emitDeleteRelationship(relationship)}
                                             >
-                                                Удалить
+                                                ${this.i18n.t('note_content.remove')}
                                             </button>
                                         </div>
                                     </span>

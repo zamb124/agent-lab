@@ -109,20 +109,20 @@ export class GraphContextMenu extends PlatformElement {
             ${this.nodeId ? html`
                 <button class="ctx-item" @click=${() => this._onAction('open-entity')}>
                     ${CTX_ICONS['open-entity']}
-                    Открыть карточку
+                    ${this.i18n.t('graph.context_open_entity')}
                 </button>
                 <button class="ctx-item" @click=${() => this._onAction('focus')}>
                     ${CTX_ICONS['focus']}
-                    Приблизить
+                    ${this.i18n.t('graph.zoom_in')}
                 </button>
                 <div class="separator"></div>
                 <button class="ctx-item" @click=${() => this._onAction('path-from')}>
                     ${CTX_ICONS['path-from']}
-                    Маршрут от этой сущности
+                    ${this.i18n.t('graph.context_path_from')}
                 </button>
                 <button class="ctx-item" @click=${() => this._onAction('graph-from')}>
                     ${CTX_ICONS['graph-from']}
-                    Граф от этой сущности
+                    ${this.i18n.t('graph.context_graph_from')}
                 </button>
             ` : ''}
         `;

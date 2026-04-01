@@ -275,17 +275,17 @@ export class NamespaceDetail extends PlatformElement {
         const ragApi = this.services.get('ragApi');
         
         await RagStore.uploadDocument(ragApi, currentNamespaceId, file);
-        this.success(`Документ "${file.name}" успешно загружен`);
+        this.success(this.i18n.t('notifications.document_uploaded_named', { name: file.name }));
     }
     
     async _deleteDocument(documentId) {
         const { currentNamespaceId } = this.state.value;
         const ragApi = this.services.get('ragApi');
         
-        if (!confirm('Удалить этот документ?')) return;
+        if (!confirm(this.i18n.t('document.delete_confirm'))) return;
         
         await RagStore.deleteDocument(ragApi, currentNamespaceId, documentId);
-        this.success('Документ удален');
+        this.success(this.i18n.t('notifications.document_deleted'));
     }
     
     _triggerFileInput() {
@@ -331,7 +331,7 @@ export class NamespaceDetail extends PlatformElement {
         if (!namespace) {
             return html`
                 <div class="empty">
-                    <div class="empty-text">Namespace не найден</div>
+                    <div class="empty-text">${this.i18n.t('namespace_detail.not_found')}</div>
                 </div>
             `;
         }
@@ -339,7 +339,7 @@ export class NamespaceDetail extends PlatformElement {
         return html`
             <div class="header">
                 <div class="header-left">
-                    <button class="menu-btn" @click=${this._openSidebar} title="Открыть меню">
+                    <button class="menu-btn" @click=${this._openSidebar} title=${this.i18n.t('namespace_detail.open_menu')}>
                         <platform-icon name="menu" size="20"></platform-icon>
                     </button>
                     <button class="btn-icon" @click=${this._goBack}>
@@ -347,13 +347,13 @@ export class NamespaceDetail extends PlatformElement {
                     </button>
                     <div>
                         <h1 class="title">${namespace.name}</h1>
-                        <p class="subtitle">${namespaceDocuments.length} документов</p>
+                        <p class="subtitle">${this.i18n.t('namespace_detail.documents_count', { count: namespaceDocuments.length })}</p>
                     </div>
                 </div>
                 <div class="actions">
                     <button class="btn btn-primary" @click=${this._triggerFileInput} ?disabled=${uploading}>
                         <platform-icon name="plus" size="18"></platform-icon>
-                        <span>${uploading ? 'Загрузка...' : 'Загрузить документ'}</span>
+                        <span>${uploading ? this.i18n.t('namespace_detail.uploading_short') : this.i18n.t('namespace_detail.upload_document')}</span>
                     </button>
                 </div>
             </div>
@@ -367,7 +367,7 @@ export class NamespaceDetail extends PlatformElement {
             ${loading ? html`
                 <div class="empty">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Загрузка документов...</div>
+                    <div class="loading-text">${this.i18n.t('namespace_detail.loading_documents')}</div>
                 </div>
             ` : html`
                 ${namespaceDocuments.length === 0 ? html`
@@ -383,11 +383,11 @@ export class NamespaceDetail extends PlatformElement {
                                 <platform-icon name="${uploading ? 'refresh' : 'cloud'}" size="32"></platform-icon>
                             </div>
                             <div class="drop-zone-text">
-                                ${uploading ? 'Загрузка документа...' : 'Перетащите файл сюда'}
+                                ${uploading ? this.i18n.t('namespace_detail.uploading_document') : this.i18n.t('namespace_detail.drop_here')}
                             </div>
                             <div class="drop-zone-hint">
-                                или нажмите для выбора файла<br>
-                                Поддерживаемые форматы: PDF, DOCX, DOC, XLSX, PPTX, HTML, TXT, MD, RTF, CSV, изображения
+                                ${this.i18n.t('namespace_detail.drop_or_choose')}<br>
+                                ${this.i18n.t('namespace_detail.supported_formats')}
                             </div>
                         </div>
                     </div>
@@ -402,12 +402,12 @@ export class NamespaceDetail extends PlatformElement {
                                             ${doc.name || doc.document_id}
                                         </div>
                                         <div class="document-meta">
-                                            <span>Создан: ${new Date(doc.created_at).toLocaleDateString()}</span>
-                                            ${doc.pages ? html`<span>${doc.pages} страниц</span>` : ''}
+                                            <span>${this.i18n.t('namespace_detail.created_label')} ${new Date(doc.created_at).toLocaleDateString()}</span>
+                                            ${doc.pages ? html`<span>${this.i18n.t('namespace_detail.pages_count', { count: doc.pages })}</span>` : ''}
                                         </div>
                                     </div>
                                     <div class="document-actions">
-                                        <button class="btn-icon danger" @click=${() => this._deleteDocument(doc.document_id)} title="Удалить">
+                                        <button class="btn-icon danger" @click=${() => this._deleteDocument(doc.document_id)} title=${this.i18n.t('namespace_detail.delete_title')}>
                                             <platform-icon name="trash" size="16"></platform-icon>
                                         </button>
                                     </div>

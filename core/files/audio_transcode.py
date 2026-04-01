@@ -17,16 +17,80 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Optional, Tuple
 
 def audio_needs_ios_compatible_transcode(content_type: str) -> bool:
     if not isinstance(content_type, str) or content_type.strip() == "":
         return False
     base = content_type.split(";")[0].strip().lower()
-    if base in ("audio/webm", "audio/ogg", "application/ogg"):
+    if base in (
+        "audio/webm",
+        "audio/ogg",
+        "application/ogg",
+        "video/webm",
+        "audio/flac",
+        "audio/x-flac",
+    ):
         return True
-    if base.startswith("audio/webm"):
+    if base.startswith("audio/webm") or base.startswith("video/webm"):
         return True
     return False
+
+
+def sniff_ios_incompatible_audio_magic(data: bytes) -> Optional[str]:
+    """
+    Определяет WebM (EBML) или Ogg по сигнатуре, если Content-Type неверен.
+
+    Returns:
+        Суффикс для ffmpeg: ".webm" или ".ogg", либо None.
+    """
+    if len(data) < 4:
+        return None
+    if data[:4] == b"\x1a\x45\xdf\xa3":
+        return ".webm"
+    if data[:4] == b"OggS":
+        return ".ogg"
+    return None
+
+
+def resolve_ios_transcode_source(
+    content_type: str,
+    original_name: str,
+    data: bytes,
+) -> Tuple[bool, str]:
+    """
+    Нужно ли перекодировать загрузку в AAC/M4A и с каким суффиксом исходника вызывать ffmpeg.
+
+    Учитывает MIME, расширение имени и магические байты (обход неверного Content-Type).
+    """
+    if audio_needs_ios_compatible_transcode(content_type or ""):
+        magic = sniff_ios_incompatible_audio_magic(data)
+        if magic:
+            return True, magic
+        suf = Path(original_name).suffix.lower()
+        if suf in (".ogg", ".oga", ".opus"):
+            return True, ".ogg"
+        if suf == ".webm":
+            return True, ".webm"
+        if suf in (".flac",):
+            return True, ".flac"
+        if suf:
+            return True, suf
+        return True, ".webm"
+
+    magic = sniff_ios_incompatible_audio_magic(data)
+    if magic:
+        return True, magic
+
+    ext = Path(original_name).suffix.lower()
+    if ext in (".webm",):
+        return True, ".webm"
+    if ext in (".ogg", ".oga", ".opus"):
+        return True, ".ogg"
+    if ext in (".flac",):
+        return True, ".flac"
+
+    return False, ".bin"
 
 
 def _transcode_sync(data: bytes, ffmpeg: str, source_suffix: str) -> bytes:

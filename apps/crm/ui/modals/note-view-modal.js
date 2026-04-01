@@ -93,7 +93,9 @@ export class NoteViewModal extends PlatformModal {
     }
 
     renderHeader() {
-        return this._editing ? 'Редактирование заметки' : 'Просмотр заметки';
+        return this._editing
+            ? this.i18n.t('note_view_modal.header_edit')
+            : this.i18n.t('note_view_modal.header_view');
     }
 
     renderHeaderActions() {
@@ -104,7 +106,7 @@ export class NoteViewModal extends PlatformModal {
             <button
                 class="header-btn graph-open-btn"
                 type="button"
-                title="Граф связей (отдельное окно)"
+                title=${this.i18n.t('note_view_modal.graph_open_title')}
                 @click=${this._openNoteGraphModal}
             >
                 <platform-icon name="network" size="16"></platform-icon>
@@ -325,7 +327,9 @@ export class NoteViewModal extends PlatformModal {
         try {
             await this._refreshEntitiesFromNote();
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка обновления сводки';
+            const message = error instanceof Error
+                ? error.message
+                : this.i18n.t('note_view_modal.err_summary_refresh');
             this.error(message);
             throw error;
         }
@@ -530,7 +534,9 @@ export class NoteViewModal extends PlatformModal {
                     });
                 }
             } catch (error) {
-                const message = error instanceof Error ? error.message : 'Ошибка сохранения заметки';
+                const message = error instanceof Error
+                    ? error.message
+                    : this.i18n.t('note_view_modal.err_save_note');
                 this.error(message);
                 throw error;
             }

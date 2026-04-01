@@ -6,12 +6,6 @@ import { CRMStore } from '../store/crm.store.js';
 import '../modals/entity-modal.js';
 import '@platform/lib/components/platform-icon.js';
 
-const TASK_STATUSES = [
-    { id: 'todo', label: 'Новая' },
-    { id: 'in_progress', label: 'В работе' },
-    { id: 'done', label: 'Готово' },
-];
-
 const TASK_DND_MIME = 'application/x-crm-task-id';
 
 export class TasksPage extends PlatformElement {
@@ -748,14 +742,14 @@ export class TasksPage extends PlatformElement {
         const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
         await crmApi.createEntity({
             entity_type: 'task',
-            name: 'Новая задача',
+            name: this.i18n.t('tasks.new'),
             description: '',
             namespace: namespaceName || 'default',
             priority: 'medium',
             attributes: { status: 'todo' },
         });
         await this._loadTasks();
-        this.success('Задача создана');
+        this.success(this.i18n.t('tasks_page.success_created'));
     }
 
     _taskStatus(task) {
@@ -785,9 +779,17 @@ export class TasksPage extends PlatformElement {
     }
 
     _nextStatusLabel(status) {
-        if (status === 'todo') return 'В работу';
-        if (status === 'in_progress') return 'Готово';
-        return 'Вернуть';
+        if (status === 'todo') return this.i18n.t('tasks_page.next_to_progress');
+        if (status === 'in_progress') return this.i18n.t('tasks_page.next_to_done');
+        return this.i18n.t('tasks_page.next_revert');
+    }
+
+    _getTaskColumnStatuses() {
+        return [
+            { id: 'todo', label: this.i18n.t('tasks_page.column_todo') },
+            { id: 'in_progress', label: this.i18n.t('tasks_page.column_in_progress') },
+            { id: 'done', label: this.i18n.t('tasks_page.column_done') },
+        ];
     }
 
     _nextStatusIcon(status) {
@@ -797,6 +799,7 @@ export class TasksPage extends PlatformElement {
     }
 
     render() {
+        const taskStatuses = this._getTaskColumnStatuses();
         const tasks = this._filteredTasks();
         const tasksByStatus = {
             todo: tasks.filter((task) => this._taskStatus(task) === 'todo'),
@@ -806,28 +809,28 @@ export class TasksPage extends PlatformElement {
 
         return html`
             <div class="page-toolbar">
-                <div class="section-label">Задачи</div>
+                <div class="section-label">${this.i18n.t('tasks.title')}</div>
                 <div class="top-row">
-                    <div class="title">Задачи</div>
+                    <div class="title">${this.i18n.t('tasks.title')}</div>
                     <label class="search-box">
                         <platform-icon name="search" size="14"></platform-icon>
                         <input
                             class="search-input"
                             type="text"
-                            placeholder="Поиск"
+                            placeholder=${this.i18n.t('search', {}, 'common')}
                             .value=${this._filter}
                             @input=${(e) => { this._filter = e.target.value; }}
                         />
                     </label>
                     <div class="toolbar-actions">
-                        <button class="icon-btn-toolbar" type="button" @click=${this._loadTasks} title="Обновить">
+                        <button class="icon-btn-toolbar" type="button" @click=${this._loadTasks} title=${this.i18n.t('refresh', {}, 'common')}>
                             <platform-icon name="refresh" size="16"></platform-icon>
                         </button>
-                        <button class="cta-btn" type="button" @click=${this._createTask}>Создать</button>
+                        <button class="cta-btn" type="button" @click=${this._createTask}>${this.i18n.t('create', {}, 'common')}</button>
                     </div>
                 </div>
                 <div class="status-tabs">
-                    ${TASK_STATUSES.map((s) => html`
+                    ${taskStatuses.map((s) => html`
                         <button
                             class="status-tab ${this._activeStatus === s.id ? 'active' : ''}"
                             type="button"
@@ -841,7 +844,7 @@ export class TasksPage extends PlatformElement {
             </div>
 
             <div class="board">
-                ${TASK_STATUSES.map((s) => {
+                ${taskStatuses.map((s) => {
                     const isActive = !this._isMobile || this._activeStatus === s.id;
                     const statusTasks = tasksByStatus[s.id];
                     return html`
@@ -857,10 +860,10 @@ export class TasksPage extends PlatformElement {
                                 @drop=${(e) => this._onColumnDrop(e, s.id)}
                             >
                                 ${this._loading ? html`
-                                    <div class="empty">Загрузка...</div>
+                                    <div class="empty">${this.i18n.t('loading', {}, 'common')}</div>
                                 ` : statusTasks.length === 0 ? html`
                                     ${this._dndGapEmptyColumn(s.id) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : ''}
-                                    <div class="empty">Нет задач</div>
+                                    <div class="empty">${this.i18n.t('tasks.empty')}</div>
                                 ` : html`
                                     ${statusTasks.map((task) => html`
                                         ${this._dndGapBeforeTask(s.id, task.entity_id) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : ''}
@@ -880,10 +883,10 @@ export class TasksPage extends PlatformElement {
                                                     <div
                                                         class="task-drag-handle"
                                                         draggable="true"
-                                                        title="Перетащить задачу"
+                                                        title=${this.i18n.t('tasks_page.drag_hint')}
                                                         role="button"
                                                         tabindex="0"
-                                                        aria-label="Перетащить задачу"
+                                                        aria-label=${this.i18n.t('tasks_page.drag_hint')}
                                                         @dragstart=${(e) => this._onTaskDragStart(e, task)}
                                                         @dragend=${this._onTaskDragEnd}
                                                         @click=${(e) => e.stopPropagation()}

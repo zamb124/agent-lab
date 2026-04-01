@@ -1,5 +1,5 @@
 /**
- * AI Suggestions Panel - Панель AI предложений с группировкой по типам
+ * Панель AI-предложений с группировкой по типам сущностей.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -279,13 +279,13 @@ export class AISuggestionsPanel extends PlatformElement {
         try {
             if (isUpdate && existingId) {
                 await CRMStore.updateExistingEntity(crmApi, index, existingId);
-                this.success('Сущность обновлена');
+                this.success(this.i18n.t('ai_suggestions.success_entity_updated'));
             } else {
                 await CRMStore.confirmSuggestion(crmApi, index);
-                this.success('Сущность создана');
+                this.success(this.i18n.t('ai_suggestions.success_entity_created'));
             }
         } catch (err) {
-            this.error(`Ошибка: ${err.message}`);
+            this.error(this.i18n.t('ai_suggestions.error', { message: err.message }));
         }
     }
 
@@ -294,9 +294,9 @@ export class AISuggestionsPanel extends PlatformElement {
         const crmApi = this.services.get('crmApi');
         try {
             await CRMStore.confirmRelationship(crmApi, index);
-            this.success('Связь создана');
+            this.success(this.i18n.t('ai_suggestions.success_relationship'));
         } catch (err) {
-            this.error(`Ошибка создания связи: ${err.message}`);
+            this.error(this.i18n.t('ai_suggestions.error_relationship', { message: err.message }));
         }
     }
 
@@ -305,9 +305,9 @@ export class AISuggestionsPanel extends PlatformElement {
         const crmApi = this.services.get('crmApi');
         try {
             const count = await CRMStore.confirmAllSuggestions(crmApi);
-            this.success(`Создано ${count} записей`);
+            this.success(this.i18n.t('ai_suggestions.success_batch', { count }));
         } catch (err) {
-            this.error(`Ошибка: ${err.message}`);
+            this.error(this.i18n.t('ai_suggestions.error', { message: err.message }));
         } finally {
             this._confirming = false;
         }
@@ -324,7 +324,7 @@ export class AISuggestionsPanel extends PlatformElement {
 
         return html`
             <div class="panel-header">
-                <span class="panel-title">AI Предложения</span>
+                <span class="panel-title">${this.i18n.t('ai_suggestions.panel_title')}</span>
                 <div class="panel-actions">
                     ${hasContent ? html`
                         <button
@@ -332,10 +332,12 @@ export class AISuggestionsPanel extends PlatformElement {
                             @click=${this._onConfirmAll}
                             ?disabled=${this._confirming}
                         >
-                            ${this._confirming ? 'Создание...' : `Создать все (${totalCount})`}
+                            ${this._confirming
+                                ? this.i18n.t('ai_suggestions.creating')
+                                : this.i18n.t('ai_suggestions.create_all', { count: totalCount })}
                         </button>
                     ` : ''}
-                    <button class="close-btn" @click=${this._onClose} title="Закрыть">
+                    <button class="close-btn" @click=${this._onClose} title=${this.i18n.t('close', {}, 'common')}>
                         <platform-icon name="close" size="14"></platform-icon>
                     </button>
                 </div>
@@ -347,7 +349,7 @@ export class AISuggestionsPanel extends PlatformElement {
                         <div class="empty-icon">
                             <platform-icon name="book-open" size="56"></platform-icon>
                         </div>
-                        <div class="empty-text">Нет предложений</div>
+                        <div class="empty-text">${this.i18n.t('ai_suggestions.empty')}</div>
                     </div>
                 ` : html`
                     ${groups.map(group => html`
@@ -378,7 +380,7 @@ export class AISuggestionsPanel extends PlatformElement {
                     ${this._relationships.length > 0 ? html`
                         <div class="type-section">
                             <div class="section-header">
-                                <span class="section-title">Связи</span>
+                                <span class="section-title">${this.i18n.t('ai_suggestions.relationships')}</span>
                                 <span class="section-count">${this._relationships.length}</span>
                             </div>
                             <div class="cards-list">

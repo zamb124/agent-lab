@@ -59,7 +59,7 @@ export class SyncChannelRow extends PlatformElement {
                 box-shadow: inset 3px 0 0 rgba(234, 179, 8, 0.85);
             }
 
-            /* Внутри .nav-row-wrap сайдбара фон и рамка только у обёртки, не у кнопки */
+            /* In .nav-row-wrap sidebar, background/border are on the wrapper, not the button */
             :host([in-nav-wrap]) button.nav-item {
                 border: none;
             }

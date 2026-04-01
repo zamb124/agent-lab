@@ -167,15 +167,15 @@ export class GraphSearchPill extends PlatformElement {
                 <input
                     type="text"
                     .value=${this.query}
-                    placeholder="Фильтр..."
+                    placeholder=${this.i18n.t('graph.search_placeholder_short')}
                     @input=${this._onInput}
                     @keydown=${this._onKeydown}
                 />
                 ${hasQuery
-                    ? html`<button class="pill-icon-btn" type="button" title="Очистить" @click=${this._onClear}>
+                    ? html`<button class="pill-icon-btn" type="button" title=${this.i18n.t('graph.search_clear')} @click=${this._onClear}>
                         <svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
                     </button>`
-                    : html`<button class="pill-icon-btn" type="button" title="Обновить граф" @click=${this._onRefresh}>
+                    : html`<button class="pill-icon-btn" type="button" title=${this.i18n.t('graph.search_refresh_graph')} @click=${this._onRefresh}>
                         <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>
                     </button>`
                 }

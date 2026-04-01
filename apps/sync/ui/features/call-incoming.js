@@ -166,7 +166,7 @@ class CallIncoming extends PlatformElement {
             this._audio.loop = true;
             this._audio.volume = 0.6;
             this._audio.play().catch(() => {});
-        } catch { /* звук необязателен */ }
+        } catch { /* optional sound */ }
     }
 
     _stopRinging() {

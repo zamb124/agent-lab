@@ -1,5 +1,5 @@
 /**
- * Entity Preview Tooltip - Popup с информацией о сущности при наведении
+ * Всплывающая подсказка с краткими данными сущности (граф, списки).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -191,10 +191,17 @@ export class EntityPreviewTooltip extends PlatformElement {
             return {
                 icon: this.entityType.icon || 'file',
                 color: this.entityType.color || 'var(--text-tertiary)',
-                label: this.entityType.name || this.entity?.entity_type || 'Сущность',
+                label:
+                    this.entityType.name ||
+                    this.entity?.entity_type ||
+                    this.i18n.t('ai_entity_card.entity_fallback'),
             };
         }
-        return { icon: 'file', color: 'var(--text-tertiary)', label: this.entity?.entity_type || 'Сущность' };
+        return {
+            icon: 'file',
+            color: 'var(--text-tertiary)',
+            label: this.entity?.entity_type || this.i18n.t('ai_entity_card.entity_fallback'),
+        };
     }
 
     _resolveIconName(iconName) {
@@ -231,16 +238,12 @@ export class EntityPreviewTooltip extends PlatformElement {
     }
 
     _formatLabel(key) {
-        const labels = {
-            email: 'Email',
-            phone: 'Телефон',
-            company: 'Компания',
-            position: 'Должность',
-            role: 'Роль',
-            address: 'Адрес',
-            website: 'Сайт',
-        };
-        return labels[key] || key.charAt(0).toUpperCase() + key.slice(1);
+        const fullKey = `entity_preview.attr_labels.${key}`;
+        const translated = this.i18n.t(fullKey);
+        if (translated !== fullKey) {
+            return translated;
+        }
+        return key.charAt(0).toUpperCase() + key.slice(1);
     }
 
     _formatDate(dateStr) {
@@ -291,7 +294,8 @@ export class EntityPreviewTooltip extends PlatformElement {
 
                 ${this.entity.created_at ? html`
                     <div class="footer">
-                        Создано: ${this._formatDate(this.entity.created_at)}
+                        ${this.i18n.t('entity_preview.created_prefix')}
+                        ${this._formatDate(this.entity.created_at)}
                     </div>
                 ` : ''}
             </div>

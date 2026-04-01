@@ -751,7 +751,7 @@ export class DailyNotesPage extends PlatformElement {
         this._dateTo = to;
         if (from !== to) {
             this._loadingSummary = false;
-            this._summaryText = 'Сводка строится для одного дня. Сузьте период до одной даты.';
+            this._summaryText = this.i18n.t('daily_notes_page.summary_need_single_day');
             this._summaryEntities = [];
             this._summaryGeneratedAt = '';
             this._summaryRevalidating = false;
@@ -903,7 +903,7 @@ export class DailyNotesPage extends PlatformElement {
         if (attrs && typeof attrs === 'object' && typeof attrs.ai_summary === 'string' && attrs.ai_summary.trim().length > 0) {
             return this._getLimitedText(attrs.ai_summary, 260);
         }
-        return this._getLimitedText(this._getTextValue(note.description, 'Без описания'), 220);
+        return this._getLimitedText(this._getTextValue(note.description, this.i18n.t('note_content.no_description')), 220);
     }
 
     _getTextValue(value, defaultValue) {
@@ -921,11 +921,11 @@ export class DailyNotesPage extends PlatformElement {
     async _onDateRangeChange(event) {
         const detail = event.detail;
         if (!detail || detail.selection !== 'range') {
-            throw new Error('Ожидается selection=range у platform-date-picker');
+            throw new Error('Expected platform-date-picker selection=range');
         }
         const v = detail.value;
         if (!v || typeof v !== 'object') {
-            throw new Error('Значение диапазона должно быть объектом');
+            throw new Error('Range value must be an object');
         }
         const start = v.start;
         const end = v.end;
@@ -1152,7 +1152,7 @@ export class DailyNotesPage extends PlatformElement {
         ) {
             return this._currentUser.name;
         }
-        return 'Пользователь';
+        return this.i18n.t('entity_card.requester_fallback');
     }
 
     _getAuthorAvatarUrl(note) {
@@ -1231,6 +1231,20 @@ export class DailyNotesPage extends PlatformElement {
         });
     }
 
+    _summaryMetaLine() {
+        if (this._loadingSummary) {
+            return this.i18n.t('daily_notes_page.summary_generating');
+        }
+        if (this._summaryRevalidating) {
+            return this._summaryGeneratedAt
+                ? this.i18n.t('daily_notes_page.summary_revalidating_last', { time: this._summaryGeneratedAt })
+                : this.i18n.t('daily_notes_page.summary_revalidating');
+        }
+        return this._summaryGeneratedAt
+            ? this.i18n.t('daily_notes_page.summary_generated_at', { time: this._summaryGeneratedAt })
+            : this.i18n.t('daily_notes_page.summary_none');
+    }
+
     _renderSummaryContent(summaryTags) {
         return html`
             <div class="summary-header">
@@ -1240,7 +1254,7 @@ export class DailyNotesPage extends PlatformElement {
                     </span>
                     <span class="summary-title-text">Daily summary</span>
                 </h3>
-                <button class="summary-refresh-btn" type="button" title="Обновить" @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary || this._dateFrom !== this._dateTo}>
+                <button class="summary-refresh-btn" type="button" title=${this.i18n.t('refresh', {}, 'common')} @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary || this._dateFrom !== this._dateTo}>
                     <platform-icon
                         class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
                         name="refresh"
@@ -1249,15 +1263,7 @@ export class DailyNotesPage extends PlatformElement {
                 </button>
             </div>
             <div class="summary-meta">
-                ${this._loadingSummary
-                    ? 'Генерация...'
-                    : this._summaryRevalidating
-                        ? this._summaryGeneratedAt
-                            ? `Обновляется... последнее в ${this._summaryGeneratedAt}`
-                            : 'Обновляется...'
-                        : this._summaryGeneratedAt
-                            ? `Сгенерировано в ${this._summaryGeneratedAt}`
-                            : 'Нет summary'}
+                ${this._summaryMetaLine()}
             </div>
             <p class="summary-text">${this._summaryText}</p>
             <div class="summary-tags">
@@ -1276,11 +1282,11 @@ export class DailyNotesPage extends PlatformElement {
         const summaryTags = this._summaryEntities;
 
         return html`
-            <div class="section-label">Ежедневник</div>
+            <div class="section-label">${this.i18n.t('daily_notes_page.section_title')}</div>
             <div class="top-row">
                 <div class="title">
-                    Ежедневник
-                    <button class="title-settings" type="button" title="Настройки">
+                    ${this.i18n.t('daily_notes_page.section_title')}
+                    <button class="title-settings" type="button" title=${this.i18n.t('daily_notes_page.settings_tooltip')}>
                         <platform-icon name="settings" size="18"></platform-icon>
                     </button>
                 </div>
@@ -1289,7 +1295,7 @@ export class DailyNotesPage extends PlatformElement {
                     <input
                         class="search-input"
                         type="text"
-                        placeholder="Введите запрос"
+                        placeholder=${this.i18n.t('daily_notes_page.search_placeholder')}
                         .value=${this._query}
                         @input=${this._onSearchInput}
                     />
@@ -1300,11 +1306,11 @@ export class DailyNotesPage extends PlatformElement {
                         mode="date"
                         selection="range"
                         value-format="iso"
-                        label="Период"
+                        label=${this.i18n.t('daily_notes_page.period_label')}
                         .value=${{ start: this._dateFrom, end: this._dateTo }}
                         @change=${this._onDateRangeChange}
                     ></platform-date-picker>
-                    <button class="cta-btn" type="button" @click=${this._onCreateNote}>Добавить заметку</button>
+                    <button class="cta-btn" type="button" @click=${this._onCreateNote}>${this.i18n.t('daily_notes_page.add_note')}</button>
                 </div>
             </div>
 
@@ -1312,7 +1318,7 @@ export class DailyNotesPage extends PlatformElement {
                 <section class="main-column">
                     <div class="cards-scroll">
                         ${filteredNotes.length === 0 ? html`
-                            <div class="empty">На выбранный период заметок нет</div>
+                            <div class="empty">${this.i18n.t('daily_notes_page.empty_period')}</div>
                         ` : html`
                             <div class="cards-grid">
                                 ${filteredNotes.map((note) => html`
@@ -1326,7 +1332,7 @@ export class DailyNotesPage extends PlatformElement {
                                                             <button
                                                                 class="note-tag ${this._getEntityTagTone(index)}"
                                                                 type="button"
-                                                                title="Открыть сущность"
+                                                                title=${this.i18n.t('ai_analysis_modal.open_entity_title')}
                                                                 @click=${(event) => this._openEntityModal(entity, event)}
                                                             >
                                                                 <platform-icon name=${this._getEntityTagIcon(entity)} size="12"></platform-icon>
@@ -1358,12 +1364,12 @@ export class DailyNotesPage extends PlatformElement {
                                                 `;
                                             })()}
                                             <div class="note-footer-right">
-                                                <span class="published-at">Опубликовано в ${this._formatTime(this._getTextValue(note.updated_at, this._getTextValue(note.created_at, new Date().toISOString())))}</span>
+                                                <span class="published-at">${this.i18n.t('daily_notes_page.published_at', { time: this._formatTime(this._getTextValue(note.updated_at, this._getTextValue(note.created_at, new Date().toISOString()))) })}</span>
                                                 <button
                                                     class="analyze-btn ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : ''}"
                                                     type="button"
                                                     @click=${(event) => { event.stopPropagation(); this._onAnalyzeNote(note); }}
-                                                    title=${this._hasNoteAnalysisDraft(note) ? 'Открыть черновик AI анализа' : 'AI анализ'}
+                                                    title=${this._hasNoteAnalysisDraft(note) ? this.i18n.t('daily_notes_page.analysis_open_draft') : this.i18n.t('daily_notes_page.analysis_run')}
                                                 >
                                                     <platform-icon name="ai" size="14" colored></platform-icon>
                                                 </button>

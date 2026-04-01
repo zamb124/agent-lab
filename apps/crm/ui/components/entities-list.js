@@ -1,6 +1,5 @@
 /**
- * Entities List - Список сущностей с превью
- * Наследует CRMPanel для поддержки сворачивания
+ * Список сущностей с превью (панель CRM).
  */
 import { html, css } from 'lit';
 import { buttonStyles, iconButtonStyles } from '@platform/lib/styles/shared/button.styles.js';
@@ -153,7 +152,7 @@ export class EntitiesList extends CRMPanel {
     constructor() {
         super();
         this.panelId = 'entities-list';
-        this.panelTitle = 'Сущности';
+        this.panelTitle = '';
         this.panelIcon = 'building-one';
         
         this._entities = [];
@@ -167,6 +166,11 @@ export class EntitiesList extends CRMPanel {
             this._entityTypes = state.entities.entityTypes || [];
             this._loading = state.entities.entitiesLoading;
         });
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.panelTitle = this.i18n.t('entities.title');
     }
 
     disconnectedCallback() {
@@ -238,7 +242,7 @@ export class EntitiesList extends CRMPanel {
             <button
                 class="btn-icon primary"
                 @click=${this._onCreateEntity}
-                title="Создать сущность"
+                title=${this.i18n.t('entities.list_create_tooltip')}
             >
                 <platform-icon name="plus" size="16"></platform-icon>
             </button>
@@ -247,7 +251,7 @@ export class EntitiesList extends CRMPanel {
 
     renderContent() {
         if (this._loading) {
-            return html`<div class="loading">Загрузка...</div>`;
+            return html`<div class="loading">${this.i18n.t('loading', {}, 'common')}</div>`;
         }
 
         return html`
@@ -257,9 +261,9 @@ export class EntitiesList extends CRMPanel {
                         <div class="empty-icon">
                             <platform-icon name="book-open" size="56"></platform-icon>
                         </div>
-                        <div>Нет сущностей</div>
+                        <div>${this.i18n.t('entities.empty')}</div>
                         <div style="margin-top: var(--space-2); font-size: var(--text-sm);">
-                            Создайте первую сущность
+                            ${this.i18n.t('entities.list_empty_cta')}
                         </div>
                     </div>
                 ` : this._entities.map(entity => {

@@ -154,7 +154,7 @@ export class SearchView extends PlatformElement {
         e.preventDefault();
         
         if (!this._query || !this._selectedNamespace) {
-            this.warning('Заполните все поля');
+            this.warning(this.i18n.t('search_view.fill_all_fields'));
             return;
         }
         
@@ -182,23 +182,23 @@ export class SearchView extends PlatformElement {
         
         return html`
             <page-header 
-                title="Поиск" 
-                subtitle="Поиск по документам в namespaces"
+                title=${this.i18n.t('search_view.title')} 
+                subtitle=${this.i18n.t('search_view.subtitle')}
             ></page-header>
             
             <form class="search-form" @submit=${this._handleSearch}>
                 <div class="form-row">
                     <div class="form-group" style="flex: 1;">
-                        <label class="form-label">Namespace</label>
+                        <label class="form-label">${this.i18n.t('search_view.label_namespace')}</label>
                         <select class="form-select" @change=${this._handleNamespaceChange} .value=${this._selectedNamespace}>
-                            <option value="">Выберите namespace</option>
+                            <option value="">${this.i18n.t('search_view.select_namespace')}</option>
                             ${namespaces.map(ns => html`
                                 <option value=${ns.namespace_id}>${ns.name}</option>
                             `)}
                         </select>
                     </div>
                     <div class="form-group" style="max-width: 150px;">
-                        <label class="form-label">Результатов</label>
+                        <label class="form-label">${this.i18n.t('search_view.label_limit')}</label>
                         <select class="form-select" @change=${this._handleLimitChange} .value=${String(this._limit)}>
                             <option value="3">3</option>
                             <option value="5">5</option>
@@ -209,17 +209,17 @@ export class SearchView extends PlatformElement {
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Запрос</label>
+                    <label class="form-label">${this.i18n.t('search_view.label_query')}</label>
                     <div class="search-input-wrapper">
                         <input 
                             class="form-input search-input"
                             type="text" 
-                            placeholder="Введите поисковый запрос..."
+                            placeholder=${this.i18n.t('search_view.query_placeholder')}
                             .value=${this._query}
                             @input=${this._handleQueryChange}
                         />
                         <button type="submit" class="btn btn-primary search-btn" ?disabled=${loading}>
-                            ${loading ? 'Поиск...' : 'Найти'}
+                            ${loading ? this.i18n.t('search_view.searching') : this.i18n.t('search_view.find')}
                         </button>
                     </div>
                 </div>
@@ -231,8 +231,8 @@ export class SearchView extends PlatformElement {
                         <div class="result-card">
                             <div class="result-header">
                                 <div>
-                                    <div class="result-title">${result.document_name || 'Документ'}</div>
-                                    <div class="result-meta">Page ${result.page || 'N/A'}</div>
+                                    <div class="result-title">${result.document_name || this.i18n.t('search_view.document_fallback')}</div>
+                                    <div class="result-meta">${this.i18n.t('search_view.page_meta', { page: result.page != null ? String(result.page) : 'N/A' })}</div>
                                 </div>
                                 <div class="result-score">${(result.score * 100).toFixed(1)}%</div>
                             </div>
@@ -245,13 +245,13 @@ export class SearchView extends PlatformElement {
                     <div class="empty-icon">
                         <platform-icon name="eye" size="64"></platform-icon>
                     </div>
-                    <div class="empty-text">Нет результатов</div>
-                    <div class="empty-hint">Введите запрос для поиска</div>
+                    <div class="empty-text">${this.i18n.t('search_view.empty_no_results')}</div>
+                    <div class="empty-hint">${this.i18n.t('search_view.empty_hint')}</div>
                 </div>
             ` : html`
                 <div class="empty">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Поиск...</div>
+                    <div class="loading-text">${this.i18n.t('search_view.searching')}</div>
                 </div>
             `}
         `;

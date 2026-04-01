@@ -119,7 +119,7 @@ export class NoteEditor extends PlatformElement {
             }
             
             .editor:empty:before {
-                content: 'Начните писать...';
+                content: var(--note-editor-empty-placeholder, '');
                 color: var(--text-tertiary);
             }
             
@@ -403,7 +403,7 @@ export class NoteEditor extends PlatformElement {
         const crmApi = this.services.get('crmApi');
         await CRMStore.analyzeText(crmApi, this._noteText, this._currentNoteId);
         this.emit('analysis-ready', { noteId: this._currentNoteId });
-        this.success('Анализ завершен');
+        this.success(this.i18n.t('note_editor.analysis_complete'));
     }
 
     _onEditorFocus() {
@@ -614,16 +614,16 @@ export class NoteEditor extends PlatformElement {
                     <div class="empty-icon">
                         <platform-icon name="book-open" size="56"></platform-icon>
                     </div>
-                    <div>Выберите заметку</div>
+                    <div>${this.i18n.t('note_editor.empty_select_title')}</div>
                     <div style="margin-top: var(--space-2); font-size: var(--text-sm);">
-                        или создайте новую
+                        ${this.i18n.t('note_editor.empty_select_subtitle')}
                     </div>
                 </div>
             `;
         }
         
         if (!this._currentNote) {
-            return html`<div class="empty-state">Загрузка...</div>`;
+            return html`<div class="empty-state">${this.i18n.t('loading', {}, 'common')}</div>`;
         }
 
         const hasRelatedEntities = this._relatedEntities.length > 0;
@@ -637,7 +637,7 @@ export class NoteEditor extends PlatformElement {
                 <input 
                     type="text"
                     class="title-input"
-                    placeholder="Название заметки"
+                    placeholder=${this.i18n.t('note_editor.note_title_placeholder')}
                     .value=${this._currentNote.name || ''}
                     @change=${this._onTitleChange}
                 />
@@ -650,7 +650,7 @@ export class NoteEditor extends PlatformElement {
                     class="ai-analyze-btn ${this._analyzing ? 'analyzing' : ''}"
                     @click=${this._onAnalyze}
                     ?disabled=${this._analyzing}
-                    title="${this._analyzing ? 'Анализируем...' : 'Анализ AI'}"
+                    title=${this._analyzing ? this.i18n.t('note_editor.analyze_analyzing') : this.i18n.t('note_editor.analyze_ai')}
                 >
                     <platform-icon name="ai" size="22"></platform-icon>
                 </button>

@@ -1,6 +1,5 @@
 /**
- * Entity Filters - Панель фильтрации сущностей
- * Наследует CRMPanel для поддержки сворачивания
+ * Панель фильтров списка сущностей (CRMPanel).
  */
 import { html, css } from 'lit';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
@@ -160,7 +159,7 @@ export class EntityFilters extends CRMPanel {
     constructor() {
         super();
         this.panelId = 'entity-filters';
-        this.panelTitle = 'Фильтры';
+        this.panelTitle = '';
         this.panelIcon = 'adjustment';
         
         this._filters = {
@@ -182,6 +181,11 @@ export class EntityFilters extends CRMPanel {
             this._selectedType = state.entities.filters.entity_type;
             this._currentNamespace = state.namespaces.current;
         });
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.panelTitle = this.i18n.t('entity_filters.panel_title');
     }
 
     disconnectedCallback() {
@@ -287,25 +291,25 @@ export class EntityFilters extends CRMPanel {
                             <platform-icon name="folder" size="16"></platform-icon>
                         </span>
                         <div class="namespace-indicator-content">
-                            <div class="namespace-indicator-label">Пространство</div>
+                            <div class="namespace-indicator-label">${this.i18n.t('entity_filters.namespace_label')}</div>
                                 <div class="namespace-indicator-value">${this._getCurrentNamespaceName()}</div>
                         </div>
                     </div>
                 ` : ''}
 
                 <div class="filter-group">
-                    <label class="filter-label">Поиск</label>
+                    <label class="filter-label">${this.i18n.t('entity_filters.search_label')}</label>
                     <input
                         type="text"
                         class="filter-input"
-                        placeholder="Имя, описание..."
+                        placeholder=${this.i18n.t('entity_filters.search_placeholder')}
                         .value=${this._filters.search || ''}
                         @input=${this._onSearchInput}
                     />
                 </div>
 
                 <div class="filter-group">
-                    <label class="filter-label">Тип</label>
+                    <label class="filter-label">${this.i18n.t('entity_filters.type_label')}</label>
                     <div class="type-chips">
                         ${baseTypes.map(type => html`
                             <button
@@ -323,7 +327,7 @@ export class EntityFilters extends CRMPanel {
 
                 ${subtypes.length > 0 ? html`
                     <div class="filter-group">
-                        <label class="filter-label">Подтип</label>
+                        <label class="filter-label">${this.i18n.t('entity_filters.subtype_label')}</label>
                         <div class="type-chips">
                             ${subtypes.map(type => html`
                                 <button
@@ -341,7 +345,7 @@ export class EntityFilters extends CRMPanel {
                 ` : ''}
 
                 <div class="filter-group">
-                    <label class="filter-label">Дата</label>
+                    <label class="filter-label">${this.i18n.t('entity_filters.date_label')}</label>
                     <div class="date-row">
                         <platform-date-picker
                             class="filter-input"
@@ -358,7 +362,7 @@ export class EntityFilters extends CRMPanel {
                 </div>
 
                 <button class="clear-btn" @click=${this._onClearFilters}>
-                    Сбросить фильтры
+                    ${this.i18n.t('entity_filters.reset')}
                 </button>
             </div>
         `;
