@@ -144,5 +144,5 @@ class ContextFactory:
                     if lang.value == browser_lang:
                         return lang
         
-        return Language.RU
+        return Language.EN
 
