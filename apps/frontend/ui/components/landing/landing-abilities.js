@@ -4,6 +4,12 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+import {
+    landFlowsAbilityUrl,
+    landRagAbilityUrl,
+    landNetworkleAbilityUrl,
+    landSyncAbilityUrl,
+} from '../../utils/land-product-images.js';
 
 export class LandingAbilities extends PlatformElement {
     static styles = [
@@ -42,15 +48,21 @@ export class LandingAbilities extends PlatformElement {
             
             .ability-image {
                 width: 100%;
-                aspect-ratio: 4 / 3;
-                background: radial-gradient(circle at center, rgba(87, 104, 254, 0.2), transparent);
+                aspect-ratio: 16 / 9;
+                background: rgba(20, 22, 34, 0.6);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 20px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 64px;
+                overflow: hidden;
                 order: -1;
+                box-shadow: 0 20px 56px rgba(0, 0, 0, 0.35);
+            }
+
+            .ability-image img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                object-position: top center;
+                display: block;
             }
             
             .ability-content {
@@ -179,12 +191,23 @@ export class LandingAbilities extends PlatformElement {
 
     render() {
         const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        const locale = this.i18n.getCurrentLocale();
+        const flowsSrc = landFlowsAbilityUrl(locale);
         return html`
             <div class="abilities-container">
                 <h2 class="abilities-title">${t('features.tag')}</h2>
                 
                 <div class="ability-item">
-                    <div class="ability-image">🚀</div>
+                    <div class="ability-image">
+                        <img
+                            src=${flowsSrc}
+                            alt=${t('features.ability_alt_flows')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
                     <div class="ability-content">
                         <h3 class="ability-name">${t('features.feature1_title')}</h3>
                         <p class="ability-description">
@@ -199,7 +222,16 @@ export class LandingAbilities extends PlatformElement {
                 </div>
                 
                 <div class="ability-item">
-                    <div class="ability-image">💰</div>
+                    <div class="ability-image">
+                        <img
+                            src=${landRagAbilityUrl}
+                            alt=${t('features.ability_alt_kb')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
                     <div class="ability-content">
                         <h3 class="ability-name">${t('features.feature2_title')}</h3>
                         <p class="ability-description">
@@ -214,7 +246,16 @@ export class LandingAbilities extends PlatformElement {
                 </div>
                 
                 <div class="ability-item">
-                    <div class="ability-image">📈</div>
+                    <div class="ability-image">
+                        <img
+                            src=${landNetworkleAbilityUrl}
+                            alt=${t('features.ability_alt_networkle')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
                     <div class="ability-content">
                         <h3 class="ability-name">${t('features.feature3_title')}</h3>
                         <p class="ability-description">
@@ -229,7 +270,16 @@ export class LandingAbilities extends PlatformElement {
                 </div>
                 
                 <div class="ability-item">
-                    <div class="ability-image">🔒</div>
+                    <div class="ability-image">
+                        <img
+                            src=${landSyncAbilityUrl}
+                            alt=${t('features.ability_alt_sync')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
                     <div class="ability-content">
                         <h3 class="ability-name">${t('features.feature4_title')}</h3>
                         <p class="ability-description">

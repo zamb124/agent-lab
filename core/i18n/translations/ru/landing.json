@@ -66,6 +66,10 @@
     "integ_models_500": "500+ AI-моделей"
   },
   "features": {
+    "ability_alt_flows": "AI Studio в Humanitec",
+    "ability_alt_kb": "Knowledge Base в Humanitec",
+    "ability_alt_networkle": "NetWorkle в Humanitec",
+    "ability_alt_sync": "Sync в Humanitec",
     "tag": "/ Возможности платформы",
     "feature1_title": "Запуск за часы, а не месяцы",
     "feature1_description": "Не тратьте время и деньги на разработку с нуля. Используйте готовые сервисы: создавайте AI-агентов, общайтесь в Sync, управляйте контактами в NetWorkle, храните документы в Knowledge Base. Всё уже настроено и работает.",

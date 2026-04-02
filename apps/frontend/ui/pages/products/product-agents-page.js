@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
+import { landFlowsAbilityUrl } from '../../utils/land-product-images.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductAgentsPage extends PlatformElement {
@@ -55,16 +56,20 @@ export class ProductAgentsPage extends PlatformElement {
                 background-clip: text;
             }
             
-            .hero-icon {
-                width: 80px;
-                height: 80px;
-                margin: 0 auto 24px;
+            .hero-shot {
+                max-width: 1000px;
+                margin: 0 auto 32px;
+                border-radius: 20px;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
             }
             
-            .hero-icon img {
+            .hero-shot img {
                 width: 100%;
-                height: 100%;
-                object-fit: contain;
+                height: auto;
+                display: block;
+                vertical-align: top;
             }
             
             .hero-description {
@@ -118,14 +123,19 @@ export class ProductAgentsPage extends PlatformElement {
                 transition: all 0.3s;
             }
             
+            .feature-card::before {
+                content: '';
+                display: block;
+                width: 44px;
+                height: 4px;
+                border-radius: 2px;
+                margin-bottom: 20px;
+                background: linear-gradient(90deg, var(--landing-primary, #5768fe), #8b9dff);
+            }
+            
             .feature-card:hover {
                 border-color: rgba(87, 104, 254, 0.3);
                 transform: translateY(-4px);
-            }
-            
-            .feature-icon {
-                font-size: 48px;
-                margin-bottom: 20px;
             }
             
             .feature-title {
@@ -177,16 +187,17 @@ export class ProductAgentsPage extends PlatformElement {
                 gap: 20px;
             }
             
-            .benefit-icon {
+            .benefit-marker {
                 flex-shrink: 0;
-                width: 56px;
-                height: 56px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(87, 104, 254, 0.15);
-                border-radius: 16px;
-                font-size: 28px;
+                width: 4px;
+                min-height: 52px;
+                border-radius: 2px;
+                margin-top: 4px;
+                background: linear-gradient(
+                    180deg,
+                    var(--landing-primary, #5768fe),
+                    rgba(139, 157, 255, 0.85)
+                );
             }
             
             .benefit-content h3 {
@@ -313,15 +324,23 @@ export class ProductAgentsPage extends PlatformElement {
 
     render() {
         const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
+        const heroSrc = landFlowsAbilityUrl(this.i18n.getCurrentLocale());
         return html`
             <landing-header></landing-header>
             <div class="page-container">
                 <section class="hero">
-                    <div class="hero-icon">
-                        <img src="/static/core/assets/service_logos/agents_logo.svg" alt="AI Studio" />
-                    </div>
                     <span class="hero-badge">${t('agents.hero_badge')}</span>
                     <h1 class="hero-title">${t('agents.hero_title')}</h1>
+                    <div class="hero-shot">
+                        <img
+                            src=${heroSrc}
+                            alt=${t('agents.hero_visual_alt')}
+                            width="1200"
+                            height="675"
+                            loading="eager"
+                            decoding="async"
+                        />
+                    </div>
                     <p class="hero-description">
                         ${t('agents.hero_description')}
                     </p>
@@ -333,7 +352,6 @@ export class ProductAgentsPage extends PlatformElement {
                 <section class="features">
                     <div class="features-grid">
                         <div class="feature-card">
-                            <div class="feature-icon">🎨</div>
                             <h3 class="feature-title">${t('agents.f1_title')}</h3>
                             <p class="feature-description">
                                 ${t('agents.f1_desc')}
@@ -341,7 +359,6 @@ export class ProductAgentsPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">💬</div>
                             <h3 class="feature-title">${t('agents.f2_title')}</h3>
                             <p class="feature-description">
                                 ${t('agents.f2_desc')}
@@ -349,7 +366,6 @@ export class ProductAgentsPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🔌</div>
                             <h3 class="feature-title">${t('agents.f3_title')}</h3>
                             <p class="feature-description">
                                 ${t('agents.f3_desc')}
@@ -357,7 +373,6 @@ export class ProductAgentsPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">📊</div>
                             <h3 class="feature-title">${t('agents.f4_title')}</h3>
                             <p class="feature-description">
                                 ${t('agents.f4_desc')}
@@ -371,7 +386,7 @@ export class ProductAgentsPage extends PlatformElement {
                         <h2 class="benefits-title">${t('agents.benefits_title')}</h2>
                         <div class="benefits-grid">
                             <div class="benefit-item">
-                                <div class="benefit-icon">⏱️</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('agents.b1_h')}</h3>
                                     <p>${t('agents.b1_p')}</p>
@@ -379,7 +394,7 @@ export class ProductAgentsPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">💰</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('agents.b2_h')}</h3>
                                     <p>${t('agents.b2_p')}</p>
@@ -387,7 +402,7 @@ export class ProductAgentsPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">🌙</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('agents.b3_h')}</h3>
                                     <p>${t('agents.b3_p')}</p>
@@ -395,7 +410,7 @@ export class ProductAgentsPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">📈</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('agents.b4_h')}</h3>
                                     <p>${t('agents.b4_p')}</p>
@@ -403,7 +418,7 @@ export class ProductAgentsPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">🎯</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('agents.b5_h')}</h3>
                                     <p>${t('agents.b5_p')}</p>
@@ -411,7 +426,7 @@ export class ProductAgentsPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">🔧</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('agents.b6_h')}</h3>
                                     <p>${t('agents.b6_p')}</p>

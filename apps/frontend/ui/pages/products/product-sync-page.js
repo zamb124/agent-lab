@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
+import { landSyncAbilityUrl } from '../../utils/land-product-images.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductSyncPage extends PlatformElement {
@@ -55,16 +56,20 @@ export class ProductSyncPage extends PlatformElement {
                 background-clip: text;
             }
             
-            .hero-icon {
-                width: 80px;
-                height: 80px;
-                margin: 0 auto 24px;
+            .hero-shot {
+                max-width: 1000px;
+                margin: 0 auto 32px;
+                border-radius: 20px;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
             }
             
-            .hero-icon img {
+            .hero-shot img {
                 width: 100%;
-                height: 100%;
-                object-fit: contain;
+                height: auto;
+                display: block;
+                vertical-align: top;
             }
             
             .hero-description {
@@ -118,14 +123,19 @@ export class ProductSyncPage extends PlatformElement {
                 transition: all 0.3s;
             }
             
+            .feature-card::before {
+                content: '';
+                display: block;
+                width: 44px;
+                height: 4px;
+                border-radius: 2px;
+                margin-bottom: 20px;
+                background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            }
+            
             .feature-card:hover {
                 border-color: rgba(139, 92, 246, 0.35);
                 transform: translateY(-4px);
-            }
-            
-            .feature-icon {
-                font-size: 48px;
-                margin-bottom: 20px;
             }
             
             .feature-title {
@@ -236,16 +246,13 @@ export class ProductSyncPage extends PlatformElement {
                 gap: 20px;
             }
             
-            .benefit-icon {
+            .benefit-marker {
                 flex-shrink: 0;
-                width: 56px;
-                height: 56px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(139, 92, 246, 0.15);
-                border-radius: 16px;
-                font-size: 28px;
+                width: 4px;
+                min-height: 52px;
+                border-radius: 2px;
+                margin-top: 4px;
+                background: linear-gradient(180deg, #6366f1, #8b5cf6);
             }
             
             .benefit-content h3 {
@@ -384,11 +391,18 @@ export class ProductSyncPage extends PlatformElement {
             <landing-header></landing-header>
             <div class="page-container">
                 <section class="hero">
-                    <div class="hero-icon">
-                        <img src="/static/core/assets/service_logos/sync_logo.svg" alt="Sync" />
-                    </div>
                     <span class="hero-badge">${t('sync.hero_badge')}</span>
                     <h1 class="hero-title">${t('sync.hero_title')}</h1>
+                    <div class="hero-shot">
+                        <img
+                            src=${landSyncAbilityUrl}
+                            alt=${t('sync.hero_visual_alt')}
+                            width="1200"
+                            height="675"
+                            loading="eager"
+                            decoding="async"
+                        />
+                    </div>
                     <p class="hero-description">
                         ${t('sync.hero_description')}
                     </p>
@@ -400,7 +414,6 @@ export class ProductSyncPage extends PlatformElement {
                 <section class="features">
                     <div class="features-grid">
                         <div class="feature-card">
-                            <div class="feature-icon">💬</div>
                             <h3 class="feature-title">${t('sync.f1_title')}</h3>
                             <p class="feature-description">
                                 ${t('sync.f1_desc')}
@@ -408,7 +421,6 @@ export class ProductSyncPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">📹</div>
                             <h3 class="feature-title">${t('sync.f2_title')}</h3>
                             <p class="feature-description">
                                 ${t('sync.f2_desc')}
@@ -416,7 +428,6 @@ export class ProductSyncPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🔗</div>
                             <h3 class="feature-title">${t('sync.f3_title')}</h3>
                             <p class="feature-description">
                                 ${t('sync.f3_desc')}
@@ -424,7 +435,6 @@ export class ProductSyncPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🔔</div>
                             <h3 class="feature-title">${t('sync.f4_title')}</h3>
                             <p class="feature-description">
                                 ${t('sync.f4_desc')}
@@ -476,7 +486,7 @@ export class ProductSyncPage extends PlatformElement {
                     <h2 class="benefits-title">${t('sync.benefits_title')}</h2>
                     <div class="benefits-grid">
                         <div class="benefit-item">
-                            <div class="benefit-icon">⚡</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
                                 <h3>${t('sync.b1_h')}</h3>
                                 <p>${t('sync.b1_p')}</p>
@@ -484,7 +494,7 @@ export class ProductSyncPage extends PlatformElement {
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">🛡️</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
                                 <h3>${t('sync.b2_h')}</h3>
                                 <p>${t('sync.b2_p')}</p>
@@ -492,7 +502,7 @@ export class ProductSyncPage extends PlatformElement {
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">👀</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
                                 <h3>${t('sync.b3_h')}</h3>
                                 <p>${t('sync.b3_p')}</p>
@@ -500,7 +510,7 @@ export class ProductSyncPage extends PlatformElement {
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">🧩</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
                                 <h3>${t('sync.b4_h')}</h3>
                                 <p>${t('sync.b4_p')}</p>
@@ -508,7 +518,7 @@ export class ProductSyncPage extends PlatformElement {
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">👤</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
                                 <h3>${t('sync.b5_h')}</h3>
                                 <p>${t('sync.b5_p')}</p>
@@ -516,7 +526,7 @@ export class ProductSyncPage extends PlatformElement {
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">📎</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
                                 <h3>${t('sync.b6_h')}</h3>
                                 <p>${t('sync.b6_p')}</p>

@@ -1,6 +1,7 @@
 {
   "agents": {
     "hero_badge": "AI agent builder",
+    "hero_visual_alt": "AI Studio screenshot: agent builder",
     "hero_title": "AI Studio",
     "hero_description": "Build smart assistants for your business without writing code. The visual builder lets you ship an agent in hours instead of months.",
     "cta_try": "Try for free",
@@ -32,6 +33,7 @@
   },
   "rag": {
     "hero_badge": "Knowledge base with AI search",
+    "hero_visual_alt": "Knowledge Base screenshot: documents and search",
     "hero_title": "Knowledge Base",
     "hero_description": "Upload company documents so your AI agents can answer customers and employees using up-to-date information.",
     "cta_try": "Upload documents",
@@ -70,6 +72,7 @@
   },
   "crm": {
     "hero_badge": "Smart notebook",
+    "hero_visual_alt": "NetWorkle screenshot: graph and notes",
     "hero_title": "NetWorkle",
     "hero_description": "Capture notes after calls and meetings — the system finds people, companies, and deals to build a graph of your business relationships.",
     "cta_try": "Try for free",
@@ -110,6 +113,7 @@
   },
   "sync": {
     "hero_badge": "Team chat and video",
+    "hero_visual_alt": "Sync screenshot: chat and channels",
     "hero_title": "Sync",
     "hero_description": "Channels, DMs, and threads in real time. Video with screen sharing, Git context next to the discussion, and notifications when you are away.",
     "cta_try": "Open Sync",

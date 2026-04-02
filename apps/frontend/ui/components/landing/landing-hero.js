@@ -264,8 +264,8 @@ export class LandingHero extends PlatformElement {
                 <h1 class="hero-title">HUMANITEC</h1>
                 
                     <div class="hero-image-wrapper">
-                        <img 
-                            src="/static/frontend/assets/images/main_img.png" 
+                        <img
+                            src="/static/frontend/assets/images/main_img.png"
                             alt=${t('hero.image_alt')}
                             class="hero-image"
                         />

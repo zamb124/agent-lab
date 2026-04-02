@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
+import { landRagAbilityUrl } from '../../utils/land-product-images.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductRagPage extends PlatformElement {
@@ -55,16 +56,20 @@ export class ProductRagPage extends PlatformElement {
                 background-clip: text;
             }
             
-            .hero-icon {
-                width: 80px;
-                height: 80px;
-                margin: 0 auto 24px;
+            .hero-shot {
+                max-width: 1000px;
+                margin: 0 auto 32px;
+                border-radius: 20px;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
             }
             
-            .hero-icon img {
+            .hero-shot img {
                 width: 100%;
-                height: 100%;
-                object-fit: contain;
+                height: auto;
+                display: block;
+                vertical-align: top;
             }
             
             .hero-description {
@@ -118,14 +123,19 @@ export class ProductRagPage extends PlatformElement {
                 transition: all 0.3s;
             }
             
+            .feature-card::before {
+                content: '';
+                display: block;
+                width: 44px;
+                height: 4px;
+                border-radius: 2px;
+                margin-bottom: 20px;
+                background: linear-gradient(90deg, #2ecc71, #27ae60);
+            }
+            
             .feature-card:hover {
                 border-color: rgba(46, 204, 113, 0.3);
                 transform: translateY(-4px);
-            }
-            
-            .feature-icon {
-                font-size: 48px;
-                margin-bottom: 20px;
             }
             
             .feature-title {
@@ -177,16 +187,13 @@ export class ProductRagPage extends PlatformElement {
                 gap: 20px;
             }
             
-            .benefit-icon {
+            .benefit-marker {
                 flex-shrink: 0;
-                width: 56px;
-                height: 56px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(46, 204, 113, 0.15);
-                border-radius: 16px;
-                font-size: 28px;
+                width: 4px;
+                min-height: 52px;
+                border-radius: 2px;
+                margin-top: 4px;
+                background: linear-gradient(180deg, #2ecc71, #27ae60);
             }
             
             .benefit-content h3 {
@@ -236,8 +243,20 @@ export class ProductRagPage extends PlatformElement {
                 border-radius: 12px;
             }
             
-            .use-case-icon {
-                font-size: 32px;
+            .use-case-num {
+                flex-shrink: 0;
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: 'Fira Sans', sans-serif;
+                font-size: 15px;
+                font-weight: 600;
+                color: #2ecc71;
+                background: rgba(46, 204, 113, 0.12);
+                border: 1px solid rgba(46, 204, 113, 0.35);
             }
             
             .use-case-text {
@@ -362,11 +381,18 @@ export class ProductRagPage extends PlatformElement {
             <landing-header></landing-header>
             <div class="page-container">
                 <section class="hero">
-                    <div class="hero-icon">
-                        <img src="/static/core/assets/service_logos/rag_logo.svg" alt="Knowledge Base" />
-                    </div>
                     <span class="hero-badge">${t('rag.hero_badge')}</span>
                     <h1 class="hero-title">${t('rag.hero_title')}</h1>
+                    <div class="hero-shot">
+                        <img
+                            src=${landRagAbilityUrl}
+                            alt=${t('rag.hero_visual_alt')}
+                            width="1200"
+                            height="675"
+                            loading="eager"
+                            decoding="async"
+                        />
+                    </div>
                     <p class="hero-description">
                         ${t('rag.hero_description')}
                     </p>
@@ -378,7 +404,6 @@ export class ProductRagPage extends PlatformElement {
                 <section class="features">
                     <div class="features-grid">
                         <div class="feature-card">
-                            <div class="feature-icon">📄</div>
                             <h3 class="feature-title">${t('rag.f1_title')}</h3>
                             <p class="feature-description">
                                 ${t('rag.f1_desc')}
@@ -386,7 +411,6 @@ export class ProductRagPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🔍</div>
                             <h3 class="feature-title">${t('rag.f2_title')}</h3>
                             <p class="feature-description">
                                 ${t('rag.f2_desc')}
@@ -394,7 +418,6 @@ export class ProductRagPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🤖</div>
                             <h3 class="feature-title">${t('rag.f3_title')}</h3>
                             <p class="feature-description">
                                 ${t('rag.f3_desc')}
@@ -402,7 +425,6 @@ export class ProductRagPage extends PlatformElement {
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🔒</div>
                             <h3 class="feature-title">${t('rag.f4_title')}</h3>
                             <p class="feature-description">
                                 ${t('rag.f4_desc')}
@@ -416,7 +438,7 @@ export class ProductRagPage extends PlatformElement {
                         <h2 class="benefits-title">${t('rag.benefits_title')}</h2>
                         <div class="benefits-grid">
                             <div class="benefit-item">
-                                <div class="benefit-icon">⚡</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('rag.b1_h')}</h3>
                                     <p>${t('rag.b1_p')}</p>
@@ -424,7 +446,7 @@ export class ProductRagPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">🎓</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('rag.b2_h')}</h3>
                                     <p>${t('rag.b2_p')}</p>
@@ -432,7 +454,7 @@ export class ProductRagPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">📞</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('rag.b3_h')}</h3>
                                     <p>${t('rag.b3_p')}</p>
@@ -440,7 +462,7 @@ export class ProductRagPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">📖</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('rag.b4_h')}</h3>
                                     <p>${t('rag.b4_p')}</p>
@@ -448,7 +470,7 @@ export class ProductRagPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">🔄</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('rag.b5_h')}</h3>
                                     <p>${t('rag.b5_p')}</p>
@@ -456,7 +478,7 @@ export class ProductRagPage extends PlatformElement {
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">💡</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
                                     <h3>${t('rag.b6_h')}</h3>
                                     <p>${t('rag.b6_p')}</p>
@@ -470,27 +492,27 @@ export class ProductRagPage extends PlatformElement {
                     <h2 class="use-cases-title">${t('rag.use_cases_title')}</h2>
                     <div class="use-cases-grid">
                         <div class="use-case-item">
-                            <span class="use-case-icon">📋</span>
+                            <span class="use-case-num">1</span>
                             <span class="use-case-text">${t('rag.uc1')}</span>
                         </div>
                         <div class="use-case-item">
-                            <span class="use-case-icon">❓</span>
+                            <span class="use-case-num">2</span>
                             <span class="use-case-text">${t('rag.uc2')}</span>
                         </div>
                         <div class="use-case-item">
-                            <span class="use-case-icon">📦</span>
+                            <span class="use-case-num">3</span>
                             <span class="use-case-text">${t('rag.uc3')}</span>
                         </div>
                         <div class="use-case-item">
-                            <span class="use-case-icon">📝</span>
+                            <span class="use-case-num">4</span>
                             <span class="use-case-text">${t('rag.uc4')}</span>
                         </div>
                         <div class="use-case-item">
-                            <span class="use-case-icon">🎓</span>
+                            <span class="use-case-num">5</span>
                             <span class="use-case-text">${t('rag.uc5')}</span>
                         </div>
                         <div class="use-case-item">
-                            <span class="use-case-icon">📊</span>
+                            <span class="use-case-num">6</span>
                             <span class="use-case-text">${t('rag.uc6')}</span>
                         </div>
                     </div>

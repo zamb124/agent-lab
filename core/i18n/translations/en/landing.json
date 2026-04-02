@@ -66,6 +66,10 @@
     "integ_models_500": "500+ AI models"
   },
   "features": {
+    "ability_alt_flows": "AI Studio in Humanitec",
+    "ability_alt_kb": "Knowledge Base in Humanitec",
+    "ability_alt_networkle": "NetWorkle in Humanitec",
+    "ability_alt_sync": "Sync in Humanitec",
     "tag": "/ Platform Features",
     "feature1_title": "Launch in hours, not months",
     "feature1_description": "Do not waste time and money building from scratch. Use ready-made services: create AI agents, collaborate in Sync, manage contacts in NetWorkle, store documents in Knowledge Base. Everything is configured and running.",
