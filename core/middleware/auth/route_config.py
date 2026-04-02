@@ -195,6 +195,10 @@ ROUTE_RULES: List[RouteRule] = [
     # API фронтенда для управления scheduler задачами
     RouteRule("/api/scheduler/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/scheduler/*", context_type="api", auth_required=True),
+
+    # Заявки с лендинга (список; доступ system проверяется в обработчике)
+    RouteRule("/api/lead-requests", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/lead-requests", context_type="api", auth_required=True),
     
     # Push Notifications API (публичный ключ без авторизации, подписка с авторизацией)
     RouteRule("/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
@@ -239,6 +243,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/settings/*", context_type="frontend", auth_required=True),
     RouteRule("/settings", context_type="frontend", auth_required=True),
     RouteRule("/scheduler-tasks", context_type="frontend", auth_required=True),
+    RouteRule("/lead-requests", context_type="frontend", auth_required=True),
 
     # Scheduler service API
     RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),

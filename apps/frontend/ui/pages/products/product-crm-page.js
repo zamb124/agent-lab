@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductCrmPage extends PlatformElement {
@@ -366,12 +367,22 @@ export class ProductCrmPage extends PlatformElement {
         }
     };
 
+    _handleProductCtaClick = async () => {
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include',
+        });
+        if (response.ok) {
+            window.location.href = buildServiceEntryUrl('crm');
+            return;
+        }
+        this._handleOpenAuthModal();
+    };
+
     render() {
         const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
         return html`
+            <landing-header></landing-header>
             <div class="page-container">
-                <landing-header></landing-header>
-                
                 <section class="hero">
                     <div class="hero-icon">
                         <img src="/static/core/assets/service_logos/crm_logo.svg" alt="NetWorkle" />
@@ -381,7 +392,7 @@ export class ProductCrmPage extends PlatformElement {
                     <p class="hero-description">
                         ${t('crm.hero_description')}
                     </p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('crm.cta_try')}
                     </button>
                 </section>
@@ -517,7 +528,7 @@ export class ProductCrmPage extends PlatformElement {
                 <section class="cta-section">
                     <h2 class="cta-title">${t('crm.cta_title')}</h2>
                     <p class="cta-subtitle">${t('crm.cta_subtitle')}</p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('crm.cta_button')}
                     </button>
                     <a href="/" class="back-link">${t('crm.back_home')}</a>
@@ -526,7 +537,7 @@ export class ProductCrmPage extends PlatformElement {
                 <landing-footer></landing-footer>
             </div>
             
-            <auth-modal></auth-modal>
+            <auth-modal return-path=${buildServiceEntryUrl('crm')}></auth-modal>
         `;
     }
 }

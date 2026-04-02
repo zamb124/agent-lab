@@ -7,6 +7,10 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingHero extends PlatformElement {
+    static properties = {
+        isAuthenticated: { type: Boolean },
+    };
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -211,9 +215,15 @@ export class LandingHero extends PlatformElement {
         `
     ];
 
+    constructor() {
+        super();
+        this.isAuthenticated = false;
+    }
+
     connectedCallback() {
         super.connectedCallback();
         this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+        void this._checkAuth();
     }
 
     disconnectedCallback() {
@@ -224,12 +234,28 @@ export class LandingHero extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    _handleCTA() {
-        const ctaSection = document.querySelector('landing-cta');
-        if (ctaSection) {
-            ctaSection.scrollIntoView({ behavior: 'smooth' });
+    async _checkAuth() {
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include',
+        });
+        if (response.ok) {
+            this.isAuthenticated = true;
+            this.requestUpdate();
         }
     }
+
+    _handleCTA = () => {
+        if (this.isAuthenticated) {
+            window.location.href = '/dashboard';
+            return;
+        }
+        this.dispatchEvent(
+            new CustomEvent('open-auth-modal', {
+                bubbles: true,
+                composed: true,
+            })
+        );
+    };
 
     render() {
         const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);

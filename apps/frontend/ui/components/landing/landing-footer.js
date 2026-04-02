@@ -30,6 +30,7 @@ export class LandingFooter extends PlatformElement {
             
             .footer-left {
                 flex: 1;
+                min-width: 0;
             }
             
             .footer-email {
@@ -49,12 +50,14 @@ export class LandingFooter extends PlatformElement {
             
             .footer-logo {
                 font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: 100px;
+                font-size: clamp(2rem, 12vw, 6.25rem);
                 font-weight: 500;
                 line-height: 1;
                 color: var(--landing-primary);
                 margin: 0;
                 text-transform: capitalize;
+                max-width: 100%;
+                overflow-wrap: break-word;
             }
             
             .footer-right {
@@ -194,7 +197,7 @@ export class LandingFooter extends PlatformElement {
     }
 
     _legalUrl(pathname) {
-        const lang = new URLSearchParams(window.location.search).get('lang');
+        const lang = this.i18n.getCurrentLocale();
         if (lang === 'ru') {
             return `${pathname}?lang=ru`;
         }
@@ -218,7 +221,7 @@ export class LandingFooter extends PlatformElement {
                     </div>
                     
                     <div class="footer-right">
-                        <a href="#" class="footer-link">${t('footer.docs')}</a>
+                        <a href="/documentation" class="footer-link">${t('footer.docs')}</a>
                     </div>
                 </div>
                 

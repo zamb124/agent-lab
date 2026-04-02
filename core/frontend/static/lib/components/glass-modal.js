@@ -18,6 +18,7 @@ export class GlassModal extends PlatformElement {
         ...PlatformElement.properties,
         open: { type: Boolean, reflect: true },
         size: { type: String },
+        heading: { type: String },
         title: { type: String },
         _isFullscreen: { type: Boolean, state: true },
         _isDragging: { type: Boolean, state: true },
@@ -508,6 +509,67 @@ export class GlassModal extends PlatformElement {
                 color: rgba(15, 23, 42, 0.9);
             }
 
+            /*
+             * Портал в body: при светлой теме документа :host-context(light) красит панель в белый.
+             * data-theme="dark" на хосте принудительно возвращает тёмный glass (лендинг и т.п.).
+             */
+            :host([data-theme="dark"]) .modal-scrim {
+                background: rgba(0, 0, 0, 0.3);
+                backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
+                -webkit-backdrop-filter: blur(var(--glass-blur-subtle, 20px)) saturate(180%);
+            }
+
+            :host([data-theme="dark"]) .modal {
+                background: var(--glass-solid-strong, rgba(40, 40, 40, 0.92));
+                border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
+                box-shadow: var(--glass-shadow-strong,
+                    0 16px 48px rgba(0, 0, 0, 0.4),
+                    0 4px 16px rgba(0, 0, 0, 0.25));
+            }
+
+            :host([data-theme="dark"]) .modal::before {
+                background: linear-gradient(
+                    90deg,
+                    transparent 0%,
+                    rgba(255, 255, 255, 0.15) 20%,
+                    rgba(255, 255, 255, 0.15) 80%,
+                    transparent 100%
+                );
+            }
+
+            :host([data-theme="dark"]) .modal::after {
+                background: linear-gradient(
+                    135deg,
+                    rgba(255, 255, 255, 0.04) 0%,
+                    rgba(255, 255, 255, 0.01) 40%,
+                    transparent 100%
+                );
+            }
+
+            :host([data-theme="dark"]) .header-btn {
+                background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
+                color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+            }
+
+            :host([data-theme="dark"]) .header-btn:hover {
+                background: var(--glass-tint-strong, rgba(255, 255, 255, 0.08));
+                color: var(--text-primary, rgba(255, 255, 255, 0.95));
+            }
+
+            :host([data-theme="dark"]) .modal-content {
+                color: var(--text-primary, rgba(255, 255, 255, 0.95));
+            }
+
+            :host([data-theme="dark"]) .modal-content ::slotted(*) {
+                --text-primary: rgba(255, 255, 255, 0.95);
+                --text-secondary: rgba(255, 255, 255, 0.65);
+                --text-tertiary: rgba(255, 255, 255, 0.45);
+                --glass-solid-subtle: rgba(28, 28, 46, 0.75);
+                --glass-solid-medium: rgba(35, 35, 55, 0.85);
+                --border-default: rgba(255, 255, 255, 0.1);
+                --border-subtle: rgba(255, 255, 255, 0.06);
+            }
+
             @media (prefers-reduced-motion: reduce) {
                 :host([open]) .modal-overlay {
                     animation-duration: 1ms !important;
@@ -537,6 +599,7 @@ export class GlassModal extends PlatformElement {
         super();
         this.open = false;
         this.size = 'md';
+        this.heading = '';
         this.title = '';
         this._isFullscreen = false;
         this._isDragging = false;
@@ -770,7 +833,7 @@ export class GlassModal extends PlatformElement {
     }
 
     renderHeader() {
-        return this.title || '';
+        return this.heading || this.title || '';
     }
 
     renderHeaderActions() {

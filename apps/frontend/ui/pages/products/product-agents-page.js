@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductAgentsPage extends PlatformElement {
@@ -299,12 +300,22 @@ export class ProductAgentsPage extends PlatformElement {
         }
     };
 
+    _handleProductCtaClick = async () => {
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include',
+        });
+        if (response.ok) {
+            window.location.href = buildServiceEntryUrl('flows');
+            return;
+        }
+        this._handleOpenAuthModal();
+    };
+
     render() {
         const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
         return html`
+            <landing-header></landing-header>
             <div class="page-container">
-                <landing-header></landing-header>
-                
                 <section class="hero">
                     <div class="hero-icon">
                         <img src="/static/core/assets/service_logos/agents_logo.svg" alt="AI Studio" />
@@ -314,7 +325,7 @@ export class ProductAgentsPage extends PlatformElement {
                     <p class="hero-description">
                         ${t('agents.hero_description')}
                     </p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('agents.cta_try')}
                     </button>
                 </section>
@@ -413,7 +424,7 @@ export class ProductAgentsPage extends PlatformElement {
                 <section class="cta-section">
                     <h2 class="cta-title">${t('agents.cta_title')}</h2>
                     <p class="cta-subtitle">${t('agents.cta_subtitle')}</p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('agents.cta_button')}
                     </button>
                     <a href="/" class="back-link">${t('agents.back_home')}</a>
@@ -422,7 +433,7 @@ export class ProductAgentsPage extends PlatformElement {
                 <landing-footer></landing-footer>
             </div>
             
-            <auth-modal></auth-modal>
+            <auth-modal return-path=${buildServiceEntryUrl('flows')}></auth-modal>
         `;
     }
 }

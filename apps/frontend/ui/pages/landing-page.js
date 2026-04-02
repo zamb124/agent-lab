@@ -24,6 +24,7 @@ export class LandingPage extends PlatformElement {
             
             section {
                 position: relative;
+                scroll-margin-top: 88px;
             }
         `
     ];
@@ -41,12 +42,14 @@ export class LandingPage extends PlatformElement {
         super.connectedCallback();
         this._setupSmoothScroll();
         this.addEventListener('open-auth-modal', this._handleOpenAuthModal);
+        this.addEventListener('plan-selected', this._handlePlanSelected);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         this._removeSmoothScroll();
         this.removeEventListener('open-auth-modal', this._handleOpenAuthModal);
+        this.removeEventListener('plan-selected', this._handlePlanSelected);
     }
 
     _setupSmoothScroll() {
@@ -79,21 +82,31 @@ export class LandingPage extends PlatformElement {
     };
 
     _handleOpenAuthModal = () => {
-        console.log('🟢 Open auth modal event received');
         const authModal = this.shadowRoot?.querySelector('auth-modal');
-        if (authModal) {
-            console.log('✅ Auth modal found, opening...');
-            authModal.open = true;
-        } else {
-            console.error('❌ Auth modal not found');
+        if (!authModal) {
+            throw new Error('auth-modal not found in landing-page shadow root');
+        }
+        authModal.open = true;
+    };
+
+    _handlePlanSelected = (e) => {
+        if (e.detail?.plan !== 'expert') {
+            return;
+        }
+        const cta = this.shadowRoot?.querySelector('landing-cta');
+        if (cta && typeof cta.openRequestModal === 'function') {
+            cta.openRequestModal();
+        }
+        const section = this.shadowRoot?.getElementById('cta');
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     };
 
     render() {
         return html`
+            <landing-header></landing-header>
             <div class="landing-container">
-                <landing-header></landing-header>
-                
                 <section id="hero">
                     <landing-hero></landing-hero>
                 </section>
@@ -129,7 +142,7 @@ export class LandingPage extends PlatformElement {
                 <landing-footer></landing-footer>
             </div>
             
-            <auth-modal></auth-modal>
+            <auth-modal return-path="/dashboard"></auth-modal>
         `;
     }
 }
@@ -314,6 +327,10 @@ export class LegalPage extends PlatformElement {
         }
         if (raw === 'en') {
             return 'en';
+        }
+        const appLocale = this.i18n.getCurrentLocale();
+        if (appLocale === 'ru' || appLocale === 'en') {
+            return appLocale;
         }
         return defaultLocaleFromNavigator();
     }

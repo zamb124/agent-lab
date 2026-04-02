@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductSyncPage extends PlatformElement {
@@ -366,12 +367,22 @@ export class ProductSyncPage extends PlatformElement {
         }
     };
 
+    _handleProductCtaClick = async () => {
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include',
+        });
+        if (response.ok) {
+            window.location.href = buildServiceEntryUrl('sync');
+            return;
+        }
+        this._handleOpenAuthModal();
+    };
+
     render() {
         const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
         return html`
+            <landing-header></landing-header>
             <div class="page-container">
-                <landing-header></landing-header>
-                
                 <section class="hero">
                     <div class="hero-icon">
                         <img src="/static/core/assets/service_logos/sync_logo.svg" alt="Sync" />
@@ -381,7 +392,7 @@ export class ProductSyncPage extends PlatformElement {
                     <p class="hero-description">
                         ${t('sync.hero_description')}
                     </p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('sync.cta_try')}
                     </button>
                 </section>
@@ -517,7 +528,7 @@ export class ProductSyncPage extends PlatformElement {
                 <section class="cta-section">
                     <h2 class="cta-title">${t('sync.cta_title')}</h2>
                     <p class="cta-subtitle">${t('sync.cta_subtitle')}</p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('sync.cta_button')}
                     </button>
                     <a href="/" class="back-link">${t('sync.back_home')}</a>
@@ -526,7 +537,7 @@ export class ProductSyncPage extends PlatformElement {
                 <landing-footer></landing-footer>
             </div>
             
-            <auth-modal></auth-modal>
+            <auth-modal return-path=${buildServiceEntryUrl('sync')}></auth-modal>
         `;
     }
 }

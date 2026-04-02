@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductRagPage extends PlatformElement {
@@ -344,12 +345,22 @@ export class ProductRagPage extends PlatformElement {
         }
     };
 
+    _handleProductCtaClick = async () => {
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include',
+        });
+        if (response.ok) {
+            window.location.href = buildServiceEntryUrl('rag');
+            return;
+        }
+        this._handleOpenAuthModal();
+    };
+
     render() {
         const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
         return html`
+            <landing-header></landing-header>
             <div class="page-container">
-                <landing-header></landing-header>
-                
                 <section class="hero">
                     <div class="hero-icon">
                         <img src="/static/core/assets/service_logos/rag_logo.svg" alt="Knowledge Base" />
@@ -359,7 +370,7 @@ export class ProductRagPage extends PlatformElement {
                     <p class="hero-description">
                         ${t('rag.hero_description')}
                     </p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('rag.cta_try')}
                     </button>
                 </section>
@@ -488,7 +499,7 @@ export class ProductRagPage extends PlatformElement {
                 <section class="cta-section">
                     <h2 class="cta-title">${t('rag.cta_title')}</h2>
                     <p class="cta-subtitle">${t('rag.cta_subtitle')}</p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('rag.cta_button')}
                     </button>
                     <a href="/" class="back-link">${t('rag.back_home')}</a>
@@ -497,7 +508,7 @@ export class ProductRagPage extends PlatformElement {
                 <landing-footer></landing-footer>
             </div>
             
-            <auth-modal></auth-modal>
+            <auth-modal return-path=${buildServiceEntryUrl('rag')}></auth-modal>
         `;
     }
 }

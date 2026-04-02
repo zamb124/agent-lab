@@ -4,6 +4,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { FrontendStore } from '../store/frontend.store.js';
 import '@platform/lib/components/layout/platform-sidebar.js';
@@ -160,9 +161,15 @@ export class FrontendSidebar extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+        this._onAuthChange = () => this.requestUpdate();
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
     }
 
     disconnectedCallback() {
+        if (this._onAuthChange) {
+            window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
+            this._onAuthChange = null;
+        }
         if (this._i18nUnsub) {
             this._i18nUnsub();
             this._i18nUnsub = null;
@@ -279,6 +286,20 @@ export class FrontendSidebar extends PlatformElement {
                         </span>
                         <span class="nav-label">${t('console_sidebar.scheduler')}</span>
                     </button>
+
+                    ${this.auth.user?.company_id === 'system'
+                        ? html`
+                              <button
+                                  class="nav-item ${currentView === 'lead-requests' ? 'active' : ''}"
+                                  @click=${() => this._navigate('lead-requests')}
+                              >
+                                  <span class="nav-icon">
+                                      <platform-icon name="access-request" size="18"></platform-icon>
+                                  </span>
+                                  <span class="nav-label">${t('console_sidebar.leads')}</span>
+                              </button>
+                          `
+                        : ''}
                 </nav>
 
                 <div class="services-section" data-hide-collapsed>

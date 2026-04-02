@@ -143,6 +143,7 @@ export class FrontendApp extends PlatformApp {
         ['/embed-configs', 'embed-configs'],
         ['/settings', 'settings'],
         ['/scheduler-tasks', 'scheduler-tasks'],
+        ['/lead-requests', 'lead-requests'],
     ]);
 
     _syncCurrentViewFromPathname() {
@@ -229,6 +230,7 @@ export class FrontendApp extends PlatformApp {
             '/billing',
             '/embed-configs',
             '/scheduler-tasks',
+            '/lead-requests',
         ]);
         if (exact.has(path)) {
             return true;
@@ -353,6 +355,8 @@ export class FrontendApp extends PlatformApp {
                 return html`<settings-page></settings-page>`;
             case 'scheduler-tasks':
                 return html`<scheduler-tasks-page></scheduler-tasks-page>`;
+            case 'lead-requests':
+                return html`<leads-requests-page></leads-requests-page>`;
             default:
                 throw new Error(`Unknown view: ${normalizedView}`);
         }

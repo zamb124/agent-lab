@@ -525,7 +525,7 @@ export class SchedulerTasksPage extends PlatformElement {
                   `}
             <glass-modal
                 size="lg"
-                title=${td('scheduler_page.redis_title')}
+                .heading=${td('scheduler_page.redis_title')}
                 ?open=${this.redisSnapshotModalOpen}
                 @modal-closed=${() => this._closeRedisSnapshotModal()}
             >

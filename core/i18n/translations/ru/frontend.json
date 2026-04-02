@@ -116,8 +116,23 @@
     "embed": "Embed Виджеты",
     "settings": "Настройки",
     "scheduler": "Scheduler",
+    "leads": "Заявки",
     "docs_section": "Документация",
     "docs_link": "Humanitec Docs"
+  },
+  "leads_page": {
+    "title": "Заявки с лендинга",
+    "subtitle": "Заявки, оставленные через формы на сайте",
+    "loading": "Загрузка…",
+    "empty": "Пока нет заявок",
+    "load_error": "Не удалось загрузить список заявок",
+    "forbidden": "Раздел доступен только при выборе компании system",
+    "col_created": "Создано",
+    "col_name": "Имя",
+    "col_email": "Email",
+    "col_phone": "Телефон",
+    "col_company": "Компания",
+    "col_comment": "Комментарий"
   },
   "console_home": {
     "loading": "Загрузка...",

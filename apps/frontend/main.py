@@ -3,10 +3,7 @@ Frontend Service - FastAPI приложение для управления пл
 """
 import logging
 import os
-import re
 from pathlib import Path
-from typing import Optional
-from pydantic import BaseModel, field_validator
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -20,6 +17,7 @@ from apps.frontend.api.billing import router as billing_router
 from apps.frontend.api.settings import router as settings_router
 from apps.frontend.api.services import router as services_router
 from apps.frontend.api.scheduler import router as scheduler_router
+from apps.frontend.api.leads import leads_router, lead_requests_router
 from apps.frontend.container import get_frontend_container
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from core.app.factory import create_service_app
@@ -50,6 +48,8 @@ app = create_service_app(
         settings_router,
         services_router,
         scheduler_router,
+        leads_router,
+        lead_requests_router,
     ],
     title="Platform Management",
     description="Управление платформой: авторизация, компании, биллинг",
@@ -87,46 +87,9 @@ for route in list(app.routes):
         app.routes.remove(route)
 
 
-class LeadRequest(BaseModel):
-    name: str
-    email: str
-    phone: Optional[str] = None
-    company: Optional[str] = None
-    comment: Optional[str] = None
-    
-    @field_validator('email')
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(email_regex, v):
-            raise ValueError('Invalid email format')
-        return v
-
-
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "frontend"}
-
-
-@app.post("/api/leads")
-async def create_lead(lead: LeadRequest):
-    """
-    Обработка заявки с лендинга
-    
-    В production версии здесь должна быть:
-    - Валидация данных
-    - Сохранение в БД
-    - Отправка уведомления в CRM/Email/Telegram
-    """
-    logger.info(f"Новая заявка: {lead.name} ({lead.email})")
-    
-    # TODO: Сохранение в БД
-    # TODO: Отправка уведомления
-    
-    return {
-        "success": True,
-        "message": "Заявка принята. Мы свяжемся с вами в ближайшее время."
-    }
 
 
 @app.get("/api/public/legal")

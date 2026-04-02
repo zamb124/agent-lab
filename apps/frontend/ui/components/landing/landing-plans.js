@@ -246,16 +246,18 @@ export class LandingPlans extends PlatformElement {
     ];
 
     _handleCTA(planType) {
+        if (planType === 'constructor') {
+            this.dispatchEvent(new CustomEvent('open-auth-modal', {
+                bubbles: true,
+                composed: true
+            }));
+            return;
+        }
         this.dispatchEvent(new CustomEvent('plan-selected', {
             detail: { plan: planType },
             bubbles: true,
             composed: true
         }));
-        
-        const ctaSection = document.querySelector('landing-cta');
-        if (ctaSection) {
-            ctaSection.scrollIntoView({ behavior: 'smooth' });
-        }
     }
 
     connectedCallback() {
@@ -290,6 +292,7 @@ export class LandingPlans extends PlatformElement {
                             <li>${t('plans.self_li3')}</li>
                             <li>${t('plans.self_li4')}</li>
                             <li>${t('plans.self_li5')}</li>
+                            <li>${t('plans.self_li6')}</li>
                         </ul>
                         <p class="plan-target">
                             ${t('plans.self_target')}

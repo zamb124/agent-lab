@@ -22,6 +22,7 @@ class Storage(Base):
     - agent:flow_id
     - flow:flow_id
     - session:session_id
+    - company:system:request:{uuid} — заявки с лендинга (frontend), значение JSON
     """
 
     __tablename__ = "storage"

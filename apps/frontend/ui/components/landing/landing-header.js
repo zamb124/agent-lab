@@ -290,16 +290,19 @@ export class LandingHeader extends PlatformElement {
             .mobile-menu {
                 display: none;
                 position: fixed;
+                inset: 0;
                 top: 71px;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(15, 15, 15, 0.98);
-                backdrop-filter: blur(20px);
+                box-sizing: border-box;
                 padding: 40px 20px;
                 flex-direction: column;
+                align-items: stretch;
                 gap: 24px;
-                z-index: 99;
+                z-index: 10000;
+                background: #0f0f0f;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                min-height: calc(100vh - 71px);
+                min-height: calc(100dvh - 71px);
             }
             
             .mobile-menu.active {
@@ -486,6 +489,24 @@ export class LandingHeader extends PlatformElement {
         this.mobileMenuOpen = false;
     }
 
+    _onMobileMenuShellClick(e) {
+        if (e.target === e.currentTarget) {
+            this._closeMobileMenu();
+        }
+    }
+
+    _onHeaderBarClick(e) {
+        if (!this.mobileMenuOpen) {
+            return;
+        }
+        const path = e.composedPath();
+        const burger = this.shadowRoot?.querySelector('.burger');
+        if (burger && path.includes(burger)) {
+            return;
+        }
+        this._closeMobileMenu();
+    }
+
     async _setLang(lang) {
         if (this.i18n.getCurrentLocale() === lang) {
             return;
@@ -493,7 +514,36 @@ export class LandingHeader extends PlatformElement {
         await this.i18n.setLocale(lang);
     }
 
+    _resolveLandingPage() {
+        const root = this.getRootNode();
+        if (!(root instanceof ShadowRoot)) {
+            return null;
+        }
+        const host = root.host;
+        if (host?.tagName?.toLowerCase() !== 'landing-page') {
+            return null;
+        }
+        return host;
+    }
+
+    _scrollToLandingSection(sectionId) {
+        const page = this._resolveLandingPage();
+        if (!page) {
+            return;
+        }
+        const target = page.shadowRoot?.getElementById(sectionId);
+        if (!target) {
+            return;
+        }
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     _handleNavClick(e) {
+        const href = e.currentTarget.getAttribute('href');
+        if (href?.startsWith('#')) {
+            e.preventDefault();
+            this._scrollToLandingSection(href.slice(1));
+        }
         this._closeMobileMenu();
         this._closeProductsDropdown();
     }
@@ -544,8 +594,8 @@ export class LandingHeader extends PlatformElement {
         const uiLocale = this.i18n.getCurrentLocale();
         const h = (sub) => this._lt(`header.${sub}`);
         return html`
-            <header class="header-container">
-                <a href="#" class="logo" @click=${this._closeMobileMenu}>
+            <header class="header-container" @click=${this._onHeaderBarClick}>
+                <a href="/" class="logo" @click=${this._closeMobileMenu}>
                     <div class="logo-icon">
                         <img src="/static/core/assets/service_logos/frontend_logo.svg" alt="Humanitec" />
                     </div>
@@ -553,8 +603,8 @@ export class LandingHeader extends PlatformElement {
                 </a>
                 
                 <nav class="nav">
-                    <a href="#about" class="nav-link">${h('about')}</a>
-                    <a href="#abilities" class="nav-link">${h('features')}</a>
+                    <a href="#about" class="nav-link" @click=${this._handleNavClick}>${h('about')}</a>
+                    <a href="#abilities" class="nav-link" @click=${this._handleNavClick}>${h('features')}</a>
                     <div class=${classMap({ 'nav-dropdown': true, 'open': this.productsDropdownOpen })}>
                         <button class="nav-dropdown-trigger" @click=${this._toggleProductsDropdown}>
                             ${h('solutions')}
@@ -634,7 +684,10 @@ export class LandingHeader extends PlatformElement {
                 </div>
             </header>
             
-            <div class=${classMap({ 'mobile-menu': true, active: this.mobileMenuOpen })}>
+            <div
+                class=${classMap({ 'mobile-menu': true, active: this.mobileMenuOpen })}
+                @click=${this._onMobileMenuShellClick}
+            >
                 <a href="#about" class="nav-link" @click=${this._handleNavClick}>${h('about')}</a>
                 <a href="#abilities" class="nav-link" @click=${this._handleNavClick}>${h('features')}</a>
                 

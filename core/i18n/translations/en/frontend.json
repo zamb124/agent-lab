@@ -116,8 +116,23 @@
     "embed": "Embed Widgets",
     "settings": "Settings",
     "scheduler": "Scheduler",
+    "leads": "Leads",
     "docs_section": "Documentation",
     "docs_link": "Humanitec Docs"
+  },
+  "leads_page": {
+    "title": "Landing leads",
+    "subtitle": "Requests submitted via website forms",
+    "loading": "Loading…",
+    "empty": "No leads yet",
+    "load_error": "Could not load leads",
+    "forbidden": "This section is only available when the active company is system",
+    "col_created": "Created",
+    "col_name": "Name",
+    "col_email": "Email",
+    "col_phone": "Phone",
+    "col_company": "Company",
+    "col_comment": "Comment"
   },
   "console_home": {
     "loading": "Loading...",

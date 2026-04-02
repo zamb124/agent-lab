@@ -111,6 +111,7 @@ export class LandingAbout extends PlatformElement {
                 border-radius: 24px;
                 font-size: 14px;
                 color: var(--landing-secondary);
+                text-decoration: none;
                 backdrop-filter: blur(10px);
                 transition: all 0.3s;
                 animation: float 4s ease-in-out infinite;
@@ -131,6 +132,9 @@ export class LandingAbout extends PlatformElement {
             .integration-badge:nth-child(13) { animation-delay: 0.15s; transform: translateY(4px); }
             .integration-badge:nth-child(14) { animation-delay: 0.45s; transform: translateY(-5px); }
             .integration-badge:nth-child(15) { animation-delay: 0.75s; transform: translateY(2px); }
+            .integration-badge:nth-child(16) { animation-delay: 0.25s; transform: translateY(-3px); }
+            .integration-badge:nth-child(17) { animation-delay: 0.55s; transform: translateY(4px); }
+            .integration-badge:nth-child(18) { animation-delay: 0.85s; transform: translateY(-2px); }
             
             .integration-badge:hover {
                 border-color: var(--landing-primary);
@@ -304,6 +308,8 @@ export class LandingAbout extends PlatformElement {
                         <span class="integration-badge highlight">${t('about.integ_pdf')}</span>
                         <a href="/products/crm" class="integration-badge product">${t('about.integ_networkle')}</a>
                         <a href="/products/sync" class="integration-badge product">${t('about.integ_sync')}</a>
+                        <a href="/products/sync" class="integration-badge product">${t('about.integ_chat')}</a>
+                        <a href="/products/sync" class="integration-badge highlight">${t('about.integ_video')}</a>
                         <span class="integration-badge">${t('about.integ_email')}</span>
                         <span class="integration-badge highlight">${t('about.integ_graph')}</span>
                         <span class="integration-badge">${t('about.integ_amocrm')}</span>
