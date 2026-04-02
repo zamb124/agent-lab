@@ -90,6 +90,31 @@ class EntityTimelineBoundsResponse(BaseModel):
     total_entities: int
 
 
+MergeSide = Literal["survivor", "source"]
+
+
+class EntityMergeRequest(BaseModel):
+    """Слияние source в survivor: survivor сохраняет entity_id, source удаляется."""
+
+    survivor_entity_id: str
+    source_entity_id: str
+    scalar_choices: Dict[str, MergeSide] = Field(
+        default_factory=dict,
+        description="Для каждого конфликтного скаляра: survivor | source",
+    )
+    attribute_choices: Dict[str, MergeSide] = Field(
+        default_factory=dict,
+        description="Для каждого конфликтного ключа attributes",
+    )
+
+
+class EntityMergeResponse(BaseModel):
+    """Результат слияния: актуальная survivor-сущность и id удалённой."""
+
+    entity: EntityResponse
+    merged_from_entity_id: str
+
+
 class EntityTypeCreate(BaseModel):
     """Создание типа сущности"""
     type_id: str

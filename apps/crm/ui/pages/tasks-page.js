@@ -507,7 +507,7 @@ export class TasksPage extends PlatformElement {
         this._tasks = [];
         this._loading = false;
         this._filter = '';
-        this._isMobile = false;
+        this._isMobile = CRMStore.state.ui.isMobile;
         this._activeStatus = 'todo';
         this._dragOverStatus = null;
         this._draggingTaskId = null;
@@ -535,6 +535,7 @@ export class TasksPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._isMobile = CRMStore.state.ui.isMobile;
         window.addEventListener('tasks-create', this._onTasksCreate);
         window.addEventListener('tasks-refresh', this._onTasksRefresh);
         window.addEventListener('crm-mobile-search', this._onMobileSearch);

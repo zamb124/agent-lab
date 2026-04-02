@@ -14,7 +14,6 @@ export class EmbedConfigsPage extends PlatformElement {
         css`
             :host {
                 display: block;
-                padding: var(--space-6);
             }
             
             .configs-table {

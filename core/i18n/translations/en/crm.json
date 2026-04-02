@@ -155,7 +155,8 @@
             "title": "Possible Duplicates",
             "merge": "Merge",
             "ignore": "Ignore"
-        }
+        },
+        "merge_first_marked": "First entity marked. Shift+click another row to merge."
     },
     "tasks": {
         "title": "Tasks",
@@ -485,7 +486,7 @@
                 "title": "Calendar"
             },
             "settings": {
-                "title": "Settings"
+                "title": "CRM settings"
             },
             "templates": {
                 "title": "Templates"
@@ -730,6 +731,26 @@
         "add_attribute": "+ Add attribute",
         "saving": "Saving..."
     },
+    "entity_merge": {
+        "heading": "Merge entities",
+        "pick_base": "Which card stays (keeps the URL)",
+        "conflicts": "Differences: pick the left or right value",
+        "no_conflicts": "No field conflicts — pick the base card only.",
+        "submit": "Merge",
+        "success": "Entities merged",
+        "loading": "Loading…",
+        "err_pair": "Two different entity IDs are required",
+        "attr_key": "Attribute: {key}",
+        "field": {
+            "name": "Name",
+            "description": "Description",
+            "status": "Status",
+            "entity_subtype": "Subtype",
+            "priority": "Priority",
+            "note_date": "Note date",
+            "due_date": "Due date"
+        }
+    },
     "namespace_modal": {
         "header": "New space",
         "err_name_required": "Name is required",
@@ -926,6 +947,10 @@
         "toolbar_filter_rel_type": "Filter by relationship type",
         "toolbar_labels_mode": "Toggle label mode",
         "toolbar_reset_view": "Reset view",
+        "toolbar_merge": "Merge with marked",
+        "merge_anchor_set": "First entity marked for merge. Shift+click the second one, or select a node and press «Merge with marked».",
+        "merge_need_pair": "Mark the first entity (Shift+click), select the second on the graph, then press «Merge with marked» again.",
+        "merge_same_node": "Two different entities are required",
         "panel_toggle_search": "Toggle search panel",
         "panel_toggle_timeline": "Toggle timeline",
         "panel_toggle_legend": "Toggle legend",
@@ -948,6 +973,7 @@
         "meta_mode": "mode:",
         "meta_depth": "depth:",
         "meta_nodes": "nodes:",
-        "meta_edges": "edges:"
+        "meta_edges": "edges:",
+        "incident_weight_subtitle": "Weight: {{value}}"
     }
 }

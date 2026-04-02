@@ -26,13 +26,21 @@ from apps.crm.models.api import (
     AIAnalysisRelationshipDraft,
     AIExtractedEntity,
     DeduplicateResult,
+    EntityMergeRequest,
 )
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
+from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
+from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
 from apps.crm.db.models import Relationship
-from apps.crm.constants_graph import IN_CONTEXT_RELATIONSHIP_TYPE, NOTE_VOICE_RELATIONSHIP_TYPE
+from apps.crm.constants_graph import (
+    IN_CONTEXT_RELATIONSHIP_TYPE,
+    NOTE_VOICE_RELATIONSHIP_TYPE,
+    PLATFORM_USER_ID_ATTR,
+)
 from apps.crm.services.attachment_service import AttachmentService
 from apps.crm.services.user_person_service import UserPersonService
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
@@ -85,6 +93,16 @@ def _canonical_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
 
 ANALYSIS_DRAFT_APPLY_MAX_ROUNDS = 3
+
+_MERGE_SCALAR_KEYS: tuple[str, ...] = (
+    "name",
+    "description",
+    "status",
+    "entity_subtype",
+    "priority",
+    "note_date",
+    "due_date",
+)
 
 
 class DraftVersionConflictError(ValueError):
@@ -142,6 +160,9 @@ class EntityService:
         daily_summary_cache_service: DailySummaryCacheService,
         daily_summary_artifact_service: DailySummaryArtifactService,
         user_person_service: UserPersonService,
+        access_grant_repo: AccessGrantRepository,
+        access_request_repo: AccessRequestRepository,
+        company_mapping_repo: CompanyMappingRepository,
     ):
         self._entity_repo = entity_repo
         self._entity_type_repo = entity_type_repo
@@ -153,6 +174,9 @@ class EntityService:
         self._daily_summary_cache_service = daily_summary_cache_service
         self._daily_summary_artifact_service = daily_summary_artifact_service
         self._user_person_service = user_person_service
+        self._access_grant_repo = access_grant_repo
+        self._access_request_repo = access_request_repo
+        self._company_mapping_repo = company_mapping_repo
     
     def _get_company_id(self) -> str:
         context = get_context()
@@ -466,6 +490,169 @@ class EntityService:
         """Получает entity по ID"""
         
         return await self._entity_repo.get(entity_id)
+
+    async def merge_entities(self, body: EntityMergeRequest) -> Tuple[CRMEntity, str]:
+        """
+        Сливает source в survivor: переносит связи и права, объединяет поля по выбору,
+        удаляет source. survivor сохраняет entity_id.
+        """
+        survivor_id = body.survivor_entity_id.strip()
+        source_id = body.source_entity_id.strip()
+        if survivor_id == source_id:
+            raise ValueError("survivor_entity_id и source_entity_id должны различаться")
+
+        survivor = await self._entity_repo.get(survivor_id)
+        source = await self._entity_repo.get(source_id)
+        if survivor is None:
+            raise ValueError(f"Сущность survivor не найдена: {survivor_id}")
+        if source is None:
+            raise ValueError(f"Сущность source не найдена: {source_id}")
+
+        company_id = self._get_company_id()
+        if survivor.company_id != company_id or source.company_id != company_id:
+            raise ValueError("Сущности должны принадлежать активной компании")
+
+        if survivor.namespace != source.namespace:
+            raise ValueError("Разный namespace: слияние запрещено")
+
+        if survivor.entity_type != source.entity_type:
+            raise ValueError("Разный entity_type: слияние запрещено")
+
+        if survivor.entity_type == "note":
+            raise ValueError("Слияние заметок (note) не поддерживается")
+
+        mapping_survivor = await self._company_mapping_repo.get_by_entity(survivor_id)
+        mapping_source = await self._company_mapping_repo.get_by_entity(source_id)
+        if mapping_survivor is not None or mapping_source is not None:
+            raise ValueError("Слияние сущности из company_mapping запрещено")
+
+        for ent, role in ((survivor, "survivor"), (source, "source")):
+            attrs = ent.attributes or {}
+            if attrs.get(PLATFORM_USER_ID_ATTR):
+                raise ValueError(
+                    f"Слияние персональной contact-сущности ({role}) запрещено"
+                )
+
+        scalar_choices = dict(body.scalar_choices)
+        attr_choices = dict(body.attribute_choices)
+
+        conflict_scalar_keys: set[str] = set()
+        merged_scalars: Dict[str, Any] = {}
+        for key in _MERGE_SCALAR_KEYS:
+            av = getattr(survivor, key)
+            bv = getattr(source, key)
+            if _canonical_json(av) == _canonical_json(bv):
+                merged_scalars[key] = av
+            else:
+                conflict_scalar_keys.add(key)
+                if key not in scalar_choices:
+                    raise ValueError(
+                        f"Конфликт поля {key}: укажите scalar_choices[{key!r}] "
+                        f"равным 'survivor' или 'source'"
+                    )
+                side = scalar_choices[key]
+                if side not in ("survivor", "source"):
+                    raise ValueError(f"Недопустимое значение scalar_choices[{key!r}]: {side!r}")
+                merged_scalars[key] = av if side == "survivor" else bv
+
+        extra_scalar = set(scalar_choices) - conflict_scalar_keys
+        if extra_scalar:
+            raise ValueError(
+                "Лишние ключи в scalar_choices (нет конфликта): "
+                + ", ".join(sorted(extra_scalar))
+            )
+
+        sa = dict(survivor.attributes or {})
+        sb = dict(source.attributes or {})
+        all_attr_keys = set(sa.keys()) | set(sb.keys())
+        conflict_attr_keys: set[str] = set()
+        merged_attrs: Dict[str, Any] = {}
+        for k in sorted(all_attr_keys):
+            a_has = k in sa
+            b_has = k in sb
+            if a_has and not b_has:
+                merged_attrs[k] = sa[k]
+            elif b_has and not a_has:
+                merged_attrs[k] = sb[k]
+            elif _canonical_json(sa[k]) == _canonical_json(sb[k]):
+                merged_attrs[k] = sa[k]
+            else:
+                conflict_attr_keys.add(k)
+                if k not in attr_choices:
+                    raise ValueError(
+                        f"Конфликт attributes[{k!r}]: укажите attribute_choices"
+                    )
+                side = attr_choices[k]
+                if side not in ("survivor", "source"):
+                    raise ValueError(f"Недопустимое значение attribute_choices[{k!r}]: {side!r}")
+                merged_attrs[k] = sa[k] if side == "survivor" else sb[k]
+
+        extra_attr = set(attr_choices) - conflict_attr_keys
+        if extra_attr:
+            raise ValueError(
+                "Лишние ключи в attribute_choices (нет конфликта): "
+                + ", ".join(sorted(extra_attr))
+            )
+
+        def _union_str_lists(a: List[str], b: List[str]) -> List[str]:
+            return list(dict.fromkeys([*(a or []), *(b or [])]))
+
+        merged_tags = _union_str_lists(survivor.tags, source.tags)
+        merged_assignees = _union_str_lists(survivor.assignees, source.assignees)
+        merged_attachments = list(
+            dict.fromkeys(
+                [*(survivor.attachment_ids or []), *(source.attachment_ids or [])]
+            )
+        )
+
+        await self._relationship_repo.rewrite_entity_id(company_id, source_id, survivor_id)
+        await self._relationship_repo.deduplicate_relationships_for_entity(survivor_id)
+
+        await self._entity_repo.rewrite_source_entity_id_references(
+            company_id, source_id, survivor_id
+        )
+
+        await self._access_grant_repo.remap_entity_resource_id(
+            company_id, source_id, survivor_id
+        )
+        await self._access_grant_repo.deduplicate_entity_grants(company_id, survivor_id)
+
+        await self._access_request_repo.remap_entity_resource_id(
+            company_id, source_id, survivor_id
+        )
+        await self._access_request_repo.deduplicate_pending_entity_requests(survivor_id)
+
+        source_fresh = await self._entity_repo.get(source_id)
+        if source_fresh is None:
+            raise ValueError("Сущность source пропала до завершения слияния")
+        source_fresh.attachment_ids = []
+        source_fresh.updated_at = datetime.now(timezone.utc)
+        await self._entity_repo.update(source_fresh)
+
+        surv = await self._entity_repo.get(survivor_id)
+        if surv is None:
+            raise ValueError("Сущность survivor не найдена после переноса связей")
+        for key in _MERGE_SCALAR_KEYS:
+            setattr(surv, key, merged_scalars[key])
+        surv.tags = merged_tags
+        surv.assignees = merged_assignees
+        surv.attributes = merged_attrs
+        surv.attachment_ids = merged_attachments
+        surv.updated_at = datetime.now(timezone.utc)
+        await self._ensure_namespace_exists(surv.namespace)
+        await self._ensure_entity_type_allowed_in_namespace(
+            entity_type=surv.entity_type,
+            namespace=surv.namespace,
+            entity_subtype=surv.entity_subtype,
+        )
+        await self._entity_repo.update(surv)
+
+        await self._delete_entity_with_saga(source_id)
+
+        out = await self._entity_repo.get(survivor_id)
+        if out is None:
+            raise ValueError("Сущность survivor не найдена после слияния")
+        return (out, source_id)
     
     async def update_entity(
         self, 

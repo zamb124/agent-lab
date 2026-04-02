@@ -14,6 +14,8 @@ from apps.crm.models.api import (
     EntityUpdate,
     EntityResponse,
     EntityTimelineBoundsResponse,
+    EntityMergeRequest,
+    EntityMergeResponse,
     AIAnalyzeRequest,
     AIAnalyzeResponse,
     AIAnalysisDraftApplyResult,
@@ -88,6 +90,43 @@ async def create_entity(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return EntityResponse.model_validate(entity)
+
+
+@router.post("/merge", response_model=EntityMergeResponse)
+async def merge_entities(
+    body: EntityMergeRequest,
+    service: EntityService = Depends(get_entity_service),
+    access_control: AccessControlService = Depends(get_access_control_service),
+):
+    """Слияние двух сущностей: survivor сохраняет id, source удаляется, связи переносятся."""
+    survivor = await service.get_entity(body.survivor_entity_id.strip())
+    source = await service.get_entity(body.source_entity_id.strip())
+    if survivor is None:
+        raise HTTPException(status_code=404, detail="Survivor entity not found")
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source entity not found")
+
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not user_id or not await access_control.can_write_entity(survivor, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not user_id or not await access_control.can_write_entity(source, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    try:
+        merged, merged_from_id = await service.merge_entities(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        filtered = await access_control.filter_fields(merged, user_id, company_id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return EntityMergeResponse(
+        entity=EntityResponse.model_validate(filtered),
+        merged_from_entity_id=merged_from_id,
+    )
 
 
 @router.get("/search", response_model=List[EntityResponse])

@@ -23,6 +23,7 @@ export class DailyNotesPage extends PlatformElement {
         _summaryRevalidating: { state: true },
         _isMobile: { state: true },
         _summaryOpen: { state: true },
+        _notesLeavingIds: { state: true },
     };
 
     static styles = [
@@ -193,7 +194,19 @@ export class DailyNotesPage extends PlatformElement {
                 box-sizing: border-box;
                 overflow: hidden;
                 cursor: pointer;
-                transition: border-color var(--duration-fast), background var(--duration-fast);
+                opacity: 1;
+                transform: none;
+                transition:
+                    border-color var(--duration-fast),
+                    background var(--duration-fast),
+                    opacity 0.22s ease,
+                    transform 0.22s ease;
+            }
+
+            .note-card.note-card-leaving {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.98);
+                pointer-events: none;
             }
 
             .note-card:hover {
@@ -719,6 +732,7 @@ export class DailyNotesPage extends PlatformElement {
         this._summaryRevalidating = false;
         this._isMobile = false;
         this._summaryOpen = false;
+        this._notesLeavingIds = [];
         this._unsubscribe = null;
         this._onPlatformNotification = this._onPlatformNotification.bind(this);
         this._onMobileSearch = this._onMobileSearch.bind(this);
@@ -740,9 +754,12 @@ export class DailyNotesPage extends PlatformElement {
             const previousNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
             this._currentNamespace = state.namespaces.current;
             const nextNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
-            if (previousNamespace !== nextNamespace) {
+            const namespaceChanged = previousNamespace !== nextNamespace;
+            if (namespaceChanged) {
                 this._reloadNotesForSelectedDate();
                 this._loadDailySummary();
+            } else {
+                this._syncNotesLeavingWithStore(state);
             }
             this._loadVisibleNoteEntities();
         });
@@ -997,9 +1014,47 @@ export class DailyNotesPage extends PlatformElement {
         await this._loadVisibleNoteEntities();
     }
 
+    _syncNotesLeavingWithStore(state) {
+        const storeNotes = Array.isArray(state.entities.notes) ? state.entities.notes : [];
+        const storeIds = new Set(storeNotes.map((n) => n.entity_id));
+        const leaving = new Set(this._notesLeavingIds);
+        let changed = false;
+        for (const id of [...leaving]) {
+            if (storeIds.has(id)) {
+                leaving.delete(id);
+                changed = true;
+            }
+        }
+        for (const note of this._notes) {
+            const id = note.entity_id;
+            if (typeof id !== 'string' || id.trim().length === 0) {
+                throw new Error('Note entity_id is required');
+            }
+            if (!storeIds.has(id) && !leaving.has(id)) {
+                leaving.add(id);
+                changed = true;
+            }
+        }
+        if (changed) {
+            this._notesLeavingIds = [...leaving];
+        }
+    }
+
+    _onNoteCardLeaveTransitionEnd(noteId, event) {
+        if (event.target !== event.currentTarget) {
+            return;
+        }
+        if (event.propertyName !== 'opacity') {
+            return;
+        }
+        this._notes = this._notes.filter((n) => n.entity_id !== noteId);
+        this._notesLeavingIds = this._notesLeavingIds.filter((id) => id !== noteId);
+    }
+
     async _reloadNotesForSelectedDate() {
         const crmApi = this.services.get('crmApi');
         this._noteEntitiesByNoteId = {};
+        this._notesLeavingIds = [];
         const { from, to } = CRMStore.getDailyNotesRange();
         this._dateFrom = from;
         this._dateTo = to;
@@ -1095,7 +1150,11 @@ export class DailyNotesPage extends PlatformElement {
 
     _getFilteredNotes() {
         const normalizedQuery = this._query.trim().toLowerCase();
+        const leavingSet = new Set(this._notesLeavingIds);
         return this._notes.filter((note) => {
+            if (leavingSet.has(note.entity_id)) {
+                return true;
+            }
             if (!normalizedQuery) {
                 return true;
             }
@@ -1456,7 +1515,11 @@ export class DailyNotesPage extends PlatformElement {
                         ` : html`
                             <div class="cards-grid">
                                 ${filteredNotes.map((note) => html`
-                                    <article class="note-card" @click=${() => this._openNoteModal(note)}>
+                                    <article
+                                        class="note-card ${this._notesLeavingIds.includes(note.entity_id) ? 'note-card-leaving' : ''}"
+                                        @click=${() => this._openNoteModal(note)}
+                                        @transitionend=${(e) => this._onNoteCardLeaveTransitionEnd(note.entity_id, e)}
+                                    >
                                         ${(() => {
                                             const relatedEntities = this._getNoteEntities(note);
                                             return html`

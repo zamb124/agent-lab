@@ -9,7 +9,7 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type
 
-from sqlalchemy import delete, select, and_, or_, func
+from sqlalchemy import delete, select, and_, or_, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
@@ -151,6 +151,27 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             logger.info(f"Deleted entity: {entity_id}")
 
         return deleted
+
+    async def rewrite_source_entity_id_references(
+        self,
+        company_id: str,
+        old_entity_id: str,
+        new_entity_id: str,
+    ) -> int:
+        """Поля source_entity_id в crm_entities, указывающие на old, переназначаются на new."""
+        if old_entity_id == new_entity_id:
+            raise ValueError("old_entity_id и new_entity_id должны различаться")
+        async with self._db.session() as session:
+            result = await session.execute(
+                update(CRMEntity)
+                .where(
+                    CRMEntity.company_id == company_id,
+                    CRMEntity.source_entity_id == old_entity_id,
+                )
+                .values(source_entity_id=new_entity_id)
+            )
+            await session.commit()
+            return int(result.rowcount or 0)
 
     # -- List / Filter --
 

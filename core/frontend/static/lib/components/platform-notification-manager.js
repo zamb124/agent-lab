@@ -68,7 +68,7 @@ export class PlatformNotificationManager extends PlatformElement {
 
     _computePanelRect(buttonEl) {
         const r = buttonEl.getBoundingClientRect();
-        const width = Math.min(400, window.innerWidth - 16);
+        const width = Math.min(400, Math.floor(window.innerWidth * 0.8));
         let left = r.left;
         if (left + width > window.innerWidth - 8) {
             left = Math.max(8, window.innerWidth - width - 8);

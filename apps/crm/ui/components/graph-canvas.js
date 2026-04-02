@@ -1,6 +1,12 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { createGraphTextSprite } from './graph-3d-helpers.js';
+import {
+    aggregateIncidentWeightsByNode,
+    computeGraphNodeDisplaySize,
+    createGraphNodeLabelSprite,
+    createGraphTextSprite,
+    maxIncidentWeightOrOne,
+} from './graph-3d-helpers.js';
 
 const GRAPH_PRESETS = {
     dense: { charge: -60, linkWidth: 0.8, nodeRelSize: 5 },
@@ -25,6 +31,7 @@ export class GraphCanvas extends PlatformElement {
         nodeColorFn: { state: true },
         edgeDirectedFn: { state: true },
         relationshipTypeColors: { state: true },
+        incidentWeightSubtitleFn: { attribute: false },
     };
 
     static styles = [
@@ -49,6 +56,7 @@ export class GraphCanvas extends PlatformElement {
         this.nodeColorFn = () => '#bca8ff';
         this.edgeDirectedFn = () => true;
         this.relationshipTypeColors = new Map();
+        this.incidentWeightSubtitleFn = null;
         this._graphInstance = null;
         this._autoFitPending = false;
         this._hoveredNodeId = '';
@@ -93,6 +101,9 @@ export class GraphCanvas extends PlatformElement {
             || changedProperties.has('graphPreset')
         ) {
             this._syncGraph();
+        }
+        if (changedProperties.has('incidentWeightSubtitleFn') && this._graphInstance) {
+            this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
         }
     }
 
@@ -169,27 +180,20 @@ export class GraphCanvas extends PlatformElement {
             const relationType = edge.relationship_type || edge.type || 'related';
             return `${sourceId}:${targetId}:${relationType}`;
         }));
-        const weightByNodeId = new Map();
-        this.graphEdges.forEach((edge) => {
-            const sourceId = edge.source_id || edge.source_entity_id || edge.source;
-            const targetId = edge.target_id || edge.target_entity_id || edge.target;
-            const edgeWeight = typeof edge.weight === 'number' && Number.isFinite(edge.weight) ? edge.weight : 1;
-            weightByNodeId.set(sourceId, (weightByNodeId.get(sourceId) || 0) + edgeWeight);
-            weightByNodeId.set(targetId, (weightByNodeId.get(targetId) || 0) + edgeWeight);
-        });
-        const maxWeight = Math.max(1, ...weightByNodeId.values());
+        const weightByNodeId = aggregateIncidentWeightsByNode(this.graphEdges);
+        const maxWeight = maxIncidentWeightOrOne(weightByNodeId);
         const nodes = this.graphNodes.map((node) => {
             const nodeId = node.entity_id || node.id;
             const totalWeight = weightByNodeId.get(nodeId) || 0;
-            const weightRatio = totalWeight / maxWeight;
-            const baseSize = node.level === 0 ? 2.2 : 1.4;
-            const weightBonus = weightRatio * 3.5;
+            const rawLevel = typeof node.level === 'number' && Number.isFinite(node.level) ? node.level : 1;
+            const sizingLevel = rawLevel === 0 ? 0 : 1;
             return {
                 ...node,
                 id: nodeId,
                 name: node.name || node.label || nodeId,
                 color: this.nodeColorFn(node),
-                size: baseSize + weightBonus,
+                incident_weight_sum: totalWeight,
+                size: computeGraphNodeDisplaySize(sizingLevel, totalWeight, maxWeight),
             };
         });
         if (nodes.length === 1) {
@@ -253,7 +257,26 @@ export class GraphCanvas extends PlatformElement {
                 const group = new THREE.Group();
                 group.add(sphere);
                 const labelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#f0f4ff';
-                const sprite = this._createTextSprite(node.name || node.id || '', labelColor, 24);
+                const subtitleColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
+                const weightSum = typeof node.incident_weight_sum === 'number' && Number.isFinite(node.incident_weight_sum)
+                    ? node.incident_weight_sum
+                    : 0;
+                let subtitle = '';
+                if (typeof this.incidentWeightSubtitleFn === 'function') {
+                    subtitle = this.incidentWeightSubtitleFn(weightSum) || '';
+                }
+                const sprite = subtitle
+                    ? createGraphNodeLabelSprite({
+                        title: node.name || node.id || '',
+                        subtitle,
+                        titleColor: labelColor,
+                        subtitleColor,
+                        titleFontSize: 24,
+                        subtitleFontSize: 14,
+                        maxTitleLength: 28,
+                        maxSubtitleLength: 32,
+                    })
+                    : this._createTextSprite(node.name || node.id || '', labelColor, 24);
                 if (sprite) {
                     sprite.visible = this._shouldShowNodeLabel(node);
                     sprite.position.set(0, radius + 3, 0);

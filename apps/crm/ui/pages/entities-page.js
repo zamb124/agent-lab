@@ -8,6 +8,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
 import '../components/entity-card.js';
 import '../modals/entity-modal.js';
+import '../modals/entity-merge-modal.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class EntitiesPage extends PlatformElement {
@@ -538,6 +539,7 @@ export class EntitiesPage extends PlatformElement {
         this._isMobile = false;
         this._mobileTab = 'list';
         this._debounceTimer = null;
+        this._entitiesMergeFirstId = '';
 
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._entities = state.entities.list;
@@ -625,6 +627,41 @@ export class EntitiesPage extends PlatformElement {
         if (this._isMobile) {
             this._mobileTab = 'card';
         }
+    }
+
+    _openMergeModal(entityIdA, entityIdB) {
+        const a = typeof entityIdA === 'string' ? entityIdA.trim() : '';
+        const b = typeof entityIdB === 'string' ? entityIdB.trim() : '';
+        if (!a || !b || a === b) {
+            throw new Error('Merge requires two distinct entity IDs');
+        }
+        const modal = document.createElement('entity-merge-modal');
+        modal.entityIdA = a;
+        modal.entityIdB = b;
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('merged', () => {
+            this._applyFilters();
+        });
+    }
+
+    _onEntityListClick(entityId, event) {
+        if (event.shiftKey) {
+            if (!this._entitiesMergeFirstId) {
+                this._entitiesMergeFirstId = entityId;
+                this.info(this.i18n.t('entities.merge_first_marked'));
+                return;
+            }
+            if (this._entitiesMergeFirstId === entityId) {
+                this._entitiesMergeFirstId = '';
+                return;
+            }
+            this._openMergeModal(this._entitiesMergeFirstId, entityId);
+            this._entitiesMergeFirstId = '';
+            return;
+        }
+        this._onSelectEntity(entityId);
     }
 
     _onMobileTab(tab) {
@@ -817,7 +854,7 @@ export class EntitiesPage extends PlatformElement {
         return html`
             <article
                 class="entity-card-item ${isActive ? 'active' : ''}"
-                @click=${() => this._onSelectEntity(entity.entity_id)}
+                @click=${(e) => this._onEntityListClick(entity.entity_id, e)}
             >
                 <div class="card-header">
                     <div class="card-type-icon" style="background: ${bgColor}; color: ${typeConfig.color};">

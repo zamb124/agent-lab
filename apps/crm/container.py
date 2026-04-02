@@ -153,6 +153,9 @@ class CRMContainer(BaseContainer):
             daily_summary_cache_service=self.daily_summary_cache_service,
             daily_summary_artifact_service=self.daily_summary_artifact_service,
             user_person_service=self.user_person_service,
+            access_grant_repo=self.access_grant_repository,
+            access_request_repo=self.access_request_repository,
+            company_mapping_repo=self.company_mapping_repository,
         )
     
     @lazy

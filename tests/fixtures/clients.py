@@ -77,7 +77,16 @@ async def rag_client(rag_app, rag_worker):
 
 
 @pytest_asyncio.fixture
-async def crm_client(app, rag_app, rag_service, flows_service, rag_worker):
+async def crm_client(
+    app,
+    rag_app,
+    rag_service,
+    flows_service,
+    rag_worker,
+    unique_id,
+    auth_headers_system,
+    auth_headers_company2,
+):
     """
     HTTP клиент для CRM API (ASGI transport).
     
@@ -92,15 +101,23 @@ async def crm_client(app, rag_app, rag_service, flows_service, rag_worker):
     """
     from apps.crm.main import create_app
     from apps.crm.container import get_crm_container
-    
+
+    from tests.fixtures.crm_test_setup import ensure_crm_per_test_namespace_and_types
+
     crm_app = create_app()
-    
+
     container = get_crm_container()
     await container.company_init_service.initialize_company("system")
     await container.company_init_service.initialize_company("company2")
-    
+
     transport = ASGITransport(app=crm_app)
     async with AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=True) as client:
+        await ensure_crm_per_test_namespace_and_types(
+            client,
+            unique_id,
+            auth_headers_system,
+            auth_headers_company2,
+        )
         yield client
 
 

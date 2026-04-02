@@ -60,6 +60,9 @@ def _build_service() -> EntityService:
         daily_summary_cache_service=AsyncMock(),
         daily_summary_artifact_service=artifact_service,
         user_person_service=AsyncMock(),
+        access_grant_repo=AsyncMock(),
+        access_request_repo=AsyncMock(),
+        company_mapping_repo=AsyncMock(),
     )
 
 

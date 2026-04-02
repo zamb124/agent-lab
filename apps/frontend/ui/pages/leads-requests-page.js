@@ -11,7 +11,6 @@ export class LeadsRequestsPage extends PlatformElement {
         css`
             :host {
                 display: block;
-                padding: var(--space-6);
             }
 
             .table-wrap {

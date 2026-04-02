@@ -22,6 +22,14 @@ description: "CRM NetWorkle система управления сущностя
 - Набор типов сущностей в каждом пространстве задается бизнес-задачей (например: собеседования, кандидаты, сделки, встречи, заметки).
 - **Каждая сущность жестко принадлежит одному `namespace` внутри своей `company_id` и не существует вне этого пространства.**
 
+## Слияние сущностей (merge)
+
+- **HTTP:** `POST /crm/api/v1/entities/merge` с телом `EntityMergeRequest` (`survivor_entity_id`, `source_entity_id`, `scalar_choices`, `attribute_choices`); ответ `EntityMergeResponse` — актуальная survivor-сущность и `merged_from_entity_id`.
+- **Survivor** сохраняет `entity_id`; **source** удаляется после переноса данных. Связи source **не теряются:** в `relationships` все вхождения `source_entity_id` / `target_entity_id`, равные id source, заменяются на id survivor (`RelationshipRepository.rewrite_entity_id`), затем **дедуп** по ключу `(namespace, source, target, relationship_type)` и удаление петель `source == target` (`deduplicate_relationships_for_entity`).
+- **Поля:** конфликтующие скаляры из набора `name`, `description`, `status`, `entity_subtype`, `priority`, `note_date`, `due_date` требуют записи в `scalar_choices`; конфликтующие ключи `attributes` — в `attribute_choices`. Лишние ключи в choices → `422`. `tags` / `assignees` объединяются с дедупликацией порядка; `attachment_ids` — объединение; перед удалением source у source очищается список вложений, чтобы каскад не удалил документы, уже учтённые у survivor.
+- **Дополнительно:** переназначение `crm_entities.source_entity_id` (`EntityRepository.rewrite_source_entity_id_references`), гранты и запросы доступа на entity (`AccessGrantRepository.remap_entity_resource_id` + дедуп грантов, `AccessRequestRepository.remap_entity_resource_id` + дедуп pending).
+- **Ограничения:** одна компания, один `namespace`, один `entity_type`; не `note`; не сущность из `company_mapping`; не contact с `attributes.platform_user_id`. Реализация: `EntityService.merge_entities`.
+
 ## Архитектура
 
 CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relationships, grants)**
@@ -242,6 +250,11 @@ Relationship(
 - Возвращает связанные entities на 1 уровень
 - Фильтр по типам связей
 - Учитывает направление
+
+**Визуализация весов на UI-графе (3D):**
+- Размер узла и подпись завязаны на **сумму `weight` инцидентных рёбер** в текущем отображаемом срезе (influence / overview / related / path).
+- Агрегация: [`aggregateIncidentWeightsByNode`](apps/crm/ui/components/graph-3d-helpers.js), петля `source === target` учитывается один раз; нормализация размера — [`computeGraphNodeDisplaySize`](apps/crm/ui/components/graph-3d-helpers.js); второй строкой подписи показывается локализованный суммарный вес (`graph_page.incident_weight_subtitle`).
+- Основной канвас: [`graph-canvas.js`](apps/crm/ui/components/graph-canvas.js); мини-граф: [`mini-graph-preview.js`](apps/crm/ui/components/mini-graph-preview.js).
 
 **Cross-company traversal:**
 - `RelationshipRepository.get_by_entity_for_graph(cross_company=True)`

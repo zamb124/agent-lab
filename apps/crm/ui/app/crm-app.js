@@ -76,6 +76,7 @@ export class CRMApp extends PlatformApp {
 
             .main {
                 flex: 1;
+                min-width: 0;
                 height: var(--app-vh, 100vh);
                 display: flex;
                 flex-direction: column;
@@ -86,6 +87,7 @@ export class CRMApp extends PlatformApp {
             platform-island {
                 flex: 1;
                 min-height: 0;
+                min-width: 0;
             }
 
             .mobile-shell-header-wrap {

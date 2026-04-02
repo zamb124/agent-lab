@@ -33,6 +33,13 @@ export class CRMAPIService extends BaseService {
         }
         return this.post('/entities', data);
     }
+
+    async mergeEntities(payload) {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Merge payload is required');
+        }
+        return this.post('/entities/merge', payload);
+    }
     
     async updateEntity(entityId, data) {
         if (!entityId) {

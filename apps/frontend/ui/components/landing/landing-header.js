@@ -38,6 +38,7 @@ export class LandingHeader extends PlatformElement {
                 gap: 10px;
                 text-decoration: none;
                 white-space: nowrap;
+                flex-shrink: 0;
             }
             
             .logo-icon {
@@ -186,6 +187,7 @@ export class LandingHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: 16px;
+                flex-shrink: 0;
             }
             
             .lang-switcher {
@@ -337,10 +339,6 @@ export class LandingHeader extends PlatformElement {
                     font-size: 20px;
                 }
                 
-                .nav {
-                    display: flex;
-                }
-                
                 .nav-link {
                     font-size: 18px;
                 }
@@ -356,6 +354,12 @@ export class LandingHeader extends PlatformElement {
                 .login-btn,
                 .dashboard-btn {
                     display: block;
+                }
+            }
+            
+            @media (min-width: 1100px) {
+                .nav {
+                    display: flex;
                 }
                 
                 .burger {

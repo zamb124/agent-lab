@@ -1986,6 +1986,51 @@ export const CRMStore = {
         return entity;
     },
 
+    async mergeEntities(crmApi, payload) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Merge payload is required');
+        }
+
+        const result = await crmApi.mergeEntities(payload);
+        const survivor = result.entity;
+        const mergedFromId = result.merged_from_entity_id;
+        const survivorId = survivor.entity_id;
+
+        baseStore.setState((s) => {
+            const listWithout = s.entities.list.filter((e) => e.entity_id !== mergedFromId);
+            const hasSurvivor = listWithout.some((e) => e.entity_id === survivorId);
+            const nextList = hasSurvivor
+                ? listWithout.map((e) => (e.entity_id === survivorId ? survivor : e))
+                : [...listWithout, survivor];
+
+            let nextCurrentId = s.entities.currentEntityId;
+            if (nextCurrentId === mergedFromId) {
+                nextCurrentId = survivorId;
+            }
+
+            let nextCurrentEntity = s.entities.currentEntity;
+            if (nextCurrentEntity && nextCurrentEntity.entity_id === mergedFromId) {
+                nextCurrentEntity = survivor;
+            } else if (nextCurrentEntity && nextCurrentEntity.entity_id === survivorId) {
+                nextCurrentEntity = survivor;
+            }
+
+            return {
+                entities: {
+                    ...s.entities,
+                    list: nextList,
+                    currentEntityId: nextCurrentId,
+                    currentEntity: nextCurrentEntity,
+                },
+            };
+        });
+
+        return result;
+    },
+
     async updateEntity(crmApi, entityId, data) {
         if (!crmApi) {
             throw new Error('crmApi service is required');

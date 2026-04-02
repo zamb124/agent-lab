@@ -4,6 +4,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
 import '../modals/entity-modal.js';
+import '../modals/entity-merge-modal.js';
 import '../components/graph-canvas.js';
 import '../components/graph-timeline.js';
 import '../components/graph-toolbar.js';
@@ -614,6 +615,8 @@ export class GraphPage extends PlatformElement {
         this._timelineMinTimestamp = 0;
         this._timelineMaxTimestamp = 0;
         this._panelVisibility = _resolvePanelVisibility();
+        /** @type {string} первая сущность для слияния (Shift+клик) */
+        this._mergeAnchorId = '';
         this._contextMenu = null;
         this._timelineReloadTimer = null;
         this._entityTypePaletteNamespace = '';
@@ -869,6 +872,14 @@ export class GraphPage extends PlatformElement {
         return colorsByType;
     }
 
+    _graphIncidentWeightSubtitle(sum) {
+        if (typeof sum !== 'number' || !Number.isFinite(sum) || sum <= 0) {
+            return '';
+        }
+        const value = sum.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+        return this.i18n.t('graph_page.incident_weight_subtitle', { value });
+    }
+
     _nodeColor(node) {
         if (node.access === false) {
             return '#7f7f8f';
@@ -975,6 +986,26 @@ export class GraphPage extends PlatformElement {
         if (advancedDrawer && advancedDrawer.open && !event.composedPath().includes(advancedDrawer)) {
             advancedDrawer.open = false;
         }
+    }
+
+    _openMergeModal(entityIdA, entityIdB) {
+        const a = typeof entityIdA === 'string' ? entityIdA.trim() : '';
+        const b = typeof entityIdB === 'string' ? entityIdB.trim() : '';
+        if (!a || !b || a === b) {
+            throw new Error('Merge requires two distinct entity IDs');
+        }
+        const modal = document.createElement('entity-merge-modal');
+        modal.entityIdA = a;
+        modal.entityIdB = b;
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('merged', () => {
+            this._loadGraphData().catch((error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.error(this.i18n.t('graph_page.err_timeline', { message }));
+            });
+        });
     }
 
     _openEntityModal(entityId) {
@@ -1114,6 +1145,19 @@ export class GraphPage extends PlatformElement {
             await this._resetCanvasView();
             return;
         }
+        if (actionId === 'merge_entities') {
+            if (!this._mergeAnchorId || !this._selectedNodeId) {
+                this.warning(this.i18n.t('graph_page.merge_need_pair'));
+                return;
+            }
+            if (this._mergeAnchorId === this._selectedNodeId) {
+                this.warning(this.i18n.t('graph_page.merge_same_node'));
+                return;
+            }
+            this._openMergeModal(this._mergeAnchorId, this._selectedNodeId);
+            this._mergeAnchorId = '';
+            return;
+        }
         throw new Error(`Unsupported toolbar action: ${actionId}`);
     }
 
@@ -1176,6 +1220,21 @@ export class GraphPage extends PlatformElement {
         this._attachmentEntityId = node.id;
         if (event?.altKey) {
             this._onOpenEntity(node.id);
+            return;
+        }
+        if (event?.shiftKey) {
+            const id = node.id;
+            if (!this._mergeAnchorId) {
+                this._mergeAnchorId = id;
+                this.info(this.i18n.t('graph_page.merge_anchor_set'));
+                return;
+            }
+            if (this._mergeAnchorId === id) {
+                this._mergeAnchorId = '';
+                return;
+            }
+            this._openMergeModal(this._mergeAnchorId, id);
+            this._mergeAnchorId = '';
             return;
         }
         if (this._canvasPathState === 'pick_source') {
@@ -1978,6 +2037,7 @@ export class GraphPage extends PlatformElement {
             { id: 'filter_rel_type', label: this.i18n.t('graph_page.toolbar_filter_rel_type') },
             { id: 'labels_mode', label: this.i18n.t('graph_page.toolbar_labels_mode') },
             { id: 'reset_view', label: this.i18n.t('graph_page.toolbar_reset_view') },
+            { id: 'merge_entities', label: this.i18n.t('graph_page.toolbar_merge') },
         ];
         const toolbarToggles = [
             { id: 'search', label: this.i18n.t('graph_page.panel_toggle_search'), active: this._panelVisibility.search },
@@ -2001,6 +2061,7 @@ export class GraphPage extends PlatformElement {
                         .nodeColorFn=${(node) => this._nodeColor(node)}
                         .edgeDirectedFn=${(edge) => this._isEdgeDirected(edge)}
                         .relationshipTypeColors=${relTypeColors}
+                        .incidentWeightSubtitleFn=${(sum) => this._graphIncidentWeightSubtitle(sum)}
                         @node-click=${(e) => this._onCanvasNodeClick(e.detail.node, e.detail.event)}
                         @node-dblclick=${(e) => { const canvas = this.renderRoot?.querySelector('graph-canvas'); if (canvas) { canvas.flyToNode(e.detail.node); } }}
                         @node-contextmenu=${(e) => this._showContextMenu(e.detail.screenX, e.detail.screenY, e.detail.node?.id, null)}

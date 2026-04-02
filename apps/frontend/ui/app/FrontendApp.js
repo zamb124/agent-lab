@@ -12,7 +12,7 @@ import { ServicesStatusService } from '../services/services-status.service.js';
 import { EmbedService } from '../services/embed.service.js';
 import { FlowsCatalogService } from '../services/flows-catalog.service.js';
 import { SchedulerTasksService } from '../services/scheduler-tasks.service.js';
-import { FrontendStore } from '../store/frontend.store.js';
+import { FrontendStore, getConsoleViewForPath } from '../store/frontend.store.js';
 import { replaceLocationToLastVisitedNonFrontendService } from '@platform/lib/utils/last-visited-service.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/auth-modal.js';
@@ -131,29 +131,14 @@ export class FrontendApp extends PlatformApp {
     }
 
     /**
-     * Персистентный ui.currentView и URL расходятся: сайдбар меняет только store.
-     * При заходе по /dashboard в store мог остаться другой таб (например scheduler-tasks),
-     * плюс при откате деплоя старый бандл без case для нового view падает с Unknown view.
+     * Персистентный ui.currentView и URL: при загрузке и назад/вперёд берём view из pathname.
+     * Клик по сайдбару обновляет и store, и URL через FrontendStore.setCurrentView.
      */
-    static _VIEW_BY_PATH = new Map([
-        ['/dashboard', 'dashboard'],
-        ['/team', 'team'],
-        ['/api-keys', 'api-keys'],
-        ['/billing', 'billing'],
-        ['/embed-configs', 'embed-configs'],
-        ['/settings', 'settings'],
-        ['/scheduler-tasks', 'scheduler-tasks'],
-        ['/lead-requests', 'lead-requests'],
-    ]);
-
     _syncCurrentViewFromPathname() {
         const path = window.location.pathname;
-        let view = FrontendApp._VIEW_BY_PATH.get(path);
-        if (!view && path.startsWith('/settings/')) {
-            view = 'settings';
-        }
+        const view = getConsoleViewForPath(path);
         if (view) {
-            FrontendStore.setCurrentView(view);
+            FrontendStore.setCurrentView(view, { skipUrlSync: true });
         }
     }
 
@@ -161,9 +146,18 @@ export class FrontendApp extends PlatformApp {
         this._syncCurrentViewFromPathname();
         super.connectedCallback();
         this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+        this._onPopState = () => {
+            this._syncCurrentViewFromPathname();
+            this.requestUpdate();
+        };
+        window.addEventListener('popstate', this._onPopState);
     }
 
     disconnectedCallback() {
+        if (this._onPopState) {
+            window.removeEventListener('popstate', this._onPopState);
+            this._onPopState = null;
+        }
         if (this._i18nUnsub) {
             this._i18nUnsub();
             this._i18nUnsub = null;

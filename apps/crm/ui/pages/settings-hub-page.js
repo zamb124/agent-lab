@@ -8,13 +8,34 @@ export class SettingsHubPage extends PlatformElement {
         PlatformElement.styles,
         css`
             :host { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
-            .container { display: flex; flex-direction: column; gap: var(--space-4); height: 100%; overflow-y: auto; padding: var(--space-2); }
-            .section { background: var(--crm-surface); border: 1px solid var(--crm-stroke); border-radius: var(--radius-xl); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+            .container {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+                height: 100%;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: var(--space-2);
+            }
+            .section {
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                background: var(--crm-surface);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-xl);
+                padding: var(--space-4);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
             .hero { display: flex; align-items: center; gap: var(--space-3); }
             .hero-title { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font-size: var(--text-lg); font-weight: 700; }
             .hero-subtitle { color: var(--text-secondary); font-size: var(--text-sm); }
-            .menu-btn { width: 32px; height: 32px; display: none; align-items: center; justify-content: center; border-radius: var(--radius-md); background: var(--crm-surface-muted); border: 1px solid var(--crm-stroke); color: var(--text-primary); cursor: pointer; }
-            .cards-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+            .cards-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
             .settings-card {
                 border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-xl);
@@ -45,13 +66,12 @@ export class SettingsHubPage extends PlatformElement {
             .card-description { color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; }
             .card-arrow { color: var(--text-tertiary); align-self: flex-end; transition: transform var(--duration-fast); }
             .settings-card:hover .card-arrow { transform: translateX(4px); color: var(--text-primary); }
-            @media (max-width: 767px) { .menu-btn { display: inline-flex; } }
+            @media (max-width: 767px) {
+                .hero-title { display: none; }
+                .cards-grid { grid-template-columns: 1fr; }
+            }
         `,
     ];
-
-    _openSidebar() {
-        window.dispatchEvent(new CustomEvent('platform-sidebar-open', { bubbles: true, composed: true }));
-    }
 
     _navigateTo(sectionId) {
         CRMStore.setCurrentView(sectionId);
@@ -82,9 +102,6 @@ export class SettingsHubPage extends PlatformElement {
                     <div class="hero">
                         <div>
                             <div class="hero-title">
-                                <button class="menu-btn" @click=${this._openSidebar} title=${this.i18n.t('settings_hub.open_menu')}>
-                                    <platform-icon name="menu" size="18"></platform-icon>
-                                </button>
                                 <platform-icon name="settings" size="18"></platform-icon>
                                 ${this.i18n.t('settings_hub.hero_title')}
                             </div>

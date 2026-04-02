@@ -9,7 +9,6 @@ export class SchedulerTasksPage extends PlatformElement {
         css`
             :host {
                 display: block;
-                padding: var(--space-6);
             }
 
             .toolbar {

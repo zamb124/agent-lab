@@ -6,8 +6,7 @@
 """
 
 from typing import List, Optional, Dict
-from sqlalchemy import select, delete, or_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete, or_, update
 
 from apps.crm.db.base import CRMDatabase, BaseCRMRepository
 from apps.crm.db.models import Relationship
@@ -256,4 +255,82 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             
             logger.info(f"Loaded {len(relationships)} relationships for graph (limit={limit})")
             return relationships
+
+    async def rewrite_entity_id(
+        self,
+        company_id: str,
+        old_entity_id: str,
+        new_entity_id: str,
+    ) -> int:
+        """
+        Заменяет old_entity_id на new_entity_id в source и target.
+        Возвращает суммарное число затронутых строк (две операции UPDATE).
+        """
+        if old_entity_id == new_entity_id:
+            raise ValueError("old_entity_id и new_entity_id должны различаться")
+        async with self._db.session() as session:
+            res_src = await session.execute(
+                update(Relationship)
+                .where(
+                    Relationship.company_id == company_id,
+                    Relationship.source_entity_id == old_entity_id,
+                )
+                .values(source_entity_id=new_entity_id)
+            )
+            res_tgt = await session.execute(
+                update(Relationship)
+                .where(
+                    Relationship.company_id == company_id,
+                    Relationship.target_entity_id == old_entity_id,
+                )
+                .values(target_entity_id=new_entity_id)
+            )
+            await session.commit()
+            n_src = int(res_src.rowcount or 0)
+            n_tgt = int(res_tgt.rowcount or 0)
+            logger.info(
+                f"Rewrote entity_id {old_entity_id} -> {new_entity_id}: "
+                f"source_rows={n_src} target_rows={n_tgt}"
+            )
+            return n_src + n_tgt
+
+    async def delete_by_relationship_id(self, relationship_id: str) -> bool:
+        company_id = self._get_company_id()
+        async with self._db.session() as session:
+            stmt = delete(Relationship).where(
+                Relationship.company_id == company_id,
+                Relationship.relationship_id == relationship_id,
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            return int(result.rowcount or 0) > 0
+
+    async def deduplicate_relationships_for_entity(self, entity_id: str) -> None:
+        """
+        Удаляет петли source==target и дубликаты по ключу
+        (namespace, source, target, relationship_type), оставляя запись с минимальным relationship_id.
+        """
+        company_id = self._get_company_id()
+        rels = await self.get_by_entity(entity_id)
+        loops = [r for r in rels if r.source_entity_id == r.target_entity_id]
+        for r in loops:
+            await self.delete_by_relationship_id(r.relationship_id)
+
+        rels = await self.get_by_entity(entity_id)
+        groups: Dict[tuple[str, str, str, str], List[Relationship]] = {}
+        for r in rels:
+            key = (
+                r.namespace,
+                r.source_entity_id,
+                r.target_entity_id,
+                r.relationship_type,
+            )
+            groups.setdefault(key, []).append(r)
+        for group in groups.values():
+            if len(group) <= 1:
+                continue
+            keeper = min(group, key=lambda x: x.relationship_id)
+            for r in group:
+                if r.relationship_id != keeper.relationship_id:
+                    await self.delete_by_relationship_id(r.relationship_id)
 

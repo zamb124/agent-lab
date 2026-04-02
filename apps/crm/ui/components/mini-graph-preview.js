@@ -1,7 +1,13 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
-import { createGraphTextSprite, createMatteSphereNodeGroup } from './graph-3d-helpers.js';
+import {
+    aggregateIncidentWeightsByNode,
+    computeGraphNodeDisplaySize,
+    createGraphTextSprite,
+    createMatteSphereNodeGroup,
+    maxIncidentWeightOrOne,
+} from './graph-3d-helpers.js';
 
 const API_MAX_DEPTH = 5;
 const MINI_NODE_REL_SIZE = 4;
@@ -293,13 +299,11 @@ export class MiniGraphPreview extends PlatformElement {
                 throw new Error('Graph node must have entity_id or id');
             }
             const level = _normalizeLevel(raw, root, id);
-            const isCenter = id === root;
             return {
                 ...raw,
                 id,
                 name: raw.name || raw.label || id,
                 color: _resolveNodeColor(raw),
-                size: isCenter ? 2.4 : 1.2,
                 level,
             };
         });
@@ -322,15 +326,32 @@ export class MiniGraphPreview extends PlatformElement {
             }
             const directed = _edgeDirected(edge);
             const relationType = edge.relationship_type || edge.type || 'related';
+            const edgeWeight = typeof edge.weight === 'number' && Number.isFinite(edge.weight) ? edge.weight : 1;
             sceneLinks.push({
                 source,
                 target,
                 directed,
                 relation_type: relationType,
+                weight: edgeWeight,
             });
         }
 
-        return { nodes: visibleNodes, links: sceneLinks };
+        const weightByNode = aggregateIncidentWeightsByNode(sceneLinks);
+        const maxW = maxIncidentWeightOrOne(weightByNode);
+        const nodesWithSize = visibleNodes.map((n) => {
+            const total = weightByNode.get(n.id) || 0;
+            const rawLevel = typeof n.level === 'number' && Number.isFinite(n.level) ? n.level : 1;
+            const sizingLevel = rawLevel === 0 ? 0 : 1;
+            const size = computeGraphNodeDisplaySize(sizingLevel, total, maxW);
+            let graph_weight_subtitle = '';
+            if (total > 0) {
+                const value = total.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+                graph_weight_subtitle = this.i18n.t('graph_page.incident_weight_subtitle', { value });
+            }
+            return { ...n, size, graph_weight_subtitle };
+        });
+
+        return { nodes: nodesWithSize, links: sceneLinks };
     }
 
     _syncFilteredGraphData() {
@@ -410,11 +431,16 @@ export class MiniGraphPreview extends PlatformElement {
             .nodeColor((n) => n.color)
             .nodeVal((n) => n.size)
             .nodeLabel(() => '')
-            .nodeThreeObject((node) => createMatteSphereNodeGroup(node, {
-                nodeRelSize: MINI_NODE_REL_SIZE,
-                labelColor,
-                labelFontSize: 16,
-            }))
+            .nodeThreeObject((node) => {
+                const subtitleColor = getComputedStyle(document.documentElement)
+                    .getPropertyValue('--text-secondary').trim() || '#d4dae8';
+                return createMatteSphereNodeGroup(node, {
+                    nodeRelSize: MINI_NODE_REL_SIZE,
+                    labelColor,
+                    subtitleColor,
+                    labelFontSize: 16,
+                });
+            })
             .nodeThreeObjectExtend(false)
             .linkColor((link) => (link.directed ? linkDirectedColor : linkBaseColor))
             .linkWidth((link) => (link.directed ? 0.9 : 0.6))

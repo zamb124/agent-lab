@@ -27,14 +27,36 @@ export class SpacesPage extends PlatformElement {
         PlatformElement.styles,
         css`
             :host { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
-            .container { display: flex; flex-direction: column; gap: var(--space-4); height: 100%; overflow-y: auto; padding: var(--space-2); }
-            .section { background: var(--crm-surface); border: 1px solid var(--crm-stroke); border-radius: var(--radius-xl); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+            .container {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+                height: 100%;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: var(--space-2);
+            }
+            .section {
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                background: var(--crm-surface);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-xl);
+                padding: var(--space-4);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
             .hero { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
             .hero-title { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font-size: var(--text-lg); font-weight: 700; }
             .hero-subtitle { color: var(--text-secondary); font-size: var(--text-sm); }
             .section-header { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font-size: var(--text-lg); font-weight: 600; }
             .card-text { color: var(--text-secondary); font-size: var(--text-sm); }
-            .form-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+            .form-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
             .form-group { display: flex; flex-direction: column; gap: var(--space-2); }
             .form-label { color: var(--text-secondary); font-size: var(--text-sm); font-weight: 500; }
             .label-with-hint { display: inline-flex; align-items: center; gap: var(--space-2); }
@@ -43,7 +65,7 @@ export class SpacesPage extends PlatformElement {
             .save-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--crm-button-primary-bg); background: var(--crm-button-primary-bg); color: var(--crm-button-primary-text); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); cursor: pointer; width: fit-content; }
             .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
             .soft-btn { border-color: var(--crm-stroke); background: var(--crm-surface-elevated); color: var(--text-primary); }
-            .namespace-card-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+            .namespace-card-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
             .namespace-card { border: 1px solid var(--crm-stroke); border-radius: var(--radius-lg); padding: var(--space-3); background: var(--crm-surface-muted); cursor: pointer; transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast); }
             .namespace-card:hover { border-color: var(--crm-selected-stroke); transform: translateY(-1px); }
             .namespace-card.active { border-color: var(--crm-selected-stroke); background: var(--crm-selected-bg); }
@@ -64,9 +86,17 @@ export class SpacesPage extends PlatformElement {
             .type-edit-card { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); padding: var(--space-3); background: var(--crm-surface-muted); display: flex; flex-direction: column; gap: var(--space-2); }
             .type-edit-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
             .type-edit-title { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; }
-            .type-grid { display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+            .type-grid { display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
             .hint { color: var(--text-tertiary); font-size: var(--text-xs); }
-            @media (max-width: 767px) { .menu-btn { display: inline-flex; } }
+            @media (max-width: 767px) {
+                .menu-btn { display: inline-flex; }
+                .form-grid,
+                .namespace-card-grid,
+                .type-grid { grid-template-columns: 1fr; }
+                .form-input,
+                .form-textarea { max-width: 100%; min-width: 0; box-sizing: border-box; }
+                .namespace-info { overflow-wrap: anywhere; word-break: break-word; }
+            }
         `,
     ];
 

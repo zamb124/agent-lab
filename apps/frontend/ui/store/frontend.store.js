@@ -4,6 +4,56 @@
  */
 import { BaseStore } from '@platform/lib/store/BaseStore.js';
 
+const CONSOLE_VIEW_TO_PATH = new Map([
+    ['dashboard', '/dashboard'],
+    ['team', '/team'],
+    ['api-keys', '/api-keys'],
+    ['billing', '/billing'],
+    ['embed-configs', '/embed-configs'],
+    ['settings', '/settings'],
+    ['scheduler-tasks', '/scheduler-tasks'],
+    ['lead-requests', '/lead-requests'],
+]);
+
+const CONSOLE_PATH_TO_VIEW = new Map(
+    [...CONSOLE_VIEW_TO_PATH.entries()].map(([viewName, urlPath]) => [urlPath, viewName]),
+);
+
+/**
+ * @param {string} path
+ * @returns {string | null}
+ */
+export function getConsoleViewForPath(path) {
+    const direct = CONSOLE_PATH_TO_VIEW.get(path);
+    if (direct) {
+        return direct;
+    }
+    if (path === '/settings' || path.startsWith('/settings/')) {
+        return 'settings';
+    }
+    return null;
+}
+
+/**
+ * @param {string} view
+ */
+function pushConsolePathForView(view) {
+    if (typeof window === 'undefined') {
+        return;
+    }
+    const targetPath = CONSOLE_VIEW_TO_PATH.get(view);
+    if (!targetPath) {
+        return;
+    }
+    if (view === 'settings' && window.location.pathname.startsWith('/settings')) {
+        return;
+    }
+    if (window.location.pathname === targetPath) {
+        return;
+    }
+    window.history.pushState({ frontendConsoleView: view }, '', targetPath);
+}
+
 const baseStore = new BaseStore('frontend', {
     entities: {
         companies: [],
@@ -58,10 +108,18 @@ export const FrontendStore = {
 
     // === UI ===
 
-    setCurrentView(view) {
+    /**
+     * @param {string} view
+     * @param {{ skipUrlSync?: boolean }} [options]
+     */
+    setCurrentView(view, options = {}) {
+        const { skipUrlSync = false } = options;
         baseStore.setState((s) => ({
             ui: { ...s.ui, currentView: view },
         }));
+        if (!skipUrlSync) {
+            pushConsolePathForView(view);
+        }
     },
 
     setGlobalLoading(loading) {
