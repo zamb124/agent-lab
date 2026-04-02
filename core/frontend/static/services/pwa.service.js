@@ -1,6 +1,7 @@
 /**
  * PWA Service - управление Service Worker и Push Notifications
  */
+import { AppEvents } from '../lib/utils/types.js';
 
 const STORAGE_WEB_PUSH_ENDPOINT = 'humanitec_web_push_endpoint';
 const STORAGE_IOS_DEVICE_TOKEN = 'humanitec_ios_device_token_posted';
@@ -12,7 +13,8 @@ export class PWAService {
         this.pushSubscription = null;
         this._deferredPrompt = null;
         this._updateAvailable = false;
-        
+        this._swPushMessageListenerAttached = false;
+
         // Слушаем beforeinstallprompt для A2HS
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
@@ -55,10 +57,28 @@ export class PWAService {
                 }
             });
 
-            // Слушаем сообщения от SW
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                console.log('[PWA] Message from SW:', event.data);
-            });
+            if (!this._swPushMessageListenerAttached) {
+                this._swPushMessageListenerAttached = true;
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    const d = event.data;
+                    console.log('[PWA] Message from SW:', d);
+                    if (d?.type !== 'humanitec-web-push' || !d.payload) {
+                        return;
+                    }
+                    const p = d.payload;
+                    const title = typeof p.title === 'string' ? p.title.trim() : '';
+                    const body = typeof p.message === 'string' ? p.message.trim() : '';
+                    const message = [title, body].filter(Boolean).join(' — ');
+                    if (!message) {
+                        return;
+                    }
+                    window.dispatchEvent(
+                        new CustomEvent(AppEvents.TOAST_SHOW, {
+                            detail: { type: 'info', message, duration: 5000 },
+                        })
+                    );
+                });
+            }
 
             return true;
         } catch (error) {
@@ -74,11 +94,30 @@ export class PWAService {
         if (typeof window === 'undefined') {
             return null;
         }
-        const { isCapacitorNativePlatform } = await import('../lib/utils/native-app-shell.js');
-        if (isCapacitorNativePlatform() && window.Capacitor?.getPlatform?.() === 'ios') {
+        if (await this._shouldUseIosNativePush()) {
             return this._ensureIosNativePushRegistration();
         }
         return this._ensureWebPushRegistration();
+    }
+
+    /**
+     * iOS в Capacitor: плагин APNs, не Web Push в WKWebView.
+     * Мост WKWebView может быть доступен до полного заполнения Capacitor.isNativePlatform().
+     */
+    async _shouldUseIosNativePush() {
+        const { isCapacitorNativePlatform, isStandaloneOrNativeAppShell } = await import(
+            '../lib/utils/native-app-shell.js'
+        );
+        if (!this._isIOS()) {
+            return false;
+        }
+        if (isCapacitorNativePlatform() && window.Capacitor?.getPlatform?.() === 'ios') {
+            return true;
+        }
+        if (window.webkit?.messageHandlers?.bridge && isStandaloneOrNativeAppShell()) {
+            return true;
+        }
+        return false;
     }
 
     async _ensureWebPushRegistration() {

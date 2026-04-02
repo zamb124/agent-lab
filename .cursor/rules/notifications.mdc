@@ -43,6 +43,8 @@ await notify_user(
 
 API: `POST .../api/push/subscribe` с **`transport`**: `web_vapid` | `ios_apns`. Клиент: [`PWAService.ensurePushRegistration`](../../core/frontend/static/services/pwa.service.js) после авторизации из [`PlatformApp`](../../core/frontend/static/lib/base/PlatformApp.js).
 
+Service Worker ([`core/frontend/pwa/sw.js`](../../core/frontend/pwa/sw.js)) шлёт `postMessage` с типом `humanitec-web-push` и вызывает `showNotification`. В Chrome при **активной вкладке** системный баннер часто не показывается; [`PWAService`](../../core/frontend/static/services/pwa.service.js) по этому сообщению диспатчит `AppEvents.TOAST_SHOW` (glass-toast), чтобы пуш был виден в открытом приложении.
+
 ## Frontend: как показывать
 
 - Локальные UI-тосты: `this.success/error/warning/info` или `this.notify.*` (через `PlatformElement`).

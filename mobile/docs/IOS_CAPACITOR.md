@@ -56,7 +56,11 @@ npx cap open ios
 
 Веб Push в установленной из App Store WKWebView-оболочке **не** эквивалентен Safari PWA; для фоновых уведомлений используются **APNs** и плагин **`@capacitor/push-notifications`** (см. [`PUSH_PARITY_APNS.md`](PUSH_PARITY_APNS.md)).
 
-**Xcode:** Target приложения → **Signing & Capabilities** → **+ Capability** → **Push Notifications**. После добавления плагина: `npm install` в **`mobile/`**, **`npx cap sync ios`**. Ключ Apple (`.p8`), Team ID, Key ID и **Bundle ID** задаются на сервере в **`push.apns_*`** / ENV **`PUSH__APNS_*`**.
+**Xcode:** Target приложения → **Signing & Capabilities** → **+ Capability** → **Push Notifications** (профиль подписи должен быть с включённым Push для этого App ID). После добавления плагина: `npm install` в **`mobile/`**, **`npx cap sync ios`**.
+
+В репозитории уже задано: **`AppDelegate.swift`** — пересылка APNs-токена в плагин (`NotificationCenter` + `.capacitorDidRegisterForRemoteNotifications` / `didFail…`, как в [документации плагина](https://capacitorjs.com/docs/apis/push-notifications)); **`App.entitlements`** — **`aps-environment` = `development`** для отладки по проводу; для **TestFlight / App Store** в Release обычно нужно **`production`** (Xcode при capability часто выставляет сам по конфигурации). **`Info.plist`** — **`UIBackgroundModes` → `remote-notification`**.
+
+Ключ Apple (`.p8`), Team ID, Key ID и **Bundle ID** задаются на сервере в **`push.apns_*`** / ENV **`PUSH__APNS_*`**.
 
 ## SSO / OAuth (вход перекидывает в Safari и сессия не в приложении)
 
