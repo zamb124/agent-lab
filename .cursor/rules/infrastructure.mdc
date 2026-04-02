@@ -82,6 +82,8 @@ LiveKit требует отдельный поддомен с собственн
 
 **Web Push (VAPID):** GitHub Secrets с теми же именами, что и env: `PUSH__ENABLED`, `PUSH__VAPID_PUBLIC_KEY`, `PUSH__VAPID_PRIVATE_KEY`, `PUSH__VAPID_EMAIL` (последний опционально — в workflow fallback `ops@humanitec.ru`). Workflow передаёт их в SSH-сессию, `docker-compose-prod.yaml` прокидывает в `x-common-env` и перекрывает `conf.json`. После добавления секретов — redeploy.
 
+**APNs (нативный iOS):** `team_id`, `key_id`, `bundle_id`, `use_sandbox` — в **`conf.json`** на сервере (`push.*` и/или `auth.providers.apple` для team/key при переиспользовании ключа Sign in with Apple). В compose опционально **`PUSH__APNS_PRIVATE_KEY`**, если нужен отдельный `.p8` только для push; иначе достаточно **`AUTH_APPLE_PRIVATE_KEY`** (тот же PEM, если у ключа в кабинете Apple включены и Sign in with Apple, и APNs). Секрет `PUSH__APNS_PRIVATE_KEY` в GitHub — только при отдельном ключе для пушей.
+
 **Существующий volume Postgres** со старой схемой (одна БД вместо `platform_*`) требует ручной миграции данных или нового volume — не автоматизировано в workflow.
 
 ### Postgres `unhealthy` при деплое

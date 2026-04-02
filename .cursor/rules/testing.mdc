@@ -39,7 +39,7 @@ alwaysApply: false
 |---|---|
 | Раннер | **@web/test-runner** + **@web/test-runner-playwright** (Chromium), конфиг **[`web-test-runner.config.mjs`](../../web-test-runner.config.mjs)** |
 | Файлы | **`tests/ui_components/**/*.test.js`**, хелперы — **`tests/ui_components/helpers/`** (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture` / `html` / `expect` из `@open-wc/testing`) |
-| Импорты | Как в приложении: `lit` через **node-resolve**, префиксы **`@platform/lib/`**, **`@platform/services/`**, при необходимости **`@capacitor/app`**, **`@capacitor/core`**, **`@capacitor/splash-screen`** (vendor в `core/frontend/static/assets/js/vendor/@capacitor/`) — через import map в конфиге |
+| Импорты | Как в приложении: `lit` через **node-resolve**, префиксы **`@platform/lib/`**, **`@platform/services/`**, при необходимости **`@capacitor/app`**, **`@capacitor/core`**, **`@capacitor/splash-screen`**, **`@capacitor/push-notifications`** (vendor в `core/frontend/static/assets/js/vendor/@capacitor/`) — через import map в конфиге |
 | Запуск | **`npm ci`**, затем **`npm run test:ui-components`** или **`make test-ui-components`**. В **`make test`** / **`docker-compose` tests_runner** **не входит** — нужны Node.js и зависимости из [`package.json`](../../package.json). |
 | Изоляция сервисов | После тестов вызывать **`teardownPlatformServices()`** — сброс [`ServiceRegistry.resetForUiTests()`](../../core/frontend/static/lib/services/ServiceRegistry.js). Не использовать в прод-коде. |
 | Логи | При `setupPlatformServices` возможны предупреждения PWA (404 для `sw.js`, если раннер не отдаёт статику) — ожидаемо. В **`create_service_app`** при **`TESTING=true`** маршруты PWA по умолчанию не регистрируются. |

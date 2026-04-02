@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
-from core.config.models import LLMConfig, S3Config
+from core.config.models import LLMConfig, PushConfig as CorePushConfig, S3Config
 
 
 class ExternalFlowConfig(BaseModel):
@@ -40,17 +40,17 @@ class FilesConfig(BaseModel):
     temp_dir: str = Field(default="tmp", description="Директория для временных файлов")
 
 
-class PushConfig(BaseModel):
-    """Конфигурация Web Push уведомлений"""
+class PushConfig(CorePushConfig):
+    """Push: VAPID и APNs; дефолты VAPID для локальной разработки flows."""
 
     enabled: bool = Field(default=True, description="Включить push уведомления")
     vapid_public_key: str = Field(
         default="BJBAqLwOEE7A7gIDCXW7vzmEwh23-ug6-1qpiuotzwROEDX_ZiVUk2BO3_eINDqXxBvxG2uRfukXVVBse167BAM",
-        description="VAPID публичный ключ (URL-safe Base64)"
+        description="VAPID публичный ключ (URL-safe Base64)",
     )
     vapid_private_key: str = Field(
         default="n6oh3YpjV9APhmtdZ-p18P4YGLtBRLATLbprkXWAldA",
-        description="VAPID приватный ключ (URL-safe Base64)"
+        description="VAPID приватный ключ (URL-safe Base64)",
     )
     vapid_email: str = Field(
         default="admin@platform.local",

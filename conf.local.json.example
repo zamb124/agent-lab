@@ -99,7 +99,12 @@
     "enabled": true,
     "vapid_public_key": "YOUR_VAPID_PUBLIC_KEY",
     "vapid_private_key": "YOUR_VAPID_PRIVATE_KEY",
-    "vapid_email": "YOUR_EMAIL@example.com"
+    "vapid_email": "YOUR_EMAIL@example.com",
+    "apns_team_id": null,
+    "apns_key_id": null,
+    "apns_private_key": null,
+    "apns_bundle_id": null,
+    "apns_use_sandbox": false
   },
   "calendar_sync": {
     "sync_meeting_reminder_enabled": true,

@@ -35,7 +35,7 @@
 | Манифест, SW, offline | [`core/frontend/pwa/`](../core/frontend/pwa/) |
 | Digital Asset Links | `core/frontend/pwa/assetlinks.json` — `GET /.well-known/assetlinks.json` ([`pwa_routes.py`](../core/app/pwa_routes.py)), шаблон [`assetlinks.json.example`](../core/frontend/pwa/assetlinks.json.example) |
 | Universal Links (iOS) | `core/frontend/pwa/apple-app-site-association` — `GET /.well-known/apple-app-site-association`; префиксы путей — [`platform-deeplink-paths.js`](../core/frontend/static/lib/utils/platform-deeplink-paths.js) |
-| ESM Capacitor для веб-страницы | [`core/frontend/static/assets/js/vendor/@capacitor/`](../core/frontend/static/assets/js/vendor/@capacitor/) — копии из `mobile/node_modules/@capacitor/{core,app,splash-screen}`; обновлять при смене версии **`@capacitor/app`** / **`@capacitor/core`** / **`@capacitor/splash-screen`** в **`mobile/package.json`** |
+| ESM Capacitor для веб-страницы | [`core/frontend/static/assets/js/vendor/@capacitor/`](../core/frontend/static/assets/js/vendor/@capacitor/) — копии из `mobile/node_modules/@capacitor/{core,app,splash-screen,push-notifications}` (`dist/esm` → `vendor/.../index.js` + `definitions.js`); обновлять при смене версии плагинов в **`mobile/package.json`** |
 | Маршруты `/manifest.json`, `/sw.js` | [`core/app/pwa_routes.py`](../core/app/pwa_routes.py) |
 | Клиент PWA | [`core/frontend/static/services/pwa.service.js`](../core/frontend/static/services/pwa.service.js) |
 

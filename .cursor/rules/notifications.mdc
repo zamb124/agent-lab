@@ -32,6 +32,17 @@ await notify_user(
 Разрешено вызывать из service/worker/TaskIQ/endpoint.  
 Хранить уведомления в БД нельзя: канал только real-time.
 
+## Офлайн: Web Push и APNs
+
+Если у пользователя **нет** активного WebSocket к `/{service}/ws/notifications`, `notify_user` дополнительно вызывает [`deliver_offline_push`](../../core/push/delivery.py):
+
+- Подписки с `endpoint`, начинающимся с **`https://`**, и `transport: web_vapid` (см. [`SubscribeRequest`](../../core/push/schemas.py)) уходят в **VAPID** ([`WebPushService`](../../core/push/service.py)).
+- Подписки с `endpoint` вида **`apns:<hex>`** (регистрация из нативного iOS через Capacitor) уходят в **APNs** ([`ApnsPushService`](../../core/push/apns_service.py)), если [`resolve_apns_credentials`](../../core/push/apns_credentials.py) собрал полный набор: обязателен **`push.apns_bundle_id`**, остальное — из **`push.apns_*`** или из **`auth.providers.apple`** (тот же `.p8`, что для Sign in with Apple, если у ключа в Apple Developer включён APNs).
+
+Инициализация: [`create_service_app` lifespan](../../core/app/factory.py) — `init_web_push_service` при `push.enabled`; `init_apns_push_service` при успешном `resolve_apns_credentials`. Тот же APNs-init в **sync worker** ([`apps/sync/realtime/broker.py`](../../apps/sync/realtime/broker.py)).
+
+API: `POST .../api/push/subscribe` с **`transport`**: `web_vapid` | `ios_apns`. Клиент: [`PWAService.ensurePushRegistration`](../../core/frontend/static/services/pwa.service.js) после авторизации из [`PlatformApp`](../../core/frontend/static/lib/base/PlatformApp.js).
+
 ## Frontend: как показывать
 
 - Локальные UI-тосты: `this.success/error/warning/info` или `this.notify.*` (через `PlatformElement`).

@@ -9,9 +9,8 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from core.websocket.manager import notification_manager
 from core.logging import get_logger
-from core.push.service import get_web_push_service
-from core.push.repository import PushSubscriptionRepository
-from core.config import get_settings
+from core.push.delivery import deliver_offline_push
+
 logger = get_logger(__name__)
 
 
@@ -67,44 +66,14 @@ async def notify_user(user_id: str, notification: Notification):
         f"Уведомление опубликовано: user={user_id}, type={notification.type}, service={notification.service}"
     )
     
-    # Web Push - если пользователь не подключен через WebSocket
+    # Офлайн-push (Web Push и/или APNs), если пользователь не в WebSocket
     if not notification_manager.is_user_connected(user_id):
-        await _send_web_push(user_id, notification)
-
-
-async def _send_web_push(user_id: str, notification: Notification):
-    """Отправить Web Push уведомление"""
-
-    
-    push_service = get_web_push_service()
-    if not push_service or not push_service.is_configured:
-        return
-    
-    # Создаем репозиторий с db_url из settings
-    settings = get_settings()
-    if not settings.database.shared_url:
-        raise ValueError("database.shared_url не задан")
-    db_url = settings.database.shared_url
-    
-    repo = PushSubscriptionRepository(db_url=db_url)
-    subscriptions = await repo.get_user_subscriptions(user_id)
-    
-    if not subscriptions:
-        return
-    
-    expired = await push_service.send_to_user(
-        subscriptions=subscriptions,
-        title=notification.title,
-        message=notification.message,
-        url=notification.action_url,
-        tag=notification.type.value,
-        priority=notification.priority,
-        data=notification.data
-    )
-    
-    # Удаляем истекшие подписки
-    for endpoint in expired:
-        await repo.delete_by_endpoint(endpoint)
-    
-    if expired:
-        logger.info(f"Удалено {len(expired)} истекших push подписок")
+        await deliver_offline_push(
+            user_id,
+            title=notification.title,
+            message=notification.message,
+            action_url=notification.action_url,
+            tag=notification.type.value,
+            priority=notification.priority,
+            data=notification.data,
+        )

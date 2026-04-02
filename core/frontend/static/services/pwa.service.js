@@ -2,6 +2,9 @@
  * PWA Service - управление Service Worker и Push Notifications
  */
 
+const STORAGE_WEB_PUSH_ENDPOINT = 'humanitec_web_push_endpoint';
+const STORAGE_IOS_DEVICE_TOKEN = 'humanitec_ios_device_token_posted';
+
 export class PWAService {
     constructor(baseUrl = '') {
         this.baseUrl = baseUrl;
@@ -65,7 +68,165 @@ export class PWAService {
     }
 
     /**
-     * Подписка на Push уведомления
+     * Единая регистрация офлайн-push: нативный iOS (APNs токен) или Web Push (VAPID).
+     */
+    async ensurePushRegistration() {
+        if (typeof window === 'undefined') {
+            return null;
+        }
+        const { isCapacitorNativePlatform } = await import('../lib/utils/native-app-shell.js');
+        if (isCapacitorNativePlatform() && window.Capacitor?.getPlatform?.() === 'ios') {
+            return this._ensureIosNativePushRegistration();
+        }
+        return this._ensureWebPushRegistration();
+    }
+
+    async _ensureWebPushRegistration() {
+        const initialized = await this.init();
+        if (!initialized || !this.swRegistration) {
+            return null;
+        }
+        if (!('PushManager' in window)) {
+            console.warn('[PWA] Push API не поддерживается');
+            return null;
+        }
+        if (this._isIOS() && !this.isInstalled()) {
+            console.warn('[PWA] Push на iOS в Safari требует установки на Home Screen');
+            return null;
+        }
+
+        await this.getExistingPushSubscription();
+        if (this.pushSubscription) {
+            const ep = this.pushSubscription.endpoint;
+            if (sessionStorage.getItem(STORAGE_WEB_PUSH_ENDPOINT) === ep) {
+                return this.pushSubscription;
+            }
+            const permission = Notification.permission;
+            if (permission !== 'granted') {
+                const p = await Notification.requestPermission();
+                if (p !== 'granted') {
+                    console.warn('[PWA] Разрешение на уведомления отклонено');
+                    return null;
+                }
+            }
+            try {
+                await this._postWebVapidSubscription(this.pushSubscription);
+                sessionStorage.setItem(STORAGE_WEB_PUSH_ENDPOINT, ep);
+            } catch (e) {
+                console.error('[PWA] Не удалось синхронизировать существующую push-подписку:', e);
+            }
+            return this.pushSubscription;
+        }
+
+        return this.subscribeToPush();
+    }
+
+    async _postWebVapidSubscription(pushSubscription) {
+        const response = await fetch(`${this.baseUrl}/api/push/subscribe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                transport: 'web_vapid',
+                endpoint: pushSubscription.endpoint,
+                keys: {
+                    p256dh: this._arrayBufferToBase64(pushSubscription.getKey('p256dh')),
+                    auth: this._arrayBufferToBase64(pushSubscription.getKey('auth')),
+                },
+                platform: this._detectPlatform(),
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`subscribe failed: ${response.status}`);
+        }
+    }
+
+    async _ensureIosNativePushRegistration() {
+        let PushNotifications;
+        try {
+            ({ PushNotifications } = await import('@capacitor/push-notifications'));
+        } catch (e) {
+            console.warn('[PWA] @capacitor/push-notifications недоступен', e);
+            return null;
+        }
+
+        let perm = await PushNotifications.checkPermissions();
+        if (perm.receive !== 'granted') {
+            perm = await PushNotifications.requestPermissions();
+        }
+        if (perm.receive !== 'granted') {
+            console.warn('[PWA] Нативные push: нет разрешения');
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    console.warn('[PWA] Таймаут регистрации APNs');
+                    resolve(null);
+                }
+            }, 15000);
+
+            const done = (value) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                clearTimeout(timeout);
+                resolve(value);
+            };
+
+            void PushNotifications.addListener('registration', async (tokenEvent) => {
+                const token = tokenEvent?.value;
+                if (!token) {
+                    done(null);
+                    return;
+                }
+                if (sessionStorage.getItem(STORAGE_IOS_DEVICE_TOKEN) === token) {
+                    done(token);
+                    return;
+                }
+                try {
+                    const r = await fetch(`${this.baseUrl}/api/push/subscribe`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            transport: 'ios_apns',
+                            endpoint: '',
+                            keys: { device_token: token },
+                            platform: 'ios_native',
+                        }),
+                    });
+                    if (!r.ok) {
+                        console.error('[PWA] Ошибка сохранения APNs токена:', r.status);
+                        done(null);
+                        return;
+                    }
+                    sessionStorage.setItem(STORAGE_IOS_DEVICE_TOKEN, token);
+                    done(token);
+                } catch (err) {
+                    console.error('[PWA] Сеть при регистрации APNs:', err);
+                    done(null);
+                }
+            });
+
+            void PushNotifications.addListener('registrationError', (err) => {
+                console.error('[PWA] registrationError APNs:', err);
+                done(null);
+            });
+
+            PushNotifications.register().catch((e) => {
+                console.error('[PWA] PushNotifications.register:', e);
+                done(null);
+            });
+        });
+    }
+
+    /**
+     * Подписка на Push уведомления (Web Push / VAPID)
      */
     async subscribeToPush() {
         if (!this.swRegistration) {
@@ -73,19 +234,16 @@ export class PWAService {
             return null;
         }
 
-        // Проверяем поддержку Push API
         if (!('PushManager' in window)) {
             console.warn('[PWA] Push API не поддерживается');
             return null;
         }
 
-        // Проверяем iOS ограничения
         if (this._isIOS() && !this.isInstalled()) {
             console.warn('[PWA] Push на iOS требует установки на Home Screen');
             return null;
         }
 
-        // Запрашиваем разрешение
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
             console.warn('[PWA] Разрешение на уведомления отклонено');
@@ -93,37 +251,22 @@ export class PWAService {
         }
 
         try {
-            // Получаем VAPID ключ с сервера
             const response = await fetch(`${this.baseUrl}/api/push/vapid-public-key`);
             if (!response.ok) {
                 throw new Error('Failed to get VAPID key');
             }
             const { publicKey } = await response.json();
 
-            // Подписываемся на push
             this.pushSubscription = await this.swRegistration.pushManager.subscribe({
                 userVisibleOnly: true,
-                applicationServerKey: this._urlBase64ToUint8Array(publicKey)
+                applicationServerKey: this._urlBase64ToUint8Array(publicKey),
             });
 
-            // Отправляем подписку на сервер
-            await fetch(`${this.baseUrl}/api/push/subscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    endpoint: this.pushSubscription.endpoint,
-                    keys: {
-                        p256dh: this._arrayBufferToBase64(this.pushSubscription.getKey('p256dh')),
-                        auth: this._arrayBufferToBase64(this.pushSubscription.getKey('auth'))
-                    },
-                    platform: this._detectPlatform()
-                })
-            });
+            await this._postWebVapidSubscription(this.pushSubscription);
+            sessionStorage.setItem(STORAGE_WEB_PUSH_ENDPOINT, this.pushSubscription.endpoint);
 
             console.log('[PWA] Push подписка создана');
             return this.pushSubscription;
-
         } catch (error) {
             console.error('[PWA] Ошибка подписки на push:', error);
             return null;
@@ -145,7 +288,8 @@ export class PWAService {
                 method: 'DELETE',
                 credentials: 'include'
             });
-            
+            sessionStorage.removeItem(STORAGE_WEB_PUSH_ENDPOINT);
+
             this.pushSubscription = null;
             console.log('[PWA] Push подписка удалена');
         } catch (error) {

@@ -43,6 +43,8 @@ x-common-env: &common-env
   PUSH__VAPID_PUBLIC_KEY: ${PUSH__VAPID_PUBLIC_KEY:-}
   PUSH__VAPID_PRIVATE_KEY: ${PUSH__VAPID_PRIVATE_KEY:-}
   PUSH__VAPID_EMAIL: ${PUSH__VAPID_EMAIL:-ops@humanitec.ru}
+  # APNs: опционально отдельный .p8 (если не тот же, что AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY). team_id / key_id / bundle_id — в conf.json (push или auth.providers.apple).
+  PUSH__APNS_PRIVATE_KEY: ${PUSH__APNS_PRIVATE_KEY:-}
   # WebRTC звонки: livekit доступен внутри Docker по имени сервиса.
   # CALLS__LIVEKIT_PUBLIC_URL — публичный wss:// URL для браузеров (через nginx/ingress).
   # CALLS__TURN_HOST использует SERVER_HOST (тот же IP что и для SSH деплоя).

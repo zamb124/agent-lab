@@ -40,6 +40,8 @@ LEGAL__DPO_EMAIL=...
 
 `DATABASE__URL` — алиас к `shared_url` (обратная совместимость).
 
+**Push (офлайн):** `PUSH__ENABLED`, `PUSH__VAPID_*` — Web Push. **APNs:** в `conf.json` обязателен **`push.apns_bundle_id`** (iOS App ID / bundle из Xcode); **`push.apns_team_id`**, **`push.apns_key_id`**, **`push.apns_private_key`** и **`push.apns_use_sandbox`** можно задать там же. Если `push.apns_team_id` / `push.apns_key_id` / `push.apns_private_key` пусты, для APNs подставляются **`auth.providers.apple.apple_team_id`**, **`apple_key_id`**, **`apple_private_key`** (тот же ключ `.p8`, что для Sign in with Apple, при условии что в Apple Developer у ключа включена возможность **APNs**). Отдельный секрет в ENV: опционально **`PUSH__APNS_PRIVATE_KEY`**, если push не должен читать ключ из `AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY`. Сессионный JWT пользователя к APNs **не** используется. См. [`resolve_apns_credentials`](../../core/push/apns_credentials.py), [`PushConfig`](../../core/config/models.py).
+
 ## Структура conf.json
 
 **Общий слой** (один раз): `database`, `tasks`, `auth`, `llm`, `rag`, `s3`, `server`, …

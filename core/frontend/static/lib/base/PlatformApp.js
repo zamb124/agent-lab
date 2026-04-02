@@ -94,6 +94,8 @@ export class PlatformApp extends PlatformElement {
         /** @private Слушатель window toast-show: один раз на экземпляр, до await initServices */
         this._toastListenerAttached = false;
         this._handleToast = this._handleToast.bind(this);
+        this._pushAuthListenerAttached = false;
+        this._onAuthChangeForPush = this._onAuthChangeForPush.bind(this);
     }
 
     _handleToast(e) {
@@ -193,6 +195,25 @@ export class PlatformApp extends PlatformElement {
         }
     }
 
+    _maybeRegisterPushSubscriptions() {
+        if (!this._isAuthenticated || !ServiceRegistry.isInitialized || !ServiceRegistry.has('pwa')) {
+            return;
+        }
+        queueMicrotask(() => {
+            ServiceRegistry.get('pwa')
+                .ensurePushRegistration()
+                .catch((err) => {
+                    console.error('[PlatformApp] ensurePushRegistration:', err);
+                });
+        });
+    }
+
+    _onAuthChangeForPush(ev) {
+        if (ev.detail?.isAuthenticated) {
+            this._maybeRegisterPushSubscriptions();
+        }
+    }
+
     async connectedCallback() {
         try {
             if (!this._toastListenerAttached) {
@@ -240,6 +261,11 @@ export class PlatformApp extends PlatformElement {
                 }
 
                 this._recordLastVisitedServiceFromApp();
+                this._maybeRegisterPushSubscriptions();
+                if (!this._pushAuthListenerAttached) {
+                    window.addEventListener(AppEvents.AUTH_CHANGE, this._onAuthChangeForPush);
+                    this._pushAuthListenerAttached = true;
+                }
             }
 
             const routes = this.setupRoutes();
@@ -262,6 +288,10 @@ export class PlatformApp extends PlatformElement {
     }
 
     disconnectedCallback() {
+        if (this._pushAuthListenerAttached) {
+            window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChangeForPush);
+            this._pushAuthListenerAttached = false;
+        }
         if (this._toastListenerAttached) {
             window.removeEventListener(AppEvents.TOAST_SHOW, this._handleToast);
             this._toastListenerAttached = false;

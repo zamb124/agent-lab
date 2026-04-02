@@ -54,7 +54,9 @@ npx cap open ios
 
 ## Пуши
 
-Веб Push в установленной из App Store WKWebView-оболочке **не** эквивалентен Safari PWA; для фоновых уведомлений обычно нужны **APNs** и плагин (см. [`PUSH_PARITY_APNS.md`](PUSH_PARITY_APNS.md)).
+Веб Push в установленной из App Store WKWebView-оболочке **не** эквивалентен Safari PWA; для фоновых уведомлений используются **APNs** и плагин **`@capacitor/push-notifications`** (см. [`PUSH_PARITY_APNS.md`](PUSH_PARITY_APNS.md)).
+
+**Xcode:** Target приложения → **Signing & Capabilities** → **+ Capability** → **Push Notifications**. После добавления плагина: `npm install` в **`mobile/`**, **`npx cap sync ios`**. Ключ Apple (`.p8`), Team ID, Key ID и **Bundle ID** задаются на сервере в **`push.apns_*`** / ENV **`PUSH__APNS_*`**.
 
 ## SSO / OAuth (вход перекидывает в Safari и сессия не в приложении)
 

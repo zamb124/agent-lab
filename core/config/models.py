@@ -461,12 +461,18 @@ class CallsConfig(BaseModel):
 
 
 class PushConfig(BaseModel):
-    """Конфигурация Web Push уведомлений"""
+    """Web Push (VAPID) и APNs. Для APNs пустые apns_team_id / apns_key_id / apns_private_key
+    дополняются из auth.providers.apple при том же .p8 (ключ в Apple должен иметь capability APNs)."""
 
     enabled: bool = False
     vapid_public_key: Optional[str] = None
     vapid_private_key: Optional[str] = None
     vapid_email: str = "admin@humanitec.ru"
+    apns_team_id: Optional[str] = None
+    apns_key_id: Optional[str] = None
+    apns_private_key: Optional[str] = None
+    apns_bundle_id: Optional[str] = None
+    apns_use_sandbox: bool = False
 
 
 class LegalConfig(BaseModel):

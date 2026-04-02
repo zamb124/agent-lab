@@ -7,6 +7,8 @@ from taskiq import TaskiqState
 
 from core.config import get_settings
 from core.logging import get_logger, setup_logging
+from core.push.apns_credentials import resolve_apns_credentials
+from core.push.apns_service import init_apns_push_service
 from core.push.service import init_web_push_service
 from core.websocket.manager import notification_manager
 from core.tasks.broker import (
@@ -36,6 +38,16 @@ async def sync_worker_startup(state: TaskiqState) -> None:
             vapid_email=settings.push.vapid_email,
         )
         logger.info("Sync Worker: WebPushService инициализирован")
+    apns = resolve_apns_credentials(settings)
+    if apns:
+        init_apns_push_service(
+            team_id=apns.team_id,
+            key_id=apns.key_id,
+            private_key_pem=apns.private_key_pem,
+            bundle_id=apns.bundle_id,
+            use_sandbox=apns.use_sandbox,
+        )
+        logger.info("Sync Worker: ApnsPushService инициализирован")
     logger.info("Sync Worker: запуск")
 
 

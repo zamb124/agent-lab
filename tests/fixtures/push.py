@@ -33,6 +33,7 @@ def vapid_keys():
 def push_subscription_data():
     """Базовые данные push подписки для desktop."""
     return {
+        "transport": "web_vapid",
         "endpoint": "https://fcm.googleapis.com/fcm/send/test-endpoint",
         "keys": {
             "p256dh": "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM",

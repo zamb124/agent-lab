@@ -49,6 +49,8 @@ from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
 from core.api.companies import router as core_companies_router
 from core.push.router import router as push_router
+from core.push.apns_credentials import resolve_apns_credentials
+from core.push.apns_service import init_apns_push_service
 from core.push.service import init_web_push_service
 from core.app.pwa_routes import register_platform_pwa_routes
 from core.app.i18n_routes import register_platform_i18n_routes
@@ -164,9 +166,20 @@ def create_service_app(
             init_web_push_service(
                 vapid_private_key=settings.push.vapid_private_key,
                 vapid_public_key=settings.push.vapid_public_key,
-                vapid_email=settings.push.vapid_email
+                vapid_email=settings.push.vapid_email,
             )
             logger.info("WebPushService инициализирован")
+
+        apns = resolve_apns_credentials(settings)
+        if apns:
+            init_apns_push_service(
+                team_id=apns.team_id,
+                key_id=apns.key_id,
+                private_key_pem=apns.private_key_pem,
+                bundle_id=apns.bundle_id,
+                use_sandbox=apns.use_sandbox,
+            )
+            logger.info("ApnsPushService инициализирован")
         
         # Кастомный startup
         if on_startup:
