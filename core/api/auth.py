@@ -7,7 +7,7 @@ API эндпоинты для авторизации.
 
 import logging
 from typing import Annotated, Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, Form
 from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel, Field as PydanticField
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -142,29 +142,20 @@ async def start_auth(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/callback/{provider_name}")
-async def auth_callback(
+async def _complete_oauth_callback(
     request: Request,
     provider_name: str,
-    code: str,
-    state: str,
-    auth_service: AuthServiceDep,
-    error: str = None,
-    user: Optional[str] = None,
-):
-    """
-    Обрабатывает callback от провайдера авторизации.
-
-    Args:
-        provider_name: Имя провайдера
-        code: Код авторизации от провайдера
-        state: State для CSRF защиты
-        error: Ошибка от провайдера (если есть)
-    """
+    code: Optional[str],
+    state: Optional[str],
+    auth_service: AuthService,
+    error: Optional[str] = None,
+    oauth_first_login_user_json: Optional[str] = None,
+) -> RedirectResponse:
+    """Общая логика GET/POST callback (Apple form_post передаёт поля в теле формы)."""
     from core.utils.domain import get_cookie_domain
-    
+
     settings = get_settings()
-    
+
     if error:
         logger.error(f"Ошибка авторизации от {provider_name}: {error}")
         raise HTTPException(status_code=400, detail=f"Ошибка авторизации: {error}")
@@ -181,17 +172,16 @@ async def auth_callback(
             status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}"
         )
 
-    # Получаем state с оригинальным хостом и redirect_uri
     auth_state = await auth_service._get_auth_state(state)
     if not auth_state:
         if provider_name == AuthProvider.GOOGLE.value:
             calendar_service = request.app.state.container.calendar_service
             try:
                 return_path = await calendar_service.complete_google_oauth(state=state, code=code)
-            except ValueError as error:
-                raise HTTPException(status_code=400, detail=str(error)) from error
-            except Exception as error:
-                raise HTTPException(status_code=500, detail=str(error)) from error
+            except ValueError as err:
+                raise HTTPException(status_code=400, detail=str(err)) from err
+            except Exception as err:
+                raise HTTPException(status_code=500, detail=str(err)) from err
             redirect_url = _append_query(
                 return_path,
                 {
@@ -201,7 +191,7 @@ async def auth_callback(
             )
             return RedirectResponse(url=redirect_url)
         raise HTTPException(status_code=400, detail="Недействительный state")
-    
+
     original_host = auth_state.get("original_host")
     redirect_uri = auth_state.get("redirect_uri")
 
@@ -212,23 +202,22 @@ async def auth_callback(
         code=code,
         state=state,
         redirect_uri=redirect_uri,
-        oauth_first_login_user_json=user,
+        oauth_first_login_user_json=oauth_first_login_user_json,
     )
 
     result = await auth_service.complete_auth(auth_request)
-    
+
     logger.info(f"Результат авторизации: success={result.success}, error={result.error_message}")
 
     if not result.success:
         logger.error(f"Ошибка завершения авторизации: {result.error_message}")
         raise HTTPException(status_code=400, detail=result.error_message)
 
-    # Используем оригинальный хост для редиректа
     target_host = original_host or request.headers.get("host", "")
-    
+
     response = RedirectResponse(url="/select-company")
     is_production = settings.server.env == "production"
-    
+
     cookie_domain = get_cookie_domain(target_host)
 
     logger.info(f"Устанавливаем cookies: session_id={result.session.session_id}, auth_token={result.token[:8]}..., domain={cookie_domain}, secure={is_production}")
@@ -255,6 +244,50 @@ async def auth_callback(
 
     logger.info(f"Успешная авторизация пользователя {result.user.user_id}")
     return response
+
+
+@router.get("/callback/{provider_name}")
+async def auth_callback(
+    request: Request,
+    provider_name: str,
+    code: str,
+    state: str,
+    auth_service: AuthServiceDep,
+    error: str = None,
+    user: Optional[str] = None,
+):
+    """Callback после OAuth (query); Apple при scope name/email шлёт POST form_post."""
+    return await _complete_oauth_callback(
+        request,
+        provider_name,
+        code,
+        state,
+        auth_service,
+        error=error,
+        oauth_first_login_user_json=user,
+    )
+
+
+@router.post("/callback/{provider_name}")
+async def auth_callback_post(
+    request: Request,
+    provider_name: str,
+    auth_service: AuthServiceDep,
+    code: str = Form(...),
+    state: str = Form(...),
+    error: Optional[str] = Form(None),
+    user: Optional[str] = Form(None),
+):
+    """Sign in with Apple: response_mode=form_post — code/state/user в application/x-www-form-urlencoded."""
+    return await _complete_oauth_callback(
+        request,
+        provider_name,
+        code,
+        state,
+        auth_service,
+        error=error,
+        oauth_first_login_user_json=user,
+    )
 
 
 @router.post("/logout")

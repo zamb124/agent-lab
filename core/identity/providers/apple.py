@@ -125,7 +125,7 @@ class AppleProvider(BaseAuthProvider):
             "response_type": "code",
             "scope": self.scope,
             "state": state,
-            "response_mode": "query",
+            "response_mode": "form_post",
         }
         return f"{self.auth_url}?{urlencode(params)}"
 

@@ -142,11 +142,28 @@ export class AuthModal extends PlatformElement {
         this.loading = false;
         this.error = '';
         this.returnPath = '';
+        this._onPageShow = (event) => {
+            if (event.persisted) {
+                this.loading = false;
+            }
+        };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener('pageshow', this._onPageShow);
+    }
+
+    disconnectedCallback() {
+        window.removeEventListener('pageshow', this._onPageShow);
+        super.disconnectedCallback();
     }
 
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
         if (changedProperties.has('open') && this.open) {
+            this.loading = false;
+            this.error = '';
             this.style.setProperty(
                 '--platform-modal-layer-z',
                 String(nextModalLayerZIndex()),
@@ -172,6 +189,7 @@ export class AuthModal extends PlatformElement {
 
     close() {
         this.open = false;
+        this.loading = false;
         this.error = '';
         this.dispatchEvent(new CustomEvent('close'));
     }

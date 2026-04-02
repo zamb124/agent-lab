@@ -81,6 +81,6 @@ class TestAuthLogin:
         data = response.json()
         assert data.get("provider") == "apple"
         assert "appleid.apple.com" in data["auth_url"]
-        assert "response_mode=query" in data["auth_url"] or "response_mode%3Dquery" in data["auth_url"]
+        assert "response_mode=form_post" in data["auth_url"] or "response_mode%3Dform_post" in data["auth_url"]
 
 
