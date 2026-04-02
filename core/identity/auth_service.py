@@ -25,6 +25,7 @@ from core.identity.base_provider import BaseAuthProvider
 from core.identity.providers.yandex import YandexProvider
 from core.identity.providers.google import GoogleProvider
 from core.identity.providers.github import GithubProvider
+from core.identity.providers.apple import AppleProvider
 from core.config import get_settings
 from core.utils.tokens import get_token_service
 
@@ -69,6 +70,7 @@ class AuthService:
             AuthProvider.YANDEX: YandexProvider,
             AuthProvider.GOOGLE: GoogleProvider,
             AuthProvider.GITHUB: GithubProvider,
+            AuthProvider.APPLE: AppleProvider,
         }
 
         for provider_name, provider_class in provider_classes.items():
@@ -173,7 +175,9 @@ class AuthService:
                 return AuthResult(success=False, error_message=error_msg)
             raise
 
-        user_info = await provider.get_user_info(access_token)
+        user_info = await provider.get_user_info(
+            access_token, auth_request.oauth_first_login_user_json
+        )
 
         user = await self._get_or_create_user(auth_request.provider, user_info)
 
@@ -274,9 +278,13 @@ class AuthService:
 
             await self._update_provider_data(user.user_id, provider, user_info)
 
-            logger.info(f"Обновлен пользователь {user_info.email}")
+            logger.info(f"Обновлен пользователь {user_info.email or user_id}")
             return user
         else:
+            if not user_info.email:
+                raise ValueError(
+                    f"Провайдер {provider.value} не вернул email; регистрация нового пользователя невозможна"
+                )
             user_id = f"user_{uuid.uuid4().hex[:12]}"
 
             user = User(

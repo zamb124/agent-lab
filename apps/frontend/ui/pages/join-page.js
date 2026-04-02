@@ -368,6 +368,13 @@ export class JoinPage extends PlatformElement {
                     >
                         ${td('join_page.login_github')}
                     </button>
+                    <button
+                        class="provider-button"
+                        ?disabled=${this._loading}
+                        @click=${() => this._startOAuth('apple')}
+                    >
+                        ${td('join_page.login_apple')}
+                    </button>
 
                     ${this._error ? html`<div class="error-box">${this._error}</div>` : ''}
                 `;

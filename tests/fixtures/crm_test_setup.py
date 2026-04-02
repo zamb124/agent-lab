@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from httpx import AsyncClient
@@ -116,3 +117,70 @@ async def ensure_crm_per_test_namespace_and_types(
             type_name=item["name"],
             namespace_id=namespace_id,
         )
+
+
+async def wait_for_crm_semantic_search_hit(
+    crm_client: AsyncClient,
+    headers: dict[str, Any],
+    *,
+    query: str,
+    entity_type: str,
+    namespace: str = "default",
+    max_attempts: int = 60,
+    delay_sec: float = 0.15,
+) -> None:
+    """Ждём, пока только что созданная сущность попадёт в pgvector (дедуп в analyze)."""
+    for attempt in range(max_attempts):
+        response = await crm_client.get(
+            "/crm/api/v1/entities/search",
+            params={
+                "query": query,
+                "entity_type": entity_type,
+                "namespace": namespace,
+                "limit": 5,
+            },
+            headers=headers,
+        )
+        if response.status_code != 200:
+            raise AssertionError(
+                f"search: {response.status_code} {response.text} (attempt {attempt})"
+            )
+        payload = response.json()
+        if isinstance(payload, list) and len(payload) > 0:
+            return
+        await asyncio.sleep(delay_sec)
+    raise AssertionError(
+        f"семантический поиск не увидел {entity_type!r} query={query!r} "
+        f"за {max_attempts * delay_sec:.1f}s"
+    )
+
+
+async def wait_daily_summary_rebuild_done(
+    crm_client: AsyncClient,
+    headers: dict[str, Any],
+    *,
+    date_str: str,
+    namespace: str | None = None,
+    max_attempts: int = 100,
+    delay_sec: float = 0.1,
+) -> dict[str, Any]:
+    """Ждём снятия revalidating, чтобы CRM worker не забирал mock LLM следующего теста."""
+    body: dict[str, Any] = {"date": date_str}
+    if namespace is not None:
+        body["namespace"] = namespace
+    last: dict[str, Any] = {}
+    for _ in range(max_attempts):
+        response = await crm_client.post(
+            "/crm/api/v1/entities/daily-summary",
+            json=body,
+            headers=headers,
+        )
+        if response.status_code != 200:
+            raise AssertionError(f"daily-summary: {response.status_code} {response.text}")
+        last = response.json()
+        if last.get("revalidating") is not True:
+            return last
+        await asyncio.sleep(delay_sec)
+    raise AssertionError(
+        f"daily-summary: revalidating не снят для {date_str!r}: {last!r}"
+    )

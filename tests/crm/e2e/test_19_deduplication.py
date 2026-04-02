@@ -8,6 +8,8 @@ User Story: При извлечении entities из текста систем�
 import pytest
 import json
 
+from tests.fixtures.crm_test_setup import wait_for_crm_semantic_search_hit
+
 
 @pytest.mark.real_taskiq
 class TestEntityDeduplication:
@@ -71,6 +73,13 @@ class TestEntityDeduplication:
         }, headers=auth_headers_system)
         assert existing_resp.status_code in [200, 201]
         existing_entity = existing_resp.json()
+
+        await wait_for_crm_semantic_search_hit(
+            crm_client,
+            auth_headers_system,
+            query=f"Иван Петров {unique_id}",
+            entity_type="contact",
+        )
         
         await mock_llm_redis([{
             "type": "text",
@@ -134,6 +143,13 @@ class TestEntityDeduplication:
             "attributes": {"industry": "IT"},
             "namespace": "default",
         }, headers=auth_headers_system)
+
+        await wait_for_crm_semantic_search_hit(
+            crm_client,
+            auth_headers_system,
+            query=f"Альфа {unique_id}",
+            entity_type="organization",
+        )
         
         await mock_llm_redis([
             {
@@ -199,6 +215,13 @@ class TestEntityDeduplication:
             "description": "Бухгалтер, работает в финансовом отделе",
             "attributes": {"department": "finance"}
         }, headers=auth_headers_system)
+
+        await wait_for_crm_semantic_search_hit(
+            crm_client,
+            auth_headers_system,
+            query=f"Мария Сидорова {unique_id}",
+            entity_type="contact",
+        )
         
         await mock_llm_redis([
             {
@@ -261,6 +284,13 @@ class TestEntityDeduplication:
             "attributes": {"email": "petr@company.com"},
             "namespace": "default",
         }, headers=auth_headers_system)
+
+        await wait_for_crm_semantic_search_hit(
+            crm_client,
+            auth_headers_system,
+            query=f"Петр Иванов {unique_id}",
+            entity_type="contact",
+        )
         
         await mock_llm_redis([
             {
@@ -402,6 +432,13 @@ class TestDeduplicateSkill:
         }, headers=auth_headers_system)
         assert existing_resp.status_code in [200, 201]
         existing_entity = existing_resp.json()
+
+        await wait_for_crm_semantic_search_hit(
+            crm_client,
+            auth_headers_system,
+            query=f"Рога и Копыта {unique_id}",
+            entity_type="organization",
+        )
         
         await mock_llm_redis([
             {

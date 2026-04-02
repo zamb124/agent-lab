@@ -79,6 +79,12 @@
         "client_id": "test-github-client-id",
         "client_secret": "test-github-client-secret",
         "enabled": true
+      },
+      "apple": {
+        "client_id": "app.humanitec.ru",
+        "apple_team_id": "MLL2V8KTV4",
+        "apple_key_id": "8369D9Q322",
+        "enabled": true
       }
     }
   },

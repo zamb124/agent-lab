@@ -72,4 +72,15 @@ class TestAuthLogin:
         
         print("✅ X-Forwarded-Proto=http корректно переключает на http")
 
+    async def test_login_apple_returns_appleid_when_configured(self, frontend_client):
+        """При настроенном Apple в конфиге — JSON с auth_url на appleid.apple.com."""
+        response = await frontend_client.get("/frontend/api/auth/login/apple")
+        if response.status_code == 400:
+            pytest.skip("Apple OAuth не настроен в тестовом окружении")
+        assert response.status_code == 200
+        data = response.json()
+        assert data.get("provider") == "apple"
+        assert "appleid.apple.com" in data["auth_url"]
+        assert "response_mode=query" in data["auth_url"] or "response_mode%3Dquery" in data["auth_url"]
+
 

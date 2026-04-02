@@ -51,6 +51,7 @@ LEGAL__DPO_EMAIL=...
 - **`llm`**: `provider`, `default_model`, провайдеры (`openrouter`, `bothub`, …), опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id модели; каталог цен в JSON не храним.
 - **`services.<имя>`**: только отличия от общего слоя (порт, `auth.permissions_enabled`, свой `llm` для flows, override `rag.providers` у rag-сервиса и т.д.).
 - **`legal`**: публичные реквизиты оператора для `/policy` и `/terms` (`company_name_*`, `legal_form_*`, `inn`, `ogrn`, `legal_address_*`, email-контакты, сроки хранения, инфраструктурные поля). Продовые значения задавать через ENV `LEGAL__*` или `conf.local.json`; в `conf.json` допустимы только шаблонные/базовые значения.
+- **`auth.providers.apple`** (Sign in with Apple, веб): `client_id` — **Services ID** (например `app.humanitec.ru`); `apple_team_id` — Team ID; `apple_key_id` — Key ID ключа `.p8` (эти три поля не секреты — удобно в `conf.json` на сервере). **`apple_private_key`** — секрет; в проде через GitHub Secret **`AUTH_APPLE_PRIVATE_KEY`** → ENV `AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY` (см. `docker-compose-prod.yaml`). Callback: `https://<публичный_хост>/auth/callback/apple`. Статический `client_secret` не используется (JWT из `.p8`).
 
 Воркеры (rag_worker и др.) при необходимости настраиваются через **ENV**, не через плейсхолдеры `${...}` в JSON.
 
@@ -81,6 +82,14 @@ settings.server.get_service_url("flows")
 ## Куки auth и тенанты
 
 `get_cookie_domain()` в [`core/utils/domain.py`](../../core/utils/domain.py): для прод-доменов и **`*.lvh.me`** — префикс **`.{base}`** (кука на всех субдоменах). Для **`*.localhost`** — **`Domain=localhost`**, чтобы после смены компании (редирект `a.localhost` → `b.localhost`) браузер продолжал слать **`auth_token`** и **`session_id`**. Для IP dev-хоста домен в Set-Cookie не задаётся (host-only).
+
+## Прокси и исходящие OAuth-запросы
+
+`httpx` в [`core/http/client.py`](../../core/http/client.py) создаётся с **`trust_env=False`**: переменные **`HTTP_PROXY` / `HTTPS_PROXY`** из окружения **не** подхватываются.
+
+Исходящие вызовы к Yandex/Google/GitHub/Apple (обмен `code` на токен, userinfo, refresh) идут через **`request_public_oauth`**: несколько попыток **без** платформенного прокси, затем с **`proxy`** из `settings.proxy` (если `proxy.enabled` и непустой `proxy.proxies`), затем снова без прокси. Ротация URL в списке `proxies` — как у `get_httpx_client(proxy=True)`.
+
+В проде за корпоративным прокси задать в конфиге/ENV секцию **`proxy`**: `enabled` и список **`proxies`** (см. `ProxyConfig` в [`core/config/models.py`](../../core/config/models.py)).
 
 ## Типичные ошибки
 

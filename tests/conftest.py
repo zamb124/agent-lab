@@ -544,8 +544,9 @@ async def mock_llm_redis(container):
             ])
     """
     from core.clients.llm.mock import setup_mock_responses_redis, clear_mock_responses_redis
-    
+
     async def _factory(responses: List[Any]) -> None:
+        await clear_mock_responses_redis(container.redis_client)
         await setup_mock_responses_redis(container.redis_client, responses)
     
     yield _factory

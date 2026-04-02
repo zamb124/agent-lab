@@ -17,6 +17,9 @@ class AuthProviderConfig(BaseModel):
     userinfo_url: str = ""
     scope: str = "openid profile email"
     enabled: bool = True
+    apple_team_id: Optional[str] = None
+    apple_key_id: Optional[str] = None
+    apple_private_key: Optional[str] = None
 
 
 class AuthConfig(BaseModel):

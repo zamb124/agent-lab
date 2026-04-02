@@ -214,6 +214,15 @@ export class AuthModal extends PlatformElement {
                         <img src="/static/frontend/assets/icons/providers/github.svg" class="provider-icon" alt="GitHub">
                         <span>${t('auth.github')}</span>
                     </button>
+
+                    <button 
+                        class="provider-button" 
+                        @click=${() => this.handleProviderClick('apple')}
+                        ?disabled=${this.loading}
+                    >
+                        <img src="/static/frontend/assets/icons/providers/apple.svg" class="provider-icon" alt="Apple">
+                        <span>${t('auth.apple')}</span>
+                    </button>
                 </div>
 
                 ${this.error ? html`<div class="error">${this.error}</div>` : ''}

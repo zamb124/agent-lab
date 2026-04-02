@@ -26,7 +26,17 @@
 |-----|-----|-------------|
 | 2.1.1 | **Identifiers** → **+** | Тип **App IDs** → **App**. |
 | 2.1.2 | **Bundle ID**: явный (Explicit), например `com.company.app` — **должен совпадать** с тем, что в Xcode / Capacitor для iOS. |
-| 2.1.3 | Возможности (Capabilities) | Включить то, что реально использует приложение: **Push Notifications**, **Associated Domains**, **Sign in with Apple** и т.д. Лишнее не включать. |
+| 2.1.3 | Возможности (Capabilities) | Включить то, что реально использует **нативный** код: **Push Notifications**, **Associated Domains**. **Sign in with Apple** на App ID — только если есть нативный вход Apple; **веб-логин Apple** внутри WKWebView настраивается через **Services ID** + домен/return URL у Apple, не через «Primary App ID». |
+
+### 2.1a Services ID (Sign in with Apple для веба, OAuth на бэкенде)
+
+Нужно для App Review 4.8, когда в приложении (Capacitor) показывается веб-форма входа с Apple.
+
+| Шаг | Где | Что сделать |
+|-----|-----|-------------|
+| 2.1a.1 | **Identifiers** → **+** | Тип **Services IDs**. Identifier = **Services ID** (например `app.humanitec.ru`) — это значение **`client_id`** в `auth.providers.apple` на сервере. |
+| 2.1a.2 | У Services ID → **Sign in with Apple** → **Configure** | Primary App ID — приложение iOS; **Domains and Subdomains** — публичный домен (например `humanitec.ru`); **Return URLs** — ровно **`https://humanitec.ru/auth/callback/apple`** (без завершающего слэша; должен совпадать с тем, что отдаёт фронтовый сервис при старте OAuth). |
+| 2.1a.3 | **Keys** → ключ **Sign in with Apple** | Создать ключ, скачать **один раз** файл `.p8`, сохранить **Key ID** и **Team ID**. Содержимое `.p8` — в секретах как **`apple_private_key`** (в JSON строка с `\n`). |
 
 ### 2.2 Сертификаты
 

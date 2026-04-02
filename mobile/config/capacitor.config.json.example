@@ -17,7 +17,9 @@
       "oauth.yandex.ru",
       "*.yandex.ru",
       "github.com",
-      "*.github.com"
+      "*.github.com",
+      "appleid.apple.com",
+      "appleid.cdn-apple.com"
     ]
   },
   "ios": {

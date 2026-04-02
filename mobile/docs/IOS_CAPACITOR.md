@@ -62,6 +62,8 @@ npx cap open ios
 
 В [`capacitor.config.json`](../capacitor.config.json) задано **`server.allowNavigation`** — шаблоны **hostname** (как в документации Capacitor: `accounts.google.com`, `*.yandex.ru`, без `https://`), по которым переходы остаются **внутри WebView**. После успешного OAuth редирект на ваш `/auth/callback/...` снова в том же WebView, cookie сессии остаются в оболочке.
 
+**Sign in with Apple через страницу в WebView** (не нативная кнопка `ASAuthorizationAppleIDButton`): в Developer обычно создают **Services ID** и ключ для веба, домен и return URL — это отдельно от диалога **Enable as a primary App ID** у capability **Sign in with Apple** на **App ID** приложения (тот вариант нужен для **нативного** SDK или группировки App ID). Для веб-флоу в WKWebView в `allowNavigation` должны быть **`appleid.apple.com`** и **`appleid.cdn-apple.com`** (JS-виджет Apple).
+
 После правки конфига обязательно: `npx cap sync ios` и пересборка.
 
 Если конкретный провайдер всё равно требует только системный браузер (политика Google для embedded WebView), понадобится отдельный сценарий: ASWebAuthenticationSession / custom URL scheme или мост одноразового кода — это уже изменения в потоке авторизации, не только конфиг.

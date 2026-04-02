@@ -18,6 +18,12 @@
       "github": {
         "client_id": "YOUR_GITHUB_CLIENT_ID",
         "client_secret": "YOUR_GITHUB_CLIENT_SECRET"
+      },
+      "apple": {
+        "client_id": "app.humanitec.ru",
+        "apple_team_id": "YOUR_APPLE_TEAM_ID",
+        "apple_key_id": "YOUR_APPLE_KEY_ID",
+        "apple_private_key": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----"
       }
     }
   },

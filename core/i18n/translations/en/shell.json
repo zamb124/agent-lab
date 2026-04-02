@@ -5,6 +5,7 @@
     "yandex": "Continue with Yandex",
     "google": "Continue with Google",
     "github": "Continue with GitHub",
+    "apple": "Sign in with Apple",
     "oauth_error": "Could not start authorization"
   },
   "pwa": {

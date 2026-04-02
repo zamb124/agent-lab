@@ -162,13 +162,32 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 
 ## OAuth Callback URLs
 
-Прописать в консолях провайдеров:
+Прописать в консолях провайдеров. Единый callback на фронтовом сервисе (без префикса `/frontend`): `https://<публичный_хост>/auth/callback/<provider>`.
 
 | Провайдер | Callback URL |
 |---|---|
-| Yandex | `https://humanitec.ru/frontend/api/auth/callback/yandex` |
-| Google | `https://humanitec.ru/frontend/api/auth/callback/google` |
-| GitHub | `https://humanitec.ru/frontend/api/auth/callback/github` |
+| Yandex | `https://humanitec.ru/auth/callback/yandex` |
+| Google | `https://humanitec.ru/auth/callback/google` |
+| GitHub | `https://humanitec.ru/auth/callback/github` |
+| Apple (Services ID) | `https://humanitec.ru/auth/callback/apple` |
+
+### Sign in with Apple: conf.json и секрет
+
+`client_id` (Services ID), `apple_team_id`, `apple_key_id` — **не секреты**, задавай в **`conf.json`**, который копируется на сервер с деплоем (`auth.providers.apple`).
+
+| Поле в `conf.json` | Пример |
+|---|---|
+| `client_id` | `app.humanitec.ru` |
+| `apple_team_id` | Team ID из Membership |
+| `apple_key_id` | Key ID ключа Sign in with Apple |
+
+В **GitHub Secrets** достаточно одного секрета:
+
+| Secret | Назначение |
+|---|---|
+| `AUTH_APPLE_PRIVATE_KEY` | Содержимое `.p8` в одной строке: `-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----` |
+
+Compose пробрасывает его как `AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY` (перекрывает поле `apple_private_key` из JSON, если задан).
 
 ## Mobile: Lighthouse CI
 

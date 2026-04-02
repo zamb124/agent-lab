@@ -224,6 +224,7 @@
     "login_yandex": "Sign in with Yandex",
     "login_google": "Sign in with Google",
     "login_github": "Sign in with GitHub",
+    "login_apple": "Sign in with Apple",
     "accept_error": "Failed to accept invitation",
     "invalid_platform": "The link is invalid. It may have been created for another platform.",
     "network_error": "Network error. Check your connection and try again.",

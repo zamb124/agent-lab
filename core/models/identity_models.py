@@ -25,6 +25,7 @@ class AuthProvider(str, Enum):
     YANDEX = "yandex"
     GOOGLE = "google"
     GITHUB = "github"
+    APPLE = "apple"
 
 
 class User(BaseModel):
@@ -304,6 +305,10 @@ class AuthRequest(BaseModel):
     code: str = Field(description="Код авторизации от провайдера")
     state: str = Field(description="State для проверки CSRF")
     redirect_uri: Optional[str] = Field(default=None, description="URI для редиректа")
+    oauth_first_login_user_json: Optional[str] = Field(
+        default=None,
+        description="Apple: JSON из query-параметра user при первой авторизации (имя)",
+    )
 
 
 class NamespaceCRMSettings(BaseModel):

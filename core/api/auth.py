@@ -150,6 +150,7 @@ async def auth_callback(
     state: str,
     auth_service: AuthServiceDep,
     error: str = None,
+    user: Optional[str] = None,
 ):
     """
     Обрабатывает callback от провайдера авторизации.
@@ -207,7 +208,11 @@ async def auth_callback(
     logger.info(f"auth_callback: redirect_uri={redirect_uri}, original_host={original_host}")
 
     auth_request = AuthRequest(
-        provider=provider, code=code, state=state, redirect_uri=redirect_uri
+        provider=provider,
+        code=code,
+        state=state,
+        redirect_uri=redirect_uri,
+        oauth_first_login_user_json=user,
     )
 
     result = await auth_service.complete_auth(auth_request)
