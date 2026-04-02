@@ -16,7 +16,7 @@ from core.config import get_settings
 from core.models import AuthProvider, AuthRequest
 from core.identity import AuthService
 from core.utils.tokens import TokenService, get_token_service
-from core.utils.domain import get_cookie_domain
+from core.utils.domain import get_cookie_domain, build_url
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,11 @@ class SwitchCompanyRequest(BaseModel):
     company_id: str
 
 
+class DemoLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 def get_auth_service(request: Request) -> AuthService:
     """Получает AuthService из контейнера приложения"""
     return request.app.state.container.auth_service
@@ -55,6 +60,68 @@ def _append_query(url: str, params: Dict[str, str]) -> str:
     query.update(params)
     next_query = urlencode(query)
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, next_query, parsed.fragment))
+
+
+@router.get("/demo/status")
+async def demo_auth_status():
+    """Публичный флаг: включён ли демо-вход (без утечки email, если выключено)."""
+    settings = get_settings()
+    demo = settings.auth.demo
+    if not demo.login_enabled:
+        return {"enabled": False}
+    return {"enabled": True, "email": demo.email}
+
+
+@router.post("/login/demo")
+async def login_demo(
+    request: Request,
+    body: DemoLoginRequest,
+    auth_service: AuthServiceDep,
+):
+    """Вход демо-пользователя (cookies как после OAuth)."""
+    settings = get_settings()
+    result = await auth_service.login_demo(body.email, body.password)
+
+    if not result.success or not result.session or not result.token or not result.user:
+        raise HTTPException(
+            status_code=401,
+            detail=result.error_message or "Неверные учётные данные",
+        )
+
+    target_host = request.headers.get("host", "")
+    redirect_url = build_url(
+        target_host,
+        "/dashboard",
+        settings.auth.demo.subdomain,
+    )
+
+    response = JSONResponse(
+        content={"redirect_url": redirect_url, "success": True},
+    )
+    is_production = settings.server.env == "production"
+    cookie_domain = get_cookie_domain(target_host)
+    cookie_max_age = TokenService.SESSION_EXPIRES
+
+    response.set_cookie(
+        key="session_id",
+        value=result.session.session_id,
+        domain=cookie_domain,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=cookie_max_age,
+    )
+    response.set_cookie(
+        key="auth_token",
+        value=result.token,
+        domain=cookie_domain,
+        httponly=False,
+        secure=is_production,
+        samesite="lax",
+        max_age=cookie_max_age,
+    )
+
+    return response
 
 
 @router.get("/providers")
@@ -102,6 +169,12 @@ async def start_auth(
     except ValueError:
         raise HTTPException(
             status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}"
+        )
+
+    if provider == AuthProvider.DEMO:
+        raise HTTPException(
+            status_code=400,
+            detail="Для демо-входа используйте POST /login/demo с полями email и password",
         )
 
     # Сохраняем оригинальный хост для редиректа после авторизации

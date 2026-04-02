@@ -2,7 +2,11 @@
  * Холодное открытие по ссылке (Mail / Safari): Capacitor App → тот же WebView.
  */
 import { hrefForDeepLinkNavigation } from './platform-deeplink-paths.js';
-import { isInternalProductNavigationUrl, isStandaloneOrNativeAppShell } from './native-app-shell.js';
+import {
+    assignInNativeShell,
+    isInternalProductNavigationUrl,
+    isStandaloneOrNativeAppShell,
+} from './native-app-shell.js';
 
 export { hrefForDeepLinkNavigation } from './platform-deeplink-paths.js';
 
@@ -35,7 +39,7 @@ function installCapacitorAppUrlOpenListener() {
                 return;
             }
             const target = hrefForDeepLinkNavigation(parsed, window.location.origin);
-            window.location.assign(target);
+            assignInNativeShell(target);
         });
     });
 }

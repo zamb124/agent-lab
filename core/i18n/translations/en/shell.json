@@ -6,7 +6,12 @@
     "google": "Continue with Google",
     "github": "Continue with GitHub",
     "apple": "Sign in with Apple",
-    "oauth_error": "Could not start authorization"
+    "oauth_error": "Could not start authorization",
+    "demo_title": "Demo access",
+    "demo_email_label": "Email",
+    "demo_password_label": "Password",
+    "demo_submit": "Sign in to demo",
+    "demo_error": "Sign-in failed. Check email and password."
   },
   "pwa": {
     "install_title": "Install Humanitec",

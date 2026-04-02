@@ -86,6 +86,14 @@
         "apple_key_id": "8369D9Q322",
         "enabled": true
       }
+    },
+    "demo": {
+      "login_enabled": true,
+      "email": "demo@demo.ru",
+      "password": "Zz123456",
+      "company_id": "demo",
+      "subdomain": "demo",
+      "company_name": "Demo"
     }
   },
   "llm": {

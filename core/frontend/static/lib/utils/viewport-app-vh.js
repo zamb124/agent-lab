@@ -82,3 +82,31 @@ export function initPlatformViewportAppVh() {
 }
 
 initPlatformViewportAppVh();
+
+function scheduleCapacitorSplashHide() {
+    if (typeof window === 'undefined') {
+        return;
+    }
+    if (
+        typeof window.Capacitor === 'undefined' ||
+        typeof window.Capacitor.isNativePlatform !== 'function' ||
+        !window.Capacitor.isNativePlatform()
+    ) {
+        return;
+    }
+    const runHide = () => {
+        void import('@capacitor/splash-screen').then(({ SplashScreen }) => SplashScreen.hide());
+    };
+    const afterPaint = () => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(runHide);
+        });
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', afterPaint, { once: true });
+    } else {
+        afterPaint();
+    }
+}
+
+scheduleCapacitorSplashHide();

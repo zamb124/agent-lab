@@ -189,6 +189,10 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 
 Compose пробрасывает его как `AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY` (перекрывает поле `apple_private_key` из JSON, если задан).
 
+### Демо-вход (App Review, опционально)
+
+В **`conf.json`** на сервере: `auth.demo.login_enabled: true`, при необходимости `email` / `company_id` / `subdomain`, и **`auth.demo.password`** (можно публичный пароль для демо). Альтернатива или дополнение: секрет **`AUTH_DEMO_PASSWORD`** в GitHub Secrets → `AUTH__DEMO__PASSWORD` в compose. После ревью выключить демо: `auth.demo.login_enabled: false` в `conf.json`.
+
 ## Mobile: Lighthouse CI
 
 Workflow [`mobile-pwa-lighthouse.yml`](mobile-pwa-lighthouse.yml) — по расписанию и вручную; проверяет PWA на URL из секрета **`PWA_LIGHTHOUSE_URL`** (например `https://humanitec.ru/`). Без секрета job завершится ошибкой на шаге Lighthouse.

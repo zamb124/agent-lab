@@ -32,6 +32,8 @@ x-common-env: &common-env
   AUTH__PROVIDERS__GITHUB__CLIENT_SECRET: ${AUTH_GITHUB_CLIENT_SECRET}
   # Sign in with Apple: client_id / team_id / key_id — в conf.json на сервере; секрет — только ключ .p8
   AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY: ${AUTH_APPLE_PRIVATE_KEY:-}
+  # Демо-вход: auth.demo.login_enabled в conf.json; пароль только из секрета деплоя (не коммитить).
+  AUTH__DEMO__PASSWORD: ${AUTH_DEMO_PASSWORD:-}
   # Ключи должны совпадать с s3.default_bucket и s3.buckets в conf.json (см. shvedzilla).
   S3__DEFAULT_BUCKET: shvedzilla
   S3__BUCKETS__SHVEDZILLA__ACCESS_KEY_ID: ${SELECTEL_ACCESS_KEY}

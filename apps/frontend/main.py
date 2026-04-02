@@ -21,6 +21,7 @@ from apps.frontend.api.leads import leads_router, lead_requests_router
 from apps.frontend.container import get_frontend_container
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from core.app.factory import create_service_app
+from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.system_bootstrap import ensure_system_admin_membership
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
     if os.getenv("TESTING") == "true":
         return
     await ensure_system_admin_membership(container)
+    await ensure_demo_company_and_user(container)
 
 
 # Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)

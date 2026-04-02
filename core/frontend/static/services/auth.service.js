@@ -121,6 +121,24 @@ export class AuthService extends BaseService {
     }
 
     /**
+     * Публичный статус демо-входа (App Review): { enabled: boolean, email?: string }
+     */
+    async getDemoStatus() {
+        return this.get('/api/auth/demo/status');
+    }
+
+    /**
+     * Демо-вход по email/password; cookies выставляет сервер. Возвращает redirect_url.
+     */
+    async loginDemo(email, password) {
+        const data = await this.post('/api/auth/login/demo', { email, password });
+        if (!data.redirect_url) {
+            throw new Error('Нет redirect_url в ответе сервера');
+        }
+        return data.redirect_url;
+    }
+
+    /**
      * Получить service-specific атрибуты пользователя
      * @param {string} service - Имя сервиса (agents, crm, rag, frontend)
      */

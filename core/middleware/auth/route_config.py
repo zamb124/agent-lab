@@ -121,6 +121,9 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/*/api/auth/login/*", auth_required=False, context_type="anonymous"),
     RouteRule("/*/api/auth/callback", auth_required=False, context_type="anonymous"),
     RouteRule("/*/api/auth/logout", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/auth/demo/status", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/auth/demo/status", auth_required=False, context_type="anonymous"),
+    RouteRule("/*/api/auth/demo/status", auth_required=False, context_type="anonymous"),
     
     # Публичные API
     RouteRule("/api/leads", auth_required=False, context_type="anonymous"),

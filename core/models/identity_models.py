@@ -26,6 +26,7 @@ class AuthProvider(str, Enum):
     GOOGLE = "google"
     GITHUB = "github"
     APPLE = "apple"
+    DEMO = "demo"
 
 
 class User(BaseModel):
@@ -120,6 +121,12 @@ class User(BaseModel):
         default_factory=dict,
         title="Атрибуты",
         description="Дополнительные service-specific данные"
+    )
+    password_hash: Optional[str] = Field(
+        default=None,
+        title="Хеш пароля",
+        description="Bcrypt-хеш; используется только для демо-учётки (auth.demo), не для OAuth",
+        groups={"admin": {"hidden": True}, "user": {"hidden": True}},
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

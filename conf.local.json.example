@@ -25,6 +25,14 @@
         "apple_key_id": "YOUR_APPLE_KEY_ID",
         "apple_private_key": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----"
       }
+    },
+    "demo": {
+      "login_enabled": true,
+      "email": "demo@demo.ru",
+      "password": "Zz123456",
+      "company_id": "demo",
+      "subdomain": "demo",
+      "company_name": "Demo"
     }
   },
   "llm": {

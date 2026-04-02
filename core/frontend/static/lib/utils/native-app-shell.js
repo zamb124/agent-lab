@@ -7,6 +7,38 @@
  * window.webkit.messageHandlers.bridge, Android — window.androidBridge.
  */
 
+export function isCapacitorNativePlatform() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+    if (typeof window.Capacitor === 'undefined' || typeof window.Capacitor.isNativePlatform !== 'function') {
+        return false;
+    }
+    return window.Capacitor.isNativePlatform();
+}
+
+/**
+ * Полная загрузка нового документа в нативном Capacitor: слой SplashScreen, затем assign.
+ * В PWA/браузере — обычный assign.
+ */
+export function assignInNativeShell(href) {
+    if (typeof window === 'undefined') {
+        return;
+    }
+    if (!isCapacitorNativePlatform()) {
+        window.location.assign(href);
+        return;
+    }
+    void import('@capacitor/splash-screen')
+        .then(({ SplashScreen }) => SplashScreen.show({ autoHide: false }))
+        .then(() => {
+            window.location.assign(href);
+        })
+        .catch(() => {
+            window.location.assign(href);
+        });
+}
+
 export function isStandaloneOrNativeAppShell() {
     if (typeof window === 'undefined') {
         return false;
@@ -110,7 +142,7 @@ export function installNativeAppShellWindowOpenPatch() {
             return originalOpen.call(window, url, target, features);
         }
         if (isInternalProductNavigationUrl(parsed)) {
-            window.location.assign(parsed.href);
+            assignInNativeShell(parsed.href);
             return null;
         }
         return originalOpen.call(window, url, target, features);
@@ -159,7 +191,7 @@ export function installNativeAppShellLinkCapture() {
             }
             event.preventDefault();
             event.stopPropagation();
-            window.location.assign(el.href);
+            assignInNativeShell(el.href);
         },
         true,
     );
@@ -167,7 +199,7 @@ export function installNativeAppShellLinkCapture() {
 
 export function openUrlSameWindowOrTab(url) {
     if (isStandaloneOrNativeAppShell()) {
-        window.location.assign(url);
+        assignInNativeShell(url);
         return;
     }
     window.open(url, '_blank', 'noopener,noreferrer');

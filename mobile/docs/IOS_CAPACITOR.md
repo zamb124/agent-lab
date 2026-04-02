@@ -66,6 +66,10 @@ npx cap open ios
 
 После правки конфига обязательно: `npx cap sync ios` и пересборка.
 
+### Splash Screen при полной навигации (`location.assign`)
+
+Плагин **`@capacitor/splash-screen`**: в веб-коде **`assignInNativeShell`** ([`native-app-shell.js`](../../core/frontend/static/lib/utils/native-app-shell.js)) перед внутренним переходом вызывает **`SplashScreen.show({ autoHide: false })`**, затем **`location.assign`**; на новой странице **`viewport-app-vh.js`** снимает слой через **`SplashScreen.hide()`** после **`DOMContentLoaded`** и двух **`requestAnimationFrame`**. Фон и поведение при старте — **`plugins.SplashScreen`** в [`capacitor.config.json`](../capacitor.config.json). Зависимость и vendor — как для **`@capacitor/app`** ([`mobile/README.md`](../README.md)).
+
 Если конкретный провайдер всё равно требует только системный браузер (политика Google для embedded WebView), понадобится отдельный сценарий: ASWebAuthenticationSession / custom URL scheme или мост одноразового кода — это уже изменения в потоке авторизации, не только конфиг.
 
 ### Сессия после закрытия приложения

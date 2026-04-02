@@ -7,6 +7,20 @@ from typing import Any, Dict, List, Optional
 from pydantic import AliasChoices, BaseModel, Field, PrivateAttr
 
 
+class DemoAuthConfig(BaseModel):
+    """
+    Демо-вход (логин + пароль) для App Review и тестовых сценариев.
+    Выключается через auth.demo.login_enabled: false в conf.json / conf.local.json.
+    """
+
+    login_enabled: bool = False
+    email: str = "demo@demo.ru"
+    company_id: str = "demo"
+    subdomain: str = "demo"
+    company_name: str = "Demo"
+    password: Optional[str] = None
+
+
 class AuthProviderConfig(BaseModel):
     """Конфигурация провайдера авторизации"""
 
@@ -31,6 +45,7 @@ class AuthConfig(BaseModel):
     jwt_secret_key: Optional[str] = None
     session_timeout: int = 3600
     providers: Dict[str, AuthProviderConfig] = Field(default_factory=dict)
+    demo: DemoAuthConfig = Field(default_factory=DemoAuthConfig)
 
 
 class DatabaseConfig(BaseModel):

@@ -7,6 +7,7 @@ from core.config.loader import load_merged_config
 from core.config.models import (
     AuthConfig,
     AuthProviderConfig,
+    DemoAuthConfig,
     CallsConfig,
     DatabaseConfig,
     LoggingConfig,
@@ -29,6 +30,7 @@ __all__ = [
     "load_merged_config",
     "AuthConfig",
     "AuthProviderConfig",
+    "DemoAuthConfig",
     "CallsConfig",
     "DatabaseConfig",
     "LoggingConfig",
