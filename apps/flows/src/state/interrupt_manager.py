@@ -12,10 +12,7 @@ InterruptManager - управление interrupt/resume для вложенны
 Zero-Guess: все методы работают с ExecutionState, не Dict.
 """
 
-import uuid
 from typing import Any, Dict, List, Optional
-
-from a2a.types import Message, Part, Role, TextPart
 
 from core.logging import get_logger
 from core.state import (
@@ -23,21 +20,9 @@ from core.state import (
     InterruptData,
     InterruptPathItem,
 )
+from apps.flows.src.runtime.a2a_messages import build_user_message
 
 logger = get_logger(__name__)
-
-
-def _new_user_message(
-    content: str, source_node_id: str, task_id: Optional[str] = None
-) -> Message:
-    """Создаёт A2A Message от пользователя с привязкой к ноде (nested resume)."""
-    return Message(
-        messageId=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[Part(root=TextPart(text=content))],
-        taskId=task_id,
-        metadata={"node_id": source_node_id},
-    )
 
 
 class InterruptManager:
@@ -90,10 +75,12 @@ class InterruptManager:
         from apps.flows.src.state.execution_state import NestedStateData
         
         saved = parent_state.nested_states.get(nested_id)
-        
+
         if saved is None:
-            saved = NestedStateData()
-        elif isinstance(saved, dict):
+            raise ValueError(
+                f"load_nested_state: нет снимка nested_states для nested_id={nested_id!r}"
+            )
+        if isinstance(saved, dict):
             saved = NestedStateData.model_validate(saved)
 
         result = ExecutionState(
@@ -221,7 +208,12 @@ class InterruptManager:
         nested_state = InterruptManager.load_nested_state(parent_state, nested_id)
 
         nested_state.messages.append(
-            _new_user_message(user_answer, nested_id, nested_state.task_id)
+            build_user_message(
+                user_answer,
+                nested_id,
+                context_id=nested_state.context_id,
+                task_id=nested_state.task_id,
+            )
         )
 
         if parent_state.interrupt_path:

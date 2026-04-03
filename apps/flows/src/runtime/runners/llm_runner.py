@@ -6,19 +6,21 @@ Stream-first: LLM ВСЕГДА вызывается как stream.
 """
 
 import time
-import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from a2a.types import (
     Message,
-    Part,
-    Role,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
-from apps.flows.src.runtime.exceptions import FlowInterrupt, ToolExecutionError
+from apps.flows.src.runtime.a2a_messages import (
+    build_assistant_message as new_assistant_message,
+    build_system_message as new_system_message,
+    build_tool_result_message as new_tool_result_message,
+    build_user_message as new_user_message,
+)
+from apps.flows.src.runtime.exceptions import FlowInterrupt
 from core.clients.llm import StreamEvent, get_llm_for_state
 from apps.flows.src.container import get_container
 from core.logging import get_logger
@@ -33,7 +35,7 @@ from apps.flows.src.variables import VariableResolver
 from core.errors import ToolExecutionError
 
 from .base_runner import BaseLlmNodeRunner
-from apps.flows.src.tools.base import BaseTool, ToolType
+from apps.flows.src.tools.base import ToolType
 
 logger = get_logger(__name__)
 
@@ -44,82 +46,6 @@ def _get_trace_ctx_from_state() -> Optional[TraceContext]:
     if trace_data:
         return TraceContext.from_dict(trace_data)
     return None
-
-
-def new_user_message(
-    content: str,
-    source_node_id: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> Message:
-    """Создаёт сообщение от пользователя."""
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[Part(root=TextPart(text=content))],
-        context_id=context_id,
-        task_id=task_id,
-        metadata={"node_id": source_node_id},
-    )
-
-
-def new_assistant_message(
-    content: str,
-    source_node_id: str,
-    tool_calls: Optional[List[Dict[str, Any]]] = None,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> Message:
-    """Создаёт сообщение от ассистента."""
-    meta: Dict[str, Any] = {"node_id": source_node_id}
-    if tool_calls:
-        meta["tool_calls"] = tool_calls
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
-        context_id=context_id,
-        task_id=task_id,
-        metadata=meta,
-    )
-
-
-def new_tool_result_message(
-    tool_call_id: str,
-    content: str,
-    source_node_id: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> Message:
-    """Создаёт сообщение с результатом tool."""
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
-        context_id=context_id,
-        task_id=task_id,
-        metadata={"tool_call_id": tool_call_id, "node_id": source_node_id},
-    )
-
-
-def new_system_message(
-    content: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-    source_node_id: Optional[str] = None,
-) -> Message:
-    """Создаёт системное сообщение (для LLM-запроса или для записи в state.messages)."""
-    meta: Dict[str, Any] = {"system": True}
-    if source_node_id is not None:
-        meta["node_id"] = source_node_id
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
-        context_id=context_id,
-        task_id=task_id,
-        metadata=meta,
-    )
 
 
 def _get_message_metadata(msg) -> Dict[str, Any]:
@@ -178,15 +104,17 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
         if interrupt_path:
             if user_content:
-                resumed = await self._handle_resume(
+                await self._handle_resume(
                     state, user_content, interrupt_path, context_id, task_id
                 )
-                if not resumed:
-                    return
             else:
                 InterruptManager.clear_interrupt_path(state)
         elif user_content:
-            state.messages.append(new_user_message(user_content, sid, context_id, task_id))
+            state.messages.append(
+                new_user_message(
+                    user_content, sid, context_id=context_id, task_id=task_id
+                )
+            )
 
         async for event in self._react_loop(
             state, llm_node_label, context_id, task_id, emitter
@@ -211,27 +139,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             react = self.node_config.react
             return react.loop_mode, react.exit_tool, react.max_iterations, react.strict, react.reminder_message
         return ReactLoopMode.AUTO, "finish", self.MAX_ITERATIONS, True, None
-
-    def _get_reason_tool_name(self) -> Optional[str]:
-        """Находит имя reasoning tool по tool_type."""
-        for tool in self.tools:
-            if getattr(tool, "tool_type", None) == ToolType.REASON:
-                return tool.name
-        return None
-
-    def _get_exit_tool_name(self) -> Optional[str]:
-        """Находит имя exit tool по tool_type."""
-        for tool in self.tools:
-            if getattr(tool, "tool_type", None) == ToolType.EXIT:
-                return tool.name
-        return None
-
-    def _find_tool_by_type(self, tool_type: ToolType) -> Optional[BaseTool]:
-        """Находит tool по tool_type."""
-        for tool in self.tools:
-            if getattr(tool, "tool_type", None) == tool_type:
-                return tool
-        return None
 
     def _find_exit_tool_call(
         self, tool_calls: List[Dict[str, Any]], exit_tool: str
@@ -274,7 +181,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         return
                 break
         state.messages.append(
-            new_assistant_message("", sid, [tool_call], context_id, task_id)
+            new_assistant_message(
+                "", sid, [tool_call], context_id=context_id, task_id=task_id
+            )
         )
 
     async def _handle_resume(
@@ -284,10 +193,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         interrupt_path: List[InterruptPathItem],
         context_id: str,
         task_id: Optional[str] = None,
-    ) -> bool:
+    ) -> None:
         """Обрабатывает resume после interrupt."""
         if not interrupt_path:
-            return True
+            return
 
         next_call = interrupt_path[0]
         call_type = next_call.type
@@ -318,7 +227,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 for tr in tool_results:
                     state.messages.append(
                         new_tool_result_message(
-                            tr["tool_call_id"], tr["content"], sid, context_id, task_id
+                            tr["tool_call_id"],
+                            tr["content"],
+                            sid,
+                            context_id=context_id,
+                            task_id=task_id,
                         )
                     )
                 InterruptManager.clear_interrupt_path(state)
@@ -330,11 +243,16 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 state, tool_call_id, tool_call, context_id, task_id
             )
             state.messages.append(
-                new_tool_result_message(tool_call_id, user_answer, sid, context_id, task_id)
+                new_tool_result_message(
+                    tool_call_id,
+                    user_answer,
+                    sid,
+                    context_id=context_id,
+                    task_id=task_id,
+                )
             )
 
         InterruptManager.clear_interrupt_path(state)
-        return True
 
     async def _react_loop(
         self,
@@ -371,10 +289,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             response_format = None
 
         loop_mode, exit_tool, max_iterations, strict, reminder_message = self._get_react_config()
-        reason_tool_name = self._get_reason_tool_name()
-        exit_tool_name = self._get_exit_tool_name() or exit_tool
+        reason_tool = self._find_tool_by_type(ToolType.REASON)
+        reason_tool_name = reason_tool.name if reason_tool else None
+        exit_tool_obj = self._find_tool_by_type(ToolType.EXIT)
+        exit_tool_name = (exit_tool_obj.name if exit_tool_obj else None) or exit_tool
 
-        system_msg = new_system_message(system_prompt, context_id, task_id)
+        system_msg = new_system_message(
+            system_prompt, context_id=context_id, task_id=task_id
+        )
 
         iteration = 0
         final_response = ""
@@ -457,15 +379,25 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 )
                                 
                                 state.messages.append(
-                                    new_assistant_message(content, sid, tool_calls, context_id, task_id)
+                                    new_assistant_message(
+                                        content,
+                                        sid,
+                                        tool_calls,
+                                        context_id=context_id,
+                                        task_id=task_id,
+                                    )
                                 )
-                                
+
                                 exit_call_id = exit_call.get("id", exit_tool_name)
                                 await emitter.emit_tool_call(exit_tool_name, exit_args, exit_call_id)
                                 
                                 state.messages.append(
                                     new_tool_result_message(
-                                        exit_call_id, final_response, sid, context_id, task_id
+                                        exit_call_id,
+                                        final_response,
+                                        sid,
+                                        context_id=context_id,
+                                        task_id=task_id,
                                     )
                                 )
                                 await emitter.emit_tool_result(exit_tool_name, final_response, exit_call_id)
@@ -475,7 +407,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 break
 
                             state.messages.append(
-                                new_assistant_message(content, sid, tool_calls, context_id, task_id)
+                                new_assistant_message(
+                                    content,
+                                    sid,
+                                    tool_calls,
+                                    context_id=context_id,
+                                    task_id=task_id,
+                                )
                             )
 
                             for tc in tool_calls:
@@ -496,7 +434,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 for tr in tool_results:
                                     state.messages.append(
                                         new_tool_result_message(
-                                            tr["tool_call_id"], tr["content"], sid, context_id, task_id
+                                            tr["tool_call_id"],
+                                            tr["content"],
+                                            sid,
+                                            context_id=context_id,
+                                            task_id=task_id,
                                         )
                                     )
                                     tool_call_id = tr["tool_call_id"]
@@ -615,8 +557,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 state.messages.append(
                                     new_system_message(
                                         reminder_message or default_reminder,
-                                        context_id,
-                                        task_id,
+                                        context_id=context_id,
+                                        task_id=task_id,
                                         source_node_id=sid,
                                     )
                                 )

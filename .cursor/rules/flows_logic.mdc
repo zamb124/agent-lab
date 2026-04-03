@@ -18,7 +18,7 @@ alwaysApply: true
 
 ## Любая нода = Tool
 
-NodeAsToolWrapper оборачивает ЛЮБУЮ ноду для LlmNode:
+NodeAsToolWrapper оборачивает ЛЮБУЮ ноду для LlmNode; `BaseNode.as_tool()` возвращает тот же класс через `NodeAsToolWrapper.from_base_node` (отдельного `NodeAsTool` нет):
 
     tools: [
       {"tool_id": "calc", "type": "code", "code": "..."},

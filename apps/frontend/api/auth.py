@@ -5,7 +5,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse
 from core.identity.auth_service import AuthService
 from core.models.identity_models import AuthProvider, AuthRequest
 from core.config import get_settings
@@ -117,15 +117,5 @@ async def auth_callback(
         max_age=TokenService.SESSION_EXPIRES,
     )
     
-    return response
-
-
-@router.post("/logout")
-async def logout(request: Request):
-    """Выйти из системы"""
-    cookie_domain = get_cookie_domain(request.headers.get("host", ""))
-    
-    response = JSONResponse({"success": True})
-    response.delete_cookie("auth_token", domain=cookie_domain)
     return response
 

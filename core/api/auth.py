@@ -7,7 +7,7 @@ API эндпоинты для авторизации.
 
 import logging
 from typing import Annotated, Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Request, Depends, Form
+from fastapi import APIRouter, HTTPException, Request, Depends, Form, Query
 from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel, Field as PydanticField
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -52,6 +52,34 @@ def get_auth_service(request: Request) -> AuthService:
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> None:
+    """
+    Удаляет куки входа с теми же path/domain/secure/samesite (и httponly для auth_token),
+    с какими они выставляются в login/demo, OAuth callback и switch-company.
+    """
+    settings = get_settings()
+    is_production = settings.server.env == "production"
+    host = request.headers.get("host", "")
+    cookie_domain = get_cookie_domain(host)
+    for httponly_auth in (False, True):
+        response.delete_cookie(
+            key="auth_token",
+            path="/",
+            domain=cookie_domain,
+            secure=is_production,
+            httponly=httponly_auth,
+            samesite="lax",
+        )
+    response.delete_cookie(
+        key="session_id",
+        path="/",
+        domain=cookie_domain,
+        secure=is_production,
+        httponly=True,
+        samesite="lax",
+    )
 
 
 def _append_query(url: str, params: Dict[str, str]) -> str:
@@ -364,22 +392,25 @@ async def auth_callback_post(
 
 
 @router.post("/logout")
-async def logout(session_id: str, auth_service: AuthServiceDep):
+async def logout(
+    request: Request,
+    auth_service: AuthServiceDep,
+    session_id: Annotated[Optional[str], Query()] = None,
+):
     """
-    Завершает сессию пользователя.
-
-    Args:
-        session_id: ID сессии для завершения
+    Завершает сессию: берёт session_id из query (опционально) или из JWT в cookie,
+    удаляет запись сессии и снимает auth_token/session_id в браузере.
     """
-    if not session_id:
-        raise HTTPException(status_code=400, detail="Не указан session_id")
+    token_data = getattr(request.state, "token_data", None)
+    resolved_session_id = session_id or (
+        token_data.session_id if token_data and token_data.session_id else None
+    )
+    if resolved_session_id:
+        await auth_service.logout(resolved_session_id)
 
-    success = await auth_service.logout(session_id)
-
-    if success:
-        return {"success": True, "message": "Сессия завершена"}
-    else:
-        raise HTTPException(status_code=500, detail="Ошибка завершения сессии")
+    response = JSONResponse({"success": True, "message": "Сессия завершена"})
+    _clear_platform_auth_cookies(response, request)
+    return response
 
 
 @router.get("/me")

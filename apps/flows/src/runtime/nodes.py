@@ -21,7 +21,7 @@ import inspect
 import json
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -38,6 +38,9 @@ from apps.flows.src.models.external_api import ExternalAPIConfig, ParameterSchem
 from core.state import ExecutionState, InterruptData
 from core.logging import get_logger
 from core.errors import ResourceNotFoundError
+
+if TYPE_CHECKING:
+    from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 
 logger = get_logger(__name__)
 
@@ -382,21 +385,18 @@ class BaseNode(ABC):
 
     def as_tool(
         self, name: Optional[str] = None, description: Optional[str] = None
-    ) -> "NodeAsTool":
+    ) -> "NodeAsToolWrapper":
         """
-        Превращает ноду в tool для использования в других нодах.
-
-        Args:
-            name: Имя tool
-            description: Описание tool
-
-        Returns:
-            NodeAsTool wrapper
+        Превращает ноду в tool (тот же NodeAsToolWrapper, что и в ToolRegistry).
         """
-        return NodeAsTool(
-            node=self,
-            name=name or f"{self.node_id}_tool",
-            description=description or self.description or f"Вызов ноды {self.node_id}",
+        from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
+
+        return NodeAsToolWrapper.from_base_node(
+            self,
+            tool_name=name or f"{self.node_id}_tool",
+            tool_description=description
+            or self.description
+            or f"Вызов ноды {self.node_id}",
         )
 
 
@@ -701,61 +701,6 @@ class LlmNode(BaseNode):
         """
         return rendered_prompt
 
-    def as_tool(
-        self, name: Optional[str] = None, description: Optional[str] = None
-    ) -> "NodeAsTool":
-        """
-        Превращает LlmNode в tool для использования в других нодах.
-
-        Args:
-            name: Имя tool
-            description: Описание tool
-
-        Returns:
-            NodeAsTool wrapper
-        """
-        return NodeAsTool(
-            node=self,
-            name=name or f"{self.llm_node_id}_tool",
-            description=description or self.llm_node_description or f"Вызов ноды {self.llm_node_name}",
-        )
-
-
-class NodeAsTool:
-    """Обертка для использования любой ноды как tool."""
-
-    def __init__(self, node: "BaseNode", name: str, description: str):
-        self.node = node
-        self.name = name
-        self.description = description
-        self.parameters = {
-            "type": "object",
-            "properties": {"request": {"type": "string", "description": "Запрос к ноде"}},
-            "required": ["request"],
-        }
-
-    async def run(self, args: Dict[str, Any], state: ExecutionState) -> str:
-        """Выполняет ноду как tool."""
-        request = args.get("request", "")
-        node_name = getattr(self.node, "llm_node_name", self.node.node_id)
-        logger.info(f"NodeAsTool: вызов {node_name} с запросом: {request[:100]}")
-        
-        state.content = request
-        await self.node.run(state)
-        return state.response or "Нет ответа от ноды"
-
-    def to_openai_schema(self) -> Dict[str, Any]:
-        """Возвращает схему для OpenAI."""
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
-        }
-
-
 class CodeNode(BaseNode):
     """
     Универсальная нода для выполнения кода.
@@ -914,9 +859,18 @@ class RemoteFlowNode(BaseNode):
             auth_headers=auth_headers,
         )
 
-        state.response = result.get("response", "")
-        setattr(state, "remote_status", result.get("status", "completed"))
-        return result.get("response", "")
+        if not isinstance(result, dict):
+            raise ValueError(
+                f"RemoteFlowNode: ожидался dict от a2a_client.send_task, получено {type(result)}"
+            )
+        if "response" not in result:
+            raise ValueError("RemoteFlowNode: ответ A2A без обязательного поля 'response'")
+        if "status" not in result:
+            raise ValueError("RemoteFlowNode: ответ A2A без обязательного поля 'status'")
+
+        state.response = result["response"]
+        setattr(state, "remote_status", result["status"])
+        return result["response"]
 
     async def _resolve_connection(
         self, container, variables: Dict[str, Any]
@@ -995,11 +949,22 @@ class ExternalAPINode(BaseNode):
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
             interrupt_data = result["interrupt"]
-            state.interrupt = InterruptData(question=interrupt_data.get("question", ""))
+            if not isinstance(interrupt_data, dict):
+                raise ValueError(
+                    f"ExternalAPINode: interrupt должен быть dict, получено {type(interrupt_data)}"
+                )
+            if "question" not in interrupt_data:
+                raise ValueError(
+                    "ExternalAPINode: interrupt без обязательного поля 'question'"
+                )
+            state.interrupt = InterruptData(question=interrupt_data["question"])
             return None
 
         if result.get("status") == "error":
-            raise ValueError(f"External API error: {result.get('error')}")
+            err = result.get("error")
+            if err is None:
+                raise ValueError("ExternalAPINode: status=error без поля 'error'")
+            raise ValueError(f"External API error: {err}")
 
         for response_field, state_field in api_cfg.state_mapping.items():
             data = result.get("data", {})

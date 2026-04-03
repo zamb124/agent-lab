@@ -178,13 +178,26 @@ class Flow:
                     logger.debug(f"Flow {self.flow_id}: executing node '{node_id}' (type={node_type})")
 
                 # Выполнение всех нод текущего уровня
-                async def _run(node_id: str) -> ExecutionState:
+                async def _run(node_id: str, run_state: ExecutionState) -> ExecutionState:
                     node_type = self.nodes[node_id].config.get("type", "function")
                     async with tracer.node_span(node_id, node_type, trace_ctx):
-                        return await self.nodes[node_id].run.kiq(state)
+                        return await self.nodes[node_id].run.kiq(run_state)
 
                 try:
-                    tasks = [_run(node_id) for node_id in current_nodes]
+                    run_states: Dict[str, ExecutionState] = {}
+                    if len(current_nodes) > 1 and not container.use_worker:
+                        for nid in current_nodes:
+                            run_states[nid] = ExecutionState.model_validate(
+                                state.model_dump(exclude_none=False)
+                            )
+                    else:
+                        for nid in current_nodes:
+                            run_states[nid] = state
+
+                    tasks = [
+                        _run(node_id, run_states[node_id])
+                        for node_id in current_nodes
+                    ]
                     results = await asyncio.gather(*tasks)
                     state = self._merge_results(state, results)
                 except FlowInterrupt as e:
@@ -193,8 +206,6 @@ class Flow:
                     state.interrupt = InterruptData(question=e.question)
                     state.current_nodes = current_nodes
                     return state
-                except Exception as e:
-                    raise
 
                 for node_id in current_nodes:
                     node = self.nodes[node_id]
@@ -322,7 +333,7 @@ class Flow:
         state.node_history[node_id]["calls"].append(
             {
                 "response": state.response,
-                "validation": getattr(state, "validation", None),
+                "validation": state.validation,
             }
         )
 
@@ -373,10 +384,12 @@ class Flow:
         
         if condition_type == "simple":
             return self._evaluate_simple_condition(condition, state)
-        elif condition_type == "python":
+        if condition_type == "python":
             return self._evaluate_python_condition(condition.get("code", ""), state)
-        
-        return True
+
+        raise ValueError(
+            f"Неизвестный type условия ребра: {condition_type!r}, ожидаются 'simple' или 'python'"
+        )
 
     def _evaluate_simple_condition(self, condition: Dict[str, Any], state: ExecutionState) -> bool:
         """Вычисляет простое условие: variable operator value."""
@@ -400,8 +413,11 @@ class Flow:
         
         try:
             return op(left, right)
-        except TypeError:
-            return False
+        except TypeError as e:
+            raise ValueError(
+                f"Условие ребра: несовместимые типы для variable={variable!r} "
+                f"op={op_str!r} left={left!r} right={right!r}"
+            ) from e
 
     def _evaluate_python_condition(self, code: str, state: ExecutionState) -> bool:
         """
@@ -412,22 +428,21 @@ class Flow:
         from core.errors import SafeEvalError
         
         if not code or "def check" not in code:
-            logger.warning(f"Invalid Python condition: missing check function")
-            return False
-        
+            raise ValueError(
+                "Python-условие ребра: требуется непустой код с функцией check(state)"
+            )
+
         state_dict = state.model_dump(exclude_none=False)
-        
+
         try:
             evaluator = SafeEval(variables=state.variables)
             check_fn = evaluator._compile(code, "check", auto_find=False)
             result = check_fn(state_dict)
             return bool(result)
         except SafeEvalError as e:
-            logger.error(f"Python condition SafeEval error: {e}")
-            return False
+            raise ValueError(f"Python-условие ребра: ошибка SafeEval: {e}") from e
         except Exception as e:
-            logger.error(f"Python condition execution error: {e}")
-            return False
+            raise ValueError(f"Python-условие ребра: ошибка выполнения check(state): {e}") from e
 
     def _evaluate_condition_string(self, condition: str, state: ExecutionState) -> bool:
         """Вычисляет условие в legacy строковом формате."""
@@ -451,8 +466,11 @@ class Flow:
 
                 try:
                     return op(left, right)
-                except TypeError:
-                    return False
+                except TypeError as e:
+                    raise ValueError(
+                        f"Строковое условие ребра: несовместимые типы "
+                        f"left_path={left_path!r} right={right_value!r} left={left!r} right={right!r}"
+                    ) from e
 
         value = MappingResolver.get_nested_value(state, condition.strip())
         return bool(value)
@@ -477,15 +495,11 @@ class Flow:
         ):
             return value[1:-1]
 
-        # Number
-        try:
-            if "." in value:
-                return float(value)
+        if re.fullmatch(r"-?\d+", value):
             return int(value)
-        except ValueError:
-            pass
+        if re.fullmatch(r"-?\d+\.\d+", value):
+            return float(value)
 
-        # Как есть
         return value
 
     @classmethod

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from a2a.types import Message, Part, Role, TextPart
 
+from apps.flows.src.runtime.a2a_messages import build_user_message
 from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.tools.base import ToolType
@@ -108,12 +109,11 @@ class BaseLlmNodeRunner(ABC):
         """Добавляет сообщение пользователя."""
         if not self.node_config:
             raise ValueError("add_user_message: node_config required")
-        message = Message(
-            messageId=str(uuid.uuid4()),
-            role=Role.user,
-            parts=[Part(root=TextPart(text=content))],
-            taskId=state.task_id,
-            metadata={"node_id": self.node_config.node_id},
+        message = build_user_message(
+            content,
+            self.node_config.node_id,
+            context_id=state.context_id,
+            task_id=state.task_id,
         )
         self.add_message(state, message)
 

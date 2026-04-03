@@ -2,13 +2,13 @@ from .flow import Flow
 from .nodes import (
     BaseNode,
     LlmNode,
-    NodeAsTool,
     CodeNode,
     FlowNode,
     RemoteFlowNode,
     ExternalAPINode,
     create_node,
 )
+from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from .exceptions import FlowInterrupt, BreakpointInterrupt
 from .runners import BaseLlmNodeRunner, LlmNodeRunner
 from .simple_executor import SimpleLlmNodeExecutor
@@ -17,7 +17,7 @@ __all__ = [
     "Flow",
     "BaseNode",
     "LlmNode",
-    "NodeAsTool",
+    "NodeAsToolWrapper",
     "CodeNode",
     "FlowNode",
     "RemoteFlowNode",

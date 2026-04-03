@@ -4,6 +4,7 @@ API endpoints для триггеров агентов.
 CRUD для триггеров + webhook endpoints для приема входящих событий.
 """
 
+import json
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -353,16 +354,20 @@ async def generic_webhook(
     if not trigger.enabled:
         raise HTTPException(status_code=400, detail="Trigger is disabled")
     
-    # Парсим payload
     try:
         payload = await request.json()
-    except Exception:
-        payload = {}
-    
-    logger.info(f"Webhook received: flow_id={flow_id}, trigger={trigger_id}")
-    
-    # TODO: Implement WebhookTriggerHandler
-    return {"status": "ok", "message": "Webhook received (handler not implemented)"}
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON body: {e}") from e
+
+    payload_keys = list(payload.keys()) if isinstance(payload, dict) else None
+    logger.info(
+        f"Webhook received: flow_id={flow_id}, trigger={trigger_id}, payload_type={type(payload).__name__}, keys={payload_keys}"
+    )
+
+    raise HTTPException(
+        status_code=501,
+        detail="Webhook trigger execution is not implemented",
+    )
 
 
 # Test endpoint
