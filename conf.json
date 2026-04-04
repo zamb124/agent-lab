@@ -8,7 +8,7 @@
     "rag_service_url": "http://localhost:8004",
     "sync_service_url": "http://localhost:8005",
     "office_service_url": "http://localhost:8008",
-    "platform_public_base_url": "http://localhost:8002"
+    "platform_public_base_url": "https://humanitec.ru"
   },
   "database": {
     "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shared",

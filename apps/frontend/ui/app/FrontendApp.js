@@ -352,6 +352,8 @@ export class FrontendApp extends PlatformApp {
                 return html`<scheduler-tasks-page></scheduler-tasks-page>`;
             case 'lead-requests':
                 return html`<leads-requests-page></leads-requests-page>`;
+            case 'platform-tracing':
+                return html`<tracing-page></tracing-page>`;
             default:
                 throw new Error(`Unknown view: ${normalizedView}`);
         }

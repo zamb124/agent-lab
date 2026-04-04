@@ -91,6 +91,15 @@ alwaysApply: false
 | `get_spans_by_user` | По `user_id`, опционально интервал времени |
 | `get_spans_by_flow` / `get_spans_by_agent` | По `platform.flow_id` в `attributes` |
 | `search_traces` | Фильтры user/session/flow + пагинация; группировка по `trace_id` |
+| `admin_search_spans` | Админ-список без обязательного `service_name`: точные и ILIKE-фильтры (мин. 2 символа для подстрок), интервал времени, курсор `(start_time, span_id)` как у `list_spans_for_service` |
+| `admin_facet_distinct_*` | Подсказки distinct: `company_id`, `user_id`, `service_name`, `event_type` |
+
+## Админ UI (frontend)
+
+- Доступ только при **активной компании `system`** (`SYSTEM_COMPANY_ID`), иначе **403**.
+- HTTP API сервиса **frontend**: префикс **`/frontend/api/platform-tracing`** (роутер `apps/frontend/api/platform_tracing.py`): facets, `GET /spans` (данные из `admin_search_spans`), `GET /traces/{trace_id}` (плоский список из `get_trace` + дерево через **`build_span_tree`** в `core/tracing/span_tree.py`).
+- Если **`database.tracing_url` пустой** или **`tracing.postgres_enabled=false`** — эндпоинты отвечают **503** (без пустых данных).
+- Страница консоли: **`apps/frontend/ui/pages/admin/tracing-page.js`**, пункт меню в сайдбаре только для `system`.
 
 Сериализация строки репозитория — плоский dict с полями модели + `flow_id`/`task_id`/… из `attributes` (см. `_serialize_span`).
 
@@ -114,4 +123,4 @@ alwaysApply: false
 
 ## Ключевые файлы
 
-`core/tracing/tracer.py`, `core/tracing/repository.py`, `core/tracing/context.py`, `core/tracing/attributes.py`, `core/app/factory.py` (lifespan), `apps/flows_worker/broker.py`, `apps/idle_worker/broker.py`, `core/container/base.py`, `tests/fixtures/test_database_env.py`, `tests/core/tracing/test_span_repository_service_api.py`.
+`core/tracing/tracer.py`, `core/tracing/repository.py`, `core/tracing/span_tree.py`, `core/tracing/context.py`, `core/tracing/attributes.py`, `core/app/factory.py` (lifespan), `apps/frontend/api/platform_tracing.py`, `apps/flows_worker/broker.py`, `apps/idle_worker/broker.py`, `core/container/base.py`, `tests/fixtures/test_database_env.py`, `tests/core/tracing/test_span_repository_service_api.py`, `tests/frontend/api/test_platform_tracing_api.py`.

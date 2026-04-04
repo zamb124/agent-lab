@@ -18,6 +18,7 @@ from apps.frontend.api.settings import router as settings_router
 from apps.frontend.api.services import router as services_router
 from apps.frontend.api.scheduler import router as scheduler_router
 from apps.frontend.api.leads import leads_router, lead_requests_router
+from apps.frontend.api.platform_tracing import router as platform_tracing_router
 from apps.frontend.container import get_frontend_container
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from core.app.factory import create_service_app
@@ -52,6 +53,7 @@ app = create_service_app(
         scheduler_router,
         leads_router,
         lead_requests_router,
+        platform_tracing_router,
     ],
     title="Platform Management",
     description="Управление платформой: авторизация, компании, биллинг",

@@ -45,6 +45,44 @@ def _decode_service_list_cursor(cursor: str) -> Tuple[datetime, str]:
     return t, payload["s"]
 
 
+MIN_ADMIN_ILIKE_LEN = 2
+ADMIN_SPANS_MAX_LIMIT = 100
+ADMIN_FACETS_MAX_LIMIT = 20
+
+
+def _escape_like_fragment(fragment: str) -> str:
+    return fragment.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _admin_ilike(column, fragment: str):
+    return column.ilike(f"%{_escape_like_fragment(fragment)}%", escape="\\")
+
+
+def _admin_optional_ilike_param(param_name: str, value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if stripped == "":
+        return None
+    if len(stripped) < MIN_ADMIN_ILIKE_LEN:
+        raise ValueError(
+            f"{param_name}: для поиска подстроки нужно минимум {MIN_ADMIN_ILIKE_LEN} символа, "
+            f"получено {len(stripped)}"
+        )
+    return stripped
+
+
+def _facet_query_fragment(q: Optional[str]) -> Optional[str]:
+    if q is None:
+        return None
+    stripped = q.strip()
+    if stripped == "":
+        return None
+    if len(stripped) < MIN_ADMIN_ILIKE_LEN:
+        return None
+    return stripped
+
+
 class SpanRepository:
     def __init__(self, storage: "Storage"):
         self._storage = storage
@@ -348,6 +386,144 @@ class SpanRepository:
                 traces_dict[tid]["spans"].append(span)
 
             return list(traces_dict.values()), total_count or 0
+
+    async def admin_search_spans(
+        self,
+        *,
+        service_name: Optional[str] = None,
+        company_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+        from_time: Optional[datetime] = None,
+        to_time: Optional[datetime] = None,
+        company_id_query: Optional[str] = None,
+        user_id_query: Optional[str] = None,
+        operation_name_query: Optional[str] = None,
+        event_type_query: Optional[str] = None,
+        limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        from core.db.models import Spans
+
+        if limit < 1:
+            raise ValueError("limit должен быть >= 1")
+        if limit > ADMIN_SPANS_MAX_LIMIT:
+            raise ValueError(f"limit не больше {ADMIN_SPANS_MAX_LIMIT}")
+
+        company_frag = _admin_optional_ilike_param("company_id_query", company_id_query)
+        user_frag = _admin_optional_ilike_param("user_id_query", user_id_query)
+        op_frag = _admin_optional_ilike_param("operation_name_query", operation_name_query)
+        event_frag = _admin_optional_ilike_param("event_type_query", event_type_query)
+
+        async with self._storage._get_session() as session:
+            stmt = select(Spans)
+            if service_name is not None:
+                stmt = stmt.where(Spans.service_name == service_name)
+            if company_id is not None:
+                stmt = stmt.where(Spans.company_id == company_id)
+            if user_id is not None:
+                stmt = stmt.where(Spans.user_id == user_id)
+            if namespace is not None:
+                stmt = stmt.where(Spans.namespace == namespace)
+            if from_time is not None:
+                stmt = stmt.where(Spans.start_time >= from_time)
+            if to_time is not None:
+                stmt = stmt.where(Spans.start_time <= to_time)
+            if company_frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.company_id, company_frag))
+            if user_frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.user_id, user_frag))
+            if op_frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.operation_name, op_frag))
+            if event_frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.event_type, event_frag))
+            if cursor is not None:
+                try:
+                    cursor_time, cursor_span_id = _decode_service_list_cursor(cursor)
+                except (json.JSONDecodeError, KeyError, ValueError) as e:
+                    raise ValueError(f"Некорректный cursor: {e}") from e
+                stmt = stmt.where(
+                    or_(
+                        Spans.start_time < cursor_time,
+                        and_(
+                            Spans.start_time == cursor_time,
+                            Spans.span_id < cursor_span_id,
+                        ),
+                    )
+                )
+            stmt = stmt.order_by(Spans.start_time.desc(), Spans.span_id.desc()).limit(limit)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            items = [self._serialize_span(row) for row in rows]
+            next_cursor: Optional[str] = None
+            if len(items) == limit:
+                last = rows[-1]
+                next_cursor = _encode_service_list_cursor(last.start_time, last.span_id)
+            return items, next_cursor
+
+    async def admin_facet_distinct_company_ids(
+        self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
+    ) -> List[str]:
+        from core.db.models import Spans
+
+        if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
+            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+        frag = _facet_query_fragment(q)
+        async with self._storage._get_session() as session:
+            stmt = select(Spans.company_id).where(Spans.company_id.isnot(None))
+            if frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.company_id, frag))
+            stmt = stmt.distinct().order_by(Spans.company_id.asc()).limit(limit)
+            result = await session.execute(stmt)
+            return [row[0] for row in result.all() if row[0] is not None]
+
+    async def admin_facet_distinct_user_ids(
+        self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
+    ) -> List[str]:
+        from core.db.models import Spans
+
+        if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
+            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+        frag = _facet_query_fragment(q)
+        async with self._storage._get_session() as session:
+            stmt = select(Spans.user_id).where(Spans.user_id.isnot(None))
+            if frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.user_id, frag))
+            stmt = stmt.distinct().order_by(Spans.user_id.asc()).limit(limit)
+            result = await session.execute(stmt)
+            return [row[0] for row in result.all() if row[0] is not None]
+
+    async def admin_facet_distinct_service_names(
+        self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
+    ) -> List[str]:
+        from core.db.models import Spans
+
+        if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
+            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+        frag = _facet_query_fragment(q)
+        async with self._storage._get_session() as session:
+            stmt = select(Spans.service_name).where(Spans.service_name.isnot(None))
+            if frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.service_name, frag))
+            stmt = stmt.distinct().order_by(Spans.service_name.asc()).limit(limit)
+            result = await session.execute(stmt)
+            return [row[0] for row in result.all() if row[0] is not None]
+
+    async def admin_facet_distinct_event_types(
+        self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
+    ) -> List[str]:
+        from core.db.models import Spans
+
+        if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
+            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+        frag = _facet_query_fragment(q)
+        async with self._storage._get_session() as session:
+            stmt = select(Spans.event_type).where(Spans.event_type.isnot(None))
+            if frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.event_type, frag))
+            stmt = stmt.distinct().order_by(Spans.event_type.asc()).limit(limit)
+            result = await session.execute(stmt)
+            return [row[0] for row in result.all() if row[0] is not None]
 
     def _serialize_span(self, row: Any) -> Dict[str, Any]:
         raw_attrs = row.attributes or {}

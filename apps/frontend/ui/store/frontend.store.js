@@ -13,6 +13,7 @@ const CONSOLE_VIEW_TO_PATH = new Map([
     ['settings', '/settings'],
     ['scheduler-tasks', '/scheduler-tasks'],
     ['lead-requests', '/lead-requests'],
+    ['platform-tracing', '/platform-tracing'],
 ]);
 
 const CONSOLE_PATH_TO_VIEW = new Map(

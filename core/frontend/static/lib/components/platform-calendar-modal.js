@@ -1685,7 +1685,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._eventAttachments = [];
         this._eventMetadata = {};
         this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'event';
+        this._selectedEventKind = 'meeting';
         this._selectedEventNamespace = null;
         this._timezoneOptions = [...BASE_TIMEZONE_OPTIONS];
         this._teamMembers = [];
@@ -1699,7 +1699,7 @@ export class PlatformCalendarModal extends PlatformModal {
         const defaultEnd = addDays(now, 0);
         defaultEnd.setMinutes(defaultEnd.getMinutes() + 30);
         this._eventForm = {
-            kind: 'event',
+            kind: 'meeting',
             color: DEFAULT_EVENT_COLOR,
             title: '',
             description: '',
@@ -2340,7 +2340,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._selectedEventId = null;
         this._eventForm = {
             ...this._eventForm,
-            kind: 'event',
+            kind: 'meeting',
             color: DEFAULT_EVENT_COLOR,
             title: '',
             description: '',
@@ -2352,7 +2352,7 @@ export class PlatformCalendarModal extends PlatformModal {
         };
         this._eventDeepLink = null;
         this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'event';
+        this._selectedEventKind = 'meeting';
         this._selectedEventNamespace = null;
         this._eventMetadata = {};
         this._eventAttachments = [];
@@ -2465,11 +2465,11 @@ export class PlatformCalendarModal extends PlatformModal {
             }
             this._selectedEventId = null;
             this._selectedEventSource = 'platform';
-            this._selectedEventKind = 'event';
+            this._selectedEventKind = 'meeting';
             this._selectedEventNamespace = null;
             this._eventForm = {
                 ...this._eventForm,
-                kind: 'event',
+                kind: 'meeting',
                 color: DEFAULT_EVENT_COLOR,
                 title: '',
                 description: '',
@@ -2501,7 +2501,7 @@ export class PlatformCalendarModal extends PlatformModal {
         await this.calendarApi.deleteEvent(this._selectedEventId);
         this._selectedEventId = null;
         this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'event';
+        this._selectedEventKind = 'meeting';
         this._selectedEventNamespace = null;
         this._eventMetadata = {};
         this._eventAttachments = [];
@@ -2873,8 +2873,8 @@ export class PlatformCalendarModal extends PlatformModal {
                             @change=${(e) => this._onEventFormChange('kind', e.target.value)}
                             ?disabled=${this._selectedEventId && !this._isEventEditable(this._selectedEventSource)}
                         >
-                            <option value="event">${c('kind_event')}</option>
                             <option value="meeting">${c('kind_meeting')}</option>
+                            <option value="event">${c('kind_event')}</option>
                             <option value="task">${c('kind_task')}</option>
                             <option value="note">${c('kind_note')}</option>
                             <option value="call">${c('kind_call')}</option>

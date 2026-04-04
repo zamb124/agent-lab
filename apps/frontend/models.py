@@ -101,3 +101,16 @@ class ChangePlanRequest(BaseModel):
     """Запрос на смену тарифа"""
     plan: str = Field(description="Новый тарифный план")
 
+
+class PlatformTracingFacetsResponse(BaseModel):
+    """Подсказки для автокомплита (distinct значения)."""
+
+    items: List[str]
+
+
+class PlatformTracingSpansPageResponse(BaseModel):
+    """Страница spans админ-поиска с курсором."""
+
+    items: List[Dict[str, Any]]
+    next_cursor: Optional[str] = None
+

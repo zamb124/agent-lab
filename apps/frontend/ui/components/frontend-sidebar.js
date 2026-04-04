@@ -287,6 +287,15 @@ export class FrontendSidebar extends PlatformElement {
                                   </span>
                                   <span class="nav-label">${t('console_sidebar.leads')}</span>
                               </button>
+                              <button
+                                  class="nav-item ${currentView === 'platform-tracing' ? 'active' : ''}"
+                                  @click=${() => this._navigate('platform-tracing')}
+                              >
+                                  <span class="nav-icon">
+                                      <platform-icon name="workflow" size="18"></platform-icon>
+                                  </span>
+                                  <span class="nav-label">${t('console_sidebar.tracing')}</span>
+                              </button>
                           `
                         : ''}
                 </nav>

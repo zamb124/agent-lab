@@ -533,6 +533,16 @@ export class IconService {
             return this.cache.get(requestedName);
         }
 
+        const lower = requestedName.toLowerCase();
+        const inUiIconMap =
+            Object.prototype.hasOwnProperty.call(ICON_MAP, requestedName) ||
+            Object.prototype.hasOwnProperty.call(ICON_MAP, lower);
+        if (!inUiIconMap && FILE_ICON_ALIAS_KEYS.has(lower)) {
+            const svg = await this.loadFileIcon(requestedName);
+            this.cache.set(requestedName, svg);
+            return svg;
+        }
+
         const mappedFileName = ICON_MAP[requestedName] || requestedName;
         const primaryUrl = `${this.basePath}/${mappedFileName}.svg`;
         const primaryResponse = await fetch(primaryUrl);

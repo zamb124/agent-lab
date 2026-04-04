@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from apps.flows.src.api.v1.traces import _build_span_tree
+from core.tracing.span_tree import build_span_tree
 
 
 def _iso(dt: datetime) -> str:
@@ -53,7 +53,7 @@ def test_build_span_tree_siblings_execution_order(flat_input_order: str) -> None
     else:
         flat = [supervisor, flow_span, llm2]
 
-    tree = _build_span_tree(flat)
+    tree = build_span_tree(flat)
     assert len(tree) == 1
     root = tree[0]
     assert root["span_id"] == "root"

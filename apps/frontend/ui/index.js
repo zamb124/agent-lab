@@ -19,6 +19,7 @@ import './pages/embed-configs-page.js';
 import './pages/settings/settings-page.js';
 import './pages/scheduler-tasks-page.js';
 import './pages/leads-requests-page.js';
+import './pages/admin/tracing-page.js';
 
 // Страницы продуктов
 import './pages/products/product-agents-page.js';
