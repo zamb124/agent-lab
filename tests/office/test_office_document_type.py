@@ -40,6 +40,29 @@ def test_upload_blob_filename_uses_spreadsheet_mime():
     assert ft == "xlsx"
 
 
+def test_upload_pdf_by_uuid_filename():
+    dtype, ft = onlyoffice_document_type_for_upload(
+        "6c38f870-29ad-11f1-9517-a579a3c87a6b.pdf",
+        "application/pdf",
+    )
+    assert dtype == "word"
+    assert ft == "pdf"
+
+
+def test_upload_blob_pdf_mime():
+    dtype, ft = onlyoffice_document_type_for_upload("blob", "application/pdf")
+    assert dtype == "word"
+    assert ft == "pdf"
+
+
+def test_resolve_editor_pdf():
+    assert resolve_onlyoffice_document_type_for_editor("cell", "scan.pdf") == "word"
+
+
+def test_file_type_binding_pdf():
+    assert onlyoffice_file_type_for_binding("word", "doc.pdf") == "pdf"
+
+
 def test_upload_rejects_unknown_mime_without_extension():
     with pytest.raises(ValueError, match="Неподдерживаемый тип файла"):
         onlyoffice_document_type_for_upload("blob", "application/octet-stream")

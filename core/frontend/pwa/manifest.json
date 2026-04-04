@@ -123,7 +123,7 @@
     {
       "name": "Documents",
       "short_name": "Documents",
-      "description": "Документы OnlyOffice",
+      "description": "Совместное редактирование документов",
       "url": "/documents",
       "icons": [
         {

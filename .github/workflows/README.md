@@ -57,7 +57,7 @@
 │  │ rag      │ 8004 │ python -m apps.rag.main                │   │
 │  │ sync     │ 8005 │ python -m apps.sync.main               │   │
 │  │ office   │ 8008 │ python -m apps.office.main (Documents BFF)│   │
-│  │ onlyoffice-documentserver │ 8088 │ onlyoffice/documentserver-de │   │
+│  │ onlyoffice-documentserver │ 8088 │ onlyoffice/documentserver (CE) │   │
 │  │ scheduler-api │ 8006 │ python -m apps.scheduler.main      │   │
 │  │ flows_worker │  —   │ taskiq worker apps.flows_worker.worker:worker_app│   │
 │  │ crm_worker │  —   │ taskiq worker apps.crm_worker.worker:worker_app│   │
@@ -166,7 +166,7 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 
 ### Документы / OnlyOffice
 
-В **`docker-compose-prod.yaml`** поднимаются **`onlyoffice-documentserver`** (**`onlyoffice/documentserver-de`**, порт **8088**) и BFF **`office`** (**8008**). Секрет JWT должен совпадать в контейнере DS и в BFF (**`OFFICE__JWT_SECRET`** / **`ONLYOFFICE_JWT_SECRET`**). Публичные URL браузера и callback — в **`OFFICE__DOCUMENT_SERVER_PUBLIC_URL`** и **`OFFICE__CALLBACK_PUBLIC_BASE_URL`** (часто совпадают с origin ingress и с URL, с которого Document Server достучится до BFF).
+В **`docker-compose-prod.yaml`** поднимаются **`onlyoffice-documentserver`** (**`onlyoffice/documentserver`**, Community Edition, порт **8088**) и BFF **`office`** (**8008**). Секрет JWT должен совпадать в контейнере DS и в BFF (**`OFFICE__JWT_SECRET`** / **`ONLYOFFICE_JWT_SECRET`**). Публичные URL браузера и callback — в **`OFFICE__DOCUMENT_SERVER_PUBLIC_URL`** и **`OFFICE__CALLBACK_PUBLIC_BASE_URL`** (часто совпадают с origin ingress и с URL, с которого Document Server достучится до BFF).
 
 | Secret | Описание |
 |---|---|

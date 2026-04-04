@@ -1,8 +1,9 @@
 /**
- * Приложение «Документы» (OnlyOffice BFF): auth, sidebar, список /edit/:id.
+ * Приложение «Документы»: auth, sidebar, список /edit/:id.
  */
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
+import { setActivePlatformNamespaceName } from '@platform/lib/utils/platform-namespace.js';
 import { OfficeAPIService } from '../services/office-api.service.js';
 import { OfficeStore } from '../store/office.store.js';
 import '@platform/lib/components/app-loader.js';
@@ -11,7 +12,10 @@ import '@platform/lib/components/platform-icon.js';
 import '../features/office-sidebar.js';
 import '../features/documents-list-page.js';
 import '../features/document-editor-page.js';
+import '../features/office-catalogs-dashboard.js';
 import '../features/office-documents-shell-actions.js';
+import '../modals/office-namespace-modal.js';
+
 export class OfficeApp extends PlatformApp {
     static properties = {
         ...PlatformApp.properties,
@@ -19,6 +23,7 @@ export class OfficeApp extends PlatformApp {
         _editBindingId: { state: true },
         _isMobileLayout: { state: true },
         _mobileSidebarOpen: { state: true },
+        _showNamespaceModal: { state: true },
     };
 
     static styles = [
@@ -175,6 +180,7 @@ export class OfficeApp extends PlatformApp {
         this._editBindingId = '';
         this._isMobileLayout = false;
         this._mobileSidebarOpen = false;
+        this._showNamespaceModal = false;
         this._onPopState = this._onPopState.bind(this);
         this._onNavigate = this._onNavigate.bind(this);
         this._boundMobileSidebarChange = this._onPlatformSidebarMobileChange.bind(this);
@@ -260,9 +266,12 @@ export class OfficeApp extends PlatformApp {
         );
     }
 
-    _mobileBarTitle(isEdit) {
+    _mobileBarTitle(isEdit, isCatalogs) {
         if (isEdit) {
             return this.i18n.t('mobile.editorTitle');
+        }
+        if (isCatalogs) {
+            return this.i18n.t('mobile.catalogsTitle');
         }
         return this.i18n.t('list.heading');
     }
@@ -280,6 +289,22 @@ export class OfficeApp extends PlatformApp {
             const raw = rest.slice(5);
             this._editBindingId = decodeURIComponent(raw);
             this._view = 'edit';
+        } else if (rest === 'catalogs') {
+            this._view = 'catalogs';
+            this._editBindingId = '';
+        } else if (rest.startsWith('catalog/')) {
+            const raw = rest.slice(8);
+            const cid = decodeURIComponent(raw).trim();
+            if (cid) {
+                OfficeStore.setActiveCatalogId(cid);
+                OfficeStore.setFilterCatalogIds([cid]);
+            }
+            window.history.replaceState({}, '', '/documents');
+            this._view = 'list';
+            this._editBindingId = '';
+            queueMicrotask(() =>
+                window.dispatchEvent(new CustomEvent('office-documents-list-reload', { bubbles: true })),
+            );
         } else {
             this._view = 'list';
             this._editBindingId = '';
@@ -301,6 +326,25 @@ export class OfficeApp extends PlatformApp {
         this.requestUpdate();
     }
 
+    _openNamespaceModal() {
+        this._showNamespaceModal = true;
+    }
+
+    _closeNamespaceModal() {
+        this._showNamespaceModal = false;
+    }
+
+    _onOfficeNamespaceSaved(e) {
+        this._showNamespaceModal = false;
+        const name = e.detail?.name;
+        const cid = this.services?.auth?.user?.company_id;
+        if (typeof name === 'string' && name.trim() && typeof cid === 'string' && cid.trim()) {
+            setActivePlatformNamespaceName(cid.trim(), name.trim());
+            OfficeStore.setActiveCatalogId('');
+        }
+        window.dispatchEvent(new CustomEvent('office-sidebar-reload-namespaces', { bubbles: true }));
+    }
+
     render() {
         const shell = renderPlatformAppShell(this);
         if (shell !== null) {
@@ -310,10 +354,13 @@ export class OfficeApp extends PlatformApp {
             return html`<app-loader></app-loader>`;
         }
         const isEdit = this._view === 'edit' && this._editBindingId;
+        const isCatalogs = this._view === 'catalogs';
         const mainContent = isEdit
             ? html`<document-editor-page .bindingId=${this._editBindingId}></document-editor-page>`
-            : html`<documents-list-page></documents-list-page>`;
-        const activeView = isEdit ? 'edit' : 'list';
+            : isCatalogs
+              ? html`<office-catalogs-dashboard></office-catalogs-dashboard>`
+              : html`<documents-list-page></documents-list-page>`;
+        const activeView = isEdit ? 'edit' : isCatalogs ? 'catalogs' : 'list';
         const showMobileMenu = this._isMobileLayout && !this._mobileSidebarOpen;
         const openSidebarLabel = this.i18n.t('mobile.openSidebar');
         return html`
@@ -346,20 +393,37 @@ export class OfficeApp extends PlatformApp {
                               </button>
                           `
                         : null}
-                    <h1 class="office-mobile-title">${this._mobileBarTitle(!!isEdit)}</h1>
+                    <h1 class="office-mobile-title">
+                        ${this._mobileBarTitle(!!isEdit, isCatalogs)}
+                    </h1>
                 </header>
                 <div class="office-content-row">
                     <div class="sidebar">
-                        <office-sidebar .activeView=${activeView}></office-sidebar>
+                        <office-sidebar
+                            .activeView=${activeView}
+                            @open-namespace-modal=${this._openNamespaceModal}
+                        ></office-sidebar>
                     </div>
                     <div class="main ${isEdit ? 'main--bleed' : ''}">
-                        <platform-island ?content-no-scroll=${isEdit} padding=${isEdit ? 'none' : 'md'}>
+                        <platform-island
+                            ?content-no-scroll=${isEdit}
+                            padding=${isEdit ? 'none' : 'md'}
+                        >
                             ${mainContent}
                         </platform-island>
                     </div>
                 </div>
             </div>
             <office-documents-shell-actions></office-documents-shell-actions>
+            ${this._showNamespaceModal
+                ? html`
+                      <office-namespace-modal
+                          .open=${true}
+                          @modal-closed=${this._closeNamespaceModal}
+                          @saved=${this._onOfficeNamespaceSaved}
+                      ></office-namespace-modal>
+                  `
+                : null}
             <pwa-install-banner></pwa-install-banner>
         `;
     }

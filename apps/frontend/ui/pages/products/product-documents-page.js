@@ -1,11 +1,15 @@
 /**
- * Лендинг продукта «Документы» (OnlyOffice).
+ * Лендинг продукта «Документы».
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
-import { landDocumentsHeroUrl } from '../../utils/land-product-images.js';
+import {
+    landDocumentsHeroUrl,
+    landDocumentsShot2Url,
+    landDocumentsShot3Url,
+} from '../../utils/land-product-images.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductDocumentsPage extends PlatformElement {
@@ -70,6 +74,24 @@ export class ProductDocumentsPage extends PlatformElement {
                 height: auto;
                 display: block;
                 vertical-align: top;
+            }
+
+            .product-gallery {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 0 20px 60px;
+            }
+
+            .product-gallery-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+
+            @media (min-width: 768px) {
+                .product-gallery-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                }
             }
             
             .hero-description {
@@ -398,7 +420,7 @@ export class ProductDocumentsPage extends PlatformElement {
                             src=${landDocumentsHeroUrl}
                             alt=${t('documents.hero_visual_alt')}
                             width="1200"
-                            height="675"
+                            height="673"
                             loading="eager"
                             decoding="async"
                         />
@@ -409,6 +431,31 @@ export class ProductDocumentsPage extends PlatformElement {
                     <button class="cta-btn" @click=${this._handleProductCtaClick}>
                         ${t('documents.cta_try')}
                     </button>
+                </section>
+
+                <section class="product-gallery" aria-label=${t('documents.gallery_section_label')}>
+                    <div class="product-gallery-grid">
+                        <div class="hero-shot">
+                            <img
+                                src=${landDocumentsShot2Url}
+                                alt=${t('documents.gallery_2_alt')}
+                                width="1200"
+                                height="673"
+                                loading="lazy"
+                                decoding="async"
+                            />
+                        </div>
+                        <div class="hero-shot">
+                            <img
+                                src=${landDocumentsShot3Url}
+                                alt=${t('documents.gallery_3_alt')}
+                                width="1200"
+                                height="673"
+                                loading="lazy"
+                                decoding="async"
+                            />
+                        </div>
+                    </div>
                 </section>
                 
                 <section class="features">

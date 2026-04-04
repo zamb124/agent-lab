@@ -18,6 +18,7 @@ const baseStore = new BaseStore(
         },
         catalog: {
             activeCatalogId: '',
+            filterCatalogIds: [],
         },
     },
     { persist: false, devtools: true },
@@ -60,6 +61,18 @@ export const OfficeStore = {
         const id = typeof catalogId === 'string' ? catalogId : '';
         baseStore.setState((s) => ({
             catalog: { ...s.catalog, activeCatalogId: id },
+        }));
+    },
+
+    /**
+     * @param {unknown} ids
+     */
+    setFilterCatalogIds(ids) {
+        const arr = Array.isArray(ids)
+            ? [...new Set(ids.map((x) => String(x).trim()).filter((x) => x.length > 0))]
+            : [];
+        baseStore.setState((s) => ({
+            catalog: { ...s.catalog, filterCatalogIds: arr },
         }));
     },
 };

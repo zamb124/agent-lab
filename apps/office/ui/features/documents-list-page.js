@@ -12,6 +12,8 @@ import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 
+const DOC_CATALOG_FILTER_SEARCH_MIN = 8;
+
 export class DocumentsListPage extends PlatformElement {
     static properties = {
         _items: { state: true },
@@ -44,6 +46,82 @@ export class DocumentsListPage extends PlatformElement {
                 border-color: rgba(245, 158, 11, 0.45);
                 background: rgba(245, 158, 11, 0.08);
             }
+            .doc-catalog-bar {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                align-items: center;
+                gap: var(--space-2);
+                margin-bottom: var(--space-4);
+                min-width: 0;
+            }
+            .doc-catalog-filter-label {
+                flex-shrink: 0;
+                font-size: var(--text-sm);
+                font-weight: 600;
+                color: var(--text-secondary);
+            }
+            .doc-catalog-filter-search {
+                flex: 0 0 7.5rem;
+                width: 7.5rem;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 6px 10px;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--documents-stroke);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                font-size: 13px;
+                font-family: inherit;
+            }
+            .doc-catalog-filter-search:focus-visible {
+                outline: none;
+                box-shadow: var(--focus-ring);
+            }
+            .doc-catalog-tags-scroll {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: var(--space-2);
+                overflow-x: auto;
+                overflow-y: hidden;
+                flex-wrap: nowrap;
+                padding-bottom: 2px;
+                scrollbar-width: thin;
+            }
+            .doc-catalog-filter-tag {
+                flex-shrink: 0;
+                padding: 4px 12px;
+                margin: 0;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--documents-stroke);
+                background: transparent;
+                color: var(--text-secondary);
+                font-size: 12px;
+                font-weight: 600;
+                font-family: inherit;
+                line-height: 1.2;
+                cursor: pointer;
+                max-width: 11rem;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                transition:
+                    background var(--duration-fast) var(--easing-default),
+                    border-color var(--duration-fast) var(--easing-default),
+                    color var(--duration-fast) var(--easing-default);
+            }
+            .doc-catalog-filter-tag[aria-pressed='true'] {
+                border-color: var(--documents-selected-stroke);
+                background: color-mix(in srgb, var(--documents-selected-bg) 88%, transparent);
+                color: var(--documents-selected-text);
+            }
+            .doc-catalog-filter-tag:focus-visible {
+                outline: none;
+                box-shadow: var(--focus-ring);
+            }
             .doc-page-heading {
                 margin: 0 0 var(--space-4);
                 font-size: 42px;
@@ -60,6 +138,7 @@ export class DocumentsListPage extends PlatformElement {
             }
             .doc-table {
                 width: 100%;
+                table-layout: fixed;
                 border-collapse: collapse;
                 font-size: var(--text-sm);
             }
@@ -76,8 +155,46 @@ export class DocumentsListPage extends PlatformElement {
                 font-weight: 500;
             }
             .doc-title-cell {
-                max-width: 0;
-                width: 32%;
+                width: 36%;
+                min-width: 0;
+            }
+            .doc-title-with-catalog {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+            .doc-catalog-tag {
+                flex-shrink: 0;
+                max-width: min(148px, 42%);
+                padding: 4px 10px;
+                margin: 0;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--documents-selected-stroke);
+                background: color-mix(in srgb, var(--documents-selected-bg) 88%, transparent);
+                color: var(--documents-selected-text);
+                font-size: 12px;
+                font-weight: 600;
+                font-family: inherit;
+                line-height: 1.2;
+                cursor: pointer;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                transition:
+                    background var(--duration-fast) var(--easing-default),
+                    border-color var(--duration-fast) var(--easing-default);
+            }
+            .doc-catalog-tag:hover:not(:disabled) {
+                background: var(--documents-selected-bg);
+            }
+            .doc-catalog-tag:disabled {
+                opacity: 0.72;
+                cursor: default;
+            }
+            .doc-catalog-tag:focus-visible {
+                outline: none;
+                box-shadow: var(--focus-ring);
             }
             .doc-created-cell {
                 font-size: 13px;
@@ -132,7 +249,9 @@ export class DocumentsListPage extends PlatformElement {
             }
             .doc-title-link {
                 display: block;
-                width: 100%;
+                flex: 1;
+                min-width: 0;
+                width: auto;
                 margin: 0;
                 padding: 0;
                 border: none;
@@ -164,6 +283,8 @@ export class DocumentsListPage extends PlatformElement {
             }
             .doc-title-static {
                 display: block;
+                flex: 1;
+                min-width: 0;
                 font-size: 15px;
                 line-height: 20px;
                 font-weight: 700;
@@ -176,6 +297,21 @@ export class DocumentsListPage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: flex-start;
+            }
+            .doc-table thead th:nth-child(1) {
+                width: 34%;
+            }
+            .doc-table thead th:nth-child(2) {
+                width: 16%;
+            }
+            .doc-table thead th:nth-child(3) {
+                width: 24%;
+            }
+            .doc-table thead th:nth-child(4) {
+                width: 10%;
+            }
+            .doc-table thead th:nth-child(5) {
+                width: 16%;
             }
             .doc-actions {
                 display: flex;
@@ -287,6 +423,12 @@ export class DocumentsListPage extends PlatformElement {
         this._renameId = '';
         this._renameTitle = '';
         this._unsub = null;
+        /** @type {{ catalog_id: string, title: string }[]} */
+        this._catalogRows = [];
+        /** @type {string[]} */
+        this._filterCatalogIds = [];
+        this._catalogFilterQuery = '';
+        this._activeCatalogId = '';
         this._onListReload = () => {
             void this._loadAll();
         };
@@ -318,12 +460,112 @@ export class DocumentsListPage extends PlatformElement {
         const s = OfficeStore.state;
         this._items = s.documents.items;
         this._loading = s.documents.loading;
+        this._activeCatalogId = typeof s.catalog.activeCatalogId === 'string' ? s.catalog.activeCatalogId : '';
+        this._filterCatalogIds = Array.isArray(s.catalog.filterCatalogIds)
+            ? [...s.catalog.filterCatalogIds]
+            : [];
         if (s.integration.loaded) {
             this._integrationOk = s.integration.configured;
             this._integrationDetail = s.integration.detail;
         }
     }
 
+    /**
+     * @param {string[]} filterIds
+     */
+    _syncActiveToFilterIds(filterIds) {
+        if (filterIds.length === 0) {
+            return;
+        }
+        const cur = OfficeStore.state.catalog.activeCatalogId?.trim() || '';
+        if (filterIds.includes(cur)) {
+            this._activeCatalogId = cur;
+            return;
+        }
+        OfficeStore.setActiveCatalogId(filterIds[0]);
+        this._activeCatalogId = filterIds[0];
+    }
+
+    _catalogRowsForBar() {
+        const rows = this._catalogRows;
+        const q = (this._catalogFilterQuery || '').trim().toLowerCase();
+        const selected = new Set(this._filterCatalogIds);
+        if (rows.length < DOC_CATALOG_FILTER_SEARCH_MIN) {
+            return rows;
+        }
+        if (q === '') {
+            return rows;
+        }
+        return rows.filter((c) => {
+            if (selected.has(c.catalog_id)) {
+                return true;
+            }
+            const title = String(c.title || '').toLowerCase();
+            return title.includes(q);
+        });
+    }
+
+    /**
+     * @param {Event} e
+     */
+    _onCatalogFilterInput(e) {
+        const el = e.target;
+        if (el instanceof HTMLInputElement) {
+            this._catalogFilterQuery = el.value;
+            this.requestUpdate();
+        }
+    }
+
+    /**
+     * @param {unknown} catalogId
+     * @param {Event} [e]
+     */
+    _toggleCatalogFilter(catalogId, e) {
+        e?.preventDefault?.();
+        e?.stopPropagation?.();
+        const id = typeof catalogId === 'string' ? catalogId.trim() : '';
+        if (id === '' || !this._integrationOk) {
+            return;
+        }
+        const order = this._catalogRows.map((c) => c.catalog_id).filter((x) => typeof x === 'string' && x !== '');
+        const cur = new Set(this._filterCatalogIds);
+        if (cur.has(id)) {
+            if (cur.size <= 1) {
+                return;
+            }
+            cur.delete(id);
+        } else {
+            cur.add(id);
+        }
+        const next = order.filter((cid) => cur.has(cid));
+        if (next.length === 0) {
+            return;
+        }
+        OfficeStore.setFilterCatalogIds(next);
+        this._syncActiveToFilterIds(next);
+        void this._loadAll();
+    }
+
+    /**
+     * @param {unknown} catalogId
+     */
+    _resolveRowCatalogLabel(catalogId) {
+        const id = typeof catalogId === 'string' ? catalogId.trim() : '';
+        if (id === '') {
+            return this.i18n.t('list.catalogUnknown');
+        }
+        const c = this._catalogRows.find((x) => x.catalog_id === id);
+        const title = typeof c?.title === 'string' ? c.title.trim() : '';
+        if (title !== '') {
+            return title;
+        }
+        return this.i18n.t('list.catalogUnknown');
+    }
+
+    /**
+     * @param {Event} e
+     * @param {unknown} catalogId
+     */
     async _loadAll() {
         const api = this.services.officeApi;
         if (!api) {
@@ -336,10 +578,40 @@ export class DocumentsListPage extends PlatformElement {
             this._integrationOk = !!st.configured;
             this._integrationDetail = st.detail || '';
             if (!st.configured) {
+                OfficeStore.setActiveCatalogId('');
+                OfficeStore.setFilterCatalogIds([]);
+                this._activeCatalogId = '';
+                this._filterCatalogIds = [];
                 OfficeStore.setDocumentsItems([]);
+                this._catalogRows = [];
                 return;
             }
-            const list = await api.listDocuments();
+            const catRes = await api.listCatalogs();
+            const catalogRows = Array.isArray(catRes.items) ? catRes.items : [];
+            this._catalogRows = catalogRows;
+            if (catalogRows.length === 0) {
+                OfficeStore.setActiveCatalogId('');
+                OfficeStore.setFilterCatalogIds([]);
+                this._activeCatalogId = '';
+                this._filterCatalogIds = [];
+                OfficeStore.setDocumentsItems([]);
+                this._items = [];
+                return;
+            }
+            const allIds = catalogRows
+                .map((c) => c.catalog_id)
+                .filter((x) => typeof x === 'string' && x.trim() !== '');
+            let filterIds = (OfficeStore.state.catalog.filterCatalogIds || []).filter((cid) =>
+                allIds.includes(cid),
+            );
+            if (filterIds.length === 0) {
+                filterIds = [...allIds];
+                OfficeStore.setFilterCatalogIds(filterIds);
+            }
+            this._filterCatalogIds = [...filterIds];
+            this._syncActiveToFilterIds(filterIds);
+            this._activeCatalogId = OfficeStore.state.catalog.activeCatalogId?.trim() || filterIds[0];
+            const list = await api.listDocuments(filterIds);
             const items = list.items || [];
             OfficeStore.setDocumentsItems(items);
             this._items = items;
@@ -476,6 +748,12 @@ export class DocumentsListPage extends PlatformElement {
         window.dispatchEvent(new CustomEvent('office-documents-pick-file'));
     }
 
+    _goCatalogsPage() {
+        window.dispatchEvent(
+            new CustomEvent('navigate', { detail: { path: '/documents/catalogs' } }),
+        );
+    }
+
     async _deleteDoc(bindingId, title) {
         const t = (k, p) => this.i18n.t(k, p);
         const confirmed = await platformConfirm(t('list.deleteConfirm', { title }), {
@@ -517,6 +795,48 @@ export class DocumentsListPage extends PlatformElement {
                   `
                 : null}
 
+            ${this._integrationOk && this._catalogRows.length > 0
+                ? html`
+                      <div
+                          class="doc-catalog-bar"
+                          role="toolbar"
+                          aria-label=${t('list.catalogFilterBarAria')}
+                      >
+                          <span class="doc-catalog-filter-label">${t('list.catalogLabel')}</span>
+                          ${this._catalogRows.length >= DOC_CATALOG_FILTER_SEARCH_MIN
+                              ? html`
+                                    <input
+                                        type="search"
+                                        class="doc-catalog-filter-search"
+                                        placeholder=${t('list.catalogFilterSearchPlaceholder')}
+                                        autocomplete="off"
+                                        .value=${this._catalogFilterQuery}
+                                        @input=${this._onCatalogFilterInput}
+                                    />
+                                `
+                              : null}
+                          <div class="doc-catalog-tags-scroll">
+                              ${this._catalogRowsForBar().map(
+                                  (c) => html`
+                                      <button
+                                          type="button"
+                                          class="doc-catalog-filter-tag"
+                                          aria-pressed=${this._filterCatalogIds.includes(c.catalog_id)
+                                              ? 'true'
+                                              : 'false'}
+                                          title=${t('list.catalogToggleHint')}
+                                          aria-label=${`${c.title}. ${t('list.catalogToggleHint')}`}
+                                          @click=${(e) => this._toggleCatalogFilter(c.catalog_id, e)}
+                                      >
+                                          ${c.title}
+                                      </button>
+                                  `,
+                              )}
+                          </div>
+                      </div>
+                  `
+                : null}
+
             ${this._loading
                 ? html`<p>${t('list.loading')}</p>`
                 : (this._items || []).length > 0
@@ -525,31 +845,60 @@ export class DocumentsListPage extends PlatformElement {
                             <thead>
                                 <tr>
                                     <th>${t('list.colTitle')}</th>
+                                    <th>${t('list.colCreated')}</th>
+                                    <th>${t('list.colAuthor')}</th>
                                     <th>${t('list.colType')}</th>
                                     <th>${t('list.colActions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${(this._items || []).map(
-                                    (row) => html`
+                                ${(this._items || []).map((row) => {
+                                    const catalogIdRaw = row.catalog_id;
+                                    const catalogId =
+                                        typeof catalogIdRaw === 'string' ? catalogIdRaw.trim() : '';
+                                    const catalogLabel = this._resolveRowCatalogLabel(catalogIdRaw);
+                                    const inFilter = this._filterCatalogIds.includes(catalogId);
+                                    const tagDisabled =
+                                        !this._integrationOk ||
+                                        catalogId === '' ||
+                                        (inFilter && this._filterCatalogIds.length <= 1);
+                                    return html`
                                         <tr>
                                             <td class="doc-title-cell">
-                                                ${this._integrationOk
-                                                    ? html`
-                                                          <button
-                                                              type="button"
-                                                              class="doc-title-link"
-                                                              aria-label=${t('list.openDocument', {
-                                                                  title: row.title,
-                                                              })}
-                                                              @click=${() => this._goEdit(row.binding_id)}
-                                                          >
-                                                              ${row.title}
-                                                          </button>
-                                                      `
-                                                    : html`
-                                                          <span class="doc-title-static">${row.title}</span>
-                                                      `}
+                                                <div class="doc-title-with-catalog">
+                                                    <button
+                                                        type="button"
+                                                        class="doc-catalog-tag"
+                                                        title=${t('list.catalogToggleHint')}
+                                                        aria-label=${`${catalogLabel}. ${t(
+                                                            'list.catalogToggleHint',
+                                                        )}`}
+                                                        ?disabled=${tagDisabled}
+                                                        @click=${(e) =>
+                                                            this._toggleCatalogFilter(catalogIdRaw, e)}
+                                                    >
+                                                        ${catalogLabel}
+                                                    </button>
+                                                    ${this._integrationOk
+                                                        ? html`
+                                                              <button
+                                                                  type="button"
+                                                                  class="doc-title-link"
+                                                                  aria-label=${t('list.openDocument', {
+                                                                      title: row.title,
+                                                                  })}
+                                                                  @click=${() =>
+                                                                      this._goEdit(row.binding_id)}
+                                                              >
+                                                                  ${row.title}
+                                                              </button>
+                                                          `
+                                                        : html`
+                                                              <span class="doc-title-static"
+                                                                  >${row.title}</span
+                                                              >
+                                                          `}
+                                                </div>
                                             </td>
                                             <td class="doc-created-cell">
                                                 ${this._formatDocumentCreatedAt(
@@ -611,8 +960,8 @@ export class DocumentsListPage extends PlatformElement {
                                                 </div>
                                             </td>
                                         </tr>
-                                    `,
-                                )}
+                                    `;
+                                })}
                             </tbody>
                         </table>
                     `
@@ -620,31 +969,53 @@ export class DocumentsListPage extends PlatformElement {
                         <div
                             class="doc-list-body"
                             role="region"
-                            aria-label=${t('list.emptyStateAria')}
+                            aria-label=${this._integrationOk && this._catalogRows.length === 0
+                                ? t('list.noCatalogsStateAria')
+                                : t('list.emptyStateAria')}
                         >
                             <div class="doc-empty-wrap">
                                 <div class="doc-empty">
-                                    <div class="doc-empty-icon-wrap" aria-hidden="true">
-                                        <platform-icon name="doc-detail" size="44"></platform-icon>
-                                    </div>
-                                    <h2 class="doc-empty-title">${t('list.emptyStateTitle')}</h2>
-                                    <p class="doc-empty-hint">${t('list.emptyStateHint')}</p>
-                                    <div class="doc-empty-actions">
-                                        <platform-button
-                                            variant="primary"
-                                            ?disabled=${!this._integrationOk}
-                                            @click=${this._emitOpenEmpty}
-                                        >
-                                            ${t('list.newEmpty')}
-                                        </platform-button>
-                                        <platform-button
-                                            variant="secondary"
-                                            ?disabled=${!this._integrationOk}
-                                            @click=${this._emitPickUpload}
-                                        >
-                                            ${t('list.upload')}
-                                        </platform-button>
-                                    </div>
+                                    ${this._integrationOk && this._catalogRows.length === 0
+                                        ? html`
+                                              <div class="doc-empty-icon-wrap" aria-hidden="true">
+                                                  <platform-icon name="folder" size="44"></platform-icon>
+                                              </div>
+                                              <h2 class="doc-empty-title">
+                                                  ${t('list.noCatalogsStateTitle')}
+                                              </h2>
+                                              <p class="doc-empty-hint">${t('list.noCatalogsStateHint')}</p>
+                                              <div class="doc-empty-actions">
+                                                  <platform-button
+                                                      variant="primary"
+                                                      @click=${this._goCatalogsPage}
+                                                  >
+                                                      ${t('list.noCatalogsCta')}
+                                                  </platform-button>
+                                              </div>
+                                          `
+                                        : html`
+                                              <div class="doc-empty-icon-wrap" aria-hidden="true">
+                                                  <platform-icon name="doc-detail" size="44"></platform-icon>
+                                              </div>
+                                              <h2 class="doc-empty-title">${t('list.emptyStateTitle')}</h2>
+                                              <p class="doc-empty-hint">${t('list.emptyStateHint')}</p>
+                                              <div class="doc-empty-actions">
+                                                  <platform-button
+                                                      variant="primary"
+                                                      ?disabled=${!this._integrationOk}
+                                                      @click=${this._emitOpenEmpty}
+                                                  >
+                                                      ${t('list.newEmpty')}
+                                                  </platform-button>
+                                                  <platform-button
+                                                      variant="secondary"
+                                                      ?disabled=${!this._integrationOk}
+                                                      @click=${this._emitPickUpload}
+                                                  >
+                                                      ${t('list.upload')}
+                                                  </platform-button>
+                                              </div>
+                                          `}
                                 </div>
                             </div>
                         </div>

@@ -81,6 +81,30 @@ class OfficeNamespacesResponse(BaseModel):
     namespaces: List[OfficeNamespaceItem]
 
 
+class OfficeNamespaceTemplateItem(BaseModel):
+    """Шаблон пространства (ответ CRM), для модалки создания namespace."""
+
+    template_id: str
+    name: str
+    description: str | None = None
+    icon: str | None = None
+    is_system: bool = False
+    entity_type_ids: List[str] = Field(default_factory=list)
+
+
+class OfficeNamespaceCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    template_id: str = Field(min_length=1, max_length=128)
+
+
+class OfficeNamespaceCreateResponse(BaseModel):
+    name: str
+    company_id: str
+    description: str | None = None
+    is_default: bool = False
+
+
 class OfficeCatalogCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
 

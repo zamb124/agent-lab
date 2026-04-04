@@ -1,19 +1,27 @@
 {
   "appTitle": "Документы",
-  "homeIntro": "Редактирование через OnlyOffice. Полный список и загрузка — через API BFF (/documents/api/v1/documents).",
+  "homeIntro": "Совместное редактирование документов в сервисе Документы. Полный список и загрузка — через API BFF (/documents/api/v1/documents).",
   "sidebar": {
     "title": "Документы",
+    "namespace": "Пространство",
     "navList": "Все документы",
+    "navCatalogs": "Каталоги",
     "navBack": "К списку",
     "navNew": "Новый документ",
     "navUpload": "Загрузить файл",
     "navRefresh": "Обновить список"
   },
   "integration": {
-    "notConfigured": "OnlyOffice не настроен: проверьте секрет JWT и публичные URL в конфигурации сервиса."
+    "notConfigured": "Интеграция с сервером документов не настроена: проверьте секрет JWT и публичные URL в конфигурации сервиса."
   },
   "list": {
     "heading": "Документы",
+    "catalogLabel": "Каталог",
+    "catalogFilterSearchPlaceholder": "Найти…",
+    "catalogFilterBarAria": "Фильтр каталогов",
+    "catalogToggleHint": "Включить или исключить каталог из списка",
+    "defaultCatalogTitle": "Общие",
+    "catalogBootstrapError": "Не удалось получить каталог документов",
     "loading": "Загрузка…",
     "loadError": "Не удалось загрузить список: {{message}}",
     "newEmpty": "Новый документ",
@@ -30,6 +38,7 @@
       "slide": "Презентация"
     },
     "colActions": "Действия",
+    "catalogUnknown": "Каталог",
     "open": "Открыть",
     "openDocument": "Открыть документ «{title}»",
     "rename": "Переименовать",
@@ -37,7 +46,11 @@
     "empty": "Документов пока нет.",
     "emptyStateAria": "Нет документов",
     "emptyStateTitle": "Пока нет документов",
-    "emptyStateHint": "Создайте новый документ или загрузите файл с компьютера.",
+    "emptyStateHint": "Создайте новый документ или загрузите файл с компьютера — затем откройте его для совместного редактирования с командой.",
+    "noCatalogsStateAria": "Нет каталогов документов",
+    "noCatalogsStateTitle": "Пока нет каталогов",
+    "noCatalogsStateHint": "Сначала создайте каталог — затем здесь появятся документы.",
+    "noCatalogsCta": "Каталоги документов",
     "renameHeading": "Переименовать документ",
     "renameLabel": "Новое название",
     "cancel": "Отмена",
@@ -62,7 +75,35 @@
   },
   "mobile": {
     "openSidebar": "Открыть меню",
-    "editorTitle": "Редактор"
+    "editorTitle": "Редактор",
+    "catalogsTitle": "Каталоги"
+  },
+  "catalogs": {
+    "heading": "Каталоги документов",
+    "create": "Новый каталог",
+    "createHeading": "Новый каталог",
+    "createLabel": "Название",
+    "fileCount": "Файлов: {{count}}",
+    "manageAccess": "Доступ",
+    "delete": "Удалить",
+    "viewMembers": "Участники",
+    "ownerAria": "Владелец: {{name}}",
+    "memberAria": "Участник: {{name}}",
+    "empty": "Каталогов пока нет. Создайте каталог для порядка в документах.",
+    "emptyStateAria": "Нет каталогов документов",
+    "emptyStateTitle": "Пока нет каталогов",
+    "emptyStateHint": "Создайте каталог, чтобы упорядочить документы.",
+    "membersHeading": "Участники: {{title}}",
+    "membersHeadingGeneric": "Участники",
+    "removeMember": "Исключить",
+    "pickUser": "Выберите пользователя",
+    "addMember": "Добавить",
+    "memberAdded": "Участник добавлен",
+    "memberRemoved": "Участник удалён",
+    "created": "Каталог создан",
+    "deleteTitle": "Удаление каталога",
+    "deleteConfirm": "Удалить каталог «{{title}}»? В нём не должно быть файлов.",
+    "deleted": "Каталог удалён"
   },
   "editor": {
     "back": "К списку",
@@ -70,7 +111,7 @@
     "errNoId": "Не указан документ",
     "errNoApi": "Сервис API недоступен",
     "errBadConfig": "Пустой ответ редактора",
-    "errDocsApi": "Не удалось загрузить OnlyOffice API",
+    "errDocsApi": "Не удалось загрузить API редактора документов",
     "errHost": "Нет контейнера редактора",
     "errOpenTimeout": "Редактор не ответил за 2 минуты. Проверьте Document Server, OFFICE__CALLBACK_PUBLIC_BASE_URL и доступность скачивания файла для DS.",
     "eventError": "Ошибка редактора"

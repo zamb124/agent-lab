@@ -54,7 +54,7 @@ class OfficeIntegrationConfig(BaseModel):
     )
     jwt_secret: str = Field(
         default="",
-        description="Тот же секрет, что JWT_SECRET в контейнере onlyoffice/documentserver-de",
+        description="Тот же секрет, что JWT_SECRET в контейнере onlyoffice/documentserver",
     )
     callback_public_base_url: str = Field(
         default="",

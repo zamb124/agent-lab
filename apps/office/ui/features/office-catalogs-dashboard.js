@@ -3,13 +3,13 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { OfficeStore } from '../store/office.store.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-user.js';
 
 export class OfficeCatalogsDashboard extends PlatformElement {
     static properties = {
@@ -40,7 +40,66 @@ export class OfficeCatalogsDashboard extends PlatformElement {
                 font-size: 42px;
                 line-height: 1;
                 font-weight: 700;
+                background: var(
+                    --documents-title-gradient,
+                    linear-gradient(105deg, #3ec9d8 0%, #6cb1e1 42%, #737ce9 100%)
+                );
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+                color: transparent;
+            }
+            .catalog-empty-body {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                min-height: min(52vh, 440px);
+            }
+            .catalog-empty-wrap {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--space-8) var(--space-4);
+                box-sizing: border-box;
+            }
+            .catalog-empty {
+                text-align: center;
+                max-width: 26rem;
+            }
+            .catalog-empty-icon-wrap {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto var(--space-5);
+                width: 88px;
+                height: 88px;
+                border-radius: var(--radius-2xl);
+                background: color-mix(in srgb, var(--documents-selected-text) 12%, transparent);
+                border: 1px solid color-mix(in srgb, var(--documents-stroke) 55%, transparent);
+            }
+            .catalog-empty-icon-wrap platform-icon {
+                opacity: 0.42;
+                color: var(--documents-selected-text);
+            }
+            .catalog-empty-title {
+                margin: 0 0 var(--space-2);
+                font-size: var(--text-xl);
+                font-weight: var(--font-semibold);
                 color: var(--text-primary);
+                line-height: 1.25;
+            }
+            .catalog-empty-hint {
+                margin: 0 0 var(--space-5);
+                font-size: var(--text-base);
+                line-height: 1.5;
+                color: var(--text-secondary);
+            }
+            .catalog-empty-actions {
+                display: flex;
+                gap: var(--space-3);
+                justify-content: center;
+                flex-wrap: wrap;
             }
             .dash-toolbar {
                 display: flex;
@@ -111,6 +170,51 @@ export class OfficeCatalogsDashboard extends PlatformElement {
             .card-action-btn:hover {
                 background: var(--glass-solid-medium);
                 color: var(--accent);
+            }
+            .person-inline {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                flex: 1;
+                pointer-events: none;
+            }
+            .person-avatar {
+                position: relative;
+                flex: 0 0 32px;
+                width: 32px;
+                height: 32px;
+                border-radius: var(--radius-full);
+                overflow: hidden;
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--documents-stroke);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .person-initial {
+                font-size: 11px;
+                font-weight: 700;
+                color: var(--text-secondary);
+                line-height: 1;
+            }
+            .person-img {
+                position: absolute;
+                inset: 0;
+                z-index: 1;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
+            }
+            .person-name {
+                font-size: var(--text-sm);
+                font-weight: 600;
+                color: var(--text-primary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                min-width: 0;
             }
             .member-row {
                 display: flex;
@@ -193,10 +297,11 @@ export class OfficeCatalogsDashboard extends PlatformElement {
     }
 
     _openCatalog(catalogId) {
+        OfficeStore.setActiveCatalogId(catalogId);
+        OfficeStore.setFilterCatalogIds([catalogId]);
+        window.dispatchEvent(new CustomEvent('office-documents-list-reload', { bubbles: true }));
         window.dispatchEvent(
-            new CustomEvent('navigate', {
-                detail: { path: `/documents/catalog/${encodeURIComponent(catalogId)}` },
-            }),
+            new CustomEvent('navigate', { detail: { path: '/documents' } }),
         );
     }
 
@@ -344,81 +449,156 @@ export class OfficeCatalogsDashboard extends PlatformElement {
         });
     }
 
+    /**
+     * @param {string} displayName
+     */
+    _personInitial(displayName) {
+        const s = String(displayName || '').trim();
+        if (s.length === 0) {
+            return '?';
+        }
+        return s.charAt(0).toUpperCase();
+    }
+
+    /**
+     * @param {string} displayName
+     * @param {string} [avatarUrl]
+     * @param {string} ariaLabel
+     */
+    _renderPersonInline(displayName, avatarUrl, ariaLabel) {
+        const name = String(displayName || '').trim() || '—';
+        const url =
+            typeof avatarUrl === 'string' && avatarUrl.trim() !== '' ? avatarUrl.trim() : '';
+        const initial = this._personInitial(name);
+        return html`
+            <div class="person-inline" role="group" aria-label=${ariaLabel}>
+                <div class="person-avatar" aria-hidden="true">
+                    <span class="person-initial">${initial}</span>
+                    ${url
+                        ? html`
+                              <img
+                                  class="person-img"
+                                  src=${url}
+                                  alt=""
+                                  @error=${(e) => {
+                                      const el = e.target;
+                                      if (el instanceof HTMLImageElement) {
+                                          el.style.display = 'none';
+                                      }
+                                  }}
+                              />
+                          `
+                        : null}
+                </div>
+                <span class="person-name">${name}</span>
+            </div>
+        `;
+    }
+
     render() {
         const t = (k, p) => this.i18n.t(k, p);
         const selectable = this._selectableUsers();
         return html`
             <h1 class="dash-heading">${t('catalogs.heading')}</h1>
-            <div class="dash-toolbar">
-                <platform-button variant="primary" @click=${this._openCreate}>
-                    ${t('catalogs.create')}
-                </platform-button>
-            </div>
             ${this._loading
                 ? html`<p>${t('list.loading')}</p>`
-                : html`
-                      <div class="grid">
-                          ${(this._items || []).map(
-                              (row) => html`
-                                  <button
-                                      type="button"
-                                      class="card"
-                                      @click=${() => this._openCatalog(row.catalog_id)}
-                                  >
-                                      <h2 class="card-title">${row.title}</h2>
-                                      <div class="card-meta">
-                                          ${t('catalogs.fileCount', { count: row.file_count })}
-                                      </div>
-                                      <div class="card-footer">
-                                          <platform-user
-                                              .userId=${row.owner_user_id}
-                                              .name=${row.owner_display_name}
-                                              .avatarUrl=${row.owner_avatar_url ?? ''}
-                                              size="sm"
-                                          ></platform-user>
-                                          <div class="card-actions" @click=${this._stopCard}>
-                                              ${row.is_owner
-                                                  ? html`
-                                                        <button
-                                                            type="button"
-                                                            class="card-action-btn"
-                                                            title=${t('catalogs.manageAccess')}
-                                                            aria-label=${t('catalogs.manageAccess')}
-                                                            @click=${(e) => this._openMembers(e, row)}
-                                                        >
-                                                            <platform-icon name="users" .size=${20}></platform-icon>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            class="card-action-btn"
-                                                            title=${t('catalogs.delete')}
-                                                            aria-label=${t('catalogs.delete')}
-                                                            @click=${() => this._confirmDelete(row)}
-                                                        >
-                                                            <platform-icon name="trash" .size=${20}></platform-icon>
-                                                        </button>
-                                                    `
-                                                  : html`
-                                                        <button
-                                                            type="button"
-                                                            class="card-action-btn"
-                                                            title=${t('catalogs.viewMembers')}
-                                                            aria-label=${t('catalogs.viewMembers')}
-                                                            @click=${(e) => this._openMembers(e, row)}
-                                                        >
-                                                            <platform-icon name="users" .size=${20}></platform-icon>
-                                                        </button>
-                                                    `}
-                                          </div>
-                                      </div>
-                                  </button>
-                              `,
-                          )}
-                      </div>
-                      ${(this._items || []).length === 0
-                          ? html`<p>${t('catalogs.empty')}</p>`
-                          : null}
-                  `}
+                : (this._items || []).length > 0
+                  ? html`
+                        <div class="dash-toolbar">
+                            <platform-button variant="primary" @click=${this._openCreate}>
+                                ${t('catalogs.create')}
+                            </platform-button>
+                        </div>
+                        <div class="grid">
+                            ${(this._items || []).map(
+                                (row) => html`
+                                    <button
+                                        type="button"
+                                        class="card"
+                                        @click=${() => this._openCatalog(row.catalog_id)}
+                                    >
+                                        <h2 class="card-title">${row.title}</h2>
+                                        <div class="card-meta">
+                                            ${t('catalogs.fileCount', { count: row.file_count })}
+                                        </div>
+                                        <div class="card-footer">
+                                            ${this._renderPersonInline(
+                                                typeof row.owner_display_name === 'string'
+                                                    ? row.owner_display_name
+                                                    : String(row.owner_user_id ?? ''),
+                                                typeof row.owner_avatar_url === 'string'
+                                                    ? row.owner_avatar_url
+                                                    : '',
+                                                t('catalogs.ownerAria', {
+                                                    name:
+                                                        typeof row.owner_display_name === 'string' &&
+                                                        row.owner_display_name.trim() !== ''
+                                                            ? row.owner_display_name
+                                                            : String(row.owner_user_id ?? ''),
+                                                }),
+                                            )}
+                                            <div class="card-actions" @click=${this._stopCard}>
+                                                ${row.is_owner
+                                                    ? html`
+                                                          <button
+                                                              type="button"
+                                                              class="card-action-btn"
+                                                              title=${t('catalogs.manageAccess')}
+                                                              aria-label=${t('catalogs.manageAccess')}
+                                                              @click=${(e) => this._openMembers(e, row)}
+                                                          >
+                                                              <platform-icon name="users" .size=${20}></platform-icon>
+                                                          </button>
+                                                          <button
+                                                              type="button"
+                                                              class="card-action-btn"
+                                                              title=${t('catalogs.delete')}
+                                                              aria-label=${t('catalogs.delete')}
+                                                              @click=${() => this._confirmDelete(row)}
+                                                          >
+                                                              <platform-icon name="trash" .size=${20}></platform-icon>
+                                                          </button>
+                                                      `
+                                                    : html`
+                                                          <button
+                                                              type="button"
+                                                              class="card-action-btn"
+                                                              title=${t('catalogs.viewMembers')}
+                                                              aria-label=${t('catalogs.viewMembers')}
+                                                              @click=${(e) => this._openMembers(e, row)}
+                                                          >
+                                                              <platform-icon name="users" .size=${20}></platform-icon>
+                                                          </button>
+                                                      `}
+                                            </div>
+                                        </div>
+                                    </button>
+                                `,
+                            )}
+                        </div>
+                    `
+                  : html`
+                        <div
+                            class="catalog-empty-body"
+                            role="region"
+                            aria-label=${t('catalogs.emptyStateAria')}
+                        >
+                            <div class="catalog-empty-wrap">
+                                <div class="catalog-empty">
+                                    <div class="catalog-empty-icon-wrap" aria-hidden="true">
+                                        <platform-icon name="folder" size="44"></platform-icon>
+                                    </div>
+                                    <h2 class="catalog-empty-title">${t('catalogs.emptyStateTitle')}</h2>
+                                    <p class="catalog-empty-hint">${t('catalogs.emptyStateHint')}</p>
+                                    <div class="catalog-empty-actions">
+                                        <platform-button variant="primary" @click=${this._openCreate}>
+                                            ${t('catalogs.create')}
+                                        </platform-button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `}
             <glass-modal
                 .open=${this._createOpen}
                 heading=${t('catalogs.createHeading')}
@@ -467,12 +647,19 @@ export class OfficeCatalogsDashboard extends PlatformElement {
                                       this._companyUsers.length > 0 && !isOwner;
                                   return html`
                                       <div class="member-row">
-                                          <platform-user
-                                              .userId=${uid}
-                                              .name=${m.display_name}
-                                              .avatarUrl=${m.avatar_url ?? ''}
-                                              size="sm"
-                                          ></platform-user>
+                                          ${this._renderPersonInline(
+                                              typeof m.display_name === 'string'
+                                                  ? m.display_name
+                                                  : uid,
+                                              typeof m.avatar_url === 'string' ? m.avatar_url : '',
+                                              t('catalogs.memberAria', {
+                                                  name:
+                                                      typeof m.display_name === 'string' &&
+                                                      m.display_name.trim() !== ''
+                                                          ? m.display_name
+                                                          : uid,
+                                              }),
+                                          )}
                                           ${canRemove
                                               ? html`
                                                     <button

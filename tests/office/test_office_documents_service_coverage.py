@@ -49,6 +49,53 @@ async def test_documents_list_requires_catalog_id(office_client, auth_headers_sy
 
 
 @pytest.mark.asyncio
+async def test_documents_list_multiple_catalog_ids(
+    office_client, auth_headers_system, unique_id
+):
+    cr1 = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+        json={"title": f"M1 {unique_id}"},
+    )
+    cr2 = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+        json={"title": f"M2 {unique_id}"},
+    )
+    assert cr1.status_code == 200
+    assert cr2.status_code == 200
+    id1 = cr1.json()["catalog_id"]
+    id2 = cr2.json()["catalog_id"]
+    d1 = await office_client.post(
+        "/documents/api/v1/documents/empty",
+        headers=auth_headers_system,
+        json={"title": f"D1 {unique_id}", "catalog_id": id1},
+    )
+    assert d1.status_code == 200
+    bid1 = d1.json()["binding_id"]
+
+    r_both = await office_client.get(
+        "/documents/api/v1/documents",
+        headers=auth_headers_system,
+        params=[("catalog_ids", id1), ("catalog_ids", id2)],
+    )
+    assert r_both.status_code == 200
+    items_both = r_both.json()["items"]
+    ids_both = {x["binding_id"] for x in items_both}
+    assert bid1 in ids_both
+
+    r_second_only = await office_client.get(
+        "/documents/api/v1/documents",
+        headers=auth_headers_system,
+        params=[("catalog_ids", id2)],
+    )
+    assert r_second_only.status_code == 200
+    items_second = r_second_only.json()["items"]
+    ids_second = {x["binding_id"] for x in items_second}
+    assert bid1 not in ids_second
+
+
+@pytest.mark.asyncio
 async def test_company_members_lists_company_from_shared_storage(
     office_client, auth_headers_system, system_user_id
 ):

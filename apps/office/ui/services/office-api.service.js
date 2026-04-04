@@ -35,15 +35,33 @@ export class OfficeAPIService extends BaseService {
         return this.get('/integration/status');
     }
 
-    async listDocuments(catalogId) {
-        if (typeof catalogId !== 'string' || catalogId.trim().length === 0) {
-            throw new Error('catalogId is required');
+    /**
+     * @param {string[]} catalogIds
+     */
+    async listDocuments(catalogIds) {
+        const ids = Array.isArray(catalogIds)
+            ? [...new Set(catalogIds.map((x) => String(x).trim()).filter((x) => x.length > 0))]
+            : [];
+        if (ids.length === 0) {
+            throw new Error('catalogIds is required');
         }
-        return this.get('/documents', { catalog_id: catalogId.trim() });
+        const qs = ids.map((id) => `catalog_ids=${encodeURIComponent(id)}`).join('&');
+        return this._fetch('GET', `/documents?${qs}`, null, {});
     }
 
     async listNamespaces() {
         return this.get('/namespaces');
+    }
+
+    async listNamespaceTemplates() {
+        return this.get('/namespaces/templates');
+    }
+
+    /**
+     * @param {{ name: string, description?: string | null, template_id: string }} payload
+     */
+    async createNamespace(payload) {
+        return this.post('/namespaces', payload);
     }
 
     async listCompanyMembers() {

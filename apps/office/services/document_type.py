@@ -17,6 +17,7 @@ _MIME_TO_DTYPE_AND_EXT: dict[str, tuple[str, str]] = {
     "application/vnd.ms-powerpoint": ("slide", "ppt"),
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ("word", "docx"),
     "application/msword": ("word", "doc"),
+    "application/pdf": ("word", "pdf"),
 }
 
 
@@ -28,7 +29,7 @@ def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
     ext = Path(filename).suffix.lower().lstrip(".")
     if not ext:
         raise ValueError("У файла нет расширения")
-    if ext in ("doc", "docx", "odt", "rtf", "txt"):
+    if ext in ("doc", "docx", "odt", "rtf", "txt", "pdf"):
         return "word", ext
     if ext in ("xls", "xlsx", "ods", "csv"):
         return "cell", ext
@@ -36,7 +37,7 @@ def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
         return "slide", ext
     raise ValueError(
         f"Неподдерживаемое расширение для OnlyOffice: .{ext} "
-        "(ожидаются doc/docx/xls/xlsx/ppt/pptx и odt/ods/odp)"
+        "(ожидаются doc/docx/pdf/xls/xlsx/ppt/pptx и odt/ods/odp/rtf/txt/csv)"
     )
 
 

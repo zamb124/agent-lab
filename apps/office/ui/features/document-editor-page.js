@@ -1,6 +1,6 @@
 /**
- * OnlyOffice DocsAPI: первый аргумент — строка id элемента в document (getElementById не смотрит в shadow DOM).
- * См. https://api.onlyoffice.com/docs/docs-api/usage-api/config/
+ * DocsAPI редактора: первый аргумент — строка id элемента в document (getElementById не смотрит в shadow DOM).
+ * См. документацию провайдера редактора (config / DocEditor).
  * api.js обычно вставляет iframe под body; опции «родитель — наш div» в API нет — переносим iframe в #oo-editor-target.
  */
 import { html, css, nothing } from 'lit';
@@ -425,7 +425,7 @@ export class DocumentEditorPage extends PlatformElement {
                 window.__ooDocsApiOrigin = base;
                 resolve();
             };
-            s.onerror = () => reject(new Error(`OnlyOffice api.js: ${src}`));
+            s.onerror = () => reject(new Error(`Document editor api.js: ${src}`));
             document.head.appendChild(s);
         });
     }

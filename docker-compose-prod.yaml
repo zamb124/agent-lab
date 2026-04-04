@@ -299,7 +299,7 @@ services:
       - agentlab-net
 
   onlyoffice-documentserver:
-    image: onlyoffice/documentserver-de:latest
+    image: onlyoffice/documentserver:latest
     container_name: agentlab_onlyoffice
     ports:
       - "8088:80"

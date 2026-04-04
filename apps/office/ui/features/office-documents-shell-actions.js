@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { OfficeStore } from '../store/office.store.js';
+import { ensureActiveCatalogId } from '../utils/ensure-active-catalog.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-input.js';
@@ -240,7 +241,11 @@ export class OfficeDocumentsShellActions extends PlatformElement {
             return;
         }
         try {
-            const res = await api.createEmptyDocument(title, this._createPayload());
+            const catalogId = await ensureActiveCatalogId(api, (k) => this.i18n.t(k));
+            const res = await api.createEmptyDocument(title, {
+                ...this._createPayload(),
+                catalog_id: catalogId,
+            });
             this.success(this.i18n.t('list.created'));
             this._closeEmpty();
             window.dispatchEvent(new CustomEvent('office-documents-list-reload'));
@@ -266,7 +271,8 @@ export class OfficeDocumentsShellActions extends PlatformElement {
         }
         this._uploadBusy = true;
         try {
-            const res = await api.uploadDocument(file);
+            const catalogId = await ensureActiveCatalogId(api, (k) => this.i18n.t(k));
+            const res = await api.uploadDocument(file, undefined, catalogId);
             this.success(this.i18n.t('list.uploaded'));
             window.dispatchEvent(new CustomEvent('office-documents-list-reload'));
             if (res.binding_id) {

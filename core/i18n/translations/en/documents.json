@@ -1,19 +1,27 @@
 {
   "appTitle": "Documents",
-  "homeIntro": "Editing via OnlyOffice. Full list and upload use the BFF API (/documents/api/v1/documents).",
+  "homeIntro": "Collaborative document editing in Documents. Full list and upload use the BFF API (/documents/api/v1/documents).",
   "sidebar": {
     "title": "Documents",
+    "namespace": "Workspace",
     "navList": "All documents",
+    "navCatalogs": "Catalogs",
     "navBack": "Back to list",
     "navNew": "New document",
     "navUpload": "Upload file",
     "navRefresh": "Refresh list"
   },
   "integration": {
-    "notConfigured": "OnlyOffice is not configured: check JWT secret and public URLs in the service settings."
+    "notConfigured": "Document server integration is not configured: check JWT secret and public URLs in the service settings."
   },
   "list": {
     "heading": "Documents",
+    "catalogLabel": "Catalog",
+    "catalogFilterSearchPlaceholder": "Find…",
+    "catalogFilterBarAria": "Catalog filters",
+    "catalogToggleHint": "Include or exclude this catalog in the list",
+    "defaultCatalogTitle": "General",
+    "catalogBootstrapError": "Could not resolve document catalog",
     "loading": "Loading…",
     "loadError": "Failed to load list: {{message}}",
     "newEmpty": "New document",
@@ -30,6 +38,7 @@
       "slide": "Presentation"
     },
     "colActions": "Actions",
+    "catalogUnknown": "Catalog",
     "open": "Open",
     "openDocument": "Open document \"{title}\"",
     "rename": "Rename",
@@ -37,7 +46,11 @@
     "empty": "No documents yet.",
     "emptyStateAria": "No documents",
     "emptyStateTitle": "No documents yet",
-    "emptyStateHint": "Create a new document or upload a file to get started.",
+    "emptyStateHint": "Create a new document or upload a file, then open it for collaborative editing with your team.",
+    "noCatalogsStateAria": "No document catalogs",
+    "noCatalogsStateTitle": "No catalogs yet",
+    "noCatalogsStateHint": "Create a catalog first, then you can add documents here.",
+    "noCatalogsCta": "Document catalogs",
     "renameHeading": "Rename document",
     "renameLabel": "New title",
     "cancel": "Cancel",
@@ -62,7 +75,35 @@
   },
   "mobile": {
     "openSidebar": "Open menu",
-    "editorTitle": "Editor"
+    "editorTitle": "Editor",
+    "catalogsTitle": "Catalogs"
+  },
+  "catalogs": {
+    "heading": "Document catalogs",
+    "create": "New catalog",
+    "createHeading": "New catalog",
+    "createLabel": "Title",
+    "fileCount": "{{count}} files",
+    "manageAccess": "Manage access",
+    "delete": "Delete",
+    "viewMembers": "Members",
+    "ownerAria": "Owner: {{name}}",
+    "memberAria": "Member: {{name}}",
+    "empty": "No catalogs yet. Create one to organize documents.",
+    "emptyStateAria": "No document catalogs",
+    "emptyStateTitle": "No catalogs yet",
+    "emptyStateHint": "Create a catalog to organize your documents.",
+    "membersHeading": "Members: {{title}}",
+    "membersHeadingGeneric": "Members",
+    "removeMember": "Remove",
+    "pickUser": "Select user",
+    "addMember": "Add member",
+    "memberAdded": "Member added",
+    "memberRemoved": "Member removed",
+    "created": "Catalog created",
+    "deleteTitle": "Delete catalog",
+    "deleteConfirm": "Delete catalog \"{{title}}\"? It must be empty.",
+    "deleted": "Catalog deleted"
   },
   "editor": {
     "back": "Back to list",
@@ -70,7 +111,7 @@
     "errNoId": "Document is not specified",
     "errNoApi": "API service is not available",
     "errBadConfig": "Empty editor configuration",
-    "errDocsApi": "Failed to load OnlyOffice API",
+    "errDocsApi": "Failed to load document editor API",
     "errHost": "Editor container is missing",
     "errOpenTimeout": "The editor did not respond within 2 minutes. Check Document Server, OFFICE__CALLBACK_PUBLIC_BASE_URL, and that the document URL is reachable from DS.",
     "eventError": "Editor error"

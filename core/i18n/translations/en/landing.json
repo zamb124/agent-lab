@@ -16,7 +16,7 @@
     "product_sync_title": "Sync",
     "product_sync_desc": "Chat and video calls",
     "product_documents_title": "Documents",
-    "product_documents_desc": "Word, Excel, PDF in OnlyOffice",
+    "product_documents_desc": "Word, Excel, PDF — collaborative editing",
     "mobile_nav_aria": "Menu"
   },
   "hero": {
@@ -30,7 +30,7 @@
     "title": "Humanitec — your team of AI employees",
     "subtitle1": "A platform with business automation tools: AI agents, smart knowledge base, and contact management system. Freeing up time for growth.",
     "subtitle2": "Agents work 24/7, processing requests and communicating with clients.",
-    "subtitle_landing": "A platform for automation and team work: AI agents, knowledge base, contact graph, Documents (OnlyOffice), and Sync — chat with video calls and Git context. Freeing up time for growth.",
+    "subtitle_landing": "A platform for automation and team work: AI agents, knowledge base, contact graph, Documents with collaborative Office editing, and Sync — chat with video calls and Git context. Freeing up time for growth.",
     "metric1_value": "1 day",
     "metric1_label": "from idea<br>to launch",
     "metric2_value": "50₽",
@@ -57,7 +57,7 @@
     "integ_pdf": "PDF & Word",
     "integ_networkle": "NetWorkle",
     "integ_sync": "Sync",
-    "integ_documents": "Documents",
+    "integ_documents": "Documents — collaborative editing",
     "integ_chat": "Chat",
     "integ_video": "Video conferencing",
     "integ_email": "Email",
@@ -73,7 +73,8 @@
     "ability_alt_kb": "Knowledge Base in Humanitec",
     "ability_alt_networkle": "NetWorkle in Humanitec",
     "ability_alt_sync": "Sync in Humanitec",
-    "ability_alt_documents": "Documents in Humanitec",
+    "ability_alt_documents": "Documents and collaborative editing in Humanitec",
+    "ability_alt_documents_2": "Collaborative document editing in Humanitec",
     "tag": "/ Platform Features",
     "feature1_title": "Launch in hours, not months",
     "feature1_description": "Do not waste time and money building from scratch. Use ready-made services: create AI agents, collaborate in Sync, manage contacts in NetWorkle, store documents in Knowledge Base. Everything is configured and running.",
@@ -95,11 +96,11 @@
     "feature4_li1": "Data only in your database",
     "feature4_li2": "Full company isolation",
     "feature4_li3": "Integration with any systems",
-    "feature5_title": "OnlyOffice documents",
-    "feature5_description": "Edit Office files on your Document Server; bindings per company and namespace; JWT and callbacks stay on the BFF only.",
-    "feature5_li1": "Open from the dashboard or the apps menu",
-    "feature5_li2": "Upload and empty docx via the platform API",
-    "feature5_li3": "Short-lived JWT for editor download URLs"
+    "feature5_title": "Documents",
+    "feature5_description": "Collaborative editing of Office files (Word, Excel, PowerPoint) on your document server: multiple people in one file, bindings per company and namespace; JWT and callbacks stay on the BFF only.",
+    "feature5_li1": "Real-time co-editing in a familiar editor",
+    "feature5_li2": "Open from the dashboard or apps menu; upload and empty templates via the API",
+    "feature5_li3": "Time-limited JWT to hand the file to the editor securely"
   },
   "advantages": {
     "title": "We deliver impressive results for your business",
@@ -107,7 +108,7 @@
     "badge_rag": "Knowledge Base — smart document search",
     "badge_crm": "NetWorkle — your business relationship graph",
     "badge_sync": "Sync — team chat and video calls",
-    "badge_documents": "Documents — OnlyOffice in your company perimeter",
+    "badge_documents": "Documents — collaborative editing in your company perimeter",
     "badge_day1": "Launch your first agent in one day",
     "badge_onprem": "On-premise or cloud — your choice"
   },

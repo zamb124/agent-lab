@@ -27,7 +27,10 @@ from apps.office.models.api import (
     OfficeCatalogMembersResponse,
     OfficeCatalogMemberItem,
     OfficeCatalogPatchRequest,
+    OfficeNamespaceCreateRequest,
+    OfficeNamespaceCreateResponse,
     OfficeNamespaceItem,
+    OfficeNamespaceTemplateItem,
     OfficeNamespacesResponse,
     OfficeDocumentCreateResponse,
     OfficeDocumentItem,
@@ -56,6 +59,7 @@ from apps.office.services.onlyoffice_jwt import (
     encode_download_token,
     encode_editor_config,
 )
+from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import get_context
 from core.models.identity_models import User
@@ -70,6 +74,21 @@ router = APIRouter(tags=["office-bff"])
 _EMPTY_DOCX = Path(__file__).resolve().parent.parent / "templates" / "empty.docx"
 
 _HUMANITEC_PLATFORM_LOGO_PATH = "/static/core/assets/service_logos/frontend_logo.svg"
+
+_CRM_API_V1_PREFIX = "/crm/api/v1"
+
+
+def _http_exception_from_service_client(service: str, exc: ServiceClientError) -> HTTPException:
+    msg = str(exc)
+    match = re.match(r"HTTP (\d{3})", msg)
+    if match:
+        code = int(match.group(1))
+        if 400 <= code < 600:
+            return HTTPException(status_code=code, detail=msg)
+    return HTTPException(
+        status_code=502,
+        detail=f"Сервис {service} недоступен или вернул ошибку: {msg}",
+    )
 
 
 def _container() -> OfficeContainer:
@@ -227,6 +246,89 @@ async def list_namespaces(c: OfficeContainer = Depends(_container)) -> OfficeNam
         if ns.name and ns.name.strip()
     ]
     return OfficeNamespacesResponse(namespaces=items)
+
+
+@router.get("/namespaces/templates", response_model=list[OfficeNamespaceTemplateItem])
+async def list_namespace_templates_proxy(
+    c: OfficeContainer = Depends(_container),
+) -> list[OfficeNamespaceTemplateItem]:
+    ctx = get_context()
+    if not ctx.active_company:
+        raise HTTPException(status_code=403, detail="Компания не выбрана")
+    if not ctx.user:
+        raise HTTPException(status_code=403, detail="Пользователь не авторизован")
+    path = f"{_CRM_API_V1_PREFIX}/namespaces/templates"
+    try:
+        raw = await c.service_client.get("crm", path)
+    except ServiceClientError as e:
+        raise _http_exception_from_service_client("crm", e) from e
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=502, detail="CRM: неверный формат списка шаблонов namespace")
+    out: list[OfficeNamespaceTemplateItem] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=502, detail="CRM: элемент шаблона namespace не объект")
+        tid = item.get("template_id")
+        if not isinstance(tid, str) or not tid.strip():
+            raise HTTPException(status_code=502, detail="CRM: у шаблона нет template_id")
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise HTTPException(status_code=502, detail="CRM: у шаблона нет name")
+        desc = item.get("description")
+        icon = item.get("icon")
+        is_system = bool(item.get("is_system"))
+        et = item.get("entity_type_ids")
+        entity_type_ids: list[str] = []
+        if isinstance(et, list):
+            entity_type_ids = [str(x) for x in et if isinstance(x, str) and x.strip()]
+        out.append(
+            OfficeNamespaceTemplateItem(
+                template_id=tid.strip(),
+                name=name.strip(),
+                description=desc.strip() if isinstance(desc, str) and desc.strip() else None,
+                icon=icon.strip() if isinstance(icon, str) and icon.strip() else None,
+                is_system=is_system,
+                entity_type_ids=entity_type_ids,
+            )
+        )
+    return out
+
+
+@router.post("/namespaces", response_model=OfficeNamespaceCreateResponse, status_code=201)
+async def create_namespace_proxy(
+    body: OfficeNamespaceCreateRequest,
+    c: OfficeContainer = Depends(_container),
+) -> OfficeNamespaceCreateResponse:
+    ctx = get_context()
+    if not ctx.active_company:
+        raise HTTPException(status_code=403, detail="Компания не выбрана")
+    if not ctx.user:
+        raise HTTPException(status_code=403, detail="Пользователь не авторизован")
+    path = f"{_CRM_API_V1_PREFIX}/namespaces"
+    payload = {
+        "name": body.name.strip(),
+        "description": body.description.strip() if body.description else None,
+        "template_id": body.template_id.strip(),
+    }
+    try:
+        raw = await c.service_client.post("crm", path, json=payload)
+    except ServiceClientError as e:
+        raise _http_exception_from_service_client("crm", e) from e
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=502, detail="CRM: неверный ответ при создании namespace")
+    name = raw.get("name")
+    company_id = raw.get("company_id")
+    if not isinstance(name, str) or not name.strip():
+        raise HTTPException(status_code=502, detail="CRM: в ответе нет name")
+    if not isinstance(company_id, str) or not company_id.strip():
+        raise HTTPException(status_code=502, detail="CRM: в ответе нет company_id")
+    desc = raw.get("description")
+    return OfficeNamespaceCreateResponse(
+        name=name.strip(),
+        company_id=company_id.strip(),
+        description=desc.strip() if isinstance(desc, str) and desc.strip() else None,
+        is_default=bool(raw.get("is_default")),
+    )
 
 
 @router.get("/company-members")
@@ -531,7 +633,8 @@ async def remove_catalog_member(
 
 @router.get("/documents", response_model=OfficeDocumentListResponse)
 async def list_documents(
-    catalog_id: str = Query(..., min_length=1),
+    catalog_id: str | None = Query(None, min_length=1),
+    catalog_ids: list[str] | None = Query(None),
     c: OfficeContainer = Depends(_container),
 ) -> OfficeDocumentListResponse:
     ctx = get_context()
@@ -539,18 +642,37 @@ async def list_documents(
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    allowed = await c.catalog_repository.user_can_access_catalog(
-        catalog_id.strip(),
+    raw: list[str] = []
+    if catalog_ids:
+        raw.extend(catalog_ids)
+    if catalog_id is not None and catalog_id.strip() != "":
+        raw.append(catalog_id.strip())
+    seen: set[str] = set()
+    resolved_ids: list[str] = []
+    for item in raw:
+        tid = (item or "").strip()
+        if tid == "" or tid in seen:
+            continue
+        seen.add(tid)
+        resolved_ids.append(tid)
+    if not resolved_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="Укажите catalog_id или хотя бы одно значение catalog_ids",
+        )
+    for cid in resolved_ids:
+        allowed = await c.catalog_repository.user_can_access_catalog(
+            cid,
+            ctx.active_company.company_id,
+            ctx.active_namespace,
+            ctx.user.user_id,
+        )
+        if not allowed:
+            raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
+    rows = await c.document_binding_repository.list_by_company_namespace_and_catalogs(
         ctx.active_company.company_id,
         ctx.active_namespace,
-        ctx.user.user_id,
-    )
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
-    rows = await c.document_binding_repository.list_by_company_namespace_and_catalog(
-        ctx.active_company.company_id,
-        ctx.active_namespace,
-        catalog_id.strip(),
+        resolved_ids,
     )
     user_ids = {r.created_by_user_id for r in rows}
     users_by_id: dict[str, User] = {}

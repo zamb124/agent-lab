@@ -31,6 +31,23 @@ class DocumentBindingRepository:
             )
             return list(result.scalars().all())
 
+    async def list_by_company_namespace_and_catalogs(
+        self, company_id: str, namespace: str, catalog_ids: list[str]
+    ) -> List[OfficeDocumentBinding]:
+        if not catalog_ids:
+            return []
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(OfficeDocumentBinding)
+                .where(
+                    OfficeDocumentBinding.company_id == company_id,
+                    OfficeDocumentBinding.namespace == namespace,
+                    OfficeDocumentBinding.catalog_id.in_(catalog_ids),
+                )
+                .order_by(OfficeDocumentBinding.created_at.desc())
+            )
+            return list(result.scalars().all())
+
     async def get_for_company(
         self, binding_id: str, company_id: str, namespace: str
     ) -> Optional[OfficeDocumentBinding]:

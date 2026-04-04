@@ -31,7 +31,7 @@
     },
     "documents": {
       "name": "Документы",
-      "description": "Office-файлы компании в OnlyOffice: список привязок, редактор в iframe, изоляция по namespace, секреты только на BFF"
+      "description": "Совместное редактирование Office-файлов: список привязок, редактор в iframe, изоляция по namespace, секреты только на BFF"
     },
     "frontend": {
       "name": "Console",

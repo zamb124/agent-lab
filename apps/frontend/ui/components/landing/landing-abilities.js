@@ -10,6 +10,7 @@ import {
     landNetworkleAbilityUrl,
     landSyncAbilityUrl,
     landDocumentsHeroUrl,
+    landDocumentsShot2Url,
 } from '../../utils/land-product-images.js';
 
 export class LandingAbilities extends PlatformElement {
@@ -64,6 +65,19 @@ export class LandingAbilities extends PlatformElement {
                 object-fit: cover;
                 object-position: top center;
                 display: block;
+            }
+
+            .ability-images-stack {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+                width: 100%;
+                order: -1;
+            }
+
+            .ability-images-stack .ability-image {
+                order: 0;
+                width: 100%;
             }
             
             .ability-content {
@@ -133,6 +147,12 @@ export class LandingAbilities extends PlatformElement {
                 .ability-image {
                     width: 45%;
                     order: 0;
+                }
+
+                .ability-images-stack {
+                    width: 45%;
+                    order: 0;
+                    flex-shrink: 0;
                 }
                 
                 .ability-name {
@@ -295,15 +315,27 @@ export class LandingAbilities extends PlatformElement {
                 </div>
                 
                 <div class="ability-item">
-                    <div class="ability-image">
-                        <img
-                            src=${landDocumentsHeroUrl}
-                            alt=${t('features.ability_alt_documents')}
-                            width="512"
-                            height="512"
-                            loading="lazy"
-                            decoding="async"
-                        />
+                    <div class="ability-images-stack">
+                        <div class="ability-image">
+                            <img
+                                src=${landDocumentsHeroUrl}
+                                alt=${t('features.ability_alt_documents')}
+                                width="1200"
+                                height="673"
+                                loading="lazy"
+                                decoding="async"
+                            />
+                        </div>
+                        <div class="ability-image">
+                            <img
+                                src=${landDocumentsShot2Url}
+                                alt=${t('features.ability_alt_documents_2')}
+                                width="1200"
+                                height="673"
+                                loading="lazy"
+                                decoding="async"
+                            />
+                        </div>
                     </div>
                     <div class="ability-content">
                         <h3 class="ability-name">${t('features.feature5_title')}</h3>

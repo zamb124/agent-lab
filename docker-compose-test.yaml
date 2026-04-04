@@ -58,7 +58,7 @@ services:
   # OnlyOffice Document Server — те же JWT и URL, что в tests_runner (OFFICE__*).
   onlyoffice-documentserver:
     platform: "linux/amd64"
-    image: onlyoffice/documentserver-de:latest
+    image: onlyoffice/documentserver:latest
     container_name: agentlab_onlyoffice_test
     ports:
       - "18088:80"
