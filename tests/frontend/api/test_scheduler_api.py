@@ -9,10 +9,11 @@ import pytest
 from apps.scheduler.main import (
     CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
     CALENDAR_SYNC_TASK_NAME,
+    SPAN_BILLING_SETTLEMENT_TASK_NAME,
     SYSTEM_SCHEDULER_COMPANY_ID,
     on_startup,
 )
-from core.config.models import CalendarSyncConfig
+from core.config.models import BillingConfig, BillingSpanSettlementConfig, CalendarSyncConfig
 from core.scheduler.models import PlatformScheduleType, ScheduledTaskStatus
 
 
@@ -186,6 +187,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
             enabled=True,
             cron="*/1 * * * *",
         )
+        billing = BillingConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
@@ -196,6 +198,8 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
             if filters.task_name == CALENDAR_SYNC_TASK_NAME:
                 return []
             if filters.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
+                return []
+            if filters.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME:
                 return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
@@ -230,6 +234,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             enabled=True,
             cron="*/1 * * * *",
         )
+        billing = BillingConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
@@ -241,6 +246,8 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             if filters.task_name == CALENDAR_SYNC_TASK_NAME:
                 return [paused_task]
             if filters.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
+                return []
+            if filters.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME:
                 return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
@@ -264,3 +271,41 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
     assert fake_service.resumed_task_id == "paused-1"
     assert fake_service.meeting_reminder_create is not None
     assert fake_service.meeting_reminder_create.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME
+
+
+@pytest.mark.asyncio
+async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() -> None:
+    class _FakeSettings:
+        calendar_sync = CalendarSyncConfig(enabled=False)
+        billing = BillingConfig(
+            span_settlement=BillingSpanSettlementConfig(
+                enabled=True,
+                cron="*/5 * * * *",
+            )
+        )
+
+    class _FakeSchedulerService:
+        def __init__(self) -> None:
+            self.created_requests: list = []
+
+        async def list(self, company_id, filters):
+            assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
+            return []
+
+        async def create(self, company_id, user_id, request):
+            assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
+            assert user_id is None
+            self.created_requests.append(request)
+            n = len(self.created_requests)
+            return type("CreatedTask", (), {"id": f"task-{n}", "schedule_id": f"schedule-{n}"})()
+
+    fake_service = _FakeSchedulerService()
+    fake_container = type("Container", (), {"scheduler_service": fake_service})()
+
+    await on_startup(app=None, container=fake_container, settings=_FakeSettings())
+
+    span_reqs = [r for r in fake_service.created_requests if r.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME]
+    assert len(span_reqs) == 1
+    assert span_reqs[0].schedule_type == PlatformScheduleType.CRON
+    assert span_reqs[0].cron == "*/5 * * * *"
+    assert span_reqs[0].queue_name == "idle"

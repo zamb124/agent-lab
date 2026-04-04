@@ -224,10 +224,15 @@ class BaseContainer:
     def billing_service(self):
         """BillingService для биллинга и учета использования"""
         from core.billing import BillingService
+        from core.config import get_settings
+
+        settings = get_settings()
         return BillingService(
             company_repository=self.company_repository,
             user_repository=self.user_repository,
-            usage_repository=self.usage_repository
+            usage_repository=self.usage_repository,
+            resource_base_prices=settings.billing.resource_base_prices,
+            shared_storage=self.shared_storage,
         )
     
     @lazy

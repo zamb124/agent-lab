@@ -354,6 +354,8 @@ export class FrontendApp extends PlatformApp {
                 return html`<leads-requests-page></leads-requests-page>`;
             case 'platform-tracing':
                 return html`<tracing-page></tracing-page>`;
+            case 'platform-billing':
+                return html`<billing-admin-page></billing-admin-page>`;
             default:
                 throw new Error(`Unknown view: ${normalizedView}`);
         }

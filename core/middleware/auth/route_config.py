@@ -207,6 +207,10 @@ ROUTE_RULES: List[RouteRule] = [
     # Админ трейсинг (доступ system проверяется в обработчике)
     RouteRule("/api/platform-tracing/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/platform-tracing/*", context_type="api", auth_required=True),
+
+    # Админ тарифы и usage (доступ system проверяется в обработчике)
+    RouteRule("/api/platform-billing/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/platform-billing/*", context_type="api", auth_required=True),
     
     # Push Notifications API (публичный ключ без авторизации, подписка с авторизацией)
     RouteRule("/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
@@ -253,6 +257,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/scheduler-tasks", context_type="frontend", auth_required=True),
     RouteRule("/lead-requests", context_type="frontend", auth_required=True),
     RouteRule("/platform-tracing", context_type="frontend", auth_required=True),
+    RouteRule("/platform-billing", context_type="frontend", auth_required=True),
 
     # Scheduler service API
     RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),

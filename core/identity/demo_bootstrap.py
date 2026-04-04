@@ -6,9 +6,13 @@ import uuid
 
 from core.auth.utils import hash_password
 from core.clients import ServiceClient
+from core.clients.service_client import ServiceClientError
 from core.config import get_settings
+from core.context import clear_context, set_context
 from core.logging import get_logger
+from core.models.context_models import Context, Language
 from core.models.identity_models import Company, User, UserStatus
+from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
 
@@ -117,7 +121,34 @@ async def ensure_demo_company_and_user(container: object) -> None:
     await subdomain_repo.set_mapping(subdomain, company_id)
     await user_repo.set(user)
 
+    roles = user.companies.get(company_id, [])
+    auth_token = get_token_service().create_token(
+        user_id=user.user_id,
+        company_id=company_id,
+        roles=roles,
+    )
+    init_context = Context(
+        user=User(
+            user_id=user.user_id,
+            name=user.name or user.user_id,
+            groups=user.groups,
+        ),
+        host="internal",
+        session_id="demo-bootstrap",
+        channel="system",
+        language=Language.RU,
+        active_company=Company(
+            company_id=company.company_id,
+            name=company.name,
+            subdomain=company.subdomain,
+        ),
+        user_companies=[],
+        trace_id=f"frontend:demo-bootstrap:{uuid.uuid4()}",
+        auth_token=auth_token,
+    )
+
     service_client = ServiceClient()
+    set_context(init_context)
     try:
         init_response = await service_client.post(
             "flows",
@@ -133,6 +164,12 @@ async def ensure_demo_company_and_user(container: object) -> None:
             company_id,
             init_response.get("task_id"),
         )
+    except ServiceClientError as exc:
+        logger.error(
+            "Demo bootstrap: не удалось вызвать flows company/init для %s: %s",
+            company_id,
+            exc,
+        )
     except Exception as exc:
         logger.error(
             "Demo bootstrap: не удалось вызвать flows company/init для %s: %s",
@@ -140,3 +177,5 @@ async def ensure_demo_company_and_user(container: object) -> None:
             exc,
             exc_info=True,
         )
+    finally:
+        clear_context()

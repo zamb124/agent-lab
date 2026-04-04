@@ -30,6 +30,26 @@
     "sampling_rate": 1.0,
     "retention_days": 30
   },
+  "billing": {
+    "resource_base_prices": {
+      "llm": { "*": 0.001 },
+      "tool": {
+        "weather_api": 0.1,
+        "travel_suggest": 0.2,
+        "calculator": 0.0,
+        "nano_banana_generation": 0.5,
+        "fashn_buyer_agent": 0.0,
+        "*": 0.05
+      }
+    },
+    "span_settlement": {
+      "enabled": false,
+      "cron": "*/15 * * * *",
+      "lookback_minutes": 90,
+      "batch_limit": 200,
+      "fallback_user_id": ""
+    }
+  },
   "push": {
     "enabled": true,
     "vapid_public_key": "ВСТАВИТЬ_PUBLIC_ИЗ_ГЕНЕРАТОРА",

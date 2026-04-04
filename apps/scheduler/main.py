@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 
 CALENDAR_SYNC_TASK_NAME = "calendar_sync_tick"
 CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME = "calendar_sync_meeting_reminder_tick"
+SPAN_BILLING_SETTLEMENT_TASK_NAME = "span_billing_settlement_tick"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 
 
@@ -89,6 +90,14 @@ async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> No
         task_name=CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
         cron=config.sync_meeting_reminder_cron,
         log_label="Calendar Sync meeting reminder",
+    )
+    billing_cfg = settings.billing.span_settlement
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=billing_cfg.enabled,
+        task_name=SPAN_BILLING_SETTLEMENT_TASK_NAME,
+        cron=billing_cfg.cron,
+        log_label="Span billing settlement",
     )
 
 

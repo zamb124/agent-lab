@@ -5,6 +5,7 @@ globs:
   - "**/db/models.py"
   - "**/db/models/**"
   - "core/db/migrations.py"
+  - "core/db/postgres_service_databases.py"
   - "scripts/db_migrate.py"
   - "core/db/service_registry.py"
   - "core/db/migration_manifest.py"
@@ -40,9 +41,9 @@ alwaysApply: false
 - **platform_office**: `office_document_bindings` — привязки файлов Office к `company_id` и namespace (BFF).
 - **platform_tracing**: только **`spans`** (OpenTelemetry + журнал по сущности); не shared. См. **`tracing.mdc`**.
 
-У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Физические БД **не** создаёт Alembic; при деплое после `postgres up` выполняется идемпотентный `migrations/postgres/bootstrap_idempotent.sql` (на случай, если первый init кластера не создал сервисные БД).
+У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Физические БД **не** создаёт Alembic; при деплое после `postgres up` выполняется идемпотентный **`migrations/postgres/bootstrap_idempotent.sql`** (на случай, если первый init кластера не создал сервисные БД). Опционально тот же смысл можно выполнить из Python: **`core.db.postgres_service_databases.ensure_postgres_service_databases_async`** (не вызывается из `scripts.db_migrate`).
 
-Если в `init.sql` позже добавили новую БД (например `platform_office` или `platform_tracing`), а том Postgres dev **уже существовал**, entrypoint-initdb **не** выполнится снова — будет `database "…" does not exist`. Локально: **`make dev-bootstrap-postgres`** (прогоняет `bootstrap_idempotent.sql` в контейнере `agentlab_postgres_dev`) или вручную `psql` с тем же файлом.
+Если в `init.sql` позже добавили новую БД, а том Postgres dev **уже существовал**, entrypoint-initdb **не** выполнится снова — будет `database "…" does not exist`. Локально: **`make dev-bootstrap-postgres`** (прогоняет `bootstrap_idempotent.sql` в контейнере `agentlab_postgres_dev`) или вручную `psql` с тем же файлом.
 
 ## PostgreSQL и pgvector
 
@@ -122,6 +123,7 @@ command: ["python", "-m", "scripts.db_migrate", "upgrade"]
 - `core/db/migration_manifest.py` — загрузка манифеста, регистрация, bootstrap
 - `scripts/db_migrate.py` — точка входа и argparse для Alembic
 - `migrations/<svc>/env.py`, `versions/`
+- `core/db/postgres_service_databases.py` — опционально: создание сервисных БД и `vector` по `services.json` (не в пути `db_migrate`)
 - `core/db/migrations.py` — `run_migrations_async()`, и т.д.
 - `core/db/service_registry.py`
 - `core/db/models/platform.py`, `core/db/models/rag.py`

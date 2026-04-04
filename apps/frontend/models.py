@@ -114,3 +114,30 @@ class PlatformTracingSpansPageResponse(BaseModel):
     items: List[Dict[str, Any]]
     next_cursor: Optional[str] = None
 
+
+class PlatformBillingPricesResponse(BaseModel):
+    """Эффективный прайс (конфиг + override) и сырой override из shared storage."""
+
+    effective: Dict[str, Dict[str, float]]
+    storage_override: Optional[Dict[str, Dict[str, float]]] = None
+
+
+class PlatformBillingUsageReportResponse(BaseModel):
+    """Строки usage из shared БД для админки."""
+
+    items: List[Dict[str, Any]]
+
+
+class PlatformBillingSettlementRulesResponse(BaseModel):
+    """Документ правил span settlement (JSON)."""
+
+    document: Dict[str, Any]
+
+
+class PlatformBillingCompanyPricesResponse(BaseModel):
+    """Эффективный прайс для компании (global merge + override компании)."""
+
+    company_id: str
+    effective: Dict[str, Dict[str, float]]
+    storage_override: Optional[Dict[str, Dict[str, float]]] = None
+

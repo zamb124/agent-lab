@@ -296,6 +296,15 @@ export class FrontendSidebar extends PlatformElement {
                                   </span>
                                   <span class="nav-label">${t('console_sidebar.tracing')}</span>
                               </button>
+                              <button
+                                  class="nav-item ${currentView === 'platform-billing' ? 'active' : ''}"
+                                  @click=${() => this._navigate('platform-billing')}
+                              >
+                                  <span class="nav-icon">
+                                      <platform-icon name="database" size="18"></platform-icon>
+                                  </span>
+                                  <span class="nav-label">${t('console_sidebar.billing_admin')}</span>
+                              </button>
                           `
                         : ''}
                 </nav>

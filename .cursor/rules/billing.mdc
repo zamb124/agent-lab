@@ -1,0 +1,41 @@
+---
+description: "Тарификация: прайс-лист, usage, связка spans и record_usage"
+alwaysApply: false
+---
+
+# Биллинг и тарификация
+
+## Источники цен
+
+1. **Базовые цены** — `settings.billing.resource_base_prices` (JSON / `conf.json`, секция `billing.resource_base_prices`).
+2. **Глобальный override** — shared storage **`billing:resource_base_prices_json`** (`force_global=True`). Merge в **`BillingService.get_effective_resource_base_prices()`**.
+3. **Пер-компания** — **`billing:company:{company_id}:resource_base_prices_json`**: merge поверх глобального эффектива в **`get_effective_resource_base_prices_for_company(company_id)`** (и в расчёте unit cost для списания).
+4. **Множители тарифа** — `DEFAULT_TARIFF_PRICES` / `Company.tariff_plan` в **`_unit_cost_for_company`**.
+
+Ключ ресурса: **`category:resource`**.
+
+## Правила списания по spans
+
+- Каталог JSON в storage: **`billing:settlement_rules_json`** — модель **`SettlementRulesDocument`** в [`core/billing/settlement_rules.py`](core/billing/settlement_rules.py): `application_mode` (`all_matching` | `first_win`), список **`SettlementRule`** (`rule_id`, `match`, `resource_name`, `usage_type`, `quantity_from`, `exclusive_group`, `priority`).
+- **`quantity_from`:** `const:N` или `attr:<полный_ключ_в_attributes>` (например `platform.billing.quantity`).
+- Джоба: **`BillingService.settle_pending_span_in_job`** — если **`rules` пустой**, поведение как раньше (**`settle_span_charge`**, legacy). Если правила заданы — только совпавшие правила; при отсутствии матча списания нет (в лог — warning).
+
+## Списание и идемпотентность
+
+- **`record_usage`** — таблица `usage`, баланс компании; возвращает **`usage_id`**.
+- **Составной ключ:** `billing:settled:{span_id}:{rule_id}`; legacy-правило **`__legacy_span_only__`** дублирует запись в старый ключ `billing:settled_span:{span_id}` для обратной совместимости.
+- Одно и то же **`rule_id`** для одного span не создаёт второй usage; разные **`rule_id`** — несколько usage на один span (если правила совпали и режим это допускает).
+
+## Фоновая джоба
+
+- **`span_billing_settlement_tick`** загружает документ правил один раз на пачку, для каждого span вызывает **`settle_pending_span_in_job`** (суммарно считает новые списания).
+- Выборка spans: **`list_spans_pending_billing_settlement`**.
+
+## Админка (компания `system`)
+
+- **`/frontend/api/platform-billing`**: `GET/PUT /prices`, `GET/PUT /settlement-rules`, `GET/PUT /prices/company/{company_id}`, `GET /usage-report`.
+- UI: **`/platform-billing`**, **`billing-admin-page`**.
+
+## Контракт атрибутов на span
+
+См. **`tracing.mdc`** (раздел SaaS / биллинг): `platform.billing.resource_name`, `usage_type`, `quantity`, `pending_settlement`.

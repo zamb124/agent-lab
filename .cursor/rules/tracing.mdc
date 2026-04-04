@@ -34,9 +34,13 @@ alwaysApply: false
 | Атрибут | Назначение |
 |---------|------------|
 | `platform.billing.usage_type` | Строковое значение `UsageType` из `core/models/billing_models.py` (`llm_request`, `embedding_request`, …) |
-| `platform.billing.resource_name` | Имя ресурса для `record_usage` / тарифов (модель, `stt.cloud_ru`, …) |
+| `platform.billing.resource_name` | Ключ цены для `BillingService` / `record_usage`: формат **`category:resource`** (как в `get_resource_cost_for_company`), например `llm:gpt-4`, `embedding:pgvector` |
+| `platform.billing.quantity` | Целое число единиц списания (умножается на unit cost); по умолчанию 1 |
+| `platform.billing.pending_settlement` | `true` — span участвует в **фоновом** списании (`span_billing_settlement_tick` на idle); без этого атрибута span только для наблюдаемости |
 
 Удобная обёртка: **`traced_operation(...)`** в [`core/tracing/operation_span.py`](core/tracing/operation_span.py); низкоуровнево — **`PlatformTracer.platform_operation_span`**.
+
+Идемпотентность джобы: после успешного `record_usage` в shared storage пишется `billing:settled_span:{span_id}` → `usage_id` (см. **`billing.mdc`**).
 
 **Колонки `company_id` / `namespace` в БД:** при сохранении span, если в итоговых атрибутах есть **`platform.tenant.company_id`** или **`platform.tenant.namespace`** (непустые строки), они задают колонки **поверх** значений из `get_context()`. Так воркеры и фоновые задачи фиксируют tenant без HTTP-контекста.
 
@@ -93,6 +97,7 @@ alwaysApply: false
 | `search_traces` | Фильтры user/session/flow + пагинация; группировка по `trace_id` |
 | `admin_search_spans` | Админ-список без обязательного `service_name`: точные и ILIKE-фильтры (мин. 2 символа для подстрок), интервал времени, курсор `(start_time, span_id)` как у `list_spans_for_service` |
 | `admin_facet_distinct_*` | Подсказки distinct: `company_id`, `user_id`, `service_name`, `event_type` |
+| `list_spans_pending_billing_settlement` | Окно `[from_time, to_time)` по `start_time`: есть `platform.billing.resource_name` и `pending_settlement`; сортировка по времени; лимит пачки для джобы |
 
 ## Админ UI (frontend)
 
@@ -100,6 +105,7 @@ alwaysApply: false
 - HTTP API сервиса **frontend**: префикс **`/frontend/api/platform-tracing`** (роутер `apps/frontend/api/platform_tracing.py`): facets, `GET /spans` (данные из `admin_search_spans`), `GET /traces/{trace_id}` (плоский список из `get_trace` + дерево через **`build_span_tree`** в `core/tracing/span_tree.py`).
 - Если **`database.tracing_url` пустой** или **`tracing.postgres_enabled=false`** — эндпоинты отвечают **503** (без пустых данных).
 - Страница консоли: **`apps/frontend/ui/pages/admin/tracing-page.js`**, пункт меню в сайдбаре только для `system`.
+- Пути **`/frontend/api/platform-tracing/*`** и **`/platform-tracing`** зарегистрированы в **`core/middleware/auth/route_config.py`** (иначе AuthMiddleware отдаёт 404).
 
 Сериализация строки репозитория — плоский dict с полями модели + `flow_id`/`task_id`/… из `attributes` (см. `_serialize_span`).
 

@@ -7,6 +7,7 @@
 и core.db.migration_manifest.bootstrap_migration_registry).
 """
 
+import asyncio
 import logging
 from pathlib import Path
 

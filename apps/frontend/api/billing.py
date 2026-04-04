@@ -57,31 +57,14 @@ async def get_usage_stats(request: Request, container: ContainerDep):
         raise HTTPException(status_code=400, detail="Компания не выбрана")
     
     company = request.state.company
-    
-    try:
-        from core.billing.service import BillingService
-        from core.context import set_context
-        
-        # Устанавливаем контекст для usage_repository
-        if hasattr(request.state, 'context'):
-            set_context(request.state.context)
-        
-        billing_service = BillingService(
-            company_repository=container.company_repository,
-            user_repository=container.user_repository,
-            usage_repository=container.usage_repository
-        )
-        
-        stats = await billing_service.get_company_usage_stats(company.company_id)
-        
-        return BillingUsage(**stats)
-    
-    except Exception as e:
-        logger.error(f"Ошибка получения статистики использования: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Не удалось получить статистику: {str(e)}"
-        )
+
+    from core.context import set_context
+
+    if hasattr(request.state, 'context'):
+        set_context(request.state.context)
+
+    stats = await container.billing_service.get_company_usage_stats(company.company_id)
+    return BillingUsage(**stats)
 
 
 @router.post("/topup")

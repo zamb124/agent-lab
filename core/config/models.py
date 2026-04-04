@@ -571,3 +571,40 @@ class LegalConfig(BaseModel):
     cloud_region: str = "EU/RU"
     analytics_tools: str = "Internal analytics"
     billing_provider: Optional[str] = None
+
+
+def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
+    """Базовые цены до merge с override в shared storage (ключ billing:resource_base_prices_json)."""
+    return {
+        "llm": {"*": 0.001},
+        "tool": {
+            "weather_api": 0.1,
+            "travel_suggest": 0.2,
+            "calculator": 0.0,
+            "nano_banana_generation": 0.5,
+            "fashn_buyer_agent": 0.0,
+            "*": 0.05,
+        },
+    }
+
+
+class BillingSpanSettlementConfig(BaseModel):
+    """Фоновое списание по spans с platform.billing.pending_settlement (idle worker)."""
+
+    enabled: bool = False
+    cron: str = "*/15 * * * *"
+    lookback_minutes: int = 90
+    batch_limit: int = 200
+    fallback_user_id: str = Field(
+        default="",
+        description="user_id для UsageRecord, если в span нет user_id (иначе span пропускается с ошибкой в логе)",
+    )
+
+
+class BillingConfig(BaseModel):
+    """Тарификация: базовые цены из конфига + override через API system; settlement по трейсам."""
+
+    resource_base_prices: Dict[str, Dict[str, float]] = Field(
+        default_factory=default_billing_resource_base_prices
+    )
+    span_settlement: BillingSpanSettlementConfig = Field(default_factory=BillingSpanSettlementConfig)

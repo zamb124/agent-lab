@@ -461,6 +461,44 @@ class SpanRepository:
                 next_cursor = _encode_service_list_cursor(last.start_time, last.span_id)
             return items, next_cursor
 
+    async def list_spans_pending_billing_settlement(
+        self,
+        *,
+        from_time: datetime,
+        to_time: datetime,
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Spans с platform.billing.resource_name и platform.billing.pending_settlement=true
+        за полуинтервал [from_time, to_time), по возрастанию start_time (для джобы списания).
+        """
+        from core.db.models import Spans
+
+        if limit < 1:
+            raise ValueError("limit должен быть >= 1")
+        if from_time.tzinfo is None or to_time.tzinfo is None:
+            raise ValueError("from_time и to_time обязаны иметь timezone")
+
+        res_txt = Spans.attributes[trace_attr.ATTR_BILLING_RESOURCE_NAME].astext
+        pend_txt = Spans.attributes[trace_attr.ATTR_BILLING_PENDING_SETTLEMENT].astext
+
+        async with self._storage._get_session() as session:
+            stmt = (
+                select(Spans)
+                .where(
+                    Spans.start_time >= from_time,
+                    Spans.start_time < to_time,
+                    res_txt.isnot(None),
+                    res_txt != "",
+                    pend_txt.in_(("true", "True", "1")),
+                )
+                .order_by(Spans.start_time.asc(), Spans.span_id.asc())
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            return [self._serialize_span(row) for row in rows]
+
     async def admin_facet_distinct_company_ids(
         self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
     ) -> List[str]:

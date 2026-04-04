@@ -246,6 +246,7 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 - **Уведомления:** только `notify_user` из `core.websocket.publisher`; персистентное хранилище уведомлений в БД не используем. **`notifications.mdc`**, показ в UI — **`frontend.mdc`**.
 - **Scheduler:** control-plane в `apps/scheduler`; вызов из кода других сервисов — только через `core/clients/scheduler_client.py`, не прямой `httpx`; изоляция по `company_id`. **`taskiq.mdc`**.
 - **Трейсинг:** OTEL `trace_id` + `parent_span_id`, БД `platform_tracing`, корневой span сущности через `resource_root_span`. **`tracing.mdc`**.
+- **Тарификация:** прайс в конфиге и `billing:resource_base_prices_json`, `UsageRecord`, фоновое списание по spans с `pending_settlement`. **`billing.mdc`**, атрибуты spans — **`tracing.mdc`**.
 
 ## Навигация по правилам
 
@@ -277,3 +278,4 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | Миграции БД | `migrations.mdc` |
 | Доменные имена (flow, user_id) | `domain_naming.mdc` |
 | Трейсинг, spans, platform_tracing | `tracing.mdc` |
+| Тарификация, usage, прайс (system) | `billing.mdc` |

@@ -27,6 +27,7 @@ from core.config.models import (
     SGRConfig,
     LegalConfig,
     TracingConfig,
+    BillingConfig,
     TasksConfig,
     CalendarSyncConfig,
     S3Config,
@@ -69,6 +70,7 @@ class BaseSettings(PydanticBaseSettings):
     sgr: SGRConfig = Field(default_factory=SGRConfig)
     legal: LegalConfig = Field(default_factory=LegalConfig)
     tracing: TracingConfig = Field(default_factory=TracingConfig)
+    billing: BillingConfig = Field(default_factory=BillingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     push: PushConfig = Field(default_factory=PushConfig)

@@ -22,6 +22,8 @@ async def traced_operation(
     operation_category: Optional[str] = None,
     billing_usage_type: Optional[str] = None,
     billing_resource_name: Optional[str] = None,
+    billing_quantity: Optional[int] = None,
+    billing_pending_settlement: bool = False,
     resource_type: Optional[str] = None,
     resource_id: Optional[str] = None,
     trace_ctx: Optional[TraceContext] = None,
@@ -30,6 +32,7 @@ async def traced_operation(
     """
     operation_name: стабильная строка вида service.area.action.
     billing_usage_type: значение UsageType (строка), например embedding_request.
+    billing_pending_settlement: если True — span попадёт в фоновое списание (idle job), иначе только observability.
     """
     merged: Dict[str, Any] = dict(extra_attributes or {})
     if operation_category:
@@ -38,6 +41,10 @@ async def traced_operation(
         merged[attr.ATTR_BILLING_USAGE_TYPE] = billing_usage_type
     if billing_resource_name:
         merged[attr.ATTR_BILLING_RESOURCE_NAME] = billing_resource_name
+    if billing_quantity is not None:
+        merged[attr.ATTR_BILLING_QUANTITY] = billing_quantity
+    if billing_pending_settlement:
+        merged[attr.ATTR_BILLING_PENDING_SETTLEMENT] = True
 
     tracer = get_tracer()
     async with tracer.platform_operation_span(

@@ -89,6 +89,8 @@ ATTR_STATE_SNAPSHOT = "platform.state.snapshot"
 # Биллинг / SaaS (связь с UsageType и resource_name в metadata usage)
 ATTR_BILLING_USAGE_TYPE = "platform.billing.usage_type"
 ATTR_BILLING_RESOURCE_NAME = "platform.billing.resource_name"
+ATTR_BILLING_QUANTITY = "platform.billing.quantity"
+ATTR_BILLING_PENDING_SETTLEMENT = "platform.billing.pending_settlement"
 ATTR_OPERATION_CATEGORY = "platform.operation.category"
 
 # RAG / embeddings
