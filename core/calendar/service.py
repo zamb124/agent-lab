@@ -763,6 +763,7 @@ class CalendarService:
                 "scheduled_start_at": _iso_datetime(start_at),
                 "scheduled_end_at": _iso_datetime(end_at),
                 "join_url_base": base,
+                "calendar_member_user_ids": invited,
             }
             data = await self._service_client.patch(
                 "sync",
@@ -791,10 +792,6 @@ class CalendarService:
     async def upsert_event(self, event_id: str | None, payload: dict, user_id: str, company_id: str) -> CalendarEvent:
         now = datetime.now(timezone.utc)
         payload = dict(payload)
-        sync_raw = payload.pop("sync_meeting", None)
-        if sync_raw is not None and not isinstance(sync_raw, dict):
-            raise ValueError("sync_meeting должен быть объектом с полем enabled.")
-        want_sync = bool(sync_raw and sync_raw.get("enabled"))
 
         current = None
         if event_id is None:
@@ -814,6 +811,12 @@ class CalendarService:
         if start_at >= end_at:
             raise ValueError("Calendar event start_at must be before end_at")
 
+        attendees_raw = payload.get("attendees") or []
+        attendees: list[CalendarAttendee] = [
+            CalendarAttendee.model_validate(item) if isinstance(item, dict) else item
+            for item in attendees_raw
+        ]
+
         md: dict[str, str] = dict(payload.get("metadata") or {})
         if current is not None:
             for meta_key, meta_val in current.metadata.items():
@@ -823,6 +826,7 @@ class CalendarService:
         source = CalendarEventSource(payload["source"])
         source_id = payload["source_id"] or final_event_id
         status = CalendarEventStatus(payload["status"])
+        want_sync = source == CalendarEventSource.PLATFORM and payload["kind"] == "meeting"
 
         deep_link_final: str | None = payload.get("deep_link")
         if source == CalendarEventSource.PLATFORM:
@@ -833,7 +837,7 @@ class CalendarService:
                 title=payload["title"],
                 start_at=start_at,
                 end_at=end_at,
-                attendees=payload["attendees"],
+                attendees=attendees,
                 organizer_user_id=user_id,
                 company_id=company_id,
                 metadata=md,
@@ -856,7 +860,7 @@ class CalendarService:
             all_day=payload["all_day"],
             start_at=start_at,
             end_at=end_at,
-            attendees=payload["attendees"],
+            attendees=attendees,
             recurrence_rule=payload.get("recurrence_rule"),
             recurrence_id=payload.get("recurrence_id"),
             series_id=payload.get("series_id"),

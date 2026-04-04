@@ -4,7 +4,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import AliasChoices, BaseModel, Field, PrivateAttr
+from pydantic import AliasChoices, BaseModel, Field, PrivateAttr, model_validator
 
 
 class DemoAuthConfig(BaseModel):
@@ -63,6 +63,7 @@ class DatabaseConfig(BaseModel):
     crm_url: Optional[str] = None
     sync_url: Optional[str] = None
     rag_url: Optional[str] = None
+    office_url: Optional[str] = None
     redis_url: str = "redis://localhost:8099"
 
 
@@ -104,6 +105,7 @@ class ServerConfig(BaseModel):
     rag_service_url: Optional[str] = None
     sync_service_url: Optional[str] = None
     scheduler_service_url: Optional[str] = None
+    office_service_url: Optional[str] = None
     platform_public_base_url: Optional[str] = Field(
         default="https://humanitec.ru",
         description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
@@ -117,6 +119,7 @@ class ServerConfig(BaseModel):
         "rag": 8004,
         "sync": 8005,
         "scheduler": 8006,
+        "office": 8008,
     }
 
     def get_service_url(self, service: Optional[str] = None) -> str:
@@ -124,7 +127,7 @@ class ServerConfig(BaseModel):
         Возвращает URL сервиса.
 
         Args:
-            service: Имя сервиса (flows, crm, frontend, rag). Если None - URL текущего сервиса.
+            service: Имя сервиса (flows, crm, office, …). Если None — URL текущего сервиса.
         """
         if service is None:
             return f"http://localhost:{self.port}"
@@ -442,6 +445,59 @@ class S3Config(BaseModel):
     buckets: Dict[str, S3BucketConfig] = Field(default_factory=dict)
 
 
+class SpeechToChatConfig(BaseModel):
+    """Серверный egress «речь в ленту»: сегменты LiveKit и опрос TaskIQ в sync worker."""
+
+    segment_seconds: int = Field(default=12, ge=1)
+    poll_initial_delay_seconds: float = Field(default=4.0, ge=0)
+    poll_interval_seconds: float = Field(default=4.0, ge=0)
+    poll_lock_ttl_seconds: int = Field(
+        default=900,
+        ge=60,
+        description="TTL Redis single-flight ключа sync:stc_poll:{company}:{call_id}; внутри тика периодически продлевается.",
+    )
+    poll_lock_refresh_interval_seconds: float = Field(
+        default=60.0,
+        ge=5.0,
+        description="Интервал EXPIRE для того же ключа, пока тик держит lock.",
+    )
+    poll_lock_busy_retry_seconds: float = Field(
+        default=8.0,
+        ge=0.5,
+        description="Задержка перед следующим kiq, если lock занят другим воркером.",
+    )
+    max_segments_per_poll_per_track: int = Field(
+        default=1,
+        ge=1,
+        le=128,
+        description="Сколько новых сегментов (сообщений) максимум выложить за один тик опроса на один микрофонный трек.",
+    )
+    livekit_client_timeout_seconds: float = Field(
+        default=60.0,
+        ge=5.0,
+        description="Таймаут aiohttp для Twirp LiveKit в тике poll и при stop_speech_egresses.",
+    )
+    segment_http_download_timeout_seconds: float = Field(
+        default=120.0,
+        ge=10.0,
+        description="Таймаут httpx при скачивании байт сегмента по URL (не S3 SDK).",
+    )
+    s3_segment_list_page_size: int = Field(
+        default=128,
+        ge=1,
+        le=1000,
+        description="Размер страницы list_objects_v2 по префиксу сегментов в S3.",
+    )
+
+    @model_validator(mode="after")
+    def _poll_lock_refresh_before_ttl(self) -> SpeechToChatConfig:
+        if self.poll_lock_refresh_interval_seconds >= self.poll_lock_ttl_seconds:
+            raise ValueError(
+                "poll_lock_refresh_interval_seconds должен быть меньше poll_lock_ttl_seconds"
+            )
+        return self
+
+
 class CallsConfig(BaseModel):
     """Конфигурация WebRTC звонков: LiveKit SFU и coturn TURN.
 
@@ -458,6 +514,17 @@ class CallsConfig(BaseModel):
     turn_port: int = 3478
     turn_secret: str = ""
     turn_credential_ttl: int = 86400
+    speech_to_chat: SpeechToChatConfig = Field(default_factory=SpeechToChatConfig)
+    finalize_recording_egress_poll_interval_seconds: float = Field(
+        default=3.0,
+        ge=0.5,
+        description="Интервал asyncio.sleep между опросами list_egress при finalize записи звонка.",
+    )
+    finalize_recording_egress_wait_timeout_seconds: float = Field(
+        default=600.0,
+        ge=30.0,
+        description="Сколько секунд ждать появления location у composite egress при finalize записи (не STT).",
+    )
 
 
 class PushConfig(BaseModel):

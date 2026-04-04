@@ -1,6 +1,6 @@
 # Deploy
 
-Деплой запускается автоматически при push в `main` или вручную через `workflow_dispatch`.
+Деплой запускается вручную через **`workflow_dispatch`** (см. [`deploy.yml`](deploy.yml)).
 
 ## Схема
 
@@ -19,6 +19,7 @@
 │  │  full → собирает    │    │    docker-compose-prod.yaml  │    │
 │  │  один образ со      │───▶│    conf.json                 │    │
 │  │                     │    │    migrations/postgres/init.sql│  │
+│  │                     │    │    deploy/onlyoffice/themes/…  │  │
 │  │  всем кодом         │    │                              │    │
 │  │                     │    │                              │    │
 │  │  Push →             │    │  SSH → запуск на сервере     │    │
@@ -37,7 +38,9 @@
 │                                                                 │
 │  /opt/agent-lab/                                                │
 │  ├── docker-compose-prod.yaml   ← из репо                       │
-│  └── conf.json                  ← из репо (в т.ч. services.*)   │
+│  ├── conf.json                  ← из репо (в т.ч. services.*)   │
+│  ├── migrations/postgres/*.sql  ← из репо                       │
+│  └── deploy/onlyoffice/themes/theme-humanitec-light.json       │
 │                                                                 │
 │  docker compose pull            ← тянет образ из ghcr.io        │
 │  docker compose run migrations  ← применяет миграции БД         │
@@ -53,6 +56,8 @@
 │  │ crm      │ 8003 │ python -m apps.crm.main                │   │
 │  │ rag      │ 8004 │ python -m apps.rag.main                │   │
 │  │ sync     │ 8005 │ python -m apps.sync.main               │   │
+│  │ office   │ 8008 │ python -m apps.office.main (Documents BFF)│   │
+│  │ onlyoffice-documentserver │ 8088 │ onlyoffice/documentserver-de │   │
 │  │ scheduler-api │ 8006 │ python -m apps.scheduler.main      │   │
 │  │ flows_worker │  —   │ taskiq worker apps.flows_worker.worker:worker_app│   │
 │  │ crm_worker │  —   │ taskiq worker apps.crm_worker.worker:worker_app│   │
@@ -68,6 +73,8 @@
 │  humanitec.ru/crm      → crm      :8003                         │
 │  humanitec.ru/rag      → rag      :8004                         │
 │  humanitec.ru/sync     → sync     :8005                         │
+│  humanitec.ru/documents → office  :8008 (BFF + UI документов)   │
+│  humanitec.ru/onlyoffice или отдельный хост → DS :8088 (api.js) │
 │  *.humanitec.ru        → frontend :8002 (поддомены компаний)    │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -106,14 +113,28 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | `POSTGRES_PASSWORD` | Пароль PostgreSQL |
 | `AUTH_JWT_SECRET` | JWT секрет (`openssl rand -hex 32`) |
 
-### S3 Selectel (обязательные)
+### S3 (продакшен: не MinIO из `conf.json`)
 
-Секреты в GitHub по имени `SELECTEL_*` не меняются; в `docker-compose-prod.yaml` они мапятся в `S3__BUCKETS__<ключ>` — ключ должен совпадать с `s3.default_bucket` / ключом в `s3.buckets` в `conf.json` (например `shvedzilla`).
+Корневой блок **`s3`** в `conf.json` (тот же файл копируется на сервер) задаёт **имя бакета по умолчанию**, endpoint и структуру `buckets`. Запись **`test-bucket` / MinIO** в репозитории — для **локальной** разработки; в проде приложения используют **`s3.default_bucket`** (сейчас в шаблоне — **`shvedzilla`**, Selectel), если вы не меняли его на сервере.
+
+В **`docker-compose-prod.yaml`** в `x-common-env` жёстко задано:
+
+- `S3__DEFAULT_BUCKET: shvedzilla`
+- `S3__BUCKETS__SHVEDZILLA__ACCESS_KEY_ID` / `S3__BUCKETS__SHVEDZILLA__SECRET_ACCESS_KEY` из секретов
+
+Имя **`SHVEDZILLA`** в переменных окружения должно совпадать с **ключом** объекта в `s3.buckets` и с **`s3.default_bucket`** в `conf.json` на сервере. Если продакшен использует **другой бакет** (не `shvedzilla`), нужно:
+
+1. Обновить **`conf.json`** на сервере: `default_bucket`, соответствующий объект в `buckets` (endpoint, `bucket_name`, provider).
+2. Обновить **`docker-compose-prod.yaml`**: `S3__DEFAULT_BUCKET` и блок `S3__BUCKETS__<ИМЯ_КЛЮЧА_В_UPPERCASE>` под тот же ключ (как в Pydantic nested env).
+
+Ключи S3 в GitHub — это **не** MinIO:
 
 | Secret | Описание |
 |---|---|
-| `SELECTEL_ACCESS_KEY` | Selectel S3 access key |
-| `SELECTEL_SECRET_KEY` | Selectel S3 secret key |
+| `SELECTEL_ACCESS_KEY` | S3 access key (например Selectel) |
+| `SELECTEL_SECRET_KEY` | S3 secret key |
+
+Отдельный секрет «для S3» не требуется, если достаточно пары `SELECTEL_*`: они подставляются в env контейнеров и **перекрывают** плейсхолдеры в JSON для бакета `shvedzilla`.
 
 ### LLM (обязательные)
 
@@ -142,6 +163,16 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | `LLM_OPENROUTER_API_KEY` | `LLM_OPENROUTER_API_KEY` | OpenRouter: чат и эмбеддинги по умолчанию |
 | `RAG_EMBEDDING_API_KEY` (опционально) | `RAG_EMBEDDING_API_KEY` | Другой ключ только для embeddings (перебивает LLM-ключ в compose) |
 | `RAG_AGENTSET_API_KEY` (опционально) | не в workflow — добавь в `deploy.yml` env + `envs`, если используете Agentset | Agentset API key |
+
+### Документы / OnlyOffice
+
+В **`docker-compose-prod.yaml`** поднимаются **`onlyoffice-documentserver`** (**`onlyoffice/documentserver-de`**, порт **8088**) и BFF **`office`** (**8008**). Секрет JWT должен совпадать в контейнере DS и в BFF (**`OFFICE__JWT_SECRET`** / **`ONLYOFFICE_JWT_SECRET`**). Публичные URL браузера и callback — в **`OFFICE__DOCUMENT_SERVER_PUBLIC_URL`** и **`OFFICE__CALLBACK_PUBLIC_BASE_URL`** (часто совпадают с origin ingress и с URL, с которого Document Server достучится до BFF).
+
+| Secret | Описание |
+|---|---|
+| `ONLYOFFICE_JWT_SECRET` | Общий секрет JWT для DS и BFF |
+| `OFFICE_DOCUMENT_SERVER_PUBLIC_URL` (опционально) | Origin Document Server для скрипта api.js (по умолчанию в compose `http://localhost:8088`) |
+| `OFFICE_CALLBACK_PUBLIC_BASE_URL` (опционально) | Публичный базовый URL BFF для download/callback (по умолчанию `http://localhost:8008`) |
 
 ### Платежи YooMoney (опционально)
 

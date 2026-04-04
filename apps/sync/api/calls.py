@@ -112,6 +112,27 @@ def _ttl_hours_from_schedule(scheduled_end: datetime, now: datetime) -> int:
     return max(1, min(168, hours))
 
 
+async def _reconcile_calendar_meeting_channel_members(
+    *,
+    container,
+    channel_id: str,
+    company_id: str,
+    link_creator_user_id: str,
+    calendar_member_user_ids: list[str],
+) -> None:
+    channels = container.channel_repository
+    desired_guests = {
+        uid for uid in calendar_member_user_ids if uid and uid != link_creator_user_id
+    }
+    for uid in sorted(desired_guests):
+        await channels.add_member_if_missing(channel_id, uid, "member", company_id=company_id)
+    current = await channels.list_member_user_ids(channel_id, company_id=company_id)
+    desired = {link_creator_user_id} | desired_guests
+    for uid in current:
+        if uid not in desired:
+            await channels.delete_member(channel_id, uid, company_id=company_id)
+
+
 # ─── Авторизованные эндпоинты ────────────────────────────────────────────────
 
 @router.get("/turn-credentials")
@@ -329,6 +350,23 @@ async def patch_call_link(
         scheduled_end_at=new_end,
         expires_at=new_expires,
     )
+    if body.scheduled_title is not None:
+        ch = await container.channel_repository.get(link.channel_id)
+        if ch is None or ch.company_id != company_id:
+            raise HTTPException(status_code=404, detail="Канал ссылки не найден.")
+        name = body.scheduled_title.strip()
+        if name == "":
+            raise HTTPException(status_code=400, detail="scheduled_title не может быть пустым.")
+        ch.name = name
+        await container.channel_repository.update(ch)
+    if body.calendar_member_user_ids is not None:
+        await _reconcile_calendar_meeting_channel_members(
+            container=container,
+            channel_id=link.channel_id,
+            company_id=company_id,
+            link_creator_user_id=link.created_by_user_id,
+            calendar_member_user_ids=body.calendar_member_user_ids,
+        )
     updated = await container.call_repository.get_link_for_company(link_token, company_id)
     join_url = _resolve_join_url(link_token, body.join_url_base, request)
     return CallLinkRead(

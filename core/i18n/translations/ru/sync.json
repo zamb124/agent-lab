@@ -1,39 +1,10 @@
 {
-  "meetings_title": "Встречи компании",
   "close": "Закрыть",
-  "all_channels": "Все каналы",
-  "reset_filters": "Сбросить фильтры",
-  "loading_meetings": "Загрузка встреч...",
-  "empty_filtered": "По фильтрам ничего не найдено.",
-  "meta_date": "Дата:",
-  "meta_duration": "Длительность:",
-  "meta_meeting_id": "meeting_id:",
-  "loading_details": "Загрузка деталей...",
-  "meeting_details": "Детали встречи",
-  "label_channel": "Канал",
-  "label_date": "Дата",
-  "label_duration": "Длительность",
-  "label_status": "Статус",
-  "label_participants": "Участники",
-  "label_meeting_id": "meeting_id",
-  "label_join_link": "Ссылка для входа",
-  "download_recording": "Скачать запись",
-  "download_transcript": "Скачать транскрипт",
-  "export_crm": "Экспорт в CRM",
-  "retry_processing": "Повторить обработку",
-  "select_card_hint": "Выберите карточку встречи в списке слева.",
-  "export_status": {
-    "done": "готово",
-    "pending": "в работе",
-    "failed": "ошибка"
-  },
+  "call_aggregate_empty_body": "Нет материала для сводки: в ленте этого звонка нет текстовых сообщений и готовых расшифровок аудио или видео. Речь в комнате сама в чат не попадает — пишите сообщения в канал, включите запись звонка или расшифровку голосовых в настройках канала.",
   "recording_error_default": "Ошибка записи",
-  "meeting_processing_error": "Ошибка обработки встречи",
   "sidebar": {
     "create_sync_title": "Создать Sync: служебный канал и звонок",
     "create_sync_label": "Создать Sync",
-    "open_meetings_title": "Открыть встречи",
-    "meetings_label": "Встречи",
     "direct_section": "Личные",
     "direct_search_placeholder": "Поиск по имени или id...",
     "direct_search_aria": "Поиск участников компании",
@@ -87,7 +58,11 @@
     "forward": "Переслать",
     "delete": "Удалить",
     "forward_modal_title": "Куда переслать",
-    "no_other_channels": "Нет других каналов."
+    "no_other_channels": "Нет других каналов.",
+    "call_banner_title": "Идёт звонок",
+    "call_banner_subtitle": "Нажмите, чтобы вернуться",
+    "call_banner_hangup_aria": "Завершить звонок",
+    "err_call_banner_call_id": "Нет данных звонка для завершения."
   },
   "composer": {
     "default_user_short": "Пользователь",
@@ -175,6 +150,16 @@
     "err_file_image": "Некорректный file/image контент.",
     "err_file_document": "Некорректный file/document контент.",
     "err_file_audio": "Некорректный file/audio контент.",
+    "err_file_video": "Некорректный file/video контент.",
+    "err_call_boundary": "Некорректный call/boundary контент.",
+    "call_boundary_started": "Звонок начался",
+    "call_boundary_join": "Войти",
+    "call_boundary_join_title": "Идёт звонок — войти",
+    "call_boundary_ended": "Звонок завершён",
+    "transcribe_meeting": "Транскрибировать митинг",
+    "transcribe_video": "Транскрибировать",
+    "transcribe_processing": "Идёт расшифровка…",
+    "err_call_id_transcribe": "Для расшифровки митинга нужен call_id у сообщения.",
     "err_git_ref": "Некорректный git/reference контент.",
     "err_tool_response": "Некорректный custom_tool_response контент.",
     "err_content_type": "Неподдерживаемый тип контента: {{type}}",
@@ -247,7 +232,8 @@
     "participant_menu": "Меню участника",
     "promote_meeting_admin": "Назначить админом встречи",
     "participant_action_unavailable": "Недоступно для этого участника",
-    "screen_tile_suffix": "{{label}} — экран"
+    "screen_tile_suffix": "{{label}} — экран",
+    "minimize_title": "Свернуть в чат"
   },
   "sync_store": {
     "err_channel_filter_multi": "Чтобы создать канал, оставь в фильтре одно пространство или сбрось фильтр (покажи все каналы).",
@@ -270,8 +256,6 @@
     "err_message_dot_id": "message.id обязателен.",
     "err_confirmed_message_required": "confirmedMessage обязателен.",
     "err_older_cursor_overlay": "olderCursor обязателен для загрузки истории оверлея.",
-    "err_upsert_meeting_required": "upsertMeeting: meeting обязателен.",
-    "err_filters_required": "filters обязателен.",
     "err_fields_required": "fields обязателен.",
     "err_toggle_sidebar_space_id": "toggleSidebarSpaceFilter: spaceId обязателен.",
     "err_channel_row_channel": "channelRowMetaLabel: channel обязателен.",
@@ -282,6 +266,10 @@
     "err_presence_user_id": "user.presence: user_id обязателен.",
     "err_peer_subtitle_user_id": "getPeerPresenceSubtitle: userId обязателен.",
     "err_unknown_sidebar_section": "Неизвестная секция сайдбара: {{key}}",
+    "err_active_call_overlay_payload": "setUiActiveCallOverlay: ожидается объект или null.",
+    "err_active_call_overlay_call_id": "setUiActiveCallOverlay: call_id обязателен.",
+    "err_active_call_overlay_channel_id": "setUiActiveCallOverlay: channel_id должен быть строкой.",
+    "err_active_call_overlay_minimized": "setUiActiveCallOverlay: minimized должен быть boolean.",
     "err_company_member_user_id": "company/members: у элемента нет user_id."
   },
   "presence": {
@@ -315,6 +303,8 @@
     "photo": "[Фото]",
     "file": "[Файл]",
     "audio": "[Аудио]",
+    "video": "[Видео]",
+    "call_boundary": "[Звонок]",
     "git": "[Git]",
     "tool": "[Инструмент]",
     "err_unknown_type": "Неизвестный тип контента для превью: {{type}}"
@@ -337,7 +327,10 @@
     "meta_space_prefix": "Пространство: {{name}}",
     "meta_pick_space": "Выбери пространство в списке слева.",
     "notifications": "Уведомления",
+    "new_channel_flags_heading": "Параметры канала",
     "mute_label": "Не беспокоить (без уведомлений о новых сообщениях)",
+    "transcribe_voice_label": "Автоматически транскрибировать голосовые сообщения",
+    "speech_to_chat_label": "Речь в ленту во время звонка",
     "field_name": "Название",
     "placeholder_name": "Название канала",
     "field_avatar": "Аватар",
@@ -357,7 +350,6 @@
   "space_settings": {
     "err_upload": "Некорректный ответ загрузки файла (нет file_id или url).",
     "err_name_required": "Название пространства обязательно.",
-    "err_export_namespace": "Для автоэкспорта укажите namespace.",
     "err_not_selected": "Пространство не выбрано.",
     "header_create": "Создать пространство",
     "header_edit": "Настройки пространства",
@@ -368,12 +360,12 @@
     "upload_image": "Загрузить изображение",
     "namespace_label": "Namespace (общий для CRM/RAG)",
     "namespace_loading": "Загрузка namespace...",
-    "auto_export_transcript": "Автоэкспорт транскрипта в CRM",
-    "auto_export_summary": "Автоэкспорт summary в CRM",
     "creating": "Создаём…",
     "create": "Создать",
     "saving": "Сохранение…",
-    "save": "Сохранить"
+    "save": "Сохранить",
+    "transcribe_voice_label": "Авто-транскрипция голосовых в новых каналах",
+    "speech_to_chat_label": "Речь в ленту в новых каналах (LiveKit)"
   },
   "empty_dash": "—",
   "call_join": {
@@ -391,7 +383,6 @@
     "login_account": "Войти в аккаунт"
   },
   "sync_api": {
-    "err_meeting_id": "meetingId обязателен.",
     "err_user_id": "userId обязателен.",
     "err_peer_user_id": "peerUserId обязателен.",
     "err_call_id": "callId обязателен.",
@@ -418,9 +409,6 @@
     "ws_status_no_message_id": "message.status_changed: нет message_id.",
     "ws_unknown_realtime": "[sync-ws] неизвестное realtime-событие: {{type}}",
     "err_sync_ws_not_initialized": "syncWs не инициализирован при accept.",
-    "err_recording_action": "action должен быть start или stop.",
-    "err_meeting_id_required": "meetingId обязателен.",
-    "err_meeting_details_invalid": "Некорректный ответ details встречи.",
-    "err_meeting_id_operation": "meeting_id обязателен."
+    "err_recording_action": "action должен быть start или stop."
   }
 }

@@ -39,7 +39,7 @@ class FileRecord(BaseModel):
     provider: str = Field(description="Провайдер S3 (aws, yandex, minio, etc.)")
     original_name: str = Field(description="Оригинальное имя файла")
     s3_key: str = Field(description="Ключ файла в S3")
-    s3_bucket: str = Field(description="Bucket в S3")
+    s3_bucket: str = Field(description="Ключ bucket в settings.s3.buckets (не физическое имя в S3)")
     s3_endpoint: Optional[str] = Field(default=None, description="Endpoint URL провайдера")
     storage_url: Optional[str] = Field(default=None, description="Прямой URL источника файла для proxy-download")
     content_type: str = Field(description="MIME тип файла")
@@ -161,6 +161,35 @@ class AudioAttachmentContent(BaseModel):
     transcription_status: AudioTranscriptionStatus = Field(
         default=AudioTranscriptionStatus.IDLE,
         description="Текущий статус расшифровки аудио.",
+    )
+    transcription_text: str | None = Field(
+        default=None,
+        description="Результат распознавания речи.",
+    )
+    transcription_error: str | None = Field(
+        default=None,
+        description="Текст ошибки расшифровки.",
+    )
+    source_speech_to_chat: bool = Field(
+        default=False,
+        description="Сегмент с серверного speech-to-chat; авто-STT канала на сообщение не ставится.",
+    )
+
+
+class VideoAttachmentContent(BaseModel):
+    """Видеовложение в сообщении (запись звонка и т.п.)."""
+
+    file_id: str = Field(description="Идентификатор файла в системе.")
+    filename: str = Field(description="Оригинальное имя файла.")
+    mime_type: str = Field(description="MIME-тип, например video/mp4.")
+    size: int = Field(description="Размер файла в байтах.")
+    duration_ms: int | None = Field(
+        default=None,
+        description="Длительность в миллисекундах, если известна.",
+    )
+    transcription_status: AudioTranscriptionStatus = Field(
+        default=AudioTranscriptionStatus.IDLE,
+        description="Статус расшифровки аудиодорожки.",
     )
     transcription_text: str | None = Field(
         default=None,

@@ -22,7 +22,12 @@ from core.utils.domain import is_local
 
 logger = logging.getLogger(__name__)
 
-_SERVICE_PREFIXES: tuple[str, ...] = ("flows", "crm", "rag", "sync", "frontend")
+_SERVICE_PREFIXES: tuple[str, ...] = ("flows", "crm", "rag", "sync", "documents", "frontend")
+
+# Где публичный первый сегмент пути не совпадает с ключом get_service_url / SERVER__*_SERVICE_URL.
+_PREFIX_TO_SERVICE_URL_KEY: dict[str, str] = {
+    "documents": "office",
+}
 
 _HOP_BY_HOP_REQUEST: FrozenSet[str] = frozenset(
     {
@@ -75,7 +80,8 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
         if target == self._service_name:
             return await call_next(request)
 
-        base = settings.server.get_service_url(target).rstrip("/")
+        url_key = _PREFIX_TO_SERVICE_URL_KEY.get(target, target)
+        base = settings.server.get_service_url(url_key).rstrip("/")
         query = request.url.query
         upstream = f"{base}{path}"
         if query:
@@ -83,7 +89,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
 
         parsed = urlparse(base)
         if not parsed.netloc:
-            raise RuntimeError(f"Некорректный URL сервиса {target}: {base!r}")
+            raise RuntimeError(f"Некорректный URL сервиса {url_key} (path {target}): {base!r}")
 
         # Исходный Host от браузера (qqq.lvh.me:8002), иначе CompanyResolver на flows/crm/rag
         # получает localhost:8001 и теряет субдомен — редирект на select-company.

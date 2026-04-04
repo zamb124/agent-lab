@@ -7,10 +7,12 @@ import datetime
 import pytest
 
 from apps.scheduler.main import (
+    CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
     CALENDAR_SYNC_TASK_NAME,
     SYSTEM_SCHEDULER_COMPANY_ID,
     on_startup,
 )
+from core.config.models import CalendarSyncConfig
 from core.scheduler.models import PlatformScheduleType, ScheduledTaskStatus
 
 
@@ -180,36 +182,43 @@ class TestFrontendSchedulerApi:
 @pytest.mark.asyncio
 async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -> None:
     class _FakeSettings:
-        class _CalendarSync:
-            enabled = True
-            cron = "*/1 * * * *"
-
-        calendar_sync = _CalendarSync()
+        calendar_sync = CalendarSyncConfig(
+            enabled=True,
+            cron="*/1 * * * *",
+        )
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
-            self.created_request = None
+            self.created_requests: list = []
 
         async def list(self, company_id, filters):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
-            assert filters.task_name == CALENDAR_SYNC_TASK_NAME
-            return []
+            if filters.task_name == CALENDAR_SYNC_TASK_NAME:
+                return []
+            if filters.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
+                return []
+            raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
         async def create(self, company_id, user_id, request):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
             assert user_id is None
-            self.created_request = request
-            return type("CreatedTask", (), {"id": "task-1", "schedule_id": "schedule-1"})()
+            self.created_requests.append(request)
+            n = len(self.created_requests)
+            return type("CreatedTask", (), {"id": f"task-{n}", "schedule_id": f"schedule-{n}"})()
 
     fake_service = _FakeSchedulerService()
     fake_container = type("Container", (), {"scheduler_service": fake_service})()
 
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
-    assert fake_service.created_request is not None
-    assert fake_service.created_request.task_name == CALENDAR_SYNC_TASK_NAME
-    assert fake_service.created_request.schedule_type == PlatformScheduleType.CRON
-    assert fake_service.created_request.cron == "*/1 * * * *"
+    assert len(fake_service.created_requests) == 2
+    names = {r.task_name for r in fake_service.created_requests}
+    assert names == {CALENDAR_SYNC_TASK_NAME, CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME}
+    by_name = {r.task_name: r for r in fake_service.created_requests}
+    assert by_name[CALENDAR_SYNC_TASK_NAME].schedule_type == PlatformScheduleType.CRON
+    assert by_name[CALENDAR_SYNC_TASK_NAME].cron == "*/1 * * * *"
+    assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].schedule_type == PlatformScheduleType.CRON
+    assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].cron == "*/1 * * * *"
 
 
 @pytest.mark.asyncio
@@ -217,25 +226,35 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
     paused_task = type("PausedTask", (), {"id": "paused-1", "status": ScheduledTaskStatus.PAUSED})()
 
     class _FakeSettings:
-        class _CalendarSync:
-            enabled = True
-            cron = "*/1 * * * *"
-
-        calendar_sync = _CalendarSync()
+        calendar_sync = CalendarSyncConfig(
+            enabled=True,
+            cron="*/1 * * * *",
+        )
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
             self.resumed_task_id = None
+            self.meeting_reminder_create = None
 
         async def list(self, company_id, filters):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
-            assert filters.task_name == CALENDAR_SYNC_TASK_NAME
-            return [paused_task]
+            if filters.task_name == CALENDAR_SYNC_TASK_NAME:
+                return [paused_task]
+            if filters.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
+                return []
+            raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
         async def resume(self, company_id, schedule_task_id):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
             self.resumed_task_id = schedule_task_id
             return type("ResumedTask", (), {"id": schedule_task_id, "schedule_id": "schedule-2"})()
+
+        async def create(self, company_id, user_id, request):
+            assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
+            assert user_id is None
+            assert request.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME
+            self.meeting_reminder_create = request
+            return type("CreatedTask", (), {"id": "reminder-1", "schedule_id": "schedule-rem-1"})()
 
     fake_service = _FakeSchedulerService()
     fake_container = type("Container", (), {"scheduler_service": fake_service})()
@@ -243,3 +262,5 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
     assert fake_service.resumed_task_id == "paused-1"
+    assert fake_service.meeting_reminder_create is not None
+    assert fake_service.meeting_reminder_create.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME

@@ -26,6 +26,10 @@ export class ChannelSettingsModal extends PlatformModal {
         _editAvatarUrl: { state: true },
         _savingProfile: { state: true },
         _savingMute: { state: true },
+        _transcribeVoice: { state: true },
+        _savingTranscribeVoice: { state: true },
+        _speechToChat: { state: true },
+        _savingSpeechToChat: { state: true },
     };
 
     static styles = [
@@ -355,6 +359,10 @@ export class ChannelSettingsModal extends PlatformModal {
         this._editAvatarUrl = '';
         this._savingProfile = false;
         this._savingMute = false;
+        this._transcribeVoice = false;
+        this._savingTranscribeVoice = false;
+        this._speechToChat = false;
+        this._savingSpeechToChat = false;
     }
 
     connectedCallback() {
@@ -405,6 +413,14 @@ export class ChannelSettingsModal extends PlatformModal {
         }
         this._editName = typeof ch.name === 'string' ? ch.name : '';
         this._editAvatarUrl = typeof ch.avatar_url === 'string' ? ch.avatar_url : '';
+        if (this.createMode && typeof ch.space_id === 'string' && ch.space_id !== '') {
+            const sp = this._spacesList.find((x) => x.id === ch.space_id);
+            this._transcribeVoice = sp?.transcribe_voice_messages === true;
+            this._speechToChat = sp?.speech_to_chat_enabled === true;
+        } else {
+            this._transcribeVoice = ch.transcribe_voice_messages === true;
+            this._speechToChat = ch.speech_to_chat_enabled === true;
+        }
     }
 
     async _loadMembers() {
@@ -477,12 +493,15 @@ export class ChannelSettingsModal extends PlatformModal {
             const syncApi = this.services.get('syncApi');
             const created = await syncApi.createChannel(spaceId, name);
             const url = this._editAvatarUrl.trim();
+            const patch = {
+                transcribe_voice_messages: this._transcribeVoice,
+                speech_to_chat_enabled: this._speechToChat,
+            };
             if (url !== '') {
-                await syncApi.updateChannel(created.id, {
-                    name,
-                    avatar_url: url,
-                });
+                patch.name = name;
+                patch.avatar_url = url;
             }
+            await syncApi.updateChannel(created.id, patch);
             await SyncStore.loadChannels(syncApi);
             SyncStore.sanitizeChatSelectionAfterLoad();
             await SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, created.id);
@@ -519,6 +538,60 @@ export class ChannelSettingsModal extends PlatformModal {
             this.error(message);
         } finally {
             this._savingMute = false;
+        }
+    }
+
+    async _toggleTranscribeVoice(nextOn) {
+        const ch = this.channel;
+        if (!ch?.id || this.createMode) {
+            return;
+        }
+        if (typeof nextOn !== 'boolean') {
+            return;
+        }
+        this._savingTranscribeVoice = true;
+        this._error = null;
+        try {
+            const syncApi = this.services.get('syncApi');
+            const updated = await syncApi.updateChannel(ch.id, {
+                transcribe_voice_messages: nextOn,
+            });
+            SyncStore.mergeChannel(updated);
+            this.channel = updated;
+            this._transcribeVoice = nextOn;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this._error = message;
+            this.error(message);
+        } finally {
+            this._savingTranscribeVoice = false;
+        }
+    }
+
+    async _toggleSpeechToChat(nextOn) {
+        const ch = this.channel;
+        if (!ch?.id || this.createMode) {
+            return;
+        }
+        if (typeof nextOn !== 'boolean') {
+            return;
+        }
+        this._savingSpeechToChat = true;
+        this._error = null;
+        try {
+            const syncApi = this.services.get('syncApi');
+            const updated = await syncApi.updateChannel(ch.id, {
+                speech_to_chat_enabled: nextOn,
+            });
+            SyncStore.mergeChannel(updated);
+            this.channel = updated;
+            this._speechToChat = nextOn;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this._error = message;
+            this.error(message);
+        } finally {
+            this._savingSpeechToChat = false;
         }
     }
 
@@ -733,6 +806,54 @@ export class ChannelSettingsModal extends PlatformModal {
                                 @change=${(e) => {
                                     const nextMuted = e.detail.value === true;
                                     this._toggleMute(nextMuted);
+                                }}
+                            ></platform-switch>
+                        </div>
+                        <div class="switch-row">
+                            <span class="switch-label">${this._tp('channel_settings.transcribe_voice_label')}</span>
+                            <platform-switch
+                                .checked=${this._transcribeVoice}
+                                .disabled=${this._savingTranscribeVoice}
+                                @change=${(e) => {
+                                    const nextOn = e.detail.value === true;
+                                    this._toggleTranscribeVoice(nextOn);
+                                }}
+                            ></platform-switch>
+                        </div>
+                        <div class="switch-row">
+                            <span class="switch-label">${this._tp('channel_settings.speech_to_chat_label')}</span>
+                            <platform-switch
+                                .checked=${this._speechToChat}
+                                .disabled=${this._savingSpeechToChat}
+                                @change=${(e) => {
+                                    const nextOn = e.detail.value === true;
+                                    this._toggleSpeechToChat(nextOn);
+                                }}
+                            ></platform-switch>
+                        </div>
+                    </div>
+                `
+                : ''}
+
+            ${createMode
+                ? html`
+                    <div class="field">
+                        <label class="field-label">${this._tp('channel_settings.new_channel_flags_heading')}</label>
+                        <div class="switch-row">
+                            <span class="switch-label">${this._tp('channel_settings.transcribe_voice_label')}</span>
+                            <platform-switch
+                                .checked=${this._transcribeVoice}
+                                @change=${(e) => {
+                                    this._transcribeVoice = e.detail.value === true;
+                                }}
+                            ></platform-switch>
+                        </div>
+                        <div class="switch-row">
+                            <span class="switch-label">${this._tp('channel_settings.speech_to_chat_label')}</span>
+                            <platform-switch
+                                .checked=${this._speechToChat}
+                                @change=${(e) => {
+                                    this._speechToChat = e.detail.value === true;
                                 }}
                             ></platform-switch>
                         </div>

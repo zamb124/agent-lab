@@ -1627,12 +1627,22 @@ class TestA2ARealisticStreaming:
 
         events = _parse_sse(resp.text)
         artifact_events = [e for e in events if e.get("result", {}).get("kind") == "artifact-update"]
+        text_stream_events = [
+            e
+            for e in artifact_events
+            if not str((e.get("result", {}).get("artifact") or {}).get("name") or "").startswith(
+                "node_"
+            )
+            and any(
+                p.get("kind") == "text"
+                for p in (e.get("result", {}).get("artifact") or {}).get("parts", [])
+            )
+        ]
 
-        assert len(artifact_events) >= 2, "Should have multiple artifact chunks"
+        assert len(text_stream_events) >= 2, "Should have multiple text artifact chunks"
 
-        # Все artifactId должны быть одинаковыми
         artifact_ids = set()
-        for event in artifact_events:
+        for event in text_stream_events:
             result = event.get("result", {})
             artifact_id = result.get("artifact", {}).get("artifactId")
             if artifact_id:

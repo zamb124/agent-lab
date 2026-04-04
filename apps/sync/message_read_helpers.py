@@ -80,4 +80,5 @@ def message_read_from_entity(
         reactions=_normalize_reactions(m.reactions),
         forwarded_from=forwarded_from,
         mentioned_user_ids=mids,
+        call_id=m.call_id,
     )

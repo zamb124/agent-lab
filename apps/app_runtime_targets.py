@@ -17,4 +17,5 @@ from apps.scheduler.main import app as scheduler_app
 from apps.scheduler.scheduler import scheduler as platform_scheduler
 from apps.sync.main import app as sync_app
 from apps.sync_worker.worker import worker_app as sync_taskiq_worker_app
+from apps.office.main import app as office_app
 

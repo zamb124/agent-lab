@@ -31,7 +31,7 @@ LitElement (Lit)
 
 **Import map (SPA):** минимум `lit`, `@platform/lib/`, `@platform/services/`; сервисные специфичные записи (например `@livekit/client` в Sync, дополнительные `lit/directives/*` по факту импортов) добавляются точечно в `apps/<service>/ui/index.html`. Viewport `content` — как в `core/frontend/viewport.py`.
 
-**Общий блок import map (crm / rag / sync и отдельные shell вроде `call-join.html`):** `lit`, `lit/decorators.js`, `lit/directives/class-map.js`, `lit/directives/repeat.js`, `lit/directives/unsafe-html.js`, `lit/directives/when.js`, `@platform/lib/`, `@platform/services/`; у Sync дополнительно `@livekit/client`. Flows: добавить префикс `lit/` при необходимости поддерева; frontend — точечные директивы (например `unsafe-svg`) по импортам. Ранний `app-loader` в `<head>` (как в `apps/frontend/ui/index.html` и `apps/flows/ui/index.html`) желателен для единого старта; crm/rag/sync подключают тот же модуль через `import '/static/core/lib/components/app-loader.js'`.
+**Общий блок import map (crm / rag / sync / office и отдельные shell вроде `call-join.html`):** `lit`, `lit/decorators.js`, `lit/directives/class-map.js`, `lit/directives/repeat.js`, `lit/directives/unsafe-html.js`, `lit/directives/when.js`, `lit/directives/guard.js` → `guard.min.js` в `core/frontend/static/assets/js/lit/directives/`, `@platform/lib/`, `@platform/services/`; у Sync дополнительно `@livekit/client`. Flows: добавить префикс `lit/` при необходимости поддерева; frontend — точечные директивы (например `unsafe-svg`) по импортам. Ранний `app-loader` в `<head>` (как в `apps/frontend/ui/index.html` и `apps/flows/ui/index.html`) желателен для единого старта; crm/rag/sync подключают тот же модуль через `import '/static/core/lib/components/app-loader.js'`.
 
 **Регрессия канона:** локально **`make check-ui-canon`** ([`scripts/check_ui_canon.sh`](../../scripts/check_ui_canon.sh)) — нет `extends LitElement`, нет импортов `from '/static/core/lib/...'` в `apps/**/*.js`, нет `ServiceRegistry` в `apps/**/*.js`.
 
@@ -112,7 +112,9 @@ apps/{service}/ui/
 └── services/                    # API сервисы
 ```
 
-**Сервис frontend (shell):** сайдбар [`apps/frontend/ui/components/frontend-sidebar.js`](../../apps/frontend/ui/components/frontend-sidebar.js) и блок «Быстрые действия» на dashboard используют `<platform-icon>` и токены `--text-primary` / `--accent` для контраста. Каталог flows для UI (модалка создания embed) — `FlowsCatalogService` в `apps/frontend/ui/services/flows-catalog.service.js`, регистрация `this.services.register('flowsCatalog', ...)` в `FrontendApp`; HTTP `GET /flows/api/v1/flows/` (тот же origin, `super('')` у `BaseService`).
+**Документы (`apps/office/ui`):** канон как у RAG/Sync — **`PlatformApp`**, **`registerCore('/documents')`**, бандл **`documents.json`**. См. **`office.mdc`**.
+
+**Сервис frontend (shell):** сайдбар [`apps/frontend/ui/components/frontend-sidebar.js`](../../apps/frontend/ui/components/frontend-sidebar.js) на `<platform-service-sidebar>`; блок «Быстрые действия» на dashboard использует `<platform-icon>` и токены `--text-primary` / `--accent` для контраста. Каталог flows для UI (модалка создания embed) — `FlowsCatalogService` в `apps/frontend/ui/services/flows-catalog.service.js`, регистрация `this.services.register('flowsCatalog', ...)` в `FrontendApp`; HTTP `GET /flows/api/v1/flows/` (тот же origin, `super('')` у `BaseService`).
 
 **FrontendApp: URL и `ui.currentView`:** в `FrontendStore` включён `persist`. Канонические пути консоли задаются в `apps/frontend/ui/store/frontend.store.js` (`CONSOLE_VIEW_TO_PATH`, экспорт `getConsoleViewForPath`). `setCurrentView(view)` делает `history.pushState` на соответствующий путь (кроме `settings`, если pathname уже `/settings` или `/settings/...`). Синхронизация из адресной строки и кнопки «Назад»: `_syncCurrentViewFromPathname()` вызывает `setCurrentView(..., { skipUrlSync: true })`; слушатель `popstate` в `FrontendApp`. Чтобы заход по `/dashboard` не показывал последний сохранённый таб, `_syncCurrentViewFromPathname` выполняется в `connectedCallback` до первого рендера. Новый пункт меню shell → `case` в `_renderContent`, путь в `_isKnownRoute`, пара `view`/`path` в `CONSOLE_VIEW_TO_PATH` / `getConsoleViewForPath` и при необходимости `RouteRule` в `route_config.py`.
 
@@ -196,9 +198,10 @@ class MyModal extends GlassModal {
 ## IconService и `platform-icon`
 
 - Реализация: `core/frontend/static/services/icon.service.js` — словарь **`ICON_MAP`**: логическое имя иконки → базовое имя файла в `core/frontend/static/assets/icons/{name}.svg`.
+- **Типы файлов (цветные SVG):** каталог **`core/frontend/static/assets/icons/files_icons/`** — не через `ICON_MAP`; API **`IconService.loadFileIcon`**, **`loadFileIconForOfficeDocumentType`**, **`resolveFileIconKey(filename, mimeType)`** (экспорт из `icon.service.js` / `@platform/services/`), список имён **`FILE_ICON_BASE_NAMES`**. Вложения и строки «файл по имени/MIME» везде: **`<platform-icon file-icon name="${resolveFileIconKey(...)}">`**; монохромного глифа «файл» в корне **`assets/icons/`** нет (не добавлять `file.svg` обратно). Подробности: **`office.mdc`**.
 - Новое имя без дублирования SVG: добавить ключ в `ICON_MAP` (например `'llm_node': 'agent'` — то же изображение, другое имя для UI).
 - Для продуктовых экранов (включая CRM/Figma-экраны) запрещены emoji/символьные псевдоиконки (`✓`, `✕`, `🌐` и т.п.) в шаблонах: только `<platform-icon name="...">` + имя из `ICON_MAP`; если иконки нет — сначала добавить SVG в `assets/icons`, потом ключ в `ICON_MAP`.
-- Компонент: `core/frontend/static/lib/components/platform-icon.js` — атрибут **`name`** должен существовать в `ICON_MAP`, иначе загрузка падает с ошибкой в консоль.
+- Компонент: `core/frontend/static/lib/components/platform-icon.js` — без **`file-icon`**: **`name`** в `ICON_MAP` (иначе ошибка в консоль). С **`file-icon`**: **`name`** — алиас/basename из **`files_icons`** (см. `IconService.loadFileIcon`). Для монохромных SVG на корневом **`<svg>`** не задавать **`fill: none` через CSS**: **`fill` наследуется**, иначе дочерние **`circle`** с **`fill="currentColor"`** (например **`list`**) теряют заливку и рисуются как кольца вместе с **`stroke-width`**.
 - Для визуального выбора иконки в формах использовать core-компонент `platform-icon-picker` (`core/frontend/static/lib/components/platform-icon-picker.js`, side-effect import `@platform/lib/components/platform-icon-picker.js`), а не `input + datalist` с ручным вводом.
 - Редактор flows (`apps/flows/ui/`): узел типа **`llm_node`** везде использует **`name="llm_node"`** (сайдбар типов, канва, `llm-node-editor`), не `agent`.
 - Трейсинг (`apps/flows/ui/modals/tracing-modal.js`): иконки span — `<platform-icon>`, не эмодзи. Соответствие `operation_name` → `name` согласовано с канвасом (`flow-canvas` `NODE_TYPE_ICON_NAMES` / `TRACE_NODE_TYPE_ICONS` в модалке): `flow.*` → workflow, `node.{type}.*` → иконка типа ноды (неизвестный тип → box), `llm_node.*` / `agent.*` → llm_node, `react.iteration*` → refresh, `llm.*` → bot, `tool.*` → tool, `interrupt.*` → breakpoint, `request.*` → globe, `prompt.build.*` → chat, иначе terminal.
@@ -298,6 +301,8 @@ class MyComponent extends PlatformElement {
 ```
 
 **Исключение:** `ServiceRegistry` импортируется ТОЛЬКО в `PlatformApp.initServices()`.
+
+**Standalone HTML в apps без полного `*App`:** ранний `registerCore` через **`PlatformServices`** из **`core/frontend/static/lib/services/platform-services-bootstrap.js`** — в `apps/**/*.js` не должно быть подстроки **`ServiceRegistry`** (требование **`make check-ui-canon`**).
 
 ---
 
@@ -467,18 +472,20 @@ export class MyForm extends PlatformElement {
 
 ---
 
-## Layout: Platform Sidebar
+## Layout: Platform Sidebar (shell сервисов)
 
-**Унифицированный sidebar с collapsed/mobile режимами:**
+**Канон для боковой колонки SPA:** [`platform-service-sidebar`](../../core/frontend/static/lib/components/layout/platform-service-sidebar.js) — единая оболочка: прокидывает слоты внутрь [`platform-sidebar`](../../core/frontend/static/lib/components/layout/platform-sidebar.js), отражает на хосте атрибуты **`collapsed`** и **`mobile-open`** (для стилей приложения вида `platform-service-sidebar[collapsed] .nav-label`), пробрасывает события **`collapse-change`** / **`mobile-change`**, методы **`toggleMobile()`** / **`closeMobile()`** для вызова из `*App` (бургер). Сервисный компонент (`*-sidebar` в `apps/*/ui`) рендерит один `<platform-service-sidebar>` и наполнение слотов; не дублировать отдельный `<platform-sidebar>` в приложениях.
+
+**`platform-sidebar`** (внутренний): кнопка свернуть/развернуть (chevron, `aria-expanded`, i18n `shell.sidebar.collapse` / `shell.sidebar.expand`) — при **развёрнутом** сайдбаре в одной строке с логотипом (`margin-left: auto` у `.sidebar-logo > .collapse-btn`); при **collapsed** — отдельная строка **`.sidebar-collapse-row`** между логотипом и `header`/nav, чтобы шеврон не был под иконкой сервиса. Слоты `logo` / `header` / default / `footer`, mobile overlay. Клик по логотипу не переключает collapsed.
 
 ```javascript
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/sidebar-section.js';
 import '@platform/lib/components/layout/sidebar-nav-item.js';
 ```
 
-### PlatformSidebar Properties
+### PlatformServiceSidebar / PlatformSidebar (пропы оболочки)
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -489,11 +496,11 @@ import '@platform/lib/components/layout/sidebar-nav-item.js';
 | `width` | String | '280px' | Ширина развернутого |
 | `collapsed-width` | String | '72px' | Ширина свернутого |
 
-### Slots
+### Slots (на `platform-service-sidebar`, те же имена у внутреннего `platform-sidebar`)
 
 | Slot | Description |
 |------|-------------|
-| `logo` | Кастомный логотип |
+| `logo` | Опционально: дочерний узел со `slot="logo"`; иначе используются `logo-src` / `logo-text` (пустой проброс слота ломал бы картинку) |
 | `header` | Контент после лого (actions, selectors) |
 | *(default)* | Основной контент (nav items, sections) |
 | `footer` | Footer (user, links) |
@@ -507,22 +514,29 @@ class MySidebar extends PlatformElement {
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
     };
 
-    toggleCollapse() {
-        this.collapsed = !this.collapsed;
-        this.emit('collapse-change', { collapsed: this.collapsed });
+    _shell() {
+        return this.renderRoot?.querySelector('platform-service-sidebar');
+    }
+
+    closeMobile() {
+        this._shell()?.closeMobile();
     }
 
     render() {
         return html`
-            <platform-sidebar
+            <platform-service-sidebar
                 logo-src="/static/logo.svg"
                 logo-text="My App"
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
+                @mobile-change=${(e) => {
+                    this.mobileOpen = e.detail.open;
+                }}
             >
-                <div slot="header">
-                    <button @click=${this.toggleCollapse}>Toggle</button>
-                </div>
+                <div slot="header">…</div>
 
                 <sidebar-section title="Main" icon="folder">
                     <button class="nav-item active">Dashboard</button>
@@ -532,7 +546,7 @@ class MySidebar extends PlatformElement {
                 <div slot="footer">
                     <platform-user block></platform-user>
                 </div>
-            </platform-sidebar>
+            </platform-service-sidebar>
         `;
     }
 }
@@ -543,6 +557,8 @@ class MySidebar extends PlatformElement {
 Элементы скрываемые в collapsed режиме:
 - `.sidebar-text`, `.sidebar-section-title`
 - `::slotted([data-hide-collapsed])`
+
+В **`slot="footer"`** у `platform-user` нужен атрибут **`block`**: иначе `:host` остаётся `inline-block` без `width: 100%`, и карточка профиля визуально шире колонки — её обрезает **`overflow-x: hidden`** у `.sidebar-content` в `sidebar.styles.js`.
 
 `<platform-user>` внутри свёрнутого `platform-sidebar` сам переходит в компактный вид (`:host-context(platform-sidebar[collapsed])`): скрываются имя/email и chevron; кнопка без «таблетки» (прозрачный фон, без рамки и тени), остаётся только круглый аватар 40×40 по центру. Выпадающее меню в этом режиме в `position: fixed` с координатами через `--user-menu-fixed-*` (иначе `overflow-x` у `.sidebar-content` обрезает меню по ширине колонки).
 
@@ -624,8 +640,8 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { BaseStore } from '@platform/lib/store/BaseStore.js';
 import { BaseService } from '@platform/lib/services/BaseService.js';
 
-// Layout
-import '@platform/lib/components/layout/platform-sidebar.js';
+// Layout (shell колонки — platform-service-sidebar)
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/sidebar-section.js';
 
 // Стили

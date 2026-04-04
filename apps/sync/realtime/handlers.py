@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from apps.sync.channel_lane_preview import lane_preview_from_content_row
 from apps.sync.channel_read_helpers import channel_read_entity_minimal
 from apps.sync.db.models import (
-    SyncCallMeeting,
     SyncCallRecording,
     SyncChannel,
     SyncGitResourceRef,
@@ -22,7 +21,7 @@ from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.db.repositories.meeting_repository import CallMeetingRepository, CallRecordingRepository
+from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
@@ -32,6 +31,7 @@ from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.messages import (
     AudioAttachmentContent,
     AudioTranscriptionStatus,
+    CallBoundaryContent,
     MessageContentModel,
     MessageContentType,
     MessageCreate,
@@ -39,7 +39,7 @@ from apps.sync.models.messages import (
     MessageStatus,
     TextPlainContent,
 )
-from apps.sync.models.meetings import CallMeetingRead, CallRecordingRead
+from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.spaces import SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadRead
 from apps.sync.realtime.call_handlers import (
@@ -51,7 +51,6 @@ from apps.sync.realtime.call_handlers import (
 )
 from apps.sync.realtime.commands import (
     CallTransferAdminPayload,
-    CallMeetingExportToCrmPayload,
     CallHangupPayload,
     CallRecordingStartPayload,
     CallRecordingStopPayload,
@@ -69,6 +68,8 @@ from apps.sync.realtime.commands import (
     MessagesReactPayload,
     MessagesSendPayload,
     MessagesTranscribeAudioPayload,
+    MessagesTranscribeCallPayload,
+    MessagesTranscribeVideoPayload,
     SpacesCreatePayload,
     SpacesUpdatePayload,
     ThreadsCreatePayload,
@@ -81,7 +82,6 @@ from apps.sync.realtime.events import (
     event_channel_read_updated,
     event_channel_typing,
     event_call_admin_changed,
-    event_call_export_crm_done,
     event_call_recording_started,
     event_call_recording_stopped,
     event_git_resource_upserted,
@@ -97,13 +97,35 @@ from apps.sync.realtime.notification_tasks import (
     deliver_channel_message_notification,
     deliver_sync_mention_notification,
 )
+from apps.sync.sender_display import sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
+from core.files.models import VideoAttachmentContent
 from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 
 logger = get_logger(__name__)
+
+
+async def _maybe_start_speech_to_chat_poll(
+    *,
+    call_id: str,
+    company_id: str,
+    channel_id: str,
+    livekit_room_name: str | None,
+    channels: ChannelRepository,
+) -> None:
+    if livekit_room_name is None or livekit_room_name == "":
+        return
+    ch = await channels.get(channel_id)
+    if ch is None:
+        raise ValueError(f"Канал {channel_id} не найден.")
+    if not ch.speech_to_chat_enabled:
+        return
+    from apps.sync.realtime.tasks import sync_speech_to_chat_poll_task
+
+    await sync_speech_to_chat_poll_task.kiq(call_id=call_id, company_id=company_id)
 
 
 class CommandExecutionResult:
@@ -152,7 +174,6 @@ async def _stop_and_finalize_recording(
     company_id: str,
     actor_user_id: str,
     call_recordings: CallRecordingRepository,
-    call_meetings: CallMeetingRepository,
 ) -> CallRecordingRead:
     if recording.provider_job_id is None or recording.provider_job_id == "":
         raise ValueError(
@@ -200,21 +221,6 @@ async def _stop_and_finalize_recording(
     updated_recording = await call_recordings.get(recording.recording_id)
     if updated_recording is None:
         raise RuntimeError("Запись пропала после обновления.")
-    meeting = await call_meetings.get_by_recording(updated_recording.recording_id, company_id)
-    if meeting is None:
-        meeting = SyncCallMeeting(
-            meeting_id=uuid4().hex,
-            call_id=updated_recording.call_id,
-            recording_id=updated_recording.recording_id,
-            company_id=updated_recording.company_id,
-            channel_id=updated_recording.channel_id,
-            space_id=updated_recording.space_id,
-            summary_json={},
-            export_status="pending",
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
-        )
-        await call_meetings.create(meeting)
     from apps.sync.realtime.tasks import sync_finalize_recording_task
     await sync_finalize_recording_task.kiq(
         recording_id=updated_recording.recording_id,
@@ -316,6 +322,7 @@ async def _normalize_message_create_mentions(
                 parent_message_id=body.parent_message_id,
                 contents=body.contents,
                 mentioned_user_ids=None,
+                call_id=body.call_id,
             )
         c = body.contents[first_text_idx]
         if c.type != MessageContentType.TEXT_PLAIN:
@@ -324,6 +331,7 @@ async def _normalize_message_create_mentions(
                 parent_message_id=body.parent_message_id,
                 contents=body.contents,
                 mentioned_user_ids=None,
+                call_id=body.call_id,
             )
         d = c.data
         if not isinstance(d, TextPlainContent):
@@ -340,6 +348,7 @@ async def _normalize_message_create_mentions(
             parent_message_id=body.parent_message_id,
             contents=new_contents,
             mentioned_user_ids=None,
+            call_id=body.call_id,
         )
 
     if raw_mentions is None:
@@ -364,6 +373,7 @@ async def _normalize_message_create_mentions(
             parent_message_id=body.parent_message_id,
             contents=new_contents,
             mentioned_user_ids=None,
+            call_id=body.call_id,
         )
 
     if first_text_idx is None:
@@ -385,6 +395,7 @@ async def _normalize_message_create_mentions(
         parent_message_id=body.parent_message_id,
         contents=new_contents,
         mentioned_user_ids=None,
+        call_id=body.call_id,
     )
 
 
@@ -423,6 +434,7 @@ def _set_audio_transcription_state(
             transcription_status=status,
             transcription_text=transcription_text,
             transcription_error=transcription_error,
+            source_speech_to_chat=block.data.source_speech_to_chat,
         )
         next_contents.append(
             MessageContentModel(
@@ -432,6 +444,120 @@ def _set_audio_transcription_state(
             )
         )
     return next_contents
+
+
+def _find_first_video_content_index(contents: list[MessageContentModel]) -> int | None:
+    sorted_items = sorted(enumerate(contents), key=lambda t: t[1].order)
+    for original_index, content in sorted_items:
+        if content.type == MessageContentType.FILE_VIDEO:
+            return original_index
+    return None
+
+
+def _set_video_transcription_state(
+    contents: list[MessageContentModel],
+    *,
+    status: AudioTranscriptionStatus,
+    transcription_text: str | None,
+    transcription_error: str | None,
+) -> list[MessageContentModel]:
+    video_index = _find_first_video_content_index(contents)
+    if video_index is None:
+        raise ValueError("В сообщении нет видеоконтента file/video.")
+    next_contents: list[MessageContentModel] = []
+    for index, block in enumerate(contents):
+        if index != video_index:
+            next_contents.append(block)
+            continue
+        if not isinstance(block.data, VideoAttachmentContent):
+            raise ValueError("file/video: ожидается VideoAttachmentContent.")
+        next_video = VideoAttachmentContent(
+            file_id=block.data.file_id,
+            filename=block.data.filename,
+            mime_type=block.data.mime_type,
+            size=block.data.size,
+            duration_ms=block.data.duration_ms,
+            transcription_status=status,
+            transcription_text=transcription_text,
+            transcription_error=transcription_error,
+        )
+        next_contents.append(
+            MessageContentModel(
+                type=block.type,
+                data=next_video,
+                order=block.order,
+            )
+        )
+    return next_contents
+
+
+async def _ensure_actor_may_send_to_channel(
+    *,
+    channel_id: str,
+    company_id: str,
+    actor_user_id: str,
+    body: MessageCreate,
+    channels: ChannelRepository,
+    calls: CallRepository | None,
+) -> None:
+    is_member = await channels.is_member(channel_id, actor_user_id, company_id=company_id)
+    if is_member:
+        if body.call_id is None:
+            return
+        if calls is None:
+            raise RuntimeError("CallRepository обязателен при call_id в сообщении.")
+        call = await calls.get_call(body.call_id, company_id)
+        if call.channel_id != channel_id:
+            raise ValueError("call_id не относится к этому каналу.")
+        return
+    if not actor_user_id.startswith("guest:"):
+        raise PermissionError(f"Пользователь не состоит в канале {channel_id}.")
+    if body.call_id is None:
+        raise PermissionError("Гостю нужен call_id в сообщении.")
+    if calls is None:
+        raise RuntimeError("CallRepository обязателен для сообщений гостя.")
+    call = await calls.get_call(body.call_id, company_id)
+    if call.channel_id != channel_id:
+        raise ValueError("call_id не относится к этому каналу.")
+    if call.status not in ("ringing", "active"):
+        raise PermissionError("Звонок не активен.")
+    participants = await calls.list_participants(body.call_id)
+    mine = next((p for p in participants if p.user_id == actor_user_id), None)
+    if mine is None or mine.status != "joined":
+        raise PermissionError("Гость не в этом звонке.")
+
+
+async def _post_call_boundary_message(
+    *,
+    channel_id: str,
+    call_id: str,
+    phase: Literal["started", "ended"],
+    sender_user_id: str,
+    company_id: str,
+    messages: MessageRepository,
+    user_repository: Optional[UserRepository],
+) -> MessageRead:
+    body = MessageCreate(
+        thread_id=None,
+        parent_message_id=None,
+        contents=[
+            MessageContentModel(
+                type=MessageContentType.CALL_BOUNDARY,
+                data=CallBoundaryContent(call_id=call_id, phase=phase),
+                order=0,
+            )
+        ],
+        mentioned_user_ids=None,
+        call_id=call_id,
+    )
+    return await _send_message(
+        channel_id,
+        body,
+        actor_user_id=sender_user_id,
+        company_id=company_id,
+        messages=messages,
+        user_repository=user_repository,
+    )
 
 
 async def execute_command(
@@ -445,7 +571,6 @@ async def execute_command(
     user_repository: Optional[UserRepository] = None,
     calls: Optional[CallRepository] = None,
     call_recordings: Optional[CallRecordingRepository] = None,
-    call_meetings: Optional[CallMeetingRepository] = None,
 ) -> CommandExecutionResult:
     if cmd.type == "spaces.create":
         payload = SpacesCreatePayload.model_validate(cmd.payload)
@@ -465,7 +590,13 @@ async def execute_command(
 
     if cmd.type == "channels.create":
         payload = ChannelsCreatePayload.model_validate(cmd.payload)
-        channel = await _create_channel(payload.body, actor_user_id=cmd.actor_user_id, company_id=cmd.company_id, channels=channels)
+        channel = await _create_channel(
+            payload.body,
+            actor_user_id=cmd.actor_user_id,
+            company_id=cmd.company_id,
+            channels=channels,
+            spaces=spaces,
+        )
         return CommandExecutionResult(ok=True, result=channel, events=[event_channel_created(channel)])
 
     if cmd.type == "channels.update":
@@ -552,10 +683,14 @@ async def execute_command(
 
     if cmd.type == "messages.send":
         payload = MessagesSendPayload.model_validate(cmd.payload)
-        if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
-            raise PermissionError(
-                f"Пользователь не состоит в канале {payload.channel_id}."
-            )
+        await _ensure_actor_may_send_to_channel(
+            channel_id=payload.channel_id,
+            company_id=cmd.company_id,
+            actor_user_id=cmd.actor_user_id,
+            body=payload.body,
+            channels=channels,
+            calls=calls,
+        )
         normalized_body = await _normalize_message_create_mentions(
             payload.body,
             channel_id=payload.channel_id,
@@ -579,7 +714,43 @@ async def execute_command(
             actor_user_id=cmd.actor_user_id,
             channels=channels,
         )
-        return CommandExecutionResult(ok=True, result=message, events=[event_message_created(message)])
+        evs: list[RealtimeEvent] = [event_message_created(message)]
+        channel_entity = await channels.get(payload.channel_id)
+        if channel_entity is None:
+            raise ValueError(f"Канал {payload.channel_id} не найден.")
+        if channel_entity.transcribe_voice_messages:
+            audio_idx = _find_first_audio_content_index(normalized_body.contents)
+            if audio_idx is not None:
+                block = normalized_body.contents[audio_idx]
+                if isinstance(block.data, AudioAttachmentContent):
+                    if (
+                        block.data.transcription_status == AudioTranscriptionStatus.IDLE
+                        and not block.data.source_speech_to_chat
+                    ):
+                        if user_repository is None:
+                            raise ValueError("user_repository обязателен для авто-транскрипции.")
+                        processing_contents = _set_audio_transcription_state(
+                            list(message.contents),
+                            status=AudioTranscriptionStatus.PROCESSING,
+                            transcription_text=None,
+                            transcription_error=None,
+                        )
+                        edited_at = datetime.now(tz=UTC)
+                        await messages.replace_message_contents(message.id, processing_contents, edited_at)
+                        proc_entity = await messages.get_by_id_for_company(message.id, cmd.company_id)
+                        if proc_entity is None:
+                            raise RuntimeError("Сообщение пропало после запуска авто-транскрипции.")
+                        message = await _message_read_from_db(proc_entity, messages, user_repository)
+                        evs.append(event_message_updated(message))
+                        from apps.sync.realtime.tasks import sync_transcribe_audio_message_task
+
+                        await sync_transcribe_audio_message_task.kiq(
+                            channel_id=payload.channel_id,
+                            message_id=message.id,
+                            company_id=cmd.company_id,
+                            actor_user_id=cmd.actor_user_id,
+                        )
+        return CommandExecutionResult(ok=True, result=message, events=evs)
 
     if cmd.type == "messages.mark_read":
         payload = MessagesMarkReadPayload.model_validate(cmd.payload)
@@ -669,6 +840,71 @@ async def execute_command(
             events=[event_message_updated(updated_read)],
         )
 
+    if cmd.type == "messages.transcribe_video":
+        if user_repository is None:
+            raise ValueError("user_repository обязателен.")
+        payload = MessagesTranscribeVideoPayload.model_validate(cmd.payload)
+        if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+            raise ValueError("Нет доступа к каналу.")
+        source_message = await messages.get_by_id_for_company(payload.message_id, cmd.company_id)
+        if source_message is None:
+            raise ValueError("Сообщение не найдено.")
+        if source_message.channel_id != payload.channel_id:
+            raise ValueError("Несовпадение канала.")
+        if source_message.deleted_at is not None:
+            raise ValueError("Сообщение удалено.")
+        source_rows = await messages.list_contents(payload.message_id)
+        source_contents = [
+            MessageContentModel.model_validate(
+                {"type": row.type, "data": row.data, "order": row.order}
+            )
+            for row in source_rows
+        ]
+        processing_contents = _set_video_transcription_state(
+            source_contents,
+            status=AudioTranscriptionStatus.PROCESSING,
+            transcription_text=None,
+            transcription_error=None,
+        )
+        edited_at = datetime.now(tz=UTC)
+        await messages.replace_message_contents(payload.message_id, processing_contents, edited_at)
+        updated_entity = await messages.get_by_id_for_company(payload.message_id, cmd.company_id)
+        if updated_entity is None:
+            raise RuntimeError("Сообщение пропало после запуска расшифровки.")
+        updated_read = await _message_read_from_db(updated_entity, messages, user_repository)
+        from apps.sync.realtime.tasks import sync_transcribe_video_message_task
+
+        await sync_transcribe_video_message_task.kiq(
+            channel_id=payload.channel_id,
+            message_id=payload.message_id,
+            company_id=cmd.company_id,
+            actor_user_id=cmd.actor_user_id,
+        )
+        return CommandExecutionResult(
+            ok=True,
+            result=updated_read,
+            events=[event_message_updated(updated_read)],
+        )
+
+    if cmd.type == "messages.transcribe_call":
+        if calls is None:
+            raise RuntimeError("CallRepository не передан для messages.transcribe_call.")
+        payload = MessagesTranscribeCallPayload.model_validate(cmd.payload)
+        if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+            raise ValueError("Нет доступа к каналу.")
+        call = await calls.get_call(payload.call_id, cmd.company_id)
+        if call.channel_id != payload.channel_id:
+            raise ValueError("call_id не относится к этому каналу.")
+        from apps.sync.realtime.tasks import sync_aggregate_call_transcript_task
+
+        await sync_aggregate_call_transcript_task.kiq(
+            channel_id=payload.channel_id,
+            call_id=payload.call_id,
+            company_id=cmd.company_id,
+            actor_user_id=cmd.actor_user_id,
+        )
+        return CommandExecutionResult(ok=True, result=None, events=[])
+
     if cmd.type == "git.resources.upsert":
         payload = GitResourcesUpsertPayload.model_validate(cmd.payload)
         ref = await _upsert_git_resource(payload.body, company_id=cmd.company_id, git_refs=git_refs)
@@ -682,28 +918,57 @@ async def execute_command(
         "call.recording.start",
         "call.recording.stop",
         "call.admin.transfer",
-        "call.meeting.export_to_crm",
     ):
         if calls is None:
             raise RuntimeError("CallRepository не передан в execute_command для call.* команд.")
-        if cmd.type in ("call.recording.start", "call.recording.stop", "call.admin.transfer", "call.meeting.export_to_crm"):
+        if cmd.type in ("call.recording.start", "call.recording.stop", "call.admin.transfer"):
             if call_recordings is None:
                 raise RuntimeError("CallRecordingRepository не передан в execute_command для call.* команд.")
-            if call_meetings is None:
-                raise RuntimeError("CallMeetingRepository не передан в execute_command для call.* команд.")
 
         if cmd.type == "call.invite":
             out, evs = await handle_call_invite(
                 cmd, calls=calls, channels=channels, user_repository=user_repository
             )
+            member_ids = await channels.list_member_user_ids(out.channel_id, company_id=cmd.company_id)
+            if user_repository is None:
+                raise ValueError("user_repository обязателен для маркера звонка в канале.")
+            started_read = await _post_call_boundary_message(
+                channel_id=out.channel_id,
+                call_id=out.call_id,
+                phase="started",
+                sender_user_id=out.created_by_user_id,
+                company_id=cmd.company_id,
+                messages=messages,
+                user_repository=user_repository,
+            )
+            evs.append(event_message_created(started_read))
+            if len(member_ids) <= 1:
+                now = datetime.now(UTC)
+                await calls.update_call_status(out.call_id, "active", started_at=now)
+                solo_call = await calls.get_call(out.call_id, cmd.company_id)
+                await _maybe_start_speech_to_chat_poll(
+                    call_id=solo_call.call_id,
+                    company_id=cmd.company_id,
+                    channel_id=solo_call.channel_id,
+                    livekit_room_name=solo_call.livekit_room_name,
+                    channels=channels,
+                )
         elif cmd.type == "call.accept":
-            out, evs = await handle_call_accept(cmd, calls=calls)
+            out, evs, became_active = await handle_call_accept(cmd, calls=calls)
+            if became_active:
+                await _maybe_start_speech_to_chat_poll(
+                    call_id=out.call_id,
+                    company_id=cmd.company_id,
+                    channel_id=out.channel_id,
+                    livekit_room_name=out.livekit_room_name,
+                    channels=channels,
+                )
         elif cmd.type == "call.decline":
             out, evs = await handle_call_decline(cmd, calls=calls)
         elif cmd.type == "call.hangup":
             payload = CallHangupPayload.model_validate(cmd.payload)
             auto_stopped_recording_event: RealtimeEvent | None = None
-            if call_recordings is not None and call_meetings is not None:
+            if call_recordings is not None:
                 call = await calls.get_call(payload.call_id, cmd.company_id)
                 active_recording = await call_recordings.get_active_for_call(payload.call_id, cmd.company_id)
                 if active_recording is not None and active_recording.started_by_user_id == cmd.actor_user_id:
@@ -713,12 +978,24 @@ async def execute_command(
                         company_id=cmd.company_id,
                         actor_user_id=cmd.actor_user_id,
                         call_recordings=call_recordings,
-                        call_meetings=call_meetings,
                     )
                     auto_stopped_recording_event = event_call_recording_stopped(stopped_recording)
-            out, evs = await handle_call_hangup(cmd, calls=calls)
+            out, evs, call_fully_ended = await handle_call_hangup(cmd, calls=calls)
             if auto_stopped_recording_event is not None:
                 evs.append(auto_stopped_recording_event)
+            if call_fully_ended:
+                if user_repository is None:
+                    raise ValueError("user_repository обязателен для маркера звонка в канале.")
+                boundary_read = await _post_call_boundary_message(
+                    channel_id=out.channel_id,
+                    call_id=out.call_id,
+                    phase="ended",
+                    sender_user_id=out.created_by_user_id,
+                    company_id=cmd.company_id,
+                    messages=messages,
+                    user_repository=user_repository,
+                )
+                evs.append(event_message_created(boundary_read))
         elif cmd.type == "call.recording.start":
             payload = CallRecordingStartPayload.model_validate(cmd.payload)
             call = await calls.get_call(payload.call_id, cmd.company_id)
@@ -826,7 +1103,6 @@ async def execute_command(
                 company_id=cmd.company_id,
                 actor_user_id=cmd.actor_user_id,
                 call_recordings=call_recordings,
-                call_meetings=call_meetings,
             )
             evs = [event_call_recording_stopped(out)]
         elif cmd.type == "call.admin.transfer":
@@ -851,37 +1127,6 @@ async def execute_command(
             updated_participants = await calls.list_participants(call.call_id)
             out = _call_read_from_entities(updated_call, updated_participants)
             evs = [event_call_admin_changed(out)]
-        elif cmd.type == "call.meeting.export_to_crm":
-            payload = CallMeetingExportToCrmPayload.model_validate(cmd.payload)
-            meeting = await call_meetings.get(payload.meeting_id)
-            if meeting is None or meeting.company_id != cmd.company_id:
-                raise ValueError(f"Встреча {payload.meeting_id} не найдена.")
-            if not await channels.is_member(meeting.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
-                raise PermissionError("Нет доступа к встрече.")
-            target_namespace = payload.namespace
-            if target_namespace is None and meeting.space_id is not None:
-                space = await spaces.get(meeting.space_id)
-                if space is not None:
-                    target_namespace = space.namespace
-            if target_namespace is None:
-                raise ValueError("Не задан namespace для экспорта встречи.")
-            from apps.sync.realtime.tasks import sync_export_meeting_to_crm_task
-            await sync_export_meeting_to_crm_task.kiq(
-                meeting_id=meeting.meeting_id,
-                company_id=cmd.company_id,
-                actor_user_id=cmd.actor_user_id,
-                namespace=target_namespace,
-            )
-            await call_meetings.set_export_status(
-                meeting.meeting_id,
-                status="done",
-                target_namespace=target_namespace,
-            )
-            updated_meeting = await call_meetings.get(meeting.meeting_id)
-            if updated_meeting is None:
-                raise RuntimeError("Встреча пропала после экспорта.")
-            out = _meeting_read_from_entity(updated_meeting)
-            evs = [event_call_export_crm_done(out)]
         else:
             raise RuntimeError(f"Неизвестный call.* тип команды: {cmd.type!r}.")
         return CommandExecutionResult(ok=True, result=out, events=evs)
@@ -913,7 +1158,7 @@ async def _message_read_from_db(
                 {"type": row.type, "data": row.data, "order": row.order}
             )
         )
-    sender = await _user_brief(user_repository, m.sender_user_id)
+    sender = await sender_brief_for_message(user_repository, m.sender_user_id)
     return message_read_from_entity(m=m, contents=contents, sender=sender)
 
 
@@ -935,23 +1180,6 @@ def _recording_read_from_entity(recording) -> CallRecordingRead:
         ended_at=recording.ended_at,
         created_at=recording.created_at,
         error=recording.error,
-    )
-
-
-def _meeting_read_from_entity(meeting) -> CallMeetingRead:
-    return CallMeetingRead(
-        meeting_id=meeting.meeting_id,
-        call_id=meeting.call_id,
-        recording_id=meeting.recording_id,
-        channel_id=meeting.channel_id,
-        space_id=meeting.space_id,
-        transcript_file_id=meeting.transcript_file_id,
-        transcript_text_file_id=meeting.transcript_text_file_id,
-        summary_json=meeting.summary_json or {},
-        export_status=meeting.export_status,
-        export_target_namespace=meeting.export_target_namespace,
-        created_at=meeting.created_at,
-        updated_at=meeting.updated_at,
     )
 
 
@@ -987,6 +1215,8 @@ async def _create_space(body, *, actor_user_id: str, company_id: str, spaces: Sp
         description=body.description,
         created_at=datetime.now(tz=UTC),
         created_by_user_id=actor_user_id,
+        transcribe_voice_messages=body.transcribe_voice_messages,
+        speech_to_chat_enabled=body.speech_to_chat_enabled,
     )
     await spaces.create(entity)
     return SpaceRead(
@@ -995,10 +1225,10 @@ async def _create_space(body, *, actor_user_id: str, company_id: str, spaces: Sp
         description=entity.description,
         avatar_url=entity.avatar_url,
         namespace=entity.namespace,
-        auto_export_transcript_to_crm=entity.auto_export_transcript_to_crm,
-        auto_export_summary_to_crm=entity.auto_export_summary_to_crm,
         created_at=entity.created_at,
         created_by_user_id=actor_user_id,
+        transcribe_voice_messages=entity.transcribe_voice_messages,
+        speech_to_chat_enabled=entity.speech_to_chat_enabled,
     )
 
 
@@ -1013,29 +1243,11 @@ async def _update_space(
     data = body.model_dump(exclude_unset=True)
     if not data:
         raise ValueError("Нет полей для обновления пространства.")
-    next_namespace = data["namespace"] if "namespace" in data else None
-    next_auto_export_transcript = data["auto_export_transcript_to_crm"] if "auto_export_transcript_to_crm" in data else None
-    next_auto_export_summary = data["auto_export_summary_to_crm"] if "auto_export_summary_to_crm" in data else None
     entity = await spaces.get(space_id)
     if entity is None:
         raise ValueError(f"Пространство {space_id} не найдено.")
     if entity.company_id != company_id:
         raise PermissionError("Пространство принадлежит другой компании.")
-    effective_namespace = next_namespace if "namespace" in data else entity.namespace
-    effective_auto_export_transcript = (
-        next_auto_export_transcript
-        if "auto_export_transcript_to_crm" in data
-        else entity.auto_export_transcript_to_crm
-    )
-    effective_auto_export_summary = (
-        next_auto_export_summary
-        if "auto_export_summary_to_crm" in data
-        else entity.auto_export_summary_to_crm
-    )
-    if (effective_auto_export_transcript or effective_auto_export_summary) and (
-        effective_namespace is None or str(effective_namespace).strip() == ""
-    ):
-        raise ValueError("Для автоэкспорта требуется namespace.")
     if "name" in data:
         entity.name = data["name"]
     if "description" in data:
@@ -1044,10 +1256,10 @@ async def _update_space(
         entity.avatar_url = data["avatar_url"]
     if "namespace" in data:
         entity.namespace = data["namespace"]
-    if "auto_export_transcript_to_crm" in data:
-        entity.auto_export_transcript_to_crm = data["auto_export_transcript_to_crm"]
-    if "auto_export_summary_to_crm" in data:
-        entity.auto_export_summary_to_crm = data["auto_export_summary_to_crm"]
+    if "transcribe_voice_messages" in data:
+        entity.transcribe_voice_messages = data["transcribe_voice_messages"]
+    if "speech_to_chat_enabled" in data:
+        entity.speech_to_chat_enabled = data["speech_to_chat_enabled"]
     await spaces.update(entity)
     return SpaceRead(
         id=entity.space_id,
@@ -1055,10 +1267,10 @@ async def _update_space(
         description=entity.description,
         avatar_url=entity.avatar_url,
         namespace=entity.namespace,
-        auto_export_transcript_to_crm=entity.auto_export_transcript_to_crm,
-        auto_export_summary_to_crm=entity.auto_export_summary_to_crm,
         created_at=entity.created_at,
         created_by_user_id=entity.created_by_user_id,
+        transcribe_voice_messages=entity.transcribe_voice_messages,
+        speech_to_chat_enabled=entity.speech_to_chat_enabled,
     )
 
 
@@ -1089,11 +1301,22 @@ async def _update_channel(
         entity.is_private = data["is_private"]
     if "avatar_url" in data:
         entity.avatar_url = data["avatar_url"]
+    if "transcribe_voice_messages" in data:
+        entity.transcribe_voice_messages = data["transcribe_voice_messages"]
+    if "speech_to_chat_enabled" in data:
+        entity.speech_to_chat_enabled = data["speech_to_chat_enabled"]
     await channels.update(entity)
     return _channel_read_entity(entity)
 
 
-async def _create_channel(body, *, actor_user_id: str, company_id: str, channels: ChannelRepository) -> ChannelRead:
+async def _create_channel(
+    body,
+    *,
+    actor_user_id: str,
+    company_id: str,
+    channels: ChannelRepository,
+    spaces: SpaceRepository,
+) -> ChannelRead:
     if body.type == ChannelType.TOPIC:
         if body.space_id is None:
             raise ValueError("Для topic обязателен space_id.")
@@ -1113,6 +1336,21 @@ async def _create_channel(body, *, actor_user_id: str, company_id: str, channels
         if body.name is None or body.name.strip() == "":
             raise ValueError("Для calendar_meeting обязателен name (заголовок встречи).")
 
+    transcribe_voice = False
+    speech_to_chat = False
+    if body.space_id is not None:
+        space_ent = await spaces.get(body.space_id)
+        if space_ent is None:
+            raise ValueError(f"Пространство {body.space_id} не найдено.")
+        if space_ent.company_id != company_id:
+            raise PermissionError("Пространство принадлежит другой компании.")
+        transcribe_voice = space_ent.transcribe_voice_messages
+        speech_to_chat = space_ent.speech_to_chat_enabled
+    if body.transcribe_voice_messages is not None:
+        transcribe_voice = body.transcribe_voice_messages
+    if body.speech_to_chat_enabled is not None:
+        speech_to_chat = body.speech_to_chat_enabled
+
     channel_id = uuid4().hex
     entity = SyncChannel(
         channel_id=channel_id,
@@ -1124,6 +1362,8 @@ async def _create_channel(body, *, actor_user_id: str, company_id: str, channels
         created_at=datetime.now(tz=UTC),
         created_by_user_id=actor_user_id,
         pinned_message_ids=[],
+        transcribe_voice_messages=transcribe_voice,
+        speech_to_chat_enabled=speech_to_chat,
     )
     await channels.create(entity)
     await channels.add_member_if_missing(channel_id, actor_user_id, "owner", company_id)
@@ -1154,6 +1394,7 @@ async def _send_message(
         channel_id=channel_id,
         thread_id=body.thread_id,
         parent_message_id=body.parent_message_id,
+        call_id=body.call_id,
         sender_user_id=actor_user_id,
         status=MessageStatus.SENT.value,
         sent_at=sent_at,

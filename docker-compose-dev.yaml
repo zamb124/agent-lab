@@ -150,20 +150,82 @@ services:
   #   networks:
   #     - dev-net
 
+  # Redis в конфиге обязателен для связки livekit-server + livekit-egress (запись, speech-to-chat).
   livekit:
     image: livekit/livekit-server:latest
     container_name: agentlab_livekit_dev
-    command: --dev --bind 0.0.0.0
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        keys:
+          devkey: secret
+        redis:
+          address: redis:6379
+          db: 2
+        rtc:
+          tcp_port: 7882
+          udp_port: 7881
+          use_external_ip: false
+    command: --bind 0.0.0.0
     ports:
       - "7880:7880"
       - "7881:7881/udp"
       - "7882:7882/tcp"
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:7880"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 5s
+    networks:
+      - dev-net
+
+  livekit-egress:
+    image: livekit/egress:latest
+    container_name: agentlab_livekit_egress_dev
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: devkey
+        api_secret: secret
+        ws_url: ws://livekit:7880
+        redis:
+          address: redis:6379
+          db: 2
+        logging:
+          level: info
+          json: true
+        session_limits:
+          file_output_max_duration: 1h
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - dev-net
+
+  # OnlyOffice Document Server (Developer Edition — иначе Community игнорирует customization.logo в JWT).
+  # Тот же JWT_SECRET, что в conf services.office.office.jwt_secret / OFFICE__JWT_SECRET.
+  onlyoffice-documentserver:
+    platform: "linux/amd64"
+    image: onlyoffice/documentserver-de:latest
+    container_name: agentlab_onlyoffice_dev
+    ports:
+      - "8088:80"
+    environment:
+      - JWT_ENABLED=true
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-dev-onlyoffice-jwt-secret}
+    volumes:
+      - ./deploy/onlyoffice/themes/theme-humanitec-light.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - dev-net
 
@@ -188,7 +250,6 @@ volumes:
     driver: local
   minio_dev_data:
     driver: local
-
 networks:
   dev-net:
     driver: bridge

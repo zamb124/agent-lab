@@ -344,7 +344,7 @@ export class AIEntityCard extends PlatformElement {
         
         if (entityType) {
             return {
-                icon: entityType.icon || 'file',
+                icon: entityType.icon || 'folder',
                 color: entityType.color || 'var(--text-tertiary)',
                 label: entityType.name
             };
@@ -353,14 +353,14 @@ export class AIEntityCard extends PlatformElement {
         const baseEntityType = types.find(t => t.type_id === baseType);
         if (baseEntityType) {
             return {
-                icon: baseEntityType.icon || 'file',
+                icon: baseEntityType.icon || 'folder',
                 color: baseEntityType.color || 'var(--text-tertiary)',
                 label: baseEntityType.name
             };
         }
         
         return {
-            icon: 'file',
+            icon: 'folder',
             color: 'var(--text-tertiary)',
             label: baseType || this.i18n.t('ai_entity_card.entity_fallback'),
         };
@@ -434,10 +434,13 @@ export class AIEntityCard extends PlatformElement {
     }
 
     _resolveIconName(iconName) {
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
-        return 'file';
+        return 'folder';
     }
 
     _getDedupBadge() {

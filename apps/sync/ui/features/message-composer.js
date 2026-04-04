@@ -11,6 +11,7 @@ import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from '../constants/sync-limits.js';
 import { extractMentionedUserIdsFromPlainText } from '../utils/sync-mention-text.js';
+import '@platform/lib/components/platform-icon.js';
 
 const EMOJIS = ['😀', '😅', '😉', '😍', '🤝', '🔥', '✅', '💡', '🧠', '🚀', '📌', '🧩', '⚠️', '❌', '👍', '👀'];
 
@@ -1127,10 +1128,11 @@ export class MessageComposer extends PlatformElement {
                             <img class="attachment-thumb" src=${a.localUrl} alt=${a.file.name}>
                         ` : html`
                             <div class="attachment-thumb-doc">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M14 2v6h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                                </svg>
+                                <platform-icon
+                                    file-icon
+                                    name=${this.icon.resolveFileIconKey(a.file.name, a.file.type || '')}
+                                    size="22"
+                                ></platform-icon>
                                 <span class="attachment-thumb-doc-name">${a.file.name}</span>
                             </div>
                         `}

@@ -16,6 +16,7 @@ from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRef
 from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
+from apps.sync.container import get_sync_container
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.handlers import execute_command
 
@@ -47,6 +48,7 @@ async def _setup_channel_with_members(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
 
     sr = await execute_command(
@@ -96,6 +98,7 @@ async def test_call_invite_sfu_two_members(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
 
     result = await execute_command(
@@ -111,6 +114,17 @@ async def test_call_invite_sfu_two_members(
     assert statuses["u1"] == "joined"
     assert statuses["member1"] == "invited"
     assert result.result.call_type == "video"
+
+    msg_events = [e for e in result.events if e.type == "message.created"]
+    assert len(msg_events) == 1
+    payload = msg_events[0].payload
+    contents = payload.get("contents") if isinstance(payload, dict) else None
+    assert isinstance(contents, list)
+    boundary_blocks = [c for c in contents if isinstance(c, dict) and c.get("type") == "call/boundary"]
+    assert len(boundary_blocks) == 1
+    data = boundary_blocks[0].get("data") or {}
+    assert data.get("phase") == "started"
+    assert data.get("call_id") == result.result.call_id
 
 
 @pytest.mark.asyncio
@@ -138,6 +152,7 @@ async def test_call_invite_legacy_audio_payload_yields_video_read(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
     result = await execute_command(
         _cmd("u1", company_id, "call.invite", {"channel_id": channel_id, "call_type": "audio"}),
@@ -173,6 +188,7 @@ async def test_call_invite_sfu_three_members(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
 
     result = await execute_command(
@@ -210,6 +226,7 @@ async def test_call_invite_replaces_existing(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
 
     r1 = await execute_command(
@@ -256,6 +273,7 @@ async def test_call_accept_and_hangup(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
 
     invite_res = await execute_command(
@@ -270,6 +288,8 @@ async def test_call_accept_and_hangup(
     )
     assert accept_res.ok
     assert accept_res.result.status == "active"
+    accept_boundary_msgs = [e for e in accept_res.events if e.type == "message.created"]
+    assert len(accept_boundary_msgs) == 0
 
     hangup_res = await execute_command(
         _cmd("u1", company_id, "call.hangup", {"call_id": call_id}),
@@ -311,6 +331,7 @@ async def test_call_invite_no_access_raises(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
 
     with pytest.raises(PermissionError):
@@ -346,6 +367,7 @@ async def test_call_decline(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
 
     invite_res = await execute_command(
@@ -395,6 +417,7 @@ async def test_call_hangup_ends_when_all_leave(
         messages=MessageRepository(db=call_repo._db),
         git_refs=GitResourceRefRepository(db=call_repo._db),
         calls=call_repo,
+        user_repository=get_sync_container().user_repository,
     )
 
     invite_res = await execute_command(

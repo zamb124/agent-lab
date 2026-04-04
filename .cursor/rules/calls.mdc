@@ -41,6 +41,8 @@ alwaysApply: false
 
 Сервер **не участвует** в медиа-потоке при P2P. При SFU — только LiveKit.
 
+В коде [`call_handlers.py`](apps/sync/realtime/call_handlers.py) сейчас **`P2P_MAX = 0`**: все звонки — **SFU**. **Speech-to-chat** (речь в ленту): канал **`speech_to_chat_enabled`**, серверный LiveKit egress → S3 → `messages.send`; пустой `file_results` у egress — догрузка сегментов листингом S3 по префиксу `sync-speech/...` и курсору **`last_segment_s3_key`**. Полное описание пайплайнов, locks и флагов — **[`sync.mdc`](.cursor/rules/sync.mdc)**; параметры — **[`SpeechToChatConfig`](core/config/models.py)**, TTL lock авто-STT — **`transcribe_audio_redis_lock_ttl_seconds`** в [`BaseSettings`](core/config/base.py).
+
 ## Сигналинг
 
 ```
@@ -123,13 +125,13 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 }
 ```
 
-LiveKit `--dev` mode дефолтные ключи: `devkey` / `secret`.
+Локально ключи: `devkey` / `secret`. В `docker-compose-dev.yaml` сервер поднимается с `LIVEKIT_CONFIG` (Redis `db: 2`) и сервисом `livekit-egress`, иначе API egress отдаёт 503.
 
 ## Инфраструктура
 
 | Окружение | LiveKit порт | coturn |
 |---|---|---|
-| dev | 7880 | host network |
+| dev | 7880 (`livekit` + `livekit-egress` в compose) | host network |
 | test | 7890 (ext) / 7880 (int) | нет |
 | prod | 7880 | host network |
 
@@ -141,7 +143,7 @@ LiveKit `--dev` mode дефолтные ключи: `devkey` / `secret`.
 - Команда для симуляции медиа-потока: `lk room join --url ws://livekit-test:7880 --api-key devkey --api-secret secret --identity <id> --publish-demo <room>`.
 - Для контейнерного egress endpoint `localhost`/`127.0.0.1` в S3-конфиге нормализуется в `host.docker.internal`, иначе egress внутри контейнера не сможет достучаться до host MinIO.
 - При custom S3 endpoint (`S3Upload.endpoint`) включать `S3Upload.force_path_style = true`, иначе egress может строить virtual-host URL вида `<bucket>.<endpoint>` и падать на DNS в MinIO/локальном окружении.
-- В `docker-compose-prod.yaml` и `docker-compose-test.yaml` для `livekit-egress` должен быть `session_limits.file_output_max_duration: 1h`, чтобы запись не длилась дольше часа даже без клиентского stop.
+- В `docker-compose-dev.yaml`, `docker-compose-prod.yaml` и `docker-compose-test.yaml` для `livekit-egress` должен быть `session_limits.file_output_max_duration: 1h`, чтобы запись не длилась дольше часа даже без клиентского stop.
 - Без опубликованного медиатрэка egress завершится с `Start signal not received`, файл в S3 не появится.
 
 ## БД (sync)
@@ -152,23 +154,16 @@ LiveKit `--dev` mode дефолтные ключи: `devkey` / `secret`.
 | `sync_call_participants` | Участники: status (invited/joined/declined/left) |
 | `sync_call_links` | Гостевые ссылки: link_token, expires_at, call_type |
 | `sync_call_recordings` | Записи звонков: status (requested/recording/uploaded/failed), provider_job_id, raw_file_id |
-| `sync_call_meetings` | Карточки встреч: transcript_file_id, summary_json, export_status |
-| `sync_call_speaker_segments` | Сегменты речи с speaker identity и таймкодами |
 
-## Запись, транскрипт, export
+## Запись и канал как интерфейс STT
 
-- WS-команды: `call.recording.start`, `call.recording.stop`, `call.meeting.export_to_crm`.
-- `call.recording.start` запускает `RoomCompositeEgress` с `EncodedFileOutput.s3` (primary storage только S3, без локального `/egress/...` как целевого хранилища).
-- `call.recording.stop` останавливает egress строго по `provider_job_id`; если `provider_job_id` отсутствует — команда падает с ошибкой.
-- `sync_finalize_recording_task` резолвит egress-результат по `provider_job_id` и сохраняет `raw_file.storage_url` из `file_results.location`.
-- WS-события: `call.recording.started|stopped|failed`, `call.transcript.ready|failed`, `call.summary.ready|failed`, `call.export.crm.done|failed`.
-- REST:
-  - `GET /sync/api/v1/calls/{call_id}/recordings`
-  - `GET /sync/api/v1/meetings`
-  - `GET /sync/api/v1/meetings/{meeting_id}`
-  - `GET /sync/api/v1/meetings/{meeting_id}/transcript`
-  - `POST /sync/api/v1/meetings/{meeting_id}/export/crm`
-- Настройки `sync_spaces`: `namespace` (общий для CRM/RAG), `auto_export_transcript_to_crm`, `auto_export_summary_to_crm`.
+- WS-команды: `call.recording.start`, `call.recording.stop` (без `call.meeting.*`).
+- `call.recording.start` запускает `RoomCompositeEgress` с `EncodedFileOutput.s3`.
+- `call.recording.stop` останавливает egress по `provider_job_id`.
+- `sync_finalize_recording_task`: ожидание готового egress — **`calls.finalize_recording_egress_wait_timeout_seconds`** и **`finalize_recording_egress_poll_interval_seconds`**; затем `file/video` в канал с `call_id`. Отдельных таблиц встреч/summary для sync нет.
+- WS-события звонка: `call.recording.started|stopped|failed` и прочие события участников; событий `call.transcript.*`, `call.summary.*`, `call.export.crm.*` нет.
+- REST: `GET /sync/api/v1/calls/{call_id}/recordings`; транскрипция через `POST .../messages/.../transcribe`, `.../transcribe-video`, `POST .../channels/{channel_id}/calls/{call_id}/transcribe` (см. `sync.mdc`).
+- `sync_spaces`: `namespace` для CRM/RAG; колонок автоэкспорта транскрипта/summary нет.
 
 ## Ключевые файлы
 

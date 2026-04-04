@@ -135,32 +135,78 @@ export class PlatformSidebar extends PlatformElement {
         this.closeMobile();
     }
 
+    _collapseLabel() {
+        if (this._isMobile) {
+            return '';
+        }
+        return this.collapsed
+            ? this.i18n.t('sidebar.expand', {}, 'shell')
+            : this.i18n.t('sidebar.collapse', {}, 'shell');
+    }
+
+    _renderCollapseControl() {
+        if (this._isMobile) {
+            return null;
+        }
+        const label = this._collapseLabel();
+        return html`
+            <button
+                type="button"
+                class="collapse-btn"
+                aria-label=${label}
+                title=${label}
+                aria-expanded=${String(!this.collapsed)}
+                @click=${this.toggleCollapse}
+            >
+                <platform-icon
+                    name=${this.collapsed ? 'chevron-right' : 'chevron-left'}
+                    size="18"
+                ></platform-icon>
+            </button>
+        `;
+    }
+
+    _inlineCollapseIfExpanded() {
+        if (this._isMobile || this.collapsed) {
+            return null;
+        }
+        return this._renderCollapseControl();
+    }
+
+    _renderCollapseRowBetweenLogoAndNav() {
+        if (this._isMobile || !this.collapsed) {
+            return null;
+        }
+        return html`
+            <div class="sidebar-collapse-row">${this._renderCollapseControl()}</div>
+        `;
+    }
+
     _renderLogo() {
         const hasLogoSlot = this.querySelector('[slot="logo"]');
-        
+
         if (hasLogoSlot) {
-            return html`<slot name="logo"></slot>`;
+            return html`
+                <div class="sidebar-logo sidebar-logo--slot">
+                    <slot name="logo"></slot>
+                    ${this._inlineCollapseIfExpanded()}
+                </div>
+            `;
         }
 
-        const logoTitle = this._isMobile
-            ? ''
-            : (this.collapsed
-                ? this.i18n.t('sidebar.expand', {}, 'shell')
-                : this.i18n.t('sidebar.collapse', {}, 'shell'));
         return html`
             <div class="sidebar-logo">
-                ${this.logoSrc ? html`
-                    <div
-                        class="sidebar-logo-icon ${this._isMobile ? '' : 'clickable'}"
-                        @click=${this._isMobile ? null : this.toggleCollapse}
-                        title=${logoTitle}
-                    >
-                        <img src="${this.logoSrc}" alt="${this.logoText || 'Logo'}">
-                    </div>
-                ` : ''}
-                ${this.logoText ? html`
-                    <span class="sidebar-logo-text">${this.logoText}</span>
-                ` : ''}
+                ${this.logoSrc
+                    ? html`
+                        <div class="sidebar-logo-icon">
+                            <img src="${this.logoSrc}" alt="${this.logoText || 'Logo'}">
+                        </div>
+                    `
+                    : ''}
+                ${this.logoText
+                    ? html`<span class="sidebar-logo-text">${this.logoText}</span>`
+                    : ''}
+                ${this._inlineCollapseIfExpanded()}
             </div>
         `;
     }
@@ -171,7 +217,7 @@ export class PlatformSidebar extends PlatformElement {
             
             <div class="sidebar-content">
                 ${this._renderLogo()}
-                
+                ${this._renderCollapseRowBetweenLogoAndNav()}
                 <div class="sidebar-header">
                     <slot name="header"></slot>
                 </div>

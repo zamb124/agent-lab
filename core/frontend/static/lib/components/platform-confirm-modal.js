@@ -20,13 +20,9 @@ export class PlatformConfirmModal extends PlatformModal {
                 display: none !important;
             }
 
-            .confirm-modal-header {
-                align-items: flex-start;
-            }
-
             .confirm-header-leading {
                 display: flex;
-                align-items: flex-start;
+                align-items: center;
                 gap: var(--space-3, 12px);
                 flex: 1;
                 min-width: 0;

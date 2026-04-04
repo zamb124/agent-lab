@@ -6,7 +6,7 @@ import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/glass-modal.js';
 

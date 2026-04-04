@@ -9,7 +9,6 @@ import { SyncWsService } from '../services/sync-ws.service.js';
 import { SyncStore } from '../store/sync.store.js';
 import { lanePreviewFromMessagePayload } from '../utils/lane-preview.js';
 import { senderUserId } from '../utils/sender.js';
-import '../modals/meetings-modal.js';
 import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '../features/call-overlay.js';
@@ -21,6 +20,7 @@ export class SyncApp extends PlatformApp {
         _chat: { state: true },
         _ui: { state: true },
         _activeCall: { state: true },
+        _callUiMinimized: { state: true },
         _incomingCall: { state: true },
         _activeCallChannels: { state: true },
         _mobileShell: { state: true },
@@ -47,16 +47,15 @@ export class SyncApp extends PlatformApp {
             }
 
             /*
-             * Активный звонок: iOS WebKit иначе может оставить hit-testing на .main (flex на весь экран)
-             * под полноэкранным call-overlay — кнопки оверлея не получают касания.
-             * inert снимает интерактив с подложки; overflow: visible снимает обрезку fixed-детей.
+             * Полноэкранный оверлей звонка: иначе iOS WebKit оставляет hit-testing на .main под overlay.
+             * При свёрнутом звонке атрибут снят — чат и сайдбар снова кликабельны.
              */
-            :host([data-call-active]) {
+            :host([data-call-overlay-expanded]) {
                 overflow: visible;
             }
 
-            :host([data-call-active]) .sidebar,
-            :host([data-call-active]) .main {
+            :host([data-call-overlay-expanded]) .sidebar,
+            :host([data-call-overlay-expanded]) .main {
                 pointer-events: none;
             }
 
@@ -122,11 +121,66 @@ export class SyncApp extends PlatformApp {
         this._activeCallChannels = {};
         /** id WS-команд call.hangup — ack тоже содержит CallRead с call_id, без фильтра открыл бы оверлей снова */
         this._callHangupRequestIds = new Set();
+        this._callUiMinimized = false;
+        this._boundSyncCallOverlayExpand = () => {
+            if (this._activeCall == null) return;
+            this._callUiMinimized = false;
+            this._syncUiActiveCallOverlay();
+            this.requestUpdate();
+        };
+        this._boundSyncCallBannerHangup = () => {
+            const id = this._activeCall?.call_id;
+            if (typeof id !== 'string' || id === '') {
+                return;
+            }
+            this._sendCallHangupWs(id);
+        };
+        this._boundJoinCallFromBoundary = (e) => {
+            const d = e.detail;
+            if (d == null || typeof d !== 'object') return;
+            const channelId = d.channelId;
+            const callId = d.callId;
+            if (typeof channelId !== 'string' || channelId === '') return;
+            if (typeof callId !== 'string' || callId === '') return;
+            void this._joinCallInChannel(channelId, callId);
+        };
         this._mqMobileShell = window.matchMedia('(max-width: 767px)');
         this._mobileShell = this._mqMobileShell.matches;
-        this._boundWindowOpenMeetings = () => {
-            void this._openMeetingsPanel();
-        };
+    }
+
+    _syncUiActiveCallOverlay() {
+        if (this._activeCall == null) {
+            this._callUiMinimized = false;
+            SyncStore.setUiActiveCallOverlay(null);
+            return;
+        }
+        const ch = this._activeCall.channel_id;
+        const channelId = typeof ch === 'string' ? ch : '';
+        SyncStore.setUiActiveCallOverlay({
+            call_id: this._activeCall.call_id,
+            channel_id: channelId,
+            minimized: this._callUiMinimized,
+        });
+    }
+
+    _blurCallOverlayFocus() {
+        const host = this.renderRoot?.querySelector('call-overlay');
+        const sr = host?.shadowRoot;
+        const inner = sr?.activeElement;
+        if (inner && typeof inner.blur === 'function') {
+            inner.blur();
+        }
+        if (host && document.activeElement === host && typeof host.blur === 'function') {
+            host.blur();
+        }
+    }
+
+    _onCallMinimizeRequest() {
+        if (this._activeCall == null) return;
+        this._blurCallOverlayFocus();
+        this._callUiMinimized = true;
+        this._syncUiActiveCallOverlay();
+        this.requestUpdate();
     }
 
     _localeTag() {
@@ -166,6 +220,9 @@ export class SyncApp extends PlatformApp {
         try {
             await super.connectedCallback();
             this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+            window.addEventListener('sync-call-overlay-expand', this._boundSyncCallOverlayExpand);
+            window.addEventListener('sync-call-banner-hangup', this._boundSyncCallBannerHangup);
+            window.addEventListener('join-call-from-boundary', this._boundJoinCallFromBoundary);
 
             if (!this._mobileShellMqBound) {
                 this._mobileShellMqBound = true;
@@ -177,8 +234,6 @@ export class SyncApp extends PlatformApp {
             }
 
             if (!this._isAuthenticated) return;
-
-            window.addEventListener('sync-open-meetings', this._boundWindowOpenMeetings);
 
             const syncApi = this.services.get('syncApi');
 
@@ -209,6 +264,9 @@ export class SyncApp extends PlatformApp {
     }
 
     disconnectedCallback() {
+        window.removeEventListener('sync-call-overlay-expand', this._boundSyncCallOverlayExpand);
+        window.removeEventListener('sync-call-banner-hangup', this._boundSyncCallBannerHangup);
+        window.removeEventListener('join-call-from-boundary', this._boundJoinCallFromBoundary);
         if (this._i18nUnsub) {
             this._i18nUnsub();
             this._i18nUnsub = null;
@@ -222,7 +280,6 @@ export class SyncApp extends PlatformApp {
             clearInterval(this._typingPruneTimer);
             this._typingPruneTimer = null;
         }
-        window.removeEventListener('sync-open-meetings', this._boundWindowOpenMeetings);
         this._unsubscribe?.();
         this._ws?.close();
         this._ws = null;
@@ -518,6 +575,7 @@ export class SyncApp extends PlatformApp {
         if (msg.type === 'call.ended') {
             if (this._activeCall?.call_id === p.call_id) {
                 this._activeCall = null;
+                this._syncUiActiveCallOverlay();
             }
             if (this._incomingCall?.call_id === p.call_id) {
                 this._incomingCall = null;
@@ -575,27 +633,6 @@ export class SyncApp extends PlatformApp {
             }
             return;
         }
-        if (
-            msg.type === 'call.transcript.ready'
-            || msg.type === 'call.summary.ready'
-            || msg.type === 'call.export.crm.done'
-            || msg.type === 'call.export.crm.failed'
-        ) {
-            SyncStore.upsertMeeting(p);
-            return;
-        }
-        if (msg.type === 'call.transcript.failed' || msg.type === 'call.summary.failed') {
-            SyncStore.upsertMeeting(p);
-            const errorText = (typeof p.error === 'string' && p.error !== '')
-                ? p.error
-                : this.i18n.t('meeting_processing_error', {});
-            console.error(`[sync] ${msg.type}: ${errorText}`, p);
-            if (this._activeCall?.call_id === p.call_id) {
-                const overlay = this.renderRoot?.querySelector('call-overlay');
-                overlay?.setRecordingStatus?.('failed', errorText);
-            }
-            return;
-        }
         if (msg.type === 'call.accepted') {
             return;
         }
@@ -628,25 +665,44 @@ export class SyncApp extends PlatformApp {
         return map;
     }
 
-    async _joinCallInChannel(channelId) {
-        const callInfo = this._activeCallChannels[channelId];
-        if (!callInfo) return;
+    async _joinCallInChannel(channelId, explicitCallId) {
+        const fromMap = this._activeCallChannels[channelId];
+        const callId =
+            typeof explicitCallId === 'string' && explicitCallId !== ''
+                ? explicitCallId
+                : (fromMap && typeof fromMap.call_id === 'string' ? fromMap.call_id : '');
+        if (callId === '') return;
+
+        if (this._activeCall?.call_id === callId && !this._callUiMinimized) {
+            return;
+        }
+        if (this._activeCall?.call_id === callId && this._callUiMinimized) {
+            this._callUiMinimized = false;
+            this._syncUiActiveCallOverlay();
+            this.requestUpdate();
+            return;
+        }
+
         const syncApi = this.services.get('syncApi');
         const [callData, tokenData] = await Promise.all([
-            syncApi.get(`/calls/${callInfo.call_id}`),
-            syncApi.get(`/calls/${callInfo.call_id}/token`),
+            syncApi.get(`/calls/${callId}`),
+            syncApi.get(`/calls/${callId}/token`),
         ]);
         const ws = this.services.get('syncWs');
         if (ws) {
             const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
                 (c ^ (Math.random() * 16 >> c / 4)).toString(16));
-            ws.sendJson({ id, type: 'call.accept', payload: { call_id: callInfo.call_id } });
+            ws.sendJson({ id, type: 'call.accept', payload: { call_id: callId } });
         }
+        this._callUiMinimized = false;
         this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
+        this._syncUiActiveCallOverlay();
     }
 
     async _openCallOverlay(callData) {
+        this._callUiMinimized = false;
         this._activeCall = callData;
+        this._syncUiActiveCallOverlay();
         this._incomingCall = null;
         const syncApi = this.services.get('syncApi');
         const pending = [syncApi.get(`/calls/${callData.call_id}/recordings`)];
@@ -669,6 +725,7 @@ export class SyncApp extends PlatformApp {
             nextCallData.livekit_url = tokenData.livekit_url;
         }
         this._activeCall = nextCallData;
+        this._syncUiActiveCallOverlay();
         const overlay = this.renderRoot?.querySelector('call-overlay');
         if (overlay && activeRecording) {
             overlay.setRecordingStatus('recording');
@@ -685,12 +742,14 @@ export class SyncApp extends PlatformApp {
 
         const syncApi = this.services.get('syncApi');
         const callData = await syncApi.get(`/calls/${callId}`);
+        this._callUiMinimized = false;
         if (callData.mode === 'sfu') {
             const tokenData = await syncApi.get(`/calls/${callId}/token`);
             this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
         } else {
             this._activeCall = callData;
         }
+        this._syncUiActiveCallOverlay();
     }
 
     _declineCall(callId) {
@@ -800,12 +859,6 @@ export class SyncApp extends PlatformApp {
         }, 1200);
     }
 
-    async _openMeetingsPanel() {
-        SyncStore.openMeetingsPanel();
-        const syncApi = this.services.get('syncApi');
-        await SyncStore.loadMeetings(syncApi, { limit: 200 });
-    }
-
     render() {
         const shell = renderPlatformAppShell(this);
         if (shell !== null) {
@@ -819,7 +872,7 @@ export class SyncApp extends PlatformApp {
             return html`<app-loader></app-loader>`;
         }
 
-        const callUiLocked = this._activeCall != null;
+        const callUiLocked = this._activeCall != null && !this._callUiMinimized;
 
         return html`
             <div class="sidebar" ?inert=${callUiLocked}>
@@ -837,8 +890,6 @@ export class SyncApp extends PlatformApp {
 
             <space-settings-modal></space-settings-modal>
 
-            <meetings-modal></meetings-modal>
-
             ${this._activeCall ? html`
                 <call-overlay
                     call-id=${this._activeCall.call_id}
@@ -851,7 +902,14 @@ export class SyncApp extends PlatformApp {
                     livekit-url=${this._activeCall.livekit_url || ''}
                     livekit-token=${this._activeCall.livekit_token || ''}
                     .names=${this._buildNamesMap()}
-                    @call-ended=${() => { this._activeCall = null; }}
+                    ?minimized=${this._callUiMinimized}
+                    ?inert=${this._callUiMinimized}
+                    @call-minimize-request=${() => this._onCallMinimizeRequest()}
+                    @call-ended=${() => {
+        this._activeCall = null;
+        this._callUiMinimized = false;
+        this._syncUiActiveCallOverlay();
+    }}
                     @call-hangup-request=${(e) => this._sendCallHangupWs(e.detail?.callId)}
                     @call-recording-start=${(e) => this._sendCallRecordingWs(e.detail?.callId, 'start')}
                     @call-recording-stop=${(e) => this._sendCallRecordingWs(e.detail?.callId, 'stop')}
@@ -874,9 +932,11 @@ export class SyncApp extends PlatformApp {
 
     updated(changedProps) {
         super.updated(changedProps);
-        if (changedProps.has('_activeCall')) {
-            this.toggleAttribute('data-call-active', this._activeCall != null);
-        }
+        this.toggleAttribute('data-call-active', this._activeCall != null);
+        this.toggleAttribute(
+            'data-call-overlay-expanded',
+            this._activeCall != null && !this._callUiMinimized,
+        );
     }
 }
 

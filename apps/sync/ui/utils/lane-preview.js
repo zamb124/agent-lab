@@ -47,6 +47,12 @@ export function lanePreviewFromMessagePayload(p) {
     if (blockType === 'file/audio') {
         return t('lane_preview.audio', {});
     }
+    if (blockType === 'file/video') {
+        return t('lane_preview.video', {});
+    }
+    if (blockType === 'call/boundary') {
+        return t('lane_preview.call_boundary', {});
+    }
     if (blockType === 'git/reference') {
         return t('lane_preview.git', {});
     }

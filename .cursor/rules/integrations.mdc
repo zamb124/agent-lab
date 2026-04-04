@@ -79,14 +79,18 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 response = await client.post("crm", "/crm/api/v1/entities/", json=data)
 ```
 
-**Сервисы:** `flows`, `crm`, `frontend`
+**Сервисы:** `flows`, `crm`, `frontend`, `rag`, `sync`, `office`, `scheduler` (и др. по `ServerConfig` / `get_service_url`).
 
-**Браузер и тот же origin (shell на :8002, API flows на :8001):** без ingress в `development` / `test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`: путь `/flows/...`, `/crm/...` и т.д. пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), а не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании; `/sync` часто в `anonymous` и ведёт себя иначе. Локальный Host определяется через `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.
+Вызовы REST **документов** с других сервисов — на BFF: `ServiceClient` → `"office"`, путь `/documents/api/v1/...` (секреты OnlyOffice только в процессе `apps/office`). См. **`office.mdc`**.
+
+**Браузер и тот же origin (shell на :8002, API flows на :8001):** без ingress в `development` / `test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`: путь `/flows/...`, `/crm/...`, `/documents/...` и т.д. пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), а не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании; `/sync` часто в `anonymous` и ведёт себя иначе. Локальный Host определяется через `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.
 
 **Преимущества:**
 - Автоматическая передача trace_id, авторизации
 - Валидация по OpenAPI
 - Единая конфигурация URL
+
+**Заголовки httpx:** значения должны быть encodable в latin-1. Не класть в заголовки сырой `user_id` с Unicode (например гость `guest:…:Кириллица`). Контекст пользователя для межсервисного вызова — в JWT (`Authorization`); см. `_build_interservice_auth_headers` в `apps/sync/realtime/tasks.py`.
 
 ### Внешние API - get_httpx_client
 

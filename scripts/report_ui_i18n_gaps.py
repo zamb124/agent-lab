@@ -75,7 +75,7 @@ def main() -> int:
         "--app",
         type=str,
         default="all",
-        help="Имя сервиса (crm, flows, frontend, rag, sync) или all",
+        help="Имя сервиса (crm, flows, frontend, office, rag, sync) или all",
     )
     parser.add_argument(
         "--summary",

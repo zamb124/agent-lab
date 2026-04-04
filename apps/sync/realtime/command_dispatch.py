@@ -11,7 +11,7 @@ from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.db.repositories.meeting_repository import CallMeetingRepository, CallRecordingRepository
+from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.realtime.commands import CommandEnvelope
@@ -44,7 +44,6 @@ async def dispatch_sync_command(command: CommandEnvelope) -> dict[str, Any]:
     git_refs = GitResourceRefRepository(db)
     calls = CallRepository(db)
     call_recordings = CallRecordingRepository(db)
-    call_meetings = CallMeetingRepository(db)
 
     container = get_sync_container()
     user_repository = container.user_repository
@@ -58,7 +57,6 @@ async def dispatch_sync_command(command: CommandEnvelope) -> dict[str, Any]:
         git_refs=git_refs,
         calls=calls,
         call_recordings=call_recordings,
-        call_meetings=call_meetings,
         user_repository=user_repository,
     )
 

@@ -97,24 +97,21 @@ def build_file_api_router(
         repo = get_file_repo()
         processor = FileProcessor(file_repository=repo)
         try:
-            file_record = await processor.process_file_from_bytes(
+            file_record = await processor.persist_uploaded_file(
                 data=data,
                 original_name=original_name,
                 content_type=content_type,
                 uploaded_by=user_id,
+                company_id=company_id,
                 public=True,
+                download_url_prefix=download_url_prefix,
+                content_sha256_hex=checksum,
             )
         except AudioTranscodeError as exc:
             raise HTTPException(
                 status_code=503,
                 detail=str(exc),
             ) from exc
-        file_record = file_record.model_copy(update={
-            "company_id": company_id,
-            "checksum": checksum,
-            "download_url": f"{download_url_prefix}/{file_record.file_id}",
-        })
-        await repo.set(file_record)
 
         logger.info(f"Файл загружен: {file_record.file_id} ({original_name}, {len(data)} байт)")
         return FileResponse.from_record(file_record)
@@ -154,6 +151,7 @@ def build_file_api_router(
                     s3_client=s3_client,
                     s3_key=s3_key,
                     content_type=content_type,
+                    bucket=None,
                     range_header=range_header,
                 )
             except RangeNotSatisfiableError as exc:

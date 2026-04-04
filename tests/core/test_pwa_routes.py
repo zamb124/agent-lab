@@ -41,7 +41,8 @@ def test_sw_js(pwa_client: TestClient) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/javascript")
     assert response.headers.get("service-worker-allowed") == "/"
-    assert b"humanitec-static-v2" in response.content
+    assert b"humanitec-static-v4" in response.content
+    assert b"humanitec-dynamic-v4" in response.content
 
 
 def test_offline_html(pwa_client: TestClient) -> None:

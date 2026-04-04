@@ -1,4 +1,7 @@
 {
+  "database": {
+    "office_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_office"
+  },
   "server": {
     "env": "development",
     "platform_public_base_url": "https://your-public-app-origin.example.com"
@@ -110,5 +113,15 @@
     "sync_meeting_reminder_enabled": true,
     "sync_meeting_reminder_cron": "*/1 * * * *",
     "sync_meeting_reminder_limit": 500
+  },
+  "services": {
+    "office": {
+      "office": {
+        "document_server_public_url": "http://localhost:8088",
+        "jwt_secret": "YOUR_ONLYOFFICE_JWT_SAME_AS_DS",
+        "callback_public_base_url": "http://localhost:8008",
+        "download_token_ttl_seconds": 900
+      }
+    }
   }
 }

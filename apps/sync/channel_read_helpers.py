@@ -75,6 +75,8 @@ async def channel_read_from_entity(
         last_message_at=summ.last_message_at,
         peer_last_read_at=peer_last_read_at,
         notifications_muted=notifications_muted,
+        transcribe_voice_messages=entity.transcribe_voice_messages,
+        speech_to_chat_enabled=entity.speech_to_chat_enabled,
     )
 
 
@@ -98,4 +100,6 @@ def channel_read_entity_minimal(entity: SyncChannel) -> ChannelRead:
         last_message_at=None,
         peer_last_read_at=None,
         notifications_muted=False,
+        transcribe_voice_messages=entity.transcribe_voice_messages,
+        speech_to_chat_enabled=entity.speech_to_chat_enabled,
     )

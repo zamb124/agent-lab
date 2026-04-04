@@ -88,6 +88,7 @@ class CallOverlay extends PlatformElement {
         livekitToken: { type: String, attribute: 'livekit-token' },
         identity:    { type: String },
         names:       { type: Object },
+        minimized:   { type: Boolean, reflect: true },
         _status:      { state: true },
         _error:       { state: true },
         _participants: { state: true },
@@ -131,6 +132,29 @@ class CallOverlay extends PlatformElement {
             padding-left: env(safe-area-inset-left, 0px);
             pointer-events: auto;
             touch-action: manipulation;
+        }
+
+        /*
+         * pointer-events на :host не отключает hit-target у потомков в shadow (video, кнопки).
+         * Без * { pointer-events: none } свёрнутый оверлей перекрывает весь экран невидимой сеткой.
+         */
+        :host([minimized]:not([data-overlay-critical])) {
+            position: fixed !important;
+            left: -9999px !important;
+            top: 0 !important;
+            width: 4px !important;
+            height: 4px !important;
+            max-width: 4px !important;
+            max-height: 4px !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            padding: 0 !important;
+            clip-path: inset(50%) !important;
+        }
+
+        :host([minimized]:not([data-overlay-critical])) * {
+            pointer-events: none !important;
         }
 
         .video-grid {
@@ -1715,6 +1739,13 @@ class CallOverlay extends PlatformElement {
         }
     }
 
+    _requestMinimize() {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            return;
+        }
+        this.dispatchEvent(new CustomEvent('call-minimize-request', { bubbles: true, composed: true }));
+    }
+
     async _copyLink() {
         if (!this.callId) return;
         const res = await fetch('/sync/api/v1/calls/links', {
@@ -2064,6 +2095,19 @@ class CallOverlay extends PlatformElement {
                     ${this._status === 'connecting' ? this._tp('call_overlay.connecting') : this._formatDuration(this._duration)}
                 </span>
                 <div style="display:flex;align-items:center;gap:8px;">
+                    ${typeof this.channelId === 'string' && this.channelId !== '' ? html`
+                        <button
+                            type="button"
+                            class="ctrl-btn"
+                            style="width:36px;height:36px;"
+                            @click=${this._requestMinimize}
+                            title=${this._tp('call_overlay.minimize_title')}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+                    ` : ''}
                     ${this._recordingStatus !== 'idle' ? html`
                         <span
                             class="recording-badge"
@@ -2466,6 +2510,8 @@ class CallOverlay extends PlatformElement {
     }
 
     updated(changedProps) {
+        const critical = this._status === 'error' || this._status === 'ended';
+        this.toggleAttribute('data-overlay-critical', critical);
         if (changedProps.has('channelId')) {
             this._chatError = null;
             void this._loadOverlayChat();

@@ -6,6 +6,8 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles, iconButtonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { RagStore } from '../store/rag.store.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-icon.js';
+import { resolveFileIconKey } from '@platform/services/icon.service.js';
 
 export class NamespaceDetail extends PlatformElement {
     static styles = [
@@ -398,7 +400,11 @@ export class NamespaceDetail extends PlatformElement {
                                 <div class="document-header">
                                     <div>
                                         <div class="document-name">
-                                            <platform-icon name="file" size="16"></platform-icon>
+                                            <platform-icon
+                                                file-icon
+                                                name=${resolveFileIconKey(doc.name || '', '')}
+                                                size="16"
+                                            ></platform-icon>
                                             ${doc.name || doc.document_id}
                                         </div>
                                         <div class="document-meta">

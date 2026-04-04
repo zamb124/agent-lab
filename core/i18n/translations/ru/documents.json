@@ -1,0 +1,78 @@
+{
+  "appTitle": "Документы",
+  "homeIntro": "Редактирование через OnlyOffice. Полный список и загрузка — через API BFF (/documents/api/v1/documents).",
+  "sidebar": {
+    "title": "Документы",
+    "navList": "Все документы",
+    "navBack": "К списку",
+    "navNew": "Новый документ",
+    "navUpload": "Загрузить файл",
+    "navRefresh": "Обновить список"
+  },
+  "integration": {
+    "notConfigured": "OnlyOffice не настроен: проверьте секрет JWT и публичные URL в конфигурации сервиса."
+  },
+  "list": {
+    "heading": "Документы",
+    "loading": "Загрузка…",
+    "loadError": "Не удалось загрузить список: {{message}}",
+    "newEmpty": "Новый документ",
+    "upload": "Загрузить файл",
+    "tableAria": "Таблица документов",
+    "colTitle": "Название",
+    "colCreated": "Создан",
+    "colAuthor": "Автор",
+    "creatorAria": "Автор: {{name}}",
+    "colType": "Тип",
+    "docType": {
+      "word": "Текст",
+      "cell": "Таблица",
+      "slide": "Презентация"
+    },
+    "colActions": "Действия",
+    "open": "Открыть",
+    "openDocument": "Открыть документ «{title}»",
+    "rename": "Переименовать",
+    "delete": "Удалить",
+    "empty": "Документов пока нет.",
+    "emptyStateAria": "Нет документов",
+    "emptyStateTitle": "Пока нет документов",
+    "emptyStateHint": "Создайте новый документ или загрузите файл с компьютера.",
+    "renameHeading": "Переименовать документ",
+    "renameLabel": "Новое название",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "renamed": "Название обновлено",
+    "emptyDocHeading": "Новый документ",
+    "emptyDocLabel": "Название",
+    "emptyDocNamePlaceholder": "Например, отчёт за квартал",
+    "emptyDocTypesSection": "Тип файла",
+    "emptyDocTypeWord": "Текст",
+    "emptyDocTypeExcel": "Таблица",
+    "emptyDocTypeCsv": "CSV",
+    "emptyDocTypeSlide": "Презентация",
+    "emptyDocTypePdf": "PDF",
+    "emptyDocPdfHint": "Только загрузка",
+    "create": "Создать",
+    "created": "Документ создан",
+    "uploaded": "Файл загружен",
+    "deleteConfirmTitle": "Удаление документа",
+    "deleteConfirm": "Удалить документ «{{title}}»?",
+    "deleted": "Документ удалён"
+  },
+  "mobile": {
+    "openSidebar": "Открыть меню",
+    "editorTitle": "Редактор"
+  },
+  "editor": {
+    "back": "К списку",
+    "loading": "Открытие редактора…",
+    "errNoId": "Не указан документ",
+    "errNoApi": "Сервис API недоступен",
+    "errBadConfig": "Пустой ответ редактора",
+    "errDocsApi": "Не удалось загрузить OnlyOffice API",
+    "errHost": "Нет контейнера редактора",
+    "errOpenTimeout": "Редактор не ответил за 2 минуты. Проверьте Document Server, OFFICE__CALLBACK_PUBLIC_BASE_URL и доступность скачивания файла для DS.",
+    "eventError": "Ошибка редактора"
+  }
+}

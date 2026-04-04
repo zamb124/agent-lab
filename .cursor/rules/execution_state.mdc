@@ -22,6 +22,7 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
     content: str           # Входной запрос
     response: str          # Итоговый ответ
     result: Any            # Произвольный результат ноды/tool (CodeNode, inline execute)
+    validation: Optional[dict]  # Валидация ноды; копируется в node_history.calls; условия рёбер validation.*
     
     messages: List[Message]           # Полный лог диалога (только append; не сокращать из-за фильтра LLM)
     tool_results: Dict[str, Any]      # Результаты tools
@@ -66,7 +67,8 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
 
 - messages → extend (все добавляются)
 - tool_results → merge (dict.update)
-- остальные поля → last wins (последний перезаписывает)
+- поля из `ExecutionState.model_fields` (кроме messages/nested_states) → last wins
+- дополнительные поля (`__pydantic_extra__`, runtime keys) → при merge параллельных нод во `Flow` переносятся в общий state по каждому результату (разные ключи из веток сохраняются)
 
 ## current_nodes
 

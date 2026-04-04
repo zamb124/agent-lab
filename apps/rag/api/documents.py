@@ -104,18 +104,15 @@ async def upload_document(
     user_id = context.user.user_id
 
     processor = FileProcessor(file_repository=container.file_repository)
-    file_record = await processor.process_file_from_bytes(
+    file_record = await processor.persist_uploaded_file(
         data=file_data,
         original_name=file.filename or "document",
         content_type=file.content_type or "application/octet-stream",
         uploaded_by=user_id,
+        company_id=company_id,
         public=False,
+        download_url_prefix="/rag/api/v1/files/download",
     )
-    file_record = file_record.model_copy(update={
-        "company_id": company_id,
-        "download_url": f"/rag/api/v1/files/download/{file_record.file_id}",
-    })
-    await container.file_repository.set(file_record)
 
     document_id = file_record.file_id
     metadata_dict["document_id"] = document_id

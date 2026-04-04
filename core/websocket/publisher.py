@@ -27,6 +27,7 @@ class NotificationType(str, Enum):
     CRM_NOTE_UPDATED = "crm_note_updated"
     CALENDAR_NEW_EVENT = "calendar_new_event"
     CALENDAR_SYNC_MEETING_REMINDER = "calendar_sync_meeting_reminder"
+    OFFICE_DOCUMENT_SAVED = "office_document_saved"
 
 
 class Notification(BaseModel):

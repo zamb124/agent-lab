@@ -181,6 +181,10 @@ class ExecutionState(FlexibleBaseModel):
         default=None,
         description="Произвольный результат ноды или tool (CodeNode, inline execute)",
     )
+    validation: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Данные валидации ноды (условия рёбер вида validation.valid == true)",
+    )
     messages: List[Message] = Field(default_factory=list, description="История сообщений")
     user_groups: List[str] = Field(default_factory=list, description="Группы пользователя")
     

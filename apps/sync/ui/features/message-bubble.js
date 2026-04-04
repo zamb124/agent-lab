@@ -139,6 +139,12 @@ const _svgImageDownload = html`
         <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </svg>`;
 
+const _svgCallBoundaryJoin = html`
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polygon points="23 7 16 12 23 17 23 7"/>
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+    </svg>`;
+
 /** file_id, которые уже вернули 404/ошибку загрузки, чтобы не дергать download повторно на каждом ререндере. */
 const _unavailableFileIds = new Set();
 
@@ -158,9 +164,23 @@ function isFileUnavailable(fileId, tp) {
 
 /**
  * @param {object} content
- * @param {{ _openMentionProfile: (id: string) => void, requestUpdate: () => void }} host
+ * @param {{
+ *   _openMentionProfile: (id: string) => void,
+ *   requestUpdate: () => void,
+ *   activeCallOverlay: { call_id?: string, minimized?: boolean } | null | undefined,
+ *   _joinCallFromBoundary: (callId: string) => void,
+ * }} host
  * @param {(key: string, params?: Record<string, unknown>) => string} tp
  */
+function _callBoundaryShowJoinButton(host, boundaryCallId) {
+    const o = host.activeCallOverlay;
+    if (o == null || typeof o !== 'object') return true;
+    const activeId = o.call_id;
+    if (typeof activeId !== 'string' || activeId === '') return true;
+    if (activeId !== boundaryCallId) return true;
+    return o.minimized === true;
+}
+
 function renderContent(content, host, tp) {
     if (content.type === 'text/plain') {
         const body = content.data?.body;
@@ -253,13 +273,13 @@ function renderContent(content, host, tp) {
         const downloadUrl = `/sync/api/v1/files/download/${fileId}`;
         const label = filename ?? tp('bubble.file_fallback');
         const sizeLabel = typeof size === 'number' ? _formatFileSize(size, tp) : '';
+        const nameForIcon = typeof filename === 'string' ? filename : '';
+        const mimeForIcon = typeof mimeType === 'string' ? mimeType : '';
+        const fileIconKey = host.icon.resolveFileIconKey(nameForIcon, mimeForIcon);
         return html`
             <a class="file-card" href=${downloadUrl} download=${label} target="_blank">
                 <div class="file-card-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                    </svg>
+                    <platform-icon file-icon name=${fileIconKey} size="22"></platform-icon>
                 </div>
                 <div class="file-card-info">
                     <span class="file-card-name">${label}</span>
@@ -311,6 +331,113 @@ function renderContent(content, host, tp) {
             ></platform-audio-message-player>
         `;
     }
+    if (content.type === 'file/video') {
+        const {
+            file_id: fileId,
+            filename,
+            transcription_status: transcriptionStatus,
+            transcription_text: transcriptionText,
+            transcription_error: transcriptionError,
+        } = content.data ?? {};
+        if (typeof fileId !== 'string' || fileId === '') {
+            throw new Error(tp('bubble.err_file_video'));
+        }
+        const src = `/sync/api/v1/files/download/${fileId}`;
+        const label = typeof filename === 'string' && filename !== '' ? filename : tp('bubble.file_fallback');
+        const safeStatus = typeof transcriptionStatus === 'string' && transcriptionStatus !== ''
+            ? transcriptionStatus
+            : 'idle';
+        const safeText = typeof transcriptionText === 'string' ? transcriptionText : '';
+        const safeError = typeof transcriptionError === 'string' ? transcriptionError : '';
+        const canRequest = safeStatus === 'idle' || safeStatus === 'failed';
+        return html`
+            <div class="video-attachment">
+                <video class="video-attachment-player" controls preload="metadata" src=${src}></video>
+                <div class="video-attachment-toolbar">
+                    <a
+                        class="transcribe-btn"
+                        href=${src}
+                        download=${label}
+                        target="_blank"
+                        @click=${(e) => e.stopPropagation()}
+                    >${tp('bubble.download_title')}</a>
+                    ${canRequest
+                        ? html`
+                            <button
+                                type="button"
+                                class="transcribe-btn"
+                                @click=${(e) => {
+                                    e.stopPropagation();
+                                    host._requestVideoTranscription();
+                                }}
+                            >${tp('bubble.transcribe_video')}</button>
+                        `
+                        : ''}
+                </div>
+                ${safeStatus === 'processing'
+                    ? html`<div class="transcribe-hint">${tp('bubble.transcribe_processing')}</div>`
+                    : ''}
+                ${safeError !== '' ? html`<div class="transcribe-err">${safeError}</div>` : ''}
+                ${safeText !== '' ? html`<div class="msg-text video-transcript">${safeText}</div>` : ''}
+            </div>
+        `;
+    }
+    if (content.type === 'call/boundary') {
+        const callId = content.data?.call_id;
+        const phase = content.data?.phase;
+        if (typeof callId !== 'string' || callId === '') {
+            throw new Error(tp('bubble.err_call_boundary'));
+        }
+        if (phase !== 'started' && phase !== 'ended') {
+            throw new Error(tp('bubble.err_call_boundary'));
+        }
+        const label = phase === 'started'
+            ? tp('bubble.call_boundary_started')
+            : tp('bubble.call_boundary_ended');
+        if (phase === 'started') {
+            const showJoin = _callBoundaryShowJoinButton(host, callId);
+            return html`
+                <div class="call-boundary call-boundary--started" role="group" aria-label=${label}>
+                    ${showJoin
+                        ? html`
+                            <button
+                                type="button"
+                                class="call-boundary-join-btn"
+                                title=${tp('bubble.call_boundary_join_title')}
+                                aria-label=${tp('bubble.call_boundary_join_title')}
+                                @click=${(e) => {
+                                    e.stopPropagation();
+                                    host._joinCallFromBoundary(callId);
+                                }}
+                            >
+                                ${_svgCallBoundaryJoin}
+                                ${tp('bubble.call_boundary_join')}
+                            </button>
+                        `
+                        : html`<span class="call-boundary-started-note">${label}</span>`}
+                </div>
+            `;
+        }
+        return html`
+            <div class="call-boundary call-boundary--ended" role="group" aria-label=${label}>
+                <div class="call-boundary-icon" title=${label}>
+                    <platform-icon name="phone-ended" size="20" filled aria-hidden="true"></platform-icon>
+                </div>
+                <button
+                    type="button"
+                    class="call-boundary-transcribe"
+                    title=${tp('bubble.transcribe_meeting')}
+                    aria-label=${tp('bubble.transcribe_meeting')}
+                    @click=${(e) => {
+                        e.stopPropagation();
+                        host._requestCallTranscribe();
+                    }}
+                >
+                    <platform-icon name="doc-detail" size="18" aria-hidden="true"></platform-icon>
+                </button>
+            </div>
+        `;
+    }
     if (content.type === 'git/reference') {
         const gitRefId = content.data?.git_ref_id;
         if (typeof gitRefId !== 'string') throw new Error(tp('bubble.err_git_ref'));
@@ -341,6 +468,7 @@ export class MessageBubble extends PlatformElement {
         isOwn: { type: Boolean },
         canFocusThread: { type: Boolean },
         channelId: { type: String },
+        activeCallOverlay: { type: Object },
         pinnedMessageIds: { type: Array },
         selectionMode: { type: Boolean },
         selected: { type: Boolean },
@@ -536,14 +664,223 @@ export class MessageBubble extends PlatformElement {
                 background: rgba(16, 185, 129, 0.16);
             }
 
-            .bubble.own.bubble--audio {
+            .bubble.own.bubble--media {
                 border-color: rgba(16, 185, 129, 0.35);
                 background: rgba(16, 185, 129, 0.16);
             }
 
-            :host-context([data-theme="dark"]) .bubble.own.bubble--audio {
+            :host-context([data-theme="dark"]) .bubble.own.bubble--media {
                 border-color: rgba(100, 116, 139, 0.42);
                 background: rgba(51, 65, 85, 0.3);
+            }
+
+            /* Иначе flex (bubble-contents + время) с min-width:0 сжимает platform-audio-message-player до «таблетки». */
+            .bubble.bubble--media {
+                min-width: min(288px, 100%);
+            }
+
+            .bubble.bubble--media .bubble-contents {
+                flex: 1 1 auto;
+                min-width: min(236px, calc(100% - 52px));
+            }
+
+            .bubble.bubble--media platform-audio-message-player {
+                display: block;
+                min-width: 220px;
+                max-width: 100%;
+            }
+
+            /* Светло-зелёный фон своих пузырей: дефолтные цвета плеера сливаются с фоном — волна и время «пропадают». */
+            .bubble.own.bubble--media platform-audio-message-player {
+                --platform-audio-bar-inactive: rgba(4, 52, 34, 0.58);
+                --platform-audio-bar-active: rgba(2, 36, 24, 0.98);
+                --platform-audio-time: rgba(2, 36, 24, 0.92);
+                --platform-audio-transcribe-border: rgba(2, 36, 24, 0.45);
+                --platform-audio-transcribe-bg: rgba(255, 255, 255, 0.72);
+                --platform-audio-transcribe-fg: rgba(2, 36, 24, 0.92);
+                --platform-audio-transcription-text: rgba(2, 36, 24, 0.92);
+                --platform-audio-range-accent: rgb(4, 92, 58);
+            }
+
+            :host-context([data-theme="dark"]) .bubble.own.bubble--media platform-audio-message-player {
+                --platform-audio-bar-inactive: rgba(226, 232, 240, 0.42);
+                --platform-audio-bar-active: rgba(248, 250, 252, 0.95);
+                --platform-audio-time: rgba(241, 245, 249, 0.92);
+                --platform-audio-transcribe-border: rgba(226, 232, 240, 0.35);
+                --platform-audio-transcribe-bg: rgba(30, 41, 59, 0.55);
+                --platform-audio-transcribe-fg: rgba(241, 245, 249, 0.92);
+                --platform-audio-transcription-text: rgba(241, 245, 249, 0.9);
+                --platform-audio-range-accent: rgb(52, 211, 153);
+            }
+
+            .video-attachment {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                min-width: min(100%, 320px);
+                max-width: min(720px, 100%);
+            }
+
+            .video-attachment-player {
+                width: 100%;
+                max-height: 360px;
+                border-radius: var(--radius-lg);
+                background: #000;
+            }
+
+            .video-attachment-toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-2);
+                font-size: var(--text-xs);
+            }
+
+            .transcribe-btn {
+                padding: var(--space-1) var(--space-2);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                cursor: pointer;
+            }
+
+            .transcribe-btn:hover {
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+            }
+
+            .transcribe-hint,
+            .transcribe-err {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+
+            .transcribe-err {
+                color: rgb(239, 68, 68);
+            }
+
+            .call-boundary {
+                display: inline-flex;
+                flex-direction: row;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 0;
+                margin: 0;
+                border: none;
+                background: transparent;
+                max-width: 100%;
+                box-sizing: border-box;
+            }
+
+            .call-boundary-started-note {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+            }
+
+            .call-boundary-join-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                min-height: 30px;
+                padding: 4px 12px;
+                box-sizing: border-box;
+                border-radius: var(--radius-md);
+                border: 1px solid rgba(22, 163, 74, 0.45);
+                background: rgba(22, 163, 74, 0.1);
+                color: #15803d;
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+                font-family: inherit;
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+            }
+
+            .call-boundary-join-btn:hover {
+                background: rgba(22, 163, 74, 0.16);
+                border-color: rgba(21, 128, 61, 0.55);
+                color: #166534;
+            }
+
+            .bubble.other .call-boundary-join-btn {
+                border-color: rgba(3, 105, 161, 0.4);
+                background: rgba(56, 189, 248, 0.12);
+                color: rgb(2, 92, 145);
+            }
+
+            .bubble.other .call-boundary-join-btn:hover {
+                border-color: rgba(2, 92, 145, 0.55);
+                background: rgba(56, 189, 248, 0.2);
+                color: rgb(1, 75, 115);
+            }
+
+            .call-boundary-icon {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 40px;
+                height: 40px;
+                border-radius: var(--radius-full);
+                flex-shrink: 0;
+                box-sizing: border-box;
+            }
+
+            .bubble.own .call-boundary--ended .call-boundary-icon {
+                background: rgba(255, 255, 255, 0.36);
+                color: rgb(4, 85, 62);
+            }
+
+            .bubble.other .call-boundary--ended .call-boundary-icon {
+                background: rgba(255, 255, 255, 0.42);
+                color: rgb(2, 92, 145);
+            }
+
+            .call-boundary-transcribe {
+                display: inline-flex;
+                width: 36px;
+                height: 36px;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-full);
+                border: 1px solid rgba(255, 255, 255, 0.45);
+                background: rgba(255, 255, 255, 0.22);
+                cursor: pointer;
+                padding: 0;
+                flex-shrink: 0;
+                box-sizing: border-box;
+                transition: background var(--duration-fast), border-color var(--duration-fast);
+            }
+
+            .bubble.own .call-boundary-transcribe {
+                color: rgb(6, 95, 70);
+            }
+
+            .bubble.other .call-boundary-transcribe {
+                color: rgb(3, 105, 161);
+            }
+
+            .call-boundary-transcribe:hover {
+                background: rgba(255, 255, 255, 0.38);
+                border-color: rgba(255, 255, 255, 0.58);
+            }
+
+            .call-boundary-transcribe:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
+            }
+
+            .bubble.bubble--call-boundary {
+                padding: var(--space-2) var(--space-3);
+            }
+
+            .bubble.bubble--call-boundary .bubble-body {
+                align-items: center;
+            }
+
+            .bubble.bubble--call-boundary .contents-inner {
+                gap: 0;
             }
 
             .bubble.other {
@@ -1289,6 +1626,46 @@ export class MessageBubble extends PlatformElement {
         }
     }
 
+    async _requestVideoTranscription() {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            throw new Error(this._tp('bubble.err_channel_transcribe'));
+        }
+        if (typeof this.msg?.id !== 'string' || this.msg.id === '') {
+            throw new Error(this._tp('bubble.err_message_transcribe'));
+        }
+        const syncApi = this.services.get('syncApi');
+        const updated = await syncApi.transcribeVideoMessage(this.channelId, this.msg.id);
+        if (updated && typeof updated === 'object' && typeof updated.id === 'string') {
+            SyncStore.upsertMessage(updated);
+        }
+    }
+
+    async _requestCallTranscribe() {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            throw new Error(this._tp('bubble.err_channel_transcribe'));
+        }
+        const callId = this.msg?.call_id;
+        if (typeof callId !== 'string' || callId === '') {
+            throw new Error(this._tp('bubble.err_call_id_transcribe'));
+        }
+        const syncApi = this.services.get('syncApi');
+        await syncApi.transcribeCallSession(this.channelId, callId);
+    }
+
+    _joinCallFromBoundary(callId) {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            throw new Error(this._tp('bubble.err_no_channel'));
+        }
+        if (typeof callId !== 'string' || callId === '') {
+            throw new Error(this._tp('bubble.err_call_id_transcribe'));
+        }
+        this.dispatchEvent(new CustomEvent('join-call-from-boundary', {
+            bubbles: true,
+            composed: true,
+            detail: { channelId: this.channelId, callId },
+        }));
+    }
+
     _parentPreview() {
         const pid = this.msg?.parent_message_id;
         if (!pid) return null;
@@ -1375,7 +1752,9 @@ export class MessageBubble extends PlatformElement {
         if (!this.msg) return html``;
         const { msg, isOwn, canFocusThread, flashActive, deleting } = this;
         const sorted = [...(msg.contents ?? [])].sort((a, b) => a.order - b.order);
-        const isAudioOnlyBubble = sorted.length === 1 && sorted[0]?.type === 'file/audio';
+        const isCompactMediaBubble = sorted.length === 1
+            && (sorted[0]?.type === 'file/audio' || sorted[0]?.type === 'file/video');
+        const isCallBoundaryOnly = sorted.length === 1 && sorted[0]?.type === 'call/boundary';
         const fwdMeta = this._forwardedMeta();
         const hasEdited = Boolean(msg.edited_at);
         const hasHeaderEnd = this._isPinned() || canFocusThread;
@@ -1399,7 +1778,7 @@ export class MessageBubble extends PlatformElement {
                     </div>
                 ` : ''}
                 ${isOwn ? '' : this._renderAvatarSlot()}
-                <div class="bubble ${isOwn ? 'own' : 'other'} ${fwdMeta ? 'bubble--forwarded' : ''} ${isAudioOnlyBubble ? 'bubble--audio' : ''}">
+                <div class="bubble ${isOwn ? 'own' : 'other'} ${fwdMeta ? 'bubble--forwarded' : ''} ${isCompactMediaBubble ? 'bubble--media' : ''} ${isCallBoundaryOnly ? 'bubble--call-boundary' : ''}">
                     ${fwdMeta ? html`
                         <span class="forwarded-corner" title=${fwdMeta.tip}>
                             <platform-icon name="share" size="12"></platform-icon>

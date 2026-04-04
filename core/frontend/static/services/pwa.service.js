@@ -294,7 +294,11 @@ export class PWAService {
             if (!response.ok) {
                 throw new Error('Failed to get VAPID key');
             }
-            const { publicKey } = await response.json();
+            const body = await response.json();
+            const publicKey = body?.publicKey;
+            if (typeof publicKey !== 'string' || publicKey.trim() === '') {
+                throw new Error('[PWA] Сервер вернул пустой VAPID publicKey (настройте push.vapid_public_key)');
+            }
 
             this.pushSubscription = await this.swRegistration.pushManager.subscribe({
                 userVisibleOnly: true,
@@ -442,15 +446,42 @@ export class PWAService {
     }
 
     /**
-     * Конвертация VAPID ключа
+     * Конвертация VAPID ключа (base64url или одна строка из PEM без заголовков).
      */
     _urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding)
-            .replace(/-/g, '+')
-            .replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+        if (typeof base64String !== 'string') {
+            throw new TypeError('[PWA] VAPID publicKey: ожидается строка');
+        }
+        let s = base64String.trim().replace(/^\uFEFF/, '');
+        s = s.replace(/[\u200B-\u200D\uFEFF\u00AD\u2060]/g, '');
+        if (s.includes('-----BEGIN')) {
+            const lines = s.split(/\r?\n/).map((line) => line.trim());
+            s = lines
+                .filter((line) => line.length > 0 && !line.startsWith('-----'))
+                .join('');
+        }
+        s = s.replace(/\s/g, '');
+        if (s.length === 0 || !/^[A-Za-z0-9+/=_-]+$/.test(s)) {
+            const bad = s.match(/[^A-Za-z0-9+/=_-]/u);
+            const hint = bad
+                ? `U+${bad[0].codePointAt(0).toString(16)}`
+                : 'empty';
+            throw new Error(
+                `[PWA] VAPID publicKey: ожидается base64 или base64url (A-Za-z0-9, +, /, -, _, padding =). Проблема: ${hint}. Проверьте push.vapid_public_key.`,
+            );
+        }
+        const padding = '='.repeat((4 - (s.length % 4)) % 4);
+        const base64 = (s + padding).replace(/-/g, '+').replace(/_/g, '/');
+        let rawData;
+        try {
+            rawData = window.atob(base64);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            throw new Error(
+                `[PWA] VAPID publicKey: неверный base64 (${msg}). Ожидается одна строка base64url как в выводе web-push / vapidkeys.`,
+            );
+        }
+        return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
     }
 
     /**

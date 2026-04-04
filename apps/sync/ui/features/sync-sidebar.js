@@ -1,6 +1,5 @@
 /**
- * SyncSidebar — боковая панель: spaces, channels, навигация
- * По образцу rag-sidebar + platform-sidebar.
+ * SyncSidebar — spaces, channels; оболочка platform-service-sidebar.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -9,7 +8,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
 import './sync-channel-row.js';
 import './sync-direct-member-row.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
@@ -281,11 +280,11 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--accent);
             }
 
-            :host([collapsed]) .sidebar-adhoc-label {
+            platform-service-sidebar[collapsed] .sidebar-adhoc-label {
                 display: none;
             }
 
-            :host([collapsed]) .sidebar-adhoc-btn {
+            platform-service-sidebar[collapsed] .sidebar-adhoc-btn {
                 justify-content: center;
                 padding: var(--space-2);
             }
@@ -343,13 +342,13 @@ export class SyncSidebar extends PlatformElement {
                 flex-shrink: 0;
             }
 
-            platform-sidebar[collapsed] .sync-sidebar-footer-row {
+            platform-service-sidebar[collapsed] .sync-sidebar-footer-row {
                 flex-direction: column;
                 gap: 8px;
                 align-items: center;
             }
 
-            platform-sidebar[collapsed] .sync-sidebar-footer-row platform-user {
+            platform-service-sidebar[collapsed] .sync-sidebar-footer-row platform-user {
                 flex: 0 0 auto;
                 width: 100%;
             }
@@ -403,71 +402,82 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--accent);
             }
 
-            :host([collapsed]) .sync-sidebar-inner .section-title,
-            :host([collapsed]) .sync-sidebar-inner .chevron-rot,
-            :host([collapsed]) .sync-sidebar-inner .direct-search,
-            :host([collapsed]) .sync-sidebar-inner .section-empty,
-            :host([collapsed]) .sync-sidebar-inner .loading-text,
-            :host([collapsed]) .sync-sidebar-inner .add-btn {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-title,
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .chevron-rot,
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .direct-search,
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-empty,
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .loading-text,
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .add-btn {
                 display: none !important;
             }
 
-            :host([collapsed]) .sync-sidebar-inner .section-header--toggle {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-header--toggle {
                 justify-content: center;
                 padding-left: var(--space-2);
                 padding-right: var(--space-2);
             }
 
-            :host([collapsed]) .sync-sidebar-inner .space-filters-header,
-            :host([collapsed]) .sync-sidebar-inner .space-tags-scroll {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .space-filters-header,
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .space-tags-scroll {
                 display: none !important;
             }
 
-            :host([collapsed]) .sync-sidebar-inner .nav-row-wrap {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .nav-row-wrap {
                 justify-content: center;
                 margin-bottom: var(--space-1);
             }
 
-            :host([collapsed]) .sync-sidebar-inner .row-gear {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .row-gear {
                 display: none !important;
             }
 
-            :host([collapsed]) .sync-sidebar-inner .channels-section {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .channels-section {
                 border-top: none;
                 padding-top: var(--space-2);
                 margin-top: 0;
             }
 
-            :host([collapsed]) .sync-sidebar-inner .section-scroll {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-scroll {
                 max-height: none;
             }
 
-            .call-indicator {
-                display: flex;
+            .call-join-btn {
+                align-self: center;
+                display: inline-flex;
                 align-items: center;
-                gap: var(--space-1);
-                padding: 2px 6px;
-                background: rgba(34,197,94,0.15);
-                border: 1px solid rgba(34,197,94,0.3);
-                border-radius: 100px;
-                font-size: 11px;
-                font-weight: 600;
-                color: #22c55e;
+                justify-content: center;
+                gap: 6px;
+                height: 30px;
+                padding: 0 12px;
+                margin-right: var(--space-1);
+                box-sizing: border-box;
+                border-radius: var(--radius-md);
+                border: 1px solid rgba(22, 163, 74, 0.4);
+                background: rgba(22, 163, 74, 0.08);
+                color: #15803d;
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
                 flex-shrink: 0;
                 cursor: pointer;
-                transition: background 0.15s;
+                font-family: inherit;
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
             }
-            .call-indicator:hover { background: rgba(34,197,94,0.25); }
-            .call-dot {
-                width: 6px; height: 6px;
-                border-radius: 50%;
-                background: #22c55e;
-                animation: blink 1.5s ease infinite;
+
+            .call-join-btn:hover {
+                background: rgba(22, 163, 74, 0.14);
+                border-color: rgba(21, 128, 61, 0.55);
+                color: #166534;
+            }
+
+            .nav-row-wrap.active .call-join-btn {
+                border-color: rgba(22, 163, 74, 0.55);
+                background: rgba(22, 163, 74, 0.12);
+                color: #14532d;
+            }
+
+            .call-join-btn svg {
                 flex-shrink: 0;
-            }
-            @keyframes blink {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.3; }
+                opacity: 0.9;
             }
         `
     ];
@@ -537,13 +547,6 @@ export class SyncSidebar extends PlatformElement {
         }
     }
 
-    _openMeetings() {
-        window.dispatchEvent(new CustomEvent('sync-open-meetings', { bubbles: true }));
-        if (window.innerWidth < 768) {
-            SyncStore.setMobileSidebarOpen(false);
-        }
-    }
-
     async _selectChannel(channel) {
         const syncApi = this.services.get('syncApi');
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
@@ -602,11 +605,13 @@ export class SyncSidebar extends PlatformElement {
         const spaceList = this._spaces.list;
 
         return html`
-            <platform-sidebar
+            <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/sync_logo.svg"
                 logo-text="Sync Chat"
                 ?collapsed=${this.collapsed}
-                @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
                 @mobile-change=${(e) => {
                     const o = e.detail?.open;
                     if (typeof o === 'boolean') {
@@ -627,17 +632,6 @@ export class SyncSidebar extends PlatformElement {
                                 <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                             </svg>
                             <span class="sidebar-adhoc-label">${ts('sidebar.create_sync_label')}</span>
-                        </button>
-                    </div>
-                    <div class="sidebar-adhoc-row" style="padding-top:0;">
-                        <button
-                            type="button"
-                            class="sidebar-adhoc-btn"
-                            title=${ts('sidebar.open_meetings_title')}
-                            @click=${this._openMeetings}
-                        >
-                            <platform-icon name="calendar" size="16"></platform-icon>
-                            <span class="sidebar-adhoc-label">${ts('sidebar.meetings_label')}</span>
                         </button>
                     </div>
                     <div class="channels-section">
@@ -765,7 +759,7 @@ export class SyncSidebar extends PlatformElement {
                                         ${this.activeCallChannels?.[channel.id] ? html`
                                             <button
                                                 type="button"
-                                                class="call-indicator"
+                                                class="call-join-btn"
                                                 title=${ts('sidebar.call_active_title')}
                                                 @click=${(e) => {
                                                     e.stopPropagation();
@@ -775,7 +769,10 @@ export class SyncSidebar extends PlatformElement {
                                                     }));
                                                 }}
                                             >
-                                                <span class="call-dot"></span>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <polygon points="23 7 16 12 23 17 23 7"/>
+                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                                </svg>
                                                 ${ts('sidebar.call_join')}
                                             </button>
                                         ` : ''}
@@ -807,7 +804,7 @@ export class SyncSidebar extends PlatformElement {
                     </div>
                     <platform-deployment-version base-url="/sync" footer></platform-deployment-version>
                 </div>
-            </platform-sidebar>
+            </platform-service-sidebar>
         `;
     }
 }

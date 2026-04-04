@@ -250,6 +250,7 @@ export class PlatformUser extends PlatformElement {
             { id: 'crm', logo: '/static/core/assets/service_logos/crm_logo.svg' },
             { id: 'rag', logo: '/static/core/assets/service_logos/rag_logo.svg' },
             { id: 'sync', logo: '/static/core/assets/service_logos/sync_logo.svg' },
+            { id: 'documents', logo: '/static/core/assets/service_logos/documents_logo.svg' },
             { id: 'frontend', logo: '/static/core/assets/service_logos/frontend_logo.svg' },
         ];
     }

@@ -245,7 +245,7 @@ def create_service_app(
     app.add_middleware(DeploymentHeadersMiddleware)
 
     # Локальный dev/test: браузер на :8002 с путём /flows/... без ingress — пересылаем на flows_service_url
-    app.add_middleware(DevInterServiceProxyMiddleware, service_name=service_name)
+    app.add_middleware(DevInterServiceProxyMiddleware, service_name=settings.server.name)
 
     # API prefix
     # api_version="v1" → /flows/api/v1 (REST API)
@@ -285,42 +285,43 @@ def create_service_app(
     app.include_router(_file_router, prefix=f"{files_api_prefix}/files")
     logger.info(f"Файловый роутер подключён: {files_api_prefix}/files")
 
+    public_segment = settings.server.name
+
     # Core auth роутер (автоматически для всех сервисов)
-    auth_prefix = f"/{service_name}/api/auth"
+    auth_prefix = f"/{public_segment}/api/auth"
     logger.info(f"Подключение core auth роутера ({auth_prefix}/*)")
     app.include_router(core_auth_router, prefix=auth_prefix, tags=["auth"])
     if service_name == "frontend":
         logger.info("Подключение core auth роутера (/auth/*) для единого OAuth callback")
         app.include_router(core_auth_router, prefix="/auth", tags=["auth"])
 
-    calendar_prefix = f"/{service_name}/api/calendar"
+    calendar_prefix = f"/{public_segment}/api/calendar"
     logger.info(f"Подключение core calendar роутера ({calendar_prefix}/*)")
     app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
 
     if service_name != "frontend":
-        companies_prefix = f"/{service_name}/api/companies"
+        companies_prefix = f"/{public_segment}/api/companies"
         logger.info(f"Подключение core companies роутера ({companies_prefix}/*)")
         app.include_router(core_companies_router, prefix=companies_prefix, tags=["companies"])
     
     # Push notifications роутер (автоматически для всех сервисов)
-    push_prefix = f"/{service_name}"
+    push_prefix = f"/{public_segment}"
     logger.info(f"Подключение push роутера ({push_prefix}/api/push/*)")
     app.include_router(push_router, prefix=push_prefix, tags=["push"])
     
     # WebSocket роутер для уведомлений (автоматически для всех сервисов)
     # Монтируем с префиксом сервиса для правильного роутинга через nginx
-    ws_path = f"/{service_name}/ws/notifications" if service_name != "core" else "/ws/notifications"
+    ws_path = f"/{public_segment}/ws/notifications" if service_name != "core" else "/ws/notifications"
     logger.info(f"Подключение WebSocket роутера для уведомлений ({ws_path})")
-    app.include_router(ws_router, prefix=f"/{service_name}" if service_name != "core" else "", tags=["websocket"])
+    app.include_router(ws_router, prefix=f"/{public_segment}" if service_name != "core" else "", tags=["websocket"])
     
     # Pages роутеры (добавляем префикс сервиса к их собственному префиксу)
     if pages_routers:
         for router in pages_routers:
             tags = router.tags or [f"{service_name}-pages"]
-            # Добавляем только префикс сервиса, FastAPI сам добавит его к prefix роутера
+            # Добавляем только префикс публичного пути (server.name), FastAPI сам добавит его к prefix роутера
             if hasattr(router, 'prefix') and router.prefix:
-                # Если у роутера есть prefix, добавляем только service_name
-                app.include_router(router, prefix=f"/{service_name}", tags=tags)
+                app.include_router(router, prefix=f"/{public_segment}", tags=tags)
             else:
                 # Роутер без префикса подключается как есть
                 app.include_router(router, tags=tags)
@@ -405,6 +406,7 @@ def create_service_app(
             "lit/directives/repeat.js": "/static/core/assets/js/lit/directives/repeat.min.js",
             "lit/directives/unsafe-html.js": "/static/core/assets/js/lit/directives/unsafe-html.min.js",
             "lit/directives/when.js": "/static/core/assets/js/lit/directives/when.min.js",
+            "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
             "@platform/lib/": "/static/core/lib/",
             "@platform/services/": "/static/core/services/"
         }

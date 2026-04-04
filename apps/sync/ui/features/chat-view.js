@@ -62,10 +62,18 @@ export class ChatView extends PlatformElement {
             .header-body {
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
+                justify-content: flex-start;
                 gap: var(--space-3);
                 min-width: 0;
                 width: 100%;
+            }
+
+            .header-main-tray {
+                flex: 1 1 0;
+                min-width: 0;
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
             }
 
             .mobile-menu-btn {
@@ -145,10 +153,213 @@ export class ChatView extends PlatformElement {
             }
 
             .header-channel-wrap {
-                flex: 1 1 auto;
+                flex: 1 1 0;
                 min-width: 0;
                 display: flex;
                 align-items: center;
+            }
+
+            .header-call-banner--integrated {
+                flex: 1 1 0;
+                min-width: 0;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 8px 10px 8px 12px;
+                border-radius: var(--radius-lg);
+                border: 1px solid rgba(255, 255, 255, 0.22);
+                background: linear-gradient(135deg, #0d9488 0%, #059669 48%, #047857 100%);
+                box-shadow:
+                    0 4px 18px rgba(5, 150, 105, 0.32),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+                color: rgba(255, 255, 255, 0.98);
+            }
+
+            :host-context([data-theme="light"]) .header-call-banner--integrated {
+                border-color: rgba(255, 255, 255, 0.35);
+                box-shadow:
+                    0 4px 16px rgba(5, 150, 105, 0.22),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+            }
+
+            @media (min-width: 768px) {
+                .header-call-banner--integrated {
+                    border-radius: var(--radius-lg);
+                }
+            }
+
+            @media (max-width: 767px) {
+                .header-call-banner--integrated {
+                    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+                    padding-right: max(10px, env(safe-area-inset-right, 0px));
+                }
+            }
+
+            .header-call-banner-hit {
+                flex: 1 1 0;
+                min-width: 0;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 12px;
+                padding: 0;
+                margin: 0;
+                border: none;
+                background: transparent;
+                color: inherit;
+                font: inherit;
+                text-align: left;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+                position: relative;
+                z-index: 0;
+            }
+
+            .header-call-banner-hit:hover {
+                filter: brightness(1.06);
+            }
+
+            .header-call-banner-hit:focus-visible {
+                outline: 2px solid rgba(255, 255, 255, 0.85);
+                outline-offset: 2px;
+                border-radius: var(--radius-md);
+            }
+
+            .header-call-banner-toolbar {
+                display: flex;
+                flex-shrink: 0;
+                align-items: center;
+                gap: 6px;
+                position: relative;
+                z-index: 2;
+            }
+
+            .header-call-banner-ws.ws-badge.open {
+                background: rgba(255, 255, 255, 0.18);
+                border-color: rgba(255, 255, 255, 0.45);
+                color: #fff;
+            }
+
+            .header-call-banner-ws.ws-badge.connecting {
+                background: rgba(253, 224, 71, 0.22);
+                border-color: rgba(253, 224, 71, 0.5);
+                color: #fffbeb;
+            }
+
+            .header-call-banner-ws.ws-badge.closed {
+                background: rgba(248, 113, 113, 0.28);
+                border-color: rgba(252, 165, 165, 0.5);
+                color: #fff;
+            }
+
+            .header-call-banner-icon-btn {
+                display: inline-flex;
+                width: 38px;
+                height: 38px;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                border: 1px solid rgba(255, 255, 255, 0.35);
+                background: rgba(255, 255, 255, 0.12);
+                color: #fff;
+                cursor: pointer;
+                padding: 0;
+                box-sizing: border-box;
+                transition: background var(--duration-fast), border-color var(--duration-fast);
+            }
+
+            .header-call-banner-icon-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.5);
+            }
+
+            .header-call-banner-icon-btn:focus-visible {
+                outline: 2px solid #fff;
+                outline-offset: 2px;
+            }
+
+            .header-call-banner-pulse {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                background: #fff;
+                animation: header-call-banner-pulse 1.5s ease-in-out infinite;
+            }
+
+            @keyframes header-call-banner-pulse {
+                0%, 100% {
+                    opacity: 1;
+                    transform: scale(1);
+                    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+                }
+                50% {
+                    opacity: 0.88;
+                    transform: scale(0.9);
+                    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
+                }
+            }
+
+            .header-call-banner-text {
+                flex: 1 1 auto;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .header-call-banner-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                letter-spacing: 0.01em;
+            }
+
+            .header-call-banner-sub {
+                font-size: var(--text-xs);
+                opacity: 0.92;
+            }
+
+            .header-call-banner-hangup {
+                flex-shrink: 0;
+                width: 40px;
+                height: 40px;
+                border-radius: var(--radius-full);
+                border: none;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: rgba(220, 38, 38, 0.92);
+                color: #fff;
+                box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35);
+                transition: transform var(--duration-fast) var(--easing-default), background var(--duration-fast) var(--easing-default);
+                position: relative;
+                z-index: 3;
+            }
+
+            .header-call-banner-hangup:hover {
+                background: rgba(185, 28, 28, 0.98);
+                transform: scale(1.04);
+            }
+
+            .header-call-banner-hangup:focus-visible {
+                outline: 2px solid #fff;
+                outline-offset: 2px;
+            }
+
+            .header-body--call-banner {
+                align-items: stretch;
+            }
+
+            @media (max-width: 767px) {
+                .chat-header.chat-header--call-banner {
+                    padding-top: max(var(--space-1), env(safe-area-inset-top, 0px));
+                    padding-bottom: var(--space-1);
+                    padding-left: var(--space-2);
+                    padding-right: 0;
+                }
             }
 
             .header-leading {
@@ -904,6 +1115,48 @@ export class ChatView extends PlatformElement {
         }
     }
 
+    _callBannerActive() {
+        const o = this._ui.activeCallOverlay;
+        if (!o || o.minimized !== true) {
+            return false;
+        }
+        if (typeof o.channel_id !== 'string' || o.channel_id === '') {
+            return false;
+        }
+        const sel = this._chat.selectedChannelId;
+        if (typeof sel !== 'string' || sel === '') {
+            return false;
+        }
+        return SyncStore.normalizeSyncChannelId(sel) === SyncStore.normalizeSyncChannelId(o.channel_id);
+    }
+
+    _expandCallFromBanner(e) {
+        if (e.target.closest('.header-call-banner-toolbar')) {
+            return;
+        }
+        window.dispatchEvent(new CustomEvent('sync-call-overlay-expand', { bubbles: true }));
+    }
+
+    _hangupCallFromBanner(e) {
+        e.stopPropagation();
+        const o = this._ui.activeCallOverlay;
+        if (typeof o?.call_id !== 'string' || o.call_id === '') {
+            throw new Error(this.i18n.t('chat_view.err_call_banner_call_id', {}));
+        }
+        window.dispatchEvent(new CustomEvent('sync-call-banner-hangup', {
+            bubbles: true,
+            detail: { call_id: o.call_id },
+        }));
+    }
+
+    _onCallBannerKeydown(e) {
+        if (e.key !== 'Enter' && e.key !== ' ') {
+            return;
+        }
+        e.preventDefault();
+        this._expandCallFromBanner(e);
+    }
+
     render() {
         const ts = (key, params) => this.i18n.t(key, params ?? {});
         const { selectedChannelId, focusedThreadId } = this._chat;
@@ -949,6 +1202,8 @@ export class ChatView extends PlatformElement {
         const headerSubtitleText = typingLine || subtitleFallback;
         const showHeaderSubtitle = typeof headerSubtitleText === 'string' && headerSubtitleText !== '';
 
+        const callBanner = this._callBannerActive();
+
         const headerLead = selectedChannel
             ? html`<div class="header-leading">${this._headerLeadingGraphic(selectedChannel)}</div>`
             : html``;
@@ -982,9 +1237,7 @@ export class ChatView extends PlatformElement {
                     </div>
                 `;
 
-        return html`
-            <div class=${classMap({ 'chat-header': true, 'chat-header--compact': this._isMobile })}>
-                <div class="header-body">
+        const mobileMenuBtn = html`
                     <button
                         type="button"
                         class=${classMap({ 'mobile-menu-btn': true, hidden: !showMobileMenuBtn })}
@@ -994,10 +1247,129 @@ export class ChatView extends PlatformElement {
                     >
                         <platform-icon name="hamburger" size="20"></platform-icon>
                     </button>
-                    <div class="header-channel-wrap">
-                        ${channelBlock}
+                `;
+
+        const callBannerBody = html`
+                    ${mobileMenuBtn}
+                    <div class="header-call-banner--integrated">
+                        <button
+                            type="button"
+                            class="header-call-banner-hit"
+                            title=${ts('chat_view.call_banner_subtitle')}
+                            @click=${this._expandCallFromBanner}
+                            @keydown=${this._onCallBannerKeydown}
+                        >
+                            <span class="header-call-banner-pulse" aria-hidden="true"></span>
+                            <div class="header-call-banner-text">
+                                <div class="header-call-banner-title">${ts('chat_view.call_banner_title')}</div>
+                                <div class="header-call-banner-sub">${ts('chat_view.call_banner_subtitle')}</div>
+                            </div>
+                        </button>
+                        <div class="header-call-banner-toolbar">
+                            <span class="ws-badge ${this._wsState} header-call-banner-ws">${this._wsState}</span>
+                            ${focusedThreadId ? html`
+                                <button
+                                    type="button"
+                                    class="header-call-banner-icon-btn"
+                                    title=${ts('chat_view.back')}
+                                    aria-label=${ts('chat_view.back')}
+                                    @click=${() => SyncStore.setFocusedThread(null)}
+                                >
+                                    <platform-icon name="chevron-left" size="18"></platform-icon>
+                                </button>
+                            ` : html`
+                                <button
+                                    type="button"
+                                    class="header-call-banner-icon-btn"
+                                    title=${ts('chat_view.threads_title')}
+                                    aria-label=${ts('chat_view.threads_title')}
+                                    ?disabled=${!selectedChannelId}
+                                    @click=${() => SyncStore.setThreadDrawerOpen(true)}
+                                >
+                                    <platform-icon name="list" size="18"></platform-icon>
+                                </button>
+                            `}
+                            ${this._isMobile ? html`
+                                <div class="header-more-wrap">
+                                    <button
+                                        type="button"
+                                        class="header-call-banner-icon-btn header-more-trigger"
+                                        title=${ts('chat_view.more_title')}
+                                        aria-label=${ts('chat_view.more_aria')}
+                                        aria-expanded=${this._headerMoreOpen ? 'true' : 'false'}
+                                        aria-haspopup="true"
+                                        @click=${this._toggleHeaderMoreMenu}
+                                    >
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                            <circle cx="5" cy="12" r="2"/>
+                                            <circle cx="12" cy="12" r="2"/>
+                                            <circle cx="19" cy="12" r="2"/>
+                                        </svg>
+                                    </button>
+                                    ${this._headerMoreOpen ? html`
+                                        <div class="header-more-menu" @pointerdown=${(e) => e.stopPropagation()}>
+                                            ${focusedThreadId ? html`
+                                                <button
+                                                    type="button"
+                                                    class="header-more-item"
+                                                    @click=${() => {
+        this._closeHeaderMoreMenu();
+        SyncStore.setFocusedThread(null);
+    }}
+                                                >
+                                                    <platform-icon name="chevron-left" size="16"></platform-icon>
+                                                    <span>${ts('chat_view.back')}</span>
+                                                </button>
+                                            ` : html`
+                                                <button
+                                                    type="button"
+                                                    class="header-more-item"
+                                                    ?disabled=${!selectedChannelId}
+                                                    @click=${() => {
+        this._closeHeaderMoreMenu();
+        SyncStore.setThreadDrawerOpen(true);
+    }}
+                                                >
+                                                    <platform-icon name="list" size="16"></platform-icon>
+                                                    <span>${ts('chat_view.threads')}</span>
+                                                </button>
+                                            `}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                            <button
+                                type="button"
+                                class="header-call-banner-hangup"
+                                title=${ts('call_overlay.hangup_title')}
+                                aria-label=${ts('chat_view.call_banner_hangup_aria')}
+                                @click=${this._hangupCallFromBanner}
+                            >
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C9.6 21 3 14.4 3 6c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="header-actions">
+                `;
+
+        return html`
+            <div class=${classMap({
+        'chat-header': true,
+        'chat-header--compact': this._isMobile,
+        'chat-header--call-banner': callBanner,
+    })}>
+                <div class=${classMap({
+        'header-body': true,
+        'header-body--call-banner': callBanner,
+    })}>
+                    ${callBanner ? callBannerBody : html`
+                    ${mobileMenuBtn}
+                    <div class="header-main-tray">
+                        <div class="header-channel-wrap">
+                            ${channelBlock}
+                        </div>
+                        <div class="header-actions">
                         ${this._isMobile ? html`
                             <div class="header-more-wrap">
                                 <button
@@ -1020,7 +1392,7 @@ export class ChatView extends PlatformElement {
                                         <div class="header-more-menu-status">
                                             <span class="ws-badge ${this._wsState}">${this._wsState}</span>
                                         </div>
-                                        ${selectedChannelId ? html`
+                                        ${selectedChannelId && !callBanner ? html`
                                             <button
                                                 type="button"
                                                 class="header-more-item"
@@ -1068,7 +1440,7 @@ export class ChatView extends PlatformElement {
                         ` : html`
                             <span class="ws-badge ${this._wsState}">${this._wsState}</span>
 
-                            ${selectedChannelId ? html`
+                            ${selectedChannelId && !callBanner ? html`
                             <button type="button" class="icon-btn" title=${ts('chat_view.call_in_channel_title')} aria-label=${ts('chat_view.call_in_channel_aria')} @click=${this._startCall}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polygon points="23 7 16 12 23 17 23 7"/>
@@ -1094,7 +1466,9 @@ export class ChatView extends PlatformElement {
                             </button>
                         `}
                         `}
+                        </div>
                     </div>
+                    `}
                 </div>
             </div>
 

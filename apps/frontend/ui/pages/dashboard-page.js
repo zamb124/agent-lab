@@ -321,6 +321,12 @@ export class DashboardPage extends PlatformElement {
                 logo: '/static/core/assets/service_logos/rag_logo.svg',
                 description: tp('apps.rag.description'),
             },
+            {
+                id: 'documents',
+                name: tp('apps.documents.name'),
+                logo: '/static/core/assets/service_logos/documents_logo.svg',
+                description: tp('apps.documents.description'),
+            },
         ];
 
         return html`
@@ -362,6 +368,7 @@ export class DashboardPage extends PlatformElement {
             crm: '8003',
             rag: '8004',
             sync: '8005',
+            documents: '8008',
         };
 
         const targetPort = servicePortById[serviceId];

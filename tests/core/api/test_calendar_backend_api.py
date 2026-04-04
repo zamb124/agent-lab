@@ -29,7 +29,7 @@ async def test_calendar_event_crud_and_filters(
     end_at = start_at + timedelta(hours=1)
     create_payload = {
         "title": f"Calendar CRUD {unique_id}",
-        "kind": "meeting",
+        "kind": "event",
         "source": "platform",
         "source_id": None,
         "namespace": "tests",
@@ -107,7 +107,7 @@ async def test_calendar_event_crud_and_filters(
 
 
 @pytest.mark.asyncio
-async def test_calendar_rejects_invalid_sync_meeting_shape(
+async def test_calendar_platform_kind_event_has_no_sync_link_metadata(
     unique_id: str,
     frontend_client,
     auth_headers_system,
@@ -116,8 +116,8 @@ async def test_calendar_rejects_invalid_sync_meeting_shape(
     response = await frontend_client.post(
         "/frontend/api/calendar/events",
         json={
-            "title": f"sync shape {unique_id}",
-            "kind": "meeting",
+            "title": f"plain event {unique_id}",
+            "kind": "event",
             "source": "platform",
             "source_id": None,
             "namespace": None,
@@ -134,11 +134,15 @@ async def test_calendar_rejects_invalid_sync_meeting_shape(
             "series_id": None,
             "deep_link": None,
             "metadata": {},
-            "sync_meeting": "enabled",
         },
         headers=auth_headers_system,
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
+    body = response.json()
+    meta = body.get("metadata") or {}
+    assert not meta.get("sync_link_token")
+    assert meta.get("sync_meeting") not in ("1", 1)
+    assert body.get("deep_link") in (None, "")
 
 
 @pytest.mark.asyncio
@@ -373,7 +377,7 @@ async def test_calendar_create_event_sends_invite_notification_by_attendee_id(
     end_at = start_at + timedelta(minutes=30)
     create_payload = {
         "title": f"Invite by attendee_id {unique_id}",
-        "kind": "meeting",
+        "kind": "event",
         "source": "platform",
         "source_id": None,
         "namespace": "tests",
@@ -435,7 +439,7 @@ async def test_calendar_create_event_sends_invite_notification_by_attendee_email
     end_at = start_at + timedelta(minutes=45)
     create_payload = {
         "title": f"Invite by attendee_email {unique_id}",
-        "kind": "meeting",
+        "kind": "event",
         "source": "platform",
         "source_id": None,
         "namespace": "tests",

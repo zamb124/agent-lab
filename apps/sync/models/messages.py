@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Union
+from typing import Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from apps.sync.models.common import UserBrief
-from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus
+from core.files.models import (
+    AudioAttachmentContent,
+    AudioTranscriptionStatus,
+    VideoAttachmentContent,
+)
 
 # Один текстовый блок text/plain — как лимит одного сообщения в Telegram (4096).
 SYNC_MESSAGE_TEXT_MAX_CHARS = 4096
@@ -33,6 +37,8 @@ class MessageContentType(str, Enum):
     FILE_IMAGE = "file/image"
     FILE_DOCUMENT = "file/document"
     FILE_AUDIO = "file/audio"
+    FILE_VIDEO = "file/video"
+    CALL_BOUNDARY = "call/boundary"
     GIT_REFERENCE = "git/reference"
     CUSTOM_TOOL_RESPONSE = "custom_tool_response"
 
@@ -96,11 +102,20 @@ class CustomToolResponseContent(BaseModel):
     )
 
 
+class CallBoundaryContent(BaseModel):
+    """Маркер начала или окончания звонка в ленте канала."""
+
+    call_id: str = Field(description="Идентификатор звонка.")
+    phase: Literal["started", "ended"] = Field(description="Фаза сессии.")
+
+
 ContentData = Union[
     TextPlainContent,
     CodeBlockContent,
     FileAttachmentContent,
     AudioAttachmentContent,
+    VideoAttachmentContent,
+    CallBoundaryContent,
     MockImageContent,
     GitReferenceContent,
     CustomToolResponseContent,
@@ -113,6 +128,24 @@ class MessageContentModel(BaseModel):
     type: MessageContentType = Field(description="Тип блока контента.")
     data: ContentData = Field(description="Данные блока контента.")
     order: int = Field(description="Позиция блока в сообщении.")
+
+    @model_validator(mode="after")
+    def _coerce_file_video_payload(self) -> MessageContentModel:
+        """Union ContentData отдаёт приоритет FileAttachmentContent; для file/video нужен VideoAttachmentContent."""
+        if self.type == MessageContentType.FILE_VIDEO and isinstance(self.data, FileAttachmentContent):
+            fa = self.data
+            object.__setattr__(
+                self,
+                "data",
+                VideoAttachmentContent(
+                    file_id=fa.file_id,
+                    filename=fa.filename,
+                    mime_type=fa.mime_type,
+                    size=fa.size,
+                    duration_ms=None,
+                ),
+            )
+        return self
 
 
 class ReactionEntry(BaseModel):
@@ -168,6 +201,10 @@ class MessageRead(BaseModel):
         default=None,
         description="Дублирует mentions из первого блока text/plain для клиента.",
     )
+    call_id: str | None = Field(
+        default=None,
+        description="Привязка к сессии звонка (агрегация транскрипции по митингу).",
+    )
 
 
 class MessageCreate(BaseModel):
@@ -187,6 +224,10 @@ class MessageCreate(BaseModel):
     mentioned_user_ids: list[str] | None = Field(
         default=None,
         description="Упоминания участников канала; сервер записывает в data первого text/plain.",
+    )
+    call_id: str | None = Field(
+        default=None,
+        description="Связать сообщение с активным/завершённым звонком (голос, чат оверлея, запись).",
     )
 
 

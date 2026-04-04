@@ -132,16 +132,16 @@ class MockLLM:
     
     async def _get_response_async(self, messages: List[Message]) -> Dict[str, Any]:
         """Асинхронный метод получения ответа с Redis поддержкой."""
-        # Сначала Redis (межпроцессный)
-        redis_response = await self._get_redis_response()
-        if redis_response is not None:
-            return self._process_response(redis_response, messages)
-        
-        # Потом локальная очередь
+        # Локальная очередь приоритетнее Redis: в одном тесте uvicorn ест очередь
+        # из configure_mock_llm, а worker — из ключа mock_llm:responses без пересечения.
         if self._response_queue:
             response = self._response_queue.pop(0)
             logger.debug(f"MockLLM: ответ из очереди (осталось {len(self._response_queue)})")
             return self._process_response(response, messages)
+
+        redis_response = await self._get_redis_response()
+        if redis_response is not None:
+            return self._process_response(redis_response, messages)
 
         return self._generate_from_patterns(messages)
 

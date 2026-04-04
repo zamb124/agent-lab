@@ -446,7 +446,7 @@ def execute(args, state):
         
         mock_llm_with_queue([
             # Main agent вызывает subagent
-            {"type": "tool_call", "tool": "subagent", "args": {}},
+            {"type": "tool_call", "tool": "subagent", "args": {"request": "run helper"}},
             # Subagent вызывает свой tool
             {"type": "tool_call", "tool": "set_flag", "args": {}},
             # Subagent отвечает
@@ -538,7 +538,11 @@ def execute(args, state):
         
         # Mock HTTP response
         with patch('apps.flows.src.runtime.nodes.ExternalAPINode._run_impl', new_callable=AsyncMock) as mock_api:
-            mock_api.return_value = {"api_executed": True, "api_data": "from_api"}
+            mock_api.return_value = {
+                "response": "from_api",
+                "api_executed": True,
+                "api_data": "from_api",
+            }
             
             react = LlmNode("main", config={"prompt": "Use API.", "tools": [tool]})
             result = await react.run(make_state(content="test"))
@@ -567,7 +571,11 @@ def execute(args, state):
         
         # Mock A2A call
         with patch('apps.flows.src.runtime.nodes.RemoteFlowNode._run_impl', new_callable=AsyncMock) as mock_remote:
-            mock_remote.return_value = {"remote_executed": True, "remote_response": "pong"}
+            mock_remote.return_value = {
+                "response": "pong",
+                "remote_executed": True,
+                "remote_response": "pong",
+            }
             
             react = LlmNode("main", config={"prompt": "Use remote.", "tools": [tool]})
             result = await react.run(make_state(content="test"))
@@ -596,7 +604,11 @@ def execute(args, state):
         
         # Mock MCP call
         with patch('apps.flows.src.runtime.nodes.MCPNode._run_impl', new_callable=AsyncMock) as mock_mcp:
-            mock_mcp.return_value = {"mcp_executed": True, "mcp_output": "mcp_result"}
+            mock_mcp.return_value = {
+                "response": "mcp_result",
+                "mcp_executed": True,
+                "mcp_output": "mcp_result",
+            }
             
             react = LlmNode("main", config={"prompt": "Use MCP.", "tools": [tool]})
             result = await react.run(make_state(content="test"))

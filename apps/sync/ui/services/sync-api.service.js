@@ -13,8 +13,18 @@ export class SyncAPIService extends BaseService {
         return this.get(`/spaces/?limit=${limit}`);
     }
 
-    async createSpace(name, description) {
-        return this.post('/spaces/', { name, description: description || null });
+    /**
+     * @param {string} name
+     * @param {string | null} [description]
+     * @param {{ transcribe_voice_messages?: boolean, speech_to_chat_enabled?: boolean }} [defaultsForNewChannels]
+     */
+    async createSpace(name, description, defaultsForNewChannels = {}) {
+        return this.post('/spaces/', {
+            name,
+            description: description || null,
+            transcribe_voice_messages: defaultsForNewChannels.transcribe_voice_messages === true,
+            speech_to_chat_enabled: defaultsForNewChannels.speech_to_chat_enabled === true,
+        });
     }
 
     /**
@@ -30,49 +40,6 @@ export class SyncAPIService extends BaseService {
 
     async getChannels(limit = 200) {
         return this.get(`/channels/?limit=${limit}`);
-    }
-
-    async getMeetings(params = {}) {
-        const search = new URLSearchParams();
-        if (typeof params.channel_id === 'string' && params.channel_id !== '') {
-            search.set('channel_id', params.channel_id);
-        }
-        if (typeof params.space_id === 'string' && params.space_id !== '') {
-            search.set('space_id', params.space_id);
-        }
-        if (typeof params.limit === 'number') {
-            search.set('limit', String(params.limit));
-        }
-        const query = search.toString();
-        return this.get(`/meetings/${query ? `?${query}` : ''}`);
-    }
-
-    async getMeeting(meetingId) {
-        if (typeof meetingId !== 'string' || meetingId === '') {
-            throw new Error(t('sync_api.err_meeting_id', {}));
-        }
-        return this.get(`/meetings/${encodeURIComponent(meetingId)}`);
-    }
-
-    async getMeetingTranscript(meetingId) {
-        if (typeof meetingId !== 'string' || meetingId === '') {
-            throw new Error(t('sync_api.err_meeting_id', {}));
-        }
-        return this.get(`/meetings/${encodeURIComponent(meetingId)}/transcript`);
-    }
-
-    async exportMeetingToCrm(meetingId, namespace = null) {
-        if (typeof meetingId !== 'string' || meetingId === '') {
-            throw new Error(t('sync_api.err_meeting_id', {}));
-        }
-        return this.post(`/meetings/${encodeURIComponent(meetingId)}/export/crm`, { namespace });
-    }
-
-    async retryMeetingProcessing(meetingId) {
-        if (typeof meetingId !== 'string' || meetingId === '') {
-            throw new Error(t('sync_api.err_meeting_id', {}));
-        }
-        return this.post(`/meetings/${encodeURIComponent(meetingId)}/retry-processing`, {});
     }
 
     async getCallRecordings(callId) {
@@ -293,6 +260,40 @@ export class SyncAPIService extends BaseService {
         }
         return this.post(
             `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/transcribe`,
+            {}
+        );
+    }
+
+    /**
+     * @param {string} channelId
+     * @param {string} messageId
+     */
+    async transcribeVideoMessage(channelId, messageId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error(t('channel_settings.err_channel_id', {}));
+        }
+        if (typeof messageId !== 'string' || messageId === '') {
+            throw new Error(t('sync_api.err_message_id', {}));
+        }
+        return this.post(
+            `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/transcribe-video`,
+            {}
+        );
+    }
+
+    /**
+     * @param {string} channelId
+     * @param {string} callId
+     */
+    async transcribeCallSession(channelId, callId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error(t('channel_settings.err_channel_id', {}));
+        }
+        if (typeof callId !== 'string' || callId === '') {
+            throw new Error(t('sync_api.err_call_id', {}));
+        }
+        return this.post(
+            `/channels/${encodeURIComponent(channelId)}/calls/${encodeURIComponent(callId)}/transcribe`,
             {}
         );
     }

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 import uuid
+from pathlib import Path
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 
@@ -18,9 +20,26 @@ os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID", "minioadmin")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY", "minioadmin")
-import uuid
+os.environ.setdefault("STT__PROVIDER", "mock")
+os.environ.setdefault("STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
+os.environ.setdefault("CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS", "2")
+os.environ.setdefault("CALLS__SPEECH_TO_CHAT__POLL_INITIAL_DELAY_SECONDS", "0.5")
+os.environ.setdefault("CALLS__SPEECH_TO_CHAT__POLL_INTERVAL_SECONDS", "1")
+os.environ.setdefault("CALLS__LIVEKIT_URL", "ws://localhost:7890")
+os.environ.setdefault("CALLS__LIVEKIT_PUBLIC_URL", "http://localhost:7890")
+os.environ.setdefault("CALLS__LIVEKIT_API_KEY", "devkey")
+os.environ.setdefault("CALLS__LIVEKIT_API_SECRET", "secret")
+
+import core.config.base as _sync_test_config_base
+
+_sync_test_config_base._settings_instance = None
+from core.config import set_settings
+from core.config.base import BaseSettings
+from core.config.loader import load_merged_config
+
+set_settings(BaseSettings(**load_merged_config(service_name="sync")))
+
 from collections.abc import AsyncIterator
-from typing import Callable
 
 import pytest
 import pytest_asyncio
@@ -32,13 +51,40 @@ from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.file_repository import SyncFileRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.db.repositories.meeting_repository import CallMeetingRepository, CallRecordingRepository
+from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
+from apps.sync.db.repositories.call_speech_egress_repository import CallSpeechEgressTrackRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
-from core.clients.stt_client import STTTranscriptionResult
-from core.files.models import AudioTranscriptionStatus
-
 from sqlalchemy import text
+
+_SYNC_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="session")
+def livekit_cli_test_container() -> None:
+    """Поднимает контейнер lk cli до тестов; иначе docker-compose внутри тела теста съедает лимит timeout."""
+    compose = _SYNC_REPO_ROOT / "docker-compose-test.yaml"
+    r = subprocess.run(
+        [
+            "docker-compose",
+            "-f",
+            str(compose),
+            "up",
+            "-d",
+            "livekit-cli-test",
+        ],
+        cwd=str(_SYNC_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(
+            "docker-compose up livekit-cli-test failed:\n"
+            f"{r.stdout}\n{r.stderr}"
+        )
+    yield
 
 
 def _get_sync_test_db_url() -> str:
@@ -76,10 +122,9 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
 _SYNC_DELETE_ORDER = (
     # Дочерние таблицы первыми; без TRUNCATE — меньше AccessExclusiveLock и deadlock с xdist.
     "sync_call_links",
-    "sync_call_speaker_segments",
-    "sync_call_meetings",
     "sync_call_recordings",
     "sync_call_participants",
+    "sync_call_speech_egress_tracks",
     "sync_calls",
     "sync_message_files",
     "sync_message_contents",
@@ -161,8 +206,8 @@ def call_recording_repo(sync_database: SyncDatabase) -> CallRecordingRepository:
 
 
 @pytest.fixture()
-def call_meeting_repo(sync_database: SyncDatabase) -> CallMeetingRepository:
-    return CallMeetingRepository(db=sync_database)
+def speech_egress_repo(sync_database: SyncDatabase) -> CallSpeechEgressTrackRepository:
+    return CallSpeechEgressTrackRepository(db=sync_database)
 
 
 @pytest.fixture()
@@ -174,33 +219,45 @@ def sync_user_repository(sync_database: SyncDatabase):
 
 
 @pytest_asyncio.fixture()
-async def livekit_demo_publisher():
-    """Запускает headless demo publisher в комнате LiveKit через livekit-cli контейнер."""
+async def livekit_demo_publisher(livekit_cli_test_container):
+    """Публикует тестовый Opus-трек в комнату LiveKit через lk (`tests/fixtures/sync/speech_demo.ogg`)."""
     processes: list[asyncio.subprocess.Process] = []
 
-    async def _ensure_cli_container_running() -> None:
-        compose_up = await asyncio.create_subprocess_exec(
-            "docker-compose",
-            "-f",
-            "docker-compose-test.yaml",
-            "up",
-            "-d",
-            "livekit-cli-test",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        compose_output, _ = await compose_up.communicate()
-        if compose_up.returncode != 0:
-            raise RuntimeError(
-                "Не удалось поднять livekit-cli-test контейнер: "
-                f"{compose_output.decode('utf-8', errors='replace')}"
-            )
-
-    async def _start(*, room_name: str, settle_seconds: float = 3.0) -> str:
+    async def _start(
+        *,
+        room_name: str,
+        settle_seconds: float = 3.0,
+        identity: str | None = None,
+    ) -> str:
         if room_name == "":
             raise ValueError("room_name обязателен для demo publisher.")
-        await _ensure_cli_container_running()
-        identity = f"test-publisher-{uuid.uuid4().hex[:8]}"
+        pub_identity = (
+            identity
+            if isinstance(identity, str) and identity.strip() != ""
+            else f"test-publisher-{uuid.uuid4().hex[:8]}"
+        )
+        audio_fixture = _SYNC_REPO_ROOT / "tests/fixtures/sync/speech_demo.ogg"
+        if not audio_fixture.is_file():
+            raise RuntimeError(
+                "Для speech-to-chat e2e нужен Opus-файл: tests/fixtures/sync/speech_demo.ogg"
+            )
+        cp = subprocess.run(
+            [
+                "docker",
+                "cp",
+                str(audio_fixture),
+                "agentlab_livekit_cli_test:/tmp/speech_demo.ogg",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+        if cp.returncode != 0:
+            raise RuntimeError(
+                "docker cp speech_demo.ogg в livekit-cli-test не удался:\n"
+                f"{cp.stdout}\n{cp.stderr}"
+            )
         command = [
             "docker",
             "exec",
@@ -215,8 +272,9 @@ async def livekit_demo_publisher():
             "--api-secret",
             "secret",
             "--identity",
-            identity,
-            "--publish-demo",
+            pub_identity,
+            "--publish",
+            "/tmp/speech_demo.ogg",
             room_name,
         ]
         process = await asyncio.create_subprocess_exec(
@@ -235,7 +293,7 @@ async def livekit_demo_publisher():
                 "Demo publisher завершился до старта egress. "
                 f"room={room_name}, returncode={process.returncode}, output={output}"
             )
-        return identity
+        return pub_identity
 
     yield _start
 
@@ -250,143 +308,3 @@ async def livekit_demo_publisher():
             await process.wait()
 
 
-@pytest.fixture()
-def mock_sync_recording_source(monkeypatch) -> Callable[[bytes, str], None]:
-    """Подменяет скачивание raw-записи в sync pipeline тестовым содержимым."""
-    from apps.sync.realtime import tasks as sync_tasks
-
-    def _apply(audio_bytes: bytes = b"fake-audio-bytes", content_type: str = "audio/wav") -> None:
-        async def _stubbed_download(*, source_url: str, timeout_seconds: float) -> tuple[bytes, str]:
-            return audio_bytes, content_type
-
-        monkeypatch.setattr(sync_tasks, "_download_recording_bytes", _stubbed_download)
-
-    return _apply
-
-
-@pytest.fixture()
-def mock_sync_stt_client(monkeypatch) -> Callable[[str], object]:
-    """Подменяет STTClientFactory в sync pipeline и возвращает объект-клиент для проверок."""
-    from apps.sync.realtime import tasks as sync_tasks
-
-    class _MockSTTClient:
-        def __init__(self, transcript_text: str) -> None:
-            self._transcript_text = transcript_text
-            self.calls: list[dict[str, str]] = []
-
-        async def transcribe_audio(
-            self,
-            *,
-            audio_bytes: bytes,
-            file_name: str,
-            mime_type: str,
-            language: str | None = None,
-        ) -> STTTranscriptionResult:
-            self.calls.append(
-                {
-                    "file_name": file_name,
-                    "mime_type": mime_type,
-                    "language": language or "",
-                    "size": str(len(audio_bytes)),
-                }
-            )
-            return STTTranscriptionResult(
-                provider="mock",
-                status=AudioTranscriptionStatus.DONE,
-                text=self._transcript_text,
-                language=language,
-            )
-
-    def _apply(transcript_text: str) -> _MockSTTClient:
-        client = _MockSTTClient(transcript_text=transcript_text)
-        monkeypatch.setattr(sync_tasks.STTClientFactory, "create_client", staticmethod(lambda: client))
-        return client
-
-    return _apply
-
-
-@pytest.fixture()
-def mock_sync_egress_result(monkeypatch) -> Callable[[str, str], None]:
-    """Подменяет резолв egress результата в sync pipeline."""
-    from apps.sync.realtime import tasks as sync_tasks
-
-    def _apply(
-        egress_id: str = "egress-test-id",
-        source_url: str = "http://recordings.local/egress-test.mp4",
-    ) -> None:
-        async def _stubbed_resolve(*, room_name: str, timeout_seconds: float) -> tuple[str, str]:
-            return egress_id, source_url
-
-        monkeypatch.setattr(sync_tasks, "_resolve_livekit_egress_result", _stubbed_resolve)
-
-    return _apply
-
-
-@pytest.fixture()
-def wait_for_meeting_pipeline_complete(call_meeting_repo):
-    """Ожидает завершения meeting pipeline до готового транскрипта и summary."""
-
-    async def _wait(
-        meeting_id: str,
-        company_id: str,
-        *,
-        timeout_seconds: float = 40.0,
-        expected_namespace: str | None = None,
-        require_export_done: bool = True,
-    ):
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout_seconds
-        latest = await call_meeting_repo.get(meeting_id)
-        poll_index = 0
-        while loop.time() < deadline:
-            poll_index += 1
-            latest = await call_meeting_repo.get(meeting_id)
-            if latest is None:
-                if poll_index % 8 == 0:
-                    print(f"[wait_meeting_pipeline] meeting={meeting_id} status=missing")
-                await asyncio.sleep(0.25)
-                continue
-            if latest.company_id != company_id:
-                raise AssertionError(
-                    f"Встреча {meeting_id} принадлежит другой компании: {latest.company_id}."
-                )
-            summary = latest.summary_json or {}
-            has_summary = "short_summary" in summary
-            has_transcript = isinstance(latest.transcript_text_file_id, str) and latest.transcript_text_file_id != ""
-            export_ok = (latest.export_status == "done") if require_export_done else True
-            namespace_ok = True
-            if expected_namespace is not None:
-                namespace_ok = latest.export_target_namespace == expected_namespace
-            if poll_index % 8 == 0:
-                print(
-                    "[wait_meeting_pipeline] "
-                    f"meeting={meeting_id} "
-                    f"recording={latest.recording_id} "
-                    f"export_status={latest.export_status} "
-                    f"has_transcript={has_transcript} "
-                    f"has_summary={has_summary} "
-                    f"namespace={latest.export_target_namespace}"
-                )
-            if has_summary and has_transcript and export_ok and namespace_ok:
-                return latest
-            await asyncio.sleep(0.25)
-
-        current_summary = {}
-        current_export_status = "missing"
-        current_namespace = None
-        current_transcript_file = None
-        if latest is not None:
-            current_summary = latest.summary_json or {}
-            current_export_status = latest.export_status
-            current_namespace = latest.export_target_namespace
-            current_transcript_file = latest.transcript_text_file_id
-        raise AssertionError(
-            "Meeting pipeline не завершился в срок: "
-            f"meeting_id={meeting_id}, "
-            f"export_status={current_export_status}, "
-            f"export_target_namespace={current_namespace}, "
-            f"transcript_text_file_id={current_transcript_file}, "
-            f"summary_keys={list(current_summary.keys())}."
-        )
-
-    return _wait

@@ -18,18 +18,36 @@ class TestDemoAuth:
         assert "POST" in detail or "password" in detail.lower()
 
     async def test_demo_status_when_disabled(self, frontend_client):
-        response = await frontend_client.get("/frontend/api/auth/demo/status")
-        assert response.status_code == 200
-        data = response.json()
-        assert data.get("enabled") is False
-        assert "email" not in data
+        old = get_settings()
+        demo_off = old.auth.model_copy(
+            update={"demo": old.auth.demo.model_copy(update={"login_enabled": False})}
+        )
+        new_settings = old.model_copy(update={"auth": demo_off})
+        set_settings(new_settings)
+        try:
+            response = await frontend_client.get("/frontend/api/auth/demo/status")
+            assert response.status_code == 200
+            data = response.json()
+            assert data.get("enabled") is False
+            assert "email" not in data
+        finally:
+            set_settings(old)
 
     async def test_login_demo_when_disabled_returns_401(self, frontend_client):
-        response = await frontend_client.post(
-            "/frontend/api/auth/login/demo",
-            json={"email": "demo@demo.ru", "password": "any"},
+        old = get_settings()
+        demo_off = old.auth.model_copy(
+            update={"demo": old.auth.demo.model_copy(update={"login_enabled": False})}
         )
-        assert response.status_code == 401
+        new_settings = old.model_copy(update={"auth": demo_off})
+        set_settings(new_settings)
+        try:
+            response = await frontend_client.post(
+                "/frontend/api/auth/login/demo",
+                json={"email": "demo@demo.ru", "password": "any"},
+            )
+            assert response.status_code == 401
+        finally:
+            set_settings(old)
 
     async def test_demo_login_success(self, unique_id, frontend_client):
         old = get_settings()

@@ -32,11 +32,21 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         css`
             :host {
                 display: block;
+                min-width: 220px;
+                max-width: 100%;
+                box-sizing: border-box;
+                --platform-audio-bar-inactive: rgba(8, 105, 60, 0.33);
+                --platform-audio-bar-active: rgba(8, 105, 60, 0.88);
+                --platform-audio-time: rgba(6, 95, 70, 0.95);
+                --platform-audio-transcribe-border: rgba(6, 95, 70, 0.38);
+                --platform-audio-transcribe-bg: rgba(255, 255, 255, 0.56);
+                --platform-audio-transcribe-fg: rgba(6, 95, 70, 0.95);
+                --platform-audio-transcription-text: rgba(6, 95, 70, 0.95);
             }
 
             .root {
                 min-width: 220px;
-                max-width: 360px;
+                max-width: min(360px, 100%);
                 border: none;
                 background: transparent;
                 padding: 0;
@@ -72,7 +82,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
 
             .wave-wrap {
                 flex: 1;
-                min-width: 0;
+                min-width: min(120px, 100%);
                 display: flex;
                 flex-direction: column;
                 gap: 3px;
@@ -91,17 +101,17 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
             .bar {
                 width: 100%;
                 border-radius: 999px;
-                background: rgba(8, 105, 60, 0.33);
+                background: var(--platform-audio-bar-inactive);
                 min-height: 3px;
             }
 
             .bar.active {
-                background: rgba(8, 105, 60, 0.88);
+                background: var(--platform-audio-bar-active);
             }
 
             .time {
                 font-size: 12px;
-                color: rgba(6, 95, 70, 0.95);
+                color: var(--platform-audio-time);
                 white-space: nowrap;
                 line-height: 1.15;
             }
@@ -115,6 +125,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
             input[type='range'] {
                 width: 100%;
                 margin: 0;
+                accent-color: var(--platform-audio-range-accent, #0d7a45);
             }
 
             .actions {
@@ -130,9 +141,9 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                 width: 24px;
                 height: 24px;
                 border-radius: 8px;
-                border: 1px solid rgba(6, 95, 70, 0.38);
-                background: rgba(255, 255, 255, 0.56);
-                color: rgba(6, 95, 70, 0.95);
+                border: 1px solid var(--platform-audio-transcribe-border);
+                background: var(--platform-audio-transcribe-bg);
+                color: var(--platform-audio-transcribe-fg);
                 cursor: pointer;
                 font-size: 12px;
                 font-weight: 700;
@@ -151,7 +162,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
             .transcription {
                 font-size: 12px;
                 line-height: 1.35;
-                color: rgba(6, 95, 70, 0.95);
+                color: var(--platform-audio-transcription-text);
                 white-space: pre-line;
             }
 

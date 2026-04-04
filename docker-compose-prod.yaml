@@ -12,6 +12,7 @@ x-common-env: &common-env
   DATABASE__CRM_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_crm
   DATABASE__SYNC_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_sync
   DATABASE__RAG_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_rag
+  DATABASE__OFFICE_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_office
   DATABASE__REDIS_URL: redis://redis:6379/0
   DATABASE__AUTO_MIGRATE: "false"
   TASKS__BROKER_URL: redis://redis:6379/1
@@ -22,6 +23,7 @@ x-common-env: &common-env
   SERVER__CRM_SERVICE_URL: http://crm:8003
   SERVER__RAG_SERVICE_URL: http://rag:8004
   SERVER__SYNC_SERVICE_URL: http://sync:8005
+  SERVER__OFFICE_SERVICE_URL: http://office:8008
   SERVER__SCHEDULER_SERVICE_URL: http://scheduler-api:8006
   AUTH__JWT_SECRET: ${AUTH__JWT_SECRET:-change-me-in-production}
   AUTH__PROVIDERS__YANDEX__CLIENT_ID: ${AUTH_YANDEX_CLIENT_ID}
@@ -60,6 +62,9 @@ x-common-env: &common-env
   STT__CLOUD_RU__API_KEY: ${STT__CLOUD_RU__API_KEY:-${STT_CLOUD_RU_API_KEY:-}}
   # RAG pgvector (CRM, flows, сервис rag): OpenRouter embeddings. По умолчанию тот же ключ, что и LLM; иначе RAG_EMBEDDING_API_KEY в SSH/env деплоя.
   RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-${LLM_OPENROUTER_API_KEY:-}}
+  OFFICE__DOCUMENT_SERVER_PUBLIC_URL: ${OFFICE_DOCUMENT_SERVER_PUBLIC_URL:-http://localhost:8088}
+  OFFICE__JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-me-in-production}
+  OFFICE__CALLBACK_PUBLIC_BASE_URL: ${OFFICE_CALLBACK_PUBLIC_BASE_URL:-http://localhost:8008}
 
 x-healthcheck: &healthcheck
   interval: 30s
@@ -293,6 +298,50 @@ services:
     networks:
       - agentlab-net
 
+  onlyoffice-documentserver:
+    image: onlyoffice/documentserver-de:latest
+    container_name: agentlab_onlyoffice
+    ports:
+      - "8088:80"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-me-in-production}
+    volumes:
+      - ./deploy/onlyoffice/themes/theme-humanitec-light.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  office:
+    <<: *app
+    container_name: agentlab_office
+    command: ["python", "-m", "apps.office.main"]
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - office_logs:/app/logs
+    environment:
+      <<: *common-env
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: "8008"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      onlyoffice-documentserver:
+        condition: service_started
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
   # ============================================
   # Workers
   # ============================================
@@ -476,6 +525,7 @@ volumes:
   crm_logs:
   rag_logs:
   sync_logs:
+  office_logs:
   scheduler_api_logs:
   flows_worker_logs:
   rag_worker_logs:

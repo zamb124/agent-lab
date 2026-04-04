@@ -21,6 +21,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 | crm | 8003 | CRM: entities, graph, access control |
 | rag | 8004 | RAG: документы, семантический поиск |
 | sync | 8005 | Инженерный чат с Git-интеграцией |
+| office | 8008 | Документы OnlyOffice: публичный путь `/documents`, процесс **`apps/office`**; см. **`office.mdc`** |
 | flows_worker | — | TaskIQ worker задач сервиса flows |
 | crm_worker | — | TaskIQ worker задач CRM |
 | rag_worker | — | TaskIQ worker обработки документов |
@@ -36,13 +37,23 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 
 Новый функционал с пользовательским текстом (UI, подписи, сообщения в интерфейсе) пишется **сразу с переводом**: для каждого нового ключа добавляются строки **парно** в `core/i18n/translations/ru/<namespace>.json` и `core/i18n/translations/en/<namespace>.json` в том же изменении, что и код. Фича без полной пары `ru` + `en` для всех новых ключей **не считается готовой**. Захардкоженный пользовательский текст вместо ключей i18n — запрещён (исключения только там, где это явно допустимо в **`frontend.mdc`**). Детали: раздел Internationalization в **`frontend.mdc`**; проверка парности ключей: **`make check-i18n`**.
 
-**Сканер непереведённого UI (кириллица в литералах):** `uv run python scripts/report_ui_i18n_gaps.py` — обходит `apps/<сервис>/ui/**/*.js`, пропускает однострочные `//` и строки JSDoc с `*`; выводит файл и строку для каждого совпадения. Флаги: `--summary` (сводка по сервисам), `--app crm|flows|frontend|rag|sync` (один сервис). Цель: **0** совпадений после выноса строк в `this.i18n.t(...)`. Не заменяет **`make check-i18n`** (тот проверяет структуру JSON `ru`/`en`).
+**Сканер непереведённого UI (кириллица в литералах):** `uv run python scripts/report_ui_i18n_gaps.py` — обходит `apps/<сервис>/ui/**/*.js`, пропускает однострочные `//` и строки JSDoc с `*`; выводит файл и строку для каждого совпадения. Флаги: `--summary` (сводка по сервисам), `--app crm|flows|frontend|office|rag|sync` (один сервис). Цель: **0** совпадений после выноса строк в `this.i18n.t(...)`. Не заменяет **`make check-i18n`** (тот проверяет структуру JSON `ru`/`en`).
 
 ## Канон фронтенда: отклонения запрещены
 
 Весь UI в `apps/*/ui/` **строго** наследуется от общей базы в `core/frontend/static/` и правил **`frontend.mdc`**. Писать «свой» фронт в обход канона (другие базовые классы, обход import map, свой реестр сервисов в компонентах, самодельные модалки там, где нужен glass-стек) **нельзя**. Исключения (например drawer/panel, не полноценное модальное окно) — только там, где это **уже явно описано** в `frontend.mdc` / `sync.mdc`.
 
 Кратко: **`PlatformElement` / `PlatformApp` / `PlatformModal` (или `PlatformFormModal` / `PlatformLightModal` по смыслу)**; импорты только через **`@platform/...`**; сервисы в компонентах — **`this.services`**, не `ServiceRegistry`; новый shell — viewport и import map по канону. Контроль: **`make check-ui-canon`** (`scripts/check_ui_canon.sh`). Любое новое исключение из канона — **сначала правка рулов**, потом код.
+
+## ОЧЕНЬ ВАЖНО: ноль костылей
+
+**Слоган:** *Чиним систему — не обходим её.*
+
+Костыль — любой обход вместо честной модели: «временный» хардкод, дублирование логики, магические условия в API/UI, спецфлаги «только для этого кейса», маскировка дыры в архитектуре. Это **хуже** явной ошибки: костыли размножаются, тормозят эволюцию и делают поведение непредсказуемым.
+
+**Лучше потратить время на правку продукта, контрактов, схемы данных и архитектуры, чем вбивать обходной путь.** Если качественное решение требует изменить дизайн системы — меняем систему. Время на правильную правку окупается; время на костыли превращается в постоянный налог.
+
+Опора на костыль под видом «быстрее сейчас» или «потом отрефакторим» **запрещена**: «потом» в таком виде не наступает.
 
 ## АБСОЛЮТНЫЕ ЗАПРЕТЫ
 
@@ -204,13 +215,13 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 ### Bootstrap-инварианты платформы
 
-При старте `frontend` обязательно проверяем bootstrap-доступ: компания `system` должна существовать (создаётся автоматически при отсутствии), а пользователь с email `zambas124@yandex.ru` должен иметь роль `admin` в компании `system`; при отсутствии роли обновляем `company.members` и `user.companies`.
+При старте `frontend` вызывается bootstrap: компания `system` создаётся при отсутствии; если в хранилище есть пользователь с email `zambas124@yandex.ru` и у него ещё нет `admin` в `system`, обновляем `company.members` и `user.companies`. Если такого пользователя нет — старт не падает (только предупреждение в логе).
 
 ## Управление зависимостями
 
 UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 
-Локально все сервисы одной командой: **`make app`** (эквивалент `uv run python scripts/run.py all`: uvicorn с `--reload`, TaskIQ worker/scheduler без reload; остановка Ctrl+C). Падение одного процесса (например порт занят) не останавливает остальные. Зависшие процессы на портах HTTP: **`make app APP_KILL=1`** или `uv run python scripts/run.py kill-ports` (порты 8001–8006).
+Локально все сервисы одной командой: **`make app`** (эквивалент `uv run python scripts/run.py all`: uvicorn с `--reload`, TaskIQ worker/scheduler без reload; остановка Ctrl+C). Падение одного процесса (например порт занят) не останавливает остальные. Зависшие процессы на портах HTTP: **`make app APP_KILL=1`** или `uv run python scripts/run.py kill-ports` (порты HTTP-сервисов из `scripts/run.py`, включая **8008** для office).
 
 ## Документация библиотек
 
@@ -248,6 +259,7 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | ExecutionState | `execution_state.mdc` |
 | CRM: entities, graph, grants | `crm.mdc` |
 | RAG: документы, поиск, pgvector | `rag.mdc` |
+| Документы (OnlyOffice) | `office.mdc` |
 | Sync: чат, каналы, Git-интеграция | `sync.mdc` |
 | WebRTC звонки (Sync), LiveKit, сигналинг | `calls.mdc` |
 | Frontend: Lit 3, Zustand, i18n | `frontend.mdc` |

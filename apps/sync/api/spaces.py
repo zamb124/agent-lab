@@ -10,6 +10,7 @@ from apps.sync.models.spaces import SpaceRead, SpaceCreate, SpaceUpdate
 from apps.sync.realtime.command_dispatch import dispatch_sync_command
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
+from core.config import get_settings
 from core.context import get_context
 
 router = APIRouter()
@@ -31,10 +32,10 @@ async def list_spaces(pagination: PaginationRequest = Depends()) -> list[SpaceRe
             description=s.description,
             avatar_url=s.avatar_url,
             namespace=s.namespace,
-            auto_export_transcript_to_crm=s.auto_export_transcript_to_crm,
-            auto_export_summary_to_crm=s.auto_export_summary_to_crm,
             created_at=s.created_at,
             created_by_user_id=s.created_by_user_id,
+            transcribe_voice_messages=s.transcribe_voice_messages,
+            speech_to_chat_enabled=s.speech_to_chat_enabled,
         )
         for s in spaces
     ]
@@ -52,7 +53,9 @@ async def create_space(body: SpaceCreate) -> SpaceRead:
         payload={"body": body.model_dump()},
     )
     task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(timeout=300.0)
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
     if res.is_err:
         raise RuntimeError(f"Command failed: {res.error}")
     return SpaceRead.model_validate(res.return_value["result"])

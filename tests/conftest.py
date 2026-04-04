@@ -34,6 +34,7 @@ from httpx import ASGITransport, AsyncClient
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 
+
 # Устанавливаем переменные окружения ДО импорта приложения
 os.environ["TESTING"] = "true"
 for _db_key, _db_val in TEST_DATABASE_ENV.items():
@@ -50,10 +51,16 @@ os.environ["SERVER__RAG_SERVICE_URL"] = "http://localhost:9002"
 os.environ["SERVER__CRM_SERVICE_URL"] = "http://localhost:9003"
 os.environ["SERVER__FRONTEND_SERVICE_URL"] = "http://localhost:9004"
 os.environ["SERVER__SYNC_SERVICE_URL"] = "http://localhost:9005"
+os.environ.setdefault("STT__PROVIDER", "mock")
+os.environ.setdefault("STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
 # S3: дефолтный alias test-bucket и endpoint тестового MinIO (docker-compose-test: 19002).
 # В conf.json у test-bucket указан 19001 (dev); без override тесты создавали бакет на 19002, а приложение — на 19001.
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
+# OnlyOffice: локально после `make test-up` — порт 18088 (docker-compose-test). В контейнере tests_runner задаётся в compose.
+os.environ.setdefault("OFFICE__JWT_SECRET", "test-onlyoffice-jwt-secret")
+os.environ.setdefault("OFFICE__DOCUMENT_SERVER_PUBLIC_URL", "http://localhost:18088")
+os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://testserver")
 # RAG config для тестов (pgvector в PostgreSQL)
 os.environ.setdefault("RAG__ENABLED", "true")
 os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
@@ -245,12 +252,78 @@ async def _shared_scheduler_schema_ready(db_url: str) -> bool:
         await engine.dispose()
 
 
+async def _office_schema_ready(office_db_url: str) -> bool:
+    """platform_office: привязки, колонка catalog_id, таблица каталогов (миграции office_0002+)."""
+    if not office_db_url or not office_db_url.strip():
+        return True
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(office_db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            bindings = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'office_document_bindings'
+                    """
+                )
+            )
+            if (bindings.scalar() or 0) != 1:
+                return False
+            ns_col = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'office_document_bindings'
+                      AND column_name = 'namespace'
+                    """
+                )
+            )
+            if (ns_col.scalar() or 0) != 1:
+                return False
+            cat_col = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'office_document_bindings'
+                      AND column_name = 'catalog_id'
+                    """
+                )
+            )
+            if (cat_col.scalar() or 0) != 1:
+                return False
+            catalogs = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'office_document_catalogs'
+                    """
+                )
+            )
+            return (catalogs.scalar() or 0) == 1
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_database_before_tests():
     """
     Глобальная фикстура для подготовки БД перед запуском тестов.
-    Если alembic_version уже есть и в ней ровно одна строка — дроп и миграции не выполняем
-    (другой процесс уже подготовил БД). Иначе под блокировкой: дроп таблиц и миграции.
+    Если shared/crm и прочие проверки ОК и в platform_office актуальная схема (bindings + catalog_id + каталоги) —
+    пропуск. Если только office отстаёт — upgrade для сервиса office без дропа shared.
+    Иначе под блокировкой: дроп таблиц shared и полный upgrade.
     """
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
@@ -275,25 +348,38 @@ async def setup_database_before_tests():
 
     shared_db_url = os.environ.get("DATABASE__SHARED_URL", TEST_DATABASE_ENV["DATABASE__SHARED_URL"])
     crm_db_url = os.environ.get("DATABASE__CRM_URL", TEST_DATABASE_ENV["DATABASE__CRM_URL"])
+    office_db_url = os.environ.get("DATABASE__OFFICE_URL", TEST_DATABASE_ENV["DATABASE__OFFICE_URL"])
 
-    if (
-        await _alembic_version_ready(shared_db_url)
-        and await _crm_schema_ready(crm_db_url)
-        and await _shared_calendar_schema_ready(shared_db_url)
-        and await _shared_scheduler_schema_ready(shared_db_url)
-    ):
+    async def _core_ready() -> bool:
+        return (
+            await _alembic_version_ready(shared_db_url)
+            and await _crm_schema_ready(crm_db_url)
+            and await _shared_calendar_schema_ready(shared_db_url)
+            and await _shared_scheduler_schema_ready(shared_db_url)
+        )
+
+    core_ok = await _core_ready()
+    office_ok = await _office_schema_ready(office_db_url)
+
+    if core_ok and office_ok:
         print("БД уже подготовлена (alembic_version есть, одна ревизия), пропуск дропа и миграций.\n")
         yield
     else:
         lock = FileLock(_DB_SETUP_LOCK, timeout=_DB_SETUP_LOCK_TIMEOUT_SEC)
         with lock:
-            if (
-                await _alembic_version_ready(shared_db_url)
-                and await _crm_schema_ready(crm_db_url)
-                and await _shared_calendar_schema_ready(shared_db_url)
-                and await _shared_scheduler_schema_ready(shared_db_url)
-            ):
+            core_ok = await _core_ready()
+            office_ok = await _office_schema_ready(office_db_url)
+            if core_ok and office_ok:
                 print("БД подготовлена другим процессом, пропуск.\n")
+                yield
+            elif core_ok and not office_ok:
+                print("Догрузка миграций сервиса office (platform_office)...")
+                from core.db.migration_manifest import bootstrap_migration_registry
+                from core.db.migrations import run_migrations_async
+
+                bootstrap_migration_registry()
+                await run_migrations_async(service="office")
+                print("Миграции office применены!\n")
                 yield
             else:
                 print("Подготовка БД для тестов...")
@@ -643,18 +729,15 @@ def sync_tools(request, monkeypatch):
     - process_flow_task.kiq - выполняет agent tasks напрямую  
     - send_task_update.kiq - выполняет push notifications напрямую
     - send_webhook.kiq - выполняет webhooks напрямую
-    - Redis pub/sub - in-memory очередь для streaming событий
+
+    Redis Pub/Sub не подменяется: стриминг идёт через реальный Redis из контейнера.
     """
     # Пропускаем для тестов с маркером real_taskiq
     if request.node.get_closest_marker("real_taskiq"):
         yield
         return
-    import asyncio
     from apps.flows.src.tasks import flow_tasks, tool_tasks
     from apps.flows.src.tasks import push_notification_tasks
-    
-    # In-memory pub/sub для streaming
-    _channels: Dict[str, asyncio.Queue] = {}
     
     class SyncTaskResult:
         """Имитация результата TaskIQ task."""
@@ -670,8 +753,14 @@ def sync_tools(request, monkeypatch):
     
     async def sync_tool_kiq(tool_id, args, state):
         """Выполняет tool синхронно."""
+        from core.context import get_context
+
+        ctx = get_context()
+        context_data = ctx.to_dict() if ctx is not None else None
         try:
-            result = await tool_tasks.execute_tool(tool_id, args, state)
+            result = await tool_tasks.execute_tool(
+                tool_id, args, state, context_data=context_data
+            )
             return SyncTaskResult(result)
         except Exception as e:
             return SyncTaskResult(error=e)
@@ -687,6 +776,7 @@ def sync_tools(request, monkeypatch):
             if "context_data" not in kwargs:
                 mock_ctx = Context(
                     user=User(user_id="test_user", name="Test User"),
+                    active_company=Company(company_id="system", name="System"),
                     session_id="test_session",
                     channel="test",
                     metadata={
@@ -719,41 +809,11 @@ def sync_tools(request, monkeypatch):
             # В реальном TaskIQ ретраи обрабатывают ошибки, здесь просто игнорируем
             return SyncTaskResult({"success": False})
     
-    async def mock_publish(self, channel: str, message: str) -> int:
-        """In-memory publish."""
-        if channel not in _channels:
-            _channels[channel] = asyncio.Queue()
-        await _channels[channel].put(message)
-        return 1
-    
-    async def mock_subscribe(self, channel: str, timeout: float = 300.0, ready_event=None):
-        """In-memory subscribe."""
-        if channel not in _channels:
-            _channels[channel] = asyncio.Queue()
-        
-        # Сигнализируем что подписка готова
-        if ready_event:
-            ready_event.set()
-        
-        queue = _channels[channel]
-        while True:
-            try:
-                message = await asyncio.wait_for(queue.get(), timeout=1.0)
-                yield message
-            except asyncio.TimeoutError:
-                if queue.empty():
-                    break
-    
     # Патчим kiq методы
     monkeypatch.setattr(tool_tasks.execute_tool, "kiq", sync_tool_kiq)
     monkeypatch.setattr(flow_tasks.process_flow_task, "kiq", sync_agent_kiq)
     monkeypatch.setattr(push_notification_tasks.send_task_update, "kiq", sync_send_task_update_kiq)
     monkeypatch.setattr(push_notification_tasks.send_webhook, "kiq", sync_send_webhook_kiq)
-    
-    # Патчим Redis pub/sub
-    from core.clients import RedisClient
-    monkeypatch.setattr(RedisClient, "publish", mock_publish)
-    monkeypatch.setattr(RedisClient, "subscribe", mock_subscribe)
     
     yield None
 

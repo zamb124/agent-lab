@@ -9,6 +9,7 @@ import {
     landRagAbilityUrl,
     landNetworkleAbilityUrl,
     landSyncAbilityUrl,
+    landDocumentsHeroUrl,
 } from '../../utils/land-product-images.js';
 
 export class LandingAbilities extends PlatformElement {
@@ -289,6 +290,30 @@ export class LandingAbilities extends PlatformElement {
                             <li>${t('features.feature4_li1')}</li>
                             <li>${t('features.feature4_li2')}</li>
                             <li>${t('features.feature4_li3')}</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="ability-item">
+                    <div class="ability-image">
+                        <img
+                            src=${landDocumentsHeroUrl}
+                            alt=${t('features.ability_alt_documents')}
+                            width="512"
+                            height="512"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
+                    <div class="ability-content">
+                        <h3 class="ability-name">${t('features.feature5_title')}</h3>
+                        <p class="ability-description">
+                            ${t('features.feature5_description')}
+                        </p>
+                        <ul class="ability-features">
+                            <li>${t('features.feature5_li1')}</li>
+                            <li>${t('features.feature5_li2')}</li>
+                            <li>${t('features.feature5_li3')}</li>
                         </ul>
                     </div>
                 </div>

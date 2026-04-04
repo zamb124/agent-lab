@@ -122,7 +122,14 @@ class NodeAsToolWrapper(BaseTool):
                 raise ValueError(f"Node config requires 'tool_id' or 'node_id' field: {node_config}")
             
             self._args_schema_dict = node_config.get("args_schema")
-            
+            if self._args_schema_dict is None and str(node_type) == NodeType.LLM_NODE.value:
+                self._args_schema_dict = {
+                    "request": {
+                        "type": "string",
+                        "description": "Запрос к субагенту",
+                    },
+                }
+
             self.node_config = NodeConfig(
                 node_id=node_id,
                 name=node_config.get("name", node_id),

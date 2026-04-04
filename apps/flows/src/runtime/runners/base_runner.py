@@ -79,6 +79,14 @@ class BaseLlmNodeRunner(ABC):
                 return tool
         return None
 
+    def _get_reason_tool_name(self) -> str | None:
+        tool = self._find_tool_by_type(ToolType.REASON)
+        return getattr(tool, "name", None) if tool else None
+
+    def _get_exit_tool_name(self) -> str | None:
+        tool = self._find_tool_by_type(ToolType.EXIT)
+        return getattr(tool, "name", None) if tool else None
+
     @abstractmethod
     async def run(self, input_data: Dict[str, Any], state: "ExecutionState") -> Dict[str, Any]:
         """

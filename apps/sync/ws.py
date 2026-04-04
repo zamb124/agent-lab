@@ -76,8 +76,6 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-PRESENCE_HEARTBEAT_INTERVAL_SEC = 45
-
 
 class PubSubFanout:
     """Подписка на Redis Pub/Sub -> broadcast всем WS клиентам."""
@@ -168,8 +166,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         )
 
     async def presence_heartbeat() -> None:
+        interval = settings.ws_presence_heartbeat_interval_seconds
         while True:
-            await asyncio.sleep(PRESENCE_HEARTBEAT_INTERVAL_SEC)
+            await asyncio.sleep(interval)
             await refresh_sync_ws_presence(redis_url, user_id)
 
     heartbeat_task = asyncio.create_task(presence_heartbeat())
@@ -206,7 +205,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             logger.info("ws cmd queued: id=%s", frame.id)
 
             try:
-                res = await task.wait_result(timeout=settings.tasks.broker_url and 300.0 or 300.0)
+                res = await task.wait_result(
+                    timeout=settings.sync_taskiq_wait_result_timeout_seconds,
+                )
             except TaskiqResultTimeoutError as exc:
                 logger.error("ws cmd timeout: id=%s", frame.id)
                 out = WsResultFrame(

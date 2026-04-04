@@ -653,6 +653,15 @@ export class LandingHeader extends PlatformElement {
                                     <span class="nav-dropdown-item-desc">${h('product_sync_desc')}</span>
                                 </div>
                             </a>
+                            <a href="/products/documents" class="nav-dropdown-item" @click=${this._handleNavClick}>
+                                <div class="nav-dropdown-item-icon">
+                                    <img src="/static/core/assets/service_logos/documents_logo.svg" alt=${h('product_documents_title')} />
+                                </div>
+                                <div class="nav-dropdown-item-content">
+                                    <span class="nav-dropdown-item-title">${h('product_documents_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_documents_desc')}</span>
+                                </div>
+                            </a>
                         </div>
                     </div>
                     <a href="/documentation" class="nav-link">${h('docs')}</a>
@@ -720,6 +729,12 @@ export class LandingHeader extends PlatformElement {
                             <img src="/static/core/assets/service_logos/sync_logo.svg" alt=${h('product_sync_title')} />
                         </div>
                         ${h('product_sync_title')}
+                    </a>
+                    <a href="/products/documents" class="mobile-product-link" @click=${this._handleNavClick}>
+                        <div class="mobile-product-icon">
+                            <img src="/static/core/assets/service_logos/documents_logo.svg" alt=${h('product_documents_title')} />
+                        </div>
+                        ${h('product_documents_title')}
                     </a>
                 </div>
                 

@@ -4,8 +4,8 @@
 
 export const LAST_VISITED_SERVICE_STORAGE_KEY = 'platform:last_service';
 
-/** @type {readonly ['flows', 'crm', 'rag', 'sync', 'frontend']} */
-const ALLOWED_SERVICE_IDS = ['flows', 'crm', 'rag', 'sync', 'frontend'];
+/** @type {readonly ['flows', 'crm', 'rag', 'sync', 'documents', 'frontend']} */
+const ALLOWED_SERVICE_IDS = ['flows', 'crm', 'rag', 'sync', 'documents', 'frontend'];
 
 const SERVICE_PORT_BY_ID = {
     flows: '8001',
@@ -13,6 +13,7 @@ const SERVICE_PORT_BY_ID = {
     crm: '8003',
     rag: '8004',
     sync: '8005',
+    documents: '8008',
 };
 
 /**
@@ -36,7 +37,8 @@ export function buildServiceEntryUrl(serviceId) {
         throw new Error(`Неизвестный сервис для перехода: ${serviceId}`);
     }
 
-    const servicePath = serviceId === 'frontend' ? '/dashboard' : `/${serviceId}`;
+    const servicePath =
+        serviceId === 'frontend' ? '/dashboard' : serviceId === 'documents' ? '/documents' : `/${serviceId}`;
     if (typeof window === 'undefined') {
         return servicePath;
     }
@@ -68,7 +70,7 @@ export function setLastVisitedService(id) {
 }
 
 /**
- * @returns {'flows' | 'crm' | 'rag' | 'sync' | 'frontend' | null}
+ * @returns {'flows' | 'crm' | 'rag' | 'sync' | 'documents' | 'frontend' | null}
  */
 export function getLastVisitedService() {
     const raw = window.localStorage.getItem(LAST_VISITED_SERVICE_STORAGE_KEY);
@@ -78,13 +80,13 @@ export function getLastVisitedService() {
     if (!ALLOWED_SERVICE_IDS.includes(raw)) {
         return null;
     }
-    return /** @type {'flows' | 'crm' | 'rag' | 'sync' | 'frontend'} */ (raw);
+    return /** @type {'flows' | 'crm' | 'rag' | 'sync' | 'documents' | 'frontend'} */ (raw);
 }
 
 /**
  * Из значения getBaseUrl() вида `/flows` или `/frontend` извлекает id сервиса.
  * @param {string} baseUrl
- * @returns {'flows' | 'crm' | 'rag' | 'sync' | 'frontend' | null}
+ * @returns {'flows' | 'crm' | 'rag' | 'sync' | 'documents' | 'frontend' | null}
  */
 export function serviceIdFromBaseUrl(baseUrl) {
     const segment = String(baseUrl ?? '')
@@ -97,7 +99,7 @@ export function serviceIdFromBaseUrl(baseUrl) {
     if (!ALLOWED_SERVICE_IDS.includes(segment)) {
         return null;
     }
-    return /** @type {'flows' | 'crm' | 'rag' | 'sync' | 'frontend'} */ (segment);
+    return /** @type {'flows' | 'crm' | 'rag' | 'sync' | 'documents' | 'frontend'} */ (segment);
 }
 
 /**
@@ -109,7 +111,7 @@ export function replaceLocationToLastVisitedNonFrontendService() {
     if (!id || id === 'frontend') {
         return false;
     }
-    const nonFrontend = ['flows', 'crm', 'rag', 'sync'];
+    const nonFrontend = ['flows', 'crm', 'rag', 'sync', 'documents'];
     if (!nonFrontend.includes(id)) {
         return false;
     }

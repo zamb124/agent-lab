@@ -3,6 +3,7 @@ import { PlatformModal } from './glass-modal.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
+import { resolveFileIconKey } from '../../services/icon.service.js';
 import './platform-date-picker.js';
 import './platform-switch.js';
 
@@ -868,6 +869,18 @@ export class PlatformCalendarModal extends PlatformModal {
                 min-width: 0;
             }
 
+            .event-compose-sync-hint-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .event-compose-meeting-sync-hint {
+                margin: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary, var(--glass-text-muted));
+                line-height: 1.45;
+            }
+
             .event-compose-join-link {
                 display: inline-flex;
                 align-items: center;
@@ -1697,7 +1710,6 @@ export class PlatformCalendarModal extends PlatformModal {
             end_at: toDateTimeInputValue(defaultEnd),
             attendees: [],
             recurrence: 'none',
-            sync_meeting_enabled: false,
         };
         this._eventDeepLink = null;
         this._integrationForm = {
@@ -2168,7 +2180,6 @@ export class PlatformCalendarModal extends PlatformModal {
             end_at: toDateTimeInputValue(new Date(event.end_at)),
             attendees: Array.isArray(event.attendees) ? event.attendees.map((item) => toAttendeeTag(item)) : [],
             recurrence: this._ruleToRecurrence(event.recurrence_rule),
-            sync_meeting_enabled: eventMetadataHasSyncMeeting(this._eventMetadata),
         };
         this._eventDeepLink = typeof event.deep_link === 'string' && event.deep_link !== '' ? event.deep_link : null;
         this._attendeeDraft = '';
@@ -2338,7 +2349,6 @@ export class PlatformCalendarModal extends PlatformModal {
             recurrence: 'none',
             start_at: toDateTimeInputValue(startDate),
             end_at: toDateTimeInputValue(endDate),
-            sync_meeting_enabled: false,
         };
         this._eventDeepLink = null;
         this._selectedEventSource = 'platform';
@@ -2438,7 +2448,6 @@ export class PlatformCalendarModal extends PlatformModal {
                     },
                     this._eventAttachments
                 ),
-                sync_meeting: { enabled: Boolean(this._eventForm.sync_meeting_enabled) },
             };
             if (!payload.title) {
                 throw new Error(this._calT('err_title_required'));
@@ -2467,7 +2476,6 @@ export class PlatformCalendarModal extends PlatformModal {
                 location: '',
                 attendees: [],
                 recurrence: 'none',
-                sync_meeting_enabled: false,
             };
             this._eventMetadata = {};
             this._eventDeepLink = null;
@@ -2697,7 +2705,15 @@ export class PlatformCalendarModal extends PlatformModal {
                             <div class="event-compose-attachments">
                                 ${this._eventAttachments.map((attachment) => html`
                                     <div class="event-compose-attachment">
-                                        <platform-icon class="event-compose-attachment-icon" name="paperclip" size="14"></platform-icon>
+                                        <platform-icon
+                                            class="event-compose-attachment-icon"
+                                            file-icon
+                                            name=${resolveFileIconKey(
+                                                attachment.name,
+                                                typeof attachment.content_type === 'string' ? attachment.content_type : '',
+                                            )}
+                                            size="14"
+                                        ></platform-icon>
                                         <a
                                             class="event-compose-attachment-link"
                                             href=${attachment.url}
@@ -2880,23 +2896,17 @@ export class PlatformCalendarModal extends PlatformModal {
                     </div>
                 </div>
 
-                ${this._selectedEventSource === 'platform' && (!this._selectedEventId || this._isEventEditable(this._selectedEventSource)) ? html`
+                ${this._selectedEventSource === 'platform' && (!this._selectedEventId || this._isEventEditable(this._selectedEventSource)) && this._eventForm.kind === 'meeting' ? html`
                     <div class="event-compose-row">
                         <label class="event-compose-label">
                             <span class="event-compose-sync-head">
                                 <img class="event-sync-logo-inline" src=${SYNC_LOGO_SRC} alt="" />
-                                ${c('label_sync_meeting')}
+                                ${c('tag_sync')}
                             </span>
                         </label>
                         <div class="event-compose-control">
-                            <div class="event-compose-sync-row">
-                                <div class="event-compose-switch">
-                                    <platform-switch
-                                        .checked=${Boolean(this._eventForm.sync_meeting_enabled)}
-                                        .label=${c('sync_meeting_toggle')}
-                                        @change=${(e) => this._onEventFormChange('sync_meeting_enabled', e.detail.value)}
-                                    ></platform-switch>
-                                </div>
+                            <div class="event-compose-sync-row event-compose-sync-hint-row">
+                                <p class="event-compose-meeting-sync-hint">${c('meeting_sync_hint')}</p>
                                 ${this._eventDeepLink ? html`
                                     <a
                                         class="event-compose-join-link"

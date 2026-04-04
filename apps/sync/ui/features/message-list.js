@@ -92,6 +92,7 @@ export class MessageList extends PlatformElement {
         _skeletonPlan: { state: true },
         _hasMoreOlder: { state: true },
         _loadingOlder: { state: true },
+        _activeCallOverlay: { state: true },
     };
 
     static styles = [
@@ -248,6 +249,7 @@ export class MessageList extends PlatformElement {
         this._wasLoading = false;
         this._hasMoreOlder = false;
         this._loadingOlder = false;
+        this._activeCallOverlay = null;
         this._lastScrollTop = 0;
         /** @type {ResizeObserver | null} */
         this._listResizeObs = null;
@@ -327,6 +329,7 @@ export class MessageList extends PlatformElement {
                 this._hasMoreOlder = false;
                 this._loadingOlder = false;
             }
+            this._activeCallOverlay = state.ui.activeCallOverlay ?? null;
             this._syncCurrentUserId();
             this._scrollIfSticky();
         });
@@ -584,6 +587,7 @@ export class MessageList extends PlatformElement {
                             data-msg-id=${msg.id}
                             .msg=${msg}
                             .channelId=${this.channelId}
+                            .activeCallOverlay=${this._activeCallOverlay}
                             .pinnedMessageIds=${this._pinnedMessageIds}
                             .selectionMode=${this._selectionMode}
                             .selected=${selected}

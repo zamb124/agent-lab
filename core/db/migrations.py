@@ -35,16 +35,18 @@ def _make_alembic_config(script_location: str, db_url: str) -> Config | None:
 
 
 def _assert_full_registry() -> None:
-    from core.db.migration_manifest import get_migration_service_names
+    from core.db.migration_manifest import expected_migration_registry_names
     from core.db.service_registry import get_all_services
 
-    expected = set(get_migration_service_names())
+    expected = expected_migration_registry_names()
     names = {s.name for s in get_all_services()}
     missing = expected - names
-    if missing:
+    extra = names - expected
+    if missing or extra:
         raise ValueError(
-            "Реестр миграций неполный, не хватает сервисов: "
-            f"{sorted(missing)}. Вызовите core.db.migration_manifest.bootstrap_migration_registry() "
+            "Реестр миграций не совпадает с манифестом для текущего конфига: "
+            f"ожидались {sorted(expected)}, в реестре {sorted(names)}. "
+            "Вызовите core.db.migration_manifest.bootstrap_migration_registry() "
             "или: python -m scripts.db_migrate …"
         )
 
@@ -72,7 +74,10 @@ async def run_migrations_async(service: str | None = None) -> None:
     if service is not None:
         services = [s for s in services if s.name == service]
         if not services:
-            raise ValueError(f"Сервис {service!r} не найден в реестре")
+            raise ValueError(
+                f"Сервис {service!r} не в реестре миграций "
+                f"(для optional-сервисов задайте database URL, см. migrations/services.json)"
+            )
 
     for svc in services:
         db_url = svc.get_db_url()

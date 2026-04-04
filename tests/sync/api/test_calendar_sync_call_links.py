@@ -1,5 +1,5 @@
 """
-Создание календарных ссылок Sync, список scheduled, детали synthetic meeting_id.
+Создание календарных ссылок Sync и список scheduled (GET /calls/links/scheduled).
 
 Реальный sync ASGI, PostgreSQL, без моков внутренних компонентов.
 """
@@ -66,26 +66,10 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
     )
     assert scheduled_list.status_code == 200
     scheduled_payload = scheduled_list.json()
-    assert any(row.get("calendar_event_id") == event_id for row in scheduled_payload)
-
-    meetings = await sync_client.get("/sync/api/v1/meetings/", headers=auth_headers_system)
-    assert meetings.status_code == 200
-    rows = meetings.json()
-    synthetic = next((m for m in rows if m.get("meeting_id") == f"scheduled:{event_id}"), None)
-    assert synthetic is not None
-    assert synthetic["meeting_kind"] == "scheduled"
-    assert synthetic["link_token"] == token
-    assert synthetic["join_url"] is not None
-
-    detail = await sync_client.get(
-        f"/sync/api/v1/meetings/scheduled:{event_id}",
-        headers=auth_headers_system,
-    )
-    assert detail.status_code == 200
-    detail_meeting = detail.json()["meeting"]
-    assert detail_meeting["meeting_kind"] == "scheduled"
-    assert detail_meeting["link_token"] == token
-    assert detail_meeting["calendar_event_id"] == event_id
+    row = next((r for r in scheduled_payload if r.get("calendar_event_id") == event_id), None)
+    assert row is not None
+    assert row["link_token"] == token
+    assert row["join_url"] is not None
 
 
 @pytest.mark.asyncio
@@ -171,6 +155,73 @@ async def test_calendar_call_link_delete_removes_join_and_channel(
     assert listed.status_code == 200
     channel_ids = {item["id"] for item in listed.json()}
     assert channel_id not in channel_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(120)
+async def test_calendar_call_link_patch_syncs_channel_members(
+    sync_client,
+    auth_headers_system,
+    system_user2_id: str,
+    sync_db_clean: None,
+    unique_id: str,
+) -> None:
+    event_id = f"cal_mem_{unique_id}"
+    start = datetime.now(UTC) + timedelta(days=6)
+    end = start + timedelta(hours=1)
+    create = await sync_client.post(
+        "/sync/api/v1/calls/links",
+        headers=auth_headers_system,
+        json={
+            "calendar_event_id": event_id,
+            "scheduled_title": f"Members {unique_id}",
+            "scheduled_start_at": start.isoformat(),
+            "scheduled_end_at": end.isoformat(),
+            "calendar_member_user_ids": [],
+            "join_url_base": "https://app.test.example.com",
+        },
+    )
+    assert create.status_code == 201, create.text
+    token = create.json()["link_token"]
+    channel_id = create.json()["channel_id"]
+
+    mem0 = await sync_client.get(
+        f"/sync/api/v1/channels/{channel_id}/members",
+        headers=auth_headers_system,
+    )
+    assert mem0.status_code == 200
+    ids0 = {row["user_id"] for row in mem0.json()}
+    assert len(ids0) == 1
+
+    patch_add = await sync_client.patch(
+        f"/sync/api/v1/calls/links/{token}",
+        headers=auth_headers_system,
+        json={"calendar_member_user_ids": [system_user2_id]},
+    )
+    assert patch_add.status_code == 200, patch_add.text
+    mem1 = await sync_client.get(
+        f"/sync/api/v1/channels/{channel_id}/members",
+        headers=auth_headers_system,
+    )
+    assert mem1.status_code == 200
+    ids1 = {row["user_id"] for row in mem1.json()}
+    assert system_user2_id in ids1
+    assert len(ids1) == 2
+
+    patch_clear = await sync_client.patch(
+        f"/sync/api/v1/calls/links/{token}",
+        headers=auth_headers_system,
+        json={"calendar_member_user_ids": []},
+    )
+    assert patch_clear.status_code == 200, patch_clear.text
+    mem2 = await sync_client.get(
+        f"/sync/api/v1/channels/{channel_id}/members",
+        headers=auth_headers_system,
+    )
+    assert mem2.status_code == 200
+    ids2 = {row["user_id"] for row in mem2.json()}
+    assert system_user2_id not in ids2
+    assert len(ids2) == 1
 
 
 @pytest.mark.asyncio

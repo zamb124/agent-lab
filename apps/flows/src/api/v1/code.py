@@ -632,6 +632,7 @@ async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
         input_state_normalized.setdefault("interrupt", None)
         input_state_normalized.setdefault("flow_config_version", None)
         input_state_normalized.setdefault("result", None)
+        input_state_normalized.setdefault("validation", None)
         
         node_config = await _build_node_config(request)
         output_state = await _execute_node(node_config, input_state_normalized, flow_id=flow_id)

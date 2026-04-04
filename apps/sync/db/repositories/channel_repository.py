@@ -177,6 +177,21 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         if not is_already:
             await self.upsert_member(channel_id, user_id, role, company_id=cid)
 
+    async def delete_member(
+        self,
+        channel_id: str,
+        user_id: str,
+        company_id: Optional[str] = None,
+    ) -> bool:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            row = await session.get(SyncChannelMember, (channel_id, user_id))
+            if row is None or row.company_id != cid:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
+
     async def get_member_role(self, channel_id: str, user_id: str) -> Optional[str]:
         async with self._db.session() as session:
             row = await session.get(SyncChannelMember, (channel_id, user_id))

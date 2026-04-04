@@ -7,6 +7,7 @@
     "frontend_service_url": "http://localhost:8002",
     "rag_service_url": "http://localhost:8004",
     "sync_service_url": "http://localhost:8005",
+    "office_service_url": "http://localhost:8008",
     "platform_public_base_url": "http://localhost:8002"
   },
   "database": {
@@ -15,6 +16,7 @@
     "crm_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_crm",
     "sync_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_sync",
     "rag_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_rag",
+    "office_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_office",
     "redis_url": "redis://localhost:63791/0"
   },
   "tasks": {
@@ -313,6 +315,34 @@
             "endpoint_url": "http://localhost:9000",
             "enabled": true
           }
+        }
+      }
+    },
+    "office": {
+      "service_name": "office",
+      "server": {
+        "name": "documents",
+        "host": "0.0.0.0",
+        "port": 8008,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": true
+      },
+      "office": {
+        "document_server_public_url": "http://localhost:8088",
+        "jwt_secret": "dev-onlyoffice-jwt-secret",
+        "callback_public_base_url": "http://host.docker.internal:8008",
+        "download_token_ttl_seconds": 900,
+        "editor_customization": {
+          "compact_toolbar": true,
+          "compact_header": true,
+          "ui_theme": "theme-humanitec-light",
+          "platform_header_branding": true,
+          "logo_image_url": "",
+          "logo_image_dark_url": "",
+          "logo_link_url": "",
+          "features_tips": false
         }
       }
     },

@@ -690,14 +690,17 @@ export class EntitiesPage extends PlatformElement {
                 label: match.name || typeId,
             };
         }
-        return { icon: 'file', color: 'var(--text-tertiary)', label: entity.entity_type };
+        return { icon: 'folder', color: 'var(--text-tertiary)', label: entity.entity_type };
     }
 
     _resolveIconName(iconName) {
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
-        return 'file';
+        return 'folder';
     }
 
     _hexToRgba(hex, alpha) {
@@ -762,7 +765,7 @@ export class EntitiesPage extends PlatformElement {
                         @click=${() => this._onMobileTab('card')}
                         ?disabled=${!this._currentEntityId}
                     >
-                        <platform-icon name="file" size="14"></platform-icon>
+                        <platform-icon name="folder" size="14"></platform-icon>
                         ${this.i18n.t('entities_page.tab_card')}
                     </button>
                 </div>

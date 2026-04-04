@@ -15,6 +15,7 @@ SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/crm/",
     "/rag/",
     "/sync/",
+    "/documents/",
     "/frontend/",
     "/static/",
     "/assets/",
@@ -314,6 +315,15 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/sync", auth_required=False, context_type="anonymous"),
     RouteRule("/sync/", auth_required=False, context_type="anonymous"),
     RouteRule("/sync/*", auth_required=False, context_type="anonymous"),
+
+    # Documents (apps/office): BFF + Lit shell; OnlyOffice дергает download/callback по JWT в query / Bearer
+    RouteRule("/documents/ui/static/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/office-download", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/onlyoffice/callback", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/*", context_type="session", auth_required=True),
+    RouteRule("/documents", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/*", auth_required=False, context_type="anonymous"),
 ]
 
 # Страницы где разрешен доступ без субдомена

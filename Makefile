@@ -1,5 +1,5 @@
 .PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base
-.PHONY: dev-up dev-down dev-logs dev-minio-restart test test-down test-unit test-integration prod-up prod-down prod-logs
+.PHONY: dev-up dev-down dev-logs dev-minio-restart dev-bootstrap-postgres test test-down test-unit test-integration prod-up prod-down prod-logs
 .PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n
 
 # Docker Registry
@@ -42,6 +42,11 @@ dev-clean:
 dev-minio-restart:
 	docker-compose -f docker-compose-dev.yaml restart minio
 	@echo "MinIO dev перезапущен. Проверка UTC: date -u и docker exec agentlab_minio_dev date -u"
+
+# Недостающие БД на старом томе Postgres: init.sql не перезапускается
+dev-bootstrap-postgres:
+	docker exec -i agentlab_postgres_dev env PGPASSWORD=admin psql -U platform_user -d postgres < migrations/postgres/bootstrap_idempotent.sql
+	@echo "Postgres dev: применён migrations/postgres/bootstrap_idempotent.sql"
 
 # Test Environment (порты: 54322, 63792, 19002-19012, 18052) - ТОЛЬКО для автотестов
 test:

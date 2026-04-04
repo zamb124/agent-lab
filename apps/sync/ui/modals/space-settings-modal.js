@@ -16,11 +16,11 @@ export class SpaceSettingsModal extends PlatformModal {
         _description: { state: true },
         _avatarUrl: { state: true },
         _namespace: { state: true },
-        _autoExportTranscriptToCrm: { state: true },
-        _autoExportSummaryToCrm: { state: true },
         _crmNamespaces: { state: true },
         _crmNamespacesLoading: { state: true },
         _saving: { state: true },
+        _transcribeVoice: { state: true },
+        _speechToChat: { state: true },
     };
 
     static styles = [
@@ -140,11 +140,11 @@ export class SpaceSettingsModal extends PlatformModal {
         this._description = '';
         this._avatarUrl = '';
         this._namespace = '';
-        this._autoExportTranscriptToCrm = false;
-        this._autoExportSummaryToCrm = false;
         this._crmNamespaces = [];
         this._crmNamespacesLoading = false;
         this._saving = false;
+        this._transcribeVoice = false;
+        this._speechToChat = false;
         this._lastModalOpenTag = null;
         this.open = false;
     }
@@ -162,8 +162,8 @@ export class SpaceSettingsModal extends PlatformModal {
                     this._description = '';
                     this._avatarUrl = '';
                     this._namespace = '';
-                    this._autoExportTranscriptToCrm = false;
-                    this._autoExportSummaryToCrm = false;
+                    this._transcribeVoice = false;
+                    this._speechToChat = false;
                 }
             } else if (nextId === null) {
                 this._syncedForSpaceId = null;
@@ -181,8 +181,8 @@ export class SpaceSettingsModal extends PlatformModal {
                     this._description = typeof sp.description === 'string' ? sp.description : '';
                     this._avatarUrl = typeof sp.avatar_url === 'string' ? sp.avatar_url : '';
                     this._namespace = typeof sp.namespace === 'string' ? sp.namespace : '';
-                    this._autoExportTranscriptToCrm = sp.auto_export_transcript_to_crm === true;
-                    this._autoExportSummaryToCrm = sp.auto_export_summary_to_crm === true;
+                    this._transcribeVoice = sp.transcribe_voice_messages === true;
+                    this._speechToChat = sp.speech_to_chat_enabled === true;
                 }
             }
 
@@ -263,26 +263,17 @@ export class SpaceSettingsModal extends PlatformModal {
             const url = this._avatarUrl.trim();
             const description = this._description.trim() || null;
             const namespace = this._namespace.trim();
-            const autoExportTranscriptToCrm = this._autoExportTranscriptToCrm;
-            const autoExportSummaryToCrm = this._autoExportSummaryToCrm;
-            if ((autoExportTranscriptToCrm || autoExportSummaryToCrm) && namespace === '') {
-                throw new Error(this._tp('space_settings.err_export_namespace'));
-            }
             if (create) {
-                const created = await syncApi.createSpace(name, description);
-                if (
-                    url !== ''
-                    || namespace !== ''
-                    || autoExportTranscriptToCrm
-                    || autoExportSummaryToCrm
-                ) {
+                const created = await syncApi.createSpace(name, description, {
+                    transcribe_voice_messages: this._transcribeVoice,
+                    speech_to_chat_enabled: this._speechToChat,
+                });
+                if (url !== '' || namespace !== '') {
                     await syncApi.updateSpace(created.id, {
                         name,
                         description,
                         avatar_url: url,
                         namespace: namespace === '' ? null : namespace,
-                        auto_export_transcript_to_crm: autoExportTranscriptToCrm,
-                        auto_export_summary_to_crm: autoExportSummaryToCrm,
                     });
                 }
                 await SyncStore.loadSpaces(syncApi);
@@ -299,8 +290,8 @@ export class SpaceSettingsModal extends PlatformModal {
                 description,
                 avatar_url: url === '' ? null : url,
                 namespace: namespace === '' ? null : namespace,
-                auto_export_transcript_to_crm: autoExportTranscriptToCrm,
-                auto_export_summary_to_crm: autoExportSummaryToCrm,
+                transcribe_voice_messages: this._transcribeVoice,
+                speech_to_chat_enabled: this._speechToChat,
             });
             await SyncStore.loadSpaces(syncApi);
             this.close();
@@ -400,24 +391,25 @@ export class SpaceSettingsModal extends PlatformModal {
 
             <div class="field">
                 <div class="switch-row">
-                    <span class="switch-label">${this._tp('space_settings.auto_export_transcript')}</span>
+                    <span class="switch-label">${this._tp('space_settings.transcribe_voice_label')}</span>
                     <platform-switch
-                        .checked=${this._autoExportTranscriptToCrm}
+                        .checked=${this._transcribeVoice}
                         @change=${(e) => {
-                            this._autoExportTranscriptToCrm = e.detail.value === true;
+                            this._transcribeVoice = e.detail.value === true;
                         }}
                     ></platform-switch>
                 </div>
                 <div class="switch-row">
-                    <span class="switch-label">${this._tp('space_settings.auto_export_summary')}</span>
+                    <span class="switch-label">${this._tp('space_settings.speech_to_chat_label')}</span>
                     <platform-switch
-                        .checked=${this._autoExportSummaryToCrm}
+                        .checked=${this._speechToChat}
                         @change=${(e) => {
-                            this._autoExportSummaryToCrm = e.detail.value === true;
+                            this._speechToChat = e.detail.value === true;
                         }}
                     ></platform-switch>
                 </div>
             </div>
+
         `;
     }
 

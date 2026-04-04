@@ -84,6 +84,7 @@ class ServiceRegistryClass {
     get a2a() { return this.has('a2a') ? this.get('a2a') : null; }
     get companies() { return this.has('companies') ? this.get('companies') : null; }
     get ragApi() { return this.has('ragApi') ? this.get('ragApi') : null; }
+    get officeApi() { return this.has('officeApi') ? this.get('officeApi') : null; }
     get syncApi() { return this.has('syncApi') ? this.get('syncApi') : null; }
     get syncWs() { return this.has('syncWs') ? this.get('syncWs') : null; }
     get crmApi() { return this.has('crmApi') ? this.get('crmApi') : null; }

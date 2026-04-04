@@ -4,36 +4,10 @@
 User Story: Голосовой ввод -> транскрипция -> AI анализ -> создание entities.
 """
 
-import io
-import struct
 import pytest
 import json
 
-
-def _generate_wav_silence(duration_sec: float = 1.0, sample_rate: int = 16000, bits_per_sample: int = 16) -> bytes:
-    """PCM WAV с тишиной — валидный аудиофайл для STT."""
-    num_channels = 1
-    num_samples = int(sample_rate * duration_sec)
-    byte_rate = sample_rate * num_channels * bits_per_sample // 8
-    block_align = num_channels * bits_per_sample // 8
-    data_size = num_samples * block_align
-
-    buf = io.BytesIO()
-    buf.write(b"RIFF")
-    buf.write(struct.pack("<I", 36 + data_size))
-    buf.write(b"WAVE")
-    buf.write(b"fmt ")
-    buf.write(struct.pack("<I", 16))
-    buf.write(struct.pack("<H", 1))
-    buf.write(struct.pack("<H", num_channels))
-    buf.write(struct.pack("<I", sample_rate))
-    buf.write(struct.pack("<I", byte_rate))
-    buf.write(struct.pack("<H", block_align))
-    buf.write(struct.pack("<H", bits_per_sample))
-    buf.write(b"data")
-    buf.write(struct.pack("<I", data_size))
-    buf.write(b"\x00" * data_size)
-    return buf.getvalue()
+from tests.fixtures.audio_bytes import minimal_wav_silence
 
 
 @pytest.mark.real_taskiq
@@ -43,7 +17,7 @@ class TestVoiceInput:
     @pytest.mark.asyncio
     async def test_transcribe_audio(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """Аудио -> текст через STT (транскрипция)"""
-        audio_bytes = _generate_wav_silence(duration_sec=1.0)
+        audio_bytes = minimal_wav_silence(duration_sec=1.0)
         
         await mock_llm_redis([{
             "type": "text",
@@ -67,7 +41,7 @@ class TestVoiceInput:
     @pytest.mark.asyncio
     async def test_voice_to_note_full_pipeline(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """Полный pipeline: Аудио -> транскрипция -> AI анализ -> entities"""
-        audio_bytes = _generate_wav_silence(duration_sec=1.0)
+        audio_bytes = minimal_wav_silence(duration_sec=1.0)
         
         await mock_llm_redis([
             {
@@ -118,7 +92,7 @@ class TestVoiceInput:
     @pytest.mark.asyncio
     async def test_voice_input_with_language(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """Голосовой ввод с указанием языка"""
-        audio_bytes = _generate_wav_silence(duration_sec=1.0)
+        audio_bytes = minimal_wav_silence(duration_sec=1.0)
         
         await mock_llm_redis([{
             "type": "text",

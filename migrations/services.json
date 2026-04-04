@@ -24,6 +24,11 @@
       "name": "rag",
       "models_module": "core.db.models.rag",
       "database_url_key": "rag_url"
+    },
+    {
+      "name": "office",
+      "models_module": "apps.office.db.models",
+      "database_url_key": "office_url"
     }
   ],
   "postgres": {
@@ -32,7 +37,8 @@
       "platform_agents",
       "platform_crm",
       "platform_sync",
-      "platform_rag"
+      "platform_rag",
+      "platform_office"
     ],
     "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]
   }

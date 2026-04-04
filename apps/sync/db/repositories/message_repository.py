@@ -65,6 +65,29 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def list_root_lane_by_call(
+        self,
+        *,
+        channel_id: str,
+        call_id: str,
+        company_id: str,
+    ) -> List[SyncMessage]:
+        """Сообщения основной ленты канала с привязкой к звонку, по времени (для агрегата транскрипции)."""
+        async with self._db.session() as session:
+            stmt = (
+                select(SyncMessage)
+                .where(
+                    SyncMessage.company_id == company_id,
+                    SyncMessage.channel_id == channel_id,
+                    SyncMessage.call_id == call_id,
+                    SyncMessage.thread_id.is_(None),
+                    SyncMessage.deleted_at.is_(None),
+                )
+                .order_by(SyncMessage.sent_at.asc(), SyncMessage.message_id.asc())
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
     async def list_by_thread(
         self,
         thread_id: str,
@@ -226,6 +249,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         channel_id: str,
         thread_id: Optional[str],
         parent_message_id: Optional[str],
+        call_id: Optional[str] = None,
         sender_user_id: str,
         status: str,
         sent_at: datetime,
@@ -241,6 +265,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 channel_id=channel_id,
                 thread_id=thread_id,
                 parent_message_id=parent_message_id,
+                call_id=call_id,
                 sender_user_id=sender_user_id,
                 status=status,
                 sent_at=sent_at,

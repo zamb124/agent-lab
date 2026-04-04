@@ -203,12 +203,12 @@ export class EntitiesList extends CRMPanel {
         const entityType = this._entityTypes.find(t => t.type_id === typeId);
         if (entityType) {
             return {
-                icon: entityType.icon || 'file',
+                icon: entityType.icon || 'folder',
                 color: entityType.color || 'var(--text-tertiary)',
                 label: entityType.name || typeId,
             };
         }
-        return { icon: 'file', color: 'var(--text-tertiary)', label: entity.entity_type };
+        return { icon: 'folder', color: 'var(--text-tertiary)', label: entity.entity_type };
     }
 
     _formatDate(dateString) {
@@ -233,7 +233,7 @@ export class EntitiesList extends CRMPanel {
         if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
             return html`<platform-icon name="${iconName}" size="20"></platform-icon>`;
         }
-        return html`<platform-icon name="file" size="20"></platform-icon>`;
+        return html`<platform-icon name="folder" size="20"></platform-icon>`;
     }
     
     renderHeaderActions() {

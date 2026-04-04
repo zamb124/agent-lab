@@ -144,6 +144,22 @@ async def sync_app():
 
 
 @pytest_asyncio.fixture
+async def office_app():
+    """FastAPI приложение office (Documents / OnlyOffice BFF + UI, ASGI)."""
+    from apps.office.main import app
+
+    yield app
+
+
+@pytest_asyncio.fixture
+async def office_client(office_app):
+    """HTTP-клиент для BFF office (ASGI). Миграции platform_office — в setup_database_before_tests."""
+    transport = ASGITransport(app=office_app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
 async def sync_client(sync_app, sync_worker):
     """
     HTTP клиент для Sync API (ASGI, lifespan включён).

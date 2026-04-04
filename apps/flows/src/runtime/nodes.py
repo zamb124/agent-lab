@@ -971,10 +971,12 @@ class ExternalAPINode(BaseNode):
             if isinstance(data, dict) and response_field in data:
                 setattr(state, state_field, data[response_field])
 
-        setattr(state, "api_response", result.get("data"))
+        data = result.get("data")
+        setattr(state, "api_response", data)
         setattr(state, "api_status", result.get("status"))
+        setattr(state, "result", data)
 
-        return result.get("data")
+        return data
 
 
 class MCPNode(BaseNode):
@@ -1092,12 +1094,13 @@ class ChannelNode(BaseNode):
         )
         
         setattr(state, "channel_result", result)
-        
+        setattr(state, "result", result)
+
         logger.info(
             f"[node:{self.node_id}] Channel {self.channel.value} "
             f"action {self.action} completed"
         )
-        
+
         return result
 
 

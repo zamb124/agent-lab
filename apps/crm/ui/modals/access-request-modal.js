@@ -236,7 +236,7 @@ export class AccessRequestModal extends PlatformModal {
             <div class="form-grid">
                 <div class="entity-preview">
                     <div class="entity-preview-icon">
-                        <platform-icon name="file" size="20"></platform-icon>
+                        <platform-icon name="folder" size="20"></platform-icon>
                     </div>
                     <div class="entity-preview-name">
                         ${this.entityName || this.i18n.t('access_request_modal.entity_fallback')}

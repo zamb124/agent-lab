@@ -4,6 +4,7 @@
  */
 import { html } from 'lit';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-icon.js';
 
 export function renderPanel(component) {
     const t = (key) => component.i18n.t(`execution_panel.${key}`);
@@ -90,7 +91,7 @@ export function renderPanel(component) {
                                 hidden
                                 @change=${component._handleFileSelect}
                             >
-                            <platform-icon name="file" size="20"></platform-icon>
+                            <platform-icon file-icon name="text" size="20"></platform-icon>
                         </label>
                         ${component.isBreakpoint
                             ? html`

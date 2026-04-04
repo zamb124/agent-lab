@@ -5,6 +5,8 @@ import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
+import { resolveFileIconKey } from '@platform/services/icon.service.js';
 
 export class ChatMessage extends PlatformElement {
     static styles = [
@@ -602,14 +604,11 @@ export class ChatMessage extends PlatformElement {
 
     _renderFile(file) {
         const isImage = file.type && file.type.startsWith('image/');
-        
+        const iconKey = isImage ? 'image' : resolveFileIconKey(file.name || '', file.type || '');
+
         return html`
             <div class="file-item">
-                ${isImage ? html`
-                    <platform-icon name="doc-detail" size="20"></platform-icon>
-                ` : html`
-                    <platform-icon name="file" size="20"></platform-icon>
-                `}
+                <platform-icon file-icon name=${iconKey} size="20"></platform-icon>
                 <div>
                     <div class="file-name">${file.name}</div>
                     ${file.size ? html`<div class="file-size">${this._formatFileSize(file.size)}</div>` : ''}

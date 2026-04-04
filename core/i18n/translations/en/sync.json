@@ -1,39 +1,10 @@
 {
-  "meetings_title": "Company meetings",
   "close": "Close",
-  "all_channels": "All channels",
-  "reset_filters": "Reset filters",
-  "loading_meetings": "Loading meetings...",
-  "empty_filtered": "No meetings match the filters.",
-  "meta_date": "Date:",
-  "meta_duration": "Duration:",
-  "meta_meeting_id": "meeting_id:",
-  "loading_details": "Loading details...",
-  "meeting_details": "Meeting details",
-  "label_channel": "Channel",
-  "label_date": "Date",
-  "label_duration": "Duration",
-  "label_status": "Status",
-  "label_participants": "Participants",
-  "label_meeting_id": "meeting_id",
-  "label_join_link": "Join link",
-  "download_recording": "Download recording",
-  "download_transcript": "Download transcript",
-  "export_crm": "Export to CRM",
-  "retry_processing": "Retry processing",
-  "select_card_hint": "Select a meeting card from the list on the left.",
-  "export_status": {
-    "done": "done",
-    "pending": "in progress",
-    "failed": "error"
-  },
+  "call_aggregate_empty_body": "Nothing to summarize: this call lane has no text messages or finished audio/video transcripts. Room audio is not posted to the chat — send messages in the channel, start a call recording, or enable voice transcription in channel settings.",
   "recording_error_default": "Recording error",
-  "meeting_processing_error": "Meeting processing error",
   "sidebar": {
     "create_sync_title": "Create Sync: service channel and call",
     "create_sync_label": "Create Sync",
-    "open_meetings_title": "Open meetings",
-    "meetings_label": "Meetings",
     "direct_section": "Direct",
     "direct_search_placeholder": "Search by name or id...",
     "direct_search_aria": "Search company members",
@@ -87,7 +58,11 @@
     "forward": "Forward",
     "delete": "Delete",
     "forward_modal_title": "Forward to",
-    "no_other_channels": "No other channels."
+    "no_other_channels": "No other channels.",
+    "call_banner_title": "Call in progress",
+    "call_banner_subtitle": "Tap to return to the call",
+    "call_banner_hangup_aria": "End call",
+    "err_call_banner_call_id": "No call data to hang up."
   },
   "composer": {
     "default_user_short": "User",
@@ -175,6 +150,16 @@
     "err_file_image": "Invalid file/image content.",
     "err_file_document": "Invalid file/document content.",
     "err_file_audio": "Invalid file/audio content.",
+    "err_file_video": "Invalid file/video content.",
+    "err_call_boundary": "Invalid call/boundary content.",
+    "call_boundary_started": "Call started",
+    "call_boundary_join": "Join",
+    "call_boundary_join_title": "Call in progress — join",
+    "call_boundary_ended": "Call ended",
+    "transcribe_meeting": "Transcribe meeting",
+    "transcribe_video": "Transcribe",
+    "transcribe_processing": "Transcribing…",
+    "err_call_id_transcribe": "call_id is required on the message to transcribe the meeting.",
     "err_git_ref": "Invalid git/reference content.",
     "err_tool_response": "Invalid custom_tool_response content.",
     "err_content_type": "Unsupported content type: {{type}}",
@@ -247,7 +232,8 @@
     "participant_menu": "Participant menu",
     "promote_meeting_admin": "Make meeting admin",
     "participant_action_unavailable": "Not available for this participant",
-    "screen_tile_suffix": "{{label}} — screen"
+    "screen_tile_suffix": "{{label}} — screen",
+    "minimize_title": "Minimize to chat"
   },
   "sync_store": {
     "err_channel_filter_multi": "To create a channel, leave only one space in the filter or reset the filter (show all channels).",
@@ -270,8 +256,6 @@
     "err_message_dot_id": "message.id is required.",
     "err_confirmed_message_required": "confirmedMessage is required.",
     "err_older_cursor_overlay": "olderCursor is required to load overlay history.",
-    "err_upsert_meeting_required": "upsertMeeting: meeting is required.",
-    "err_filters_required": "filters is required.",
     "err_fields_required": "fields is required.",
     "err_toggle_sidebar_space_id": "toggleSidebarSpaceFilter: spaceId is required.",
     "err_channel_row_channel": "channelRowMetaLabel: channel is required.",
@@ -282,6 +266,10 @@
     "err_presence_user_id": "user.presence: user_id is required.",
     "err_peer_subtitle_user_id": "getPeerPresenceSubtitle: userId is required.",
     "err_unknown_sidebar_section": "Unknown sidebar section: {{key}}",
+    "err_active_call_overlay_payload": "setUiActiveCallOverlay: expected object or null.",
+    "err_active_call_overlay_call_id": "setUiActiveCallOverlay: call_id is required.",
+    "err_active_call_overlay_channel_id": "setUiActiveCallOverlay: channel_id must be a string.",
+    "err_active_call_overlay_minimized": "setUiActiveCallOverlay: minimized must be a boolean.",
     "err_company_member_user_id": "company/members: item has no user_id."
   },
   "presence": {
@@ -315,6 +303,8 @@
     "photo": "[Photo]",
     "file": "[File]",
     "audio": "[Audio]",
+    "video": "[Video]",
+    "call_boundary": "[Call]",
     "git": "[Git]",
     "tool": "[Tool]",
     "err_unknown_type": "Unknown content type for preview: {{type}}"
@@ -337,7 +327,10 @@
     "meta_space_prefix": "Space: {{name}}",
     "meta_pick_space": "Pick a space in the list on the left.",
     "notifications": "Notifications",
+    "new_channel_flags_heading": "Channel options",
     "mute_label": "Do not disturb (no notifications for new messages)",
+    "transcribe_voice_label": "Automatically transcribe voice messages",
+    "speech_to_chat_label": "Speech to channel during calls",
     "field_name": "Name",
     "placeholder_name": "Channel name",
     "field_avatar": "Avatar",
@@ -357,7 +350,6 @@
   "space_settings": {
     "err_upload": "Invalid file upload response (missing file_id or url).",
     "err_name_required": "Space name is required.",
-    "err_export_namespace": "Set a namespace for auto-export.",
     "err_not_selected": "No space selected.",
     "header_create": "Create space",
     "header_edit": "Space settings",
@@ -368,12 +360,12 @@
     "upload_image": "Upload image",
     "namespace_label": "Namespace (shared for CRM/RAG)",
     "namespace_loading": "Loading namespaces...",
-    "auto_export_transcript": "Auto-export transcript to CRM",
-    "auto_export_summary": "Auto-export summary to CRM",
     "creating": "Creating…",
     "create": "Create",
     "saving": "Saving…",
-    "save": "Save"
+    "save": "Save",
+    "transcribe_voice_label": "Auto-transcribe voice in new channels",
+    "speech_to_chat_label": "Speech to channel for new channels (LiveKit)"
   },
   "empty_dash": "—",
   "call_join": {
@@ -391,7 +383,6 @@
     "login_account": "Sign in"
   },
   "sync_api": {
-    "err_meeting_id": "meetingId is required.",
     "err_user_id": "userId is required.",
     "err_peer_user_id": "peerUserId is required.",
     "err_call_id": "callId is required.",
@@ -418,9 +409,6 @@
     "ws_status_no_message_id": "message.status_changed: message_id is missing.",
     "ws_unknown_realtime": "[sync-ws] unknown realtime event: {{type}}",
     "err_sync_ws_not_initialized": "syncWs is not initialized on accept.",
-    "err_recording_action": "action must be start or stop.",
-    "err_meeting_id_required": "meetingId is required.",
-    "err_meeting_details_invalid": "Invalid meeting details response.",
-    "err_meeting_id_operation": "meeting_id is required."
+    "err_recording_action": "action must be start or stop."
   }
 }

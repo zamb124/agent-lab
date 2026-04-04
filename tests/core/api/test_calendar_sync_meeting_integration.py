@@ -1,5 +1,5 @@
 """
-Создание события календаря с sync_meeting через frontend ASGI и реальный Sync HTTP (порт 9005).
+Платформенная встреча (kind=meeting): канал Sync и ссылка через frontend ASGI и реальный Sync HTTP (порт 9005).
 
 ServiceClient ходит на SERVER__SYNC_SERVICE_URL; sync_service поднимает процесс на 9005.
 """
@@ -47,7 +47,6 @@ async def test_platform_calendar_sync_meeting_creates_sync_link_and_delete_remov
         "series_id": None,
         "deep_link": None,
         "metadata": {"case": f"sync_int_{unique_id}"},
-        "sync_meeting": {"enabled": True},
     }
     create_response = await frontend_client.post(
         "/frontend/api/calendar/events",
@@ -74,7 +73,7 @@ async def test_platform_calendar_sync_meeting_creates_sync_link_and_delete_remov
         update_payload = {
             **create_payload,
             "title": f"Sync meeting updated {unique_id}",
-            "sync_meeting": {"enabled": False},
+            "kind": "event",
         }
         update_response = await frontend_client.put(
             f"/frontend/api/calendar/events/{event_id}",

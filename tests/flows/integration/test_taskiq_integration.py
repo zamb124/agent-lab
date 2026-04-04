@@ -73,7 +73,9 @@ def execute(args, state):
         }
 
     @pytest.mark.asyncio
-    async def test_tool_executes_via_taskiq_kiq(self, app, container, calculator_tool_config):
+    async def test_tool_executes_via_taskiq_kiq(
+        self, app, container, calculator_tool_config, mock_context
+    ):
         """Tool выполняется через TaskIQ .kiq() + wait_result()."""
         import pytest
         import asyncio
@@ -93,6 +95,7 @@ def execute(args, state):
             calculator_tool_config,
             {"a": 10, "b": 5, "op": "add"},
             state_dict,
+            context_data=mock_context.to_dict(),
         )
 
         try:
@@ -106,7 +109,7 @@ def execute(args, state):
 
     @pytest.mark.asyncio
     async def test_multiple_tools_execute_parallel_via_taskiq(
-        self, app, container, calculator_tool_config
+        self, app, container, calculator_tool_config, mock_context
     ):
         """Несколько tools кикаются параллельно и ждём все результаты."""
         # Создаем валидный state
@@ -123,6 +126,7 @@ def execute(args, state):
                 calculator_tool_config,
                 {"a": i, "b": i * 2, "op": "mul"},
                 state_dict,
+                context_data=mock_context.to_dict(),
             )
             tasks.append((i, task))
 
@@ -137,7 +141,7 @@ def execute(args, state):
         assert results == expected
 
     @pytest.mark.asyncio
-    async def test_tool_receives_state(self, app, container):
+    async def test_tool_receives_state(self, app, container, mock_context):
         """Tool получает state и может его использовать."""
         tool_config = {
             "tool_id": "taskiq_state_tool",
@@ -164,6 +168,7 @@ def execute(args, state):
             tool_config,
             {"value": "test"},
             state_dict,
+            context_data=mock_context.to_dict(),
         )
 
         result = await task.wait_result()

@@ -401,8 +401,8 @@ class TestPythonConditions:
         assert not hasattr(result, 'result') or result.result is None
 
     @pytest.mark.asyncio
-    async def test_python_invalid_code_returns_false(self, app):
-        """Python условие с ошибкой - возвращает False, не падает."""
+    async def test_python_invalid_code_raises(self, app):
+        """Python условие с ошибкой выполнения check — ValueError."""
         agent = await Flow.from_config({
             "id": "test",
             "name": "Test",
@@ -413,25 +413,23 @@ class TestPythonConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "target", 
+                    "from": "start",
+                    "to": "target",
                     "condition": {
                         "type": "python",
-                        "code": "def check(state):\n    return undefined_variable"
-                    }
+                        "code": "def check(state):\n    return undefined_variable",
+                    },
                 }
-            ]
+            ],
         })
-        
+
         state = make_state()
-        # Не должен падать - ошибка в условии логируется, возвращает False
-        result = await agent.run(state)
-        
-        assert not hasattr(result, 'result') or result.result is None
+        with pytest.raises(ValueError, match="Python-условие ребра"):
+            await agent.run(state)
 
     @pytest.mark.asyncio
-    async def test_python_missing_check_function(self, app):
-        """Python условие без функции check - возвращает False."""
+    async def test_python_missing_check_function_raises(self, app):
+        """Python условие без функции check — ValueError."""
         agent = await Flow.from_config({
             "id": "test",
             "name": "Test",
@@ -442,21 +440,19 @@ class TestPythonConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "target", 
+                    "from": "start",
+                    "to": "target",
                     "condition": {
                         "type": "python",
-                        "code": "def wrong_name(state):\n    return True"
-                    }
+                        "code": "def wrong_name(state):\n    return True",
+                    },
                 }
-            ]
+            ],
         })
-        
+
         state = make_state()
-        result = await agent.run(state)
-        
-        # Функция check не найдена - возвращает False
-        assert not hasattr(result, 'result') or result.result is None
+        with pytest.raises(ValueError, match="функцией check"):
+            await agent.run(state)
 
 
 class TestUnconditionalEdges:

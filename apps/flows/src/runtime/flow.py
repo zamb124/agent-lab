@@ -181,11 +181,25 @@ class Flow:
                 async def _run(node_id: str, run_state: ExecutionState) -> ExecutionState:
                     node_type = self.nodes[node_id].config.get("type", "function")
                     async with tracer.node_span(node_id, node_type, trace_ctx):
-                        return await self.nodes[node_id].run.kiq(run_state)
+                        await emitter.emit_node_start(node_id, node_type)
+                        try:
+                            result_state = await self.nodes[node_id].run.kiq(run_state)
+                        except (FlowInterrupt, BreakpointInterrupt):
+                            raise
+                        except Exception as exc:
+                            await emitter.emit_node_error(node_id, str(exc))
+                            raise
+                        preview = ""
+                        if result_state.response:
+                            preview = str(result_state.response)
+                        elif result_state.result is not None:
+                            preview = str(result_state.result)
+                        await emitter.emit_node_complete(node_id, preview)
+                        return result_state
 
                 try:
                     run_states: Dict[str, ExecutionState] = {}
-                    if len(current_nodes) > 1 and not container.use_worker:
+                    if len(current_nodes) > 1:
                         for nid in current_nodes:
                             run_states[nid] = ExecutionState.model_validate(
                                 state.model_dump(exclude_none=False)
@@ -261,6 +275,10 @@ class Flow:
                         setattr(merged, field, list(value))
                     else:
                         setattr(merged, field, value)
+
+            extra = getattr(result, "__pydantic_extra__", None) or {}
+            for key, value in extra.items():
+                setattr(merged, key, value)
 
         return merged
 
@@ -446,13 +464,14 @@ class Flow:
 
     def _evaluate_condition_string(self, condition: str, state: ExecutionState) -> bool:
         """Вычисляет условие в legacy строковом формате."""
+        # Двухсимвольные операторы раньше односимвольных: иначе "count <= 3" матчится как "count" > "= 3".
         patterns = [
             (r"(.+?)\s*==\s*(.+)", operator.eq),
             (r"(.+?)\s*!=\s*(.+)", operator.ne),
-            (r"(.+?)\s*>\s*(.+)", operator.gt),
-            (r"(.+?)\s*<\s*(.+)", operator.lt),
             (r"(.+?)\s*>=\s*(.+)", operator.ge),
             (r"(.+?)\s*<=\s*(.+)", operator.le),
+            (r"(.+?)\s*>\s*(.+)", operator.gt),
+            (r"(.+?)\s*<\s*(.+)", operator.lt),
         ]
 
         for pattern, op in patterns:

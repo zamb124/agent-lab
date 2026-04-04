@@ -55,6 +55,30 @@ services:
     networks:
       - test-net
 
+  # OnlyOffice Document Server — те же JWT и URL, что в tests_runner (OFFICE__*).
+  onlyoffice-documentserver:
+    platform: "linux/amd64"
+    image: onlyoffice/documentserver-de:latest
+    container_name: agentlab_onlyoffice_test
+    ports:
+      - "18088:80"
+    environment:
+      - JWT_ENABLED=true
+      - JWT_SECRET=test-onlyoffice-jwt-secret
+    volumes:
+      - ./deploy/onlyoffice/themes/theme-humanitec-light.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
+    depends_on:
+      redis-test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    networks:
+      - test-net
+
   test-a2a-agent:
     platform: "linux/amd64"
     build:
@@ -94,6 +118,7 @@ services:
       - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
+      - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -123,6 +148,7 @@ services:
       - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
+      - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -147,6 +173,7 @@ services:
     environment:
       - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
+      - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -180,12 +207,15 @@ services:
         condition: service_started
       livekit-test:
         condition: service_healthy
+      onlyoffice-documentserver:
+        condition: service_healthy
     environment:
       - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
       - DATABASE__FLOWS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
       - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
+      - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -202,6 +232,9 @@ services:
       - CALLS__LIVEKIT_API_SECRET=secret
       - STT__PROVIDER=mock
       - STT__MOCK_TRANSCRIPT_TEXT=Тестовая транскрипция docker worker
+      - OFFICE__JWT_SECRET=test-onlyoffice-jwt-secret
+      - OFFICE__DOCUMENT_SERVER_PUBLIC_URL=http://onlyoffice-documentserver
+      - OFFICE__CALLBACK_PUBLIC_BASE_URL=http://testserver
     command: ["sh", "-c", "test -d /app/test-results || mkdir -p /app/test-results; test -d /app/htmlcov || mkdir -p /app/htmlcov; chmod -R 777 /app/test-results /app/htmlcov 2>/dev/null || true; python -m pytest tests/ -v -n ${PYTEST_WORKERS} --junitxml=/app/test-results/junit.xml --cov=apps --cov=core --cov-report=term-missing --cov-report=html"]
     restart: "no"
     volumes:

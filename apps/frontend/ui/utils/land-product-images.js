@@ -13,3 +13,6 @@ export function landFlowsAbilityUrl(locale) {
 export const landRagAbilityUrl = `${LAND_IMAGE_BASE}/rag.png`;
 export const landNetworkleAbilityUrl = `${LAND_IMAGE_BASE}/networkle_ability-image_ru.png`;
 export const landSyncAbilityUrl = `${LAND_IMAGE_BASE}/sync_ability-image_ru.png`;
+
+/** Hero для страницы продукта «Документы» (пока без отдельного land-скриншота). */
+export const landDocumentsHeroUrl = '/static/core/assets/service_logos/documents_logo.svg';

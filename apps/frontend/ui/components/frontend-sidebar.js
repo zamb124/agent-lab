@@ -1,13 +1,12 @@
 /**
- * FrontendSidebar - боковая навигационная панель
- * Использует platform-sidebar с collapsed/mobile режимами
+ * FrontendSidebar — навигация консоли; оболочка platform-service-sidebar.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { FrontendStore } from '../store/frontend.store.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 
@@ -123,21 +122,20 @@ export class FrontendSidebar extends PlatformElement {
                 transform: translateX(4px);
             }
 
-            /* Collapsed mode */
-            :host([collapsed]) .nav-label,
-            :host([collapsed]) .section-title,
-            :host([collapsed]) .service-link span:not(.nav-icon) {
+            platform-service-sidebar[collapsed] .nav-label,
+            platform-service-sidebar[collapsed] .section-title,
+            platform-service-sidebar[collapsed] .service-link span:not(.nav-icon) {
                 display: none;
             }
 
-            :host([collapsed]) .nav-item,
-            :host([collapsed]) .service-link {
+            platform-service-sidebar[collapsed] .nav-item,
+            platform-service-sidebar[collapsed] .service-link {
                 justify-content: center;
                 padding: var(--space-3);
             }
 
-            :host([collapsed]) .nav-item:hover,
-            :host([collapsed]) .service-link:hover {
+            platform-service-sidebar[collapsed] .nav-item:hover,
+            platform-service-sidebar[collapsed] .service-link:hover {
                 transform: none;
             }
         `
@@ -177,25 +175,12 @@ export class FrontendSidebar extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    toggleCollapse() {
-        this.collapsed = !this.collapsed;
-        this.emit('collapse-change', { collapsed: this.collapsed });
-    }
-
-    toggleMobile() {
-        this.mobileOpen = !this.mobileOpen;
-        this.emit('mobile-change', { open: this.mobileOpen });
+    _shell() {
+        return this.renderRoot?.querySelector('platform-service-sidebar');
     }
 
     closeMobile() {
-        if (this.mobileOpen) {
-            this.mobileOpen = false;
-            this.emit('mobile-change', { open: false });
-            // Глобальное событие для platform-sidebar-trigger и platform-island
-            window.dispatchEvent(new CustomEvent('platform-sidebar-mobile-change', {
-                detail: { open: false },
-            }));
-        }
+        this._shell()?.closeMobile();
     }
 
     _navigate(view) {
@@ -208,13 +193,17 @@ export class FrontendSidebar extends PlatformElement {
         const t = (key) => this.i18n.t(key, {});
 
         return html`
-            <platform-sidebar
+            <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/frontend_logo.svg"
                 logo-text="HUMANITEC"
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(e) => this.collapsed = e.detail.collapsed}
-                @mobile-change=${(e) => this.mobileOpen = e.detail.open}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
+                @mobile-change=${(e) => {
+                    this.mobileOpen = e.detail.open;
+                }}
             >
                 <nav>
                     <button
@@ -316,7 +305,7 @@ export class FrontendSidebar extends PlatformElement {
                     <platform-user block></platform-user>
                     <platform-deployment-version base-url="/frontend" footer></platform-deployment-version>
                 </div>
-            </platform-sidebar>
+            </platform-service-sidebar>
         `;
     }
 }

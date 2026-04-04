@@ -10,7 +10,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+import { PlatformServices } from '@platform/lib/services/platform-services-bootstrap.js';
 import { i18nDefaultNamespaceForBaseUrl } from '@platform/services/i18n/i18n.service.js';
 import { hueFromString } from '../utils/sync-hue.js';
 
@@ -275,8 +275,8 @@ class CallJoinPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
-        if (!ServiceRegistry.isInitialized) {
-            await ServiceRegistry.registerCore('/sync');
+        if (!PlatformServices.isInitialized) {
+            await PlatformServices.registerCore('/sync');
         }
         const i18nNs = i18nDefaultNamespaceForBaseUrl('/sync');
         if (i18nNs !== '') {

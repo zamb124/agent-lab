@@ -1,0 +1,78 @@
+{
+  "appTitle": "Documents",
+  "homeIntro": "Editing via OnlyOffice. Full list and upload use the BFF API (/documents/api/v1/documents).",
+  "sidebar": {
+    "title": "Documents",
+    "navList": "All documents",
+    "navBack": "Back to list",
+    "navNew": "New document",
+    "navUpload": "Upload file",
+    "navRefresh": "Refresh list"
+  },
+  "integration": {
+    "notConfigured": "OnlyOffice is not configured: check JWT secret and public URLs in the service settings."
+  },
+  "list": {
+    "heading": "Documents",
+    "loading": "Loading…",
+    "loadError": "Failed to load list: {{message}}",
+    "newEmpty": "New document",
+    "upload": "Upload file",
+    "tableAria": "Documents table",
+    "colTitle": "Title",
+    "colCreated": "Created",
+    "colAuthor": "Author",
+    "creatorAria": "Author: {{name}}",
+    "colType": "Type",
+    "docType": {
+      "word": "Document",
+      "cell": "Spreadsheet",
+      "slide": "Presentation"
+    },
+    "colActions": "Actions",
+    "open": "Open",
+    "openDocument": "Open document \"{title}\"",
+    "rename": "Rename",
+    "delete": "Delete",
+    "empty": "No documents yet.",
+    "emptyStateAria": "No documents",
+    "emptyStateTitle": "No documents yet",
+    "emptyStateHint": "Create a new document or upload a file to get started.",
+    "renameHeading": "Rename document",
+    "renameLabel": "New title",
+    "cancel": "Cancel",
+    "save": "Save",
+    "renamed": "Title updated",
+    "emptyDocHeading": "New document",
+    "emptyDocLabel": "Title",
+    "emptyDocNamePlaceholder": "e.g. Q1 report",
+    "emptyDocTypesSection": "File type",
+    "emptyDocTypeWord": "Document",
+    "emptyDocTypeExcel": "Spreadsheet",
+    "emptyDocTypeCsv": "CSV",
+    "emptyDocTypeSlide": "Presentation",
+    "emptyDocTypePdf": "PDF",
+    "emptyDocPdfHint": "Upload only",
+    "create": "Create",
+    "created": "Document created",
+    "uploaded": "File uploaded",
+    "deleteConfirmTitle": "Delete document",
+    "deleteConfirm": "Delete document \"{{title}}\"?",
+    "deleted": "Document deleted"
+  },
+  "mobile": {
+    "openSidebar": "Open menu",
+    "editorTitle": "Editor"
+  },
+  "editor": {
+    "back": "Back to list",
+    "loading": "Opening editor…",
+    "errNoId": "Document is not specified",
+    "errNoApi": "API service is not available",
+    "errBadConfig": "Empty editor configuration",
+    "errDocsApi": "Failed to load OnlyOffice API",
+    "errHost": "Editor container is missing",
+    "errOpenTimeout": "The editor did not respond within 2 minutes. Check Document Server, OFFICE__CALLBACK_PUBLIC_BASE_URL, and that the document URL is reachable from DS.",
+    "eventError": "Editor error"
+  }
+}

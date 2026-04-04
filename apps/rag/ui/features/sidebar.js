@@ -1,13 +1,12 @@
 /**
- * RAG Sidebar - боковая навигационная панель
- * Использует platform-sidebar с collapsed/mobile режимами
+ * RAG Sidebar — навигация; оболочка platform-service-sidebar.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { RagStore } from '../store/rag.store.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 
@@ -185,19 +184,18 @@ export class RagSidebar extends PlatformElement {
                 margin-bottom: 0;
             }
 
-            /* Collapsed mode */
-            :host([collapsed]) .nav-label,
-            :host([collapsed]) .section-title,
-            :host([collapsed]) .provider-section {
+            platform-service-sidebar[collapsed] .nav-label,
+            platform-service-sidebar[collapsed] .section-title,
+            platform-service-sidebar[collapsed] .provider-section {
                 display: none;
             }
 
-            :host([collapsed]) .nav-item {
+            platform-service-sidebar[collapsed] .nav-item {
                 justify-content: center;
                 padding: var(--space-3);
             }
 
-            :host([collapsed]) .nav-item:hover {
+            platform-service-sidebar[collapsed] .nav-item:hover {
                 transform: none;
             }
         `
@@ -247,24 +245,12 @@ export class RagSidebar extends PlatformElement {
         }
     }
 
-    toggleCollapse() {
-        this.collapsed = !this.collapsed;
-        this.emit('collapse-change', { collapsed: this.collapsed });
-    }
-
-    toggleMobile() {
-        this.mobileOpen = !this.mobileOpen;
-        this.emit('mobile-change', { open: this.mobileOpen });
+    _shell() {
+        return this.renderRoot?.querySelector('platform-service-sidebar');
     }
 
     closeMobile() {
-        if (this.mobileOpen) {
-            this.mobileOpen = false;
-            this.emit('mobile-change', { open: false });
-            window.dispatchEvent(new CustomEvent('platform-sidebar-mobile-change', {
-                detail: { open: false },
-            }));
-        }
+        this._shell()?.closeMobile();
     }
 
     _toggleProviderDropdown(e) {
@@ -289,13 +275,17 @@ export class RagSidebar extends PlatformElement {
         const { currentView, usage, currentProvider, providers } = this.state.value;
 
         return html`
-            <platform-sidebar
+            <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/rag_logo.svg"
                 logo-text="RAG Service"
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(e) => this.collapsed = e.detail.collapsed}
-                @mobile-change=${(e) => this.mobileOpen = e.detail.open}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
+                @mobile-change=${(e) => {
+                    this.mobileOpen = e.detail.open;
+                }}
             >
                 <nav>
                     <button
@@ -362,7 +352,7 @@ export class RagSidebar extends PlatformElement {
 
                     <div class="usage">
                         <div class="usage-item">
-                            <platform-icon name="file" size="14"></platform-icon>
+                            <platform-icon file-icon name="text" size="14"></platform-icon>
                             <span>Pages: ${usage.pages} / ${usage.maxPages}</span>
                         </div>
                         <div class="usage-item">
@@ -376,7 +366,7 @@ export class RagSidebar extends PlatformElement {
                     <platform-user block></platform-user>
                     <platform-deployment-version base-url="/rag" footer></platform-deployment-version>
                 </div>
-            </platform-sidebar>
+            </platform-service-sidebar>
         `;
     }
 }

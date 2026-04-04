@@ -3,6 +3,8 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
+import { resolveFileIconKey } from '@platform/services/icon.service.js';
 
 export class ChatInput extends PlatformElement {
     static styles = [
@@ -415,7 +417,11 @@ export class ChatInput extends PlatformElement {
                         alt=${file.name}
                     >
                 ` : html`
-                    <platform-icon name="file" size="24"></platform-icon>
+                    <platform-icon
+                        file-icon
+                        name=${resolveFileIconKey(file.name || '', file.type || '')}
+                        size="24"
+                    ></platform-icon>
                 `}
                 
                 <div class="file-info">

@@ -7,12 +7,13 @@ TaskIQ задачи для выполнения tools.
 
 from __future__ import annotations
 
-import copy
 from typing import Any, Dict
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.container import get_container
+from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
+from core.models.context_models import Context
 
 from apps.flows_worker.broker import broker
 
@@ -24,6 +25,7 @@ async def execute_tool(
     tool_id_or_config: Any,
     args: Dict[str, Any],
     state_dict: Dict[str, Any],
+    context_data: Dict[str, Any] | None = None,
 ):
     """
     Выполняет tool через TaskIQ.
@@ -32,10 +34,16 @@ async def execute_tool(
         tool_id_or_config: ID tool (str) или inline конфиг (dict)
         args: Аргументы вызова
         state_dict: Сериализованный ExecutionState (граница TaskIQ)
+        context_data: Сериализованный Context (как у process_flow_task) для репозиториев с company_id
 
     Returns:
         Dict с результатом (сериализуется обратно для TaskIQ)
     """
+    previous_context = None
+    if context_data is not None:
+        previous_context = get_context()
+        set_context(Context.from_dict(context_data))
+
     container = get_container()
     
     if isinstance(tool_id_or_config, str):
@@ -57,28 +65,32 @@ async def execute_tool(
     tool_state = ExecutionState.model_validate(state_dict)
 
     try:
-        result = await tool.run(args, tool_state)
-    except FlowInterrupt as e:
-        # FlowInterrupt НЕ происходит в execute_tool - это функция для tools
-        # Это исключение ловится где-то выше в стеке
-        nested = tool_state.nested_states
-        path = [item.model_dump() for item in tool_state.interrupt_path]
-        logger.info(
-            f"Tool {tool_id} interrupt: {e.question[:50]}..., nested_keys={list(nested.keys())}, path_len={len(path)}"
-        )
+        try:
+            result = await tool.run(args, tool_state)
+        except FlowInterrupt as e:
+            nested = tool_state.nested_states
+            path = [item.model_dump() for item in tool_state.interrupt_path]
+            logger.info(
+                f"Tool {tool_id} interrupt: {e.question[:50]}..., nested_keys={list(nested.keys())}, path_len={len(path)}"
+            )
+            return {
+                "tool_id": tool_id,
+                "result": None,
+                "interrupt": {"question": e.question},
+                "nested_states": nested,
+                "interrupt_path": path,
+            }
+
+        logger.debug(f"Tool {tool_id} completed")
+
         return {
             "tool_id": tool_id,
-            "result": None,
-            "interrupt": {"question": e.question},
-            "nested_states": nested,
-            "interrupt_path": path,
+            "result": result,
+            "nested_states": tool_state.nested_states,
         }
-
-    logger.debug(f"Tool {tool_id} completed")
-
-    # Сериализация для возврата через TaskIQ
-    return {
-        "tool_id": tool_id,
-        "result": result,
-        "nested_states": tool_state.nested_states,
-    }
+    finally:
+        if context_data is not None:
+            if previous_context is not None:
+                set_context(previous_context)
+            else:
+                clear_context()

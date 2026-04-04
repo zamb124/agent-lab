@@ -106,14 +106,20 @@ class CallLinkPatch(BaseModel):
     scheduled_start_at: Optional[datetime] = None
     scheduled_end_at: Optional[datetime] = None
     join_url_base: Optional[str] = None
+    calendar_member_user_ids: Optional[list[str]] = Field(
+        default=None,
+        description="Полная синхронизация участников канала встречи (кроме создателя ссылки).",
+    )
 
     @model_validator(mode="after")
     def _has_update(self) -> "CallLinkPatch":
-        if (
-            self.scheduled_title is None
-            and self.scheduled_start_at is None
-            and self.scheduled_end_at is None
-        ):
+        has_schedule = (
+            self.scheduled_title is not None
+            or self.scheduled_start_at is not None
+            or self.scheduled_end_at is not None
+        )
+        has_members = self.calendar_member_user_ids is not None
+        if not has_schedule and not has_members:
             raise ValueError("Укажите хотя бы одно поле для обновления.")
         if (
             self.scheduled_start_at is not None

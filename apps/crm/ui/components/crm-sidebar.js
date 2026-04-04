@@ -1,12 +1,11 @@
 /**
- * CRM Sidebar - Навигация в стиле Apple Notes
- * Использует platform-sidebar с collapsed/mobile режимами
+ * CRM Sidebar — навигация; оболочка platform-service-sidebar.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { CRMStore } from '../store/crm.store.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-notification-manager.js';
@@ -22,7 +21,7 @@ export class CRMSidebar extends PlatformElement {
                 height: 100%;
             }
 
-            platform-sidebar {
+            platform-service-sidebar {
                 --sidebar-logo-text-weight: 700;
                 --sidebar-logo-text-gradient: var(--crm-main-gradient);
                 --sidebar-logo-text-clip: text;
@@ -205,25 +204,24 @@ export class CRMSidebar extends PlatformElement {
                 min-width: 0;
             }
 
-            /* Collapsed mode */
-            :host([collapsed]) .namespace-selector,
-            :host([collapsed]) .nav-label,
-            :host([collapsed]) .nav-count,
-            :host([collapsed]) .nav-title {
+            platform-service-sidebar[collapsed] .namespace-selector,
+            platform-service-sidebar[collapsed] .nav-label,
+            platform-service-sidebar[collapsed] .nav-count,
+            platform-service-sidebar[collapsed] .nav-title {
                 display: none;
             }
 
-            :host([collapsed]) .nav-item {
+            platform-service-sidebar[collapsed] .nav-item {
                 justify-content: center;
                 padding: var(--space-3);
             }
 
-            :host([collapsed]) .user-section-row {
+            platform-service-sidebar[collapsed] .user-section-row {
                 flex-direction: column;
                 align-items: center;
             }
 
-            :host([collapsed]) .user-section-row platform-user {
+            platform-service-sidebar[collapsed] .user-section-row platform-user {
                 flex: 0 0 auto;
                 width: 100%;
                 min-width: 0;
@@ -283,24 +281,12 @@ export class CRMSidebar extends PlatformElement {
         this._unsubscribe?.();
     }
 
-    toggleCollapse() {
-        this.collapsed = !this.collapsed;
-        this.emit('collapse-change', { collapsed: this.collapsed });
-    }
-
-    toggleMobile() {
-        this.mobileOpen = !this.mobileOpen;
-        this.emit('mobile-change', { open: this.mobileOpen });
+    _shell() {
+        return this.renderRoot?.querySelector('platform-service-sidebar');
     }
 
     closeMobile() {
-        if (this.mobileOpen) {
-            this.mobileOpen = false;
-            this.emit('mobile-change', { open: false });
-            window.dispatchEvent(new CustomEvent('platform-sidebar-mobile-change', {
-                detail: { open: false },
-            }));
-        }
+        this._shell()?.closeMobile();
     }
 
     _navigate(view) {
@@ -337,13 +323,17 @@ export class CRMSidebar extends PlatformElement {
 
     render() {
         return html`
-            <platform-sidebar
+            <platform-service-sidebar
                 logo-src="/crm/ui/static/assets/icons/networkle_logo.svg"
                 logo-text="NetWorkle"
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(e) => this.collapsed = e.detail.collapsed}
-                @mobile-change=${(e) => this.mobileOpen = e.detail.open}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
+                @mobile-change=${(e) => {
+                    this.mobileOpen = e.detail.open;
+                }}
             >
                 <div slot="header" class="crm-sidebar-header-slot">
                     <div class="namespace-selector" data-hide-collapsed>
@@ -432,7 +422,7 @@ export class CRMSidebar extends PlatformElement {
                     </div>
                     <platform-deployment-version base-url="/crm" footer></platform-deployment-version>
                 </div>
-            </platform-sidebar>
+            </platform-service-sidebar>
         `;
     }
 }

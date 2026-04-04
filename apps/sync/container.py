@@ -80,14 +80,12 @@ class SyncContainer(BaseContainer):
         return CallRecordingRepository(db=self.sync_db)
 
     @lazy
-    def call_meeting_repository(self):
-        from apps.sync.db.repositories.meeting_repository import CallMeetingRepository
-        return CallMeetingRepository(db=self.sync_db)
+    def call_speech_egress_track_repository(self):
+        from apps.sync.db.repositories.call_speech_egress_repository import (
+            CallSpeechEgressTrackRepository,
+        )
 
-    @lazy
-    def call_speaker_segment_repository(self):
-        from apps.sync.db.repositories.meeting_repository import CallSpeakerSegmentRepository
-        return CallSpeakerSegmentRepository(db=self.sync_db)
+        return CallSpeechEgressTrackRepository(db=self.sync_db)
 
 
 # === Глобальный контейнер ===

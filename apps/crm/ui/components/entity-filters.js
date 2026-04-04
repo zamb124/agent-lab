@@ -271,10 +271,13 @@ export class EntityFilters extends CRMPanel {
     }
 
     _resolveIconName(iconName) {
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
-        return 'file';
+        return 'folder';
     }
 
     renderContent() {

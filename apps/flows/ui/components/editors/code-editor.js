@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
+import '@platform/lib/components/platform-icon.js';
 
 const DEFAULT_PYTHON = `def execute(args, state):
     """
@@ -988,7 +989,7 @@ export class CodeEditor extends PlatformElement {
                                         class="editor-btn ${this._templatesOpen ? 'active' : ''}"
                                         @click=${this._toggleTemplates}
                                     >
-                                        <platform-icon name="file" size="12"></platform-icon>
+                                        <platform-icon file-icon name="text" size="12"></platform-icon>
                                         ${this.i18n.t('code_editor.templates')}
                                     </button>
                                     ${this._renderTemplatesDropdown()}

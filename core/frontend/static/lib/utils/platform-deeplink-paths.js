@@ -10,6 +10,7 @@ export const DEEPLINK_PATH_PREFIXES = [
     '/crm',
     '/rag',
     '/flows',
+    '/documents',
     '/documentation',
     '/scheduler',
 ];

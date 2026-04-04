@@ -268,6 +268,10 @@ export class LandingAdvantages extends PlatformElement {
                         ${t('advantages.badge_sync')}
                     </a>
                     
+                    <a href="/products/documents" class="advantage-badge advantage-link">
+                        ${t('advantages.badge_documents')}
+                    </a>
+                    
                     <div class="advantage-badge">
                         ${t('advantages.badge_day1')}
                     </div>

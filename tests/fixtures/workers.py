@@ -230,9 +230,9 @@ class SessionWorkerManager:
         """Запускает новый worker процесс."""
         self._cleanup_old_processes()
         
-        # Логи
-        worker_log = open(self.log_file, "w")
-        worker_err = open(self.err_file, "w")
+        # Логи: line-buffered + unbuffered python, иначе stderr/stdout воркера долго не попадают в файлы.
+        worker_log = open(self.log_file, "w", buffering=1, encoding="utf-8", errors="replace")
+        worker_err = open(self.err_file, "w", buffering=1, encoding="utf-8", errors="replace")
         
         # Запускаем worker
         worker_process = subprocess.Popen(
@@ -462,6 +462,9 @@ def sync_worker():
     TaskIQ worker очереди sync (apps.sync_worker.worker:worker_app).
 
     Нужен для REST/WS, где вызывается handle_command.kiq() (создание space/channel и т.д.).
+
+    Логи процесса: stdout /tmp/sync_taskiq_worker_test.log, stderr /tmp/sync_taskiq_worker_test_err.log
+    (line-buffered, PYTHONUNBUFFERED=1 у дочернего процесса).
     """
     if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
         yield None
@@ -486,6 +489,7 @@ def sync_worker():
         env={
             **TEST_DATABASE_ENV,
             "TESTING": "true",
+            "PYTHONUNBUFFERED": "1",
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
@@ -502,6 +506,20 @@ def sync_worker():
             "S3__BUCKETS__TEST-BUCKET__PROVIDER": "minio",
             "STT__PROVIDER": "mock",
             "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
+            "CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS": os.environ.get(
+                "CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS", "2"
+            ),
+            "CALLS__SPEECH_TO_CHAT__POLL_INITIAL_DELAY_SECONDS": os.environ.get(
+                "CALLS__SPEECH_TO_CHAT__POLL_INITIAL_DELAY_SECONDS", "0.5"
+            ),
+            "CALLS__SPEECH_TO_CHAT__POLL_INTERVAL_SECONDS": os.environ.get(
+                "CALLS__SPEECH_TO_CHAT__POLL_INTERVAL_SECONDS", "1"
+            ),
+            "SERVER__FLOWS_SERVICE_URL": "http://localhost:9001",
+            "SERVER__RAG_SERVICE_URL": "http://localhost:9002",
+            "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
+            "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
+            "SERVER__SYNC_SERVICE_URL": "http://127.0.0.1:9005",
         },
         cleanup_patterns=[
             "apps.sync_worker.worker",

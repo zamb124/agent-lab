@@ -14,7 +14,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from core.app import create_service_app
 from core.tracing.middleware import TracingMiddleware
 from core.context import set_context, clear_context
-from core.identity.system_bootstrap import ensure_system_admin_membership
+from core.identity.system_bootstrap import (
+    SYSTEM_ADMIN_EMAIL,
+    ensure_system_admin_membership,
+)
 from core.models.context_models import Context, Language
 from core.models.identity_models import User, Company
 from core.utils.tokens import get_token_service
@@ -31,6 +34,10 @@ logger = get_logger(__name__)
 
 async def _build_scheduler_auth_context(container: object, trace_id: str, session_id: str) -> Context:
     company, user = await ensure_system_admin_membership(container)
+    if user is None:
+        raise ValueError(
+            f"Нет пользователя с email {SYSTEM_ADMIN_EMAIL}: контекст для фоновых задач не собрать"
+        )
     roles = user.companies.get(company.company_id, [])
     auth_token = get_token_service().create_token(
         user_id=user.user_id,

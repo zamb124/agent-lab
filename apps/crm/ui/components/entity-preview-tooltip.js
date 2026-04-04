@@ -189,7 +189,7 @@ export class EntityPreviewTooltip extends PlatformElement {
     _getTypeConfig() {
         if (this.entityType) {
             return {
-                icon: this.entityType.icon || 'file',
+                icon: this.entityType.icon || 'folder',
                 color: this.entityType.color || 'var(--text-tertiary)',
                 label:
                     this.entityType.name ||
@@ -198,17 +198,20 @@ export class EntityPreviewTooltip extends PlatformElement {
             };
         }
         return {
-            icon: 'file',
+            icon: 'folder',
             color: 'var(--text-tertiary)',
             label: this.entity?.entity_type || this.i18n.t('ai_entity_card.entity_fallback'),
         };
     }
 
     _resolveIconName(iconName) {
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
-        return 'file';
+        return 'folder';
     }
 
     _getDisplayAttributes() {

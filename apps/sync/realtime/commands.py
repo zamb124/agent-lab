@@ -10,7 +10,7 @@ from apps.sync.models.calls import CallRead, CallType
 from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelUpdate
 from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
 from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
-from apps.sync.models.meetings import CallMeetingRead, CallRecordingRead
+from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.spaces import SpaceCreate, SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadCreate, ThreadRead
 from core.calls.models import SignalType
@@ -32,6 +32,8 @@ CommandType = Literal[
     "messages.react",
     "messages.pin",
     "messages.transcribe_audio",
+    "messages.transcribe_video",
+    "messages.transcribe_call",
     "git.resources.upsert",
     "call.invite",
     "call.signal",
@@ -41,7 +43,6 @@ CommandType = Literal[
     "call.recording.start",
     "call.recording.stop",
     "call.admin.transfer",
-    "call.meeting.export_to_crm",
 ]
 
 
@@ -80,7 +81,6 @@ class WsResultFrame(BaseModel):
         | GitResourceRefRead
         | CallRead
         | CallRecordingRead
-        | CallMeetingRead
         | None
     ) = None
     error_code: str | None = None
@@ -168,6 +168,16 @@ class MessagesTranscribeAudioPayload(BaseModel):
     message_id: str
 
 
+class MessagesTranscribeVideoPayload(BaseModel):
+    channel_id: str
+    message_id: str
+
+
+class MessagesTranscribeCallPayload(BaseModel):
+    channel_id: str
+    call_id: str
+
+
 class CallInvitePayload(BaseModel):
     channel_id: str
     call_type: CallType = "video"
@@ -210,8 +220,3 @@ class CallRecordingStopPayload(BaseModel):
 class CallTransferAdminPayload(BaseModel):
     call_id: str
     target_user_id: str
-
-
-class CallMeetingExportToCrmPayload(BaseModel):
-    meeting_id: str
-    namespace: str | None = None

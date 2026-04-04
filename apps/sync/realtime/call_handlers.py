@@ -10,6 +10,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import aiohttp
+from livekit.api.twirp_client import TwirpError, TwirpErrorCode
+
 from apps.sync.db.models import SyncCall, SyncCallParticipant
 from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
@@ -31,6 +34,7 @@ from apps.sync.realtime.events import (
     event_call_participant_joined,
     event_call_participant_left,
 )
+
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
@@ -158,21 +162,25 @@ async def handle_call_invite(
 async def handle_call_accept(
     cmd: CommandEnvelope,
     calls: CallRepository,
-) -> tuple[CallRead, list[RealtimeEvent]]:
+) -> tuple[CallRead, list[RealtimeEvent], bool]:
+    """Третий элемент: звонок только что перешёл ringing → active (для маркера в чате)."""
     payload = CallAcceptPayload.model_validate(cmd.payload)
     call = await calls.get_call(payload.call_id, cmd.company_id)
 
     if call.status == "ended":
         raise ValueError("Звонок уже завершён.")
 
+    was_ringing = call.status == "ringing"
     now = datetime.now(UTC)
     await calls.update_participant_status(
         payload.call_id, cmd.actor_user_id, "joined", joined_at=now
     )
 
     active_count = await calls.count_active_participants(payload.call_id)
+    became_active = False
     if active_count >= 2 and call.status == "ringing":
         await calls.update_call_status(payload.call_id, "active", started_at=now)
+        became_active = True
 
     participants = await calls.list_participants(payload.call_id)
     call_read = _call_read_from_entities(
@@ -182,7 +190,7 @@ async def handle_call_accept(
     return call_read, [
         event_call_accepted(payload.call_id, cmd.actor_user_id),
         event_call_participant_joined(payload.call_id, cmd.actor_user_id),
-    ]
+    ], bool(became_active and was_ringing)
 
 
 async def handle_call_decline(
@@ -205,7 +213,8 @@ async def handle_call_decline(
 async def handle_call_hangup(
     cmd: CommandEnvelope,
     calls: CallRepository,
-) -> tuple[CallRead, list[RealtimeEvent]]:
+) -> tuple[CallRead, list[RealtimeEvent], bool]:
+    """Третий элемент: звонок полностью завершён (последний участник вышел)."""
     payload = CallHangupPayload.model_validate(cmd.payload)
     call = await calls.get_call(payload.call_id, cmd.company_id)
 
@@ -224,9 +233,17 @@ async def handle_call_hangup(
         event_call_participant_left(payload.call_id, cmd.actor_user_id)
     ]
 
+    call_fully_ended = False
     if active_count == 0:
         await calls.update_call_status(payload.call_id, "ended", ended_at=now)
         if call.mode == "sfu" and call.livekit_room_name:
+            from apps.sync.realtime.speech_to_chat_workflow import stop_speech_egresses_for_call_room
+
+            await stop_speech_egresses_for_call_room(
+                call_id=payload.call_id,
+                company_id=cmd.company_id,
+                room_name=call.livekit_room_name,
+            )
             settings = get_settings()
             lk = LiveKitClient(
                 url=settings.calls.livekit_url,
@@ -235,14 +252,26 @@ async def handle_call_hangup(
             )
             try:
                 await lk.delete_room(call.livekit_room_name)
-            except Exception:
-                logger.exception("Не удалось удалить LiveKit комнату %s", call.livekit_room_name)
+            except TwirpError as exc:
+                if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
+                    logger.warning(
+                        "LiveKit delete_room: комната уже отсутствует room=%s code=%s",
+                        call.livekit_room_name,
+                        exc.code,
+                    )
+                else:
+                    raise
+            except aiohttp.ClientError as exc:
+                raise RuntimeError(
+                    f"LiveKit delete_room: сетевая ошибка aiohttp room={call.livekit_room_name}"
+                ) from exc
 
         ended_call = await calls.get_call(payload.call_id, cmd.company_id)
         final_participants = await calls.list_participants(payload.call_id)
         call_read = _call_read_from_entities(ended_call, final_participants)
         events.append(event_call_ended(call_read))
+        call_fully_ended = True
     else:
         call_read = _call_read_from_entities(call, participants)
 
-    return call_read, events
+    return call_read, events, call_fully_ended

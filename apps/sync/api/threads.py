@@ -7,6 +7,7 @@ from apps.sync.models.common import PaginationRequest
 from apps.sync.models.threads import ThreadRead, ThreadCreate, ThreadRow
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
+from core.config import get_settings
 from core.context import get_context
 
 router = APIRouter()
@@ -49,7 +50,9 @@ async def create_thread(channel_id: str, body: ThreadCreate) -> ThreadRead:
         payload={"body": body.model_dump()},
     )
     task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(timeout=300.0)
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
     if res.is_err:
         raise RuntimeError(f"Command failed: {res.error}")
     return ThreadRead.model_validate(res.return_value["result"])

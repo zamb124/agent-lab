@@ -218,6 +218,7 @@ export class FrontendApp extends PlatformApp {
             '/products/rag',
             '/products/crm',
             '/products/sync',
+            '/products/documents',
             '/dashboard',
             '/team',
             '/api-keys',
@@ -442,6 +443,10 @@ export class FrontendApp extends PlatformApp {
             
             if (path === '/products/sync') {
                 return html`<product-sync-page></product-sync-page>`;
+            }
+            
+            if (path === '/products/documents') {
+                return html`<product-documents-page></product-documents-page>`;
             }
             
             return html`<landing-page></landing-page>`;

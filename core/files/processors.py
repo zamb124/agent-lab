@@ -3,15 +3,15 @@
 Сохраняют файлы в S3 и создают записи в БД через FileRepository.
 """
 
-import re
-import logging
 import hashlib
+import logging
 import mimetypes
+import re
 import uuid
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from core.files.s3_client import S3ClientFactory, S3Client
+from core.clients.stt_client import BaseSTTClient, STTClientFactory
 from core.files.audio_transcode import (
     resolve_ios_transcode_source,
     transcode_audio_bytes_to_m4a_aac,
@@ -22,7 +22,7 @@ from core.files.models import (
     FileMetadata,
     FileStatus,
 )
-from core.clients.stt_client import BaseSTTClient, STTClientFactory
+from core.files.s3_client import S3Client, S3ClientFactory
 
 if TYPE_CHECKING:
     from core.files.file_repository import FileRepository
@@ -127,7 +127,7 @@ class FileProcessor:
             original_name=original_name,
             content_type=content_type,
             file_size=len(data),
-            s3_bucket=s3_client.bucket_name,
+            s3_bucket=s3_client.require_bucket_config_key(),
             s3_key=s3_key,
             s3_endpoint=s3_client.endpoint_url,
             uploaded_by=uploaded_by,
@@ -140,6 +140,44 @@ class FileProcessor:
         await self.file_repository.set(file_record)
 
         logger.info(f"Файл обработан: {file_id} ({original_name}, {len(data)} байт)")
+        return file_record
+
+    async def persist_uploaded_file(
+        self,
+        *,
+        data: bytes,
+        original_name: str,
+        content_type: str,
+        uploaded_by: Optional[str],
+        company_id: str,
+        public: bool,
+        download_url_prefix: str,
+        content_sha256_hex: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+    ) -> FileMetadata:
+        """
+        Один путь для «байты с клиента или воркера → S3 + FileRecord»: process_file_from_bytes,
+        затем company_id, same-origin download_url и при необходимости checksum (как POST .../files/).
+        """
+        file_record = await self.process_file_from_bytes(
+            data=data,
+            original_name=original_name,
+            content_type=content_type,
+            uploaded_by=uploaded_by,
+            metadata=metadata,
+            tags=tags,
+            public=public,
+        )
+        prefix = download_url_prefix.rstrip("/")
+        updates: Dict[str, Any] = {
+            "company_id": company_id,
+            "download_url": f"{prefix}/{file_record.file_id}",
+        }
+        if content_sha256_hex is not None:
+            updates["checksum"] = content_sha256_hex
+        file_record = file_record.model_copy(update=updates)
+        await self.file_repository.set(file_record)
         return file_record
 
     async def get_file_record(self, file_id: str) -> Optional[FileMetadata]:
@@ -220,12 +258,12 @@ class FileProcessor:
             Список словарей с информацией о файлах (ключи: name, file_id, url, content_type, size)
         """
         file_info_list = []
-        
+
         # Формат: [FILE] Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
         # Может быть с переносами строк и эмодзи внутри
         pattern = r'\[FILE\][\s\n]*📎?\s*Файл:\s*([^\(]+)\s*\(ID:\s*([^,]+),\s*URL:\s*([^,]+),\s*тип:\s*([^,]+),\s*размер:\s*([^)]+)\)[\s\n]*\[/FILE\]'
         matches = re.findall(pattern, message_content, re.MULTILINE)
-        
+
         for filename, file_id, url, content_type, size in matches:
             file_info_list.append({
                 "name": filename.strip(),
@@ -234,7 +272,7 @@ class FileProcessor:
                 "content_type": content_type.strip(),
                 "size": size.strip(),
             })
-        
+
         # Также поддерживаем формат без [FILE]...[/FILE] для обратной совместимости
         if not file_info_list:
             old_pattern = r'📎\s*Файл:\s*([^\(]+)\s*\(ID:\s*(file_[a-f0-9]{12})'
@@ -372,7 +410,7 @@ class AudioProcessor:
             original_name=original_name,
             content_type=content_type,
             file_size=len(data),
-            s3_bucket=s3_client.bucket_name,
+            s3_bucket=s3_client.require_bucket_config_key(),
             s3_key=s3_key,
             s3_endpoint=s3_client.endpoint_url,
             uploaded_by=uploaded_by,
@@ -426,7 +464,7 @@ async def get_default_file_processor() -> FileProcessor:
     Требует предварительного вызова initialize_default_processors().
     """
     global _default_file_processor
-    
+
     if _default_file_processor is None:
         if _default_file_repository is None:
             raise RuntimeError(
@@ -434,7 +472,7 @@ async def get_default_file_processor() -> FileProcessor:
                 "Вызовите initialize_default_processors(file_repository) при старте приложения."
             )
         _default_file_processor = FileProcessor(file_repository=_default_file_repository)
-    
+
     return _default_file_processor
 
 
@@ -444,7 +482,7 @@ async def get_default_audio_processor() -> AudioProcessor:
     Требует предварительного вызова initialize_default_processors().
     """
     global _default_audio_processor
-    
+
     if _default_audio_processor is None:
         if _default_file_repository is None:
             raise RuntimeError(
@@ -454,7 +492,7 @@ async def get_default_audio_processor() -> AudioProcessor:
         _default_audio_processor = AudioProcessor(
             file_repository=_default_file_repository,
         )
-    
+
     return _default_audio_processor
 
 

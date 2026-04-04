@@ -1044,9 +1044,12 @@ export class AIAnalysisModal extends PlatformModal {
 
     _resolveIconName(rawIconName) {
         if (typeof rawIconName !== 'string' || rawIconName.trim().length === 0) {
-            return 'file';
+            return 'folder';
         }
         const iconName = rawIconName.trim();
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (/^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
@@ -1056,7 +1059,7 @@ export class AIAnalysisModal extends PlatformModal {
             '🏢': 'database',
         };
         const aliasName = emojiIconAliases[iconName];
-        return typeof aliasName === 'string' ? aliasName : 'file';
+        return typeof aliasName === 'string' ? aliasName : 'folder';
     }
 
     _getEntityTypeIcon(typeId) {

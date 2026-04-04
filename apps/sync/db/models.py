@@ -30,12 +30,12 @@ class SyncSpace(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     namespace: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    auto_export_transcript_to_crm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    auto_export_summary_to_crm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     created_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    transcribe_voice_messages: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    speech_to_chat_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
         Index("ix_sync_spaces_company", "company_id"),
@@ -64,6 +64,8 @@ class SyncChannel(Base):
     )
     created_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
     pinned_message_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    transcribe_voice_messages: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    speech_to_chat_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
         Index("ix_sync_channels_company", "company_id"),
@@ -147,7 +149,10 @@ class SyncMessage(Base):
     parent_message_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("sync_messages.message_id", ondelete="SET NULL"), nullable=True
     )
-    sender_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    call_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("sync_calls.call_id", ondelete="SET NULL"), nullable=True
+    )
+    sender_user_id: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -161,6 +166,8 @@ class SyncMessage(Base):
         Index("ix_sync_messages_channel", "channel_id"),
         Index("ix_sync_messages_thread", "thread_id"),
         Index("ix_sync_messages_sent_at", "sent_at"),
+        Index("ix_sync_messages_call_id", "call_id"),
+        Index("ix_sync_messages_channel_call", "channel_id", "call_id"),
     )
 
     def __repr__(self) -> str:
@@ -290,6 +297,37 @@ class SyncCall(Base):
         return f"<SyncCall(call_id='{self.call_id}', mode='{self.mode}', status='{self.status}')>"
 
 
+class SyncCallSpeechEgressTrack(Base):
+    """LiveKit track composite egress для «речи в ленту» (один egress на микрофонный трек)."""
+
+    __tablename__ = "sync_call_speech_egress_tracks"
+
+    row_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    call_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_calls.call_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
+    )
+    participant_identity: Mapped[str] = mapped_column(String(200), nullable=False)
+    track_sid: Mapped[str] = mapped_column(String(128), nullable=False)
+    egress_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    segments_posted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_segment_s3_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("call_id", "track_sid", name="uq_sync_call_speech_track"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncCallSpeechEgressTrack(call='{self.call_id}', egress='{self.egress_id}')>"
+
+
 class SyncCallParticipant(Base):
     """Участник звонка.
 
@@ -398,82 +436,3 @@ class SyncCallRecording(Base):
 
     def __repr__(self) -> str:
         return f"<SyncCallRecording(recording_id='{self.recording_id}', call_id='{self.call_id}', status='{self.status}')>"
-
-
-class SyncCallMeeting(Base):
-    """Карточка встречи по звонку: транскрипт, summary и статус экспорта."""
-
-    __tablename__ = "sync_call_meetings"
-
-    meeting_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    call_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("sync_calls.call_id", ondelete="CASCADE"), nullable=False
-    )
-    recording_id: Mapped[Optional[str]] = mapped_column(
-        String(64), ForeignKey("sync_call_recordings.recording_id", ondelete="SET NULL"), nullable=True
-    )
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    channel_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
-    )
-    space_id: Mapped[Optional[str]] = mapped_column(
-        String(64), ForeignKey("sync_spaces.space_id", ondelete="SET NULL"), nullable=True
-    )
-    transcript_file_id: Mapped[Optional[str]] = mapped_column(
-        String(64), ForeignKey("sync_files.file_id", ondelete="SET NULL"), nullable=True
-    )
-    transcript_text_file_id: Mapped[Optional[str]] = mapped_column(
-        String(64), ForeignKey("sync_files.file_id", ondelete="SET NULL"), nullable=True
-    )
-    summary_json: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    export_status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
-    export_target_namespace: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-
-    __table_args__ = (
-        Index("ix_sync_call_meetings_company", "company_id"),
-        Index("ix_sync_call_meetings_call", "call_id"),
-        Index("ix_sync_call_meetings_channel", "channel_id"),
-        Index("ix_sync_call_meetings_space", "space_id"),
-    )
-
-    def __repr__(self) -> str:
-        return f"<SyncCallMeeting(meeting_id='{self.meeting_id}', call_id='{self.call_id}')>"
-
-
-class SyncCallSpeakerSegment(Base):
-    """Сегмент речи с таймкодами и идентификацией говорящего."""
-
-    __tablename__ = "sync_call_speaker_segments"
-
-    segment_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    meeting_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("sync_call_meetings.meeting_id", ondelete="CASCADE"), nullable=False
-    )
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    speaker_identity: Mapped[str] = mapped_column(String(128), nullable=False)
-    speaker_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    speaker_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    speaker_guest_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    started_ms: Mapped[int] = mapped_column(Integer, nullable=False)
-    ended_ms: Mapped[int] = mapped_column(Integer, nullable=False)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    __table_args__ = (
-        Index("ix_sync_call_speaker_segments_company", "company_id"),
-        Index("ix_sync_call_speaker_segments_meeting", "meeting_id"),
-        Index("ix_sync_call_speaker_segments_identity", "speaker_identity"),
-    )
-
-    def __repr__(self) -> str:
-        return f"<SyncCallSpeakerSegment(segment_id='{self.segment_id}', meeting_id='{self.meeting_id}')>"

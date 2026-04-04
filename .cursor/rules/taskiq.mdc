@@ -195,7 +195,8 @@ result = await execute_tool.kiq(
         "code": "def execute(args, state): return eval(args['expr'])"
     },
     args={"expr": "2+2"},
-    state_dict=state.model_dump(exclude_none=False)  # Сериализация на границе TaskIQ
+    state_dict=state.model_dump(exclude_none=False),
+    context_data=context.to_dict(),
 )
 
 # result содержит:

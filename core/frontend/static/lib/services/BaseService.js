@@ -98,18 +98,19 @@ export class BaseService {
         }
     }
 
-    async _fetch(method, path, data, options) {
+    async _fetch(method, path, data, options = {}) {
         const url = `${this.baseUrl}${path}`;
         const isFormData = data instanceof FormData;
-        
+        const { headers: optionHeaders = {}, ...restOptions } = options;
+
         const config = {
             method,
             headers: {
                 ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-                ...options.headers
+                ...optionHeaders,
             },
             credentials: 'include',
-            ...options
+            ...restOptions,
         };
 
         if (data) {

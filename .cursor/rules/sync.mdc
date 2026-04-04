@@ -14,17 +14,72 @@ globs:
 - **Изоляция**: `company_id` во всех таблицах, из `get_context()` автоматически
 - **Auth**: платформенный `AuthMiddleware` + `get_context()`
 - **Конфиг**: один глобальный `core.config.get_settings()`. HTTP-сервис Sync грузит `services.sync` через `set_settings(SyncSettings(**load_merged_config(service_name="sync")))` в `main.py`; Sync worker грузит `services.sync_worker` через `apps.sync_worker.worker`. Отдельного `get_sync_settings()` нет.
-- Для длительных вызовов summary в flows используется `summary_a2a_timeout_seconds` (в `SyncSettings`, дефолт 3000с; можно переопределять в `services.sync` и/или `services.sync_worker`).
-- Транскрипция записи в `apps/sync/realtime/tasks.py` выполняется через `core.clients.stt_client.STTClientFactory` (провайдер из `stt.provider`, сейчас `cloud_ru`). Требуется HTTP(S) `storage_url` записи; отсутствие доступа к источнику, не-медиа `content-type` или текстовый payload ошибки вместо бинарного файла считаются ошибкой пайплайна и переводят встречу в `failed`. Для больших файлов используется чанкование перед отправкой в STT (настройки `stt.cloud_ru.max_upload_bytes`, `chunk_duration_seconds`, `chunk_bitrate_kbps`, `chunk_sample_rate_hz`, `chunk_channels`).
+- STT в Sync: `sync_transcribe_audio_message_task` и `sync_transcribe_video_message_task` в `apps/sync/realtime/tasks.py` через `STTClientFactory` (`stt.provider`, обычно `cloud_ru`). Аудио для STT чанкуется через `ffmpeg` при превышении лимита (`stt.cloud_ru.max_upload_bytes`, `chunk_duration_seconds`, …). Видеозапись: извлечение дорожки из mp4 (`ffmpeg`), затем тот же пайплайн. Агрегат по сессии звонка: `sync_aggregate_call_transcript_task` (сообщения с `call_id` в канале) создаёт новое текстовое сообщение в ленте; если нечего собирать (нет текста и готовых расшифровок), в ленту уходит одно сообщение с текстом из корневого ключа `call_aggregate_empty_body` в `core/i18n/translations/ru/sync.json` (не падает с ValueError).
+- Маркер **«Звонок начался»** (`call/boundary`, `phase=started`): **всегда** при `call.invite` (одна запись в ленте на сессию; дубликат при `call.accept` не создаётся). Если в канале **один** участник, после `call.invite` звонок сразу переводится в `active` и поднимается poll речи в ленту при необходимости; при **двух и более** участниках переход `ringing`→`active` по-прежнему при `call.accept` (второй joined), после чего стартует speech-to-chat poll при включённом флаге канала.
+- **Речь в ленту / авто-STT / hangup / finalize записи:** раздел **«Сквозной процесс»**; locks и тайминги — **`calls.speech_to_chat`**, **`calls.finalize_recording_egress_*`**, **`transcribe_audio_redis_lock_ttl_seconds`**. Остальное по звонкам — **`calls.mdc`**.
 - Запись звонка запускается через LiveKit egress с прямым S3 upload (`EncodedFileOutput.s3`), а не через локальный `/egress` storage. `provider_job_id` обязателен: `call.recording.stop` останавливает egress по этому id, `sync_finalize_recording_task` ищет результат по этому же id.
 - У записи хранится `started_by_user_id`: при `call.hangup` автозавершение записи и запуск finalize выполняются только если выходит именно инициатор записи. Выход других участников запись не останавливает.
 - Одновременно активна только одна запись на звонок (`get_active_for_call` по статусам `requested|recording`). История нескольких завершённых записей одного звонка хранится в `sync_call_recordings` и выдаётся через `list_for_call`.
 - Запускать запись (`call.recording.start`) может только текущий админ встречи (`sync_calls.created_by_user_id`); останавливать (`call.recording.stop`) может админ встречи или пользователь, который запустил текущую активную запись (`sync_call_recordings.started_by_user_id`).
 - Передача админа встречи выполняется командой `call.admin.transfer`; новый админ должен быть зарегистрированным `joined` участником звонка (гостей назначать нельзя).
+- `POST /sync/api/v1/calls/join/{token}` создаёт или переиспользует звонок и выдаёт LiveKit-токен, но **не** пишет строки в `sync_call_participants`. Для **участника канала** `messages.send` с `call_id` не смотрит на `sync_call_participants` и статус звонка: достаточно членства в канале и совпадения `call.channel_id` с каналом команды (в т.ч. сегменты речи в ленту и транскрипция после `ended`). Для **гостя** по-прежнему нужен активный звонок и `joined` в участниках.
 - **Realtime**: Command-Event через TaskIQ (очередь `sync`) + Redis Pub/Sub + WebSocket
 - **Деплой**: в production-образе обязателен `uv pip install ... --group sync` (`websockets` в `pyproject.toml`). Иначе uvicorn не поднимает WebSocket (`No supported WebSocket library`), клиент получает 404 на `GET /sync/ws` из-за SPA-fallback в `main.py` для пути `ws`
+- `messages.send` с `call_id` для **участника канала**: только проверка, что звонок принадлежит этому каналу (`handlers._ensure_actor_may_send_to_channel`). Статус звонка и `sync_call_speech_egress_tracks` на доступ к постингу не влияют.
+- Разбор `file/audio` в БД (контент JSON + `sync_files`): `DATABASE__SYNC_URL=... uv run python scripts/inspect_sync_channel_audio_messages.py [--channel-id …] [--limit …]`.
 - **TaskIQ broker**: один инстанс в `apps/sync/realtime/broker.py` — и `handle_command.kiq()`, и `taskiq worker apps.sync_worker.worker:worker_app` (реэкспорт из того же модуля)
 - **UI**: Lit в `apps/sync/ui/` — тот же канон, что у остальных SPA: **`main.mdc` (раздел про фронтенд)** и **`frontend.mdc`**; отступления без правки рулов запрещены. Проверка: **`make check-ui-canon`**.
+
+## Сквозной процесс: речь в ленту, авто-транскрипция, запись звонка
+
+Три **независимых** механизма; общие точки — канал (`sync_channels`), звонок (`sync_calls`, LiveKit room), `messages.send`, TaskIQ worker, S3.
+
+### Флаги и данные
+
+| Флаг / сущность | Таблица / поле | Где задаётся |
+|-----------------|----------------|--------------|
+| `transcribe_voice_messages` | `sync_spaces`, `sync_channels` | Space/channel в API; при **`channels.create`** с `space_id` по умолчанию с space, поля **`ChannelCreate`** перекрывают дефолт если заданы. UI: `space-settings-modal.js`, `channel-settings-modal.js`. |
+| `speech_to_chat_enabled` | то же | то же |
+| Сегменты речи | `sync_call_speech_egress_tracks` | Строка на пару (call, track_sid): `egress_id`, `segments_posted`, `last_segment_s3_key`. |
+| Запись встречи | `sync_call_recordings` | `call.recording.start` / stop / finalize; **не** использует таблицу speech egress. |
+
+### Таблица сценариев: вход → шаги → выход → отказ
+
+| Сценарий | Вход | Шаги | Выход | Типичный отказ |
+|----------|------|------|-------|----------------|
+| Старт poll «речь в ленту» | `call.invite` при 1 участнике канала ИЛИ `call.accept` когда звонок стал `active`; канал с `speech_to_chat_enabled`; есть `livekit_room_name` | `handlers` → `_maybe_start_speech_to_chat_poll` → `sync_speech_to_chat_poll_task.kiq` | Цепочка пока `SpeechToChatPollOutcome.schedule_next`; обычная задержка — `poll_*_seconds`, при занятом lock — `poll_lock_busy_retry_seconds` | Флаг выключен; нет Redis URL; нет room name |
+| Тик poll | TaskIQ после sleep (см. выше) | Redis lock + периодическое продление TTL → LiveKit → при необходимости egress → `process_new_files…` → `messages.send` | События `message.created` | S3/LiveKit; таймаут Twirp — повтор тика |
+| Авто-STT голосового | `messages.send`; канал `transcribe_voice_messages`; первый `file/audio` IDLE (**не** `source_speech_to_chat` — сегменты речи в ленту STT не ставят) | `sync_transcribe_audio_message_task` + Redis lock на сообщение | `message.updated` | См. tasks |
+| Ручная расшифровка | Команда `messages.transcribe_audio` | Тот же task `sync_transcribe_audio_message_task` | Как у авто | Нет членства в канале; удалённое сообщение |
+| Запись звонка | `call.recording.start`; актор = админ встречи; S3 настроен | `LiveKitClient.start_room_composite_egress_to_s3` → ключ `sync-recordings/...` → строка в `sync_call_recordings` | Событие `call.recording.started` | Уже есть активная запись; звонок `ended`; не админ |
+| Стоп записи | `call.recording.stop` или `call.hangup` инициатором записи | `_stop_and_finalize_recording` → позже `sync_finalize_recording_task` (ожидание egress: **`calls.finalize_recording_egress_wait_timeout_seconds`**, poll: **`finalize_recording_egress_poll_interval_seconds`**) | `file/video` в канал (или failed + событие) | Нет прав на stop |
+| Завершение звонка (последний вышел) | `call.hangup`, `active_count == 0` | `stop_speech_egresses_for_call_room` → `delete_room` → `ended` + маркер в ленте | Хвост сегментов; SFU комната удалена | Ошибки delete_room: см. `call_handlers` |
+
+### Диаграмма: последний участник выходит (hangup)
+
+```mermaid
+sequenceDiagram
+  participant WS as WS_call_hangup
+  participant H as handle_call_hangup
+  participant ST as stop_speech_egresses
+  participant LK as LiveKit_stop_egress
+  participant DB as speech_egress_repo
+  participant PF as process_new_files
+  participant RM as delete_room
+
+  WS->>H: call_hangup
+  H->>H: participant_left
+  alt active_joined_равно_0
+    H->>ST: stop_speech_egresses_for_call_room
+    loop по_строкам_egress
+      ST->>LK: stop_egress
+      ST->>PF: финальные_file_results
+    end
+    ST->>DB: delete_for_call
+    H->>RM: delete_room
+    H->>H: call_ended_event_и_boundary
+  end
+```
 
 ## Вход с консоли (frontend)
 
@@ -80,7 +135,7 @@ WebSocket /sync/ws        ────┘
 
 - После **`messages.send`** (только корневая лента, без `thread_id`) для каждого участника кроме отправителя, **если его нет в `mentioned_user_ids`**, ставится TaskIQ-задача **`deliver_channel_message_notification`** (`apps/sync/realtime/notification_tasks.py`). Внутри: если в Redis есть presence **`sync:ws:presence:{user_id}`** (активный `/sync/ws`) — выход без `notify_user`; иначе проверка **`notifications_muted`**; иначе **`notify_user`** (`NotificationType.SYNC_NEW_MESSAGE`, `action_url` `/sync?channel=...`).
 - Упоминания: в **`MessageCreate`** опционально **`mentioned_user_ids`**; сервер валидирует участников канала и пишет в первый блок **`text/plain`** поле **`mentions`** в JSON контента. Для каждого упомянутого участника (кроме отправителя) — **`deliver_sync_mention_notification`** (`NotificationType.MENTION`, приоритет high), **без** пропуска по sync presence; учитывается **`notifications_muted`**. В тредах обычное уведомление о канале не шлётся; упоминания в треде доставляются только через **`deliver_sync_mention_notification`**.
-- Presence пишется в **`apps/sync/ws.py`** при connect, на каждый кадр от клиента и **фоновым циклом** (интервал ~45 с), пока WebSocket открыт — иначе TTL 120 с истек бы при простое. Ключ снимается только при закрытии **последнего** сокета пользователя (несколько вкладок). **`sync:last_seen:{user_id}`** — ISO-время ухода в офлайн (запись при последнем disconnect).
+- Presence пишется в **`apps/sync/ws.py`** при connect, на каждый кадр от клиента и фоновым циклом с интервалом **`ws_presence_heartbeat_interval_seconds`** ([`BaseSettings`](../../core/config/base.py)); TTL ключа — **`ws_presence_ttl_seconds`** (должен переживать паузу между heartbeat). Ключ снимается при закрытии **последнего** сокета пользователя. **`sync:last_seen:{user_id}`** — ISO при последнем disconnect.
 - UI: **`platform-notification-manager`** в `apps/sync/ui/index.html`; мьют — настройки канала (`channel-settings-modal`), API см. выше. Deep link: query **`?channel=`** на старте `sync-app.js`.
 
 ### Календарные уведомления
@@ -88,6 +143,10 @@ WebSocket /sync/ws        ────┘
 - Уведомления о новых событиях внешних календарей не реализуются в `apps/sync/*`.
 - Источник календарных уведомлений: фоновая задача `calendar_sync_tick` (`apps/flows/src/tasks/calendar_sync_tasks.py`) через `core.websocket.publisher.notify_user`.
 - Если нужен единый UX в Sync UI, обрабатывается общий поток платформенных уведомлений (`platform-notification-manager`), без дублирования бизнес-логики календаря в sync handlers.
+
+### Платформенные встречи (календарь → Sync)
+
+- Событие **`source=platform`** и **`kind=meeting`**: `CalendarService` всегда создаёт или обновляет запись в Sync — `POST` / `PATCH` `apps/sync/api/calls.py` (`/sync/api/v1/calls/links`), канал типа `calendar_meeting`, участники канала = создатель ссылки + список `calendar_member_user_ids` (платформенные участники из календаря). Поля `sync_meeting` в HTTP API календаря нет; смена `kind` с `meeting` на другой тип удаляет ссылку и канал, как при отключении встречи Sync.
 
 ### Правила
 
@@ -144,8 +203,9 @@ Naming: `{entity}.{action}` (`spaces.create`, `messages.send`, `git.resources.up
 - Текстовый блок `text/plain`: не длиннее **4096** символов (как одно сообщение в Telegram). Константа `SYNC_MESSAGE_TEXT_MAX_CHARS` в `apps/sync/models/messages.py`; на клиенте — `apps/sync/ui/constants/sync-limits.js` (`SYNC_MESSAGE_TEXT_MAX_CHARS`), ввод в `message-composer.js`.
 - Длинные строки без пробелов в пузырьке не должны вылезать за ширину: `overflow-wrap` на тексте в `message-bubble.js`.
 - Упоминания в тексте (`@…`): токен после `@` — UUID **или** platform id (`user_…`, `test_user_…`). Разбор и извлечение `mentioned_user_ids` — `apps/sync/ui/utils/sync-mention-text.js`; в ленте подпись — **`name` из GET /company/members** (`SyncStore.companyMembers`), не сырой id; пузырёк по ширине — `width: fit-content`, блок с текстом не растягивается за счёт `flex: 1` у колонки времени.
-- Аудиосообщение в чате: тип контента `file/audio` (каноническая модель `AudioAttachmentContent` в `core/files/models.py`, импортируется в `apps/sync/models/messages.py`). Поля: `file_id`, `filename`, `mime_type`, `size`, `duration_ms`, `waveform?`, `transcription_status`, `transcription_text?`, `transcription_error?`. Запуск расшифровки — `POST /channels/{channel_id}/messages/{message_id}/transcribe` (`messages.transcribe_audio`), статусы: `idle|processing|done|failed`.
-- Запись в `message-composer.js`: порядок типов для `MediaRecorder` — сначала **`audio/mp4`** (Safari/iOS), затем webm/opus; расширение файла и `mime` из `MediaRecorder.mimeType` / blob. Chromium часто отдаёт только **WebM/Opus**, который iOS не декодирует в `<audio>`: при загрузке **`POST .../files/`** `FileProcessor.process_file_from_bytes` перекодирует **`audio/webm`**, **`audio/ogg`** в **AAC M4A** (`audio/mp4`, имя `*.m4a`) через **`ffmpeg`** (`core/files/audio_transcode.py`). Воспроизведение: **`platform-audio-message-player.js`**. **`GET .../files/download/{file_id}`** из S3 отдаёт **`Accept-Ranges: bytes`**, **`Content-Length`** и отвечает **`206 Partial Content`** на **`Range`** (см. `core/files/streaming.py`, `core/files/http_range.py`) — иначе Safari часто не может стримить медиа. Без `ffmpeg` в PATH загрузка WebM-голосового завершится ошибкой — в образах сервисов пакет `ffmpeg` уже есть (`Dockerfile`).
+- Аудиосообщение в чате: тип контента `file/audio` (`AudioAttachmentContent` в `core/files/models.py`). Расшифровка: `POST .../messages/{message_id}/transcribe` (`messages.transcribe_audio`). Запись звонка в ленту: `file/video` (`VideoAttachmentContent`), расшифровка: `POST .../messages/{message_id}/transcribe-video` (`messages.transcribe_video`). Границы сессии в ленте: `call/boundary` (`CallBoundaryContent`: `phase` `started|ended`, `call_id`); у сообщения также поле `call_id`. Массовая расшифровка по сессии: `POST /channels/{channel_id}/calls/{call_id}/transcribe` (`messages.transcribe_call`, 202). Флаг канала `transcribe_voice_messages`: при `messages.send` с `file/audio` автоматически ставится та же задача, что и у ручного transcribe. Статусы транскрипции: `idle|processing|done|failed`.
+- `MessageContentModel`: для `type=file/video` после парсинга Union `data` приводится к `VideoAttachmentContent` (`model_validator` в `apps/sync/models/messages.py`), иначе из Union часто выбирается `FileAttachmentContent` с тем же набором полей и ломается `messages.transcribe_video`.
+- Запись в `message-composer.js`: порядок типов для `MediaRecorder` — сначала **`audio/mp4`** (Safari/iOS), затем webm/opus; расширение файла и `mime` из `MediaRecorder.mimeType` / blob. Chromium часто отдаёт только **WebM/Opus**, который iOS не декодирует в `<audio>`: при загрузке **`POST .../files/`** `FileProcessor.persist_uploaded_file` → `process_file_from_bytes` перекодирует **`audio/webm`**, **`audio/ogg`** в **AAC M4A** (`audio/mp4`, имя `*.m4a`) через **`ffmpeg`** (`core/files/audio_transcode.py`). Воспроизведение: **`platform-audio-message-player.js`**. **`GET .../files/download/{file_id}`** из S3 отдаёт **`Accept-Ranges: bytes`**, **`Content-Length`** и отвечает **`206 Partial Content`** на **`Range`** (см. `core/files/streaming.py`, `core/files/http_range.py`) — иначе Safari часто не может стримить медиа. Без `ffmpeg` в PATH загрузка WebM-голосового завершится ошибкой — в образах сервисов пакет `ffmpeg` уже есть (`Dockerfile`).
 
 ## Frontend (Lit 3 + PlatformApp)
 
@@ -165,7 +225,7 @@ apps/sync/ui/
   call-join.html          # отдельная страница гостя к звонку; та же дисциплина import map
   index.js                # импорт компонентов
   app/sync-app.js         # extends PlatformApp, checkAuth() через AuthService
-  store/sync.store.js     # BaseStore: spaces, channels, companyMembers, peerPresenceByUserId, messages, ws, ui
+  store/sync.store.js     # BaseStore: spaces, channels, companyMembers, peerPresenceByUserId, messages, ws, ui (без legacy meetings)
   services/
     sync-api.service.js   # extends BaseService, /sync/api/v1/*
     sync-ws.service.js    # WebSocket к /sync/ws, cookie auth, reconnect/backoff
@@ -200,9 +260,9 @@ apps/sync/ui/
 ### Правила
 
 - Mobile (`ChatView._isMobile`, `window.innerWidth <= 767`): в `chat-view.js` на корне шапки класс `chat-header--compact`; кнопка меню слева — сайдбар через `platform-sidebar-open`; `sync-sidebar` на `@mobile-change` обновляет `ui.mobileSidebarOpen`. Справа «⋯» (меню: WS; при выбранном канале — «Звонок», треды или «Назад» в треде). В шапке при открытом канале одна кнопка с камерой — **звонок в текущем канале** (все участники канала), кнопки встреч в шапке нет. Отдельная встреча без выбора существующего чата: кнопка **«Создать Sync»** в **`sync-sidebar.js`** (событие `sync-request-adhoc-call` на `window` → `ChatView._startAdHocCall`: канал с именем встречи по дате/времени + `call.invite`) и блок на экране `channel-picker`. В шапке канала: имя строкой, статус/печать — строкой под именем (колонка в `.header-channel-text`).
-- «Встречи»: `ui.meetingsPanelOpen` в store, событие `sync-open-meetings` из `sync-sidebar.js` → `sync-app._openMeetingsPanel()`; UI — `apps/sync/ui/modals/meetings-modal.js` (`PlatformModal` / GlassModal, safe area и портал как у остальных модалок), список **всех встреч компании**.
-- UI встреч: список карточек + детальная панель; в карточке канал/дата/статус/длительность (если загружены детали), в деталях — канал, участники (по segments), дата, длительность, ссылки на скачивание записи/транскрипта, действия export/retry. Фильтры в модалке: по каналу и диапазону дат.
+- Митинги и транскрипты только через ленту канала: маркеры `call/boundary` в `message-bubble.js` — компактный пузырёк; у `phase=started` — только кнопка «Войти» (SVG + текст, событие `join-call-from-boundary` → `SyncApp._joinCallInChannel`; при развёрнутом оверлее того же `call_id` — подпись «Звонок начался» без кнопки); у `ended` — иконка `phone-ended` и круглая кнопка транскрипции с `doc-detail`. Запись как `file/video` с `call_id`; отдельного UI «Встречи компании» и REST `/meetings` нет.
 - В `call-overlay` чат звонка по умолчанию скрыт; открывается/скрывается отдельной кнопкой на панели управления и показывается как glass-панель в стиле Sync поверх видеосетки (без постоянного деления экрана на две колонки).
+- Свернуть звонок в чат: кнопка в шапке оверлея (есть только при непустом `channel_id`); оверлей уезжает off-screen, соединение не рвётся. На свёрнутом `call-overlay` — `inert` с родителя + `pointer-events: none` на всех узлах в shadow; перед сворачиванием снимаем фокус с элементов внутри shadow. **`_callUiMinimized` — `state: true` в `SyncApp`; `data-call-overlay-expanded` на `sync-app` выставляется в `updated()` без фильтра по `changedProps`, иначе при смене только minimized атрибут не снимался и `pointer-events: none` на `.sidebar`/`.main` оставался навсегда.** Баннер свёрнутого звонка в `chat-view`: полоса в пределах шапки (без отрицательных margin на десктопе — иначе вылезает за скругления `platform-island`). Внутри — клик разворота, WS-бейдж, треды/назад, сброс; тулбар и `.header-call-banner-hangup` с большим `z-index`, чем `.header-call-banner-hit`, чтобы клики не уходили в кнопку разворота. На мобиле слева вне полосы — кнопка меню сайдбара; справа до края — как раньше. `sync-call-banner-hangup`: в `SyncApp` сброс только по `this._activeCall.call_id` (не по `detail`), чтобы не ломаться из‑за рассинхрона со store. В сайдбаре — `.call-join-btn`. Состояние: `SyncStore.state.ui.activeCallOverlay` + `data-call-active` / `data-call-overlay-expanded`.
 - Индикатор «печатает»: клиент шлёт `channels.typing`, сервер — `channel.typing`; в `sync-app.js` сначала кадры с `msg.type`, затем ack (`ok` + `id`); ключи `typingPeersByChannel` — `normalizeSyncChannelId`; своё событие не кладём в store; в `getTypingIndicatorLine` при открытом треде (`focusedThreadId`) учитываются и строки с `thread_id: null` (основной ввод), и строки этого треда — иначе подзаголовок оставался бы «direct» при открытой панели тредов. Ack с `ok: true` без `result` не вызывает `failPending`.
 - Подзаголовок шапки DM: печать или `getPeerPresenceSubtitle` (не сырой `direct`). Сайдбар списка каналов/личных: та же логика печати vs превью (см. выше).
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
@@ -224,7 +284,7 @@ apps/sync/ui/
 - **LiveKit egress E2E:** для записи без браузера в `docker-compose-test.yaml` должен быть `livekit-cli-test`; тест создает headless publisher (`lk room join --publish-demo`) в ту же комнату, иначе egress завершается `Start signal not received` и запись помечается `failed`.
 - **S3 endpoint для egress:** если endpoint бакета задан как `localhost`/`127.0.0.1`, перед стартом egress нормализуется в `host.docker.internal`, иначе `livekit-egress` в контейнере не сможет загрузить файл в MinIO на host.
 - **Storage URL после egress в тестах:** если `raw_storage_url` пришел как `host.docker.internal`, `sync_finalize_recording_task` в `testing`-режиме нормализует его в `localhost` перед задачей транскрипции, чтобы host-процесс worker мог скачать файл.
-- **Скачивание записи для STT:** `build_call_transcript_text` сначала пытается скачать объект через `S3ClientFactory` (по `bucket/key` из `storage_url` и конфигу bucket), и только если URL не распознан как S3 endpoint — использует HTTP download. Это убирает 403 на приватных MinIO/S3 объектах.
+- **Файл записи:** после egress `sync_finalize_recording_task` создаёт сообщение с `file/video` и `call_id`; STT одной записи идёт через скачивание файла по `file_id` в worker (S3/HTTP по конфигу), без отдельной сущности «встреча» в БД.
 - **STT в интеграционных тестах:** для `sync_worker` и `docker-compose-test` используется `STT__PROVIDER=mock` (через `core.clients.stt_client`), чтобы pipeline оставался e2e для LiveKit/S3/очереди, но не зависел от внешнего STT API.
 - **Prod deploy STT ключ:** в `docker-compose-prod.yaml` ключ должен приходить через env `STT__CLOUD_RU__API_KEY` (допустим fallback `${STT_CLOUD_RU_API_KEY}`), а `.github/workflows/deploy.yml` обязан прокидывать эти env в шаг SSH deploy (`env` + `envs`), иначе `sync_worker` падает с `STT cloud_ru api_key не настроен`.
 - **Транскрипция звонков в worker требует ffmpeg:** в runtime-образах (`Dockerfile`, `Dockerfile.test`) пакет `ffmpeg` обязателен, т.к. `apps/sync/realtime/tasks.py` режет/подготавливает аудио чанки через subprocess вызов `ffmpeg`.

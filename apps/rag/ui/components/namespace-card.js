@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { RagStore } from '../store/rag.store.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class NamespaceCard extends PlatformElement {
     static properties = {
@@ -120,7 +121,7 @@ export class NamespaceCard extends PlatformElement {
                 </div>
                 <div class="stats">
                     <div class="stat">
-                        <platform-icon name="file" size="16"></platform-icon>
+                        <platform-icon file-icon name="text" size="16"></platform-icon>
                         <span class="stat-value">${this.namespace.document_count || 0}</span>
                         <span>documents</span>
                     </div>

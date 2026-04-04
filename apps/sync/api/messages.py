@@ -18,6 +18,7 @@ from apps.sync.models.common import PaginationRequest, PaginationResponse, UserB
 from apps.sync.models.messages import MessageContentModel, MessageCreate, MessageEdit, MessageRead
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
+from core.config import get_settings
 from core.context import get_context
 from core.models.identity_models import User
 
@@ -167,7 +168,9 @@ async def send_message(channel_id: str, body: MessageCreate) -> dict:
         payload={"channel_id": channel_id, "body": body.model_dump()},
     )
     task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(timeout=300.0)
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
     if res.is_err:
         raise RuntimeError(f"Command failed: {res.error}")
     return res.return_value["result"]
@@ -183,10 +186,32 @@ async def _run_cmd(cmd_type: str, payload: dict) -> dict:
         payload=payload,
     )
     task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(timeout=300.0)
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
     if res.is_err:
         raise RuntimeError(f"Command failed: {res.error}")
-    return res.return_value["result"]
+    result = res.return_value["result"]
+    if result is None:
+        raise RuntimeError("Команда вернула пустой result.")
+    return result
+
+
+async def _run_cmd_allow_null_result(cmd_type: str, payload: dict) -> None:
+    context = get_context()
+    cmd = CommandEnvelope(
+        id=uuid.uuid4().hex,
+        actor_user_id=context.user.user_id,
+        company_id=context.active_company.company_id,
+        type=cmd_type,
+        payload=payload,
+    )
+    task = await handle_command.kiq(cmd.model_dump())
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
+    if res.is_err:
+        raise RuntimeError(f"Command failed: {res.error}")
 
 
 @router.patch("/{channel_id}/messages/{message_id}")
@@ -241,3 +266,21 @@ async def transcribe_audio_message(channel_id: str, message_id: str) -> MessageR
         {"channel_id": channel_id, "message_id": message_id},
     )
     return MessageRead.model_validate(out)
+
+
+@router.post("/{channel_id}/messages/{message_id}/transcribe-video")
+async def transcribe_video_message(channel_id: str, message_id: str) -> MessageRead:
+    out = await _run_cmd(
+        "messages.transcribe_video",
+        {"channel_id": channel_id, "message_id": message_id},
+    )
+    return MessageRead.model_validate(out)
+
+
+@router.post("/{channel_id}/calls/{call_id}/transcribe", status_code=202)
+async def transcribe_call_session(channel_id: str, call_id: str) -> dict[str, str]:
+    await _run_cmd_allow_null_result(
+        "messages.transcribe_call",
+        {"channel_id": channel_id, "call_id": call_id},
+    )
+    return {"status": "queued"}

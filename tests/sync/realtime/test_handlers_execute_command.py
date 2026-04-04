@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
+import os
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -200,6 +200,57 @@ async def test_channels_create_topic(
     assert res.ok
     assert res.result is not None
     assert res.result.name == "general"
+
+
+@pytest.mark.asyncio
+async def test_channels_create_can_override_space_transcribe_and_speech_flags(
+    space_repo,
+    channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
+    sync_user_repository,
+    sync_db_clean: None,
+    company_id: str,
+) -> None:
+    sp = SyncSpace(
+        space_id="sp_ov",
+        company_id=company_id,
+        name="S",
+        description=None,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id="u1",
+        transcribe_voice_messages=False,
+        speech_to_chat_enabled=False,
+    )
+    await space_repo.create(sp)
+    body = ChannelCreate(
+        space_id="sp_ov",
+        type=ChannelType.TOPIC,
+        name="general",
+        is_private=False,
+        transcribe_voice_messages=True,
+        speech_to_chat_enabled=True,
+    )
+    cmd = _cmd(
+        actor="u1",
+        company_id=company_id,
+        typ="channels.create",
+        payload={"body": body.model_dump()},
+    )
+    res = await execute_command(
+        cmd,
+        spaces=space_repo,
+        channels=channel_repo,
+        threads=thread_repo,
+        messages=message_repo,
+        git_refs=git_ref_repo,
+        user_repository=sync_user_repository,
+    )
+    assert res.ok
+    assert res.result is not None
+    assert res.result.transcribe_voice_messages is True
+    assert res.result.speech_to_chat_enabled is True
 
 
 @pytest.mark.asyncio
@@ -838,7 +889,6 @@ async def test_call_hangup_auto_stops_recording_for_recording_owner(
     git_ref_repo,
     call_repo,
     call_recording_repo,
-    call_meeting_repo,
     sync_user_repository,
     monkeypatch,
     sync_db_clean: None,
@@ -945,7 +995,6 @@ async def test_call_hangup_auto_stops_recording_for_recording_owner(
         git_refs=git_ref_repo,
         calls=call_repo,
         call_recordings=call_recording_repo,
-        call_meetings=call_meeting_repo,
         user_repository=sync_user_repository,
     )
     assert result.ok
@@ -962,7 +1011,6 @@ async def test_call_hangup_does_not_stop_recording_for_non_owner(
     git_ref_repo,
     call_repo,
     call_recording_repo,
-    call_meeting_repo,
     sync_user_repository,
     monkeypatch,
     sync_db_clean: None,
@@ -1069,7 +1117,6 @@ async def test_call_hangup_does_not_stop_recording_for_non_owner(
         git_refs=git_ref_repo,
         calls=call_repo,
         call_recordings=call_recording_repo,
-        call_meetings=call_meeting_repo,
         user_repository=sync_user_repository,
     )
     assert result.ok
@@ -1086,7 +1133,6 @@ async def test_call_recording_start_forbidden_for_non_admin(
     git_ref_repo,
     call_repo,
     call_recording_repo,
-    call_meeting_repo,
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
@@ -1143,7 +1189,6 @@ async def test_call_recording_start_forbidden_for_non_admin(
             git_refs=git_ref_repo,
             calls=call_repo,
             call_recordings=call_recording_repo,
-            call_meetings=call_meeting_repo,
             user_repository=sync_user_repository,
         )
 
@@ -1157,7 +1202,6 @@ async def test_call_recording_stop_allowed_for_recording_starter_non_admin(
     git_ref_repo,
     call_repo,
     call_recording_repo,
-    call_meeting_repo,
     sync_user_repository,
     monkeypatch,
     sync_db_clean: None,
@@ -1246,7 +1290,6 @@ async def test_call_recording_stop_allowed_for_recording_starter_non_admin(
         git_refs=git_ref_repo,
         calls=call_repo,
         call_recordings=call_recording_repo,
-        call_meetings=call_meeting_repo,
         user_repository=sync_user_repository,
     )
     assert result.ok
@@ -1264,7 +1307,6 @@ async def test_call_admin_transfer_updates_call_admin(
     git_ref_repo,
     call_repo,
     call_recording_repo,
-    call_meeting_repo,
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
@@ -1338,7 +1380,6 @@ async def test_call_admin_transfer_updates_call_admin(
         git_refs=git_ref_repo,
         calls=call_repo,
         call_recordings=call_recording_repo,
-        call_meetings=call_meeting_repo,
         user_repository=sync_user_repository,
     )
     assert result.ok
@@ -1353,7 +1394,6 @@ async def test_call_recording_start_stop_flow(
     flows_service,
     sync_worker,
     livekit_demo_publisher,
-    mock_sync_stt_client,
     space_repo,
     channel_repo,
     thread_repo,
@@ -1361,15 +1401,12 @@ async def test_call_recording_start_stop_flow(
     git_ref_repo,
     call_repo,
     call_recording_repo,
-    call_meeting_repo,
     sync_user_repository,
-    wait_for_meeting_pipeline_complete,
     sync_db_clean: None,
     system_user_id: str,
 ) -> None:
     company_id = "system"
     actor_user_id = system_user_id
-    mock_sync_stt_client("Тестовая транскрипция звонка")
 
     await sync_user_repository.set(
         User(
@@ -1386,8 +1423,6 @@ async def test_call_recording_start_stop_flow(
         name="S",
         description=None,
         namespace=None,
-        auto_export_transcript_to_crm=False,
-        auto_export_summary_to_crm=False,
         created_at=datetime.now(tz=UTC),
         created_by_user_id=actor_user_id,
     )
@@ -1451,7 +1486,6 @@ async def test_call_recording_start_stop_flow(
         user_repository=sync_user_repository,
         calls=call_repo,
         call_recordings=call_recording_repo,
-        call_meetings=call_meeting_repo,
     )
     assert start.ok
     assert start.result.status in ("recording", "requested")
@@ -1472,21 +1506,29 @@ async def test_call_recording_start_stop_flow(
         user_repository=sync_user_repository,
         calls=call_repo,
         call_recordings=call_recording_repo,
-        call_meetings=call_meeting_repo,
     )
     assert stop.ok
     assert stop.result.status == "uploaded"
-    meeting = await call_meeting_repo.get_by_recording(stop.result.recording_id, company_id)
-    assert meeting is not None
-    completed_meeting = await wait_for_meeting_pipeline_complete(
-        meeting_id=meeting.meeting_id,
-        company_id=company_id,
-        timeout_seconds=120.0,
-        require_export_done=False,
-    )
-    assert completed_meeting.transcript_text_file_id is not None
-    assert completed_meeting.summary_json is not None
-    assert "short_summary" in completed_meeting.summary_json
+
+    import time
+
+    deadline = time.monotonic() + 120.0
+    video_message_id: str | None = None
+    while time.monotonic() < deadline:
+        rows = await message_repo.list_by_channel(ch.channel_id, limit=80, company_id=company_id)
+        for m in rows:
+            if m.call_id != call.call_id:
+                continue
+            for row in await message_repo.list_contents(m.message_id):
+                if row.type == "file/video":
+                    video_message_id = m.message_id
+                    break
+            if video_message_id is not None:
+                break
+        if video_message_id is not None:
+            break
+        await asyncio.sleep(0.5)
+    assert video_message_id is not None
 
 
 @pytest.mark.asyncio
@@ -1496,21 +1538,20 @@ async def test_call_recording_pipeline_via_real_queue_worker(
     flows_service,
     sync_worker,
     livekit_demo_publisher,
-    mock_sync_stt_client,
     space_repo,
     channel_repo,
+    thread_repo,
+    message_repo,
+    git_ref_repo,
     call_repo,
     call_recording_repo,
-    call_meeting_repo,
     sync_user_repository,
-    wait_for_meeting_pipeline_complete,
     sync_db_clean: None,
     system_user_id: str,
 ) -> None:
     """Полный pipeline через настоящий queue worker без monkeypatch .kiq."""
     company_id = "system"
     actor_user_id = system_user_id
-    mock_sync_stt_client("Тестовая транскрипция очереди")
 
     await sync_user_repository.set(
         User(
@@ -1528,8 +1569,6 @@ async def test_call_recording_pipeline_via_real_queue_worker(
         name="Queue Pipeline Space",
         description=None,
         namespace=None,
-        auto_export_transcript_to_crm=False,
-        auto_export_summary_to_crm=False,
         created_at=datetime.now(tz=UTC),
         created_by_user_id=actor_user_id,
     )
@@ -1605,129 +1644,29 @@ async def test_call_recording_pipeline_via_real_queue_worker(
     stop_payload = stop_result.return_value["result"]
     assert stop_payload["status"] == "uploaded"
 
-    meeting = await call_meeting_repo.get_by_recording(stop_payload["recording_id"], company_id)
-    assert meeting is not None
-    completed_meeting = await wait_for_meeting_pipeline_complete(
-        meeting_id=meeting.meeting_id,
-        company_id=company_id,
-        timeout_seconds=60.0,
-        require_export_done=False,
-    )
-    assert completed_meeting.transcript_text_file_id is not None
-    assert "short_summary" in (completed_meeting.summary_json or {})
+    import time
+
+    deadline = time.monotonic() + 120.0
+    video_message_id: str | None = None
+    while time.monotonic() < deadline:
+        rows = await message_repo.list_by_channel(channel.channel_id, limit=80, company_id=company_id)
+        for m in rows:
+            if m.call_id != call.call_id:
+                continue
+            for row in await message_repo.list_contents(m.message_id):
+                if row.type == "file/video":
+                    video_message_id = m.message_id
+                    break
+            if video_message_id is not None:
+                break
+        if video_message_id is not None:
+            break
+        await asyncio.sleep(0.5)
+    assert video_message_id is not None
 
     recording = await call_recording_repo.get(stop_payload["recording_id"])
     assert recording is not None
     assert recording.raw_file_id is not None
-
-
-@pytest.mark.asyncio
-async def test_download_recording_bytes_404_then_success(monkeypatch) -> None:
-    from apps.sync.realtime import tasks as sync_tasks
-
-    class _FakeResponse:
-        def __init__(self, status_code: int, content: bytes, content_type: str | None) -> None:
-            self.status_code = status_code
-            self.content = content
-            self.headers: dict[str, str] = {}
-            if content_type is not None:
-                self.headers["content-type"] = content_type
-
-        def raise_for_status(self) -> None:
-            raise RuntimeError(f"Unexpected raise_for_status for status={self.status_code}")
-
-    class _FakeClientContext:
-        def __init__(self, responses: deque[_FakeResponse], calls: list[str]) -> None:
-            self._responses = responses
-            self._calls = calls
-
-        async def __aenter__(self) -> "_FakeClientContext":
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> bool:
-            return False
-
-        async def get(self, url: str) -> _FakeResponse:
-            self._calls.append(url)
-            if len(self._responses) == 0:
-                raise RuntimeError("Нет подготовленного ответа для fake HTTP клиента.")
-            return self._responses.popleft()
-
-    responses: deque[_FakeResponse] = deque(
-        [
-            _FakeResponse(status_code=404, content=b"", content_type=None),
-            _FakeResponse(status_code=200, content=b"audio-bytes", content_type="audio/wav"),
-        ]
-    )
-    requested_urls: list[str] = []
-    sleep_calls: list[float] = []
-
-    def _fake_get_httpx_client(*, timeout: float, **kwargs) -> _FakeClientContext:
-        return _FakeClientContext(responses=responses, calls=requested_urls)
-
-    async def _fake_sleep(seconds: float) -> None:
-        sleep_calls.append(seconds)
-
-    monkeypatch.setattr(sync_tasks, "get_httpx_client", _fake_get_httpx_client)
-    monkeypatch.setattr(sync_tasks.asyncio, "sleep", _fake_sleep)
-
-    payload, content_type = await sync_tasks._download_recording_bytes(
-        source_url="http://livekit:7880/egress/room/egress.mp4",
-        timeout_seconds=5.0,
-    )
-    assert payload == b"audio-bytes"
-    assert content_type == "audio/wav"
-    assert requested_urls == [
-        "http://livekit:7880/egress/room/egress.mp4",
-        "http://livekit:7880/egress/room/egress.mp4",
-    ]
-    assert sleep_calls == [3.0]
-
-
-@pytest.mark.asyncio
-async def test_download_recording_bytes_rejects_text_error_payload(monkeypatch) -> None:
-    from apps.sync.realtime import tasks as sync_tasks
-
-    class _FakeResponse:
-        def __init__(self, status_code: int, content: bytes, content_type: str | None) -> None:
-            self.status_code = status_code
-            self.content = content
-            self.headers: dict[str, str] = {}
-            if content_type is not None:
-                self.headers["content-type"] = content_type
-
-        def raise_for_status(self) -> None:
-            raise RuntimeError(f"Unexpected raise_for_status for status={self.status_code}")
-
-    class _FakeClientContext:
-        def __init__(self, response: _FakeResponse) -> None:
-            self._response = response
-
-        async def __aenter__(self) -> "_FakeClientContext":
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> bool:
-            return False
-
-        async def get(self, url: str) -> _FakeResponse:
-            return self._response
-
-    def _fake_get_httpx_client(*, timeout: float, **kwargs) -> _FakeClientContext:
-        return _FakeClientContext(
-            response=_FakeResponse(
-                status_code=200,
-                content=b"Error opening <_io.BytesIO object>: Format not recognised.",
-                content_type="text/plain; charset=utf-8",
-            )
-        )
-
-    monkeypatch.setattr(sync_tasks, "get_httpx_client", _fake_get_httpx_client)
-
-    with pytest.raises(ValueError, match="неподдерживаемый content-type"):
-        await sync_tasks._download_recording_bytes(
-            source_url="http://livekit:7880/egress/room/egress.mp4",
-            timeout_seconds=5.0,
-        )
 
 
 def test_extract_transcript_from_json_payload_ignores_error_payload() -> None:
@@ -1832,6 +1771,11 @@ async def test_sync_transcribe_audio_message_task_marks_done(
     monkeypatch,
 ) -> None:
     from apps.sync.realtime import tasks as sync_tasks
+    import core.config.base as config_base
+
+    monkeypatch.setenv("STT__PROVIDER", "mock")
+    monkeypatch.setenv("STT__MOCK_TRANSCRIPT_TEXT", "Привет из аудио")
+    config_base._settings_instance = None
 
     ch = SyncChannel(
         channel_id="ch_audio_task",
@@ -1869,42 +1813,8 @@ async def test_sync_transcribe_audio_message_task_marks_done(
         ],
     )
 
-    settings = SimpleNamespace(
-        stt=SimpleNamespace(
-            cloud_ru=SimpleNamespace(
-                timeout=3.0,
-                language="ru",
-                max_upload_bytes=25165824,
-                chunk_duration_seconds=300,
-                chunk_bitrate_kbps=32,
-                chunk_sample_rate_hz=16000,
-                chunk_channels=1,
-            ),
-        ),
-        server=SimpleNamespace(
-            get_service_url=lambda service=None: "http://sync.test" if service == "sync" else "http://localhost:8000",
-        ),
-    )
-
-    class _MockSttClient:
-        async def transcribe_audio(
-            self,
-            *,
-            audio_bytes: bytes,
-            file_name: str,
-            mime_type: str,
-            language: str | None = None,
-        ) -> STTTranscriptionResult:
-            assert audio_bytes == b"voice-bytes"
-            assert file_name == "voice.webm"
-            assert mime_type == "audio/webm"
-            assert language == "ru"
-            return STTTranscriptionResult(
-                provider="mock",
-                status=AudioTranscriptionStatus.DONE,
-                text="Привет из аудио",
-                language="ru",
-            )
+    sync_base = os.environ["SERVER__SYNC_SERVICE_URL"].rstrip("/")
+    expected_download_url = f"{sync_base}/sync/api/v1/files/download/file_audio_task"
 
     class _Resp:
         status_code = 200
@@ -1921,7 +1831,7 @@ async def test_sync_transcribe_audio_message_task_marks_done(
             return False
 
         async def get(self, url: str, headers: dict[str, str]):
-            assert url == "http://sync.test/sync/api/v1/files/download/file_audio_task"
+            assert url == expected_download_url
             return _Resp()
 
     published_types: list[str] = []
@@ -1930,10 +1840,7 @@ async def test_sync_transcribe_audio_message_task_marks_done(
         for event in events:
             published_types.append(event.type)
 
-    monkeypatch.setattr(sync_tasks, "get_settings", lambda: settings)
-    monkeypatch.setattr(sync_tasks, "_build_interservice_auth_headers", lambda **kwargs: {"Authorization": "Bearer x"})
     monkeypatch.setattr(sync_tasks, "get_httpx_client", lambda **kwargs: _HttpCtx())
-    monkeypatch.setattr(sync_tasks.STTClientFactory, "create_client", staticmethod(lambda: _MockSttClient()))
     monkeypatch.setattr(sync_tasks, "publish_realtime_events", _fake_publish)
 
     await sync_tasks.sync_transcribe_audio_message_task(
@@ -2021,7 +1928,7 @@ async def test_transcribe_audio_with_chunking_on_413(monkeypatch) -> None:
     )
 
     transcript = await sync_tasks._transcribe_audio_with_chunking(
-        meeting_id="meeting_413",
+        job_id="stt_job_413",
         audio_bytes=b"source",
         file_name="recording.mp4",
         mime_type="video/mp4",
@@ -2101,7 +2008,7 @@ async def test_transcribe_audio_with_chunking_on_format_error(monkeypatch) -> No
     )
 
     transcript = await sync_tasks._transcribe_audio_with_chunking(
-        meeting_id="meeting_format_error",
+        job_id="stt_job_format_error",
         audio_bytes=b"source",
         file_name="recording.mp4",
         mime_type="video/mp4",

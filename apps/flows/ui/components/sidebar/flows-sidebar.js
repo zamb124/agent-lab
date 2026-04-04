@@ -1,13 +1,12 @@
 /**
- * FlowsSidebar - sidebar для Flows Builder
- * Использует platform-sidebar с поддержкой collapsed/mobile mode
+ * FlowsSidebar — список flow; оболочка platform-service-sidebar.
  */
 import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { FlowsStore } from '../../store/flows.store.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/sidebar-section.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -29,7 +28,7 @@ export class FlowsSidebar extends PlatformElement {
                 height: 100%;
             }
 
-            platform-sidebar {
+            platform-service-sidebar {
                 height: 100%;
             }
 
@@ -98,20 +97,20 @@ export class FlowsSidebar extends PlatformElement {
                 color: var(--text-primary);
             }
 
-            :host([collapsed]) .footer-links {
+            platform-service-sidebar[collapsed] .footer-links {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
             }
 
-            :host([collapsed]) .footer-link {
+            platform-service-sidebar[collapsed] .footer-link {
                 width: 36px;
                 height: 36px;
                 padding: 0;
                 justify-content: center;
             }
 
-            :host([collapsed]) .footer-link span {
+            platform-service-sidebar[collapsed] .footer-link span {
                 display: none;
             }
         `
@@ -134,24 +133,16 @@ export class FlowsSidebar extends PlatformElement {
         FlowsStore.loadFlows(this.a2a);
     }
 
-    toggleCollapse() {
-        this.collapsed = !this.collapsed;
-        this.emit('collapse-change', { collapsed: this.collapsed });
+    _shell() {
+        return this.renderRoot?.querySelector('platform-service-sidebar');
     }
 
     toggleMobile() {
-        this.mobileOpen = !this.mobileOpen;
-        this.emit('mobile-change', { open: this.mobileOpen });
+        this._shell()?.toggleMobile();
     }
 
     closeMobile() {
-        if (this.mobileOpen) {
-            this.mobileOpen = false;
-            this.emit('mobile-change', { open: false });
-            window.dispatchEvent(new CustomEvent('platform-sidebar-mobile-change', {
-                detail: { open: false },
-            }));
-        }
+        this._shell()?.closeMobile();
     }
 
     _createFlow() {
@@ -314,13 +305,17 @@ export class FlowsSidebar extends PlatformElement {
         const { flows, currentFlowId, expandedFlows } = this.state.value;
 
         return html`
-            <platform-sidebar
+            <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/agents_logo.svg"
                 logo-text="Flows"
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(e) => this.collapsed = e.detail.collapsed}
-                @mobile-change=${(e) => this.mobileOpen = e.detail.open}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
+                @mobile-change=${(e) => {
+                    this.mobileOpen = e.detail.open;
+                }}
             >
                 <sidebar-section title=${this.i18n.t('flows_sidebar.section_all_flows')} icon="folder" ?collapsed=${this.collapsed}>
                     <button 
@@ -351,7 +346,7 @@ export class FlowsSidebar extends PlatformElement {
                 <div slot="footer">
                     <div class="footer-links">
                         <a class="footer-link" href="/documentation" target="_blank">
-                            <platform-icon name="file" size="16"></platform-icon>
+                            <platform-icon file-icon name="text" size="16"></platform-icon>
                             <span>Docs</span>
                         </a>
                         <button class="footer-link" @click=${this._openSessions}>
@@ -370,7 +365,7 @@ export class FlowsSidebar extends PlatformElement {
                     <platform-user block></platform-user>
                     <platform-deployment-version base-url="/flows" footer></platform-deployment-version>
                 </div>
-            </platform-sidebar>
+            </platform-service-sidebar>
         `;
     }
 }

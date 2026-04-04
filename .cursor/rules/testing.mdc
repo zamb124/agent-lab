@@ -13,7 +13,11 @@ alwaysApply: false
 
 Запрещено мокать: `StateRepository`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
 
-**Sync Service** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker. Нельзя подменять `handle_command.kiq`, `dispatch_sync_command`, репозитории или WebSocket через `unittest.mock` / `monkeypatch`. Подробности: `.cursor/rules/sync.mdc`, `tests/sync/README.md`. Очистка БД в `sync_db_clean` — **DELETE** по порядку FK (не `TRUNCATE`: меньше жёстких блокировок). Все тесты под `tests/sync/` автоматически в **`xdist_group("sync_db")`** — при `-n` и `--dist=loadgroup` выполняются **на одном gw последовательно**, без параллельной гонки за одной схемой. Календарные ссылки (`calendar_event_id`, канал `calendar_meeting`, `GET /meetings/scheduled:…`) — **`tests/sync/api/test_calendar_sync_call_links.py`**. Сквозной сценарий «frontend календарь + `sync_meeting` + реальный Sync HTTP» — **`tests/core/api/test_calendar_sync_meeting_integration.py`** (фикстура **`sync_service`**, порт **9005**; для join URL в тесте выставляется **`SERVER__PLATFORM_PUBLIC_BASE_URL`**).
+**Documents / office:** **`tests/office/`** — BFF с реальной **`platform_office`** и MinIO (**`test_office_bff_integration.py`**), плюс **`@pytest.mark.integration`** healthcheck к Document Server (**`test_onlyoffice_document_server.py`**). В **`docker-compose-test.yaml`** сервис **`onlyoffice-documentserver`** (порт хоста **18088**), в **`tests_runner`** заданы **`OFFICE__*`**; **`make test-up`** поднимает тот же сервис. Фикстуры **`office_app`**, **`office_client`** — **`tests/fixtures/clients.py`**. См. **`office.mdc`**.
+
+**Тестовый WAV:** общая функция **`minimal_wav_silence`** в [`tests/fixtures/audio_bytes.py`](../../tests/fixtures/audio_bytes.py) — валидный PCM без ffmpeg-транскода при upload; используется в sync (голос/STT) и CRM e2e voice, не дублировать генератор в файлах тестов.
+
+**Sync Service** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker. Нельзя подменять `handle_command.kiq`, `dispatch_sync_command`, репозитории или WebSocket через `unittest.mock` / `monkeypatch`. Подробности: `.cursor/rules/sync.mdc`, `tests/sync/README.md`. Очистка БД в `sync_db_clean` — **DELETE** по порядку FK (не `TRUNCATE`: меньше жёстких блокировок). Все тесты под `tests/sync/` автоматически в **`xdist_group("sync_db")`** — при `-n` и `--dist=loadgroup` выполняются **на одном gw последовательно**, без параллельной гонки за одной схемой. Календарные ссылки (`calendar_event_id`, канал `calendar_meeting`, `GET /sync/api/v1/calls/links/scheduled`, PATCH состава участников) — **`tests/sync/api/test_calendar_sync_call_links.py`**. Сквозной сценарий «frontend календарь, `kind=meeting`, реальный Sync HTTP» — **`tests/core/api/test_calendar_sync_meeting_integration.py`** (фикстура **`sync_service`**, порт **9005**; для join URL в тесте выставляется **`SERVER__PLATFORM_PUBLIC_BASE_URL`**).
 
 ### Зависание `make test` / pytest
 
@@ -94,7 +98,7 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 | `all_services` | session | Все сервисы + dict URL |
 | `mock_llm` | function | MockLLM с default_response |
 | `mock_llm_with_queue` | function | Фабрика очереди ответов (sync тесты) |
-| `mock_llm_redis` | function | MockLLM через Redis (интеграционные тесты с worker) |
+| `mock_llm_redis` | function | Очередь ответов **MockLLM** в **реальном** Redis (ключ `mock_llm:responses`) для процессов worker / межпроцессной доставки; Redis не подменяется |
 | `state` | function | Пустой ExecutionState |
 | `state_with_content` | function | ExecutionState с content="test" |
 | `make_test_state` | function | Фабрика ExecutionState с произвольными полями |
@@ -109,7 +113,7 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 | `local_mcp_http_url` | session | Stub MCP HTTP сервер (JSON-RPC) |
 | `test_context` | function (autouse) | Устанавливает тестовый Context |
 | `reset_mock_llm` | function (autouse) | Сброс MockLLM после теста |
-| `sync_tools` | function (autouse) | Синхронное выполнение tools (отключается `@pytest.mark.real_taskiq`) |
+| `sync_tools` | function (autouse) | Патчит `.kiq` задач на in-process вызов; **Redis Pub/Sub не патчится** — стриминг через реальный Redis контейнера (отключается `@pytest.mark.real_taskiq`) |
 
 ---
 
@@ -141,7 +145,7 @@ def test_with_queue(mock_llm_with_queue, unique_id):
     ])
 ```
 
-### MockLLM через Redis (интеграционные тесты с реальным worker)
+### MockLLM: очередь ответов в реальном Redis (интеграционные тесты с worker)
 
 ```python
 @pytest.mark.real_taskiq

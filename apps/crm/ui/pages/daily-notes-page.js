@@ -1454,14 +1454,14 @@ export class DailyNotesPage extends PlatformElement {
                                 title=${this.i18n.t('daily_notes_page.summary_entity_open')}
                                 @click=${(event) => this._openEntityModal(resolved, event)}
                             >
-                                <platform-icon name="file" size="14"></platform-icon>
+                                <platform-icon name="folder" size="14"></platform-icon>
                                 ${tag}
                             </button>
                         `;
                     }
                     return html`
                         <span class="summary-chip ${tone}">
-                            <platform-icon name="file" size="14"></platform-icon>
+                            <platform-icon name="folder" size="14"></platform-icon>
                             ${tag}
                         </span>
                     `;

@@ -5,6 +5,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import { CRMStore } from '../store/crm.store.js';
+import { resolveFileIconKey } from '@platform/services/icon.service.js';
 
 function getLocalIsoDate() {
     const now = new Date();
@@ -1701,6 +1702,9 @@ export class NoteContent extends PlatformElement {
         const typeConfig = this._getEntityTypeConfig(entity);
         if (typeConfig && typeof typeConfig.icon === 'string' && typeConfig.icon.trim().length > 0) {
             const rawIconName = typeConfig.icon.trim();
+            if (rawIconName === 'file') {
+                return 'folder';
+            }
             if (/^[a-z0-9-]+$/i.test(rawIconName)) {
                 return rawIconName;
             }
@@ -2239,6 +2243,14 @@ export class NoteContent extends PlatformElement {
                                         <div class="attach-dropdown-empty">${this.i18n.t('note_content.no_attachments')}</div>
                                     ` : attachments.map((attachment) => html`
                                         <div class="attach-dropdown-row">
+                                            <platform-icon
+                                                file-icon
+                                                name=${resolveFileIconKey(
+                                                    this._getAttachmentName(attachment),
+                                                    typeof attachment?.content_type === 'string' ? attachment.content_type : '',
+                                                )}
+                                                size="14"
+                                            ></platform-icon>
                                             <span class="attach-dropdown-name" title=${this._getAttachmentName(attachment)}>
                                                 ${this._getAttachmentName(attachment)}
                                             </span>
@@ -2349,8 +2361,8 @@ export class NoteContent extends PlatformElement {
                         <p class="summary-text">${this._getText(this.summaryText, this.i18n.t('note_content.no_summary'))}</p>
                         <div class="summary-tags">
                             ${summaryTags.map((tag) => html`
-                                <span class="summary-tag">
-                                    <platform-icon name="file" size="12"></platform-icon>
+                                    <span class="summary-tag">
+                                    <platform-icon name="folder" size="12"></platform-icon>
                                     ${tag}
                                 </span>
                             `)}

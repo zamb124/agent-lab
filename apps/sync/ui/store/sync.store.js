@@ -78,15 +78,6 @@ const baseStore = new BaseStore('sync', {
     callOverlayChat: {
         channels: {},
     },
-    meetings: {
-        list: [],
-        selected: null,
-        loading: false,
-        filters: {
-            channel_id: null,
-            space_id: null,
-        },
-    },
     chat: {
         selectedSpaceId: null,
         selectedChannelId: null,
@@ -119,9 +110,14 @@ const baseStore = new BaseStore('sync', {
         /** space_id при открытии модалки создания канала (зафиксирован при open). */
         channelSettingsCreateSpaceId: null,
         spaceSettingsSpaceId: null,
-        meetingsPanelOpen: false,
         /** Пустой массив = показать все topic-каналы; иначе только каналы выбранных пространств (ИЛИ). */
         sidebarSpaceFilterIds: [],
+        /**
+         * Активный звонок в основном приложении: полоса в шапке канала при свёрнутом оверлее.
+         * Не персистится (partialize).
+         * @type {null | { call_id: string, channel_id: string, minimized: boolean }}
+         */
+        activeCallOverlay: null,
     },
 }, {
     persist: true,
@@ -612,60 +608,6 @@ export const SyncStore = {
         }
     },
 
-    setMeetings(list) {
-        baseStore.setState((s) => ({
-            meetings: { ...s.meetings, list, loading: false },
-        }));
-    },
-
-    setMeetingsLoading(loading) {
-        baseStore.setState((s) => ({
-            meetings: { ...s.meetings, loading },
-        }));
-    },
-
-    setMeetingSelected(meeting) {
-        baseStore.setState((s) => ({
-            meetings: { ...s.meetings, selected: meeting },
-        }));
-    },
-
-    upsertMeeting(meeting) {
-        if (!meeting || typeof meeting !== 'object') {
-            throw new Error(t('sync_store.err_upsert_meeting_required', {}));
-        }
-        if (typeof meeting.meeting_id !== 'string' || meeting.meeting_id === '') {
-            throw new Error(t('sync_api.err_meeting_id', {}));
-        }
-        baseStore.setState((s) => {
-            const list = s.meetings.list;
-            const idx = list.findIndex((m) => m.meeting_id === meeting.meeting_id);
-            const nextList = idx === -1
-                ? [meeting, ...list]
-                : list.map((m, i) => (i === idx ? meeting : m));
-            const selected = s.meetings.selected;
-            const nextSelected = selected && selected.meeting_id === meeting.meeting_id
-                ? meeting
-                : selected;
-            return {
-                meetings: {
-                    ...s.meetings,
-                    list: nextList,
-                    selected: nextSelected,
-                },
-            };
-        });
-    },
-
-    setMeetingsFilters(filters) {
-        if (!filters || typeof filters !== 'object') {
-            throw new Error(t('sync_store.err_filters_required', {}));
-        }
-        baseStore.setState((s) => ({
-            meetings: { ...s.meetings, filters: { ...s.meetings.filters, ...filters } },
-        }));
-    },
-
     upsertMessage(message) {
         baseStore.setState(s => {
             const list = s.messages.list;
@@ -981,18 +923,6 @@ export const SyncStore = {
     closeSpaceSettings() {
         baseStore.setState(s => ({
             ui: { ...s.ui, spaceSettingsSpaceId: null, spaceSettingsCreate: false },
-        }));
-    },
-
-    openMeetingsPanel() {
-        baseStore.setState((s) => ({
-            ui: { ...s.ui, meetingsPanelOpen: true },
-        }));
-    },
-
-    closeMeetingsPanel() {
-        baseStore.setState((s) => ({
-            ui: { ...s.ui, meetingsPanelOpen: false },
         }));
     },
 
@@ -1355,6 +1285,38 @@ export const SyncStore = {
     },
 
     /**
+     * Состояние оверлея звонка для шапки чата (свёрнут / полный экран).
+     * @param {null | { call_id: string, channel_id: string, minimized: boolean }} overlay
+     */
+    setUiActiveCallOverlay(overlay) {
+        if (overlay === null) {
+            baseStore.setState(s => ({ ui: { ...s.ui, activeCallOverlay: null } }));
+            return;
+        }
+        if (typeof overlay !== 'object') {
+            throw new Error(t('sync_store.err_active_call_overlay_payload', {}));
+        }
+        const callId = overlay.call_id;
+        const channelId = overlay.channel_id;
+        const minimized = overlay.minimized;
+        if (typeof callId !== 'string' || callId === '') {
+            throw new Error(t('sync_store.err_active_call_overlay_call_id', {}));
+        }
+        if (typeof channelId !== 'string') {
+            throw new Error(t('sync_store.err_active_call_overlay_channel_id', {}));
+        }
+        if (typeof minimized !== 'boolean') {
+            throw new Error(t('sync_store.err_active_call_overlay_minimized', {}));
+        }
+        baseStore.setState(s => ({
+            ui: {
+                ...s.ui,
+                activeCallOverlay: { call_id: callId, channel_id: channelId, minimized },
+            },
+        }));
+    },
+
+    /**
      * @param {'direct'|'spaces'|'channels'} key
      * @param {boolean} open
      */
@@ -1585,16 +1547,4 @@ export const SyncStore = {
         await this.loadMessages(syncApi, channelId);
     },
 
-    async loadMeetings(syncApi, filters = null) {
-        this.setMeetingsLoading(true);
-        try {
-            const params = filters ?? baseStore.state.meetings.filters;
-            const rows = await syncApi.getMeetings(params);
-            this.setMeetings(rows);
-            return rows;
-        } catch (e) {
-            this.setMeetingsLoading(false);
-            throw e;
-        }
-    },
 };

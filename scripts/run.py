@@ -8,6 +8,7 @@
     python scripts/run.py crm         # Запуск crm сервиса
     python scripts/run.py rag         # Запуск rag сервиса
     python scripts/run.py sync        # Запуск sync сервиса
+    python scripts/run.py office      # Запуск office (Documents / OnlyOffice BFF + UI)
     python scripts/run.py flows_worker # Запуск TaskIQ flows_worker
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
@@ -16,7 +17,7 @@
     python scripts/run.py crm_worker  # Запуск CRM worker
     python scripts/run.py idle_worker # Запуск Idle worker
     python scripts/run.py all         # Все сервисы параллельно (make app)
-    python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах 8001–8006
+    python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах HTTP-сервисов
     python scripts/run.py kill-ports  # только освободить порты HTTP-сервисов
 
 Конфигурация загружается из conf.json и conf.local.json.
@@ -62,6 +63,11 @@ SERVICES = {
         "type": "uvicorn",
         "app": "apps.app_runtime_targets:sync_app",
         "port": "8005",
+    },
+    "office": {
+        "type": "uvicorn",
+        "app": "apps.app_runtime_targets:office_app",
+        "port": "8008",
     },
     "scheduler-api": {
         "type": "uvicorn",

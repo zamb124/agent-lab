@@ -25,6 +25,7 @@ import './pages/products/product-agents-page.js';
 import './pages/products/product-rag-page.js';
 import './pages/products/product-crm-page.js';
 import './pages/products/product-sync-page.js';
+import './pages/products/product-documents-page.js';
 
 // Импортируем компоненты лендинга
 import './components/landing/landing-header.js';

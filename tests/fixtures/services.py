@@ -51,6 +51,8 @@ _COMMON_TEST_ENV = {
     "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
     "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
     "SERVER__SYNC_SERVICE_URL": "http://localhost:9005",
+    "STT__PROVIDER": "mock",
+    "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
     "CALLS__LIVEKIT_PUBLIC_URL": "http://localhost:7890",
     "CALLS__LIVEKIT_API_KEY": "devkey",

@@ -307,6 +307,7 @@ export class LandingAbout extends PlatformElement {
                         <span class="integration-badge">${t('about.integ_rest')}</span>
                         <span class="integration-badge highlight">${t('about.integ_pdf')}</span>
                         <a href="/products/crm" class="integration-badge product">${t('about.integ_networkle')}</a>
+                        <a href="/products/documents" class="integration-badge product">${t('about.integ_documents')}</a>
                         <a href="/products/sync" class="integration-badge product">${t('about.integ_sync')}</a>
                         <a href="/products/sync" class="integration-badge product">${t('about.integ_chat')}</a>
                         <a href="/products/sync" class="integration-badge highlight">${t('about.integ_video')}</a>

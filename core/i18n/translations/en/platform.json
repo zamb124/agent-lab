@@ -29,6 +29,10 @@
       "name": "Sync",
       "description": "The engineering team hub: chat, Git, and calls alongside repos — align faster and ship with less friction"
     },
+    "documents": {
+      "name": "Documents",
+      "description": "Company Office files in OnlyOffice: binding list, editor in iframe, namespace isolation, secrets only on the BFF"
+    },
     "frontend": {
       "name": "Console",
       "description": "Your platform home: company settings, billing, and one-click access to every product"

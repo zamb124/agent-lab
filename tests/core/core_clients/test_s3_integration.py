@@ -52,10 +52,11 @@ async def minio_bucket():
         client = S3ClientFactory.create_client_for_bucket(bucket_name)
         
         s3_client = await client._get_client()
+        physical = client.bucket_name
         try:
-            await s3_client.head_bucket(Bucket=bucket_name)
-        except:
-            await s3_client.create_bucket(Bucket=bucket_name)
+            await s3_client.head_bucket(Bucket=physical)
+        except Exception:
+            await s3_client.create_bucket(Bucket=physical)
         
         yield client
         
@@ -76,8 +77,10 @@ class TestS3Integration:
         bucket_name = get_test_bucket_name()
         client = S3ClientFactory.create_client_for_bucket(bucket_name)
         bucket_config = get_settings().s3.buckets[bucket_name]
+        expected_physical = bucket_config.bucket_name or bucket_name
 
-        assert client.bucket_name == bucket_name
+        assert client.bucket_name == expected_physical
+        assert client.require_bucket_config_key() == bucket_name
         assert client.provider_name == bucket_config.provider
         assert client.endpoint_url == bucket_config.endpoint_url
         assert client.access_key_id == bucket_config.access_key_id
@@ -90,8 +93,20 @@ class TestS3Integration:
         skip_if_s3_disabled()
         with pytest.raises(ValueError, match="не найден в конфигурации"):
             S3ClientFactory.create_client_for_bucket('nonexistent-bucket')
-    
-    
+
+    async def test_bucket_config_key_on_factory_client(self):
+        """FileRecord.s3_bucket = ключ конфига; клиент знает физическое имя и ключ."""
+        skip_if_s3_disabled()
+        from core.config import get_settings
+
+        s = get_settings()
+        for cfg_key in s.s3.buckets:
+            c = S3ClientFactory.create_client_for_bucket(cfg_key)
+            try:
+                assert c.require_bucket_config_key() == cfg_key
+            finally:
+                await c.close()
+
     async def test_upload_and_download_bytes(self, minio_bucket):
         """Тест загрузки и скачивания данных в MinIO S3"""
         client = minio_bucket
@@ -394,7 +409,7 @@ class TestS3WithDatabase:
             provider=client.provider_name,
             original_name=f"{file_id}.txt",
             s3_key=s3_key,
-            s3_bucket=client.bucket_name,
+            s3_bucket=client.require_bucket_config_key(),
             s3_endpoint=client.endpoint_url,
             content_type="text/plain",
             file_size=len(test_data),
@@ -491,9 +506,16 @@ class TestS3WithDatabase:
     async def test_default_s3_client(self):
         """Тест дефолтного S3 клиента"""
         default_client = S3ClientFactory.create_default_client()
-        
+        from core.config import get_settings
+
+        s = get_settings()
+        key = s.s3.default_bucket
+        cfg = s.s3.buckets[key]
+        expected_physical = cfg.bucket_name or key
+
         assert default_client is not None
-        assert default_client.bucket_name == "test-bucket"  # Из конфигурации для тестов
+        assert default_client.bucket_name == expected_physical
+        assert default_client.require_bucket_config_key() == key
         assert default_client.provider_name == "minio"
         print(f"✅ Дефолтный клиент: {default_client.provider_name}/{default_client.bucket_name}")
         
