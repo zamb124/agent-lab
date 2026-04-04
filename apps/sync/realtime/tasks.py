@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, datetime
-from pathlib import Path
 import subprocess
 import tempfile
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -40,9 +40,78 @@ from core.config import get_settings
 from core.files.models import VideoAttachmentContent
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.models.billing_models import UsageType
+from core.tracing import attributes as trace_attributes
+from core.tracing.operation_span import traced_operation
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
+
+
+async def _record_sync_stt_billing(
+    *,
+    actor_user_id: str,
+    company_id: str,
+    audio_bytes_len: int,
+) -> None:
+    from core.billing import get_billing_service
+
+    container = get_sync_container()
+    billing = get_billing_service()
+    user = await container.user_repository.get(actor_user_id)
+    if user is None:
+        raise ValueError(f"Пользователь {actor_user_id} не найден для учёта STT.")
+    company = await container.company_repository.get(company_id)
+    if company is None:
+        raise ValueError(f"Компания {company_id} не найдена для учёта STT.")
+    settings = get_settings()
+    resource_name = "tool:stt_sync_message"
+    cost = await billing.get_resource_cost_for_company(company, resource_name)
+    await billing.record_usage(
+        user=user,
+        company=company,
+        resource_name=resource_name,
+        cost=cost,
+        usage_type=UsageType.TOOL_CALL,
+        quantity=1,
+        metadata={
+            "audio_bytes": audio_bytes_len,
+            "stt_provider": settings.stt.provider,
+        },
+    )
+
+
+async def _record_sync_finalize_recording_billing(
+    *,
+    actor_user_id: str,
+    company_id: str,
+    recording_id: str,
+    egress_id: str,
+) -> None:
+    from core.billing import get_billing_service
+
+    container = get_sync_container()
+    billing = get_billing_service()
+    user = await container.user_repository.get(actor_user_id)
+    if user is None:
+        raise ValueError(f"Пользователь {actor_user_id} не найден для учёта финализации записи.")
+    company = await container.company_repository.get(company_id)
+    if company is None:
+        raise ValueError(f"Компания {company_id} не найдена для учёта финализации записи.")
+    resource_name = "tool:livekit_recording_finalize"
+    cost = await billing.get_resource_cost_for_company(company, resource_name)
+    await billing.record_usage(
+        user=user,
+        company=company,
+        resource_name=resource_name,
+        cost=cost,
+        usage_type=UsageType.TOOL_CALL,
+        quantity=1,
+        metadata={
+            "recording_id": recording_id,
+            "egress_id": egress_id,
+        },
+    )
 
 _TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -681,112 +750,135 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
     if recording.started_by_user_id is None or recording.started_by_user_id == "":
         raise ValueError("У записи не задан started_by_user_id.")
 
-    try:
-        settings = get_settings()
-        raw_file_id = recording.raw_file_id or recording.recording_id
-        egress_timeout_seconds = settings.calls.finalize_recording_egress_wait_timeout_seconds
-        if recording.provider_job_id is None or recording.provider_job_id == "":
-            raise ValueError(
-                f"У записи {recording.recording_id} отсутствует provider_job_id для поиска egress результата."
-            )
-        provider_job_id, raw_storage_url = await _resolve_livekit_egress_result(
-            room_name=call.livekit_room_name,
-            timeout_seconds=egress_timeout_seconds,
-            expected_egress_id=recording.provider_job_id,
-        )
-        raw_storage_url = _normalize_storage_url_for_worker(
-            storage_url=raw_storage_url,
-            testing=bool(getattr(settings, "testing", False)),
-        )
-        logger.info(
-            "sync_finalize_recording_task egress resolved: recording_id=%s egress_id=%s raw_storage_url=%s",
-            recording.recording_id,
-            provider_job_id,
-            raw_storage_url,
-        )
-        parsed_storage_url = urlparse(raw_storage_url)
-        raw_original_name = parsed_storage_url.path.rsplit("/", 1)[-1]
-        if raw_original_name == "":
-            raise ValueError(f"Не удалось определить имя файла egress из URL: {raw_storage_url}")
-        raw_file = SyncFile(
-            file_id=raw_file_id,
-            company_id=company_id,
-            original_name=raw_original_name,
-            mime_type="video/mp4",
-            size_bytes=0,
-            storage_url=raw_storage_url,
-            checksum=None,
-        )
-        existing_raw = await container.sync_file_repository.get(raw_file_id)
-        if existing_raw is None:
-            await container.sync_file_repository.create(raw_file)
-        else:
-            existing_raw.original_name = raw_original_name
-            existing_raw.mime_type = "video/mp4"
-            existing_raw.size_bytes = 0
-            existing_raw.storage_url = raw_storage_url
-            existing_raw.checksum = None
-            await container.sync_file_repository.update(existing_raw)
-
-        await container.call_recording_repository.mark_status(
-            recording.recording_id,
-            status="uploaded",
-            provider_job_id=provider_job_id,
-            raw_file_id=raw_file_id,
-        )
-
-        video_body = MessageCreate(
-            thread_id=None,
-            parent_message_id=None,
-            contents=[
-                MessageContentModel(
-                    type=MessageContentType.FILE_VIDEO,
-                    data=VideoAttachmentContent(
-                        file_id=raw_file_id,
-                        filename=raw_original_name,
-                        mime_type="video/mp4",
-                        size=0,
-                        duration_ms=None,
-                        transcription_status=AudioTranscriptionStatus.IDLE,
-                        transcription_text=None,
-                        transcription_error=None,
-                    ),
-                    order=0,
+    async with traced_operation(
+        "sync.calls.finalize_recording",
+        event_type="sync.calls",
+        operation_category="livekit_egress",
+        billing_usage_type=UsageType.TOOL_CALL.value,
+        billing_resource_name="tool:livekit_recording_finalize",
+        resource_type="sync_call_recording",
+        resource_id=recording_id,
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            trace_attributes.ATTR_USER_ID: recording.started_by_user_id,
+            trace_attributes.ATTR_CALL_ID: recording.call_id,
+            trace_attributes.ATTR_CHANNEL_ID: recording.channel_id,
+            trace_attributes.ATTR_LIVEKIT_ROOM: call.livekit_room_name or "",
+        },
+    ) as finalize_span:
+        try:
+            settings = get_settings()
+            raw_file_id = recording.raw_file_id or recording.recording_id
+            egress_timeout_seconds = settings.calls.finalize_recording_egress_wait_timeout_seconds
+            if recording.provider_job_id is None or recording.provider_job_id == "":
+                raise ValueError(
+                    f"У записи {recording.recording_id} отсутствует provider_job_id для поиска egress результата."
                 )
-            ],
-            mentioned_user_ids=None,
-            call_id=recording.call_id,
-        )
-        send_payload = MessagesSendPayload(channel_id=recording.channel_id, body=video_body)
-        cmd = CommandEnvelope(
-            id=uuid4().hex,
-            type="messages.send",
-            actor_user_id=recording.started_by_user_id,
-            company_id=company_id,
-            payload=send_payload.model_dump(mode="json"),
-        )
-        await dispatch_sync_command(cmd)
-        logger.info(
-            "sync_finalize_recording_task posted video message: recording_id=%s channel_id=%s",
-            recording.recording_id,
-            recording.channel_id,
-        )
-    except Exception as exc:
-        logger.error(
-            "sync_finalize_recording_task failed: recording_id=%s error=%s",
-            recording_id,
-            str(exc),
-            exc_info=True,
-        )
-        await container.call_recording_repository.mark_status(
-            recording.recording_id,
-            status="failed",
-            error=str(exc),
-        )
-        failed_row = await container.call_recording_repository.get(recording_id)
-        if failed_row is not None:
-            await publish_realtime_events([event_call_recording_failed(_recording_read_from_entity(failed_row))])
-        raise
+            provider_job_id, raw_storage_url = await _resolve_livekit_egress_result(
+                room_name=call.livekit_room_name,
+                timeout_seconds=egress_timeout_seconds,
+                expected_egress_id=recording.provider_job_id,
+            )
+            finalize_span.set_attribute(trace_attributes.ATTR_LIVEKIT_EGRESS_ID, provider_job_id)
+            raw_storage_url = _normalize_storage_url_for_worker(
+                storage_url=raw_storage_url,
+                testing=bool(getattr(settings, "testing", False)),
+            )
+            logger.info(
+                "sync_finalize_recording_task egress resolved: recording_id=%s egress_id=%s raw_storage_url=%s",
+                recording.recording_id,
+                provider_job_id,
+                raw_storage_url,
+            )
+            parsed_storage_url = urlparse(raw_storage_url)
+            raw_original_name = parsed_storage_url.path.rsplit("/", 1)[-1]
+            if raw_original_name == "":
+                raise ValueError(f"Не удалось определить имя файла egress из URL: {raw_storage_url}")
+            raw_file = SyncFile(
+                file_id=raw_file_id,
+                company_id=company_id,
+                original_name=raw_original_name,
+                mime_type="video/mp4",
+                size_bytes=0,
+                storage_url=raw_storage_url,
+                checksum=None,
+            )
+            existing_raw = await container.sync_file_repository.get(raw_file_id)
+            if existing_raw is None:
+                await container.sync_file_repository.create(raw_file)
+            else:
+                existing_raw.original_name = raw_original_name
+                existing_raw.mime_type = "video/mp4"
+                existing_raw.size_bytes = 0
+                existing_raw.storage_url = raw_storage_url
+                existing_raw.checksum = None
+                await container.sync_file_repository.update(existing_raw)
+
+            await container.call_recording_repository.mark_status(
+                recording.recording_id,
+                status="uploaded",
+                provider_job_id=provider_job_id,
+                raw_file_id=raw_file_id,
+            )
+
+            video_body = MessageCreate(
+                thread_id=None,
+                parent_message_id=None,
+                contents=[
+                    MessageContentModel(
+                        type=MessageContentType.FILE_VIDEO,
+                        data=VideoAttachmentContent(
+                            file_id=raw_file_id,
+                            filename=raw_original_name,
+                            mime_type="video/mp4",
+                            size=0,
+                            duration_ms=None,
+                            transcription_status=AudioTranscriptionStatus.IDLE,
+                            transcription_text=None,
+                            transcription_error=None,
+                        ),
+                        order=0,
+                    )
+                ],
+                mentioned_user_ids=None,
+                call_id=recording.call_id,
+            )
+            send_payload = MessagesSendPayload(channel_id=recording.channel_id, body=video_body)
+            cmd = CommandEnvelope(
+                id=uuid4().hex,
+                type="messages.send",
+                actor_user_id=recording.started_by_user_id,
+                company_id=company_id,
+                payload=send_payload.model_dump(mode="json"),
+            )
+            await dispatch_sync_command(cmd)
+            await _record_sync_finalize_recording_billing(
+                actor_user_id=recording.started_by_user_id,
+                company_id=company_id,
+                recording_id=recording.recording_id,
+                egress_id=provider_job_id,
+            )
+            logger.info(
+                "sync_finalize_recording_task posted video message: recording_id=%s channel_id=%s",
+                recording.recording_id,
+                recording.channel_id,
+            )
+        except Exception as exc:
+            logger.error(
+                "sync_finalize_recording_task failed: recording_id=%s error=%s",
+                recording_id,
+                str(exc),
+                exc_info=True,
+            )
+            await container.call_recording_repository.mark_status(
+                recording.recording_id,
+                status="failed",
+                error=str(exc),
+            )
+            failed_row = await container.call_recording_repository.get(recording_id)
+            if failed_row is not None:
+                await publish_realtime_events([event_call_recording_failed(_recording_read_from_entity(failed_row))])
+            raise
 
 
 async def transcribe_audio_message_core(
@@ -859,39 +951,61 @@ async def transcribe_audio_message_core(
         return
     try:
         try:
-            async with get_httpx_client(timeout=timeout_seconds) as client:
-                response = await client.get(file_download_url, headers=auth_headers)
-            response.raise_for_status()
-            if not response.content:
-                raise ValueError("Файл аудиосообщения пустой.")
+            async with traced_operation(
+                "sync.stt.transcribe_audio_message",
+                event_type="sync.stt",
+                operation_category="stt",
+                billing_usage_type=UsageType.TOOL_CALL.value,
+                billing_resource_name="tool:stt_sync_message",
+                resource_type="sync_message",
+                resource_id=message_id,
+                extra_attributes={
+                    trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+                    trace_attributes.ATTR_USER_ID: actor_user_id,
+                    trace_attributes.ATTR_CHANNEL_ID: channel_id,
+                },
+            ) as stt_span:
+                stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, settings.stt.provider)
+                async with get_httpx_client(timeout=timeout_seconds) as client:
+                    response = await client.get(file_download_url, headers=auth_headers)
+                response.raise_for_status()
+                if not response.content:
+                    raise ValueError("Файл аудиосообщения пустой.")
+                audio_len = len(response.content)
+                stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, audio_len)
 
-            transcript_text = await _transcribe_audio_with_chunking(
-                job_id=message_id,
-                audio_bytes=response.content,
-                file_name=audio_info.filename,
-                mime_type=audio_info.mime_type,
-                language=settings.stt.cloud_ru.language,
-            )
-            if transcript_text.strip() == "":
-                raise ValueError("STT вернул пустую транскрипцию аудиосообщения.")
+                transcript_text = await _transcribe_audio_with_chunking(
+                    job_id=message_id,
+                    audio_bytes=response.content,
+                    file_name=audio_info.filename,
+                    mime_type=audio_info.mime_type,
+                    language=settings.stt.cloud_ru.language,
+                )
+                if transcript_text.strip() == "":
+                    raise ValueError("STT вернул пустую транскрипцию аудиосообщения.")
 
-            done_contents = _replace_audio_transcription(
-                contents=source_contents,
-                status=AudioTranscriptionStatus.DONE,
-                transcription_text=transcript_text,
-                transcription_error=None,
-            )
-            await container.message_repository.replace_message_contents(
-                message_id=message_id,
-                contents=done_contents,
-                edited_at=datetime.now(tz=UTC),
-            )
-            done_message = await _load_message_read(
-                container,
-                message_id=message_id,
-                company_id=company_id,
-            )
-            await publish_realtime_events([event_message_updated(done_message)])
+                done_contents = _replace_audio_transcription(
+                    contents=source_contents,
+                    status=AudioTranscriptionStatus.DONE,
+                    transcription_text=transcript_text,
+                    transcription_error=None,
+                )
+                await container.message_repository.replace_message_contents(
+                    message_id=message_id,
+                    contents=done_contents,
+                    edited_at=datetime.now(tz=UTC),
+                )
+                done_message = await _load_message_read(
+                    container,
+                    message_id=message_id,
+                    company_id=company_id,
+                )
+                await publish_realtime_events([event_message_updated(done_message)])
+                await _record_sync_stt_billing(
+                    actor_user_id=actor_user_id,
+                    company_id=company_id,
+                    audio_bytes_len=audio_len,
+                )
         except Exception as exc:
             failed_contents = _replace_audio_transcription(
                 contents=source_contents,
@@ -979,43 +1093,64 @@ async def transcribe_video_message_core(
     )
 
     try:
-        async with get_httpx_client(timeout=timeout_seconds) as client:
-            response = await client.get(file_download_url, headers=auth_headers)
-        response.raise_for_status()
-        if not response.content:
-            raise ValueError("Файл видеосообщения пустой.")
+        async with traced_operation(
+            "sync.stt.transcribe_video_message",
+            event_type="sync.stt",
+            operation_category="stt",
+            billing_usage_type=UsageType.TOOL_CALL.value,
+            billing_resource_name="tool:stt_sync_message",
+            resource_type="sync_message",
+            resource_id=message_id,
+            extra_attributes={
+                trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+                trace_attributes.ATTR_USER_ID: actor_user_id,
+                trace_attributes.ATTR_CHANNEL_ID: channel_id,
+            },
+        ) as video_stt_span:
+            video_stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, settings.stt.provider)
+            async with get_httpx_client(timeout=timeout_seconds) as client:
+                response = await client.get(file_download_url, headers=auth_headers)
+            response.raise_for_status()
+            if not response.content:
+                raise ValueError("Файл видеосообщения пустой.")
+            video_stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, len(response.content))
 
-        audio_bytes, audio_name = _extract_audio_track_from_video_bytes(
-            video_bytes=response.content,
-            base_name=video_info.filename,
-        )
-        transcript_text = await _transcribe_audio_with_chunking(
-            job_id=message_id,
-            audio_bytes=audio_bytes,
-            file_name=audio_name,
-            mime_type="audio/mpeg",
-            language=settings.stt.cloud_ru.language,
-        )
-        if transcript_text.strip() == "":
-            raise ValueError("STT вернул пустую транскрипцию видеосообщения.")
+            audio_bytes, audio_name = _extract_audio_track_from_video_bytes(
+                video_bytes=response.content,
+                base_name=video_info.filename,
+            )
+            transcript_text = await _transcribe_audio_with_chunking(
+                job_id=message_id,
+                audio_bytes=audio_bytes,
+                file_name=audio_name,
+                mime_type="audio/mpeg",
+                language=settings.stt.cloud_ru.language,
+            )
+            if transcript_text.strip() == "":
+                raise ValueError("STT вернул пустую транскрипцию видеосообщения.")
 
-        done_contents = _replace_video_transcription(
-            contents=source_contents,
-            status=AudioTranscriptionStatus.DONE,
-            transcription_text=transcript_text,
-            transcription_error=None,
-        )
-        await container.message_repository.replace_message_contents(
-            message_id=message_id,
-            contents=done_contents,
-            edited_at=datetime.now(tz=UTC),
-        )
-        done_message = await _load_message_read(
-            container,
-            message_id=message_id,
-            company_id=company_id,
-        )
-        await publish_realtime_events([event_message_updated(done_message)])
+            done_contents = _replace_video_transcription(
+                contents=source_contents,
+                status=AudioTranscriptionStatus.DONE,
+                transcription_text=transcript_text,
+                transcription_error=None,
+            )
+            await container.message_repository.replace_message_contents(
+                message_id=message_id,
+                contents=done_contents,
+                edited_at=datetime.now(tz=UTC),
+            )
+            done_message = await _load_message_read(
+                container,
+                message_id=message_id,
+                company_id=company_id,
+            )
+            await publish_realtime_events([event_message_updated(done_message)])
+            await _record_sync_stt_billing(
+                actor_user_id=actor_user_id,
+                company_id=company_id,
+                audio_bytes_len=len(audio_bytes),
+            )
     except Exception as exc:
         failed_contents = _replace_video_transcription(
             contents=source_contents,
@@ -1069,113 +1204,127 @@ async def sync_aggregate_call_transcript_task(
     if channel_id == "" or call_id == "" or company_id == "" or actor_user_id == "":
         raise ValueError("channel_id, call_id, company_id и actor_user_id обязательны.")
 
-    container = get_sync_container()
-    rows = await container.message_repository.list_root_lane_by_call(
-        channel_id=channel_id,
-        call_id=call_id,
-        company_id=company_id,
-    )
-    for m in rows:
-        content_rows = await container.message_repository.list_contents(m.message_id)
-        contents = [
-            MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
-            for r in content_rows
-        ]
-        has_audio = any(c.type == MessageContentType.FILE_AUDIO for c in contents)
-        has_video = any(c.type == MessageContentType.FILE_VIDEO for c in contents)
-        if has_audio:
-            audio = _extract_audio_info(contents)
-            if audio.transcription_status != AudioTranscriptionStatus.DONE:
-                await transcribe_audio_message_core(
-                    channel_id=channel_id,
-                    message_id=m.message_id,
-                    company_id=company_id,
-                    actor_user_id=actor_user_id,
+    async with traced_operation(
+        "sync.calls.aggregate_transcript",
+        event_type="sync.calls",
+        operation_category="sync_command",
+        resource_type="sync_call",
+        resource_id=call_id,
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            trace_attributes.ATTR_USER_ID: actor_user_id,
+            trace_attributes.ATTR_CHANNEL_ID: channel_id,
+            trace_attributes.ATTR_CALL_ID: call_id,
+        },
+    ) as aggregate_span:
+        container = get_sync_container()
+        rows = await container.message_repository.list_root_lane_by_call(
+            channel_id=channel_id,
+            call_id=call_id,
+            company_id=company_id,
+        )
+        aggregate_span.set_attribute("platform.sync.call_aggregate_lane_count", len(rows))
+        for m in rows:
+            content_rows = await container.message_repository.list_contents(m.message_id)
+            contents = [
+                MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
+                for r in content_rows
+            ]
+            has_audio = any(c.type == MessageContentType.FILE_AUDIO for c in contents)
+            has_video = any(c.type == MessageContentType.FILE_VIDEO for c in contents)
+            if has_audio:
+                audio = _extract_audio_info(contents)
+                if audio.transcription_status != AudioTranscriptionStatus.DONE:
+                    await transcribe_audio_message_core(
+                        channel_id=channel_id,
+                        message_id=m.message_id,
+                        company_id=company_id,
+                        actor_user_id=actor_user_id,
+                    )
+            if has_video:
+                video = _extract_video_info(
+                    [
+                        MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
+                        for r in await container.message_repository.list_contents(m.message_id)
+                    ]
                 )
-        if has_video:
-            video = _extract_video_info(
-                [
-                    MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
-                    for r in await container.message_repository.list_contents(m.message_id)
-                ]
+                if video.transcription_status != AudioTranscriptionStatus.DONE:
+                    await transcribe_video_message_core(
+                        channel_id=channel_id,
+                        message_id=m.message_id,
+                        company_id=company_id,
+                        actor_user_id=actor_user_id,
+                    )
+
+        out_lines: list[str] = []
+        fresh_rows = await container.message_repository.list_root_lane_by_call(
+            channel_id=channel_id,
+            call_id=call_id,
+            company_id=company_id,
+        )
+        for m in fresh_rows:
+            content_rows = await container.message_repository.list_contents(m.message_id)
+            contents = [
+                MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
+                for r in content_rows
+            ]
+            only_boundary = (
+                len(contents) == 1
+                and contents[0].type == MessageContentType.CALL_BOUNDARY
             )
-            if video.transcription_status != AudioTranscriptionStatus.DONE:
-                await transcribe_video_message_core(
-                    channel_id=channel_id,
-                    message_id=m.message_id,
-                    company_id=company_id,
-                    actor_user_id=actor_user_id,
-                )
+            if only_boundary:
+                continue
 
-    out_lines: list[str] = []
-    fresh_rows = await container.message_repository.list_root_lane_by_call(
-        channel_id=channel_id,
-        call_id=call_id,
-        company_id=company_id,
-    )
-    for m in fresh_rows:
-        content_rows = await container.message_repository.list_contents(m.message_id)
-        contents = [
-            MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
-            for r in content_rows
+            sender = await sender_brief_for_message(container.user_repository, m.sender_user_id)
+            label = sender.display_name
+            ts = _utc_iso_z(m.sent_at)
+            parts: list[str] = []
+            for c in sorted(contents, key=lambda x: x.order):
+                if c.type == MessageContentType.TEXT_PLAIN:
+                    if isinstance(c.data, TextPlainContent) and c.data.body.strip() != "":
+                        parts.append(c.data.body.strip())
+                elif c.type == MessageContentType.FILE_AUDIO:
+                    if isinstance(c.data, AudioAttachmentContent):
+                        if c.data.transcription_text and c.data.transcription_text.strip() != "":
+                            parts.append(c.data.transcription_text.strip())
+                elif c.type == MessageContentType.FILE_VIDEO:
+                    if isinstance(c.data, VideoAttachmentContent):
+                        if c.data.transcription_text and c.data.transcription_text.strip() != "":
+                            parts.append(c.data.transcription_text.strip())
+            if len(parts) == 0:
+                continue
+            body = " ".join(parts)
+            out_lines.append(f"[{label}][{ts}] — {body}")
+
+        full_text = "\n".join(out_lines)
+        if full_text.strip() == "":
+            full_text = _sync_call_aggregate_empty_body()
+
+        chunks = _split_text_plain_chunks(full_text)
+        content_blocks = [
+            MessageContentModel(
+                type=MessageContentType.TEXT_PLAIN,
+                data=TextPlainContent(body=chunk, mentions=None),
+                order=idx,
+            )
+            for idx, chunk in enumerate(chunks)
         ]
-        only_boundary = (
-            len(contents) == 1
-            and contents[0].type == MessageContentType.CALL_BOUNDARY
+        agg_body = MessageCreate(
+            thread_id=None,
+            parent_message_id=None,
+            contents=content_blocks,
+            mentioned_user_ids=None,
+            call_id=call_id,
         )
-        if only_boundary:
-            continue
-
-        sender = await sender_brief_for_message(container.user_repository, m.sender_user_id)
-        label = sender.display_name
-        ts = _utc_iso_z(m.sent_at)
-        parts: list[str] = []
-        for c in sorted(contents, key=lambda x: x.order):
-            if c.type == MessageContentType.TEXT_PLAIN:
-                if isinstance(c.data, TextPlainContent) and c.data.body.strip() != "":
-                    parts.append(c.data.body.strip())
-            elif c.type == MessageContentType.FILE_AUDIO:
-                if isinstance(c.data, AudioAttachmentContent):
-                    if c.data.transcription_text and c.data.transcription_text.strip() != "":
-                        parts.append(c.data.transcription_text.strip())
-            elif c.type == MessageContentType.FILE_VIDEO:
-                if isinstance(c.data, VideoAttachmentContent):
-                    if c.data.transcription_text and c.data.transcription_text.strip() != "":
-                        parts.append(c.data.transcription_text.strip())
-        if len(parts) == 0:
-            continue
-        body = " ".join(parts)
-        out_lines.append(f"[{label}][{ts}] — {body}")
-
-    full_text = "\n".join(out_lines)
-    if full_text.strip() == "":
-        full_text = _sync_call_aggregate_empty_body()
-
-    chunks = _split_text_plain_chunks(full_text)
-    content_blocks = [
-        MessageContentModel(
-            type=MessageContentType.TEXT_PLAIN,
-            data=TextPlainContent(body=chunk, mentions=None),
-            order=idx,
+        send_payload = MessagesSendPayload(channel_id=channel_id, body=agg_body)
+        cmd = CommandEnvelope(
+            id=uuid4().hex,
+            type="messages.send",
+            actor_user_id=actor_user_id,
+            company_id=company_id,
+            payload=send_payload.model_dump(mode="json"),
         )
-        for idx, chunk in enumerate(chunks)
-    ]
-    agg_body = MessageCreate(
-        thread_id=None,
-        parent_message_id=None,
-        contents=content_blocks,
-        mentioned_user_ids=None,
-        call_id=call_id,
-    )
-    send_payload = MessagesSendPayload(channel_id=channel_id, body=agg_body)
-    cmd = CommandEnvelope(
-        id=uuid4().hex,
-        type="messages.send",
-        actor_user_id=actor_user_id,
-        company_id=company_id,
-        payload=send_payload.model_dump(mode="json"),
-    )
-    await dispatch_sync_command(cmd)
+        await dispatch_sync_command(cmd)
 
 
 def _speech_to_chat_poll_sleep_seconds(*, is_continuation: bool) -> float:
@@ -1202,7 +1351,18 @@ async def sync_speech_to_chat_poll_task(
         await asyncio.sleep(_speech_to_chat_poll_sleep_seconds(is_continuation=is_continuation))
     from apps.sync.realtime.speech_to_chat_workflow import run_speech_to_chat_poll_cycle
 
-    outcome = await run_speech_to_chat_poll_cycle(call_id=call_id, company_id=company_id)
+    async with traced_operation(
+        "sync.speech_to_chat.poll_cycle",
+        event_type="sync.speech_to_chat",
+        operation_category="sync_command",
+        resource_type="sync_call",
+        resource_id=call_id,
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            trace_attributes.ATTR_CALL_ID: call_id,
+        },
+    ):
+        outcome = await run_speech_to_chat_poll_cycle(call_id=call_id, company_id=company_id)
     if outcome.schedule_next:
         stc = get_settings().calls.speech_to_chat
         next_delay = (

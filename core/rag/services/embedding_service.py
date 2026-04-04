@@ -12,6 +12,8 @@ from typing import List, Optional, TYPE_CHECKING
 from core.http import get_httpx_client
 from core.context import get_context
 from core.models.billing_models import UsageType
+from core.tracing import attributes as trace_attributes
+from core.tracing.operation_span import traced_operation
 
 if TYPE_CHECKING:
     from core.billing.service import BillingService
@@ -162,7 +164,7 @@ class EmbeddingService:
         # Есть user/company - billing обязателен
         billing = self.billing_service or self._get_billing_service()
         
-        logger.info(f"💰 Embedding billing: записываем {token_count} tokens, cost={cost:.4f}₽")
+        logger.info(f"Embedding billing: записываем {token_count} tokens, cost={cost:.4f}₽")
         
         await billing.record_usage(
             user=context.user,
@@ -291,32 +293,46 @@ class EmbeddingService:
         """
         if not texts:
             return []
-        
-        # Подсчитываем токены для billing
+
         token_count = self.count_tokens(texts)
-        
-        logger.info(f"Генерация embeddings для {len(texts)} текстов ({token_count} токенов)")
-        
-        all_embeddings = []
-        total_batches = (len(texts) + self.BATCH_SIZE - 1) // self.BATCH_SIZE
-        
-        for i in range(0, len(texts), self.BATCH_SIZE):
-            batch = texts[i:i + self.BATCH_SIZE]
-            batch_num = i // self.BATCH_SIZE + 1
-            logger.debug(f"Batch {batch_num}/{total_batches}: {len(batch)} текстов")
-            
-            batch_embeddings = await self._generate_embeddings_batch(batch)
-            all_embeddings.extend(batch_embeddings)
-        
-        # Записываем billing
-        cost = self.calculate_cost(token_count)
-        await self._record_usage(token_count, cost)
-        
-        logger.info(
-            f"Сгенерировано {len(all_embeddings)} embeddings "
-            f"(model={self._active_model}, tokens={token_count}, cost={cost:.4f}₽)"
-        )
-        return all_embeddings
+        resource_hint = self._active_model or (self.models[0] if self.models else "embedding")
+
+        async with traced_operation(
+            "rag.embed.batch",
+            event_type="rag.embeddings",
+            operation_category="embedding",
+            billing_usage_type=UsageType.EMBEDDING_REQUEST.value,
+            billing_resource_name=f"embedding:{resource_hint}",
+            extra_attributes={
+                trace_attributes.ATTR_EMBED_TEXT_COUNT: len(texts),
+                trace_attributes.ATTR_EMBED_BATCH_SIZE: self.BATCH_SIZE,
+                trace_attributes.ATTR_LLM_INPUT_TOKENS: token_count,
+            },
+        ) as span:
+            logger.info(f"Генерация embeddings для {len(texts)} текстов ({token_count} токенов)")
+
+            all_embeddings: List[List[float]] = []
+            total_batches = (len(texts) + self.BATCH_SIZE - 1) // self.BATCH_SIZE
+
+            for i in range(0, len(texts), self.BATCH_SIZE):
+                batch = texts[i : i + self.BATCH_SIZE]
+                batch_num = i // self.BATCH_SIZE + 1
+                logger.debug(f"Batch {batch_num}/{total_batches}: {len(batch)} текстов")
+
+                batch_embeddings = await self._generate_embeddings_batch(batch)
+                all_embeddings.extend(batch_embeddings)
+
+            resolved_model = self._active_model or ""
+            span.set_attribute(trace_attributes.ATTR_EMBED_MODEL, resolved_model)
+
+            cost = self.calculate_cost(token_count)
+            await self._record_usage(token_count, cost)
+
+            logger.info(
+                f"Сгенерировано {len(all_embeddings)} embeddings "
+                f"(model={self._active_model}, tokens={token_count}, cost={cost:.4f}₽)"
+            )
+            return all_embeddings
     
     def get_embedding_dimension(self) -> int:
         """

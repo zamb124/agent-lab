@@ -17,6 +17,7 @@
     "sync_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_sync",
     "rag_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_rag",
     "office_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_office",
+    "tracing_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_tracing",
     "redis_url": "redis://localhost:63791/0"
   },
   "tasks": {

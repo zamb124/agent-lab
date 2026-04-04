@@ -43,6 +43,21 @@ logging.getLogger("opentelemetry.sdk.trace").addFilter(
 
 _tracer: Optional["PlatformTracer"] = None
 _span_repository: Optional["SpanRepository"] = None
+_process_tracing_service_name: Optional[str] = None
+
+
+def set_tracing_service_name(name: str) -> None:
+    """Имя процесса для колонки service_name (один раз при старте сервиса/воркера)."""
+    global _process_tracing_service_name
+    _process_tracing_service_name = name
+
+
+def _resolve_tracing_service_name() -> str:
+    if _process_tracing_service_name:
+        return _process_tracing_service_name
+    from core.config import get_settings
+
+    return get_settings().server.name
 
 
 def set_span_repository(repository: "SpanRepository") -> None:
@@ -106,10 +121,50 @@ class PlatformTracer:
             status = "ERROR"
             status_message = span.status.description
 
-        # Собираем все атрибуты
         all_attrs = dict(span.attributes) if span.attributes else {}
         if extra_attrs:
             all_attrs.update(extra_attrs)
+
+        if trace_ctx:
+            if trace_ctx.flow_id and attr.ATTR_FLOW_ID not in all_attrs:
+                all_attrs[attr.ATTR_FLOW_ID] = trace_ctx.flow_id
+            if trace_ctx.task_id and attr.ATTR_TASK_ID not in all_attrs:
+                all_attrs[attr.ATTR_TASK_ID] = trace_ctx.task_id
+            if trace_ctx.context_id and attr.ATTR_CONTEXT_ID not in all_attrs:
+                all_attrs[attr.ATTR_CONTEXT_ID] = trace_ctx.context_id
+            if trace_ctx.skill_id and attr.ATTR_SKILL_ID not in all_attrs:
+                all_attrs[attr.ATTR_SKILL_ID] = trace_ctx.skill_id
+            if trace_ctx.channel and attr.ATTR_CHANNEL not in all_attrs:
+                all_attrs[attr.ATTR_CHANNEL] = trace_ctx.channel
+            if trace_ctx.is_resume and attr.ATTR_IS_RESUME not in all_attrs:
+                all_attrs[attr.ATTR_IS_RESUME] = trace_ctx.is_resume
+
+        company_id: Optional[str] = None
+        namespace: Optional[str] = None
+        from core.context import get_context
+
+        app_ctx = get_context()
+        if app_ctx:
+            if app_ctx.active_company:
+                company_id = app_ctx.active_company.company_id
+            namespace = app_ctx.active_namespace
+            if company_id and attr.ATTR_TENANT_COMPANY_ID not in all_attrs:
+                all_attrs[attr.ATTR_TENANT_COMPANY_ID] = company_id
+            if namespace and attr.ATTR_TENANT_NAMESPACE not in all_attrs:
+                all_attrs[attr.ATTR_TENANT_NAMESPACE] = namespace
+
+        cid_attr = all_attrs.get(attr.ATTR_TENANT_COMPANY_ID)
+        if cid_attr is not None:
+            cid_str = str(cid_attr).strip()
+            if cid_str != "":
+                company_id = cid_str
+        ns_attr = all_attrs.get(attr.ATTR_TENANT_NAMESPACE)
+        if ns_attr is not None:
+            ns_str = str(ns_attr).strip()
+            if ns_str != "":
+                namespace = ns_str
+
+        channel_val = trace_ctx.channel if trace_ctx else all_attrs.get(attr.ATTR_CHANNEL)
 
         span_data = {
             "span_id": span_id,
@@ -122,20 +177,18 @@ class PlatformTracer:
             "duration_ms": duration_ms,
             "status": status,
             "status_message": status_message,
-            "user_id": trace_ctx.user_id if trace_ctx else None,
+            "service_name": _resolve_tracing_service_name(),
+            "company_id": company_id,
+            "namespace": namespace,
+            "user_id": trace_ctx.user_id if trace_ctx else all_attrs.get(attr.ATTR_USER_ID),
             "user_name": trace_ctx.user_name if trace_ctx else None,
             "user_groups": trace_ctx.user_groups if trace_ctx else None,
             "session_auth": trace_ctx.session_auth if trace_ctx else None,
             "session_agent": trace_ctx.session_agent if trace_ctx else None,
-            "flow_id": trace_ctx.flow_id if trace_ctx else all_attrs.get(attr.ATTR_FLOW_ID),
-            "task_id": trace_ctx.task_id if trace_ctx else all_attrs.get(attr.ATTR_TASK_ID),
-            "context_id": trace_ctx.context_id if trace_ctx else all_attrs.get(attr.ATTR_CONTEXT_ID),
-            "skill_id": trace_ctx.skill_id if trace_ctx else all_attrs.get(attr.ATTR_SKILL_ID),
-            "channel": trace_ctx.channel if trace_ctx else all_attrs.get(attr.ATTR_CHANNEL),
-            "node_id": all_attrs.get(attr.ATTR_NODE_ID),
-            "agent_name": all_attrs.get(attr.ATTR_AGENT_NAME)
-            or all_attrs.get(attr.ATTR_LLM_NODE_LABEL),
-            "is_resume": trace_ctx.is_resume if trace_ctx else all_attrs.get(attr.ATTR_IS_RESUME),
+            "channel": channel_val,
+            "event_type": all_attrs.get(attr.ATTR_EVENT_TYPE),
+            "resource_type": all_attrs.get(attr.ATTR_RESOURCE_TYPE),
+            "resource_id": all_attrs.get(attr.ATTR_RESOURCE_ID),
             "attributes": all_attrs,
             "events": None,
         }
@@ -256,6 +309,81 @@ class PlatformTracer:
                 yield span
             finally:
                 await self._save_span(span, f"flow.{flow_id}", "INTERNAL", start_time, trace_ctx)
+
+    @asynccontextmanager
+    async def resource_root_span(
+        self,
+        operation_name: str,
+        *,
+        resource_type: str,
+        resource_id: str,
+        event_type: str = "resource.session",
+        trace_ctx: Optional[TraceContext] = None,
+    ) -> AsyncGenerator[Span, None]:
+        """
+        Корневой span сущности (чат, сессия flow, заметка): дочерние spans через вложенные
+        context manager'ы PlatformTracer получают parent_span_id и общий trace_id (дерево OTEL).
+        Колонки event_type / resource_type / resource_id — выборки «журнал по сущности».
+        """
+        if not is_tracing_enabled():
+            yield trace.get_current_span()
+            return
+
+        start_time = datetime.now(timezone.utc)
+        attributes = self._base_attributes(trace_ctx)
+        attributes[attr.ATTR_RESOURCE_TYPE] = resource_type
+        attributes[attr.ATTR_RESOURCE_ID] = resource_id
+        attributes[attr.ATTR_EVENT_TYPE] = event_type
+
+        with self._otel_tracer.start_as_current_span(
+            name=operation_name,
+            kind=SpanKind.INTERNAL,
+            attributes=attributes,
+        ) as span:
+            try:
+                yield span
+            finally:
+                await self._save_span(span, operation_name, "INTERNAL", start_time, trace_ctx)
+
+    @asynccontextmanager
+    async def platform_operation_span(
+        self,
+        operation_name: str,
+        *,
+        event_type: Optional[str] = None,
+        resource_type: Optional[str] = None,
+        resource_id: Optional[str] = None,
+        trace_ctx: Optional[TraceContext] = None,
+        extra_attributes: Optional[Dict[str, Any]] = None,
+    ) -> AsyncGenerator[Span, None]:
+        """
+        Универсальный span значимой операции сервиса (RAG, Sync, CRM, …).
+        operation_name: стабильный идентификатор вида service.area.action.
+        """
+        if not is_tracing_enabled():
+            yield trace.get_current_span()
+            return
+
+        start_time = datetime.now(timezone.utc)
+        attributes = self._base_attributes(trace_ctx)
+        if event_type:
+            attributes[attr.ATTR_EVENT_TYPE] = event_type
+        if resource_type:
+            attributes[attr.ATTR_RESOURCE_TYPE] = resource_type
+        if resource_id:
+            attributes[attr.ATTR_RESOURCE_ID] = resource_id
+        if extra_attributes:
+            attributes.update(extra_attributes)
+
+        with self._otel_tracer.start_as_current_span(
+            name=operation_name,
+            kind=SpanKind.INTERNAL,
+            attributes=attributes,
+        ) as span:
+            try:
+                yield span
+            finally:
+                await self._save_span(span, operation_name, "INTERNAL", start_time, trace_ctx)
 
     @asynccontextmanager
     async def node_span(

@@ -29,8 +29,10 @@ from apps.sync.models.threads import ThreadCreate
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.handlers import execute_command
 from apps.sync.realtime.tasks import handle_command
+from apps.sync.container import get_sync_container
+from core.billing import set_billing_service
 from core.clients.stt_client import STTTranscriptionResult
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 
 
 def _cmd(
@@ -1776,6 +1778,29 @@ async def test_sync_transcribe_audio_message_task_marks_done(
     monkeypatch.setenv("STT__PROVIDER", "mock")
     monkeypatch.setenv("STT__MOCK_TRANSCRIPT_TEXT", "Привет из аудио")
     config_base._settings_instance = None
+
+    sync_container = get_sync_container()
+    set_billing_service(sync_container.billing_service)
+    co = await sync_container.company_repository.get(company_id)
+    if co is None:
+        await sync_container.company_repository.set(
+            Company(
+                company_id=company_id,
+                name=company_id,
+                owner_user_id="u1",
+                members={"u1": ["owner"]},
+                balance=1000.0,
+            )
+        )
+    await sync_user_repository.set(
+        User(
+            user_id="u1",
+            name="Transcribe Task User",
+            emails=["u1@t.local"],
+            companies={company_id: ["owner"]},
+            active_company_id=company_id,
+        )
+    )
 
     ch = SyncChannel(
         channel_id="ch_audio_task",

@@ -29,6 +29,11 @@
       "name": "office",
       "models_module": "apps.office.db.models",
       "database_url_key": "office_url"
+    },
+    {
+      "name": "tracing",
+      "models_module": "core.db.models.tracing",
+      "database_url_key": "tracing_url"
     }
   ],
   "postgres": {
@@ -38,7 +43,8 @@
       "platform_crm",
       "platform_sync",
       "platform_rag",
-      "platform_office"
+      "platform_office",
+      "platform_tracing"
     ],
     "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]
   }

@@ -42,7 +42,7 @@ from core.middleware.auth import AuthMiddleware
 from core.middleware.deployment_headers import DeploymentHeadersMiddleware
 from core.middleware.dev_inter_service_proxy import DevInterServiceProxyMiddleware
 from core.tracing import setup_tracing
-from core.tracing.tracer import set_span_repository
+from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.websocket.manager import notification_manager
 from core.websocket.router import router as ws_router
 from core.api.auth import router as core_auth_router
@@ -149,6 +149,11 @@ def create_service_app(
         if settings.tracing.enabled:
             setup_tracing(settings.tracing)
             if settings.tracing.postgres_enabled:
+                if not settings.database.tracing_url:
+                    raise ValueError(
+                        "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
+                    )
+                set_tracing_service_name(settings.server.name)
                 set_span_repository(container.span_repository)
             logger.info("Трейсинг инициализирован")
         

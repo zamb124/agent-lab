@@ -19,6 +19,8 @@ from apps.crm_worker.broker import broker
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.models.identity_models import Company, User
+from core.tracing import attributes as trace_attributes
+from core.tracing.operation_span import traced_operation
 from core.utils.tokens import TokenType, get_token_service
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -126,10 +128,20 @@ async def rebuild_daily_summary_task(
         user_id=user_id,
     )
     container = get_crm_container()
-    state = await container.entity_service.rebuild_daily_summary(
-        date_str=date_str,
-        namespace=namespace,
-    )
+    async with traced_operation(
+        "crm.worker.rebuild_daily_summary",
+        event_type="crm.worker",
+        operation_category="sync_command",
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            "platform.crm.summary_date": date_str,
+            "platform.crm.summary_namespace": namespace or "",
+        },
+    ):
+        state = await container.entity_service.rebuild_daily_summary(
+            date_str=date_str,
+            namespace=namespace,
+        )
     if state.get("revalidating") is False and state.get("stale") is False:
         await _notify_daily_summary_updated(
             company_id=company_id,
@@ -165,11 +177,21 @@ async def rebuild_period_summary_task(
         user_id=user_id,
     )
     container = get_crm_container()
-    state = await container.entity_service.rebuild_period_summary(
-        date_from=date_from,
-        date_to=date_to,
-        namespace=namespace,
-    )
+    async with traced_operation(
+        "crm.worker.rebuild_period_summary",
+        event_type="crm.worker",
+        operation_category="sync_command",
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            "platform.crm.period_from": date_from,
+            "platform.crm.period_to": date_to,
+        },
+    ):
+        state = await container.entity_service.rebuild_period_summary(
+            date_from=date_from,
+            date_to=date_to,
+            namespace=namespace,
+        )
     if state.get("revalidating") is False and state.get("stale") is False:
         await _notify_daily_summary_updated(
             company_id=company_id,

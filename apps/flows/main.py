@@ -12,7 +12,6 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from core.app import create_service_app
-from core.tracing.middleware import TracingMiddleware
 from core.context import set_context, clear_context
 from core.identity.system_bootstrap import (
     SYSTEM_ADMIN_EMAIL,
@@ -218,7 +217,6 @@ app = create_service_app(
             "same_site": "lax",
             "https_only": False,
         }),
-        (TracingMiddleware, {}),
     ],
     cors_origins=["*"],
     api_version="v1",

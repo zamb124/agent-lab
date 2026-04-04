@@ -119,6 +119,7 @@ services:
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
+      - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -149,6 +150,7 @@ services:
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
+      - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -174,6 +176,7 @@ services:
       - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
+      - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -216,6 +219,7 @@ services:
       - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
+      - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true

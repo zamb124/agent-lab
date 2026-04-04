@@ -32,7 +32,7 @@ async def idle_worker_startup(state: TaskiqState) -> None:
     from apps.flows.config import get_settings
     from apps.flows.src.container import get_container
     from core.tracing import setup_tracing
-    from core.tracing.tracer import set_span_repository
+    from core.tracing.tracer import set_span_repository, set_tracing_service_name
 
     settings = get_settings()
     setup_logging(service_name="idle_worker")
@@ -64,6 +64,11 @@ async def idle_worker_startup(state: TaskiqState) -> None:
     if settings.tracing.enabled:
         setup_tracing(settings.tracing)
         if settings.tracing.postgres_enabled and hasattr(container, "span_repository"):
+            if not settings.database.tracing_url:
+                raise ValueError(
+                    "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
+                )
+            set_tracing_service_name("idle_worker")
             set_span_repository(container.span_repository)
         logger.info("Idle worker: трейсинг инициализирован")
 

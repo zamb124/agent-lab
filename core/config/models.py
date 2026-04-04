@@ -66,6 +66,10 @@ class DatabaseConfig(BaseModel):
     sync_url: Optional[str] = None
     rag_url: Optional[str] = None
     office_url: Optional[str] = None
+    tracing_url: Optional[str] = Field(
+        default=None,
+        description="PostgreSQL platform_tracing (spans); отдельно от shared",
+    )
     redis_url: str = "redis://localhost:8099"
 
 

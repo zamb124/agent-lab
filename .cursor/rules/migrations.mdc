@@ -30,6 +30,7 @@ alwaysApply: false
 | sync    | platform_sync     | migrations/sync/      | DATABASE__SYNC_URL          |
 | rag     | platform_rag      | migrations/rag/       | DATABASE__RAG_URL           |
 | office  | platform_office   | migrations/office/    | DATABASE__OFFICE_URL        |
+| tracing | platform_tracing  | migrations/tracing/   | DATABASE__TRACING_URL       |
 
 **Таблицы по БД (важно для baseline и JOIN):**
 
@@ -37,10 +38,11 @@ alwaysApply: false
 - **platform_crm**: реляционные CRM-таблицы плюс **`vector_documents`** (pgvector) для `JOIN crm_entities` при семантическом поиске; дубли по смыслу с RAG не смешиваются: RAG-документы живут в **platform_rag**, сущности CRM — в **platform_crm**.
 - **platform_rag**: `document_processing_status`, `vector_documents` для пайплайна RAG.
 - **platform_office**: `office_document_bindings` — привязки файлов Office к `company_id` и namespace (BFF).
+- **platform_tracing**: только **`spans`** (OpenTelemetry + журнал по сущности); не shared. См. **`tracing.mdc`**.
 
 У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Физические БД **не** создаёт Alembic; при деплое после `postgres up` выполняется идемпотентный `migrations/postgres/bootstrap_idempotent.sql` (на случай, если первый init кластера не создал сервисные БД).
 
-Если в `init.sql` позже добавили новую БД (например `platform_office`), а том Postgres dev **уже существовал**, entrypoint-initdb **не** выполнится снова — будет `database "platform_office" does not exist`. Локально: **`make dev-bootstrap-postgres`** (прогоняет `bootstrap_idempotent.sql` в контейнере `agentlab_postgres_dev`) или вручную `psql` с тем же файлом.
+Если в `init.sql` позже добавили новую БД (например `platform_office` или `platform_tracing`), а том Postgres dev **уже существовал**, entrypoint-initdb **не** выполнится снова — будет `database "…" does not exist`. Локально: **`make dev-bootstrap-postgres`** (прогоняет `bootstrap_idempotent.sql` в контейнере `agentlab_postgres_dev`) или вручную `psql` с тем же файлом.
 
 ## PostgreSQL и pgvector
 
@@ -65,6 +67,7 @@ migrations/
 ├── sync/
 ├── rag/
 ├── office/
+├── tracing/
 └── _legacy_removed/
 ```
 

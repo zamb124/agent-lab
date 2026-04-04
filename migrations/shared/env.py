@@ -1,7 +1,7 @@
 """
 Alembic env для shared БД.
 
-Управляет таблицами: storage, users, variables, usage, namespaces, spans, push_subscriptions.
+Управляет таблицами: storage, users, variables, usage, namespaces, push_subscriptions.
 """
 
 import asyncio
@@ -17,7 +17,7 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from core.db.models.platform import (  # noqa: F401 — регистрируют таблицы в Base.metadata
-    Base, Storage, Users, Variables, Usage, Namespaces, Spans, PushSubscription,
+    Base, Storage, Users, Variables, Usage, Namespaces, PushSubscription,
     CalendarEventRecord, CalendarIntegrationRecord, SchedulerTaskRecord,
 )
 
@@ -31,7 +31,7 @@ target_metadata = Base.metadata
 
 MANAGED_TABLES = {
     "storage", "users", "variables", "usage",
-    "namespaces", "spans", "push_subscriptions",
+    "namespaces", "push_subscriptions",
     "calendar_events", "calendar_integrations", "scheduler_tasks",
 }
 

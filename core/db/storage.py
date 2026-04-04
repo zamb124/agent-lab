@@ -22,8 +22,7 @@ from core.db.models import (
     Users as UsersModel,
     Variables as VariablesModel,
     Usage as UsageModel,
-    Spans as SpansModel,
-    Namespaces as NamespacesModel
+    Namespaces as NamespacesModel,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,6 @@ TABLE_MODELS = {
     "users": UsersModel,
     "variables": VariablesModel,
     "usage": UsageModel,
-    "spans": SpansModel,
     "namespaces": NamespacesModel,
 }
 

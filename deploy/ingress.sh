@@ -2,12 +2,13 @@
 # Настройка MicroK8s Ingress + cert-manager (Let's Encrypt) на сервере.
 #
 # Архитектура:
-#   domain.com/         → frontend  (8002)
-#   domain.com/agents   → agents    (8001)
-#   domain.com/crm      → crm       (8003)
-#   domain.com/rag      → rag       (8004)
-#   domain.com/sync     → sync      (8005, websocket)
-#   *.domain.com/*      → те же правила (поддомены компаний)
+#   domain.com/            → frontend  (8002)
+#   domain.com/agents      → agents    (8001)
+#   domain.com/crm         → crm       (8003)
+#   domain.com/rag         → rag       (8004)
+#   domain.com/sync        → sync      (8005, websocket)
+#   domain.com/documents   → office    (8008, BFF «Документы» + OnlyOffice BFF)
+#   *.domain.com/*         → те же правила (поддомены компаний)
 #
 # Конфиг в conf.local.json:
 #   "selectel": { "ip": "...", "login": "...", "ssh_port": "22" }
@@ -15,13 +16,16 @@
 #     "domain": "humanitec.ru",
 #     "email": "admin@humanitec.ru",
 #     "services": [
-#       {"name": "frontend", "port": 8002, "path": "/",      "websocket": false},
-#       {"name": "agents",   "port": 8001, "path": "/flows","websocket": false},
-#       {"name": "crm",      "port": 8003, "path": "/crm",   "websocket": false},
-#       {"name": "rag",      "port": 8004, "path": "/rag",   "websocket": false},
-#       {"name": "sync",     "port": 8005, "path": "/sync",  "websocket": true}
-#     ]
+#       {"name": "frontend", "port": 8002, "path": "/",         "websocket": false},
+#       {"name": "agents",   "port": 8001, "path": "/flows",   "websocket": false},
+#       {"name": "crm",      "port": 8003, "path": "/crm",     "websocket": false},
+#       {"name": "rag",      "port": 8004, "path": "/rag",     "websocket": false},
+#       {"name": "sync",     "port": 8005, "path": "/sync",    "websocket": true},
+#       {"name": "office",   "port": 8008, "path": "/documents","websocket": false}
+#     ],
+#     "wildcard_tls_secret": "humanitec-ru-wildcard-tls"
 #   }
+#   wildcard_tls_secret — опционально; иначе ищется секрет *-wildcard-tls в namespace default.
 #
 # Запуск: bash deploy/ingress.sh
 
@@ -62,9 +66,12 @@ log "IP хоста: ${HOST_IP}"
 log "Проверяем cert-manager"
 ${SSH} "microk8s kubectl get namespace cert-manager >/dev/null 2>&1 || (microk8s enable cert-manager && microk8s kubectl wait --for=condition=ready pod -l app=cert-manager -n cert-manager --timeout=120s)"
 
-# ClusterIssuer
-log "ClusterIssuer (Let's Encrypt)"
-${SSH} "microk8s kubectl apply -f -" <<EOF
+# ClusterIssuer: не перезаписываем существующий — иначе сбрасываются DNS-01 / доп. solvers для wildcard.
+if ${SSH} "microk8s kubectl get clusterissuer letsencrypt >/dev/null 2>&1"; then
+  log "ClusterIssuer letsencrypt уже есть — не трогаем (wildcard/DNS-01 сохраняются)"
+else
+  log "ClusterIssuer (Let's Encrypt, только HTTP-01 — для apex)"
+  ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -80,6 +87,7 @@ spec:
         ingress:
           class: public
 EOF
+fi
 
 # Services + Endpoints для каждого сервиса
 log "Создаём Services и Endpoints"
@@ -127,9 +135,43 @@ build_paths() {
 
 PATHS="$(build_paths)"
 
-# Ingress: TLS только на apex. Wildcard *.domain в одном Certificate с HTTP-01 выдать нельзя
-# (нужен DNS-01) — иначе заказ ACME зависает в pending без Secret. Поддомены компаний: см. deploy/wildcard-tls.md
+# Ingress TLS: apex + опционально wildcard для *.domain (тот же секрет, что вручную или DNS-01).
+# Раньше в манифесте был только apex — kubectl apply затирал второй tls-блок и ломал поддомены.
+# Wildcard: см. deploy/wildcard-tls.sh / DNS-01; имя секрета — ingress.wildcard_tls_secret или авто-поиск.
 TLS_SECRET="$(echo "${DOMAIN}" | tr '.' '-')-tls"
+WILDCARD_TLS_SECRET="$(jq -r '.ingress.wildcard_tls_secret // empty' "${CONF_LOCAL_JSON}" 2>/dev/null || true)"
+if [[ -z "${WILDCARD_TLS_SECRET}" ]]; then
+  _DOMAIN_DASH_TLS="$(echo "${DOMAIN}" | tr '.' '-')"
+  for _cand in "${_DOMAIN_DASH_TLS}-wildcard-tls" "wildcard-${_DOMAIN_DASH_TLS}-tls" "${_DOMAIN_DASH_TLS}-star-tls"; do
+    if ${SSH} "microk8s kubectl get secret ${_cand} -n default >/dev/null 2>&1"; then
+      WILDCARD_TLS_SECRET="${_cand}"
+      break
+    fi
+  done
+fi
+
+if [[ -n "${WILDCARD_TLS_SECRET}" ]]; then
+  log "Ingress TLS: apex ${TLS_SECRET} + wildcard *.${DOMAIN} → ${WILDCARD_TLS_SECRET}"
+  TLS_SPEC=$(cat <<EOFTLS
+  tls:
+  - hosts:
+    - ${DOMAIN}
+    secretName: ${TLS_SECRET}
+  - hosts:
+    - "*.${DOMAIN}"
+    secretName: ${WILDCARD_TLS_SECRET}
+EOFTLS
+)
+else
+  log "Ingress TLS: только apex ${TLS_SECRET} (wildcard-секрет в default не найден — поддомены без отдельного TLS)"
+  TLS_SPEC=$(cat <<EOFTLS
+  tls:
+  - hosts:
+    - ${DOMAIN}
+    secretName: ${TLS_SECRET}
+EOFTLS
+)
+fi
 
 log "Создаём Ingress для ${DOMAIN} и *.${DOMAIN}"
 ${SSH} "microk8s kubectl apply -f -" <<EOF
@@ -148,10 +190,7 @@ metadata:
       proxy_set_header Connection "upgrade";
 spec:
   ingressClassName: public
-  tls:
-  - hosts:
-    - ${DOMAIN}
-    secretName: ${TLS_SECRET}
+${TLS_SPEC}
   rules:
   - host: ${DOMAIN}
     http:

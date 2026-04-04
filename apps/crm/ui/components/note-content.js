@@ -1792,12 +1792,14 @@ export class NoteContent extends PlatformElement {
     _emitSaveNote() {
         const title = this._draftTitle.trim();
         if (title.length === 0) {
-            throw new Error(this.i18n.t('note_content.err_empty_title'));
+            this.error(this.i18n.t('note_content.err_empty_title'));
+            return;
         }
         const subtype = this._draftSubtype.trim();
         const noteDate = this._draftNoteDate.trim();
         if (noteDate.length === 0) {
-            throw new Error(this.i18n.t('note_content.err_no_date'));
+            this.error(this.i18n.t('note_content.err_no_date'));
+            return;
         }
         this.emit('save-note', {
             noteId: this.note.entity_id,

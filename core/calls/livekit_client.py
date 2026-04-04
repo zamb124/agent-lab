@@ -22,6 +22,9 @@ from livekit.api import (
 )
 from livekit.protocol.egress import EgressInfo, ListEgressRequest
 
+from core.tracing import attributes as trace_attributes
+from core.tracing.operation_span import traced_operation
+
 
 class LiveKitClient:
     """Тонкая обёртка над livekit-api SDK для управления SFU-комнатами."""
@@ -46,13 +49,31 @@ class LiveKitClient:
 
     async def create_room(self, room_name: str) -> None:
         """Создаёт LiveKit комнату. Если уже существует — не ошибка."""
-        async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
-            await api.room.create_room(CreateRoomRequest(name=room_name))
+        async with traced_operation(
+            "livekit.room.create",
+            event_type="livekit.room",
+            operation_category="livekit",
+            extra_attributes={
+                trace_attributes.ATTR_LIVEKIT_OPERATION: "create_room",
+                trace_attributes.ATTR_LIVEKIT_ROOM: room_name,
+            },
+        ):
+            async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
+                await api.room.create_room(CreateRoomRequest(name=room_name))
 
     async def delete_room(self, room_name: str) -> None:
         """Удаляет LiveKit комнату."""
-        async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
-            await api.room.delete_room(DeleteRoomRequest(room=room_name))
+        async with traced_operation(
+            "livekit.room.delete",
+            event_type="livekit.room",
+            operation_category="livekit",
+            extra_attributes={
+                trace_attributes.ATTR_LIVEKIT_OPERATION: "delete_room",
+                trace_attributes.ATTR_LIVEKIT_ROOM: room_name,
+            },
+        ):
+            async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
+                await api.room.delete_room(DeleteRoomRequest(room=room_name))
 
     async def list_egress(
         self,
@@ -122,8 +143,22 @@ class LiveKitClient:
                 )
             ],
         )
-        async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
-            return await api.egress.start_room_composite_egress(request)
+        async with traced_operation(
+            "livekit.egress.room_composite_s3",
+            event_type="livekit.egress",
+            operation_category="livekit_egress",
+            extra_attributes={
+                trace_attributes.ATTR_LIVEKIT_OPERATION: "start_room_composite_egress",
+                trace_attributes.ATTR_LIVEKIT_ROOM: room_name,
+                "platform.livekit.audio_only": audio_only,
+            },
+        ) as span:
+            async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
+                info = await api.egress.start_room_composite_egress(request)
+            eid = getattr(info, "egress_id", None) or ""
+            if eid:
+                span.set_attribute(trace_attributes.ATTR_LIVEKIT_EGRESS_ID, eid)
+            return info
 
     async def start_track_composite_segmented_audio_to_s3(
         self,
@@ -183,10 +218,24 @@ class LiveKitClient:
                 audio_bitrate=128,
             ),
         )
-        if api is not None:
-            return await api.egress.start_track_composite_egress(request)
-        async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as inner:
-            return await inner.egress.start_track_composite_egress(request)
+        async with traced_operation(
+            "livekit.egress.track_composite_segmented",
+            event_type="livekit.egress",
+            operation_category="livekit_egress",
+            extra_attributes={
+                trace_attributes.ATTR_LIVEKIT_ROOM: room_name,
+                "platform.livekit.audio_track_id": audio_track_id,
+            },
+        ) as span:
+            if api is not None:
+                info = await api.egress.start_track_composite_egress(request)
+            else:
+                async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as inner:
+                    info = await inner.egress.start_track_composite_egress(request)
+            eid = getattr(info, "egress_id", None) or ""
+            if eid:
+                span.set_attribute(trace_attributes.ATTR_LIVEKIT_EGRESS_ID, eid)
+            return info
 
     async def stop_egress(
         self, *, egress_id: str, api: LiveKitAPI | None = None
@@ -195,10 +244,16 @@ class LiveKitClient:
         if egress_id == "":
             raise ValueError("egress_id обязателен для stop_egress.")
         request = StopEgressRequest(egress_id=egress_id)
-        if api is not None:
-            return await api.egress.stop_egress(request)
-        async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as inner:
-            return await inner.egress.stop_egress(request)
+        async with traced_operation(
+            "livekit.egress.stop",
+            event_type="livekit.egress",
+            operation_category="livekit_egress",
+            extra_attributes={trace_attributes.ATTR_LIVEKIT_EGRESS_ID: egress_id},
+        ):
+            if api is not None:
+                return await api.egress.stop_egress(request)
+            async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as inner:
+                return await inner.egress.stop_egress(request)
 
     def generate_token(self, *, room_name: str, identity: str, can_publish: bool = True) -> str:
         """

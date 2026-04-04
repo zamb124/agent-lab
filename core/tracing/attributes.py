@@ -4,6 +4,15 @@ Semantic Conventions для Platform трейсинга.
 Все атрибуты имеют префикс 'platform.' для namespace изоляции.
 """
 
+# Журнал по сущности (дублируются в колонках spans при сохранении, плюс иерархия OTEL)
+ATTR_EVENT_TYPE = "platform.event_type"
+ATTR_RESOURCE_TYPE = "platform.resource.type"
+ATTR_RESOURCE_ID = "platform.resource.id"
+
+ATTR_TENANT_COMPANY_ID = "platform.tenant.company_id"
+ATTR_TENANT_NAMESPACE = "platform.tenant.namespace"
+ATTR_SERVICE_NAME = "platform.service_name"
+
 # Идентификаторы пользователя
 ATTR_USER_ID = "platform.user.id"
 ATTR_USER_NAME = "platform.user.name"
@@ -76,6 +85,33 @@ ATTR_FILES_COUNT = "platform.files.count"
 
 # State
 ATTR_STATE_SNAPSHOT = "platform.state.snapshot"
+
+# Биллинг / SaaS (связь с UsageType и resource_name в metadata usage)
+ATTR_BILLING_USAGE_TYPE = "platform.billing.usage_type"
+ATTR_BILLING_RESOURCE_NAME = "platform.billing.resource_name"
+ATTR_OPERATION_CATEGORY = "platform.operation.category"
+
+# RAG / embeddings
+ATTR_EMBED_MODEL = "platform.embed.model"
+ATTR_EMBED_BATCH_SIZE = "platform.embed.batch_size"
+ATTR_EMBED_TEXT_COUNT = "platform.embed.text_count"
+ATTR_RAG_DOCUMENT_ID = "platform.rag.document_id"
+ATTR_RAG_STAGE = "platform.rag.stage"
+
+# Sync / STT / calls
+ATTR_SYNC_COMMAND_TYPE = "platform.sync.command_type"
+ATTR_STT_PROVIDER = "platform.stt.provider"
+ATTR_STT_AUDIO_BYTES = "platform.stt.audio_bytes"
+ATTR_STT_CHUNK_COUNT = "platform.stt.chunk_count"
+ATTR_LIVEKIT_OPERATION = "platform.livekit.operation"
+ATTR_LIVEKIT_ROOM = "platform.livekit.room_name"
+ATTR_LIVEKIT_EGRESS_ID = "platform.livekit.egress_id"
+ATTR_CALL_ID = "platform.call.id"
+ATTR_CHANNEL_ID = "platform.sync.channel_id"
+
+# CRM
+ATTR_CRM_QUERY_MODE = "platform.crm.query_mode"
+ATTR_CRM_ENTITY_TYPE = "platform.crm.entity_type"
 
 # Prompt
 ATTR_PROMPT_NODE_ID = "platform.prompt.node_id"

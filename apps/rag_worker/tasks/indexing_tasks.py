@@ -8,6 +8,8 @@ from apps.rag_worker.broker import broker
 from core.rag.factory import get_default_rag_provider
 from core.logging import get_logger
 from apps.rag.container import get_rag_container
+from core.tracing import attributes as trace_attributes
+from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
 
@@ -36,31 +38,43 @@ async def upload_document_task(
     container = get_rag_container()
     status_repo = container.document_status_repository
 
-    provider = get_default_rag_provider()
-    document = await provider.upload_document_from_s3(
-        namespace_id=namespace_id,
-        s3_key=s3_key,
-        document_name=document_name,
-        metadata=metadata,
-    )
+    async with traced_operation(
+        "rag.worker.index.upload_s3",
+        event_type="rag.ingest",
+        operation_category="rag_ingest",
+        resource_type="rag.namespace",
+        resource_id=namespace_id,
+        extra_attributes={
+            trace_attributes.ATTR_RAG_STAGE: "upload_from_s3",
+            "platform.rag.document_name": document_name,
+            "platform.rag.s3_key": s3_key,
+        },
+    ):
+        provider = get_default_rag_provider()
+        document = await provider.upload_document_from_s3(
+            namespace_id=namespace_id,
+            s3_key=s3_key,
+            document_name=document_name,
+            metadata=metadata,
+        )
 
-    logger.info(
-        f"RAG Worker: документ {document_name} проиндексирован, document_id={document.document_id}"
-    )
+        logger.info(
+            f"RAG Worker: документ {document_name} проиндексирован, document_id={document.document_id}"
+        )
 
-    await status_repo.update_status(
-        document.document_id,
-        "completed",
-        s3_key=s3_key,
-        s3_bucket=metadata.get("s3_bucket"),
-    )
+        await status_repo.update_status(
+            document.document_id,
+            "completed",
+            s3_key=s3_key,
+            s3_bucket=metadata.get("s3_bucket"),
+        )
 
-    return {
-        "document_id": document.document_id,
-        "document_name": document_name,
-        "namespace": namespace_id,
-        "status": "completed",
-    }
+        return {
+            "document_id": document.document_id,
+            "document_name": document_name,
+            "namespace": namespace_id,
+            "status": "completed",
+        }
 
 
 @broker.task(retry_on_error=True, max_retries=3, queue_name="rag")
@@ -77,19 +91,27 @@ async def delete_document_task(namespace_id: str, document_id: str) -> Dict[str,
     """
     logger.info(f"RAG Worker: удаление документа {document_id} из namespace {namespace_id}")
 
-    provider = get_default_rag_provider()
-    success = await provider.delete_document(namespace_id, document_id)
+    async with traced_operation(
+        "rag.worker.index.delete",
+        event_type="rag.delete",
+        operation_category="rag_ingest",
+        resource_type="rag.document",
+        resource_id=document_id,
+        extra_attributes={"platform.rag.namespace_id": namespace_id},
+    ):
+        provider = get_default_rag_provider()
+        success = await provider.delete_document(namespace_id, document_id)
 
-    if success:
-        logger.info(f"RAG Worker: документ {document_id} удален")
-    else:
-        logger.warning(f"RAG Worker: не удалось удалить документ {document_id}")
+        if success:
+            logger.info(f"RAG Worker: документ {document_id} удален")
+        else:
+            logger.warning(f"RAG Worker: не удалось удалить документ {document_id}")
 
-    return {
-        "document_id": document_id,
-        "namespace": namespace_id,
-        "deleted": success,
-    }
+        return {
+            "document_id": document_id,
+            "namespace": namespace_id,
+            "deleted": success,
+        }
 
 
 @broker.task(retry_on_error=True, max_retries=3, queue_name="rag")
@@ -122,32 +144,45 @@ async def process_document_upload(
     await status_repo.update_status(document_id, "processing")
     logger.info(f"RAG Worker: статус -> processing для {document_id}")
 
-    provider = get_default_rag_provider()
+    async with traced_operation(
+        "rag.worker.ingest.full",
+        event_type="rag.ingest",
+        operation_category="rag_ingest",
+        resource_type="rag.document",
+        resource_id=document_id,
+        extra_attributes={
+            trace_attributes.ATTR_RAG_DOCUMENT_ID: document_id,
+            trace_attributes.ATTR_RAG_STAGE: "upload_parse_index",
+            "platform.rag.namespace_id": namespace_id,
+            "platform.rag.file_bytes": len(file_data),
+        },
+    ):
+        provider = get_default_rag_provider()
 
-    s3_key, bucket = await provider._upload_bytes_to_s3(file_data, namespace_id, document_name)
-    logger.info(f"RAG Worker: файл загружен в S3: {s3_key}")
+        s3_key, bucket = await provider._upload_bytes_to_s3(file_data, namespace_id, document_name)
+        logger.info(f"RAG Worker: файл загружен в S3: {s3_key}")
 
-    document = await provider.upload_document_from_s3(
-        namespace_id=namespace_id,
-        s3_key=s3_key,
-        document_name=document_name,
-        metadata={**metadata, "document_id": document_id},
-    )
-    logger.info(f"RAG Worker: документ проиндексирован: {document.document_id}")
+        document = await provider.upload_document_from_s3(
+            namespace_id=namespace_id,
+            s3_key=s3_key,
+            document_name=document_name,
+            metadata={**metadata, "document_id": document_id},
+        )
+        logger.info(f"RAG Worker: документ проиндексирован: {document.document_id}")
 
-    chunks_count = document.metadata.get("total_chunks")
-    await status_repo.update_status(
-        document_id,
-        "completed",
-        s3_key=s3_key,
-        s3_bucket=bucket,
-        chunks_count=chunks_count,
-    )
-    logger.info(f"RAG Worker: документ {document_id} обработан")
+        chunks_count = document.metadata.get("total_chunks")
+        await status_repo.update_status(
+            document_id,
+            "completed",
+            s3_key=s3_key,
+            s3_bucket=bucket,
+            chunks_count=chunks_count,
+        )
+        logger.info(f"RAG Worker: документ {document_id} обработан")
 
-    return {
-        "document_id": document_id,
-        "status": "completed",
-        "s3_key": s3_key,
-        "chunks_count": chunks_count,
-    }
+        return {
+            "document_id": document_id,
+            "status": "completed",
+            "s3_key": s3_key,
+            "chunks_count": chunks_count,
+        }

@@ -37,7 +37,7 @@ from core.clients.llm import setup_mock_responses
 from core.logging import get_logger
 from core.tracing import setup_tracing
 from core.tracing.config import TracingConfig
-from core.tracing.tracer import set_span_repository
+from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.tracing.provider import set_tracing_enabled
 
 logger = get_logger(__name__)
@@ -87,6 +87,7 @@ def enable_tracing_for_test(container):
         service_name="platform-test",
     )
     setup_tracing(config)
+    set_tracing_service_name("platform-test")
     set_span_repository(container.span_repository)
     set_tracing_enabled(True)
     

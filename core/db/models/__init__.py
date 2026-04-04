@@ -11,12 +11,12 @@ from core.db.models.platform import (
     Variables,
     Usage,
     Namespaces,
-    Spans,
     PushSubscription,
     CalendarEventRecord,
     CalendarIntegrationRecord,
     SchedulerTaskRecord,
 )
+from core.db.models.tracing import Spans
 from core.db.models.rag import (
     DocumentProcessingStatus,
     VectorDocument,

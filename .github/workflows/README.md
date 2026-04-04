@@ -79,6 +79,8 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+В **`conf.local.json`** на машине, с которой запускают **`deploy/ingress.sh`**, в **`ingress.services`** обязательно добавить **`office`** с **`"path": "/documents"`** и **`"port": 8008`**, иначе **`/documents`** не попадёт в BFF и пользователь увидит платформенный 404.
+
 ## Postgres: `migrations/postgres/init.sql`
 
 Compose монтирует этот путь в `agentlab_postgres` как `/docker-entrypoint-initdb.d/01-init-databases.sql`. При **первом** создании тома данных выполняется SQL: дополнительные БД (`platform_agents`, …) и `CREATE EXTENSION vector` там, где нужно.

@@ -34,7 +34,7 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     from apps.flows.config import get_settings
     from apps.flows.src.container import get_container
     from core.tracing import setup_tracing
-    from core.tracing.tracer import set_span_repository
+    from core.tracing.tracer import set_span_repository, set_tracing_service_name
 
     settings = get_settings()
     setup_logging(service_name=service_name)
@@ -66,6 +66,11 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     if settings.tracing.enabled:
         setup_tracing(settings.tracing)
         if settings.tracing.postgres_enabled and hasattr(container, "span_repository"):
+            if not settings.database.tracing_url:
+                raise ValueError(
+                    "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
+                )
+            set_tracing_service_name("flows_worker")
             set_span_repository(container.span_repository)
         logger.info("Worker: трейсинг инициализирован")
 

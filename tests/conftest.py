@@ -317,12 +317,56 @@ async def _office_schema_ready(office_db_url: str) -> bool:
         await engine.dispose()
 
 
+async def _tracing_schema_ready(tracing_db_url: str) -> bool:
+    """platform_tracing: таблица spans (миграции tracing)."""
+    if not tracing_db_url or not tracing_db_url.strip():
+        return True
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(tracing_db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            row = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'spans'
+                    """
+                )
+            )
+            return (row.scalar() or 0) == 1
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
+async def _ensure_postgres_database(admin_url: str, database_name: str) -> None:
+    """CREATE DATABASE на том же инстансе, если базы ещё нет (admin_url → обычно …/postgres)."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(admin_url, echo=False, isolation_level="AUTOCOMMIT")
+    async with engine.connect() as conn:
+        chk = await conn.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"),
+            {"name": database_name},
+        )
+        if chk.first() is None:
+            await conn.execute(text(f'CREATE DATABASE "{database_name}"'))
+    await engine.dispose()
+
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_database_before_tests():
     """
     Глобальная фикстура для подготовки БД перед запуском тестов.
     Если shared/crm и прочие проверки ОК и в platform_office актуальная схема (bindings + catalog_id + каталоги) —
     пропуск. Если только office отстаёт — upgrade для сервиса office без дропа shared.
+    Если только platform_tracing отстаёт — upgrade для сервиса tracing.
     Иначе под блокировкой: дроп таблиц shared и полный upgrade.
     """
     from sqlalchemy.ext.asyncio import create_async_engine
@@ -349,6 +393,14 @@ async def setup_database_before_tests():
     shared_db_url = os.environ.get("DATABASE__SHARED_URL", TEST_DATABASE_ENV["DATABASE__SHARED_URL"])
     crm_db_url = os.environ.get("DATABASE__CRM_URL", TEST_DATABASE_ENV["DATABASE__CRM_URL"])
     office_db_url = os.environ.get("DATABASE__OFFICE_URL", TEST_DATABASE_ENV["DATABASE__OFFICE_URL"])
+    tracing_db_url = os.environ.get(
+        "DATABASE__TRACING_URL",
+        TEST_DATABASE_ENV.get("DATABASE__TRACING_URL", ""),
+    )
+
+    if tracing_db_url:
+        admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
+        await _ensure_postgres_database(admin_url, "platform_tracing")
 
     async def _core_ready() -> bool:
         return (
@@ -360,8 +412,9 @@ async def setup_database_before_tests():
 
     core_ok = await _core_ready()
     office_ok = await _office_schema_ready(office_db_url)
+    tracing_ok = await _tracing_schema_ready(tracing_db_url) if tracing_db_url else True
 
-    if core_ok and office_ok:
+    if core_ok and office_ok and tracing_ok:
         print("БД уже подготовлена (alembic_version есть, одна ревизия), пропуск дропа и миграций.\n")
         yield
     else:
@@ -369,8 +422,18 @@ async def setup_database_before_tests():
         with lock:
             core_ok = await _core_ready()
             office_ok = await _office_schema_ready(office_db_url)
-            if core_ok and office_ok:
+            tracing_ok = await _tracing_schema_ready(tracing_db_url) if tracing_db_url else True
+            if core_ok and office_ok and tracing_ok:
                 print("БД подготовлена другим процессом, пропуск.\n")
+                yield
+            elif core_ok and office_ok and not tracing_ok:
+                print("Догрузка миграций сервиса tracing (platform_tracing)...")
+                from core.db.migration_manifest import bootstrap_migration_registry
+                from core.db.migrations import run_migrations_async
+
+                bootstrap_migration_registry()
+                await run_migrations_async(service="tracing")
+                print("Миграции tracing применены!\n")
                 yield
             elif core_ok and not office_ok:
                 print("Догрузка миграций сервиса office (platform_office)...")

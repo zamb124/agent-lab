@@ -13,6 +13,7 @@ x-common-env: &common-env
   DATABASE__SYNC_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_sync
   DATABASE__RAG_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_rag
   DATABASE__OFFICE_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_office
+  DATABASE__TRACING_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_tracing
   DATABASE__REDIS_URL: redis://redis:6379/0
   DATABASE__AUTO_MIGRATE: "false"
   TASKS__BROKER_URL: redis://redis:6379/1

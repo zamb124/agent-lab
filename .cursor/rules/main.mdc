@@ -245,6 +245,7 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 - **Терминология:** исполняемая сущность — **flow** (`flow_id`), тип ноды с LLM — **`llm_node`** (не `react_node`); пользователь — **`user_id`**. **`domain_naming.mdc`**.
 - **Уведомления:** только `notify_user` из `core.websocket.publisher`; персистентное хранилище уведомлений в БД не используем. **`notifications.mdc`**, показ в UI — **`frontend.mdc`**.
 - **Scheduler:** control-plane в `apps/scheduler`; вызов из кода других сервисов — только через `core/clients/scheduler_client.py`, не прямой `httpx`; изоляция по `company_id`. **`taskiq.mdc`**.
+- **Трейсинг:** OTEL `trace_id` + `parent_span_id`, БД `platform_tracing`, корневой span сущности через `resource_root_span`. **`tracing.mdc`**.
 
 ## Навигация по правилам
 
@@ -275,3 +276,4 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | Уведомления | `notifications.mdc` |
 | Миграции БД | `migrations.mdc` |
 | Доменные имена (flow, user_id) | `domain_naming.mdc` |
+| Трейсинг, spans, platform_tracing | `tracing.mdc` |

@@ -155,6 +155,18 @@ class BaseContainer:
         from core.db.storage import Storage
         from core.context import get_context
         return Storage(db_url=self.shared_db_url, get_context_func=get_context)
+
+    @lazy
+    def tracing_storage(self):
+        """Storage только для platform_tracing (spans), не shared."""
+        from core.db.storage import Storage
+        from core.context import get_context
+        from core.config import get_settings
+
+        url = get_settings().database.tracing_url
+        if not url:
+            raise ValueError("DATABASE__TRACING_URL не задан в конфигурации")
+        return Storage(db_url=url, get_context_func=get_context)
     
     # === Репозитории (shared БД) ===
     
@@ -268,9 +280,9 @@ class BaseContainer:
     
     @lazy
     def span_repository(self):
-        """SpanRepository для сохранения трейсов в shared БД"""
+        """SpanRepository для platform_tracing (отдельная БД)."""
         from core.tracing.repository import SpanRepository
-        return SpanRepository(storage=self.shared_storage)
+        return SpanRepository(storage=self.tracing_storage)
     
     @lazy
     def push_subscription_repository(self):
