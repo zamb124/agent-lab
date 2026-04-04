@@ -5,6 +5,7 @@ import { AppEvents } from '../lib/utils/types.js';
 
 const STORAGE_WEB_PUSH_ENDPOINT = 'humanitec_web_push_endpoint';
 const STORAGE_IOS_DEVICE_TOKEN = 'humanitec_ios_device_token_posted';
+const STORAGE_DEPLOYMENT_VERSION = 'humanitec_deployment_version';
 
 export class PWAService {
     constructor(baseUrl = '') {
@@ -29,6 +30,63 @@ export class PWAService {
         });
     }
 
+    _healthUrl() {
+        const trimmed = (this.baseUrl || '').trim().replace(/\/$/, '');
+        return trimmed ? `${trimmed}/health` : '/health';
+    }
+
+    /**
+     * Сравнивает `deployment_version` из GET {baseUrl}/health с localStorage; при смене релиза — сброс SW и Cache Storage.
+     * @returns {Promise<boolean>} true, если вызвана перезагрузка страницы
+     */
+    async _syncDeploymentAndMaybeResetClient() {
+        let res;
+        try {
+            res = await fetch(this._healthUrl(), {
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+        } catch (e) {
+            console.warn('[PWA] health недоступен, пропуск проверки версии деплоя:', e);
+            return false;
+        }
+        if (!res.ok) {
+            console.warn('[PWA] health вернул', res.status, '— пропуск проверки версии деплоя');
+            return false;
+        }
+        let data;
+        try {
+            data = await res.json();
+        } catch (e) {
+            console.warn('[PWA] Некорректный JSON health, пропуск проверки версии:', e);
+            return false;
+        }
+        const current = data.deployment_version;
+        if (typeof current !== 'string' || current.length === 0) {
+            return false;
+        }
+        const stored = localStorage.getItem(STORAGE_DEPLOYMENT_VERSION);
+        if (stored !== null && stored !== current) {
+            console.log('[PWA] Новый релиз:', current, '(было:', stored, ') — сброс SW и кэшей');
+            await this._unregisterAllServiceWorkersAndClearCaches();
+            localStorage.setItem(STORAGE_DEPLOYMENT_VERSION, current);
+            window.location.reload();
+            return true;
+        }
+        localStorage.setItem(STORAGE_DEPLOYMENT_VERSION, current);
+        return false;
+    }
+
+    async _unregisterAllServiceWorkersAndClearCaches() {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+        if (!('caches' in window)) {
+            return;
+        }
+        const keys = await caches.keys();
+        await Promise.all(keys.map((name) => caches.delete(name)));
+    }
+
     /**
      * Инициализация PWA - регистрация Service Worker
      */
@@ -39,10 +97,18 @@ export class PWAService {
         }
 
         try {
+            const reloadPending = await this._syncDeploymentAndMaybeResetClient();
+            if (reloadPending) {
+                return false;
+            }
+
             this.swRegistration = await navigator.serviceWorker.register('/sw.js', {
-                scope: '/'
+                scope: '/',
+                updateViaCache: 'none',
             });
             console.log('[PWA] Service Worker зарегистрирован');
+
+            void this.swRegistration.update();
 
             // Проверка обновлений
             this.swRegistration.addEventListener('updatefound', () => {
@@ -405,10 +471,19 @@ export class PWAService {
      * Применить обновление (перезагрузка)
      */
     applyUpdate() {
-        if (this.swRegistration?.waiting) {
-            this.swRegistration.waiting.postMessage('skipWaiting');
+        const waiting = this.swRegistration?.waiting;
+        if (!waiting) {
+            window.location.reload();
+            return;
         }
-        window.location.reload();
+        navigator.serviceWorker.addEventListener(
+            'controllerchange',
+            () => {
+                window.location.reload();
+            },
+            { once: true },
+        );
+        waiting.postMessage('skipWaiting');
     }
 
     /**

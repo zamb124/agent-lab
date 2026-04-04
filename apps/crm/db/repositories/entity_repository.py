@@ -206,6 +206,36 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def count_all(
+        self,
+        entity_type: Optional[str] = None,
+        entity_subtype: Optional[str] = None,
+        namespace: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        company_id: Optional[str] = None,
+    ) -> int:
+        """Считает entities с теми же условиями, что и list_all (без лимита)."""
+        cid = company_id or self._get_company_id()
+
+        async with self._db.session() as session:
+            stmt = select(func.count(CRMEntity.entity_id)).where(CRMEntity.company_id == cid)
+
+            if entity_type:
+                stmt = stmt.where(CRMEntity.entity_type == entity_type)
+            if entity_subtype:
+                stmt = stmt.where(CRMEntity.entity_subtype == entity_subtype)
+            if namespace:
+                stmt = stmt.where(CRMEntity.namespace == namespace)
+
+            if filters:
+                stmt = self._apply_filters(stmt, filters)
+
+            result = await session.execute(stmt)
+            value = result.scalar()
+            if value is None:
+                raise ValueError("Entity count query returned empty value")
+            return int(value)
+
     async def get_created_at_bounds(
         self,
         entity_type: Optional[str] = None,

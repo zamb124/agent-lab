@@ -3,8 +3,8 @@
  * Обеспечивает офлайн-работу, кэширование и push-уведомления
  */
 
-const STATIC_CACHE_NAME = 'humanitec-static-v4';
-const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v4';
+const STATIC_CACHE_NAME = 'humanitec-static-v5';
+const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v5';
 
 // Статические ресурсы для предварительного кэширования (только пути, доступные на любом сервисе с /static/core)
 const STATIC_ASSETS = [
@@ -133,6 +133,17 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request).catch((err) => {
         console.error('[SW] auth fetch:', err);
+        return new Response('', { status: 503, statusText: 'Service Unavailable' });
+      })
+    );
+    return;
+  }
+
+  // Версия деплоя и health: только сеть, без Cache Storage (иначе клиент не видит новый релиз)
+  if (url.pathname === '/health' || url.pathname.endsWith('/health')) {
+    event.respondWith(
+      fetch(request).catch((err) => {
+        console.error('[SW] health fetch:', err);
         return new Response('', { status: 503, statusText: 'Service Unavailable' });
       })
     );
@@ -319,7 +330,7 @@ self.addEventListener('notificationclose', (event) => {
 self.addEventListener('message', (event) => {
   console.log('[SW] Message received:', event.data);
   
-  if (event.data === 'skipWaiting') {
+  if (event.data === 'skipWaiting' || event.data?.type === 'skipWaiting') {
     self.skipWaiting();
   }
   

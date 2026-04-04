@@ -37,6 +37,7 @@ from pydantic_settings import BaseSettings as PydanticBaseSettings
 
 from core.config.loader import load_merged_config
 from core.config import set_settings
+from core.app.health_payload import build_health_payload
 from core.logging import setup_logging
 from core.middleware.auth import AuthMiddleware
 from core.middleware.deployment_headers import DeploymentHeadersMiddleware
@@ -360,14 +361,7 @@ def create_service_app(
     @app.get("/health")
     @app.get(f"/{service_name}/health")
     async def health():
-        payload: dict[str, str] = {
-            "status": "healthy",
-            "service": settings.server.name,
-        }
-        dep = settings.server.deployment_version
-        if dep:
-            payload["deployment_version"] = dep
-        return payload
+        return build_health_payload(settings)
     
     @app.get("/")
     async def root():

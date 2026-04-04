@@ -477,10 +477,6 @@ export class DocumentEditorPage extends PlatformElement {
                 await new Promise((resolve) => requestAnimationFrame(resolve));
             }
             target.innerHTML = '';
-            const frameH = Math.max(480, Math.min(Math.round(window.innerHeight - 140), 920));
-            const box = host.getBoundingClientRect();
-            const wPx = `${Math.max(320, Math.round(box.width))}px`;
-            const hPx = `${Math.max(320, Math.round(box.height > 48 ? box.height : frameH))}px`;
             const placeholder = document.createElement('div');
             placeholder.id = `oo-embed-${id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
             this._startOoLayout(host, placeholder, target);
@@ -498,8 +494,6 @@ export class DocumentEditorPage extends PlatformElement {
             const editorInit = {
                 ...claims,
                 token,
-                width: wPx,
-                height: hPx,
                 type: typeof claims.type === 'string' ? claims.type : 'desktop',
                 events: {
                     onAppReady: () => this._markEditorUiVisible(),

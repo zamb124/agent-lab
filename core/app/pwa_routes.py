@@ -50,7 +50,10 @@ def register_platform_pwa_routes(app: FastAPI, project_root: Path) -> None:
         return FileResponse(
             sw_path,
             media_type="application/javascript",
-            headers={"Service-Worker-Allowed": "/"},
+            headers={
+                "Service-Worker-Allowed": "/",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+            },
         )
 
     @app.get("/offline.html")

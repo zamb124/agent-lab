@@ -42,6 +42,16 @@ async def office_saved_file_http():
 
 
 @pytest.mark.asyncio
+async def test_documents_health_json_not_spa_shell(office_client):
+    r = await office_client.get("/documents/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "documents"
+    assert "<!DOCTYPE html>" not in r.text
+
+
+@pytest.mark.asyncio
 async def test_office_integration_status_configured(office_client, auth_headers_system):
     r = await office_client.get(
         "/documents/api/v1/integration/status",
