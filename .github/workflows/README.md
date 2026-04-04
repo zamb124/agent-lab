@@ -168,14 +168,16 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 
 ### Документы / OnlyOffice
 
-В **`docker-compose-prod.yaml`** поднимаются **`onlyoffice-documentserver`** (**`onlyoffice/documentserver`**, Community Edition, порт **8088**) и BFF **`office`** (**8008**). Секрет JWT должен совпадать в контейнере DS и в BFF (**`OFFICE__JWT_SECRET`** / **`ONLYOFFICE_JWT_SECRET`**). Публичные URL браузера и callback — в **`OFFICE__DOCUMENT_SERVER_PUBLIC_URL`** и **`OFFICE__CALLBACK_PUBLIC_BASE_URL`** (часто совпадают с origin ingress и с URL, с которого Document Server достучится до BFF).
+В **`docker-compose-prod.yaml`** поднимаются **`onlyoffice-documentserver`** (**`onlyoffice/documentserver`**, Community Edition, порт **8088**) и BFF **`office`** (**8008**). Секрет JWT должен совпадать в контейнере DS и в BFF (**`OFFICE__JWT_SECRET`** / **`ONLYOFFICE_JWT_SECRET`**).
+
+В **`x-common-env`** заданы дефолты Humanitec: **`SERVER__PLATFORM_PUBLIC_BASE_URL`** = `https://humanitec.ru`, **`OFFICE__DOCUMENT_SERVER_PUBLIC_URL`** = `https://onlyoffice.humanitec.ru`, **`OFFICE__CALLBACK_PUBLIC_BASE_URL`** = `https://humanitec.ru` (ingress с **`/documents`** на office). Другой домен (например `qqq.humanitec.ru`) — в `.env` на сервере: **`OFFICE_CALLBACK_PUBLIC_BASE_URL=https://qqq.humanitec.ru`**, **`SERVER__PLATFORM_PUBLIC_BASE_URL=https://qqq.humanitec.ru`** (и при необходимости секреты из `deploy.yml`).
 
 | Secret | Описание |
 |---|---|
-| `ONLYOFFICE_JWT_SECRET` | Общий секрет JWT для DS и BFF |
-| `OFFICE_DOCUMENT_SERVER_PUBLIC_URL` | **Обязателен в проде**, если пользователь не на той же машине, что DS: публичный origin OnlyOffice (api.js), иначе в ответе `editor-config` останется `http://localhost:8088` и редактор не откроется. |
-| `OFFICE_CALLBACK_PUBLIC_BASE_URL` | **Обязателен в проде**: публичный базовый URL BFF (`https://…`), с которого Document Server качает файл и шлёт callback (не `http://localhost:8008` и не `http://office:8008`). |
-| `SERVER__PLATFORM_PUBLIC_BASE_URL` (опционально) | Публичный origin сайта (например `https://qqq.humanitec.ru`); в JWT редактора для логотипа шапки берётся **раньше**, чем внутренний `SERVER__OFFICE_SERVICE_URL` (`http://office:8008`). |
+| `ONLYOFFICE_JWT_SECRET` | Обязателен в проде: общий секрет JWT для DS и BFF. |
+| `OFFICE_DOCUMENT_SERVER_PUBLIC_URL` | Опционально: переопределяет дефолт **`https://onlyoffice.humanitec.ru`**. |
+| `OFFICE_CALLBACK_PUBLIC_BASE_URL` | Опционально: переопределяет дефолт **`https://humanitec.ru`** (должен быть origin, с которого DS достучится до **`/documents/api/v1/...`**). |
+| `SERVER__PLATFORM_PUBLIC_BASE_URL` | Опционально: в `.env` на сервере переопределяет дефолт **`https://humanitec.ru`** (логотип в JWT редактора). |
 
 ### Платежи YooMoney (опционально)
 

@@ -8,7 +8,7 @@ globs:
 
 # Документы (процесс `office`, URL `/documents`)
 
-- **Продукт в UI:** **Документы**. Публичный HTTP-префикс **`/documents`** (`server.name` = `documents` в `services.office` после merge). Порт **8008**.
+- **Продукт в UI:** **Документы**. Публичный HTTP-префикс **`/documents`** (`server.name` = `documents` в `services.office` после merge). Порт **8008**. Slug компании (субдомен) **`onlyoffice`** зарезервирован (**`validate_slug`** в **`core/utils/subdomain.py`**), чтобы не пересекаться с хостом OnlyOffice (`onlyoffice.<домен>`).
 - **`apps/office`:** FastAPI BFF **`/documents/api/v1/*`**, Lit в `apps/office/ui/`, статика **`/documents/ui/static`**, `SERVER__OFFICE_SERVICE_URL` / **`get_service_url("office")`**. Health: **`GET /health`**, **`GET /office/health`** и алиас **`GET /documents/health`** (тот же JSON, что и у остальных сервисов — для `base-url="/documents"` и PWA). В dev-proxy первый сегмент **`documents`** мапится на **`office`** в **`DevInterServiceProxyMiddleware`**.
 - **Межсервисный вызов BFF:** `ServiceClient` → **`"office"`**, путь **`/documents/api/v1/...`**.
 - **Данные:** `DATABASE__OFFICE_URL` → **`migrations/office/`**; привязки **`company_id` + `active_namespace`** (`office_document_bindings`). Секреты OnlyOffice и публичные URL — вложенная модель **`OfficeIntegrationConfig`** (`services.office.office` / ENV **`OFFICE__*`**). Локально: **office на хосте** (`make app`), **DS в Docker** → **`callback_public_base_url`** = **`http://host.docker.internal:8008`** (в JWT DS ходит за файлом на этот URL; **`http://localhost:8008`** из контейнера DS указывает на сам контейнер). Если **office** тоже в compose — **`http://office:8008`**.
