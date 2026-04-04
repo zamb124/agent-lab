@@ -176,7 +176,8 @@ def _editor_header_brand_base_url(settings: OfficeSettings) -> str:
     if manual:
         return manual
     srv = settings.server
-    for candidate in (srv.office_service_url, srv.platform_public_base_url, srv.frontend_service_url):
+    # platform_public_base_url — публичный origin; office_service_url в Docker часто http://office:8008 (только внутри сети).
+    for candidate in (srv.platform_public_base_url, srv.frontend_service_url, srv.office_service_url):
         if candidate is not None and str(candidate).strip():
             return str(candidate).strip().rstrip("/")
     return ""

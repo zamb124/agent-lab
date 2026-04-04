@@ -27,6 +27,7 @@
     "newEmpty": "Новый документ",
     "upload": "Загрузить файл",
     "tableAria": "Таблица документов",
+    "cardsAria": "Список документов",
     "colTitle": "Название",
     "colCreated": "Создан",
     "colAuthor": "Автор",

@@ -27,6 +27,7 @@
     "newEmpty": "New document",
     "upload": "Upload file",
     "tableAria": "Documents table",
+    "cardsAria": "Document list",
     "colTitle": "Title",
     "colCreated": "Created",
     "colAuthor": "Author",

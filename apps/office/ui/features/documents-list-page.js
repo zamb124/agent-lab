@@ -410,6 +410,103 @@ export class DocumentsListPage extends PlatformElement {
                 justify-content: center;
                 flex-wrap: wrap;
             }
+            .doc-list-dual {
+                width: 100%;
+            }
+            .doc-table-shell {
+                display: block;
+            }
+            .doc-cards-shell {
+                display: none;
+                flex-direction: column;
+                gap: var(--space-3);
+                width: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            .doc-card-item {
+                margin: 0;
+                padding: 0;
+            }
+            .doc-card {
+                box-sizing: border-box;
+                width: 100%;
+                padding: var(--space-4);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--documents-stroke);
+                background: var(--glass-solid-subtle);
+            }
+            .doc-card-title-block {
+                min-width: 0;
+            }
+            .doc-card-title-block .doc-title-with-catalog {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .doc-card-title-block .doc-catalog-tag {
+                max-width: 100%;
+            }
+            .doc-card .doc-title-link,
+            .doc-card .doc-title-static {
+                white-space: normal;
+                overflow: visible;
+                text-overflow: unset;
+                word-break: break-word;
+                width: 100%;
+            }
+            .doc-card .doc-creator-name {
+                white-space: normal;
+                overflow: visible;
+                text-overflow: unset;
+                word-break: break-word;
+            }
+            .doc-card-mid {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                margin-top: var(--space-3);
+                min-width: 0;
+            }
+            .doc-card-type {
+                flex-shrink: 0;
+            }
+            .doc-card-meta {
+                margin-top: var(--space-3);
+                min-width: 0;
+            }
+            .doc-card-author-label {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-tertiary);
+                margin-bottom: var(--space-1);
+            }
+            .doc-card-date {
+                margin-top: var(--space-2);
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .doc-card-date-label {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-tertiary);
+            }
+            .doc-card-date-value {
+                font-size: 13px;
+                font-weight: 500;
+                line-height: 18px;
+                color: var(--text-secondary);
+            }
+            @media (max-width: 767px) {
+                .doc-table-shell {
+                    display: none;
+                }
+                .doc-cards-shell {
+                    display: flex;
+                }
+            }
         `,
     ];
 
@@ -705,6 +802,163 @@ export class DocumentsListPage extends PlatformElement {
         `;
     }
 
+    /**
+     * @param {Record<string, unknown>} row
+     */
+    _rowCatalogState(row) {
+        const catalogIdRaw = row.catalog_id;
+        const catalogId = typeof catalogIdRaw === 'string' ? catalogIdRaw.trim() : '';
+        const catalogLabel = this._resolveRowCatalogLabel(catalogIdRaw);
+        const inFilter = this._filterCatalogIds.includes(catalogId);
+        const tagDisabled =
+            !this._integrationOk ||
+            catalogId === '' ||
+            (inFilter && this._filterCatalogIds.length <= 1);
+        return { catalogIdRaw, catalogLabel, tagDisabled };
+    }
+
+    /**
+     * @param {Record<string, unknown>} row
+     * @param {(k: string, p?: Record<string, string>) => string} tr
+     * @param {{ catalogIdRaw: unknown; catalogLabel: string; tagDisabled: boolean }} catalogState
+     */
+    _renderTitleWithCatalog(row, tr, catalogState) {
+        const { catalogIdRaw, catalogLabel, tagDisabled } = catalogState;
+        return html`
+            <div class="doc-title-with-catalog">
+                <button
+                    type="button"
+                    class="doc-catalog-tag"
+                    title=${tr('list.catalogToggleHint')}
+                    aria-label=${`${catalogLabel}. ${tr('list.catalogToggleHint')}`}
+                    ?disabled=${tagDisabled}
+                    @click=${(e) => this._toggleCatalogFilter(catalogIdRaw, e)}
+                >
+                    ${catalogLabel}
+                </button>
+                ${this._integrationOk
+                    ? html`
+                          <button
+                              type="button"
+                              class="doc-title-link"
+                              aria-label=${tr('list.openDocument', { title: row.title })}
+                              @click=${() => this._goEdit(row.binding_id)}
+                          >
+                              ${row.title}
+                          </button>
+                      `
+                    : html` <span class="doc-title-static">${row.title}</span> `}
+            </div>
+        `;
+    }
+
+    /**
+     * @param {Record<string, unknown>} row
+     * @param {(k: string, p?: Record<string, string>) => string} tr
+     */
+    _renderTypeBlock(row, tr) {
+        return this._fileIconName(row.document_type)
+            ? html`
+                  <div
+                      class="doc-type-cell"
+                      role="img"
+                      aria-label=${tr(`list.docType.${row.document_type}`)}
+                      title=${tr(`list.docType.${row.document_type}`)}
+                  >
+                      <platform-icon
+                          file-icon
+                          name=${row.document_type}
+                          .size=${28}
+                          colored
+                      ></platform-icon>
+                  </div>
+              `
+            : html`<span>${row.document_type}</span>`;
+    }
+
+    /**
+     * @param {Record<string, unknown>} row
+     * @param {(k: string, p?: Record<string, string>) => string} tr
+     */
+    _renderDocActionButtons(row, tr) {
+        return html`
+            <div class="doc-actions">
+                <button
+                    type="button"
+                    class="doc-action-btn"
+                    aria-label=${tr('list.rename')}
+                    @click=${() => this._openRename(row.binding_id, row.title)}
+                >
+                    <platform-icon name="edit" .size=${20}></platform-icon>
+                </button>
+                <button
+                    type="button"
+                    class="doc-action-btn doc-action-btn--danger"
+                    aria-label=${tr('list.delete')}
+                    @click=${() => this._deleteDoc(row.binding_id, row.title)}
+                >
+                    <platform-icon name="trash" .size=${20}></platform-icon>
+                </button>
+            </div>
+        `;
+    }
+
+    /**
+     * @param {Record<string, unknown>} row
+     * @param {(k: string, p?: Record<string, string>) => string} tr
+     */
+    _renderTableRow(row, tr) {
+        const catalogState = this._rowCatalogState(row);
+        const created = this._formatDocumentCreatedAt(
+            typeof row.created_at === 'string' ? row.created_at : '',
+        );
+        return html`
+            <tr>
+                <td class="doc-title-cell">
+                    ${this._renderTitleWithCatalog(row, tr, catalogState)}
+                </td>
+                <td class="doc-created-cell">${created}</td>
+                <td>${this._renderCreatorCell(row, tr)}</td>
+                <td>${this._renderTypeBlock(row, tr)}</td>
+                <td>${this._renderDocActionButtons(row, tr)}</td>
+            </tr>
+        `;
+    }
+
+    /**
+     * @param {Record<string, unknown>} row
+     * @param {(k: string, p?: Record<string, string>) => string} tr
+     */
+    _renderDocumentCard(row, tr) {
+        const catalogState = this._rowCatalogState(row);
+        const created = this._formatDocumentCreatedAt(
+            typeof row.created_at === 'string' ? row.created_at : '',
+        );
+        return html`
+            <article class="doc-card">
+                <div class="doc-card-title-block">
+                    ${this._renderTitleWithCatalog(row, tr, catalogState)}
+                </div>
+                <div class="doc-card-mid">
+                    <div class="doc-card-type">${this._renderTypeBlock(row, tr)}</div>
+                    ${this._renderDocActionButtons(row, tr)}
+                </div>
+                <div class="doc-card-meta">
+                    <div class="doc-card-author-label">${tr('list.colAuthor')}</div>
+                    ${this._renderCreatorCell(row, tr)}
+                </div>
+                ${created
+                    ? html`
+                          <div class="doc-card-date">
+                              <span class="doc-card-date-label">${tr('list.colCreated')}</span>
+                              <span class="doc-card-date-value">${created}</span>
+                          </div>
+                      `
+                    : null}
+            </article>
+        `;
+    }
+
     _goEdit(bindingId) {
         window.history.pushState({}, '', `/documents/edit/${encodeURIComponent(bindingId)}`);
         window.dispatchEvent(new Event('popstate'));
@@ -841,129 +1095,37 @@ export class DocumentsListPage extends PlatformElement {
                 ? html`<p>${t('list.loading')}</p>`
                 : (this._items || []).length > 0
                   ? html`
-                        <table class="doc-table" aria-label=${t('list.tableAria')}>
-                            <thead>
-                                <tr>
-                                    <th>${t('list.colTitle')}</th>
-                                    <th>${t('list.colCreated')}</th>
-                                    <th>${t('list.colAuthor')}</th>
-                                    <th>${t('list.colType')}</th>
-                                    <th>${t('list.colActions')}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${(this._items || []).map((row) => {
-                                    const catalogIdRaw = row.catalog_id;
-                                    const catalogId =
-                                        typeof catalogIdRaw === 'string' ? catalogIdRaw.trim() : '';
-                                    const catalogLabel = this._resolveRowCatalogLabel(catalogIdRaw);
-                                    const inFilter = this._filterCatalogIds.includes(catalogId);
-                                    const tagDisabled =
-                                        !this._integrationOk ||
-                                        catalogId === '' ||
-                                        (inFilter && this._filterCatalogIds.length <= 1);
-                                    return html`
+                        <div class="doc-list-dual">
+                            <div class="doc-table-shell">
+                                <table class="doc-table" aria-label=${t('list.tableAria')}>
+                                    <thead>
                                         <tr>
-                                            <td class="doc-title-cell">
-                                                <div class="doc-title-with-catalog">
-                                                    <button
-                                                        type="button"
-                                                        class="doc-catalog-tag"
-                                                        title=${t('list.catalogToggleHint')}
-                                                        aria-label=${`${catalogLabel}. ${t(
-                                                            'list.catalogToggleHint',
-                                                        )}`}
-                                                        ?disabled=${tagDisabled}
-                                                        @click=${(e) =>
-                                                            this._toggleCatalogFilter(catalogIdRaw, e)}
-                                                    >
-                                                        ${catalogLabel}
-                                                    </button>
-                                                    ${this._integrationOk
-                                                        ? html`
-                                                              <button
-                                                                  type="button"
-                                                                  class="doc-title-link"
-                                                                  aria-label=${t('list.openDocument', {
-                                                                      title: row.title,
-                                                                  })}
-                                                                  @click=${() =>
-                                                                      this._goEdit(row.binding_id)}
-                                                              >
-                                                                  ${row.title}
-                                                              </button>
-                                                          `
-                                                        : html`
-                                                              <span class="doc-title-static"
-                                                                  >${row.title}</span
-                                                              >
-                                                          `}
-                                                </div>
-                                            </td>
-                                            <td class="doc-created-cell">
-                                                ${this._formatDocumentCreatedAt(
-                                                    typeof row.created_at === 'string'
-                                                        ? row.created_at
-                                                        : '',
-                                                )}
-                                            </td>
-                                            <td>${this._renderCreatorCell(row, t)}</td>
-                                            <td>
-                                                ${this._fileIconName(row.document_type)
-                                                    ? html`
-                                                          <div
-                                                              class="doc-type-cell"
-                                                              role="img"
-                                                              aria-label=${t(
-                                                                  `list.docType.${row.document_type}`,
-                                                              )}
-                                                              title=${t(
-                                                                  `list.docType.${row.document_type}`,
-                                                              )}
-                                                          >
-                                                              <platform-icon
-                                                                  file-icon
-                                                                  name=${row.document_type}
-                                                                  .size=${28}
-                                                                  colored
-                                                              ></platform-icon>
-                                                          </div>
-                                                      `
-                                                    : html`<span>${row.document_type}</span>`}
-                                            </td>
-                                            <td>
-                                                <div class="doc-actions">
-                                                    <button
-                                                        type="button"
-                                                        class="doc-action-btn"
-                                                        aria-label=${t('list.rename')}
-                                                        @click=${() =>
-                                                            this._openRename(row.binding_id, row.title)}
-                                                    >
-                                                        <platform-icon
-                                                            name="edit"
-                                                            .size=${20}
-                                                        ></platform-icon>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        class="doc-action-btn doc-action-btn--danger"
-                                                        aria-label=${t('list.delete')}
-                                                        @click=${() =>
-                                                            this._deleteDoc(row.binding_id, row.title)}
-                                                    >
-                                                        <platform-icon
-                                                            name="trash"
-                                                            .size=${20}
-                                                        ></platform-icon>
-                                                    </button>
-                                                </div>
-                                            </td>
+                                            <th>${t('list.colTitle')}</th>
+                                            <th>${t('list.colCreated')}</th>
+                                            <th>${t('list.colAuthor')}</th>
+                                            <th>${t('list.colType')}</th>
+                                            <th>${t('list.colActions')}</th>
                                         </tr>
-                                    `;
-                                })}
-                            </tbody>
-                        </table>
+                                    </thead>
+                                    <tbody>
+                                        ${(this._items || []).map((row) => this._renderTableRow(row, t))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div
+                                class="doc-cards-shell"
+                                role="list"
+                                aria-label=${t('list.cardsAria')}
+                            >
+                                ${(this._items || []).map(
+                                    (row) => html`
+                                        <div class="doc-card-item" role="listitem">
+                                            ${this._renderDocumentCard(row, t)}
+                                        </div>
+                                    `,
+                                )}
+                            </div>
+                        </div>
                     `
                   : html`
                         <div

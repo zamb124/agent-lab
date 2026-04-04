@@ -226,7 +226,7 @@ async def test_office_editor_config_download_roundtrip(office_client, auth_heade
     assert cust["features"]["featuresTips"] is False
     logo = cust["logo"]
     assert "frontend_logo.svg" in logo["image"]
-    assert ":8008/static/core/" in logo["image"] or ":8002/static/core/" in logo["image"]
+    assert "/static/core/" in logo["image"]
     assert logo["url"].endswith("/documents")
     assert cust["customer"]["name"] == "HUMANITEC"
     dl = cfg["document"]["url"]

@@ -1,5 +1,5 @@
-.PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base
-.PHONY: dev-up dev-down dev-logs dev-minio-restart dev-bootstrap-postgres test test-down test-unit test-integration prod-up prod-down prod-logs
+.PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base stats
+.PHONY: dev-up dev-down dev-logs dev-minio-restart dev-bootstrap-postgres test-runner test-runner-down test-runner-unit test-integration prod-up prod-down prod-logs
 .PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n
 
 # Docker Registry
@@ -7,10 +7,11 @@ DOCKER_REGISTRY ?= zambas/repo
 # Платформа для сервера (amd64 для большинства VPS)
 DOCKER_PLATFORM ?= linux/amd64
 
-# SSH настройки для деплоя
-SSH_USER ?= zambas124
-SSH_HOST ?= 46.21.244.79
-REMOTE_DIR ?= /opt/agents-lab
+# SSH для деплоя и make stats. Имена AGENT_LAB_* — чтобы глобальный export SSH_HOST в шелле
+# не перебивал дефолт (у Make переменные из окружения сильнее, чем SSH_HOST ?= в файле).
+AGENT_LAB_SSH_USER ?= root
+AGENT_LAB_SSH_HOST ?= 84.38.184.105
+AGENT_LAB_REMOTE_DIR ?= /opt/agent-lab
 
 # ============================================================================
 # Изолированные окружения (dev/test/prod)
@@ -48,19 +49,17 @@ dev-bootstrap-postgres:
 	docker exec -i agentlab_postgres_dev env PGPASSWORD=admin psql -U platform_user -d postgres < migrations/postgres/bootstrap_idempotent.sql
 	@echo "Postgres dev: применён migrations/postgres/bootstrap_idempotent.sql"
 
-# Test Environment (порты: 54322, 63792, 19002-19012, 18052) - ТОЛЬКО для автотестов
-test:
-	@echo "🧪 Запуск тестов в изолированном окружении (включая MinIO и test-a2a-agent)..."
+# Цели test / test-unit / test-down — в mk/test.mk (после include). Старый one-shot runner:
+test-runner:
+	@echo "Запуск контейнера tests_runner (docker-compose-test)..."
 	docker-compose -f docker-compose-test.yaml up --build --abort-on-container-exit tests_runner
-	@echo "✅ Тесты завершены"
+	@echo "Готово."
 
-test-down:
-	@echo "🛑 Остановка Test окружения..."
+test-runner-down:
 	docker-compose -f docker-compose-test.yaml down -v
-	@echo "✅ Test окружение остановлено и очищено"
+	@echo "Compose-test остановлен, volumes удалены."
 
-test-unit:
-	@echo "🧪 Запуск unit тестов..."
+test-runner-unit:
 	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m unit -v
 
 test-integration:
@@ -161,36 +160,45 @@ deploy-agents:
 	@echo "Building and deploying agents..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target agents -t $(DOCKER_REGISTRY):agents --load .
 	docker push $(DOCKER_REGISTRY):agents
-	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull agents && sudo docker compose up -d agents"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull agents && sudo docker compose up -d agents"
 
 deploy-frontend:
 	@echo "Building and deploying frontend..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target frontend -t $(DOCKER_REGISTRY):frontend --load .
 	docker push $(DOCKER_REGISTRY):frontend
-	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull frontend && sudo docker compose up -d frontend"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull frontend && sudo docker compose up -d frontend"
 
 deploy-crm:
 	@echo "Building and deploying crm..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target crm -t $(DOCKER_REGISTRY):crm --load .
 	docker push $(DOCKER_REGISTRY):crm
-	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull crm && sudo docker compose up -d crm"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull crm && sudo docker compose up -d crm"
 
 deploy-worker:
 	@echo "Building and deploying worker..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target worker -t $(DOCKER_REGISTRY):worker --load .
 	docker push $(DOCKER_REGISTRY):worker
-	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull taskiq-worker taskiq-scheduler && sudo docker compose up -d taskiq-worker taskiq-scheduler"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull taskiq-worker taskiq-scheduler && sudo docker compose up -d taskiq-worker taskiq-scheduler"
 
 deploy-rag:
 	@echo "Building and deploying rag..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target rag -t $(DOCKER_REGISTRY):rag --load .
 	docker push $(DOCKER_REGISTRY):rag
-	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull rag && sudo docker compose up -d rag"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull rag && sudo docker compose up -d rag"
 
 conf:
 	@echo "Копирование conf.json на продакшен..."
-	scp conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/conf.json
+	scp conf.json $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST):$(AGENT_LAB_REMOTE_DIR)/conf.json
 	@echo "Конфиг скопирован (единый корневой conf.json, слои сервисов внутри services.*)."
+
+# Снимок нагрузки на удалённом хосте (те же AGENT_LAB_* что у деплоя)
+stats:
+	@echo "Подключение: $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) REMOTE_DIR=$(AGENT_LAB_REMOTE_DIR)"
+	@SSH_USER="$(AGENT_LAB_SSH_USER)" SSH_HOST="$(AGENT_LAB_SSH_HOST)" REMOTE_DIR="$(AGENT_LAB_REMOTE_DIR)" ./scripts/remote_server_stats.sh || { \
+		echo ""; \
+		echo "SSH не удался. Переопределите: make stats AGENT_LAB_SSH_HOST=<ip> AGENT_LAB_SSH_USER=<user>"; \
+		exit 255; \
+	}
 
 deploy-code: docker-build docker-push
 	@echo "Deploy with code changes (uses Docker cache for deps)..."
@@ -243,12 +251,12 @@ help:
 	@echo "  make app APP_KILL=1  - то же, сначала kill -9 по PID на портах 8001–8006 (зависший uvicorn)"
 	@echo "  MinIO Console (dev): http://localhost:19011 (minioadmin/minioadmin)"
 	@echo ""
-	@echo "Testing (порты: 54322, 63792, 19002-19012) - ТОЛЬКО для автотестов:"
-	@echo "  make test            - Запустить все тесты (включая MinIO)"
-	@echo "  make test-unit       - Запустить unit тесты"
-	@echo "  make test-integration - Запустить integration тесты"
-	@echo "  make test-e2e        - Запустить e2e тесты"
-	@echo "  make test-down       - Остановить и очистить test окружение"
+	@echo "Testing (порты: 54322, 63792, 19002-19012) см. mk/test.mk:"
+	@echo "  make test / test-unit / test-down - pytest и test-up (основной поток)"
+	@echo "  make test-integration / test-e2e   - через контейнер tests_runner"
+	@echo "  make test-runner       - один прогон: up --abort-on-exit tests_runner"
+	@echo "  make test-runner-down  - compose-test down -v"
+	@echo "  make test-runner-unit  - pytest -m unit в tests_runner"
 	@echo ""
 	@echo "Frontend тесты (создание компаний и агентов):"
 	@echo "  make test-frontend   - Все frontend тесты"
@@ -271,6 +279,7 @@ help:
 	@echo "  make deploy-crm      - Деплой только crm"
 	@echo "  make deploy-worker   - Деплой только worker"
 	@echo "  make conf            - Скопировать conf.json на продакшен (секреты)"
+	@echo "  make stats           - SSH: снимок CPU/RAM/диск/Docker/compose на сервере"
 	@echo "  make docker-build    - Только собрать образы локально"
 	@echo "  make docker-push     - Только запушить образы в Docker Hub"
 	@echo ""

@@ -69,6 +69,14 @@ LiveKit требует отдельный поддомен с собственн
 
 ## Деплой
 
+Локально: снимок нагрузки на сервере — переменные **`AGENT_LAB_SSH_USER`**, **`AGENT_LAB_SSH_HOST`**, **`AGENT_LAB_REMOTE_DIR`** в `Makefile` (дефолт под этот сервер). Имена с префиксом `AGENT_LAB_`, чтобы глобальный `export SSH_HOST=...` в шелле не перебивал дефолт Make.
+
+```bash
+make stats
+# другой хост/пользователь/каталог:
+# make stats AGENT_LAB_SSH_HOST=1.2.3.4 AGENT_LAB_SSH_USER=deploy AGENT_LAB_REMOTE_DIR=/opt/agent-lab
+```
+
 Триггер: `workflow_dispatch` → `.github/workflows/deploy.yml`:
 1. Сборка образа (target `full`) → push в GHCR (`IMAGE` + тег из metadata-action)
 2. SCP на `/opt/agent-lab/`: `docker-compose-prod.yaml`, `conf.json`, **`migrations/postgres/init.sql`** (нужен bind-mount у сервиса `postgres`)

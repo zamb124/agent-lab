@@ -173,8 +173,9 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | Secret | Описание |
 |---|---|
 | `ONLYOFFICE_JWT_SECRET` | Общий секрет JWT для DS и BFF |
-| `OFFICE_DOCUMENT_SERVER_PUBLIC_URL` (опционально) | Origin Document Server для скрипта api.js (по умолчанию в compose `http://localhost:8088`) |
-| `OFFICE_CALLBACK_PUBLIC_BASE_URL` (опционально) | Публичный базовый URL BFF для download/callback (по умолчанию `http://localhost:8008`) |
+| `OFFICE_DOCUMENT_SERVER_PUBLIC_URL` | **Обязателен в проде**, если пользователь не на той же машине, что DS: публичный origin OnlyOffice (api.js), иначе в ответе `editor-config` останется `http://localhost:8088` и редактор не откроется. |
+| `OFFICE_CALLBACK_PUBLIC_BASE_URL` | **Обязателен в проде**: публичный базовый URL BFF (`https://…`), с которого Document Server качает файл и шлёт callback (не `http://localhost:8008` и не `http://office:8008`). |
+| `SERVER__PLATFORM_PUBLIC_BASE_URL` (опционально) | Публичный origin сайта (например `https://qqq.humanitec.ru`); в JWT редактора для логотипа шапки берётся **раньше**, чем внутренний `SERVER__OFFICE_SERVICE_URL` (`http://office:8008`). |
 
 ### Платежи YooMoney (опционально)
 
