@@ -467,11 +467,11 @@ class BillingService:
         user_ids = set()
         
         for record in all_usage_records:
-            
             if record.timestamp < current_month:
                 continue
-            
-            # Общая статистика
+            if record.company_id != company_id:
+                continue
+
             stats["total_cost"] += record.cost
             stats["total_calls"] += record.quantity
             

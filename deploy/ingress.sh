@@ -56,6 +56,11 @@ EMAIL="$(jq -er '.ingress.email' "${CONF_LOCAL_JSON}")"
 log "Домен: ${DOMAIN}"
 log "Сервер: ${LOGIN}@${IP}:${SSH_PORT}"
 
+if ! jq -e '.ingress.services | map(.path) | index("/documents") != null' "${CONF_LOCAL_JSON}" >/dev/null 2>&1; then
+  echo "ПРЕДУПРЕЖДЕНИЕ: в ingress.services нет office с path /documents — https://${DOMAIN}/documents уйдёт во frontend (404)." >&2
+  echo "Добавьте: {\"name\":\"office\",\"port\":8008,\"path\":\"/documents\",\"websocket\":false}" >&2
+fi
+
 SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 -p ${SSH_PORT} ${LOGIN}@${IP}"
 
 # Получаем IP хоста на сервере
@@ -181,6 +186,7 @@ metadata:
   name: humanitec-ingress
   namespace: default
   annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/configuration-snippet: |

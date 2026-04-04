@@ -1,16 +1,21 @@
 """
-Матчинг правил списания и quantity_from (без БД).
+Матчинг правил списания, resolve, quantity_from, parse_settlement_rules_json.
+Без БД и без моков платформы — только чистые функции и Pydantic.
 """
 
 from __future__ import annotations
 
+import json
+
 import pytest
+from pydantic import ValidationError
 
 from core.billing.settlement_rules import (
     SettlementApplicationMode,
     SettlementRule,
     SettlementRuleMatch,
     SettlementRulesDocument,
+    parse_settlement_rules_json,
     quantity_from_span,
     resolve_matched_rules,
     rule_matches_span,
@@ -29,6 +34,69 @@ def _span(**kwargs: object) -> dict:
     return base
 
 
+def test_parse_settlement_rules_json_minimal_document() -> None:
+    doc = parse_settlement_rules_json("{}")
+    assert doc.version == 1
+    assert doc.application_mode == SettlementApplicationMode.ALL_MATCHING
+    assert doc.rules == []
+
+
+def test_parse_settlement_rules_json_full_roundtrip() -> None:
+    payload = {
+        "version": 2,
+        "application_mode": "first_win",
+        "rules": [
+            {
+                "rule_id": "r1",
+                "enabled": True,
+                "priority": 7,
+                "exclusive_group": None,
+                "resource_name": "llm:*",
+                "usage_type": "llm_request",
+                "quantity_from": "const:2",
+                "match": {"operation_name_prefix": "x."},
+            }
+        ],
+    }
+    raw = json.dumps(payload)
+    doc = parse_settlement_rules_json(raw)
+    assert doc.version == 2
+    assert doc.application_mode == SettlementApplicationMode.FIRST_WIN
+    assert len(doc.rules) == 1
+    assert doc.rules[0].rule_id == "r1"
+    assert doc.rules[0].quantity_from == "const:2"
+
+
+def test_parse_settlement_rules_json_root_not_object_raises() -> None:
+    with pytest.raises(ValueError, match="корень должен быть объектом"):
+        parse_settlement_rules_json("[1]")
+
+
+def test_parse_settlement_rules_json_invalid_json_raises() -> None:
+    with pytest.raises(json.JSONDecodeError):
+        parse_settlement_rules_json("not json {")
+
+
+def test_settlement_rule_resource_name_without_colon_raises() -> None:
+    with pytest.raises(ValidationError):
+        SettlementRule(
+            rule_id="a",
+            resource_name="bad",
+            usage_type="llm_request",
+            match=SettlementRuleMatch(),
+        )
+
+
+def test_settlement_rule_invalid_usage_type_raises() -> None:
+    with pytest.raises(ValidationError, match="UsageType"):
+        SettlementRule(
+            rule_id="a",
+            resource_name="llm:*",
+            usage_type="not_a_usage_type",
+            match=SettlementRuleMatch(),
+        )
+
+
 def test_rule_matches_operation_name_prefix() -> None:
     rule = SettlementRule(
         rule_id="r1",
@@ -38,6 +106,63 @@ def test_rule_matches_operation_name_prefix() -> None:
     )
     assert rule_matches_span(rule, _span(operation_name="flows.x")) is True
     assert rule_matches_span(rule, _span(operation_name="crm.x")) is False
+
+
+def test_rule_matches_operation_name_equals() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="tool:*",
+        usage_type="tool_call",
+        match=SettlementRuleMatch(operation_name_equals="exact.op"),
+    )
+    assert rule_matches_span(rule, _span(operation_name="exact.op")) is True
+    assert rule_matches_span(rule, _span(operation_name="exact.op.other")) is False
+
+
+def test_rule_matches_service_name_equals() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="llm:*",
+        usage_type="llm_request",
+        match=SettlementRuleMatch(service_name_equals="rag"),
+    )
+    assert rule_matches_span(rule, _span(service_name="rag")) is True
+    assert rule_matches_span(rule, _span(service_name="flows")) is False
+
+
+def test_rule_matches_event_type_equals() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="llm:*",
+        usage_type="llm_request",
+        match=SettlementRuleMatch(event_type_equals="span.end"),
+    )
+    assert rule_matches_span(rule, _span(event_type="span.end")) is True
+    assert rule_matches_span(rule, _span(event_type="other")) is False
+
+
+def test_rule_matches_prefix_and_attribute_and_equals_and() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="llm:*",
+        usage_type="llm_request",
+        match=SettlementRuleMatch(
+            operation_name_prefix="api.",
+            operation_name_equals="api.v1.call",
+            service_name_equals="sync",
+            event_type_equals="e1",
+            attribute_equals={"k": 1},
+        ),
+    )
+    ok = _span(
+        operation_name="api.v1.call",
+        service_name="sync",
+        event_type="e1",
+        attributes={"k": 1},
+    )
+    assert rule_matches_span(rule, ok) is True
+    assert rule_matches_span(rule, _span(operation_name="api.other", attributes={"k": 1})) is False
+    assert rule_matches_span(rule, _span(operation_name="api.v1.call", attributes={"k": 2})) is False
 
 
 def test_rule_matches_attribute_equals() -> None:
@@ -52,6 +177,68 @@ def test_rule_matches_attribute_equals() -> None:
     attrs = {"platform.billing.resource_name": "llm:gpt-4"}
     assert rule_matches_span(rule, _span(attributes=attrs)) is True
     assert rule_matches_span(rule, _span(attributes={})) is False
+
+
+def test_rule_matches_span_attributes_not_dict_returns_false() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="llm:*",
+        usage_type="llm_request",
+        match=SettlementRuleMatch(attribute_equals={"a": 1}),
+    )
+    assert rule_matches_span(rule, _span(attributes="not-a-dict")) is False  # type: ignore[arg-type]
+
+
+def test_rule_matches_operation_name_not_string_prefix_fails() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="llm:*",
+        usage_type="llm_request",
+        match=SettlementRuleMatch(operation_name_prefix="x."),
+    )
+    assert rule_matches_span(rule, _span(operation_name=123)) is False  # type: ignore[arg-type]
+
+
+def test_resolve_matched_rules_empty_rules() -> None:
+    doc = SettlementRulesDocument(rules=[])
+    assert resolve_matched_rules(doc, _span()) == []
+
+
+def test_resolve_matched_rules_no_match() -> None:
+    doc = SettlementRulesDocument(
+        rules=[
+            SettlementRule(
+                rule_id="r1",
+                resource_name="llm:*",
+                usage_type="llm_request",
+                match=SettlementRuleMatch(operation_name_prefix="nope."),
+            )
+        ],
+    )
+    assert resolve_matched_rules(doc, _span(operation_name="yes.op")) == []
+
+
+def test_resolve_disabled_rule_excluded() -> None:
+    doc = SettlementRulesDocument(
+        rules=[
+            SettlementRule(
+                rule_id="off",
+                enabled=False,
+                resource_name="llm:*",
+                usage_type="llm_request",
+                match=SettlementRuleMatch(operation_name_prefix="z."),
+            ),
+            SettlementRule(
+                rule_id="on",
+                resource_name="tool:*",
+                usage_type="tool_call",
+                match=SettlementRuleMatch(operation_name_prefix="z."),
+            ),
+        ],
+    )
+    out = resolve_matched_rules(doc, _span(operation_name="z.q"))
+    assert len(out) == 1
+    assert out[0].rule_id == "on"
 
 
 def test_resolve_first_win() -> None:
@@ -78,6 +265,33 @@ def test_resolve_first_win() -> None:
     out = resolve_matched_rules(doc, span)
     assert len(out) == 1
     assert out[0].rule_id == "a"
+
+
+def test_resolve_first_win_across_two_exclusive_groups_picks_best_priority() -> None:
+    doc = SettlementRulesDocument(
+        application_mode=SettlementApplicationMode.FIRST_WIN,
+        rules=[
+            SettlementRule(
+                rule_id="ga",
+                priority=30,
+                exclusive_group="g1",
+                resource_name="llm:*",
+                usage_type="llm_request",
+                match=SettlementRuleMatch(operation_name_prefix="m."),
+            ),
+            SettlementRule(
+                rule_id="gb",
+                priority=5,
+                exclusive_group="g2",
+                resource_name="tool:*",
+                usage_type="tool_call",
+                match=SettlementRuleMatch(operation_name_prefix="m."),
+            ),
+        ],
+    )
+    out = resolve_matched_rules(doc, _span(operation_name="m.x"))
+    assert len(out) == 1
+    assert out[0].rule_id == "gb"
 
 
 def test_resolve_exclusive_group_one_winner() -> None:
@@ -115,15 +329,89 @@ def test_resolve_exclusive_group_one_winner() -> None:
     assert ids == {"high", "solo"}
 
 
+def test_resolve_two_exclusive_groups_both_winners_plus_standalone() -> None:
+    doc = SettlementRulesDocument(
+        application_mode=SettlementApplicationMode.ALL_MATCHING,
+        rules=[
+            SettlementRule(
+                rule_id="a1",
+                priority=1,
+                exclusive_group="A",
+                resource_name="llm:*",
+                usage_type="llm_request",
+                match=SettlementRuleMatch(operation_name_prefix="q."),
+            ),
+            SettlementRule(
+                rule_id="a2",
+                priority=9,
+                exclusive_group="A",
+                resource_name="tool:*",
+                usage_type="tool_call",
+                match=SettlementRuleMatch(operation_name_prefix="q."),
+            ),
+            SettlementRule(
+                rule_id="b1",
+                priority=2,
+                exclusive_group="B",
+                resource_name="embedding:*",
+                usage_type="embedding_request",
+                match=SettlementRuleMatch(operation_name_prefix="q."),
+            ),
+            SettlementRule(
+                rule_id="standalone",
+                priority=3,
+                resource_name="llm:*",
+                usage_type="llm_request",
+                match=SettlementRuleMatch(operation_name_prefix="q."),
+            ),
+        ],
+    )
+    out = resolve_matched_rules(doc, _span(operation_name="q.x"))
+    ids = {r.rule_id for r in out}
+    assert ids == {"a1", "b1", "standalone"}
+
+
 def test_quantity_const_and_attr() -> None:
     span = _span(attributes={"platform.llm.input_tokens": 7})
     assert quantity_from_span("const:3", span) == 3
     assert quantity_from_span("attr:platform.llm.input_tokens", span) == 7
 
 
-def test_quantity_from_invalid() -> None:
+def test_quantity_const_zero_raises() -> None:
+    with pytest.raises(ValueError, match=">= 1"):
+        quantity_from_span("const:0", _span())
+
+
+def test_quantity_const_negative_raises() -> None:
+    with pytest.raises(ValueError, match=">= 1"):
+        quantity_from_span("const:-1", _span())
+
+
+def test_quantity_attr_empty_key_raises() -> None:
+    with pytest.raises(ValueError, match="пустой ключ"):
+        quantity_from_span("attr:", _span())
+
+
+def test_quantity_attr_whitespace_only_key_raises() -> None:
+    with pytest.raises(ValueError, match="пустой ключ"):
+        quantity_from_span("attr:   ", _span())
+
+
+def test_quantity_from_invalid_format_raises() -> None:
     with pytest.raises(ValueError, match="неизвестный формат"):
         quantity_from_span("bad", _span())
 
+
+def test_quantity_attr_missing_raises() -> None:
     with pytest.raises(ValueError, match="атрибут"):
         quantity_from_span("attr:platform.missing", _span(attributes={}))
+
+
+def test_quantity_attr_not_int_raises() -> None:
+    with pytest.raises(ValueError, match="int()"):
+        quantity_from_span("attr:platform.x", _span(attributes={"platform.x": "nope"}))
+
+
+def test_quantity_attr_zero_raises() -> None:
+    with pytest.raises(ValueError, match=">= 1"):
+        quantity_from_span("attr:platform.x", _span(attributes={"platform.x": 0}))

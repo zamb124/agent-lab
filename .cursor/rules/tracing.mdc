@@ -95,14 +95,15 @@ alwaysApply: false
 | `get_spans_by_user` | По `user_id`, опционально интервал времени |
 | `get_spans_by_flow` / `get_spans_by_agent` | По `platform.flow_id` в `attributes` |
 | `search_traces` | Фильтры user/session/flow + пагинация; группировка по `trace_id` |
-| `admin_search_spans` | Админ-список без обязательного `service_name`: точные и ILIKE-фильтры (мин. 2 символа для подстрок), интервал времени, курсор `(start_time, span_id)` как у `list_spans_for_service` |
-| `admin_facet_distinct_*` | Подсказки distinct: `company_id`, `user_id`, `service_name`, `event_type` |
+| `admin_search_spans` | Админ-список: точные `company_id`, `user_id`, `namespace`, `service_name`; ILIKE `*_query` для company/user/operation/event/**namespace**/**service** (мин. 2 символа для query); при заданном точном `namespace` / `service_name` соответствующий `*_query` не применяется; интервал времени; курсор `(start_time, span_id)` |
+| `admin_facet_distinct_*` | Подсказки distinct: компании, пользователи, сервисы, типы событий, **namespaces**, **operation_name**; опционально сужение по `company_id` и (кроме facet namespaces) по `namespace` |
 | `list_spans_pending_billing_settlement` | Окно `[from_time, to_time)` по `start_time`: есть `platform.billing.resource_name` и `pending_settlement`; сортировка по времени; лимит пачки для джобы |
 
 ## Админ UI (frontend)
 
 - Доступ только при **активной компании `system`** (`SYSTEM_COMPANY_ID`), иначе **403**.
-- HTTP API сервиса **frontend**: префикс **`/frontend/api/platform-tracing`** (роутер `apps/frontend/api/platform_tracing.py`): facets, `GET /spans` (данные из `admin_search_spans`), `GET /traces/{trace_id}` (плоский список из `get_trace` + дерево через **`build_span_tree`** в `core/tracing/span_tree.py`).
+- HTTP API сервиса **frontend**: префикс **`/frontend/api/platform-tracing`** (роутер `apps/frontend/api/platform_tracing.py`): `GET /facets/companies`, `/facets/users`, `/facets/services`, `/facets/event-types`, **`/facets/namespaces`**, **`/facets/operations`** — query `q`, опционально **`company_id`**, **`namespace`** (где поддерживает репозиторий); `GET /spans` (`namespace_query`, `service_name_query` и прочие фильтры из `admin_search_spans`); `GET /traces/{trace_id}` (плоский список из `get_trace` + дерево **`build_span_tree`**).
+- UI **`tracing-page.js`**: поисковые поля с выпадающими подсказками по фасетам; выбор строки задаёт точный фильтр; свободный ввод из ≥2 символов — подстроковый query; после выбора компании (и при необходимости namespace) фасеты запрашиваются с теми же query-параметрами сужения.
 - Если **`database.tracing_url` пустой** или **`tracing.postgres_enabled=false`** — эндпоинты отвечают **503** (без пустых данных).
 - Страница консоли: **`apps/frontend/ui/pages/admin/tracing-page.js`**, пункт меню в сайдбаре только для `system`.
 - Пути **`/frontend/api/platform-tracing/*`** и **`/platform-tracing`** зарегистрированы в **`core/middleware/auth/route_config.py`** (иначе AuthMiddleware отдаёт 404).

@@ -83,6 +83,20 @@ def _facet_query_fragment(q: Optional[str]) -> Optional[str]:
     return stripped
 
 
+def _admin_facet_scope_company(company_id: Optional[str]) -> Optional[str]:
+    if company_id is None:
+        return None
+    stripped = company_id.strip()
+    return stripped if stripped else None
+
+
+def _admin_facet_scope_namespace(namespace: Optional[str]) -> Optional[str]:
+    if namespace is None:
+        return None
+    stripped = namespace.strip()
+    return stripped if stripped else None
+
+
 class SpanRepository:
     def __init__(self, storage: "Storage"):
         self._storage = storage
@@ -400,6 +414,8 @@ class SpanRepository:
         user_id_query: Optional[str] = None,
         operation_name_query: Optional[str] = None,
         event_type_query: Optional[str] = None,
+        namespace_query: Optional[str] = None,
+        service_name_query: Optional[str] = None,
         limit: int = 50,
         cursor: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
@@ -414,17 +430,27 @@ class SpanRepository:
         user_frag = _admin_optional_ilike_param("user_id_query", user_id_query)
         op_frag = _admin_optional_ilike_param("operation_name_query", operation_name_query)
         event_frag = _admin_optional_ilike_param("event_type_query", event_type_query)
+        namespace_frag: Optional[str] = None
+        if namespace is None:
+            namespace_frag = _admin_optional_ilike_param("namespace_query", namespace_query)
+        service_name_frag: Optional[str] = None
+        if service_name is None:
+            service_name_frag = _admin_optional_ilike_param("service_name_query", service_name_query)
 
         async with self._storage._get_session() as session:
             stmt = select(Spans)
             if service_name is not None:
                 stmt = stmt.where(Spans.service_name == service_name)
+            elif service_name_frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.service_name, service_name_frag))
             if company_id is not None:
                 stmt = stmt.where(Spans.company_id == company_id)
             if user_id is not None:
                 stmt = stmt.where(Spans.user_id == user_id)
             if namespace is not None:
                 stmt = stmt.where(Spans.namespace == namespace)
+            elif namespace_frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.namespace, namespace_frag))
             if from_time is not None:
                 stmt = stmt.where(Spans.start_time >= from_time)
             if to_time is not None:
@@ -516,15 +542,26 @@ class SpanRepository:
             return [row[0] for row in result.all() if row[0] is not None]
 
     async def admin_facet_distinct_user_ids(
-        self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
+        self,
+        *,
+        q: Optional[str] = None,
+        company_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+        limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
         from core.db.models import Spans
 
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
+        scope_co = _admin_facet_scope_company(company_id)
+        scope_ns = _admin_facet_scope_namespace(namespace)
         async with self._storage._get_session() as session:
             stmt = select(Spans.user_id).where(Spans.user_id.isnot(None))
+            if scope_co is not None:
+                stmt = stmt.where(Spans.company_id == scope_co)
+            if scope_ns is not None:
+                stmt = stmt.where(Spans.namespace == scope_ns)
             if frag is not None:
                 stmt = stmt.where(_admin_ilike(Spans.user_id, frag))
             stmt = stmt.distinct().order_by(Spans.user_id.asc()).limit(limit)
@@ -532,15 +569,26 @@ class SpanRepository:
             return [row[0] for row in result.all() if row[0] is not None]
 
     async def admin_facet_distinct_service_names(
-        self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
+        self,
+        *,
+        q: Optional[str] = None,
+        company_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+        limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
         from core.db.models import Spans
 
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
+        scope_co = _admin_facet_scope_company(company_id)
+        scope_ns = _admin_facet_scope_namespace(namespace)
         async with self._storage._get_session() as session:
             stmt = select(Spans.service_name).where(Spans.service_name.isnot(None))
+            if scope_co is not None:
+                stmt = stmt.where(Spans.company_id == scope_co)
+            if scope_ns is not None:
+                stmt = stmt.where(Spans.namespace == scope_ns)
             if frag is not None:
                 stmt = stmt.where(_admin_ilike(Spans.service_name, frag))
             stmt = stmt.distinct().order_by(Spans.service_name.asc()).limit(limit)
@@ -548,18 +596,79 @@ class SpanRepository:
             return [row[0] for row in result.all() if row[0] is not None]
 
     async def admin_facet_distinct_event_types(
-        self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
+        self,
+        *,
+        q: Optional[str] = None,
+        company_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+        limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
         from core.db.models import Spans
 
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
+        scope_co = _admin_facet_scope_company(company_id)
+        scope_ns = _admin_facet_scope_namespace(namespace)
         async with self._storage._get_session() as session:
             stmt = select(Spans.event_type).where(Spans.event_type.isnot(None))
+            if scope_co is not None:
+                stmt = stmt.where(Spans.company_id == scope_co)
+            if scope_ns is not None:
+                stmt = stmt.where(Spans.namespace == scope_ns)
             if frag is not None:
                 stmt = stmt.where(_admin_ilike(Spans.event_type, frag))
             stmt = stmt.distinct().order_by(Spans.event_type.asc()).limit(limit)
+            result = await session.execute(stmt)
+            return [row[0] for row in result.all() if row[0] is not None]
+
+    async def admin_facet_distinct_namespaces(
+        self,
+        *,
+        q: Optional[str] = None,
+        company_id: Optional[str] = None,
+        limit: int = ADMIN_FACETS_MAX_LIMIT,
+    ) -> List[str]:
+        from core.db.models import Spans
+
+        if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
+            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+        frag = _facet_query_fragment(q)
+        scope_co = _admin_facet_scope_company(company_id)
+        async with self._storage._get_session() as session:
+            stmt = select(Spans.namespace).where(Spans.namespace.isnot(None))
+            if scope_co is not None:
+                stmt = stmt.where(Spans.company_id == scope_co)
+            if frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.namespace, frag))
+            stmt = stmt.distinct().order_by(Spans.namespace.asc()).limit(limit)
+            result = await session.execute(stmt)
+            return [row[0] for row in result.all() if row[0] is not None]
+
+    async def admin_facet_distinct_operation_names(
+        self,
+        *,
+        q: Optional[str] = None,
+        company_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+        limit: int = ADMIN_FACETS_MAX_LIMIT,
+    ) -> List[str]:
+        from core.db.models import Spans
+
+        if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
+            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+        frag = _facet_query_fragment(q)
+        scope_co = _admin_facet_scope_company(company_id)
+        scope_ns = _admin_facet_scope_namespace(namespace)
+        async with self._storage._get_session() as session:
+            stmt = select(Spans.operation_name).where(Spans.operation_name.isnot(None))
+            if scope_co is not None:
+                stmt = stmt.where(Spans.company_id == scope_co)
+            if scope_ns is not None:
+                stmt = stmt.where(Spans.namespace == scope_ns)
+            if frag is not None:
+                stmt = stmt.where(_admin_ilike(Spans.operation_name, frag))
+            stmt = stmt.distinct().order_by(Spans.operation_name.asc()).limit(limit)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
 

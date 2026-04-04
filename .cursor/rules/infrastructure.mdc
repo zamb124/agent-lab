@@ -22,7 +22,7 @@ alwaysApply: false
 
 ## Маршрутизация (Ingress)
 
-Один ingress `humanitec-ingress` с path-based роутингом — работает одинаково для корневого домена и поддоменов компаний. Отдельный `livekit-ingress` для WebRTC:
+Один ingress `humanitec-ingress` с path-based роутингом — работает одинаково для корневого домена и поддоменов компаний. Аннотация **`nginx.ingress.kubernetes.io/proxy-body-size: "100m"`** на `humanitec-ingress` (см. `deploy/ingress.sh`) — без неё nginx ingress отдаёт **413** на большие POST (например `/documents`). Отдельный `livekit-ingress` для WebRTC:
 
 ```
 humanitec.ru/           → frontend-svc  :8002

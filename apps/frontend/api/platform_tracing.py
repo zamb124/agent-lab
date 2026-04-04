@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -53,11 +53,18 @@ async def facet_users(
     request: Request,
     container: ContainerDep,
     q: Optional[str] = Query(default=None),
+    company_id: Optional[str] = Query(default=None),
+    namespace: Optional[str] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetsResponse:
     _require_system(request)
     _require_tracing_db()
-    items = await container.span_repository.admin_facet_distinct_user_ids(q=q, limit=limit)
+    items = await container.span_repository.admin_facet_distinct_user_ids(
+        q=q,
+        company_id=company_id,
+        namespace=namespace,
+        limit=limit,
+    )
     return PlatformTracingFacetsResponse(items=items)
 
 
@@ -66,11 +73,18 @@ async def facet_services(
     request: Request,
     container: ContainerDep,
     q: Optional[str] = Query(default=None),
+    company_id: Optional[str] = Query(default=None),
+    namespace: Optional[str] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetsResponse:
     _require_system(request)
     _require_tracing_db()
-    items = await container.span_repository.admin_facet_distinct_service_names(q=q, limit=limit)
+    items = await container.span_repository.admin_facet_distinct_service_names(
+        q=q,
+        company_id=company_id,
+        namespace=namespace,
+        limit=limit,
+    )
     return PlatformTracingFacetsResponse(items=items)
 
 
@@ -79,11 +93,56 @@ async def facet_event_types(
     request: Request,
     container: ContainerDep,
     q: Optional[str] = Query(default=None),
+    company_id: Optional[str] = Query(default=None),
+    namespace: Optional[str] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetsResponse:
     _require_system(request)
     _require_tracing_db()
-    items = await container.span_repository.admin_facet_distinct_event_types(q=q, limit=limit)
+    items = await container.span_repository.admin_facet_distinct_event_types(
+        q=q,
+        company_id=company_id,
+        namespace=namespace,
+        limit=limit,
+    )
+    return PlatformTracingFacetsResponse(items=items)
+
+
+@router.get("/facets/namespaces", response_model=PlatformTracingFacetsResponse)
+async def facet_namespaces(
+    request: Request,
+    container: ContainerDep,
+    q: Optional[str] = Query(default=None),
+    company_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+) -> PlatformTracingFacetsResponse:
+    _require_system(request)
+    _require_tracing_db()
+    items = await container.span_repository.admin_facet_distinct_namespaces(
+        q=q,
+        company_id=company_id,
+        limit=limit,
+    )
+    return PlatformTracingFacetsResponse(items=items)
+
+
+@router.get("/facets/operations", response_model=PlatformTracingFacetsResponse)
+async def facet_operations(
+    request: Request,
+    container: ContainerDep,
+    q: Optional[str] = Query(default=None),
+    company_id: Optional[str] = Query(default=None),
+    namespace: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+) -> PlatformTracingFacetsResponse:
+    _require_system(request)
+    _require_tracing_db()
+    items = await container.span_repository.admin_facet_distinct_operation_names(
+        q=q,
+        company_id=company_id,
+        namespace=namespace,
+        limit=limit,
+    )
     return PlatformTracingFacetsResponse(items=items)
 
 
@@ -101,6 +160,8 @@ async def list_spans(
     user_id_query: Optional[str] = Query(default=None),
     operation_name_query: Optional[str] = Query(default=None),
     event_type_query: Optional[str] = Query(default=None),
+    namespace_query: Optional[str] = Query(default=None),
+    service_name_query: Optional[str] = Query(default=None),
     cursor: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=ADMIN_SPANS_MAX_LIMIT),
 ) -> PlatformTracingSpansPageResponse:
@@ -118,6 +179,8 @@ async def list_spans(
             user_id_query=user_id_query,
             operation_name_query=operation_name_query,
             event_type_query=event_type_query,
+            namespace_query=namespace_query,
+            service_name_query=service_name_query,
             limit=limit,
             cursor=cursor,
         )

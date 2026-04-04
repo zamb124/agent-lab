@@ -114,6 +114,23 @@
     "sync_meeting_reminder_cron": "*/1 * * * *",
     "sync_meeting_reminder_limit": 500
   },
+  "selectel": {
+    "ip": "YOUR_SERVER_PUBLIC_IPV4",
+    "login": "root",
+    "ssh_port": "22"
+  },
+  "ingress": {
+    "domain": "your-domain.example.com",
+    "email": "admin@your-domain.example.com",
+    "services": [
+      {"name": "frontend", "port": 8002, "path": "/", "websocket": false},
+      {"name": "agents", "port": 8001, "path": "/flows", "websocket": false},
+      {"name": "crm", "port": 8003, "path": "/crm", "websocket": false},
+      {"name": "rag", "port": 8004, "path": "/rag", "websocket": false},
+      {"name": "sync", "port": 8005, "path": "/sync", "websocket": true},
+      {"name": "office", "port": 8008, "path": "/documents", "websocket": false}
+    ]
+  },
   "services": {
     "office": {
       "office": {

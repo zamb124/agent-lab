@@ -18,6 +18,7 @@ def _row(
     start_time: datetime,
     company_id: str | None = "acme",
     user_id: str | None = "u1",
+    namespace: str = "default",
     event_type: str | None = None,
 ) -> dict:
     return {
@@ -32,7 +33,7 @@ def _row(
         "status": "OK",
         "service_name": service_name,
         "company_id": company_id,
-        "namespace": "default",
+        "namespace": namespace,
         "user_id": user_id,
         "user_name": None,
         "user_groups": None,
@@ -104,3 +105,70 @@ async def test_admin_facet_distinct_company_ids(container, unique_id: str):
     )
     out = await repo.admin_facet_distinct_company_ids(q=unique_id, limit=20)
     assert cid in out
+
+
+@pytest.mark.asyncio
+async def test_admin_facet_distinct_user_ids_scoped_by_company(container, unique_id: str):
+    repo = container.span_repository
+    base = datetime.now(timezone.utc)
+    co_a = f"scope_a_{unique_id}"
+    co_b = f"scope_b_{unique_id}"
+    uid = f"user_scope_{unique_id}"
+    await repo.save_span(
+        _row(
+            span_id=f"{unique_id}_sa",
+            trace_id=f"{unique_id}_tsa",
+            service_name=f"svc_{unique_id}",
+            operation_name="a",
+            start_time=base,
+            company_id=co_a,
+            user_id=uid,
+        )
+    )
+    await repo.save_span(
+        _row(
+            span_id=f"{unique_id}_sb",
+            trace_id=f"{unique_id}_tsb",
+            service_name=f"svc_{unique_id}",
+            operation_name="b",
+            start_time=base,
+            company_id=co_b,
+            user_id=uid,
+        )
+    )
+    out_all = await repo.admin_facet_distinct_user_ids(q=unique_id, limit=20)
+    assert uid in out_all
+    out_a = await repo.admin_facet_distinct_user_ids(q=unique_id, company_id=co_a, limit=20)
+    assert uid in out_a
+    out_b_only = await repo.admin_facet_distinct_user_ids(
+        q=unique_id, company_id=co_b, namespace="other", limit=20
+    )
+    assert uid not in out_b_only
+
+
+@pytest.mark.asyncio
+async def test_admin_search_spans_namespace_and_service_ilike(container, unique_id: str):
+    repo = container.span_repository
+    base = datetime.now(timezone.utc)
+    svc = f"my_svc_{unique_id}_tail"
+    await repo.save_span(
+        _row(
+            span_id=f"{unique_id}_ns",
+            trace_id=f"{unique_id}_tns",
+            service_name=svc,
+            operation_name="op",
+            start_time=base,
+            company_id="system",
+            namespace=f"ns_{unique_id}_x",
+        )
+    )
+    rows_ns, _ = await repo.admin_search_spans(
+        namespace_query=unique_id,
+        limit=20,
+    )
+    assert any(r["span_id"] == f"{unique_id}_ns" for r in rows_ns)
+    rows_svc, _ = await repo.admin_search_spans(
+        service_name_query=unique_id,
+        limit=20,
+    )
+    assert any(r["span_id"] == f"{unique_id}_ns" for r in rows_svc)

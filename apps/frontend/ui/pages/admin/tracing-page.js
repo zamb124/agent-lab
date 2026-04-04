@@ -9,6 +9,15 @@ import '@platform/lib/components/platform-button.js';
 const FACET_DEBOUNCE_MS = 300;
 const API_BASE = '/frontend/api/platform-tracing';
 
+const FACET_PATHS = {
+    company: 'facets/companies',
+    user: 'facets/users',
+    service: 'facets/services',
+    event: 'facets/event-types',
+    namespace: 'facets/namespaces',
+    operation: 'facets/operations',
+};
+
 export class TracingPage extends PlatformElement {
     static styles = [
         PlatformElement.styles,
@@ -39,6 +48,51 @@ export class TracingPage extends PlatformElement {
                 background: var(--glass-solid-medium);
                 color: var(--text-primary);
                 font-size: var(--text-sm);
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .suggest-wrap {
+                position: relative;
+                width: 100%;
+            }
+
+            .suggest-panel {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: calc(100% + 2px);
+                z-index: 50;
+                max-height: 220px;
+                overflow: auto;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-default);
+                background: var(--glass-solid-strong);
+                box-shadow: var(--shadow-md);
+            }
+
+            .suggest-item {
+                display: block;
+                width: 100%;
+                text-align: left;
+                padding: var(--space-2) var(--space-3);
+                border: none;
+                border-bottom: 1px solid var(--border-subtle);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                word-break: break-word;
+            }
+
+            .suggest-item:last-child {
+                border-bottom: none;
+            }
+
+            .suggest-item:hover,
+            .suggest-item:focus-visible {
+                background: var(--glass-tint-medium);
+                outline: none;
             }
 
             .actions {
@@ -170,10 +224,14 @@ export class TracingPage extends PlatformElement {
         _fEventType: { type: String, state: true },
         _fOperation: { type: String, state: true },
         _fNamespace: { type: String, state: true },
-        _fCompanyExact: { type: String, state: true },
-        _fUserExact: { type: String, state: true },
         _fFrom: { type: String, state: true },
         _fTo: { type: String, state: true },
+        _pickCompany: { type: String, state: true },
+        _pickUser: { type: String, state: true },
+        _pickNamespace: { type: String, state: true },
+        _pickService: { type: String, state: true },
+        _facetOpen: { type: String, state: true },
+        _facetItems: { type: Object, state: true },
     };
 
     constructor() {
@@ -193,27 +251,58 @@ export class TracingPage extends PlatformElement {
         this._fEventType = '';
         this._fOperation = '';
         this._fNamespace = '';
-        this._fCompanyExact = '';
-        this._fUserExact = '';
         this._fFrom = '';
         this._fTo = '';
+        this._pickCompany = '';
+        this._pickUser = '';
+        this._pickNamespace = '';
+        this._pickService = '';
+        this._facetOpen = '';
+        this._facetItems = {
+            company: [],
+            user: [],
+            service: [],
+            event: [],
+            namespace: [],
+            operation: [],
+        };
         this._facetDebounce = {};
-        this._datalistIds = {
-            company: 'tracing-facet-company',
-            user: 'tracing-facet-user',
-            service: 'tracing-facet-service',
-            event: 'tracing-facet-event',
+        this._onDocClick = (e) => {
+            if (!this._facetOpen) {
+                return;
+            }
+            const path = e.composedPath();
+            const hit = path.some(
+                (n) => n instanceof HTMLElement && n.classList?.contains('suggest-wrap')
+            );
+            if (!hit) {
+                this._facetOpen = '';
+            }
         };
     }
 
     connectedCallback() {
         super.connectedCallback();
+        document.addEventListener('click', this._onDocClick);
         void this._search(false);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        document.removeEventListener('click', this._onDocClick);
         Object.values(this._facetDebounce).forEach((id) => clearTimeout(id));
+    }
+
+    _scopeCompanyId() {
+        const p = this._pickCompany.trim();
+        const v = this._fCompany.trim();
+        return p && p === v ? p : '';
+    }
+
+    _scopeNamespace() {
+        const p = this._pickNamespace.trim();
+        const v = this._fNamespace.trim();
+        return p && p === v ? p : '';
     }
 
     _scheduleFacet(kind, q) {
@@ -226,21 +315,22 @@ export class TracingPage extends PlatformElement {
     }
 
     async _loadFacet(kind, q) {
-        const trimmed = (q || '').trim();
-        if (trimmed.length > 0 && trimmed.length < 2) {
+        const path = FACET_PATHS[kind];
+        if (!path) {
             return;
         }
-        const path =
-            kind === 'company'
-                ? 'facets/companies'
-                : kind === 'user'
-                  ? 'facets/users'
-                  : kind === 'service'
-                    ? 'facets/services'
-                    : 'facets/event-types';
+        const trimmed = (q || '').trim();
         const url = new URL(`${API_BASE}/${path}`, window.location.origin);
         if (trimmed.length >= 2) {
             url.searchParams.set('q', trimmed);
+        }
+        const co = this._scopeCompanyId();
+        if (co && kind !== 'company') {
+            url.searchParams.set('company_id', co);
+        }
+        const ns = this._scopeNamespace();
+        if (ns && kind !== 'company' && kind !== 'namespace') {
+            url.searchParams.set('namespace', ns);
         }
         const response = await fetch(url.pathname + url.search, { credentials: 'include' });
         if (!response.ok) {
@@ -248,43 +338,145 @@ export class TracingPage extends PlatformElement {
         }
         const data = await response.json();
         const items = Array.isArray(data.items) ? data.items : [];
-        const dl = this.renderRoot?.querySelector(`#${this._datalistIds[kind]}`);
-        if (!dl) {
-            return;
+        this._facetItems = { ...this._facetItems, [kind]: items };
+    }
+
+    _onSuggestInput(kind, e) {
+        const raw = e.target?.value ?? '';
+        if (kind === 'company') {
+            this._fCompany = raw;
+            if (raw.trim() !== this._pickCompany.trim()) {
+                this._pickCompany = '';
+            }
+        } else if (kind === 'user') {
+            this._fUser = raw;
+            if (raw.trim() !== this._pickUser.trim()) {
+                this._pickUser = '';
+            }
+        } else if (kind === 'namespace') {
+            this._fNamespace = raw;
+            if (raw.trim() !== this._pickNamespace.trim()) {
+                this._pickNamespace = '';
+            }
+        } else if (kind === 'service') {
+            this._fService = raw;
+            if (raw.trim() !== this._pickService.trim()) {
+                this._pickService = '';
+            }
+        } else if (kind === 'event') {
+            this._fEventType = raw;
+        } else if (kind === 'operation') {
+            this._fOperation = raw;
         }
-        dl.innerHTML = '';
-        for (const v of items) {
-            const opt = document.createElement('option');
-            opt.value = v;
-            dl.appendChild(opt);
+        this._facetOpen = kind;
+        this._scheduleFacet(kind, raw);
+    }
+
+    _onSuggestFocus(kind) {
+        this._facetOpen = kind;
+        const q =
+            kind === 'company'
+                ? this._fCompany
+                : kind === 'user'
+                  ? this._fUser
+                  : kind === 'namespace'
+                    ? this._fNamespace
+                    : kind === 'service'
+                      ? this._fService
+                      : kind === 'event'
+                        ? this._fEventType
+                        : this._fOperation;
+        void this._loadFacet(kind, q);
+    }
+
+    _pickSuggest(kind, value) {
+        const v = value ?? '';
+        if (kind === 'company') {
+            this._fCompany = v;
+            this._pickCompany = v;
+        } else if (kind === 'user') {
+            this._fUser = v;
+            this._pickUser = v;
+        } else if (kind === 'namespace') {
+            this._fNamespace = v;
+            this._pickNamespace = v;
+        } else if (kind === 'service') {
+            this._fService = v;
+            this._pickService = v;
+        } else if (kind === 'event') {
+            this._fEventType = v;
+        } else if (kind === 'operation') {
+            this._fOperation = v;
         }
+        this._facetOpen = '';
+    }
+
+    _renderSuggest(kind, label, value) {
+        const open = this._facetOpen === kind;
+        const items = Array.isArray(this._facetItems[kind]) ? this._facetItems[kind] : [];
+        return html`
+            <label>
+                ${label}
+                <div class="suggest-wrap" @click=${(e) => e.stopPropagation()}>
+                    <input
+                        type="text"
+                        .value=${value}
+                        @focus=${() => this._onSuggestFocus(kind)}
+                        @input=${(e) => this._onSuggestInput(kind, e)}
+                    />
+                    ${open && items.length > 0
+                        ? html`
+                              <div class="suggest-panel" role="listbox">
+                                  ${items.map(
+                                      (item) => html`
+                                          <button
+                                              type="button"
+                                              class="suggest-item"
+                                              role="option"
+                                              @mousedown=${(e) => e.preventDefault()}
+                                              @click=${() => this._pickSuggest(kind, item)}
+                                          >
+                                              ${item}
+                                          </button>
+                                      `
+                                  )}
+                              </div>
+                          `
+                        : ''}
+                </div>
+            </label>
+        `;
     }
 
     _buildSpanQueryParams() {
         const p = new URLSearchParams();
-        const exSvc = this._fService.trim();
-        if (exSvc) {
-            p.set('service_name', exSvc);
+        const co = this._fCompany.trim();
+        const pickCo = this._pickCompany.trim();
+        if (pickCo && pickCo === co) {
+            p.set('company_id', pickCo);
+        } else if (co.length >= 2) {
+            p.set('company_id_query', co);
         }
-        const exCo = this._fCompanyExact.trim();
-        if (exCo) {
-            p.set('company_id', exCo);
-        }
-        const exUs = this._fUserExact.trim();
-        if (exUs) {
-            p.set('user_id', exUs);
+        const us = this._fUser.trim();
+        const pickUs = this._pickUser.trim();
+        if (pickUs && pickUs === us) {
+            p.set('user_id', pickUs);
+        } else if (us.length >= 2) {
+            p.set('user_id_query', us);
         }
         const ns = this._fNamespace.trim();
-        if (ns) {
-            p.set('namespace', ns);
+        const pickNs = this._pickNamespace.trim();
+        if (pickNs && pickNs === ns) {
+            p.set('namespace', pickNs);
+        } else if (ns.length >= 2) {
+            p.set('namespace_query', ns);
         }
-        const qCo = this._fCompany.trim();
-        if (qCo.length >= 2) {
-            p.set('company_id_query', qCo);
-        }
-        const qUs = this._fUser.trim();
-        if (qUs.length >= 2) {
-            p.set('user_id_query', qUs);
+        const svc = this._fService.trim();
+        const pickSvc = this._pickService.trim();
+        if (pickSvc && pickSvc === svc) {
+            p.set('service_name', pickSvc);
+        } else if (svc.length >= 2) {
+            p.set('service_name_query', svc);
         }
         const qOp = this._fOperation.trim();
         if (qOp.length >= 2) {
@@ -389,11 +581,6 @@ export class TracingPage extends PlatformElement {
         this._detailTitle = '';
     }
 
-    _onInputFacet(kind, e) {
-        const v = e.target?.value ?? '';
-        this._scheduleFacet(kind, v);
-    }
-
     render() {
         const t = (k) => this.i18n.t(k, {});
         return html`
@@ -402,92 +589,17 @@ export class TracingPage extends PlatformElement {
                 subtitle=${t('tracing_page.subtitle')}
             ></page-header>
 
-            <datalist id=${this._datalistIds.company}></datalist>
-            <datalist id=${this._datalistIds.user}></datalist>
-            <datalist id=${this._datalistIds.service}></datalist>
-            <datalist id=${this._datalistIds.event}></datalist>
-
             <div class="filters">
-                <label>
-                    ${t('tracing_page.filter_service')}
-                    <input
-                        type="text"
-                        .value=${this._fService}
-                        list=${this._datalistIds.service}
-                        @input=${(e) => {
-                            this._fService = e.target.value;
-                            this._onInputFacet('service', e);
-                        }}
-                    />
-                </label>
-                <label>
-                    ${t('tracing_page.filter_company_exact')}
-                    <input
-                        type="text"
-                        .value=${this._fCompanyExact}
-                        @input=${(e) => (this._fCompanyExact = e.target.value)}
-                    />
-                </label>
-                <label>
-                    ${t('tracing_page.filter_company_sub')}
-                    <input
-                        type="text"
-                        .value=${this._fCompany}
-                        list=${this._datalistIds.company}
-                        @input=${(e) => {
-                            this._fCompany = e.target.value;
-                            this._onInputFacet('company', e);
-                        }}
-                    />
-                </label>
-                <label>
-                    ${t('tracing_page.filter_user_exact')}
-                    <input
-                        type="text"
-                        .value=${this._fUserExact}
-                        @input=${(e) => (this._fUserExact = e.target.value)}
-                    />
-                </label>
-                <label>
-                    ${t('tracing_page.filter_user_sub')}
-                    <input
-                        type="text"
-                        .value=${this._fUser}
-                        list=${this._datalistIds.user}
-                        @input=${(e) => {
-                            this._fUser = e.target.value;
-                            this._onInputFacet('user', e);
-                        }}
-                    />
-                </label>
-                <label>
-                    ${t('tracing_page.filter_namespace')}
-                    <input
-                        type="text"
-                        .value=${this._fNamespace}
-                        @input=${(e) => (this._fNamespace = e.target.value)}
-                    />
-                </label>
-                <label>
-                    ${t('tracing_page.filter_operation_sub')}
-                    <input
-                        type="text"
-                        .value=${this._fOperation}
-                        @input=${(e) => (this._fOperation = e.target.value)}
-                    />
-                </label>
-                <label>
-                    ${t('tracing_page.filter_event_sub')}
-                    <input
-                        type="text"
-                        .value=${this._fEventType}
-                        list=${this._datalistIds.event}
-                        @input=${(e) => {
-                            this._fEventType = e.target.value;
-                            this._onInputFacet('event', e);
-                        }}
-                    />
-                </label>
+                ${this._renderSuggest('company', t('tracing_page.filter_company'), this._fCompany)}
+                ${this._renderSuggest('namespace', t('tracing_page.filter_namespace'), this._fNamespace)}
+                ${this._renderSuggest('user', t('tracing_page.filter_user'), this._fUser)}
+                ${this._renderSuggest('service', t('tracing_page.filter_service'), this._fService)}
+                ${this._renderSuggest(
+                    'operation',
+                    t('tracing_page.filter_operation'),
+                    this._fOperation
+                )}
+                ${this._renderSuggest('event', t('tracing_page.filter_event'), this._fEventType)}
                 <label>
                     ${t('tracing_page.filter_from')}
                     <input

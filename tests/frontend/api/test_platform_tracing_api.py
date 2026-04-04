@@ -185,3 +185,88 @@ async def test_platform_tracing_trace_tree(
     assert tree[0]["span_id"] == f"{unique_id}_root"
     assert len(tree[0]["children"]) == 1
     assert tree[0]["children"][0]["span_id"] == f"{unique_id}_child"
+
+
+@pytest.mark.asyncio
+async def test_platform_tracing_facet_users_scoped_by_company(
+    frontend_client_system,
+    frontend_container,
+    unique_id: str,
+):
+    repo = frontend_container.span_repository
+    base = datetime.now(timezone.utc)
+    co_x = f"api_co_x_{unique_id}"
+    uid_x = f"api_user_{unique_id}"
+    await repo.save_span(
+        _span_payload(
+            span_id=f"{unique_id}_fx",
+            trace_id=f"{unique_id}_tfx",
+            service_name=f"svc_{unique_id}",
+            operation_name="fx",
+            start_time=base,
+            company_id=co_x,
+        )
+        | {"user_id": uid_x},
+    )
+    await repo.save_span(
+        _span_payload(
+            span_id=f"{unique_id}_fy",
+            trace_id=f"{unique_id}_tfy",
+            service_name=f"svc_{unique_id}",
+            operation_name="fy",
+            start_time=base,
+            company_id="system",
+        )
+        | {"user_id": uid_x},
+    )
+    r = await frontend_client_system.get(
+        "/frontend/api/platform-tracing/facets/users",
+        params={"q": unique_id, "company_id": co_x},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert uid_x in items
+    r2 = await frontend_client_system.get(
+        "/frontend/api/platform-tracing/facets/users",
+        params={"q": unique_id, "company_id": co_x, "namespace": "nope"},
+    )
+    assert r2.status_code == 200
+    assert uid_x not in r2.json()["items"]
+
+
+@pytest.mark.asyncio
+async def test_platform_tracing_spans_namespace_and_service_query(
+    frontend_client_system,
+    frontend_container,
+    unique_id: str,
+):
+    repo = frontend_container.span_repository
+    base = datetime.now(timezone.utc)
+    ns = f"api_ns_{unique_id}"
+    svc = f"api_svc_{unique_id}_z"
+    await repo.save_span(
+        {
+            **_span_payload(
+                span_id=f"{unique_id}_nq",
+                trace_id=f"{unique_id}_tnq",
+                service_name=svc,
+                operation_name="nq",
+                start_time=base,
+            ),
+            "namespace": ns,
+        }
+    )
+    r = await frontend_client_system.get(
+        "/frontend/api/platform-tracing/spans",
+        params={"namespace_query": unique_id, "limit": 20},
+    )
+    assert r.status_code == 200
+    ids = {x["span_id"] for x in r.json()["items"]}
+    assert f"{unique_id}_nq" in ids
+    r2 = await frontend_client_system.get(
+        "/frontend/api/platform-tracing/spans",
+        params={"service_name_query": unique_id, "limit": 20},
+    )
+    assert r2.status_code == 200
+    ids2 = {x["span_id"] for x in r2.json()["items"]}
+    assert f"{unique_id}_nq" in ids2

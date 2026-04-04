@@ -150,3 +150,30 @@ async def test_platform_billing_company_prices_roundtrip(frontend_client_system,
     assert data["company_id"] == cid
     assert data["storage_override"] == payload
     await frontend_container.shared_storage.delete(key, force_global=True)
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_put_prices_invalid_catalog_422(frontend_client_system):
+    response = await frontend_client_system.put(
+        "/frontend/api/platform-billing/prices",
+        json={"llm": "not-a-dict"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_put_company_prices_invalid_422(
+    frontend_client_system, unique_id: str,
+):
+    cid = f"co_bad_{unique_id}"
+    response = await frontend_client_system.put(
+        f"/frontend/api/platform-billing/prices/company/{cid}",
+        json={"x": 1},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_get_company_prices_whitespace_id_422(frontend_client_system):
+    response = await frontend_client_system.get("/frontend/api/platform-billing/prices/company/%20")
+    assert response.status_code == 422
