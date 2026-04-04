@@ -23,6 +23,13 @@
   "tasks": {
     "broker_url": "redis://localhost:63791/0"
   },
+  "tracing": {
+    "enabled": true,
+    "postgres_enabled": true,
+    "tempo_enabled": false,
+    "sampling_rate": 1.0,
+    "retention_days": 30
+  },
   "push": {
     "enabled": true,
     "vapid_public_key": "ВСТАВИТЬ_PUBLIC_ИЗ_ГЕНЕРАТОРА",
