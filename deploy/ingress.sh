@@ -8,20 +8,15 @@
 #   domain.com/rag         → rag       (8004)
 #   domain.com/sync        → sync      (8005, websocket)
 #   domain.com/documents   → office    (8008, BFF «Документы» + OnlyOffice BFF)
-#   domain.com/web-apps    → onlyoffice (порт публикации DS на хосте, обычно 8088)
-#   domain.com/common      → onlyoffice
-#   domain.com/cache       → onlyoffice
-#   domain.com/fonts       → onlyoffice
-#   domain.com/sdkjs       → onlyoffice
-#   DS 7.3+: браузер также запрашивает /{semver}-{hex}/web-apps/..., /{semver}-{hex}/sdkjs/...,
-#   /{semver}-{hex}/doc/... (Socket.IO), /{semver}-{hex}/fonts/... плюс POST /downloadfile/... у корня. Prefix /web-apps не покрывает — на nginx-ingress
-#   нужен regex path или server-snippet (см. office.mdc). Локально: DevInterServiceProxy.
-#   (полный список префиксов — office.mdc «Ingress и OnlyOffice»)
+#   onlyoffice.domain.com  → onlyoffice (порт публикации DS на хосте, обычно 8088)
+#   Весь трафик DS идёт на субдомен — нет проблем с /{semver}-{hex}/... путями,
+#   не нужны отдельные Prefix /web-apps, /cache, /fonts, /sdkjs на основном домене.
+#   OFFICE__DOCUMENT_SERVER_PUBLIC_URL = https://onlyoffice.domain.com
+#   Локально (без ingress): DevInterServiceProxy прокси на document_server_dev_upstream_url.
 #   *.domain.com/*         → те же правила (поддомены компаний)
 #
-# OnlyOffice: браузер грузит api.js и /common/index.html с того же origin, что /documents;
-# без этих путей в ingress редактор ломается. В ingress.services — несколько записей с
-# name "onlyoffice", один port (хост:8088), разные path (см. пример ниже).
+# OnlyOffice: браузер грузит api.js и всю статику/co-editing с субдомена onlyoffice.{domain}.
+# Iframe редактора указывает на onlyoffice.{domain} — все пути DS одним ingress-правилом.
 #
 # Конфиг в conf.local.json:
 #   "selectel": { "ip": "...", "login": "...", "ssh_port": "22" }
@@ -34,13 +29,9 @@
 #       {"name": "crm",      "port": 8003, "path": "/crm",     "websocket": false},
 #       {"name": "rag",      "port": 8004, "path": "/rag",     "websocket": false},
 #       {"name": "sync",     "port": 8005, "path": "/sync",    "websocket": true},
-#       {"name": "onlyoffice","port": 8088, "path": "/web-apps","websocket": false},
-#       {"name": "onlyoffice","port": 8088, "path": "/common", "websocket": false},
-#       {"name": "onlyoffice","port": 8088, "path": "/cache", "websocket": false},
-#       {"name": "onlyoffice","port": 8088, "path": "/fonts", "websocket": false},
-#       {"name": "onlyoffice","port": 8088, "path": "/sdkjs", "websocket": false},
 #       {"name": "office",   "port": 8008, "path": "/documents","websocket": false}
 #     ],
+#     "onlyoffice_port": 8088,
 #     "wildcard_tls_secret": "humanitec-ru-wildcard-tls"
 #   }
 #   wildcard_tls_secret — опционально; иначе ищется секрет *-wildcard-tls в namespace default.
@@ -79,16 +70,10 @@ if ! jq -e '.ingress.services | map(.path) | index("/documents") != null' "${CON
   echo "Добавьте: {\"name\":\"office\",\"port\":8008,\"path\":\"/documents\",\"websocket\":false}" >&2
 fi
 
-_DS_PREFIXES='["/web-apps","/common","/cache","/fonts","/sdkjs"]'
+ONLYOFFICE_PORT="$(jq -r '.ingress.onlyoffice_port // "8088"' "${CONF_LOCAL_JSON}")"
 if jq -e '.ingress.services | map(.path) | index("/documents") != null' "${CONF_LOCAL_JSON}" >/dev/null 2>&1; then
-  _has_ds="$(jq -r --argjson p "${_DS_PREFIXES}" '
-    ($p) as $want
-    | [ .ingress.services[].path ] as $paths
-    | ($want | map(. as $x | ($paths | index($x) != null)) | any)
-  ' "${CONF_LOCAL_JSON}")"
-  if [[ "${_has_ds}" != "true" ]]; then
-    echo "ПРЕДУПРЕЖДЕНИЕ: есть /documents (office), но нет ни одного префикса OnlyOffice (/web-apps, /common, /cache, /fonts, /sdkjs)." >&2
-    echo "Редактор OnlyOffice на https://${DOMAIN}/documents не сможет грузить статику DS с того же origin. Учти также путь /{версия}-{hash}/web-apps (DS 7.3+) — см. начало deploy/ingress.sh и office.mdc." >&2
+  if [[ "${ONLYOFFICE_PORT}" == "null" ]] || [[ -z "${ONLYOFFICE_PORT}" ]]; then
+    echo "ПРЕДУПРЕЖДЕНИЕ: есть /documents (office), но ingress.onlyoffice_port не задан — субдомен onlyoffice.${DOMAIN} не будет создан." >&2
   fi
 fi
 
@@ -381,6 +366,110 @@ EOF
   sleep 60
 fi
 
+# ─── OnlyOffice Document Server: отдельный Ingress на поддомене onlyoffice.{domain} ────
+# Весь трафик DS (web-apps, sdkjs, fonts, doc, cache, downloadfile и версионные пути)
+# уходит на один хост — не нужны отдельные Prefix в основном ingress.
+# OFFICE__DOCUMENT_SERVER_PUBLIC_URL = https://onlyoffice.{domain}
+ONLYOFFICE_SUBDOMAIN="onlyoffice.${DOMAIN}"
+
+if [[ -n "${ONLYOFFICE_PORT}" ]] && [[ "${ONLYOFFICE_PORT}" != "null" ]]; then
+  log "Создаём Service и Endpoints для OnlyOffice DS (${ONLYOFFICE_SUBDOMAIN}:${ONLYOFFICE_PORT})"
+  ${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: onlyoffice-svc
+  namespace: default
+spec:
+  ports:
+  - port: ${ONLYOFFICE_PORT}
+    targetPort: ${ONLYOFFICE_PORT}
+    protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: onlyoffice-svc
+  namespace: default
+subsets:
+- addresses:
+  - ip: ${HOST_IP}
+  ports:
+  - port: ${ONLYOFFICE_PORT}
+EOF
+
+  ONLYOFFICE_SPECIFIC_SECRET="$(echo "${ONLYOFFICE_SUBDOMAIN}" | tr '.' '-')-tls"
+
+  _OO_CONFIGURED_SECRET="$(jq -r '.ingress.onlyoffice_tls_secret // empty' "${CONF_LOCAL_JSON}" 2>/dev/null || true)"
+  if [[ -n "${_OO_CONFIGURED_SECRET}" ]]; then
+    ONLYOFFICE_TLS_SECRET="${_OO_CONFIGURED_SECRET}"
+    log "OnlyOffice TLS: использует настроенный секрет ${ONLYOFFICE_TLS_SECRET}"
+  elif [[ -n "${WILDCARD_TLS_SECRET}" ]]; then
+    ONLYOFFICE_TLS_SECRET="${WILDCARD_TLS_SECRET}"
+    log "OnlyOffice TLS: использует wildcard ${ONLYOFFICE_TLS_SECRET}"
+  else
+    ONLYOFFICE_TLS_SECRET="${ONLYOFFICE_SPECIFIC_SECRET}"
+    log "OnlyOffice TLS: wildcard не найден, будет ${ONLYOFFICE_TLS_SECRET}"
+  fi
+
+  log "Создаём Ingress для ${ONLYOFFICE_SUBDOMAIN} (TLS: ${ONLYOFFICE_TLS_SECRET})"
+  ${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: onlyoffice-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection "upgrade";
+spec:
+  ingressClassName: public
+  tls:
+  - hosts:
+    - ${ONLYOFFICE_SUBDOMAIN}
+    secretName: ${ONLYOFFICE_TLS_SECRET}
+  rules:
+  - host: ${ONLYOFFICE_SUBDOMAIN}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: onlyoffice-svc
+            port:
+              number: ${ONLYOFFICE_PORT}
+EOF
+
+  if ${SSH} "microk8s kubectl get secret ${ONLYOFFICE_TLS_SECRET} -n default >/dev/null 2>&1"; then
+    log "Секрет ${ONLYOFFICE_TLS_SECRET} уже есть в кластере — сертификат не создаём"
+  else
+    log "Создаём Certificate (Let's Encrypt HTTP-01) для ${ONLYOFFICE_SUBDOMAIN}"
+    ${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ${ONLYOFFICE_TLS_SECRET}
+  namespace: default
+spec:
+  secretName: ${ONLYOFFICE_TLS_SECRET}
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+  - ${ONLYOFFICE_SUBDOMAIN}
+EOF
+    log "Ожидаем сертификат OnlyOffice (~60 сек)"
+    sleep 60
+  fi
+else
+  log "OnlyOffice DS: ingress.onlyoffice_port не задан — пропускаем субдомен ${ONLYOFFICE_SUBDOMAIN}"
+fi
+
 echo
 echo "======================================"
 echo " Ingress настроен"
@@ -389,6 +478,9 @@ ${SSH} "microk8s kubectl get ingress && echo && microk8s kubectl get certificate
 echo
 echo "  https://${DOMAIN}/"
 jq -r '.ingress.services[] | select(.path != "/") | "  https://${DOMAIN}\(.path)"' "${CONF_LOCAL_JSON}" | DOMAIN="${DOMAIN}" envsubst
+if [[ -n "${ONLYOFFICE_PORT}" ]] && [[ "${ONLYOFFICE_PORT}" != "null" ]]; then
+  echo "  https://${ONLYOFFICE_SUBDOMAIN}/ (Document Server)"
+fi
 echo "  https://<company>.${DOMAIN}/ (поддомены компаний)"
 echo "======================================"
 

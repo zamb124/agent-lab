@@ -129,18 +129,14 @@
       {"name": "crm", "port": 8003, "path": "/crm", "websocket": false},
       {"name": "rag", "port": 8004, "path": "/rag", "websocket": false},
       {"name": "sync", "port": 8005, "path": "/sync", "websocket": true},
-      {"name": "onlyoffice", "port": 8088, "path": "/web-apps", "websocket": false},
-      {"name": "onlyoffice", "port": 8088, "path": "/common", "websocket": false},
-      {"name": "onlyoffice", "port": 8088, "path": "/cache", "websocket": false},
-      {"name": "onlyoffice", "port": 8088, "path": "/fonts", "websocket": false},
-      {"name": "onlyoffice", "port": 8088, "path": "/sdkjs", "websocket": false},
       {"name": "office", "port": 8008, "path": "/documents", "websocket": false}
-    ]
+    ],
+    "onlyoffice_port": 8088
   },
   "services": {
     "office": {
       "office": {
-        "document_server_public_url": "https://your-domain.example.com",
+        "document_server_public_url": "https://onlyoffice.your-domain.example.com",
         "jwt_secret": "YOUR_ONLYOFFICE_JWT_SAME_AS_DS",
         "callback_public_base_url": "http://localhost:8008",
         "download_token_ttl_seconds": 900
