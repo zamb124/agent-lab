@@ -44,7 +44,7 @@ class TestOutputMapping:
     async def test_function_node_returns_dict(self):
         """CodeNode возвращает dict - поля пишутся в state."""
         code = """
-def run(state):
+async def run(state):
     return {"response": "function_result", "status": "ok"}
 """
         node = CodeNode(node_id="my_function", config={"code": code})
@@ -59,7 +59,7 @@ def run(state):
     async def test_function_node_with_output_mapping(self):
         """CodeNode с output_mapping маппит поля."""
         code = """
-def run(state):
+async def run(state):
     return {"value": 42, "name": "test"}
 """
         node = CodeNode(
@@ -79,7 +79,7 @@ def run(state):
         node = CodeNode(
             node_id="double_tool",
             config={
-                "code": "def execute(args, state):\n    return {'doubled': args['x'] * 2}",
+                "code": "async def execute(args, state):\n    return {'doubled': args['x'] * 2}",
                 "input_mapping": {"x": 10},
             },
         )
@@ -95,7 +95,7 @@ def run(state):
         node = CodeNode(
             node_id="triple_tool",
             config={
-                "code": "def execute(args, state):\n    return {'value': args['x'] * 3}",
+                "code": "async def execute(args, state):\n    return {'value': args['x'] * 3}",
                 "input_mapping": {"x": 10},
                 "output_mapping": {"value": "tripled_value"},
             },
@@ -114,7 +114,7 @@ class TestSaveToMessages:
     async def test_function_node_save_to_messages_disabled(self):
         """CodeNode без save_to_messages не добавляет в messages."""
         code = """
-def run(state):
+async def run(state):
     state.result = "some_value"
     return state
 """
@@ -132,7 +132,7 @@ def run(state):
     async def test_function_node_save_to_messages_with_diff(self):
         """CodeNode с save_to_messages добавляет diff стейта."""
         code = """
-def run(state):
+async def run(state):
     state.new_field = "new_value"
     state.another_field = 123
     return state
@@ -158,7 +158,7 @@ def run(state):
         node = CodeNode(
             node_id="no_msg_tool",
             config={
-                "code": "def execute(args, state):\n    return 42",
+                "code": "async def execute(args, state):\n    return 42",
                 "input_mapping": {},
                 "save_to_messages": False,
             },
@@ -175,7 +175,7 @@ def run(state):
         node = CodeNode(
             node_id="msg_tool",
             config={
-                "code": "def execute(args, state):\n    return {'answer': 42, 'status': 'ok'}",
+                "code": "async def execute(args, state):\n    return {'answer': 42, 'status': 'ok'}",
                 "input_mapping": {},
                 "save_to_messages": True,
             },
@@ -196,7 +196,7 @@ class TestMessageField:
         node = CodeNode(
             node_id="field_tool",
             config={
-                "code": "def execute(args, state):\n    return {'answer': 42, 'debug': 'internal_info'}",
+                "code": "async def execute(args, state):\n    return {'answer': 42, 'debug': 'internal_info'}",
                 "input_mapping": {},
                 "save_to_messages": True,
                 "message_field": "answer",
@@ -219,7 +219,7 @@ class TestMessageField:
     async def test_function_node_message_field(self):
         """CodeNode с message_field."""
         code = """
-def run(state):
+async def run(state):
     state.result = "public_info"
     state.internal = "private_info"
     return state
@@ -249,7 +249,7 @@ class TestStateDiff:
     async def test_diff_only_new_fields(self):
         """Diff содержит только новые поля."""
         code = """
-def run(state):
+async def run(state):
     state.new_field1 = "value1"
     state.new_field2 = "value2"
     return state
@@ -278,7 +278,7 @@ def run(state):
     async def test_diff_changed_fields(self):
         """Diff содержит измененные поля."""
         code = """
-def run(state):
+async def run(state):
     state.mutable_field = "changed_value"
     return state
 """
@@ -308,7 +308,7 @@ class TestAllNodeTypesDataFlow:
     async def test_function_to_tool_data_flow(self):
         """CodeNode -> CodeNode: передача данных."""
         func_code = """
-def run(state):
+async def run(state):
     state.calculated_value = 100
     state.factor = 5
     return state
@@ -318,7 +318,7 @@ def run(state):
         tool_node = CodeNode(
             node_id="multiply",
             config={
-                "code": "def execute(args, state):\n    return {'result': args['value'] * args['multiplier']}",
+                "code": "async def execute(args, state):\n    return {'result': args['value'] * args['multiplier']}",
                 "input_mapping": {
                     "value": "@state:calculated_value",
                     "multiplier": "@state:factor"
@@ -351,13 +351,13 @@ def run(state):
         tool_node = CodeNode(
             node_id="generate",
             config={
-                "code": "def execute(args, state):\n    return {'generated_item': {'id': 12345, 'name': 'Test Item'}}",
+                "code": "async def execute(args, state):\n    return {'generated_item': {'id': 12345, 'name': 'Test Item'}}",
                 "input_mapping": {},
             },
         )
         
         func_code = """
-def run(state):
+async def run(state):
     item = state.generated_item
     state.formatted = f"Item #{item['id']}: {item['name']}"
     return state
@@ -388,21 +388,21 @@ def run(state):
         node1 = CodeNode(
             node_id="add_ten",
             config={
-                "code": "def execute(args, state):\n    return {'after_add': args['x'] + 10}",
+                "code": "async def execute(args, state):\n    return {'after_add': args['x'] + 10}",
                 "input_mapping": {"x": "@state:initial"},
             },
         )
         node2 = CodeNode(
             node_id="double",
             config={
-                "code": "def execute(args, state):\n    return {'after_double': args['x'] * 2}",
+                "code": "async def execute(args, state):\n    return {'after_double': args['x'] * 2}",
                 "input_mapping": {"x": "@state:after_add"},
             },
         )
         node3 = CodeNode(
             node_id="subtract",
             config={
-                "code": "def execute(args, state):\n    return {'final': args['x'] - 5}",
+                "code": "async def execute(args, state):\n    return {'final': args['x'] - 5}",
                 "input_mapping": {"x": "@state:after_double"},
             },
         )
@@ -436,19 +436,19 @@ def run(state):
     async def test_function_chain_data_flow(self):
         """Цепочка CodeNode: каждый модифицирует state."""
         code1 = """
-def run(state):
+async def run(state):
     state.step1_done = True
     state.counter = 1
     return state
 """
         code2 = """
-def run(state):
+async def run(state):
     state.step2_done = True
     state.counter = state.counter + 1
     return state
 """
         code3 = """
-def run(state):
+async def run(state):
     state.step3_done = True
     state.counter = state.counter + 1
     state.summary = f"Steps completed: {state.counter}"
@@ -484,7 +484,7 @@ def run(state):
     async def test_mixed_nodes_with_messages(self):
         """Смешанная цепочка с save_to_messages."""
         func_code = """
-def run(state):
+async def run(state):
     state.user_data = {"name": "Alice", "score": 100}
     return state
 """
@@ -496,7 +496,7 @@ def run(state):
         tool_node = CodeNode(
             node_id="add_bonus",
             config={
-                "code": "def execute(args, state):\n    return {'final_score': args['score'] + args['bonus']}",
+                "code": "async def execute(args, state):\n    return {'final_score': args['score'] + args['bonus']}",
                 "input_mapping": {
                     "score": "@state:user_data.score",
                     "bonus": "@var:bonus_amount"
@@ -539,13 +539,13 @@ class TestFromConfig:
             "nodes": {
                 "step1": {
                     "type": "code",
-                    "code": "def execute(args, state):\n    return {'result': 'step1_result'}",
+                    "code": "async def execute(args, state):\n    return {'result': 'step1_result'}",
                     "output_mapping": {"result": "first_result"},
                 },
                 "step2": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state.combined = f"Got: {state.first_result}"
     return state
 """,
@@ -574,7 +574,7 @@ def run(state):
             "nodes": {
                 "process": {
                     "type": "code",
-                    "code": "def execute(args, state):\n    return {'status': 'ok', 'data': 123}",
+                    "code": "async def execute(args, state):\n    return {'status': 'ok', 'data': 123}",
                     "save_to_messages": True,
                 },
             },
@@ -601,7 +601,7 @@ def run(state):
             "nodes": {
                 "process": {
                     "type": "code",
-                    "code": "def execute(args, state):\n    return {'public': 'show this', 'private': 'hide this'}",
+                    "code": "async def execute(args, state):\n    return {'public': 'show this', 'private': 'hide this'}",
                     "save_to_messages": True,
                     "message_field": "public",
                 },
@@ -637,7 +637,7 @@ class TestComplexPipeline:
         extract_tool = InlineTool(
             tool_id="extract",
             code="""
-def execute(args, state):
+async def execute(args, state):
     return {
         'extracted': {
             'items': [
@@ -653,7 +653,7 @@ def execute(args, state):
         load_tool = InlineTool(
             tool_id="load",
             code="""
-def execute(args, state):
+async def execute(args, state):
     return {
         'load_result': {
             'saved': len(args['items']),
@@ -664,7 +664,7 @@ def execute(args, state):
         )
         
         transform_code = """
-def run(state):
+async def run(state):
     items = state.extracted['items']
     # Увеличиваем цены на 10%
     transformed = [
@@ -680,7 +680,7 @@ def run(state):
             node_id="extract",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     return {
         'extracted': {
             'items': [
@@ -704,7 +704,7 @@ def execute(args, state):
             node_id="load",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     return {
         'load_result': {
             'saved': len(args['items']),
@@ -767,7 +767,7 @@ def execute(args, state):
         4. Finalize (CodeNode): финализирует
         """
         classify_code = """
-def run(state):
+async def run(state):
     content = state.content or ""
     state.is_urgent = "urgent" in content.lower()
     state.request_type = "urgent" if state.is_urgent else "normal"
@@ -777,7 +777,7 @@ def run(state):
         urgent_tool = InlineTool(
             tool_id="urgent_handler",
             code="""
-def execute(args, state):
+async def execute(args, state):
     return {
         'process_result': {
             'priority': 'HIGH',
@@ -791,7 +791,7 @@ def execute(args, state):
         normal_tool = InlineTool(
             tool_id="normal_handler",
             code="""
-def execute(args, state):
+async def execute(args, state):
     return {
         'process_result': {
             'priority': 'NORMAL',
@@ -803,7 +803,7 @@ def execute(args, state):
         )
         
         finalize_code = """
-def run(state):
+async def run(state):
     result = state.process_result
     state.response = f"Processed by {result['handler']}: {result['message']}"
     return state
@@ -818,7 +818,7 @@ def run(state):
             node_id="urgent_process",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     return {
         'process_result': {
             'priority': 'HIGH',
@@ -837,7 +837,7 @@ def execute(args, state):
             node_id="normal_process",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     return {
         'process_result': {
             'priority': 'NORMAL',

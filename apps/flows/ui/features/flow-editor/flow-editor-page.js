@@ -11,6 +11,7 @@ import { injectEditorStyles } from './flow-editor-styles.js';
 import { confirm } from '../../modals/confirm-modal.js';
 import '../../modals/code-modal.js';
 import '../../modals/trigger-editor-modal.js';
+import '../../modals/tool-picker-modal.js';
 import './resource-property-panel.js';
 
 export class FlowEditorPage extends PlatformElement {
@@ -683,6 +684,93 @@ export class FlowEditorPage extends PlatformElement {
         this._checkForChanges();
     }
 
+    async _addGraphCodeNodeAfterDrop(canvas, item, posX, posY, nodeConfig) {
+        let addedNodeId = null;
+        canvas.addEventListener(
+            'node-added',
+            (ev) => {
+                addedNodeId = ev.detail.nodeId;
+            },
+            { once: true },
+        );
+        await canvas._addNode(item, posX, posY);
+        if (!nodeConfig) {
+            return;
+        }
+        if (!addedNodeId) {
+            throw new Error('[FlowEditorPage] code-node-drop: node-added without nodeId');
+        }
+        this._onNodeUpdated({ detail: { nodeId: addedNodeId, nodeConfig } });
+    }
+
+    async _fillCodeNodeFromCatalogTool(canvas, item, posX, posY, toolIds) {
+        if (!toolIds.length) {
+            await this._addGraphCodeNodeAfterDrop(canvas, item, posX, posY, null);
+            return;
+        }
+        const toolId = toolIds[0];
+        const toolData = await this.a2a.get(`/api/v1/tools/${encodeURIComponent(toolId)}`);
+        const code = toolData?.code;
+        if (!code || !String(code).trim()) {
+            throw new Error(
+                `[FlowEditorPage] Tool "${toolId}" has no inline code; graph code node requires Python code`,
+            );
+        }
+        const title = typeof toolData.title === 'string' ? toolData.title.trim() : '';
+        const nodeConfig = {
+            type: 'code',
+            name: title || toolData.tool_id,
+            code,
+            language: 'python',
+        };
+        if (toolData.args_schema && typeof toolData.args_schema === 'object') {
+            nodeConfig.args_schema = toolData.args_schema;
+        }
+        if (typeof toolData.description === 'string' && toolData.description.trim()) {
+            nodeConfig.description = toolData.description.trim();
+        }
+        if (typeof toolData.tool_id === 'string' && toolData.tool_id.trim()) {
+            nodeConfig.tool_id = toolData.tool_id.trim();
+        }
+        await this._addGraphCodeNodeAfterDrop(canvas, item, posX, posY, nodeConfig);
+    }
+
+    _onCodeNodeDrop(e) {
+        const { item, posX, posY } = e.detail;
+        const canvas = this.querySelector('flow-canvas');
+        if (!canvas) {
+            throw new Error('[FlowEditorPage] flow-canvas not found for code-node-drop');
+        }
+
+        const modal = document.createElement('tool-picker-modal');
+        modal.codeNodePlacement = true;
+        modal.initialSelection = [];
+
+        let committed = false;
+
+        const onToolsSelected = (ev) => {
+            committed = true;
+            const toolIds = ev.detail?.tools || [];
+            void this._fillCodeNodeFromCatalogTool(canvas, item, posX, posY, toolIds).catch((err) => {
+                this.error(err instanceof Error ? err.message : String(err));
+            });
+        };
+
+        const onClose = () => {
+            modal.removeEventListener('tools-selected', onToolsSelected);
+            if (!committed) {
+                void this._addGraphCodeNodeAfterDrop(canvas, item, posX, posY, null);
+            }
+            modal.remove();
+        };
+
+        modal.addEventListener('tools-selected', onToolsSelected);
+        modal.addEventListener('close', onClose, { once: true });
+
+        document.body.appendChild(modal);
+        modal.showModal();
+    }
+
     _onResourceSelected(e) {
         const { resourceId, resourceConfig } = e.detail;
         
@@ -1229,6 +1317,7 @@ export class FlowEditorPage extends PlatformElement {
                             @node-selected=${this._onNodeSelected}
                             @node-unselected=${this._onNodeUnselected}
                             @node-updated=${this._onNodeUpdated}
+                            @code-node-drop=${this._onCodeNodeDrop}
                             @node-added=${this._onNodeAdded}
                             @resource-selected=${this._onResourceSelected}
                             @resource-added=${this._onResourceAdded}

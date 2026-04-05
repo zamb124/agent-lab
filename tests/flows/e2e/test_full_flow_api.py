@@ -64,7 +64,7 @@ class TestE2EFlowCreationViaAPI:
                 "description": "Калькулятор для E2E теста",
                 "code_mode": "INLINE_CODE",
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     a = args.get('a', 0)
     b = args.get('b', 0)
     return a + b
@@ -105,11 +105,11 @@ def execute(args, state):
                 "nodes": {
                     "init": {
                         "type": "code",
-                        "code": "def run(state):\n    return state",
+                        "code": "async def run(state):\n    return state",
                     },
                     "process": {
                         "type": "code",
-                        "code": "def run(state):\n    company = state.variables.get('e2e_company_name', 'Unknown')\n    state.response = f'Hello from {company}!'\n    return state",
+                        "code": "async def run(state):\n    company = state.variables.get('e2e_company_name', 'Unknown')\n    state.response = f'Hello from {company}!'\n    return state",
                     },
                 },
                 "edges": [
@@ -159,7 +159,7 @@ class TestE2EFlowWithConditions:
                     "classifier": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     content = state.get('content', '')
     if 'urgent' in content.lower():
         state['route'] = 'urgent'
@@ -170,11 +170,11 @@ def run(state):
                     },
                     "urgent_handler": {
                         "type": "code",
-                        "code": "def run(state):\n    state['response'] = 'URGENT: Processing immediately!'\n    return state",
+                        "code": "async def run(state):\n    state['response'] = 'URGENT: Processing immediately!'\n    return state",
                     },
                     "normal_handler": {
                         "type": "code",
-                        "code": "def run(state):\n    state['response'] = 'Normal: Added to queue'\n    return state",
+                        "code": "async def run(state):\n    state['response'] = 'Normal: Added to queue'\n    return state",
                     },
                 },
                 "edges": [
@@ -234,7 +234,7 @@ class TestE2EInterruptInCodeNode:
                     "ask_name": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     if 'user_name' not in state:
         state['interrupt'] = {'question': 'Как вас зовут?'}
         return state
@@ -244,7 +244,7 @@ def run(state):
                     "greet": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     name = state.get('user_name', 'Guest')
     state['response'] = f'Привет, {name}!'
     return state
@@ -308,7 +308,7 @@ class TestE2EInterruptInCodeNodeV2:
                         "code": """
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
-def run(state):
+async def run(state):
     # Проверяем есть ли уже имя
     if state.variables.get('user_name'):
         return state
@@ -325,7 +325,7 @@ def run(state):
                     "greet": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     name = state.variables.get('user_name', 'Guest')
     state.response = f'Привет, {name}!'
     return state
@@ -408,7 +408,7 @@ class TestE2EExternalAPIWithVarAuth:
                     "format_result": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     result = state.get('api_result', 'No data')
     state['response'] = f'API returned: {result}'
     return state
@@ -441,7 +441,7 @@ class TestE2EMultipleInterruptScenarios:
                     "classifier": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     content = state.get('content', '').lower()
     if 'order' in content:
         state['route'] = 'order'
@@ -455,7 +455,7 @@ def run(state):
                     "order_handler": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     if 'order_id' in state:
         state['response'] = f"Заказ {state['order_id']} найден!"
         return state
@@ -471,7 +471,7 @@ def run(state):
                     "support_handler": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     if 'problem' in state:
         state['response'] = f"Создан тикет по проблеме: {state['problem']}"
         return state
@@ -487,7 +487,7 @@ def run(state):
                     "general_handler": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     state['response'] = 'Добро пожаловать! Напишите "order" или "support".'
     return state
 """,
@@ -526,7 +526,7 @@ def run(state):
                     "classifier": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     content = state.get('content', '').lower()
     if 'order' in content:
         state['route'] = 'order'
@@ -540,7 +540,7 @@ def run(state):
                     "order_handler": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     # При resume content содержит ответ пользователя (номер заказа)
     if 'order_id' in state:
         state['response'] = f"Заказ {state['order_id']} найден!"
@@ -559,7 +559,7 @@ def run(state):
                     "support_handler": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     if 'problem' in state:
         state['response'] = f"Создан тикет по проблеме: {state['problem']}"
         return state
@@ -575,7 +575,7 @@ def run(state):
                     "general_handler": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     state['response'] = 'Добро пожаловать! Напишите "order" или "support".'
     return state
 """,
@@ -696,7 +696,7 @@ class TestE2EExternalA2AInFlow:
                     "process_result": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     agent_response = state.get('response', '')
     state['response'] = f'Agent said: {agent_response}'
     return state
@@ -743,7 +743,7 @@ class TestE2EFullScenario:
                 "description": "Форматирует текст",
                 "code_mode": "INLINE_CODE",
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     text = args.get('text', '')
     return f'[FORMATTED] {text}'
 """,
@@ -764,7 +764,7 @@ def execute(args, state):
                     "welcome": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     greeting = state.get('variables', {}).get('greeting', 'Hello')
     state['welcome_msg'] = greeting
     return state
@@ -773,7 +773,7 @@ def run(state):
                     "ask_action": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     if 'action' in state:
         return state
     if state.get('asked_action'):
@@ -787,7 +787,7 @@ def run(state):
                     "process_action": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     action = state.get('action', '')
     if 'calc' in action:
         state['response'] = 'Калькулятор: 2+2=4'

@@ -164,7 +164,7 @@ class TestCodeNode:
     async def test_function_simple_execution(self, client, app):
         """Базовый inline code."""
         code = """
-def run(state):
+async def run(state):
     state['result'] = 'executed'
     state['doubled'] = state.get('value', 0) * 2
     return state
@@ -215,7 +215,7 @@ async def run(state):
     async def test_function_with_variables(self, client, app):
         """Доступ к variables из state['variables']."""
         code = """
-def run(state):
+async def run(state):
     greeting = variables.get('greeting', 'Hello')
     state['message'] = f"{greeting}, World!"
     return state
@@ -238,7 +238,7 @@ def run(state):
         code = """
 import json
 
-def run(state):
+async def run(state):
     data = json.loads(state.get('json_input', '{}'))
     state['parsed_name'] = data.get('name', 'unknown')
     return state
@@ -261,7 +261,7 @@ def run(state):
         code = """
 import re
 
-def run(state):
+async def run(state):
     text = state.get('text', '')
     matches = re.findall(r'\\d+', text)
     state['numbers'] = matches
@@ -285,7 +285,7 @@ def run(state):
         code = """
 from datetime import datetime, timedelta
 
-def run(state):
+async def run(state):
     now = datetime.now()
     tomorrow = now + timedelta(days=1)
     state['timestamp'] = now.isoformat()
@@ -309,7 +309,7 @@ def run(state):
     async def test_function_nested_state_modification(self, client, app):
         """Изменение вложенных объектов."""
         code = """
-def run(state):
+async def run(state):
     if 'user' not in state:
         state['user'] = {}
     state['user']['name'] = 'John'
@@ -337,7 +337,7 @@ def run(state):
     async def test_function_diff_added(self, client, app):
         """Новые поля в diff."""
         code = """
-def run(state):
+async def run(state):
     state['new_field'] = 'added'
     return state
 """
@@ -362,7 +362,7 @@ def run(state):
     async def test_function_diff_modified(self, client, app):
         """Изменённые поля в diff."""
         code = """
-def run(state):
+async def run(state):
     state['existing'] = 'modified'
     return state
 """
@@ -387,7 +387,7 @@ def run(state):
     async def test_function_diff_removed(self, client, app):
         """Установка поля в None вместо удаления (ExecutionState - Pydantic модель)."""
         code = """
-def run(state):
+async def run(state):
     state.to_remove = None
     return state
 """
@@ -414,7 +414,7 @@ def run(state):
     async def test_function_diff_no_changes(self, client, app):
         """Без изменений state."""
         code = """
-def run(state):
+async def run(state):
     return state
 """
         state = {"value": 42}
@@ -433,7 +433,7 @@ def run(state):
     async def test_function_diff_nested_path(self, client, app):
         """Вложенный путь в diff."""
         code = """
-def run(state):
+async def run(state):
     if 'user' not in state:
         state['user'] = {}
     state['user']['email'] = 'test@example.com'
@@ -481,7 +481,7 @@ def run(state):
     @pytest.mark.asyncio
     async def test_function_syntax_error(self, client, app):
         """Невалидный Python."""
-        code = "def run(state):\n    return state\ninvalid syntax here"
+        code = "async def run(state):\n    return state\ninvalid syntax here"
         
         response = await client.post(
             "/flows/api/v1/code/execute",
@@ -497,7 +497,7 @@ def run(state):
     async def test_function_runtime_error(self, client, app):
         """raise ValueError."""
         code = """
-def run(state):
+async def run(state):
     raise ValueError("Intentional error")
 """
         response = await client.post(
@@ -529,7 +529,7 @@ def run(state):
         """import os блокируется."""
         code = """
 import os
-def run(state):
+async def run(state):
     return state
 """
         response = await client.post(
@@ -548,7 +548,7 @@ def run(state):
         """import subprocess блокируется."""
         code = """
 import subprocess
-def run(state):
+async def run(state):
     return state
 """
         response = await client.post(
@@ -1689,7 +1689,7 @@ class TestE2EIntegration:
     async def test_e2e_function_validate_then_execute(self, client, app):
         """validate -> execute."""
         code = """
-def run(state):
+async def run(state):
     state['validated'] = True
     return state
 """
@@ -1717,7 +1717,7 @@ def run(state):
         ])
         
         function_code = """
-def run(state):
+async def run(state):
     state['processed_query'] = state.get('content', '').upper()
     return state
 """

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.db.models import VectorDocument
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
-from core.files.reader import FileReader, ReadOptions
+from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.rag.services.embedding_service import EmbeddingService
 
@@ -286,9 +286,8 @@ class PgVectorProvider(BaseRAGProvider):
 
         doc_metadata = metadata or {}
         read_result = await self._file_reader.read(
-            source=file_path,
+            file_path,
             file_name=doc_name,
-            options=ReadOptions(),
         )
         doc_metadata["file_type"] = read_result.detected_kind.value
         doc_metadata["s3_key"] = s3_key
@@ -321,9 +320,8 @@ class PgVectorProvider(BaseRAGProvider):
         filename = document_name or original_filename
 
         read_result = await self._file_reader.read(
-            source=file_data,
+            file_data,
             file_name=filename,
-            options=ReadOptions(),
         )
         doc_metadata["file_type"] = read_result.detected_kind.value
         doc_metadata["s3_key"] = s3_key

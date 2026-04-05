@@ -364,7 +364,7 @@ class TestScheduledTaskExecution:
             nodes={
                 "main": {
                     "type": "code",
-                    "code": "def run(state):\n    state['response'] = f\"Received: {state.get('content', '')}\"\n    return state",
+                    "code": "async def run(state):\n    state['response'] = f\"Received: {state.get('content', '')}\"\n    return state",
                 },
             },
             edges=[{"from": "main", "to": None}],

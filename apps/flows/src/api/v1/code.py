@@ -11,7 +11,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
 from core.logging import get_logger
@@ -19,17 +19,19 @@ from core.state import ExecutionState
 from core.docs import DocumentationQuery
 from core.docs.service import get_documentation_service
 from core.docs.models import (
-    GlobalVariable,
-    StateField,
     CodeTemplate,
+    GlobalVariable,
+    PlatformToolDoc,
+    StateField,
 )
 from core.context import get_context
 from core.errors import SafeEvalError
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.api.v1.flows import _inline_tools_list
 from apps.flows.src.container import get_container
+from apps.flows.src.services.platform_tool_docs import collect_platform_tool_docs
 from apps.flows.src.runners import PythonCodeRunner
-from apps.flows.src.state import create_initial_state
+from apps.flows.src.state import collect_flow_node_files, create_initial_state
 
 router = APIRouter(tags=["code"])
 logger = get_logger(__name__)
@@ -43,6 +45,7 @@ class CodeCompletionsResponse(BaseModel):
     module_methods: Dict[str, List[Dict[str, Any]]]
     state_fields: List[StateField] = []
     templates: List[CodeTemplate] = []
+    platform_tools: List[PlatformToolDoc] = []
 
 
 @router.get("/completions", response_model=CodeCompletionsResponse)
@@ -66,12 +69,14 @@ async def get_code_completions(
         templates: шаблоны кода
     """
     service = get_documentation_service()
-    
+    platform_tools = await collect_platform_tool_docs()
+
     query = DocumentationQuery(
         language=language,
         perspective=perspective,
+        platform_tools=platform_tools,
     )
-    
+
     response = service.query(query)
     
     # Конвертируем module_methods в dict формат для API
@@ -87,6 +92,30 @@ async def get_code_completions(
         module_methods=module_methods,
         state_fields=response.state_fields,
         templates=response.templates,
+        platform_tools=response.platform_tools,
+    )
+
+
+@router.get("/documentation")
+async def get_code_documentation(
+    language: str = "python",
+    perspective: str = "editor",
+) -> Response:
+    """
+    Полная документация для редактора inline-кода в формате Markdown
+    (тот же состав данных, что у /completions).
+    """
+    service = get_documentation_service()
+    platform_tools = await collect_platform_tool_docs()
+    query = DocumentationQuery(
+        language=language,
+        perspective=perspective,
+        platform_tools=platform_tools,
+    )
+    body = service.to_markdown(query)
+    return Response(
+        content=body,
+        media_type="text/markdown; charset=utf-8",
     )
 
 
@@ -108,7 +137,7 @@ async def get_code_templates(
     Args:
         language: Язык программирования (python, javascript)
         category: Фильтр по категории (http, llm, interaction, data, files, state, logic, basic)
-        node_type: Тип ноды (tool, function)
+        node_type: Тип ноды (code, llm_node и др., см. документацию)
         tags: Теги через запятую (http,api)
     """
     service = get_documentation_service()
@@ -170,6 +199,8 @@ async def get_editor_state(
     if cfg_ver:
         state.flow_config_version = str(cfg_ver)
     state.current_nodes = [runtime_flow.entry]
+    cfg_nodes = (runtime_flow.config or {}).get("nodes") or {}
+    state.files = collect_flow_node_files(cfg_nodes)
 
     return state.model_dump(mode="json")
 
@@ -339,7 +370,7 @@ def _get_source_by_path(path: str) -> SourceResponse:
 class ValidateRequest(BaseModel):
     """Запрос на валидацию кода"""
     code: str
-    node_type: Optional[str] = "function"
+    node_type: Optional[str] = "code"
 
 
 class ValidateResponse(BaseModel):
@@ -506,6 +537,8 @@ class ExecuteRequest(BaseModel):
     node_type: str = "code"
     node_config: Dict[str, Any] = {}
     state: Dict[str, Any]
+    flow_id: Optional[str] = None
+    skill_id: Optional[str] = None
 
 
 class DiffItem(BaseModel):
@@ -575,6 +608,35 @@ def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> L
     return diff_items
 
 
+async def _merge_execute_state_with_flow(
+    input_state: Dict[str, Any],
+    *,
+    flow_id: str,
+    skill_id: str,
+) -> None:
+    """
+    Приближает state к реальному старту flow: файлы из всех нод графа + резолвнутые variables flow.
+    Записи state.files из запроса, которых нет среди файлов графа, дописываются в конец.
+    """
+    container = get_container()
+    runtime_flow = await container.flow_factory.get_flow(flow_id, skill_id)
+    if runtime_flow is None:
+        raise ValueError(f"Flow не найден: {flow_id}")
+
+    from_graph = collect_flow_node_files(runtime_flow.config.get("nodes") or {})
+    req_files = input_state.get("files") or []
+    seen = {(f.get("name"), f.get("path")) for f in from_graph}
+    extra = [f for f in req_files if (f.get("name"), f.get("path")) not in seen]
+    input_state["files"] = list(from_graph) + extra
+    input_state["variables"] = {
+        **runtime_flow.variables,
+        **(input_state.get("variables") or {}),
+    }
+    cfg_ver = (runtime_flow.config or {}).get("version")
+    if cfg_ver:
+        input_state["flow_config_version"] = str(cfg_ver)
+
+
 @router.post("/validate", response_model=ValidateResponse)
 async def validate_code(request: ValidateRequest) -> ValidateResponse:
     """
@@ -614,7 +676,7 @@ async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
         task_id = input_state_normalized.setdefault("task_id", str(uuid.uuid4()))
         context_id = input_state_normalized.setdefault("context_id", str(uuid.uuid4()))
         input_state_normalized.setdefault("user_id", "test_user")
-        flow_id = request.node_config.get("flow_id", "test-flow")
+        flow_id = request.flow_id or request.node_config.get("flow_id") or "test-flow"
         if "session_id" not in input_state_normalized:
             input_state_normalized["session_id"] = f"{flow_id}:{context_id}"
         
@@ -643,9 +705,24 @@ async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
         input_state_normalized.setdefault("result", None)
         input_state_normalized.setdefault("validation", None)
         input_state_normalized.setdefault("join_arrived_preds", {})
-        
+
+        resolved_flow_id = flow_id
+        resolved_skill_id = (
+            request.skill_id
+            or input_state_normalized.get("skill_id")
+            or "default"
+        )
+        if resolved_flow_id and resolved_flow_id not in ("", "test-flow"):
+            await _merge_execute_state_with_flow(
+                input_state_normalized,
+                flow_id=resolved_flow_id,
+                skill_id=resolved_skill_id,
+            )
+
         node_config = await _build_node_config(request)
-        output_state = await _execute_node(node_config, input_state_normalized, flow_id=flow_id)
+        output_state = await _execute_node(
+            node_config, input_state_normalized, flow_id=resolved_flow_id
+        )
 
         duration_ms = int((time.time() - start_time) * 1000)
         diff = _compute_diff(input_state_normalized, output_state)
@@ -719,7 +796,7 @@ async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
         request_dict = request.__dict__
         # Переносим поля из request в config (кроме node_type и state)
         for key, value in request_dict.items():
-            if key not in ("node_type", "state", "node_config") and value is not None:
+            if key not in ("node_type", "state", "node_config", "flow_id", "skill_id") and value is not None:
                 config[key] = value
     
     _validate_node_config(config)

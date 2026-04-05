@@ -8,6 +8,7 @@ from core.docs.models import (
     DocumentationQuery,
     DocumentationResponse,
 )
+from core.docs.markdown_builder import build_documentation_markdown
 from core.docs.providers.base import BaseDocProvider
 from core.docs.providers.python import PythonDocProvider
 
@@ -72,8 +73,15 @@ class DocumentationService:
         
         if q.include_templates:
             response.templates = provider.get_templates(q)
-        
+
+        if q.platform_tools is not None:
+            response.platform_tools = list(q.platform_tools)
+
         return response
+
+    def to_markdown(self, q: DocumentationQuery) -> str:
+        """Тот же состав данных, что у query(), в виде одного Markdown-документа."""
+        return build_documentation_markdown(self.query(q))
     
     def get_completions(self, language: str = "python", perspective: str = "editor"):
         """Удобный метод для получения данных autocomplete."""

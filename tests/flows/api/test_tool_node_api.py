@@ -24,7 +24,7 @@ class TestCodeNodeFlowAPI:
                 "nodes": {
                     "calculator": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
+                        "code": "async def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
                         "args_schema": {
                             "a": {"type": "integer", "description": "First number"},
                             "b": {"type": "integer", "description": "Second number"},
@@ -116,7 +116,7 @@ class TestCodeNodeFlowAPI:
                 "nodes": {
                     "formatter": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return f\"{args['prefix']}{args['value']}\"",
+                        "code": "async def execute(args, state):\n    return f\"{args['prefix']}{args['value']}\"",
                         "input_mapping": {
                             "prefix": "@var:order_prefix",
                             "value": "@state:order_id",
@@ -155,13 +155,13 @@ class TestCodeNodeFlowAPI:
                 "nodes": {
                     "step1": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['x'] * 2",
+                        "code": "async def execute(args, state):\n    return args['x'] * 2",
                         "input_mapping": {"x": "@state:input"},
                         "output_key": "doubled",
                     },
                     "step2": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return args['a'] + args['b']",
+                        "code": "async def execute(args, state):\n    return args['a'] + args['b']",
                         "input_mapping": {
                             "a": "@state:doubled",
                             "b": 100,
@@ -210,7 +210,7 @@ class TestAgentWithInlineToolAPI:
                                 "args_schema": {
                                     "name": {"type": "string", "description": "Name to greet"},
                                 },
-                                "code": "def execute(args, state):\n    return f\"Hello, {args['name']}!\"",
+                                "code": "async def execute(args, state):\n    return f\"Hello, {args['name']}!\"",
                             },
                         ],
                         "llm": {"model": "gpt-4o", "temperature": 0.2},
@@ -247,7 +247,7 @@ class TestAgentWithInlineToolAPI:
                             "ask_user",
                             {
                                 "tool_id": "inline_double",
-                                "code": "def execute(args, state):\n    return args['x'] * 2",
+                                "code": "async def execute(args, state):\n    return args['x'] * 2",
                                 "args_schema": {
                                     "x": {"type": "integer", "description": "Number to double"},
                                 },
@@ -282,7 +282,7 @@ class TestUpdateFlowWithCodeNode:
                 "nodes": {
                     "start": {
                         "type": "code",
-                        "code": "def run(state):\n    state['value'] = 10\n    return state",
+                        "code": "async def run(state):\n    state['value'] = 10\n    return state",
                     }
                 },
                 "edges": [{"from": "start", "to": None}],
@@ -300,11 +300,11 @@ class TestUpdateFlowWithCodeNode:
                 "nodes": {
                     "start": {
                         "type": "code",
-                        "code": "def run(state):\n    state['value'] = 10\n    return state",
+                        "code": "async def run(state):\n    state['value'] = 10\n    return state",
                     },
                     "process": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return {'processed': args['x'] * 2}",
+                        "code": "async def execute(args, state):\n    return {'processed': args['x'] * 2}",
                         "input_mapping": {"x": "@state:value"},
                     },
                 },

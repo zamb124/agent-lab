@@ -284,10 +284,16 @@ class TestRunner:
         if input_config.type == InputType.INLINE_CODE:
             fn = compile_function(input_config.value, "generate")
             sig = inspect.signature(fn)
-            if len(sig.parameters) == 0:
-                result = fn()
+            if inspect.iscoroutinefunction(fn):
+                if len(sig.parameters) == 0:
+                    result = await fn()
+                else:
+                    result = await fn(execution_state.model_dump())
             else:
-                result = fn(execution_state.model_dump())
+                if len(sig.parameters) == 0:
+                    result = fn()
+                else:
+                    result = fn(execution_state.model_dump())
             return str(result), None
 
         return input_config.value, None
@@ -308,7 +314,10 @@ class TestRunner:
 
         if check_config.type == CheckType.INLINE_CODE:
             fn = compile_function(check_config.value, "check")
-            result = fn(state_dict, response)
+            if inspect.iscoroutinefunction(fn):
+                result = await fn(state_dict, response)
+            else:
+                result = fn(state_dict, response)
             return self._normalize_check_result(result)
 
         if check_config.type == CheckType.NODE:

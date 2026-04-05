@@ -98,7 +98,7 @@ Return JSON with next_action and reason.""",
             node_id="tool1",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     return {"tool1_result": "Data fetched successfully", "data": [1, 2, 3]}
 """,
                 "input_mapping": {},
@@ -107,7 +107,7 @@ def execute(args, state):
         
         # Tool2 - CodeNode: доступ строго через state.field
         tool2_code = """
-def run(state):
+async def run(state):
     data = state.data
     processed = [x * 2 for x in data]
     return {"tool2_result": "Data processed", "processed_data": processed}
@@ -119,7 +119,7 @@ def run(state):
         
         # Done - CodeNode (exit type): строгий доступ к полям
         done_code = """
-def run(state):
+async def run(state):
     return {
         "response": f"Flow completed. Final: {state.final_result}",
         "execution_log": [state.tool1_result, state.tool2_result]
@@ -206,7 +206,7 @@ def run(state):
         tool1_node = CodeNode(
             node_id="tool1",
             config={
-                "code": "def execute(args, state):\n    return {'tool1_done': True, 'payload': 'data123'}",
+                "code": "async def execute(args, state):\n    return {'tool1_done': True, 'payload': 'data123'}",
                 "input_mapping": {},
             },
         )
@@ -226,7 +226,7 @@ def run(state):
             node_id="done",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {"final": f"Summary: {state.summary}", "remote_result": state.response}
 """,
                 "type": "exit"
@@ -302,7 +302,7 @@ def run(state):
             node_id="increment",
             config={
                 "code": """
-def run(state):
+async def run(state):
     current = state.counter
     history = state.history
     return {"counter": current + 1, "history": history + [f"inc_{current}"]}
@@ -315,7 +315,7 @@ def run(state):
             node_id="done",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {"response": f"Done! Counter={state.counter}, History={state.history}"}
 """,
                 "type": "exit"
@@ -388,7 +388,7 @@ def run(state):
             node_id="fast_track",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {"processed_by": "FAST", "fast_result": f"Urgent handling: {state.priority}"}
 """
             }
@@ -398,7 +398,7 @@ def run(state):
             node_id="standard_track",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {"processed_by": "STANDARD", "standard_result": "Normal handling"}
 """
             }
@@ -409,7 +409,7 @@ def run(state):
             node_id="done",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {"response": f"Completed via {state.processed_by}: {state.result}"}
 """,
                 "type": "exit"
@@ -487,7 +487,7 @@ def run(state):
             node_id="tool1",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     return {"tool1_executed": True, "tool1_data": "from_inline_tool"}
 """,
                 "input_mapping": {},
@@ -499,7 +499,7 @@ def execute(args, state):
             node_id="tool2",
             config={
                 "code": """
-def run(state):
+async def run(state):
     prev = state.tool1_data
     return {"tool2_executed": True, "tool2_data": f"processed_{prev}"}
 """
@@ -521,7 +521,7 @@ def run(state):
             node_id="done",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {
         "final_response": f"SGR completed: {state.summary}",
         "steps_executed": {
@@ -625,7 +625,7 @@ def run(state):
             node_id="risky",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {"error_occurred": True, "error_message": "Operation failed safely"}
 """
             }
@@ -636,7 +636,7 @@ def run(state):
             node_id="recovery",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {"recovered": True, "recovery_log": f"Recovered from: {state.error_message}"}
 """
             }
@@ -647,7 +647,7 @@ def run(state):
             node_id="done",
             config={
                 "code": """
-def run(state):
+async def run(state):
     return {
         "response": f"Flow finished with status: {state.final_status}",
         "was_recovered": state.recovered,

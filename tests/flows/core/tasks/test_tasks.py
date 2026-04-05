@@ -174,7 +174,7 @@ class TestProcessAgentTask:
             nodes={
                 "main": {
                     "type": "code",
-                    "code": "def run(state):\n    state['response'] = 'Initialized'\n    return state",
+                    "code": "async def run(state):\n    state['response'] = 'Initialized'\n    return state",
                 }
             },
             edges=[{"from": "main", "to": None}],
@@ -251,7 +251,7 @@ class TestProcessAgentTaskResume:
             nodes={
                 "main": {
                     "type": "code",
-                    "code": "def run(state):\n    state['response'] = 'Resumed'\n    return state",
+                    "code": "async def run(state):\n    state['response'] = 'Resumed'\n    return state",
                 }
             },
             edges=[{"from": "main", "to": None}],
@@ -388,7 +388,7 @@ class TestExecuteInlineCode:
         from core.state import ExecutionState
         
         code = """
-def run(state):
+async def run(state):
     state.result = state.x * 2
     return state
 """
@@ -429,7 +429,7 @@ async def run(state):
         code = """
 import json
 
-def run(state):
+async def run(state):
     data = json.loads(state.json_str)
     state.parsed = data
     return state
@@ -450,7 +450,7 @@ def run(state):
         from core.state import ExecutionState
         
         code = """
-def run(state):
+async def run(state):
     state.new_key = 'added'
     return state
 """
@@ -476,7 +476,7 @@ class TestExecuteTool:
             "tool_id": "test_calculator",
             "description": "Calculator for tests",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     import re
     
     expr = args.get("expression", "0")
@@ -618,11 +618,9 @@ def execute(args, state):
             "tool_id": "test_ask_user",
             "description": "Ask user question",
             "code": """
-from apps.flows.src.runtime.exceptions import FlowInterrupt
-
-def execute(args, state):
+async def execute(args, state):
     question = args.get("question", "")
-    raise FlowInterrupt(question)
+    raise FlowInterrupt(question=question)
 """,
         }
         result = await execute_tool(

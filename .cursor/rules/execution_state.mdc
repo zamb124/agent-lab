@@ -27,6 +27,7 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
     messages: List[Message]           # Полный лог диалога (только append; не сокращать из-за фильтра LLM)
     tool_results: Dict[str, Any]      # Результаты tools
     variables: Dict[str, Any]         # Переменные flow (variables)
+    files: List[dict]                 # Вложения; при старте новой сессии включает записи из `nodes[*].files` графа + файлы запроса (см. flows.mdc)
     
     current_nodes: List[str]          # Текущие ноды (для resume)
 

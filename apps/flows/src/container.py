@@ -169,7 +169,11 @@ class FlowContainer(BaseContainer):
         
         if language == "python":
             from apps.flows.src.runners.python import PythonCodeRunner
-            return PythonCodeRunner(context=context, resources=resources)
+            return PythonCodeRunner(
+                context=context,
+                resources=resources,
+                base_tool_class=self.base_tool_class,
+            )
         elif language == "javascript":
             from apps.flows.src.runners.javascript import JavaScriptCodeRunner
             return JavaScriptCodeRunner()

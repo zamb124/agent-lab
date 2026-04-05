@@ -31,6 +31,27 @@ export const formStyles = css`
         font-weight: var(--font-medium, 500);
         color: var(--text-primary, rgba(255, 255, 255, 0.95));
     }
+
+    /* Лейбл и platform-help-hint в одну строку; «?» всегда справа от текста */
+    .form-label.form-label-inline {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: var(--space-2, 8px);
+    }
+
+    .form-label-inline .form-label-inline-text {
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .form-label-inline platform-help-hint {
+        flex-shrink: 0;
+    }
     
     .form-label-hint {
         font-size: var(--text-xs, 12px);

@@ -74,11 +74,11 @@ class TestCodeNodeE2E:
                 "nodes": {
                     "prepare": {
                         "type": "code",
-                        "code": "def run(state):\n    state['num1'] = 25\n    state['num2'] = 17\n    return state",
+                        "code": "async def run(state):\n    state['num1'] = 25\n    state['num2'] = 17\n    return state",
                     },
                     "calculate": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
+                        "code": "async def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
                         "input_mapping": {
                             "a": "@state:num1",
                             "b": "@state:num2",
@@ -86,7 +86,7 @@ class TestCodeNodeE2E:
                     },
                     "finish": {
                         "type": "code",
-                        "code": "def run(state):\n    state['response'] = f\"Сумма: {state['sum']}\"\n    return state",
+                        "code": "async def run(state):\n    state['response'] = f\"Сумма: {state['sum']}\"\n    return state",
                     },
                 },
                 "edges": [
@@ -133,11 +133,11 @@ class TestCodeNodeE2E:
                 "nodes": {
                     "prepare": {
                         "type": "code",
-                        "code": "def run(state):\n    state['order_id'] = '12345'\n    return state",
+                        "code": "async def run(state):\n    state['order_id'] = '12345'\n    return state",
                     },
                     "format": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return {'formatted_order': f\"{args['prefix']}{args['id']}\"}",
+                        "code": "async def execute(args, state):\n    return {'formatted_order': f\"{args['prefix']}{args['id']}\"}",
                         "input_mapping": {
                             "prefix": "@var:order_prefix",
                             "id": "@state:order_id",
@@ -145,7 +145,7 @@ class TestCodeNodeE2E:
                     },
                     "finish": {
                         "type": "code",
-                        "code": "def run(state):\n    state['response'] = f\"Order: {state['formatted_order']}\"\n    return state",
+                        "code": "async def run(state):\n    state['response'] = f\"Order: {state['formatted_order']}\"\n    return state",
                     },
                 },
                 "edges": [
@@ -191,21 +191,21 @@ class TestCodeNodeE2E:
                 "nodes": {
                     "init": {
                         "type": "code",
-                        "code": "def run(state):\n    state['input'] = 10\n    return state",
+                        "code": "async def run(state):\n    state['input'] = 10\n    return state",
                     },
                     "double": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return {'doubled': args['x'] * 2}",
+                        "code": "async def execute(args, state):\n    return {'doubled': args['x'] * 2}",
                         "input_mapping": {"x": "@state:input"},
                     },
                     "square": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return {'squared': args['x'] ** 2}",
+                        "code": "async def execute(args, state):\n    return {'squared': args['x'] ** 2}",
                         "input_mapping": {"x": "@state:doubled"},
                     },
                     "finish": {
                         "type": "code",
-                        "code": "def run(state):\n    state['response'] = f\"Result: {state['squared']}\"\n    return state",
+                        "code": "async def run(state):\n    state['response'] = f\"Result: {state['squared']}\"\n    return state",
                     },
                 },
                 "edges": [
@@ -252,11 +252,11 @@ class TestCodeNodeE2E:
                 "nodes": {
                     "prepare": {
                         "type": "code",
-                        "code": "def run(state):\n    state['user'] = {'name': 'Иван', 'email': 'ivan@test.com'}\n    state['config'] = {'template': 'Привет, {name}!'}\n    return state",
+                        "code": "async def run(state):\n    state['user'] = {'name': 'Иван', 'email': 'ivan@test.com'}\n    state['config'] = {'template': 'Привет, {name}!'}\n    return state",
                     },
                     "greet": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return {'greeting': args['template'].format(name=args['name'])}",
+                        "code": "async def execute(args, state):\n    return {'greeting': args['template'].format(name=args['name'])}",
                         "input_mapping": {
                             "name": "@state:user.name",
                             "template": "@state:config.template",
@@ -264,7 +264,7 @@ class TestCodeNodeE2E:
                     },
                     "finish": {
                         "type": "code",
-                        "code": "def run(state):\n    state['response'] = state['greeting']\n    return state",
+                        "code": "async def run(state):\n    state['response'] = state['greeting']\n    return state",
                     },
                 },
                 "edges": [
@@ -309,20 +309,20 @@ class TestCodeNodeE2E:
                 "nodes": {
                     "classify": {
                         "type": "code",
-                        "code": "def run(state):\n    content = state.get('content', '').lower()\n    state['route'] = 'calc' if 'calc' in content else 'skip'\n    state['a'] = 2\n    state['b'] = 2\n    return state",
+                        "code": "async def run(state):\n    content = state.get('content', '').lower()\n    state['route'] = 'calc' if 'calc' in content else 'skip'\n    state['a'] = 2\n    state['b'] = 2\n    return state",
                     },
                     "calculate": {
                         "type": "code",
-                        "code": "def execute(args, state):\n    return {'result': args['x'] + args['y']}",
+                        "code": "async def execute(args, state):\n    return {'result': args['x'] + args['y']}",
                         "input_mapping": {"x": "@state:a", "y": "@state:b"},
                     },
                     "skip": {
                         "type": "code",
-                        "code": "def run(state):\n    state['result'] = 'skipped'\n    return state",
+                        "code": "async def run(state):\n    state['result'] = 'skipped'\n    return state",
                     },
                     "finish": {
                         "type": "code",
-                        "code": "def run(state):\n    state['response'] = f\"Result: {state['result']}\"\n    return state",
+                        "code": "async def run(state):\n    state['response'] = f\"Result: {state['result']}\"\n    return state",
                     },
                 },
                 "edges": [

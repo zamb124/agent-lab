@@ -4,31 +4,12 @@
 
 from typing import Any, Dict, List
 
-# Доступные модули для импорта
-COMMON_MODULES: List[str] = [
-    "json",
-    "re",
-    "datetime",
-    "math",
-    "typing",
-    "collections",
-    "itertools",
-    "functools",
-    "uuid",
-    "hashlib",
-    "base64",
-    "urllib.parse",
-    "random",
-    "operator",
-    "string",
-    "decimal",
-    "pydantic",
-    "a2a",
-    "a2a.types",
-    "httpx",
-    "copy",
-    "time",
-]
+from core.inline_python_eval_policy import ALLOWED_IMPORT_ROOTS
+
+# Импорты в inline-коде flows: whitelist (см. core.inline_python_eval_policy).
+COMMON_MODULES: List[str] = sorted(
+    m for m in ALLOWED_IMPORT_ROOTS if m != "__future__"
+)
 
 # Методы модулей для autocomplete
 MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {

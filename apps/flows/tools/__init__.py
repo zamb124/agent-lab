@@ -1,6 +1,12 @@
-"""Конкретные реализации tools"""
+"""
+Конкретные реализации tools.
+
+Публичный список __all__ — источник имён для inline namespace (PythonNamespaceBuilder):
+все перечисленные объекты попадают в eval по имени. Добавляя tool, включи имя в __all__.
+"""
 
 from .agent_session_tools import ask_user, final_answer, finish, reason, self_check
+from .docx_template import fill_docx_template
 from .files import create_file, read_file
 from .math_tools import calculator
 from .scheduling import (
@@ -16,6 +22,7 @@ __all__ = [
     "calculator",
     "cancel_scheduled_task",
     "create_file",
+    "fill_docx_template",
     "final_answer",
     "finish",
     "list_scheduled_tasks",

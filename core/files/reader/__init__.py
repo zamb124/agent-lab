@@ -7,6 +7,7 @@ from core.files.reader.models import (
     ReadAssetKind,
     ReadOptions,
     ReadPage,
+    merge_file_ref_read_options,
 )
 from core.files.reader.service import FileReader
 
@@ -20,4 +21,5 @@ __all__ = [
     "ReadOptions",
     "ReadPage",
     "FileReader",
+    "merge_file_ref_read_options",
 ]

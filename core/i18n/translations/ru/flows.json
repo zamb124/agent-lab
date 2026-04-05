@@ -141,19 +141,14 @@
     "header": "Документация — {{language}}",
     "loading": "Загрузка...",
     "load_failed": "Не удалось загрузить документацию",
-    "tab_globals": "Глобальные",
-    "tab_modules": "Модули",
-    "tab_state": "State",
-    "tab_builtins": "Builtins",
-    "section_globals": "Глобальные переменные",
-    "section_modules": "Доступные модули",
-    "section_state": "Поля ExecutionState",
-    "section_builtins": "Встроенные функции",
-    "empty_globals": "Нет доступных глобальных переменных",
-    "empty_modules": "Нет доступных модулей",
-    "empty_state": "Нет доступных полей state",
-    "empty_builtins": "Нет доступных builtins",
-    "more_methods": "...и ещё {{count}} методов"
+    "search_placeholder": "Поиск по разделам…",
+    "nav_aria": "Разделы документации",
+    "nav_globals": "Глобальные",
+    "nav_modules": "Модули",
+    "nav_state": "State",
+    "nav_builtins": "Builtins",
+    "nav_platform_tools": "Tools",
+    "nav_templates": "Шаблоны"
   },
   "flow_skills": {
     "err_exists": "Skill «{{id}}» уже существует",
@@ -376,6 +371,7 @@
     "field_tags": "Теги",
     "prompt_label": "Промпт",
     "prompt_placeholder": "Ты - полезный ассистент...",
+    "prompt_file_drop_hint": "Перетащите чип файла из блока «Закреплённые файлы» сюда, чтобы вставить сигнатуру [FILE]…[/FILE].",
     "section_messages_history": "Область истории для LLM",
     "messages_history_hint": "Полный диалог хранится в state; в модель уходит только выбранный срез (без удаления истории).",
     "messages_filter_label": "Контекст для запросов к модели",
@@ -748,7 +744,9 @@
     "title_code": "Код",
     "templates": "Шаблоны",
     "fullscreen_min": "Свернуть",
-    "fullscreen_max": "На весь экран"
+    "fullscreen_max": "На весь экран",
+    "node_file_drop_hint": "Перетащите чип файла из «Закреплённые файлы» в редактор — вставится чтение вложения (get_files + reader.read, как tool read_file).",
+    "node_file_drop_python_only": "Вставка вложения в код поддерживается только для языка Python."
   },
   "code_modal": {
     "title": "Код агента",
@@ -778,7 +776,17 @@
     "remove_resource": "Удалить ресурс",
     "reset_input_state": "Сбросить",
     "resources_drop_hint": "Перетащите ресурсы на эту ноду или добавьте глобальные ресурсы на canvas",
-    "override_render_fields": "Переопределите renderFields() в подклассе"
+    "override_render_fields": "Переопределите renderFields() в подклассе",
+    "attached_files_label": "Закреплённые файлы",
+    "attached_files_hint": "Файлы попадут в state.files при старте новой сессии flow (как вложения сообщения).",
+    "node_id_help_aria": "Справка по полю Node ID",
+    "attached_files_help_aria": "Справка по закреплённым файлам",
+    "attach_file": "Прикрепить файл",
+    "file_chip_drag_hint": "Перетащите в промпт LLM или в код Python (code node)",
+    "remove_attached_file": "Убрать файл",
+    "files_api_missing": "Сервис загрузки файлов недоступен",
+    "attached_files_upload_ok": "Файлы прикреплены",
+    "attached_files_upload_err": "Не удалось загрузить: {{message}}"
   },
   "json_field_editor": {
     "copied": "Скопировано",

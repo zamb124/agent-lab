@@ -108,6 +108,8 @@ export function setupDragDrop(component) {
 
         if (item.isResource) {
             await component.addResource(item, posX, posY);
+        } else if (item.type === 'code' && !item.isResource) {
+            component.emit('code-node-drop', { item, posX, posY });
         } else {
             await component._addNode(item, posX, posY);
         }

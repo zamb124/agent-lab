@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from apps.flows.src.tools import tool
 from core.files.models import FileResponse
-from core.files.reader import FileReader, FileReadError, ReadOptions
+from core.files.reader import FileReader, FileReadError
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.files.writer import FileWriteError, FileWriter
 
@@ -141,21 +141,12 @@ async def read_file(
             "error": f"Файл не найден. Доступные: {[f.get('name') for f in files]}",
         }
 
-    path = finfo.get("path")
-    if not path:
-        return {"success": False, "error": "У файла нет path"}
-
-    opts = ReadOptions(
-        include_asset_bytes=include_asset_bytes,
-        source_file_id=finfo.get("file_id"),
-        vision_prompt=vision_prompt,
-    )
     reader = FileReader()
     try:
         result = await reader.read(
-            source=path,
-            file_name=finfo.get("name"),
-            options=opts,
+            finfo,
+            include_asset_bytes=include_asset_bytes,
+            vision_prompt=vision_prompt,
         )
     except FileReadError as exc:
         return {"success": False, "error": str(exc)}
@@ -191,7 +182,7 @@ async def create_file(
     """Создаёт файл в хранилище. Подробное описание и примеры JSON — в description tool (см. _CREATE_FILE_TOOL_DESCRIPTION)."""
     writer = FileWriter()
     try:
-        record = await writer.create_file(
+        record = await writer.write(
             content=content,
             original_name=original_name,
             content_mode=content_mode,

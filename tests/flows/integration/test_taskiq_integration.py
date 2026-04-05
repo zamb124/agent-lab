@@ -60,7 +60,7 @@ class TestTaskIQToolExecution:
             "title": "TaskIQ Test Calculator",
             "description": "Calculator for TaskIQ tests",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     a = args.get('a', 0)
     b = args.get('b', 0)
     op = args.get('op', 'add')
@@ -148,7 +148,7 @@ def execute(args, state):
             "title": "State Tool",
             "description": "Tool that uses state",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     prefix = state.get('prefix', '')
     value = args.get('value', '')
     return f"{prefix}:{value}"
@@ -190,7 +190,7 @@ def execute(args, state):
             "title": "Multiplier",
             "description": "Multiplies",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     return args.get('x', 0) * 2
 """,
         }
@@ -254,11 +254,11 @@ class TestTaskIQFlowExecution:
             nodes={
                 "init": {
                     "type": "code",
-                    "code": "def run(state):\n    state['step'] = 'init'\n    return state",
+                    "code": "async def run(state):\n    state['step'] = 'init'\n    return state",
                 },
                 "process": {
                     "type": "code",
-                    "code": "def run(state):\n    state['step'] = 'process'\n    state['response'] = 'Done'\n    return state",
+                    "code": "async def run(state):\n    state['step'] = 'process'\n    state['response'] = 'Done'\n    return state",
                 },
             },
             edges=[
@@ -312,7 +312,7 @@ class TestTaskIQInterruptResume:
                 "ask": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     if 'name' in state:
         return state
     if state.get('asked_name'):
@@ -326,7 +326,7 @@ def run(state):
                 "greet": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     name = state.get('name', 'Unknown')
     state['response'] = f'Hello, {name}!'
     return state
@@ -425,7 +425,7 @@ class TestTaskIQInlineCode:
     async def test_inline_code_via_taskiq_kiq(self, app):
         """Inline код выполняется через TaskIQ .kiq() + wait_result()."""
         code = """
-def run(state):
+async def run(state):
     state['computed'] = state.get('x', 0) ** 2
     return state
 """
@@ -462,7 +462,7 @@ class TestTaskIQAPIIntegration:
             nodes={
                 "main": {
                     "type": "code",
-                    "code": "def run(state):\n    state['response'] = f\"Got: {state.get('content', '')}\"\n    return state",
+                    "code": "async def run(state):\n    state['response'] = f\"Got: {state.get('content', '')}\"\n    return state",
                 },
             },
             edges=[{"from": "main", "to": None}],

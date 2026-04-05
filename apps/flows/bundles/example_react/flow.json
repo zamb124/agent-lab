@@ -273,8 +273,8 @@
       "description": "Генератор и проверка через inline код",
       "turns": [
         {
-          "input": {"type": "inline_code", "value": "def generate():\n    return 'Тестовое сообщение'"},
-          "check": {"type": "inline_code", "value": "def check(state, response):\n    return len(response) > 5"}
+          "input": {"type": "inline_code", "value": "async def generate():\n    return 'Тестовое сообщение'"},
+          "check": {"type": "inline_code", "value": "async def check(state, response):\n    return len(response) > 5"}
         }
       ]
       },
@@ -373,8 +373,8 @@
       "description": "Генератор и проверка используют state",
       "turns": [
         {
-          "input": {"type": "inline_code", "value": "def generate():\n    import random\n    return f'Случайное число: {random.randint(1, 100)}'"},
-          "check": {"type": "inline_code", "value": "def check(state, response):\n    has_number = any(c.isdigit() for c in response)\n    return {'has_number': has_number, 'long_enough': len(response) > 10}"}
+          "input": {"type": "inline_code", "value": "async def generate():\n    import random\n    return f'Случайное число: {random.randint(1, 100)}'"},
+          "check": {"type": "inline_code", "value": "async def check(state, response):\n    has_number = any(c.isdigit() for c in response)\n    return {'has_number': has_number, 'long_enough': len(response) > 10}"}
         }
       ]
     },
@@ -388,8 +388,8 @@
           "check": {"type": "string", "value": "contains:привет"}
       },
         {
-          "input": {"type": "inline_code", "value": "def generate():\n    return 'Сколько будет 5 * 5?'"},
-          "check": {"type": "inline_code", "value": "def check(s, r):\n    return '25' in r"}
+          "input": {"type": "inline_code", "value": "async def generate():\n    return 'Сколько будет 5 * 5?'"},
+          "check": {"type": "inline_code", "value": "async def check(s, r):\n    return '25' in r"}
         },
         {
           "input": {"type": "text", "value": "Спасибо за помощь!"},

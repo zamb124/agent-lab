@@ -289,7 +289,7 @@ class TestExampleGraphAgent:
         classifier = flow_config.nodes["classifier"]
         assert classifier["type"] == "code"
         assert "code" in classifier
-        assert "def run(state):" in classifier["code"]
+        assert "async def run(state):" in classifier["code"]
 
     @pytest.mark.asyncio
     async def test_formatter_has_inlined_code(self, flow_config):

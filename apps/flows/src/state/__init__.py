@@ -14,6 +14,7 @@ from .persistence import (
     StateManager,
     create_initial_state,
 )
+from .node_files import collect_flow_node_files, validate_node_files_list
 
 __all__ = [
     # Модели (из core.state)
@@ -26,4 +27,6 @@ __all__ = [
     "create_initial_state",
     # Interrupt (локально)
     "InterruptManager",
+    "collect_flow_node_files",
+    "validate_node_files_list",
 ]

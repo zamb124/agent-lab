@@ -20,7 +20,7 @@ class TestCodeNode:
         node_config = {
             "type": "code",
             "code": """
-def run(state):
+async def run(state):
     state['result'] = 'inline_ok'
     return state
 """
@@ -67,7 +67,7 @@ async def run(state):
     async def test_inline_node_with_variables(self):
         """Доступ к variables из inline кода."""
         code = """
-def run(state):
+async def run(state):
     vars = state.get('variables', {})
     state['greeting'] = f"Hello, {vars.get('company', 'World')}!"
     return state
@@ -91,7 +91,7 @@ def run(state):
         code = """
 import os
 
-def run(state):
+async def run(state):
     state['files'] = os.listdir('/')
     return state
 """
@@ -120,7 +120,7 @@ class TestFlowWithInlineCode:
                 "process": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['processed'] = True
     state['value'] = state.get('input', 0) + 100
     return state
@@ -166,7 +166,7 @@ def run(state):
                 "step1": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['step1'] = 'done'
     state['counter'] = 1
     return state
@@ -175,7 +175,7 @@ def run(state):
                 "step2": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['step2'] = 'done'
     state['counter'] = state.get('counter', 0) + 1
     return state
@@ -184,7 +184,7 @@ def run(state):
                 "step3": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['step3'] = 'done'
     state['counter'] = state.get('counter', 0) + 1
     return state
@@ -235,7 +235,7 @@ def run(state):
                     "code": """
 import json
 
-def run(state):
+async def run(state):
     data = json.loads(state.get('json_input', '{}'))
     state['parsed'] = data
     state['name'] = data.get('name', 'unknown')
@@ -282,7 +282,7 @@ def run(state):
                 "check": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     value = state.get('input', 0)
     state['is_positive'] = value > 0
     return state
@@ -291,7 +291,7 @@ def run(state):
                 "positive": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['result'] = 'positive_path'
     return state
 """
@@ -299,7 +299,7 @@ def run(state):
                 "negative": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['result'] = 'negative_path'
     return state
 """
@@ -357,7 +357,7 @@ def run(state):
                 "bad": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     raise ValueError("Intentional error")
 """
                 }
@@ -402,7 +402,7 @@ class TestMixedNodes:
                 "first": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['first_done'] = True
     state['counter'] = 1
     return state
@@ -411,7 +411,7 @@ def run(state):
                 "second": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['second_done'] = True
     state['counter'] = state.get('counter', 0) + 1
     return state
@@ -455,7 +455,7 @@ class TestInlineTool:
     async def test_inline_tool_simple(self):
         """Простой inline tool."""
         code = """
-def execute(args, state):
+async def execute(args, state):
     x = args.get('x', 0)
     y = args.get('y', 0)
     return x + y
@@ -501,7 +501,7 @@ async def execute(args, state):
     async def test_inline_tool_with_state(self):
         """Inline tool с доступом к state."""
         code = """
-def execute(args, state):
+async def execute(args, state):
     prefix = state.get('prefix', '')
     name = args.get('name', 'World')
     return f"{prefix}Hello, {name}!"
@@ -527,7 +527,7 @@ def execute(args, state):
         code = """
 import json
 
-def execute(args, state):
+async def execute(args, state):
     data = args.get('data', '{}')
     parsed = json.loads(data)
     return parsed.get('name', 'unknown')
@@ -552,7 +552,7 @@ def execute(args, state):
         code = """
 import os
 
-def execute(args, state):
+async def execute(args, state):
     return os.listdir('/')
 """
         tool = InlineTool(
@@ -581,7 +581,7 @@ def execute(args, state):
         
         tool = InlineTool(
             tool_id="add",
-            code="def execute(args, state): return args['x'] + args['y']",
+            code="async def execute(args, state): return args['x'] + args['y']",
             description="Add two numbers",
             parameters=params
         )
@@ -605,7 +605,7 @@ class TestToolRegistryInline:
             "tool_id": "test_inline_tool",
             "description": "Test inline tool",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     return args.get('value', 0) * 3
 """
         }

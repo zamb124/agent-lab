@@ -7,6 +7,11 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import '@platform/lib/components/platform-icon.js';
+import {
+    FLOWS_NODE_FILE_MIME,
+    buildPythonReadFileSnippet,
+    prefixCodeLines,
+} from '../../utils/file-signature.js';
 
 const DEFAULT_PYTHON = `def execute(args, state):
     """
@@ -315,6 +320,7 @@ export class CodeEditor extends PlatformElement {
         showDocs: { type: Boolean, attribute: 'show-docs' },
         showTemplates: { type: Boolean, attribute: 'show-templates' },
         showLanguageSwitch: { type: Boolean, attribute: 'show-language-switch' },
+        acceptNodeFileDrop: { type: Boolean, attribute: 'accept-node-file-drop' },
         validationStatus: { type: String },
         validationMessage: { type: String },
         _templatesOpen: { type: Boolean, state: true },
@@ -333,6 +339,7 @@ export class CodeEditor extends PlatformElement {
         this.showDocs = true;
         this.showTemplates = true;
         this.showLanguageSwitch = true;
+        this.acceptNodeFileDrop = false;
         this.validationStatus = '';
         this.validationMessage = '';
         this._templatesOpen = false;
@@ -355,6 +362,8 @@ export class CodeEditor extends PlatformElement {
         this._readonlyCompartment = null;
         this._languageCompartment = null;
         this._completionData = null;
+        /** @type {null | (() => void)} */
+        this._nodeFileDropCleanup = null;
     }
 
     get _defaultCode() {
@@ -388,6 +397,7 @@ export class CodeEditor extends PlatformElement {
             this._fsPortalNext = null;
         }
         if (this._editorView) {
+            this._teardownNodeFileDropListeners();
             this._editorView.destroy();
             this._editorView = null;
         }
@@ -425,6 +435,13 @@ export class CodeEditor extends PlatformElement {
         
         if (changedProperties.has('language') && this._editorView && this._languageCompartment && this._cmModules) {
             this._switchLanguage();
+        }
+
+        if (
+            (changedProperties.has('acceptNodeFileDrop') || changedProperties.has('language')) &&
+            this._editorView
+        ) {
+            this._syncNodeFileDropListeners();
         }
     }
 
@@ -579,6 +596,105 @@ export class CodeEditor extends PlatformElement {
             }),
             parent: container
         });
+        this._syncNodeFileDropListeners();
+    }
+
+    _teardownNodeFileDropListeners() {
+        if (this._nodeFileDropCleanup) {
+            this._nodeFileDropCleanup();
+            this._nodeFileDropCleanup = null;
+        }
+    }
+
+    /**
+     * Отступ для вставляемого блока: по текущей строке или по контексту (пустая строка после `:`).
+     * @param {number} pos
+     * @returns {string}
+     */
+    _baseIndentAtDocPos(pos) {
+        const doc = this._editorView.state.doc;
+        const line = doc.lineAt(pos);
+        const lead = /^[\t ]*/.exec(line.text);
+        if (line.text.trim() !== '') {
+            return lead ? lead[0] : '';
+        }
+        for (let n = line.number - 1; n >= 1; n--) {
+            const prevText = doc.line(n).text;
+            if (prevText.trim() === '') {
+                continue;
+            }
+            const prevLead = /^[\t ]*/.exec(prevText);
+            const base = prevLead ? prevLead[0] : '';
+            const trimmedEnd = prevText.trimEnd();
+            if (/:\s*(#.*)?$/.test(trimmedEnd)) {
+                if (base.includes('\t')) {
+                    return `${base}\t`;
+                }
+                return `${base}    `;
+            }
+            return base;
+        }
+        return lead ? lead[0] : '';
+    }
+
+    _syncNodeFileDropListeners() {
+        this._teardownNodeFileDropListeners();
+        if (!this.acceptNodeFileDrop || !this._editorView || this.readonly) {
+            return;
+        }
+        const dom = this._editorView.dom;
+        const typesIncludeNodeFile = (e) => {
+            const types = e.dataTransfer?.types ? Array.from(e.dataTransfer.types) : [];
+            return types.includes(FLOWS_NODE_FILE_MIME);
+        };
+        const onDragOverCapture = (e) => {
+            if (!typesIncludeNodeFile(e)) {
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            e.dataTransfer.dropEffect = 'copy';
+        };
+        const onDropCapture = (e) => {
+            if (!typesIncludeNodeFile(e)) {
+                return;
+            }
+            const raw = e.dataTransfer.getData(FLOWS_NODE_FILE_MIME);
+            if (!raw) {
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            let parsed;
+            try {
+                parsed = JSON.parse(raw);
+            } catch {
+                return;
+            }
+            if (typeof parsed !== 'object' || parsed === null || typeof parsed.name !== 'string') {
+                return;
+            }
+            if (this.language !== 'python') {
+                this.warning(this.i18n.t('code_editor.node_file_drop_python_only'));
+                return;
+            }
+            let insertPos = this._editorView.posAtCoords({ x: e.clientX, y: e.clientY });
+            if (insertPos == null) {
+                insertPos = this._editorView.state.selection.main.head;
+            }
+            const baseIndent = this._baseIndentAtDocPos(insertPos);
+            const snippet = prefixCodeLines(buildPythonReadFileSnippet(parsed), baseIndent);
+            this._editorView.dispatch({
+                changes: { from: insertPos, to: insertPos, insert: snippet },
+                selection: { anchor: insertPos + snippet.length, head: insertPos + snippet.length },
+            });
+        };
+        dom.addEventListener('dragover', onDragOverCapture, true);
+        dom.addEventListener('drop', onDropCapture, true);
+        this._nodeFileDropCleanup = () => {
+            dom.removeEventListener('dragover', onDragOverCapture, true);
+            dom.removeEventListener('drop', onDropCapture, true);
+        };
     }
 
     _switchLanguage() {
@@ -696,6 +812,17 @@ export class CodeEditor extends PlatformElement {
                 changes: { from: pos, insert: code }
             });
         }
+    }
+
+    insertTextAtSelection(text) {
+        if (!this._editorView || !text) {
+            return;
+        }
+        const { from, to } = this._editorView.state.selection.main;
+        this._editorView.dispatch({
+            changes: { from, to, insert: text },
+            selection: { anchor: from + text.length, head: from + text.length },
+        });
     }
 
     replaceCode(code) {

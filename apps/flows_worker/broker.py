@@ -42,7 +42,10 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     container = get_container()
     state.container = container
 
+    from core.files.processors import initialize_default_processors
     from core.files.writer import FileWriter
+
+    initialize_default_processors(container.file_repository)
 
     s = get_settings()
     FileWriter.configure_process_upload(

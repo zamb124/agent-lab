@@ -350,7 +350,7 @@ class TestMCPNodeInGraph:
                 "nodes": {
                     "init": {
                         "type": "code",
-                        "code": "def run(state):\n    state['query'] = 'fastapi'\n    return state",
+                        "code": "async def run(state):\n    state['query'] = 'fastapi'\n    return state",
                     },
                     "mcp_call": {
                         "type": "mcp",
@@ -362,7 +362,7 @@ class TestMCPNodeInGraph:
                     },
                     "finish": {
                         "type": "code",
-                        "code": "def run(state):\n    state['response'] = 'done'\n    return state",
+                        "code": "async def run(state):\n    state['response'] = 'done'\n    return state",
                     },
                 },
                 "edges": [

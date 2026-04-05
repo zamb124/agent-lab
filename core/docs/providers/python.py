@@ -2,7 +2,6 @@
 Python провайдер документации.
 """
 
-import builtins
 from typing import Dict, List
 
 from core.docs.models import (
@@ -15,14 +14,7 @@ from core.docs.models import (
 from core.docs.providers.base import BaseDocProvider
 
 
-# Заблокированные builtins (для безопасности)
-BLOCKED_BUILTINS = frozenset({
-    "eval", "exec", "compile", "open", "__import__",
-    "globals", "locals", "vars", "dir",
-    "getattr", "setattr", "delattr", "hasattr",
-    "classmethod", "staticmethod", "property", "super", "object",
-    "memoryview", "bytearray", "breakpoint", "input", "help", "exit", "quit",
-})
+from core.inline_python_eval_policy import ALLOWED_BUILTINS
 
 
 class PythonDocProvider(BaseDocProvider):
@@ -79,11 +71,8 @@ class PythonDocProvider(BaseDocProvider):
         return result
     
     def get_builtins(self, query: DocumentationQuery) -> List[str]:
-        """Безопасные встроенные функции."""
-        return sorted([
-            name for name in dir(builtins)
-            if not name.startswith("_") and name not in BLOCKED_BUILTINS
-        ])
+        """Встроенные имена, разрешённые в inline-коде flows (whitelist)."""
+        return sorted(ALLOWED_BUILTINS)
     
     def get_templates(self, query: DocumentationQuery) -> List[CodeTemplate]:
         """Шаблоны кода с фильтрацией."""

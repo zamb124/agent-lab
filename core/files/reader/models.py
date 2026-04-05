@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import List, Optional
+from typing import Any, List, Mapping, Optional
 
 from pydantic import BaseModel, Field
 
@@ -66,6 +66,25 @@ class ReadOptions(BaseModel):
         default=None,
         description="Текст инструкции для vision-модели при разборе изображений; иначе встроенный промпт извлечения текста.",
     )
+
+
+def merge_file_ref_read_options(
+    finfo: Mapping[str, Any],
+    opts: ReadOptions,
+) -> ReadOptions:
+    from core.files.file_ref import file_id_from_download_url
+
+    if isinstance(opts.source_file_id, str) and opts.source_file_id.strip():
+        return opts
+    fid = finfo.get("file_id")
+    if isinstance(fid, str) and fid.strip():
+        return opts.model_copy(update={"source_file_id": fid.strip()})
+    url_val = finfo.get("url")
+    if isinstance(url_val, str) and url_val.strip():
+        parsed = file_id_from_download_url(url_val)
+        if parsed:
+            return opts.model_copy(update={"source_file_id": parsed})
+    return opts
 
 
 class FileTypeInfo(BaseModel):

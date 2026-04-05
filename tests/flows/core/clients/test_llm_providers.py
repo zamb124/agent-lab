@@ -302,6 +302,7 @@ class TestLlmNodeLLMConfig:
                 provider="bothub",
                 api_key="sk-node-api-key",
                 base_url="https://bothub.chat/api/v2/openai/v1",
+                max_tokens=None,
                 state=state,
             )
 
@@ -345,6 +346,7 @@ class TestLlmNodeLLMConfig:
                 provider="openrouter",
                 api_key="@var:my_key",
                 base_url="@var:my_url",
+                max_tokens=None,
                 state=state,
             )
 

@@ -1373,7 +1373,7 @@ class TestA2ASkills:
                     "entry": "node1",
                     "nodes": {
                         "node1": {"type": "llm_node", "prompt": "Test prompt"},
-                        "node2": {"type": "code", "code": "def run(state):\n    state['result'] = 'ok'\n    return state"},
+                        "node2": {"type": "code", "code": "async def run(state):\n    state['result'] = 'ok'\n    return state"},
                     },
                     "edges": [
                         {"from": "node1", "to": "node2"},
@@ -1667,18 +1667,22 @@ class TestA2ARealisticStreaming:
 
         events = _parse_sse(resp.text)
         artifact_events = [e for e in events if e.get("result", {}).get("kind") == "artifact-update"]
+        content_artifacts = [
+            e
+            for e in artifact_events
+            if not str((e.get("result", {}).get("artifact") or {}).get("name") or "").startswith(
+                "node_"
+            )
+        ]
 
-        # Должен быть хотя бы один чанк
-        assert len(artifact_events) >= 1
+        assert len(content_artifacts) >= 1, "Должен быть хотя бы один контентный artifact chunk"
 
-        # Последний artifact event должен иметь lastChunk=True
-        last_result = artifact_events[-1].get("result", {})
-        assert last_result.get("lastChunk") is True, "Last artifact chunk should have lastChunk=True"
+        last_result = content_artifacts[-1].get("result", {})
+        assert last_result.get("lastChunk") is True, "Last content artifact chunk should have lastChunk=True"
 
-        # Промежуточные не должны быть last
-        for event in artifact_events[:-1]:
+        for event in content_artifacts[:-1]:
             result = event.get("result", {})
-            assert result.get("lastChunk") is not True, "Intermediate chunks should not have lastChunk=True"
+            assert result.get("lastChunk") is not True, "Intermediate content chunks should not have lastChunk=True"
 
     @pytest.mark.asyncio
     async def test_stream_status_events(self, client, flow_id, mock_llm_with_queue, sync_tools):

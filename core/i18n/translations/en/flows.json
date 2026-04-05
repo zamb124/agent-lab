@@ -141,19 +141,14 @@
     "header": "Documentation — {{language}}",
     "loading": "Loading...",
     "load_failed": "Could not load documentation",
-    "tab_globals": "Globals",
-    "tab_modules": "Modules",
-    "tab_state": "State",
-    "tab_builtins": "Builtins",
-    "section_globals": "Global variables",
-    "section_modules": "Available modules",
-    "section_state": "ExecutionState fields",
-    "section_builtins": "Built-in functions",
-    "empty_globals": "No global variables available",
-    "empty_modules": "No modules available",
-    "empty_state": "No state fields available",
-    "empty_builtins": "No builtins available",
-    "more_methods": "...and {{count}} more methods"
+    "search_placeholder": "Search sections…",
+    "nav_aria": "Documentation sections",
+    "nav_globals": "Globals",
+    "nav_modules": "Modules",
+    "nav_state": "State",
+    "nav_builtins": "Builtins",
+    "nav_platform_tools": "Tools",
+    "nav_templates": "Templates"
   },
   "flow_skills": {
     "err_exists": "Skill \"{{id}}\" already exists",
@@ -376,6 +371,7 @@
     "field_tags": "Tags",
     "prompt_label": "Prompt",
     "prompt_placeholder": "You are a helpful assistant...",
+    "prompt_file_drop_hint": "Drag a file chip from «Attached files» here to insert a [FILE]…[/FILE] signature.",
     "section_messages_history": "LLM message history scope",
     "messages_history_hint": "The full dialog stays in state; only the selected slice is sent to the model (history is not deleted).",
     "messages_filter_label": "Context for model requests",
@@ -748,7 +744,9 @@
     "title_code": "Code",
     "templates": "Templates",
     "fullscreen_min": "Minimize",
-    "fullscreen_max": "Fullscreen"
+    "fullscreen_max": "Fullscreen",
+    "node_file_drop_hint": "Drag a file chip from «Attached files» into the editor to insert get_files + reader.read (same as the read_file tool).",
+    "node_file_drop_python_only": "Dropping an attached file into code is supported only for Python."
   },
   "code_modal": {
     "title": "Agent code",
@@ -778,7 +776,17 @@
     "remove_resource": "Remove resource",
     "reset_input_state": "Reset",
     "resources_drop_hint": "Drop resources onto this node or add global resources on the canvas",
-    "override_render_fields": "Override renderFields() in the subclass"
+    "override_render_fields": "Override renderFields() in the subclass",
+    "attached_files_label": "Attached files",
+    "attached_files_hint": "Files are merged into state.files when a new flow session starts (like message attachments).",
+    "node_id_help_aria": "Help for Node ID field",
+    "attached_files_help_aria": "Help for attached files",
+    "attach_file": "Attach file",
+    "file_chip_drag_hint": "Drag into the LLM prompt or into Python code (code node)",
+    "remove_attached_file": "Remove file",
+    "files_api_missing": "File upload service is not available",
+    "attached_files_upload_ok": "Files attached",
+    "attached_files_upload_err": "Upload failed: {{message}}"
   },
   "json_field_editor": {
     "copied": "Copied",

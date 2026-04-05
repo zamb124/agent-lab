@@ -167,6 +167,12 @@ def create_service_app(
         from core.billing import set_billing_service
         set_billing_service(container.billing_service)
         logger.info("BillingService инициализирован")
+
+        from core.files.processors import initialize_default_processors
+
+        if hasattr(container, "file_repository"):
+            initialize_default_processors(container.file_repository)
+            logger.info("initialize_default_processors: FileReader может грузить файлы по file_id / S3")
         
         # Инициализация WebPushService
         if settings.push.enabled:

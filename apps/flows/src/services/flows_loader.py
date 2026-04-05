@@ -27,6 +27,7 @@ from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import FunctionTool
+from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 
 logger = get_logger(__name__)
 
@@ -924,7 +925,7 @@ async def load_tools_to_db(
                     if stripped.startswith("async def ") or stripped.startswith("def "):
                         func_start = i
                         break
-                source_code = "\n".join(lines[func_start:])
+                source_code = strip_forbidden_platform_import_lines("\n".join(lines[func_start:]))
                 
                 # args_schema из _parameters
                 args_schema_dict: Dict[str, CallParameter] = dict(tool_instance._parameters)

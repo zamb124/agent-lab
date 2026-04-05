@@ -942,6 +942,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
             ` : ''}
                 
                 <div class="form-group">
+                    <span class="form-label-hint">${this.i18n.t('llm_node.prompt_file_drop_hint')}</span>
                     <prompt-editor
                         .value=${config.prompt || ''}
                         .variables=${this.flowVariables || {}}
@@ -949,6 +950,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                         placeholder=${this.i18n.t('llm_node.prompt_placeholder')}
                         min-height="150"
                         .aiLoading=${this.aiLoading}
+                        accept-file-drop
                         @change=${(e) => this._onInputChange('prompt', e.detail.value)}
                         @ai-improve=${this._generatePromptAI}
                     ></prompt-editor>

@@ -18,7 +18,7 @@
           "name": {"type": "string", "description": "Имя пользователя"},
           "style": {"type": "string", "description": "Стиль приветствия: formal или casual"}
         },
-        "code": "def execute(args, state):\n    name = args.get('name', 'Гость')\n    style = args.get('style', 'casual')\n    if style == 'formal':\n        return f'Уважаемый {name}, добро пожаловать!'\n    return f'Привет, {name}!'"
+        "code": "async def execute(args, state):\n    name = args.get('name', 'Гость')\n    style = args.get('style', 'casual')\n    if style == 'formal':\n        return f'Уважаемый {name}, добро пожаловать!'\n    return f'Привет, {name}!'"
       }
     ],
     "llm": {"model": "grok-code-fast-1", "temperature": 0.3}

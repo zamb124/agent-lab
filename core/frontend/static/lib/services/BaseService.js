@@ -131,15 +131,18 @@ export class BaseService {
             return {};
         }
 
-        const contentType = response.headers.get('content-type');
+        const contentType = response.headers.get('content-type') || '';
         const raw = await response.text();
         if (!raw || raw.trim() === '') {
             return {};
         }
         const trimmed = raw.trim();
         const looksJson = trimmed.startsWith('{') || trimmed.startsWith('[');
-        if (contentType && contentType.includes('application/json')) {
+        if (contentType.includes('application/json')) {
             return JSON.parse(raw);
+        }
+        if (contentType.includes('text/markdown') || contentType.includes('text/plain')) {
+            return raw;
         }
         if (looksJson) {
             return JSON.parse(raw);

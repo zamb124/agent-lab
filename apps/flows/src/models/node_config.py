@@ -215,6 +215,14 @@ class NodeConfig(StrictBaseModel):
         default_factory=dict,
         description="Ресурсы ноды (переопределяют flow-level)"
     )
+
+    files: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Закреплённые файлы ноды (как элементы state.files: name, path; опционально "
+            "mime_type, size, file_id). При старте новой сессии агрегируются в state.files."
+        ),
+    )
     
     # Общее
     local_variables: Dict[str, Any] = Field(

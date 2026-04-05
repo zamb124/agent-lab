@@ -11,12 +11,12 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "state",
         "type": "ExecutionState",
         "doc": (
-            "Состояние выполнения (run(state)); доступ и как к dict: state['content'], state.get('key').\n"
-            "- task_id, context_id, user_id, session_id — обязательные системные поля\n"
-            "- content — вход пользователя; response — ответ агента; result — результат ноды/tool\n"
-            "- messages — List[Message]; files — [{name, path, mime_type, ...}]\n"
-            "- user_groups — группы; variables — переменные агента; current_nodes — активные ноды\n"
-            "- Доп. поля через присваивание (extra); сериализация: state.model_dump()"
+            "Состояние выполнения `run(state)`; доступ как к dict: `state['content']`, `state.get('key')`.\n\n"
+            "- **`task_id`**, **`context_id`**, **`user_id`**, **`session_id`** — обязательные системные поля\n"
+            "- **`content`** — вход пользователя; **`response`** — ответ агента; **`result`** — результат ноды/tool\n"
+            "- **`messages`** — `List[Message]`; **`files`** — список вложений `{name, path, mime_type, ...}`\n"
+            "- **`user_groups`**, **`variables`**, **`current_nodes`** — группы, переменные flow, активные ноды\n"
+            "- дополнительные поля через присваивание; сериализация: `state.model_dump()`"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["core", "data"],
@@ -143,36 +143,21 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "reader",
         "type": "FileReader",
         "doc": (
-            "Только метод read(source=..., file_name=..., options=...).\n\n"
-            "Встроенный tool read_file: аргумент file_name (или первый файл, если не указан); state подставляет рантайм, "
-            "внутри по state.files находится запись и вызывается reader.read(path, file_name из записи).\n\n"
-            "В inline-коде ноды: возьми элемент из get_files(state), затем read:\n"
-            "У каждой записи есть path — куда рантайм сохранил содержимое для этого прогона. Передаёшь его в read:\n"
+            "Метод read(source, *, file_name=None, include_asset_bytes=False, source_file_id=None, source_checksum=None, "
+            "vision_model=..., vision_prompt=None) — все именованные аргументы необязательны, кроме смысла source.\n\n"
+            "source — одно из:\n"
+            "• запись вложения: dict из get_files(state) / state.files, или FileRecord / FileResponse (path и/или file_id / url);\n"
+            "• строка пути к файлу на диске, pathlib.Path, или bytes уже загруженного файла.\n\n"
+            "Удобнее всего передать целиком объект вложения:\n"
             "f = get_files(state)[0]\n"
-            "res = await reader.read(source=Path(f['path']), file_name=f.get('name'))\n"
-            "path — не путь «от себя», а именно из объекта вложения в state; файл по этому path должен быть доступен процессу.\n\n"
-            "Реже: source=bytes (уже загруженные байты в коде). Тогда file_name обязателен с расширением (.pdf, .docx, .png …).\n\n"
-            "file_name:\n"
-            "• Для source=Path(...) из вложения лучше явно передать f['name'], чтобы имя и тип совпадали с вложением.\n"
-            "• Для source=bytes — обязателен.\n"
-            "• Если не передать при source=путь — имя возьмётся из последнего сегмента path.\n\n"
-            "options (ReadOptions, все поля необязательны):\n"
-            "• include_asset_bytes — для PDF добавить в страницы assets с base64 растров (ответ тяжелее).\n"
-            "• source_file_id — попадёт в результат (удобно связать с file_id из state.files).\n"
-            "• source_checksum — иначе SHA-256 посчитается от прочитанных байтов.\n"
-            "• Для изображений: vision_prompt — текст задачи для vision LLM (пустую строку нельзя); "
-            "vision_model — какая модель (есть значение по умолчанию в ReadOptions).\n\n"
-            "Результат FileReadResult: pages (у каждой ReadPage поле text), page_count, detected_kind, mime_type, "
-            "warnings, source_checksum, source_file_id (если задали в options).\n\n"
-            "Синхронно без разбора документа: read_path_bytes. Только тип файла по имени/заголовку: "
-            "reader.recognize_file_type(file_name='x.png', head=raw[:8192]).\n"
-            "Из LLM по вложениям без кода: встроенный tool read_file (тот же смысл, аргументы через схему tool).\n\n"
-            "Пример с опциями (ReadOptions в namespace нет — импорт в начале фрагмента):\n"
-            "from core.files.reader.models import ReadOptions\n"
-            "f = get_files(state)[0]\n"
-            "res = await reader.read(source=Path(f['path']), file_name=f.get('name'), "
-            "options=ReadOptions(source_file_id=f.get('file_id')))\n"
-            "Для картинки с своей задачей для vision: options=ReadOptions(vision_prompt='Опиши текст на фото')"
+            "res = await reader.read(f)\n\n"
+            "Для source=bytes обязателен file_name с расширением (.pdf, .docx, .png …).\n"
+            "Для source=str(path) без записи вложения лучше явно file_name=..., чтобы тип совпал с файлом.\n\n"
+            "Именованные параметры: include_asset_bytes (PDF, тяжёлый ответ), source_file_id и source_checksum, "
+            "vision_prompt / vision_model для картинок (пустую строку в vision_prompt нельзя).\n\n"
+            "Результат FileReadResult: pages, page_count, detected_kind, mime_type, warnings, source_checksum, source_file_id.\n"
+            "Тип по имени/заголовку: reader.recognize_file_type(file_name='x.png', head=raw[:8192]).\n"
+            "Без кода: tool read_file."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["files", "reader"],
@@ -181,57 +166,20 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "writer",
         "type": "FileWriter",
         "doc": (
-            "writer = FileWriter() в namespace процесса flows: create_file уже с привязкой к хранилищу (на старте вызывается "
-            "FileWriter.configure_process_upload). build_bytes работает всегда.\n\n"
-            "Сборка и сохранение: original_name с расширением (например out.docx).\n\n"
-            "1) build_bytes(content, original_name, content_mode='auto', options=None) -> FileWriteResult\n"
-            "   Только память: поля data (bytes), mime_type, conversion_applied, checksum_sha256_hex.\n"
-            "2) await writer.create_file(content=..., original_name=..., content_mode='auto', options=None, public=True)\n"
-            "   Сохраняет файл; возвращает FileMetadata (file_id, url, original_name, ...).\n\n"
-            "content: str или bytes. content_mode: auto | markdown | base64 | raw.\n"
-            "• auto — для str классифицируется содержимое; для bytes используется raw.\n"
-            "• markdown — текст как Markdown (GFM): таблицы |...|, ![](https://...) картинки по URL.\n"
-            "• base64 — строка base64 декодируется в байты.\n"
-            "• raw — str в UTF-8 или bytes пишутся в файл как есть.\n\n"
-            "Расширения при markdown (и auto, если распознан markdown):\n"
-            ".md/.txt — текст; .html — HTML; .pdf — PDF; .docx — Word; .xlsx — Excel (таблицы из MD).\n\n"
-            "Примеры (inline-код ноды):\n"
-            "r = writer.build_bytes('# Раздел\\n\\nТекст', 'brief.pdf', content_mode='markdown')\n"
-            "meta = await writer.create_file(content='# Отчёт\\n|A|B|\\n|-|-|\\n|1|2|', original_name='t.xlsx', "
-            "content_mode='markdown')\n"
-            "url = meta.url  # отдать пользователю или записать в state\n\n"
-            "Тот же сценарий из LLM без кода: встроенный tool create_file (см. его описание в реестре tools)."
+            "writer = FileWriter() в namespace процесса flows: на старте FileWriter.configure_process_upload — дальше "
+            "await writer.write(...) в хранилище. build_bytes — только сборка в память.\n\n"
+            "await writer.write(content=..., original_name=..., content_mode='auto', public=True, "
+            "text_encoding='utf-8', max_image_bytes=..., http_timeout_seconds=..., pdf_max_image_width_pt=..., "
+            "docx_image_width_inches=...) -> FileMetadata.\n"
+            "create_file(...) с явным WriteOptions оставлен для редких случаев в коде вне eval.\n\n"
+            "build_bytes(content, original_name, content_mode='auto', options=None) -> FileWriteResult (data, mime_type, ...).\n\n"
+            "content: str или bytes. content_mode: auto | markdown | base64 | raw.\n\n"
+            "Пример: meta = await writer.write(content='# Отчёт\\n|A|B|\\n|-|-|\\n|1|2|', original_name='t.xlsx', "
+            "content_mode='markdown')\n\n"
+            "Tool create_file — тот же сценарий без кода."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["files", "writer"],
-    },
-    {
-        "name": "read_path_bytes",
-        "type": "function",
-        "doc": (
-            "Сырые байты или текст по path без разбора PDF/Office (без reader.read):\n"
-            "data = read_path_bytes(f['path'])  # чаще path из get_files(state)[i]\n"
-            "mode='rb' по умолчанию; mode='r' -> str UTF-8. Структурированный разбор: await reader.read(source=Path(f['path']), ...)."
-        ),
-        "perspectives": ["editor", "flow", "tool", "node"],
-        "tags": ["files", "utility"],
-    },
-    {
-        "name": "read_path_base64",
-        "type": "function",
-        "doc": (
-            "Прочитать по path из вложения и вернуть base64-строку:\n"
-            "b64 = read_path_base64(f['path'])"
-        ),
-        "perspectives": ["editor", "flow", "tool", "node"],
-        "tags": ["files", "utility"],
-    },
-    {
-        "name": "Path",
-        "type": "pathlib.Path",
-        "doc": "pathlib.Path в namespace:\nf = get_files(state)[0]; await reader.read(source=Path(f['path']), file_name=f.get('name'))",
-        "perspectives": ["editor", "flow", "tool", "node"],
-        "tags": ["files", "path"],
     },
     {
         "name": "get_user",
@@ -272,15 +220,43 @@ GLOBALS: List[Dict[str, Any]] = [
     {
         "name": "ask_user",
         "type": "function",
-        "doc": "Запросить информацию у пользователя:\nask_user('Как вас зовут?')\n# Прерывает выполнение и ждёт ответа",
+        "doc": (
+            "Синхронный запрос пользователю (interrupt):\nask_user('Как вас зовут?')\n"
+            "Для await llm.chat(..., tools=[...]) передай в списке tools имя ask_user_tool."
+        ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["interrupt", "interaction"],
+    },
+    {
+        "name": "ask_user_tool",
+        "type": "tool",
+        "doc": (
+            "Готовый tool для LLM: await llm.chat('...', tools=[ask_user_tool]). "
+            "Прямой вопрос пользователю из тела кода ноды — вызов ask_user(...)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "llm", "tools"],
+    },
+    {
+        "name": "Встроенные tools",
+        "type": "convention",
+        "doc": (
+            "В окружении кода ноды по имени доступны встроенные tools платформы: calculator, read_file, create_file, "
+            "reason, final_answer, finish, self_check, задачи планировщика (schedule_*), … "
+            "Новый системный tool подключается разработчиками платформы в реестр пакета tools."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["tools", "platform"],
     },
     # JSON
     {
         "name": "extract_json",
         "type": "function",
-        "doc": "Извлечь JSON из текста (поддерживает ```json``` блоки):\ndata = extract_json(llm_response)\n# -> dict/list или None",
+        "doc": (
+            "Извлечь JSON из текста, в том числе из fenced-блоков с меткой `json` в Markdown.\n\n"
+            "`data = extract_json(llm_response)`\n\n"
+            "Возвращает `dict` / `list` или `None`."
+        ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["json", "utility"],
     },

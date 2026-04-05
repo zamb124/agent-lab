@@ -19,6 +19,12 @@ export function normalizeInlineEditorToolType(type) {
  */
 
 /**
+ * @typedef {Object} InlineToolModalClosedResult
+ * @property {boolean} saved
+ * @property {InlineToolSavedDetail | null} [detail]
+ */
+
+/**
  * @typedef {Object} OpenInlineToolModalOptions
  * @property {'create' | 'edit'} mode
  * @property {string} toolType
@@ -28,6 +34,8 @@ export function normalizeInlineEditorToolType(type) {
  * @property {string} [skillId]
  * @property {unknown} [previewExecutionState]
  * @property {(detail: InlineToolSavedDetail) => void} [onToolSaved]
+ * @property {(result: InlineToolModalClosedResult) => void | Promise<void>} [onModalClosed]
+ *     Вызывается после закрытия модалки (сохранение или отмена); можно вернуть Promise — DOM-узел удалится после await.
  */
 
 /**
@@ -43,6 +51,7 @@ export function openInlineToolModal(options) {
         skillId,
         previewExecutionState,
         onToolSaved,
+        onModalClosed,
     } = options;
 
     const modal = document.createElement('inline-tool-modal');
@@ -56,7 +65,11 @@ export function openInlineToolModal(options) {
     modal.skillId = skillId ?? '';
     modal.previewExecutionState = previewExecutionState ?? null;
 
+    /** @type {InlineToolModalClosedResult} */
+    let closedResult = { saved: false, detail: null };
+
     const handleSaved = (e) => {
+        closedResult = { saved: true, detail: e.detail };
         onToolSaved?.(e.detail);
     };
     modal.addEventListener('tool-saved', handleSaved);
@@ -66,7 +79,15 @@ export function openInlineToolModal(options) {
         'close',
         () => {
             modal.removeEventListener('tool-saved', handleSaved);
-            modal.remove();
+            void (async () => {
+                try {
+                    if (onModalClosed) {
+                        await onModalClosed(closedResult);
+                    }
+                } finally {
+                    modal.remove();
+                }
+            })();
         },
         { once: true },
     );

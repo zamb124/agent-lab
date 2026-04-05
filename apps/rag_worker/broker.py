@@ -36,6 +36,11 @@ async def rag_worker_startup(state: TaskiqState) -> None:
     settings = get_settings()
     container = get_rag_container()
     state.container = container
+
+    from core.files.processors import initialize_default_processors
+
+    initialize_default_processors(container.file_repository)
+
     if settings.tracing.enabled:
         setup_tracing(settings.tracing)
         if settings.tracing.postgres_enabled and hasattr(container, "span_repository"):

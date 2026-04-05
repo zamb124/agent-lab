@@ -117,6 +117,9 @@ class FlowValidator:
         # 4b. messages_filter у llm_node (список node_id)
         self._validate_messages_filters(nodes, result)
         
+        # 4c. поле files у нод (как state.files)
+        self._validate_node_files(nodes, result)
+        
         # 5. Попытка сборки (если нет критических ошибок)
         if result.valid:
             await self._try_build(nodes, edges, entry, flow_id, result)
@@ -527,6 +530,31 @@ class FlowValidator:
                         node_id=nid,
                         details={"messages_filter": mf, "unknown": rid},
                     )
+
+    def _validate_node_files(
+        self,
+        nodes: Dict[str, Dict[str, Any]],
+        result: FlowValidationResult,
+    ) -> None:
+        """Поле files: список объектов с непустыми строками name и path."""
+        from apps.flows.src.state.node_files import validate_node_files_list
+
+        for node_id, cfg in nodes.items():
+            if not isinstance(cfg, dict):
+                continue
+            if "files" not in cfg:
+                continue
+            raw = cfg.get("files")
+            if raw is None or raw == []:
+                continue
+            try:
+                validate_node_files_list(raw, node_id=node_id)
+            except ValueError as exc:
+                result.add_error(
+                    code="invalid_node_files",
+                    message=str(exc),
+                    node_id=node_id,
+                )
     
     def _parse_inline_code(
         self,

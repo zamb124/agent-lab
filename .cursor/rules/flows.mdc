@@ -29,9 +29,18 @@ alwaysApply: false
 - Под карточкой `llm_node` — круглые чипы с **`platform-icon`**; тон (**фон + обводка + цвет иконки**) задаётся **`--tool-chip-accent`** из `getLlmToolChipAccentHex` — те же `#RRGGBB`, что **`_getNodeColor`** на канве, ссылка на инструмент строкой (без inline) — `#64748b`. Объект с **`code`** (в т.ч. системный `ask_user` как inline в массиве `tools`) — как **`code`**, без отдельной иконки/цвета по `tool_id`. Подсказка с именем — **`title`**. Клик по редактируемому чипу открывает **`inline-tool-modal`** через **`openInlineToolModal`**; разметка — `apps/flows/ui/utils/llm-tool-chips.js`.
 - После сохранения из модалки канва эмитит **`node-updated`** с тем же контрактом, что `property-panel`; **`flow-editor-page`** вешает `@node-updated` на **`flow-canvas`**, чтобы обновить store и канву.
 
+## UI: drop graph `code` с палитры
+
+- **`flow-canvas/events.js`**: для `type === 'code'` без `isResource` эмитится **`code-node-drop`** (не вызывается `_addNode` сразу).
+- **`flow-editor-page`**: по событию открывается тот же **`tool-picker-modal`**, что у **`llm_node`** («Add tools»): каталог **`GET /api/v1/tools/all`**, с атрибутом **`code-node-placement`** — в списке только **`item_type !== 'flow'`**, выбор карточки ведёт себя как **один** tool (без мультивыбора). **Save** (иконка в шапке): при выбранном tool — **`GET /api/v1/tools/{id}`**, на канву **`_addNode`** + **`_onNodeUpdated`** с полями из каталога (`code`, `args_schema`, …); без выбора или **0** в **`tools-selected`** — пустая code-нода. **Cancel / закрытие без Save** — только пустая нода.
+
 ## Каналы и выполнение графа
 
 Запрос пользователя в `BaseChannel.process_task` (A2A и остальные каналы) всегда идёт через `runtime_flow.run` / `Flow._execute_loop`: ноды выполняются по `edges`, состояние меняется в этом цикле. Отдельного пути «только runner на entry-`llm_node`» нет; дублирующих путей исполнения в канале не держим.
+
+### Нода: поле `files`
+
+У любой ноды в конфиге может быть **`files`**: список объектов в том же смысле, что элементы **`state.files`** (обязательны непустые строки **`name`** и **`path`**; опционально `mime_type`, `size`, `file_id`). При **первом** создании `ExecutionState` для сессии (`BaseChannel.process_task`, ветка нового state) вложения из **всех** нод эффективного графа собираются через **`collect_flow_node_files`** и кладутся в **`state.files`**, затем к ним дописываются файлы из запроса (`params.files_data`). При resume повторной подмеси нет. Эндпоинт **`GET /flows/api/v1/code/editor-state`** заполняет `state.files` так же для preview. **`POST /flows/api/v1/code/execute`** при теле с **`flow_id`** (и опционально **`skill_id`**) перед выполнением подтягивает из БД тот же flow: **`state.files`** = файлы графа + уникальные записи из тела запроса; **`state.variables`** = merge резолвнутых переменных flow с переданным `state.variables`; **`flow_config_version`** из конфига flow. Валидация: **`FlowValidator._validate_node_files`**. UI: закрепление файлов в модалке ноды; у **`llm_node`** сигнатура **`[FILE]…[/FILE]`** в промпт перетаскиванием чипа на редактор (**`prompt-editor`** с **`accept-file-drop`**). У **`code` ноды** (язык Python) перенос чипа в **`code-editor`** с **`accept-node-file-drop`** вставляет фрагмент **`get_files` + `reader.read`** (тот же смысл, что tool **`read_file`**); drag payload: кастомный MIME **`application/x-humanitec-flows-node-file+json`** + `text/plain` для промпта.
 
 ## Трейсы (UI)
 
@@ -58,6 +67,14 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 ## Evaluation (`flow.evaluation`)
 
 У шагов тест-кейса поля **`input.type`** и **`check.type`**: `text` | **`inline_code`** | `node` (и для check ещё `string`). Значение **`function`** в JSON больше не используется; при миграции старых конфигов `flow_contract_normalize` переписывает его в **`inline_code`**.
+
+## Inline Python (`apps/flows/src/eval`)
+
+- **Импорты — whitelist**: разрешённые корни модулей в **`core/inline_python_eval_policy.py`** (`ALLOWED_IMPORT_ROOTS`); **`apps.*`** и **`core.*`** запрещены. Проверка при компиляции (AST в **`apps/flows/src/eval/compiler.py`**) и в **`__import__`** (**`apps/flows/src/eval/import_policy.py`**, `safe_inline_import`).
+- **Builtins — whitelist**: **`ALLOWED_BUILTINS`** в том же модуле; нет **`open`**, **`eval`**, **`exec`**; **`__import__`** заменён на безопасный.
+- В namespace **нет** **`get_container`**, **`get_settings`**, **`pathlib.Path`**, **`read_path_bytes`** / **`read_path_base64`**. Файлы: **`get_files(state)`**, **`await reader.read(...)`** — **`source`** как запись вложения, путь или bytes; именованные параметры без отдельного объекта опций (импорт из `core` в inline-коде недоступен).
+- **`BaseTool`**: в **`PythonNamespaceBuilder`** задаётся **`base_tool_class`** снаружи (**`PythonCodeRunner`** из **`FlowContainer.get_code_runner`**, **`CodeResourceProvider`** через **`get_container().base_tool_class`**); **`namespace.py`** не импортирует контейнер.
+- Объекты из **`resources`** попадают в namespace по ключу — провайдеры должны отдавать только безопасные обёртки, не сырые репозитории/DI.
 
 ## Элементы `llm_node.tools[]`
 

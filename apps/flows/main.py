@@ -237,16 +237,17 @@ docs_path = Path(__file__).parent / "site"
 if docs_path.exists():
     app.mount("/documentation", StaticFiles(directory=docs_path, html=True), name="documentation")
 
-# Статические файлы для чата
-static_path = Path(__file__).parent / "static"
-if static_path.exists():
-    app.mount("/static", StaticFiles(directory=static_path), name="static")
-
-# Core frontend библиотека (общая для всех сервисов)
+# Core frontend — раньше общего /static: иначе Mount("/static") забирает /static/core/... и ищет
+# core/... внутри apps/flows/static (404 на tokens.css, import map и т.д.).
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
 if core_frontend_path.exists():
     app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
     logger.info(f"Core frontend библиотека смонтирована: {core_frontend_path}")
+
+# Статические файлы для чата (остальное под /static, кроме уже смонтированного /static/core)
+static_path = Path(__file__).parent / "static"
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # UI - статические файлы
 ui_path = Path(__file__).parent / "ui"

@@ -11,7 +11,7 @@ from core.errors import FlowPrematureCompletionError
 
 def _bump_node_code(node_id: str) -> str:
     return f"""
-def execute(args, state):
+async def execute(args, state):
     h = state.variables.get("hits")
     if h is None:
         h = {{}}

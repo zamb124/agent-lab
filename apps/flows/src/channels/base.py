@@ -39,7 +39,7 @@ from apps.flows.src.mock import check_mock_permission, resolve_mock_config
 from apps.flows.src.models.flow_config import Edge, SkillConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
-from apps.flows.src.state import create_initial_state
+from apps.flows.src.state import collect_flow_node_files, create_initial_state
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
 from apps.idle_worker.tasks.push_notification_tasks import send_task_update
@@ -437,6 +437,8 @@ class BaseChannel(ABC):
                     content=params.content,
                     skill_id=params.skill_id,
                 )
+                cfg_nodes = (runtime_flow.config or {}).get("nodes") or {}
+                state.files = collect_flow_node_files(cfg_nodes)
                 logger.info(f"[state] Created new state for session {params.session_id}")
             else:
                 messages_count = len(state.messages)

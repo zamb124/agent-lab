@@ -278,7 +278,7 @@ class TestInlineToolMock:
     async def test_inline_tool_mock_from_state(self):
         """InlineTool использует mock из state."""
         code = """
-def execute(args, state):
+async def execute(args, state):
     return f"inline_result_{args.get('x', 0)}"
 """
         tool = InlineTool(tool_id="inline_test", code=code)
@@ -304,7 +304,7 @@ def execute(args, state):
     async def test_inline_tool_real_execution(self):
         """InlineTool выполняет реальный код когда mock нет."""
         code = """
-def execute(args, state):
+async def execute(args, state):
     return f"inline_result_{args.get('x', 0)}"
 """
         tool = InlineTool(tool_id="inline_test", code=code)

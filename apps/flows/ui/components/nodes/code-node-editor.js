@@ -45,11 +45,15 @@ export class CodeNodeEditor extends BaseNodeEditor {
             ${showNodeIdField ? this.renderNodeIdField() : ''}
                 
                 <div class="form-group">
+                    ${language === 'python'
+                        ? html`<span class="form-label-hint">${this.i18n.t('code_editor.node_file_drop_hint')}</span>`
+                        : ''}
                 <code-editor
                             .value=${config.code || ''}
                     .language=${language}
                     node-type="code"
                             min-height="250"
+                    ?accept-node-file-drop=${language === 'python'}
                     @change=${this._onCodeChange}
                     @language-change=${this._onLanguageChange}
                     @open-docs=${this._onOpenDocs}

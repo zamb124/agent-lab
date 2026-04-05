@@ -16,8 +16,12 @@ from apps.flows.src.runners.python import PythonCodeRunner
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-# Re-export для обратной совместимости
-from apps.flows.src.eval.constants import BLOCKED_BUILTINS, BLOCKED_MODULES
+from apps.flows.src.eval.constants import (
+    ALLOWED_BUILTINS,
+    ALLOWED_IMPORT_ROOTS,
+    FORBIDDEN_IMPORT_ROOTS,
+    FUTURE_IMPORT_NAMES,
+)
 from apps.flows.src.eval.state_utils import (
     add_agent_message,
     add_user_message,
@@ -30,8 +34,6 @@ from apps.flows.src.eval.state_utils import (
     get_tool_result,
     get_user,
     merge_state,
-    read_path_bytes,
-    read_path_base64,
     set_nested,
 )
 from apps.flows.src.eval.wrappers import (
@@ -45,15 +47,16 @@ from apps.flows.src.eval.wrappers import (
 class SafeEval:
     """
     Legacy класс для безопасного выполнения inline кода.
-    
+
     Используйте PythonCodeRunner для нового кода.
     """
-    
+
     def __init__(
         self,
         context: Optional[Any] = None,
         variables: Optional[Dict[str, Any]] = None,
         resources: Optional[Dict[str, Any]] = None,
+        base_tool_class: Optional[type] = None,
     ):
         self.context = context
         self.variables = variables or {}
@@ -62,41 +65,21 @@ class SafeEval:
             context=context,
             variables=self.variables,
             resources=self.resources,
+            base_tool_class=base_tool_class,
         )
-    
+
     def _build_namespace(self) -> Dict[str, Any]:
-        """Создаёт namespace для выполнения кода."""
         return self._runner.namespace_builder.build()
-    
+
     def _compile(self, code: str, func_name: str, auto_find: bool = True) -> Callable:
-        """Компилирует код и возвращает функцию."""
         return self._runner.compiler.compile(code, func_name, auto_find=auto_find)
-    
-    async def execute_node(self, code: str, state: 'ExecutionState') -> Any:
-        """
-        Выполняет код ноды (ищет функцию run).
-        
-        Args:
-            code: Код функции
-            state: ExecutionState для передачи
-            
-        Returns:
-            Результат выполнения
-        """
+
+    async def execute_node(self, code: str, state: "ExecutionState") -> Any:
         return await self._runner.execute(code, state, func_name="run")
-    
-    async def execute_tool(self, code: str, args: Dict[str, Any], state: Optional['ExecutionState'] = None) -> Any:
-        """
-        Выполняет код tool.
-        
-        Args:
-            code: Код функции или класса
-            args: Аргументы вызова tool
-            state: State (опционально)
-            
-        Returns:
-            Результат выполнения
-        """
+
+    async def execute_tool(
+        self, code: str, args: Dict[str, Any], state: Optional["ExecutionState"] = None
+    ) -> Any:
         return await self._runner.execute_tool(code, args, state)
 
 
@@ -106,20 +89,25 @@ def compile_function(
     context: Optional[Any] = None,
     variables: Optional[Dict[str, Any]] = None,
     auto_find: bool = False,
+    base_tool_class: Optional[type] = None,
 ) -> Callable:
     """Компилирует код и возвращает функцию."""
-    namespace_builder = PythonNamespaceBuilder(context=context, variables=variables or {})
+    namespace_builder = PythonNamespaceBuilder(
+        context=context,
+        variables=variables or {},
+        base_tool_class=base_tool_class,
+    )
     compiler = PythonCompiler(namespace_builder=namespace_builder)
     return compiler.compile(code, func_name, auto_find=auto_find)
 
 
 async def safe_eval(
     code: str,
-    state: 'ExecutionState',
+    state: "ExecutionState",
     context: Optional[Any] = None,
     func_name: str = "run",
 ) -> Any:
     """Безопасно выполняет inline код ноды."""
-    variables = state.variables if hasattr(state, 'variables') else {}
+    variables = state.variables if hasattr(state, "variables") else {}
     runner = PythonCodeRunner(context=context, variables=variables)
     return await runner.execute(code, state, func_name=func_name)

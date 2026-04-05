@@ -130,7 +130,7 @@ class TestToolRepository:
             description="For testing",
             type="function",
             code_mode=CodeMode.INLINE_CODE,
-            code="def execute(args, state):\n    return args.get('x', 0) + 1",
+            code="async def execute(args, state):\n    return args.get('x', 0) + 1",
         )
 
         await repo.set(tool)

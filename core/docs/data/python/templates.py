@@ -9,7 +9,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "http_get",
         "name": "HTTP GET запрос",
-        "description": "Запрос к внешнему API с обработкой ответа",
+        "description": "**Категория:** HTTP. `httpx.get` к внешнему URL; при ошибке статуса возвращает `{\"error\": ...}`.",
         "category": "http",
         "node_type": "tool",
         "tags": ["http", "api", "external"],
@@ -35,7 +35,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "http_post",
         "name": "HTTP POST запрос",
-        "description": "Отправка данных на внешний API",
+        "description": "**Категория:** HTTP. `httpx.post` с JSON-телом; ожидаемые статусы `200` / `201`.",
         "category": "http",
         "node_type": "tool",
         "tags": ["http", "api", "external"],
@@ -62,7 +62,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "llm_simple",
         "name": "LLM вызов",
-        "description": "Простой вызов LLM с промптом",
+        "description": "**Категория:** LLM. Один вызов `llm.chat(prompt)` и извлечение текста из первой части ответа.",
         "category": "llm",
         "node_type": "tool",
         "tags": ["llm", "ai"],
@@ -87,7 +87,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "ask_user",
         "name": "Запрос у пользователя",
-        "description": "Прерывание выполнения для запроса информации у пользователя",
+        "description": "**Категория:** interrupt. Вызывает `ask_user(question)` — выполнение останавливается до ответа пользователя.",
         "category": "interaction",
         "node_type": "tool",
         "tags": ["interrupt", "user", "interaction"],
@@ -108,7 +108,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "json_processing",
         "name": "Обработка JSON",
-        "description": "Извлечение и обработка JSON из текста",
+        "description": "**Категория:** данные. Использует `extract_json(text)` для разбора JSON из текста или MD-блоков.",
         "category": "data",
         "node_type": "tool",
         "tags": ["json", "parsing", "data"],
@@ -155,8 +155,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     
     results = []
     for file_info in files:
-        from pathlib import Path
-        res = await reader.read(source=Path(file_info["path"]))
+        res = await reader.read(file_info)
         preview = res.pages[0].text[:2000] if res.pages else ""
         results.append({
             "name": file_info["name"],
@@ -346,8 +345,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     
     results = []
     for file_info in files:
-        from pathlib import Path
-        res = await reader.read(source=Path(file_info["path"]))
+        res = await reader.read(file_info)
         preview = res.pages[0].text[:2000] if res.pages else ""
         results.append({
             "name": file_info["name"],

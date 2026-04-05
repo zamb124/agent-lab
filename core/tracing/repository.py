@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import Boolean, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from core.logging import get_logger
@@ -516,7 +516,10 @@ class SpanRepository:
                     Spans.start_time < to_time,
                     res_txt.isnot(None),
                     res_txt != "",
-                    pend_txt.in_(("true", "True", "1")),
+                    or_(
+                        pend_txt.in_(("true", "True", "1")),
+                        cast(pend_txt, Boolean).is_(True),
+                    ),
                 )
                 .order_by(Spans.start_time.asc(), Spans.span_id.asc())
                 .limit(limit)

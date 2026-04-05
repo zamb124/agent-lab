@@ -1930,7 +1930,7 @@ class TestChannelNodeE2E:
                 "process": {
                     "type": "code",
                     "code": """
-def execute(args, state):
+async def execute(args, state):
     state.response = "Processing complete"
     return {"success": True}
 """,
@@ -2000,7 +2000,7 @@ def execute(args, state):
                 "process": {
                     "type": "code",
                     "code": """
-def execute(args, state):
+async def execute(args, state):
     state.response = "Your request has been processed"
     return {"success": True}
 """,
@@ -2387,7 +2387,7 @@ class TestFullTriggerFlowE2E:
                 "calculate": {
                     "type": "code",
                     "code": """
-def execute(args, state):
+async def execute(args, state):
     a = state.variables.get("a", 0)
     b = state.variables.get("b", 0)
     result = a + b

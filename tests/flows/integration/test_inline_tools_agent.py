@@ -22,7 +22,7 @@ class TestToolRegistryInlineConfig:
                 "a": {"type": "integer", "description": "Первое число"},
                 "b": {"type": "integer", "description": "Второе число"},
             },
-            "code": "def execute(args, state):\n    return args['a'] + args['b']",
+            "code": "async def execute(args, state):\n    return args['a'] + args['b']",
         }
 
         tool = await container.tool_registry.create_tool(config)
@@ -46,7 +46,7 @@ class TestToolRegistryInlineConfig:
         """ToolRegistry создает InlineTool из минимального dict."""
         config = {
             "tool_id": "simple",
-            "code": "def execute(args, state):\n    return 'ok'",
+            "code": "async def execute(args, state):\n    return 'ok'",
         }
 
         tool = await container.tool_registry.create_tool(config)
@@ -77,12 +77,12 @@ class TestToolRegistryInlineConfig:
         tools_config = [
             {
                 "tool_id": "inline_calc",
-                "code": "def execute(args, state):\n    return args['a'] + args['b']",
+                "code": "async def execute(args, state):\n    return args['a'] + args['b']",
                 "args_schema": {"a": {"type": "integer"}, "b": {"type": "integer"}},
             },
             {
                 "tool_id": "inline_doubler",
-                "code": "def execute(args, state):\n    return args['x'] * 2",
+                "code": "async def execute(args, state):\n    return args['x'] * 2",
                 "args_schema": {"x": {"type": "integer"}},
             },
         ]
@@ -118,7 +118,7 @@ class TestInlineToolSchema:
         """InlineTool генерирует корректную OpenAI схему."""
         tool = InlineTool(
             tool_id="greeter",
-            code="def execute(args, state):\n    return f\"Hello, {args['name']}!\"",
+            code="async def execute(args, state):\n    return f\"Hello, {args['name']}!\"",
             description="Приветствует пользователя",
             parameters={
                 "name": {"type": "string", "description": "Имя пользователя"},
@@ -143,7 +143,7 @@ class TestInlineToolSchema:
         """InlineTool имеет доступ к state."""
         tool = InlineTool(
             tool_id="state_reader",
-            code="""def execute(args, state):
+            code="""async def execute(args, state):
     user = state.get('user', {})
     return f"User: {user.get('name', 'anonymous')}"
 """,
@@ -170,7 +170,7 @@ class TestInlineToolsExecution:
         """Inline tool с complex логикой."""
         tool = InlineTool(
             tool_id="data_processor",
-            code="""def execute(args, state):
+            code="""async def execute(args, state):
     items = args.get('items', [])
     multiplier = args.get('multiplier', 1)
     
@@ -210,7 +210,7 @@ class TestInlineToolsExecution:
         """Inline tool может использовать разрешенные модули."""
         tool = InlineTool(
             tool_id="json_tool",
-            code="""def execute(args, state):
+            code="""async def execute(args, state):
     import json
     data = {'key': args['value']}
     return json.dumps(data)
@@ -232,7 +232,7 @@ class TestInlineToolsExecution:
         """Inline tool с math операциями."""
         tool = InlineTool(
             tool_id="math_tool",
-            code="""def execute(args, state):
+            code="""async def execute(args, state):
     import math
     return {
         'sqrt': math.sqrt(args['x']),
@@ -268,7 +268,7 @@ class TestInlineToolsInFlowConfig:
                 "tool_id": "test_inline_calc",
                 "description": "Калькулятор",
                 "args_schema": {"expression": {"type": "string"}},
-                "code": "def execute(args, state):\n    return eval(args.get('expression', '0'))",
+                "code": "async def execute(args, state):\n    return eval(args.get('expression', '0'))",
             },
             {
                 "tool_id": "custom_formatter",
@@ -277,7 +277,7 @@ class TestInlineToolsInFlowConfig:
                     "text": {"type": "string", "description": "Текст"},
                     "uppercase": {"type": "boolean", "description": "В верхнем регистре"},
                 },
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     text = args.get('text', '')
     if args.get('uppercase', False):
         return text.upper()
@@ -310,15 +310,15 @@ class TestInlineToolsInFlowConfig:
         tools_config = [
             {
                 "tool_id": "tool_a",
-                "code": "def execute(args, state):\n    return 'A'",
+                "code": "async def execute(args, state):\n    return 'A'",
             },
             {
                 "tool_id": "tool_b",
-                "code": "def execute(args, state):\n    return 'B'",
+                "code": "async def execute(args, state):\n    return 'B'",
             },
             {
                 "tool_id": "tool_c",
-                "code": "def execute(args, state):\n    return 'C'",
+                "code": "async def execute(args, state):\n    return 'C'",
             },
         ]
 

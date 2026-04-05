@@ -14,6 +14,7 @@ from apps.flows.src.models import ToolReference
 from apps.flows.src.models.enums import CodeMode, NodeType
 from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 from apps.flows.src.tools.base import BaseTool, InlineTool
 from apps.flows.src.tools.mcp_wrapper import MCPTool
 
@@ -60,6 +61,7 @@ class ToolRegistry:
         from apps.flows.tools import (
             calculator,
             create_file,
+            fill_docx_template,
             final_answer,
             finish,
             read_file,
@@ -76,6 +78,7 @@ class ToolRegistry:
         builtin_tools = [
             calculator,
             create_file,
+            fill_docx_template,
             final_answer,
             finish,
             read_file,
@@ -109,8 +112,8 @@ class ToolRegistry:
 
         Порядок веток:
         1. ``code_mode=mcp_tool`` → MCPTool
-        2. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``) → merge из ``tool_repository``; без шаблона или без ``code`` → ValueError
-        3. Поле ``type`` из NodeType / ``channel`` или наличие ``prompt`` → NodeAsToolWrapper
+        2. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → merge из ``tool_repository``
+        3. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
         4. Непустой ``code`` → InlineTool
         5. ``type=code`` без кода → NodeAsToolWrapper
         6. иначе ValueError
@@ -134,12 +137,24 @@ class ToolRegistry:
             raw = r.get("tool_id") or r.get("name")
             return raw if isinstance(raw, str) and raw else None
 
+        node_exec_kind = ref.get("type")
+        _node_as_tool_kind = node_exec_kind in (
+            NodeType.LLM_NODE.value,
+            NodeType.FLOW.value,
+            NodeType.REMOTE_FLOW.value,
+            NodeType.EXTERNAL_API.value,
+            NodeType.MCP.value,
+            NodeType.CHANNEL.value,
+            "channel",
+        )
+
         tid = _tool_lookup_id(ref)
         if (
             tid
             and not _has_nonempty_inline_code(ref)
             and not ref.get("prompt")
             and not tid.startswith("mcp:")
+            and not _node_as_tool_kind
         ):
             from apps.flows.src.container import get_container
 
@@ -155,8 +170,6 @@ class ToolRegistry:
                     f"Tool '{tid}': шаблон в tool_repository без непустого поля code"
                 )
             tid = _tool_lookup_id(ref)
-
-        node_exec_kind = ref.get("type")
 
         if node_exec_kind in (
             NodeType.LLM_NODE.value,
@@ -237,6 +250,7 @@ class ToolRegistry:
         code = config.get("code")
         if not code:
             raise ValueError(f"Inline tool '{tool_id}' requires 'code' field")
+        code = strip_forbidden_platform_import_lines(code)
 
         parameters = None
         args_schema = config.get("args_schema")

@@ -26,6 +26,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.models import FileMetadata
+from core.files.processors import FileProcessor
 from core.files.writer.content_kind import (
     ContentKind,
     SourceContent,
@@ -36,7 +37,6 @@ from core.files.writer.exceptions import FileWriteError
 from core.files.writer.image_fetch import fetch_url_bytes
 from core.files.writer.md_parse import flatten_markdown_segments, parse_gfm_table
 from core.files.writer.models import ContentMode, FileWriteResult, WriteOptions
-from core.files.processors import FileProcessor
 from core.files.writer.pdf_unicode_font import register_pdf_unicode_font
 from core.files.writer.persist import write_bytes_via_processor
 
@@ -58,7 +58,7 @@ class FileWriter:
         file_processor: FileProcessor,
         download_url_prefix: str,
     ) -> None:
-        """Один вызов при старте процесса сервиса: дальше writer = FileWriter() и await writer.create_file(...)."""
+        """Один вызов при старте процесса сервиса: дальше writer = FileWriter() и await writer.write(...)."""
         stripped = (download_url_prefix or "").strip().rstrip("/")
         if not stripped:
             raise ValueError("download_url_prefix не может быть пустым")
@@ -97,7 +97,7 @@ class FileWriter:
         download_url_prefix: str,
         options: Optional[WriteOptions] = None,
     ) -> FileWriter:
-        """Экземпляр с возможностью await create_file(...) для данного процессора и префикса URL."""
+        """Экземпляр с возможностью await write(...) для данного процессора и префикса URL."""
         return cls(
             options=options,
             file_processor=file_processor,
@@ -158,26 +158,21 @@ class FileWriter:
             return self._build_markdown_pipeline(text, name, ext, opts)
         raise FileWriteError(f"Неизвестный content_mode: {content_mode!r}")
 
-    async def create_file(
+    async def _persist_upload(
         self,
+        built: FileWriteResult,
         *,
-        content: SourceContent,
         original_name: str,
-        content_mode: ContentMode = "auto",
-        options: Optional[WriteOptions] = None,
-        public: bool = True,
+        public: bool,
     ) -> FileMetadata:
         if self._file_processor is None or self._download_url_prefix is None:
             raise FileWriteError(
-                "create_file: нет привязки к хранилищу — вызовите FileWriter.configure_process_upload(...) "
+                "write: нет привязки к хранилищу — вызовите FileWriter.configure_process_upload(...) "
                 "при старте процесса или FileWriter.bind_for_upload(...) для экземпляра"
             )
         ctx = get_context()
         if ctx.active_company is None:
             raise FileWriteError("Нет активной компании в контексте запроса")
-        built = self.build_bytes(
-            content, original_name, content_mode=content_mode, options=options
-        )
         return await write_bytes_via_processor(
             data=built.data,
             mime_type=built.mime_type,
@@ -187,6 +182,56 @@ class FileWriter:
             company_id=ctx.active_company.company_id,
             download_url_prefix=self._download_url_prefix,
             content_sha256_hex=built.checksum_sha256_hex,
+            public=public,
+        )
+
+    async def write(
+        self,
+        *,
+        content: SourceContent,
+        original_name: str,
+        content_mode: ContentMode = "auto",
+        public: bool = True,
+        text_encoding: str = "utf-8",
+        max_image_bytes: int = 15 * 1024 * 1024,
+        http_timeout_seconds: float = 30.0,
+        pdf_max_image_width_pt: float = 400.0,
+        docx_image_width_inches: float = 5.0,
+    ) -> FileMetadata:
+        opts = WriteOptions(
+            text_encoding=text_encoding,
+            max_image_bytes=max_image_bytes,
+            http_timeout_seconds=http_timeout_seconds,
+            pdf_max_image_width_pt=pdf_max_image_width_pt,
+            docx_image_width_inches=docx_image_width_inches,
+        )
+        built = self.build_bytes(
+            content, original_name, content_mode=content_mode, options=opts
+        )
+        return await self._persist_upload(
+            built, original_name=original_name, public=public
+        )
+
+    async def create_file(
+        self,
+        *,
+        content: SourceContent,
+        original_name: str,
+        content_mode: ContentMode = "auto",
+        options: Optional[WriteOptions] = None,
+        public: bool = True,
+    ) -> FileMetadata:
+        if options is not None:
+            built = self.build_bytes(
+                content, original_name, content_mode=content_mode, options=options
+            )
+            return await self._persist_upload(
+                built, original_name=original_name, public=public
+            )
+        return await self.write(
+            content=content,
+            original_name=original_name,
+            content_mode=content_mode,
             public=public,
         )
 

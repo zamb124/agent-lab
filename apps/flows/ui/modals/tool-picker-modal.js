@@ -318,6 +318,8 @@ export class ToolPickerModal extends PlatformModal {
         loading: { type: Boolean },
         allItems: { type: Array },
         activeTag: { type: String },
+        /** Режим drop graph code-ноды: только tools (без flow), один выбор как радио */
+        codeNodePlacement: { type: Boolean, attribute: 'code-node-placement' },
     };
 
     constructor() {
@@ -328,6 +330,7 @@ export class ToolPickerModal extends PlatformModal {
         this.activeTag = 'all';
         this.loading = false;
         this.size = 'full';
+        this.codeNodePlacement = false;
     }
 
     renderHeader() {
@@ -381,9 +384,16 @@ export class ToolPickerModal extends PlatformModal {
         return null;
     }
 
+    _getBaseItems() {
+        if (this.codeNodePlacement) {
+            return this.allItems.filter((item) => item.item_type !== 'flow');
+        }
+        return this.allItems;
+    }
+
     _getAllTags() {
         const tags = new Set();
-        this.allItems.forEach(item => {
+        this._getBaseItems().forEach(item => {
             if (this._isReasonTool(item)) {
                 return;
             }
@@ -393,16 +403,17 @@ export class ToolPickerModal extends PlatformModal {
     }
 
     _getFilteredItems() {
+        const base = this._getBaseItems();
         if (this.activeTag === 'all') {
-            return this.allItems;
+            return base;
         }
         if (this.activeTag === 'reason') {
-            return this.allItems.filter(item => this._isReasonTool(item));
+            return base.filter(item => this._isReasonTool(item));
         }
         if (this.activeTag === 'mcp') {
-            return this.allItems.filter(item => this._isMCPTool(item));
+            return base.filter(item => this._isMCPTool(item));
         }
-        return this.allItems.filter(item => 
+        return base.filter(item => 
             !this._isReasonTool(item) && (item.tags || ['misc']).includes(this.activeTag)
         );
     }
@@ -413,6 +424,14 @@ export class ToolPickerModal extends PlatformModal {
 
     _onCardClick(item) {
         const toolId = item.tool_id;
+        if (this.codeNodePlacement) {
+            if (this.selectedTools.has(toolId)) {
+                this.selectedTools = new Set();
+            } else {
+                this.selectedTools = new Set([toolId]);
+            }
+            return;
+        }
         if (this.selectedTools.has(toolId)) {
             this.selectedTools.delete(toolId);
         } else {
@@ -444,9 +463,10 @@ export class ToolPickerModal extends PlatformModal {
 
     _renderTags() {
         const tags = this._getAllTags();
+        const base = this._getBaseItems();
 
-        const reasonCount = this.allItems.filter(i => this._isReasonTool(i)).length;
-        const mcpCount = this.allItems.filter(i => this._isMCPTool(i)).length;
+        const reasonCount = base.filter(i => this._isReasonTool(i)).length;
+        const mcpCount = base.filter(i => this._isMCPTool(i)).length;
         
         return html`
             <div class="sidebar-title">${this.i18n.t('tool_picker.categories')}</div>
@@ -456,7 +476,7 @@ export class ToolPickerModal extends PlatformModal {
                 @click=${() => this._onTagClick('all')}
             >
                 <span>${this.i18n.t('tool_picker.tag_all')}</span>
-                <span class="tag-count">${this.allItems.length}</span>
+                <span class="tag-count">${base.length}</span>
             </button>
             
             ${mcpCount > 0 ? html`
@@ -481,7 +501,7 @@ export class ToolPickerModal extends PlatformModal {
             
             ${tags.map(tag => {
                 const label = this._toolPickerTagLabel(tag);
-                const count = this.allItems.filter(i => !this._isReasonTool(i) && (i.tags || ['misc']).includes(tag)).length;
+                const count = base.filter(i => !this._isReasonTool(i) && (i.tags || ['misc']).includes(tag)).length;
                 return html`
                     <button 
                         class="tag-btn ${this.activeTag === tag ? 'active' : ''}" 

@@ -10,6 +10,7 @@ import '../editors/tag-input.js';
 import '../editors/json-field-editor.js';
 import '../editors/state-mapping-editor.js';
 import '../editors/test-panel.js';
+import { setFlowsNodeFileDragData } from '../../utils/file-signature.js';
 
 export class BaseNodeEditor extends PlatformElement {
     static styles = [
@@ -156,6 +157,134 @@ export class BaseNodeEditor extends PlatformElement {
                 border-color: rgba(34, 34, 34, 0.14);
                 box-shadow: inset 0 1px 0 rgba(34, 34, 34, 0.04);
             }
+
+            .node-attached-files-block {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                margin-top: var(--space-2);
+                align-items: flex-start;
+            }
+
+            .node-attached-files-block--single {
+                flex-direction: row;
+                flex-wrap: nowrap;
+                align-items: center;
+            }
+
+            .node-attached-files-block--single .node-file-chips {
+                flex: 1 1 auto;
+                min-width: 0;
+                margin-top: 0;
+            }
+
+            .node-attach-icon-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
+                height: 36px;
+                padding: 0;
+                color: var(--text-secondary);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                transition:
+                    color var(--duration-fast) var(--easing-default),
+                    background var(--duration-fast) var(--easing-default),
+                    border-color var(--duration-fast) var(--easing-default);
+            }
+
+            .node-attach-icon-btn:hover:not(:disabled) {
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+                border-color: var(--border-medium);
+            }
+
+            .node-attach-icon-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .node-file-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+            }
+
+            .node-file-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                max-width: 100%;
+                padding: 4px 8px;
+                border-radius: var(--radius-md);
+                font-size: var(--text-xs);
+                border: 1px solid var(--border-subtle);
+                background: var(--glass-tint-subtle);
+                cursor: grab;
+            }
+
+            .node-attached-files-block--single .node-file-chip {
+                max-width: 100%;
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .node-file-chip:active {
+                cursor: grabbing;
+            }
+
+            .node-file-chip-drag {
+                display: inline-flex;
+                align-items: center;
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+                cursor: grab;
+                line-height: 0;
+                margin-right: 2px;
+            }
+
+            .node-file-chip-drag:active {
+                cursor: grabbing;
+            }
+
+            .node-file-chip-name {
+                min-width: 0;
+                flex: 1 1 auto;
+                max-width: 220px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .node-attached-files-block--single .node-file-chip-name {
+                max-width: none;
+            }
+
+            .node-file-chip-remove {
+                flex-shrink: 0;
+                border: none;
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                padding: 0 2px;
+                line-height: 1;
+                font-size: var(--text-base);
+            }
+
+            .node-file-chip-remove:hover {
+                color: var(--error);
+            }
+
+            .node-attach-input-hidden {
+                position: absolute;
+                width: 0;
+                height: 0;
+                opacity: 0;
+                pointer-events: none;
+            }
         `
     ];
 
@@ -168,6 +297,7 @@ export class BaseNodeEditor extends PlatformElement {
         previewExecutionState: { type: Object },
         expanded: { type: Boolean },
         allowNodeIdRenameOnce: { type: Boolean },
+        _nodeAttachUploading: { state: true },
     };
 
     constructor() {
@@ -180,6 +310,7 @@ export class BaseNodeEditor extends PlatformElement {
         this.previewExecutionState = null;
         this.expanded = false;
         this.allowNodeIdRenameOnce = false;
+        this._nodeAttachUploading = false;
         this._testStateSnapshot = { content: '', messages: [], variables: {} };
     }
 
@@ -362,8 +493,14 @@ export class BaseNodeEditor extends PlatformElement {
             : 'base_node_editor.node_id_locked_hint';
         return html`
             <div class="form-group">
-                <div class="form-label">
-                    <span class="form-label-text">${this.i18n.t('node_modal.common.sidebar_node_id')}</span>
+                <div class="form-label form-label-inline">
+                    <span class="form-label-text form-label-inline-text">${this.i18n.t(
+                        'node_modal.common.sidebar_node_id'
+                    )}</span>
+                    <platform-help-hint
+                        label=${this.i18n.t('base_node_editor.node_id_help_aria')}
+                        .text=${this.i18n.t(hintKey)}
+                    ></platform-help-hint>
                 </div>
                 <input
                     type="text"
@@ -373,7 +510,6 @@ export class BaseNodeEditor extends PlatformElement {
                     @change=${this._onNodeIdChange}
                     placeholder=${this.i18n.t('base_node_editor.placeholder_node_id')}
                 />
-                <span class="form-label-hint">${this.i18n.t(hintKey)}</span>
             </div>
         `;
     }
@@ -428,10 +564,137 @@ export class BaseNodeEditor extends PlatformElement {
                         @change=${(e) => this._onInputChange('tags', e.detail.tags)}
                     ></tag-input>
                 </div>
+                ${this.renderNodeAttachedFilesSection()}
             </div>
             
             ${this.renderInputStateSection()}
         `;
+    }
+
+    renderNodeAttachedFilesSection() {
+        const files = Array.isArray(this.nodeConfig?.files) ? this.nodeConfig.files : [];
+        return html`
+            <div class="form-group">
+                <div class="form-label form-label-inline">
+                    <span class="form-label-text form-label-inline-text">${this.i18n.t(
+                        'base_node_editor.attached_files_label'
+                    )}</span>
+                    <platform-help-hint
+                        label=${this.i18n.t('base_node_editor.attached_files_help_aria')}
+                        .text=${this.i18n.t('base_node_editor.attached_files_hint')}
+                    ></platform-help-hint>
+                </div>
+                <input
+                    type="file"
+                    class="node-attach-input-hidden"
+                    id="node-attach-file-input"
+                    multiple
+                    @change=${this._onNodeAttachFileInput}
+                />
+                <div
+                    class="node-attached-files-block${files.length === 1
+                        ? ' node-attached-files-block--single'
+                        : ''}"
+                >
+                    <button
+                        type="button"
+                        class="node-attach-icon-btn"
+                        ?disabled=${this._nodeAttachUploading}
+                        aria-label=${this.i18n.t('base_node_editor.attach_file')}
+                        @click=${this._openNodeAttachFilePicker}
+                    >
+                        <platform-icon name="paperclip" size="18"></platform-icon>
+                    </button>
+                    ${files.length
+                        ? html`
+                              <div class="node-file-chips">
+                                  ${files.map(
+                                      (f, i) => html`
+                                          <span
+                                              class="node-file-chip"
+                                              draggable="true"
+                                              @dragstart=${(e) => this._onNodeFileDragStart(e, f)}
+                                              title=${this.i18n.t('base_node_editor.file_chip_drag_hint')}
+                                          >
+                                              <span
+                                                  class="node-file-chip-drag"
+                                                  title=${this.i18n.t('base_node_editor.file_chip_drag_hint')}
+                                              >
+                                                  <platform-icon
+                                                      name="drag-handle"
+                                                      size="14"
+                                                  ></platform-icon>
+                                              </span>
+                                              <span class="node-file-chip-name">${f.name || f.path || 'file'}</span>
+                                              <button
+                                                  type="button"
+                                                  class="node-file-chip-remove"
+                                                  @click=${() => this._removeAttachedFile(i)}
+                                                  aria-label=${this.i18n.t(
+                                                      'base_node_editor.remove_attached_file'
+                                                  )}
+                                              >
+                                                  &times;
+                                              </button>
+                                          </span>
+                                      `
+                                  )}
+                              </div>
+                          `
+                        : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    _openNodeAttachFilePicker() {
+        this.shadowRoot?.getElementById('node-attach-file-input')?.click();
+    }
+
+    async _onNodeAttachFileInput(e) {
+        const input = e.target;
+        const list = Array.from(input.files || []);
+        input.value = '';
+        if (!list.length) {
+            return;
+        }
+        const api = this.filesApi;
+        if (!api) {
+            this.error(this.i18n.t('base_node_editor.files_api_missing'));
+            return;
+        }
+        this._nodeAttachUploading = true;
+        const current = Array.isArray(this.nodeConfig.files) ? [...this.nodeConfig.files] : [];
+        try {
+            for (const file of list) {
+                const rec = await api.uploadFile(file);
+                const path = api.buildDownloadUrl(rec.file_id);
+                current.push({
+                    name: rec.original_name,
+                    path,
+                    mime_type: rec.content_type,
+                    size: rec.file_size,
+                    file_id: rec.file_id,
+                });
+            }
+            this._updateConfig('files', current);
+            this.success(this.i18n.t('base_node_editor.attached_files_upload_ok'));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.error(this.i18n.t('base_node_editor.attached_files_upload_err', { message: msg }));
+        } finally {
+            this._nodeAttachUploading = false;
+        }
+    }
+
+    _removeAttachedFile(index) {
+        const current = Array.isArray(this.nodeConfig.files) ? [...this.nodeConfig.files] : [];
+        current.splice(index, 1);
+        this._updateConfig('files', current);
+    }
+
+    _onNodeFileDragStart(e, file) {
+        setFlowsNodeFileDragData(e.dataTransfer, file);
     }
 
     /**
@@ -668,6 +931,7 @@ export class BaseNodeEditor extends PlatformElement {
         return html`
             <div class="panel-body">
                 ${this.renderDescription()}
+                ${this.renderNodeAttachedFilesSection()}
                 ${this.renderFields()}
                 ${this.renderActions()}
             </div>
