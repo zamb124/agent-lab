@@ -2,9 +2,8 @@
  * Glass Input Component
  * Поле ввода с glass morphism эффектом
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
-import { ifDefined } from 'lit/directives/if-defined.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class GlassInput extends PlatformElement {
@@ -144,7 +143,7 @@ export class GlassInput extends PlatformElement {
                     name=${this.name}
                     .value=${this.value}
                     placeholder=${this.placeholder}
-                    autocomplete=${ifDefined(this.autocomplete)}
+                    autocomplete=${this.autocomplete != null && this.autocomplete !== '' ? this.autocomplete : nothing}
                     ?disabled=${this.disabled}
                     ?required=${this.required}
                     @input=${this._onInput}
