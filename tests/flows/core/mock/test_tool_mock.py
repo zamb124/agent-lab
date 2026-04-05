@@ -1,5 +1,5 @@
 """
-Тесты mock для BaseTool и InlineTool.
+Тесты mock для BaseTool и CodeTool.
 
 Mock через state.mock["tools"].
 """
@@ -7,7 +7,7 @@ Mock через state.mock["tools"].
 import pytest
 from typing import Any, Dict, Optional
 
-from apps.flows.src.tools.base import BaseTool, InlineTool
+from apps.flows.src.tools.base import BaseTool, CodeTool
 from core.state import ExecutionState
 
 
@@ -271,17 +271,17 @@ class TestBaseToolMockFromState:
         assert result == []
 
 
-class TestInlineToolMock:
-    """Тесты mock для InlineTool."""
+class TestCodeToolMock:
+    """Тесты mock для CodeTool."""
 
     @pytest.mark.asyncio
     async def test_inline_tool_mock_from_state(self):
-        """InlineTool использует mock из state."""
+        """CodeTool использует mock из state."""
         code = """
 async def execute(args, state):
     return f"inline_result_{args.get('x', 0)}"
 """
-        tool = InlineTool(tool_id="inline_test", code=code)
+        tool = CodeTool(tool_id="inline_test", code=code)
         
         state = ExecutionState(
             task_id="test-task",
@@ -302,12 +302,12 @@ async def execute(args, state):
 
     @pytest.mark.asyncio
     async def test_inline_tool_real_execution(self):
-        """InlineTool выполняет реальный код когда mock нет."""
+        """CodeTool выполняет реальный код когда mock нет."""
         code = """
 async def execute(args, state):
     return f"inline_result_{args.get('x', 0)}"
 """
-        tool = InlineTool(tool_id="inline_test", code=code)
+        tool = CodeTool(tool_id="inline_test", code=code)
         
         state = ExecutionState(
             task_id="test-task",

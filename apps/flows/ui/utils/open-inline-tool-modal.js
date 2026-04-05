@@ -13,19 +13,19 @@ export function normalizeInlineEditorToolType(type) {
 }
 
 /**
- * @typedef {Object} InlineToolSavedDetail
+ * @typedef {Object} FlowLlmToolSavedDetail
  * @property {string} toolId
  * @property {Record<string, unknown>} config
  */
 
 /**
- * @typedef {Object} InlineToolModalClosedResult
+ * @typedef {Object} FlowLlmToolModalClosedResult
  * @property {boolean} saved
- * @property {InlineToolSavedDetail | null} [detail]
+ * @property {FlowLlmToolSavedDetail | null} [detail]
  */
 
 /**
- * @typedef {Object} OpenInlineToolModalOptions
+ * @typedef {Object} OpenFlowLlmToolModalOptions
  * @property {'create' | 'edit'} mode
  * @property {string} toolType
  * @property {Record<string, unknown>} [toolConfig]
@@ -33,13 +33,13 @@ export function normalizeInlineEditorToolType(type) {
  * @property {string} [flowId]
  * @property {string} [skillId]
  * @property {unknown} [previewExecutionState]
- * @property {(detail: InlineToolSavedDetail) => void} [onToolSaved]
- * @property {(result: InlineToolModalClosedResult) => void | Promise<void>} [onModalClosed]
+ * @property {(detail: FlowLlmToolSavedDetail) => void} [onToolSaved]
+ * @property {(result: FlowLlmToolModalClosedResult) => void | Promise<void>} [onModalClosed]
  *     Вызывается после закрытия модалки (сохранение или отмена); можно вернуть Promise — DOM-узел удалится после await.
  */
 
 /**
- * @param {OpenInlineToolModalOptions} options
+ * @param {OpenFlowLlmToolModalOptions} options
  */
 export function openInlineToolModal(options) {
     const {
@@ -65,7 +65,7 @@ export function openInlineToolModal(options) {
     modal.skillId = skillId ?? '';
     modal.previewExecutionState = previewExecutionState ?? null;
 
-    /** @type {InlineToolModalClosedResult} */
+    /** @type {FlowLlmToolModalClosedResult} */
     let closedResult = { saved: false, detail: null };
 
     const handleSaved = (e) => {

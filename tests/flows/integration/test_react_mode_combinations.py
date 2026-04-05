@@ -1180,13 +1180,13 @@ class TestExplicitModeStreaming:
         from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
         from apps.flows.src.models import ReactLoopMode
         from apps.flows.src.models.enums import ReactToolRole
-        from apps.flows.src.tools.base import InlineTool
+        from apps.flows.src.tools.base import CodeTool
         from apps.flows.src.models.tool_reference import CallParameter
 
         flow_id = f"explicit_streaming_{unique_id}"
         container = get_container()
         
-        finish_tool = InlineTool(
+        finish_tool = CodeTool(
             tool_id="finish",
             code="async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
             description="Завершает агента",

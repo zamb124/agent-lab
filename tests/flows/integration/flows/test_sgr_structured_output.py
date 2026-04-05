@@ -24,7 +24,6 @@ from apps.flows.src.runtime.nodes import (
     RemoteFlowNode,
 )
 from apps.flows.src.models import Edge
-from apps.flows.src.tools import InlineTool
 from core.state import ExecutionState
 
 
@@ -93,7 +92,7 @@ Return JSON with next_action and reason.""",
             }
         )
         
-        # Tool1 - CodeNode (InlineTool)
+        # Tool1 - CodeNode (CodeTool)
         tool1_node = CodeNode(
             node_id="tool1",
             config={
@@ -450,7 +449,7 @@ async def run(state):
         """
         Полный тест SGR со ВСЕМИ типами нод:
         1. LlmNode (agent_so) - координатор с SO
-        2. CodeNode (tool1) - InlineTool
+        2. CodeNode (tool1) - CodeTool
         3. CodeNode (tool2) - Python функция
         4. RemoteFlowNode (tool3) - удалённый агент из docker-compose
         5. CodeNode (done) - exit node
@@ -482,7 +481,7 @@ async def run(state):
             }
         )
         
-        # 2. CodeNode - InlineTool
+        # 2. CodeNode - CodeTool
         tool1_node = CodeNode(
             node_id="tool1",
             config={

@@ -79,7 +79,7 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 ## Элементы `llm_node.tools[]`
 
 - Строка `tool_id` после инлайна в БД/рантайме — полный dict.
-- Dict с полем **`type`** из NodeType (`code`, `flow`, `llm_node`, …) задаёт исполнение через `ToolRegistry.materialize` → `InlineTool` или `NodeAsToolWrapper`.
+- Dict с полем **`type`** из NodeType (`code`, `flow`, `llm_node`, …) задаёт исполнение через `ToolRegistry.materialize` → `CodeTool` или `NodeAsToolWrapper`.
 - Inline-код: непустой **`code`** (для ветки code обычно `type: "code"`).
 - **`react_role`**: `standard` | `reason` | `exit` — роль в ReAct (не путать с `type` ноды и не путать с wire-форматом OpenAI `function` в сообщениях).
 

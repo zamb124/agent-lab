@@ -166,14 +166,30 @@ class TestAskUserTool:
 
     @pytest.mark.asyncio
     async def test_registry_create_tool_minimal_dict_from_repository(self, app):
-        """create_tool({tool_id}) поднимает шаблон из tool_repository и даёт InlineTool."""
+        """create_tool({tool_id}) поднимает шаблон из tool_repository и даёт CodeTool."""
         from apps.flows.src.container import get_container
-        from apps.flows.src.tools.base import InlineTool
+        from apps.flows.src.tools.base import CodeTool
 
         container = get_container()
         tool = await container.tool_registry.create_tool({"tool_id": "ask_user"})
-        assert isinstance(tool, InlineTool)
+        assert isinstance(tool, CodeTool)
         assert tool.name == "ask_user"
+
+
+class TestToolRegistryPolicy:
+    """Инварианты процессного ToolRegistry."""
+
+    def test_register_rejects_code_tool(self):
+        from apps.flows.src.tools.base import CodeTool
+        from apps.flows.src.tools.registry import ToolRegistry
+
+        reg = ToolRegistry()
+        ct = CodeTool(
+            tool_id="ephemeral",
+            code="async def execute(args, state):\n    return {}",
+        )
+        with pytest.raises(ValueError, match="CodeTool"):
+            reg.register(ct)
 
 
 class TestFinishTool:

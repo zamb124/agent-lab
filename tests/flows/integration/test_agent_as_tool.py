@@ -16,7 +16,8 @@ from core.clients.llm import setup_mock_responses
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.models import NodeConfig, LLMConfig, ToolReference
-from apps.flows.src.tools import BaseTool, InlineTool
+from apps.flows.src.tools import BaseTool
+from apps.flows.src.tools.base import CodeTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from core.state import ExecutionState
 
@@ -295,7 +296,7 @@ class TestToolRegistryInline:
 
     @pytest.mark.asyncio
     async def test_tool_registry_creates_inline_tool(self, app):
-        """ToolRegistry создаёт InlineTool из inline конфига."""
+        """ToolRegistry создаёт CodeTool из inline конфига."""
         container = get_container()
 
         # Используем уникальный tool_id чтобы не перезаписать builtin calculator
@@ -317,7 +318,7 @@ async def execute(args: dict, state: dict = None):
         tool = await container.tool_registry.create_tool(tool_config)
 
         assert tool is not None
-        assert isinstance(tool, InlineTool)
+        assert isinstance(tool, CodeTool)
         assert tool.name == "test_simple_adder"
 
     @pytest.mark.asyncio

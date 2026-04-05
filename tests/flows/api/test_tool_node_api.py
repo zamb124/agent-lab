@@ -184,7 +184,7 @@ class TestCodeNodeFlowAPI:
         await client.delete(f"/flows/api/v1/{flow_id}")
 
 
-class TestAgentWithInlineToolAPI:
+class TestAgentWithLlmNodeCodeToolsAPI:
     """Тесты создания агента с inline tools через API."""
 
     @pytest.mark.asyncio

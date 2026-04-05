@@ -25,16 +25,22 @@ export class CodeDocsModal extends PlatformModal {
             }
 
             :host .modal-header {
-                flex-wrap: wrap;
-                align-items: flex-start;
-                row-gap: var(--space-2);
+                flex-wrap: nowrap;
+                align-items: center;
+                column-gap: var(--space-2);
+            }
+
+            :host .header-buttons {
+                min-width: 0;
+                flex-shrink: 1;
             }
 
             :host .modal-title {
                 display: flex;
                 align-items: center;
                 min-width: 0;
-                white-space: normal;
+                flex: 1 1 auto;
+                max-width: 42%;
             }
 
             .code-docs-title-row {
@@ -65,40 +71,42 @@ export class CodeDocsModal extends PlatformModal {
                 font-size: var(--text-lg);
                 font-weight: var(--font-semibold);
                 line-height: 1.3;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             .code-docs-header-actions {
                 display: flex;
-                flex-direction: column;
-                align-items: flex-end;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                align-items: center;
+                justify-content: flex-end;
                 gap: var(--space-2);
-                flex: 1 1 auto;
+                flex: 0 1 auto;
                 min-width: 0;
                 max-width: 100%;
             }
 
-            @media (min-width: 720px) {
-                .code-docs-header-actions {
-                    flex-direction: row;
-                    flex-wrap: wrap;
-                    align-items: center;
-                    justify-content: flex-end;
-                    flex: 0 1 auto;
-                    max-width: min(520px, 55vw);
-                }
-            }
-
             .code-docs-nav-tags {
                 display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-1);
-                justify-content: flex-end;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                gap: 4px;
                 align-items: center;
+                justify-content: flex-end;
+                min-width: 0;
+                max-width: min(340px, 50vw);
+                overflow-x: auto;
+                overflow-y: hidden;
+                flex-shrink: 1;
+                scrollbar-width: thin;
+                -webkit-overflow-scrolling: touch;
             }
 
             .code-docs-nav-tag {
-                padding: var(--space-1) var(--space-2);
-                font-size: var(--text-xs);
+                padding: 2px 8px;
+                font-size: 11px;
                 font-weight: var(--font-medium);
                 color: var(--text-secondary);
                 background: var(--glass-tint-subtle);
@@ -119,10 +127,10 @@ export class CodeDocsModal extends PlatformModal {
             }
 
             .code-docs-search {
-                width: 100%;
-                min-width: 0;
-                flex: 1 1 160px;
-                max-width: 220px;
+                flex: 0 0 auto;
+                width: 148px;
+                min-width: 96px;
+                max-width: 180px;
             }
 
             .docs-content {
@@ -311,12 +319,22 @@ export class CodeDocsModal extends PlatformModal {
     updated(changed) {
         super.updated(changed);
         if (changed.has('_markdown') && this._markdown) {
-            const input = this.shadowRoot?.querySelector('glass-input.code-docs-search');
+            const input = this._docsModalRoot()?.querySelector('glass-input.code-docs-search');
             if (input) {
                 input.value = '';
+                const inner = input.shadowRoot?.querySelector('input');
+                if (inner) {
+                    inner.value = '';
+                }
             }
             this._clearSectionSearch();
         }
+        void this.updateComplete.then(() => {
+            const value = this._getSearchInputValue().trim();
+            if (value) {
+                this._applySectionSearch(value);
+            }
+        });
     }
 
     disconnectedCallback() {
@@ -362,27 +380,72 @@ export class CodeDocsModal extends PlatformModal {
                 </div>
                 <glass-input
                     class="code-docs-search"
-                    type="search"
+                    type="text"
+                    autocomplete="off"
                     placeholder=${this.i18n.t('code_docs.search_placeholder')}
-                    @input=${this._onSearchInput}
+                    @input=${() => this._scheduleDocsSearch()}
+                    @keyup=${() => this._scheduleDocsSearch()}
+                    @keydown=${(e) => this._onDocsSearchKeydown(e)}
                 ></glass-input>
             </div>
         `;
     }
 
-    _onSearchInput(e) {
-        const value = e.detail?.value ?? '';
+    _docsModalRoot() {
+        return this.shadowRoot ?? this.renderRoot ?? null;
+    }
+
+    _getSearchInputValue() {
+        const host = this._docsModalRoot()?.querySelector('glass-input.code-docs-search');
+        if (!host) {
+            return '';
+        }
+        const inner = host.shadowRoot?.querySelector('input');
+        if (inner && typeof inner.value === 'string') {
+            return inner.value;
+        }
+        if (typeof host.value === 'string') {
+            return host.value;
+        }
+        return '';
+    }
+
+    _onDocsSearchKeydown(e) {
+        if (e.key !== 'Enter') {
+            return;
+        }
+        e.preventDefault();
+        if (this._searchDebounce) {
+            clearTimeout(this._searchDebounce);
+            this._searchDebounce = null;
+        }
+        const value = this._getSearchInputValue();
+        this._applySectionSearch(value);
+        if (value.trim()) {
+            const r = this._docsModalRoot();
+            r?.querySelector('.docs-content')?.scrollTo({ top: 0 });
+            r?.querySelector('.modal-content')?.scrollTo({ top: 0 });
+        }
+    }
+
+    _scheduleDocsSearch() {
         if (this._searchDebounce) {
             clearTimeout(this._searchDebounce);
         }
         this._searchDebounce = window.setTimeout(() => {
             this._searchDebounce = null;
+            const value = this._getSearchInputValue();
             this._applySectionSearch(value);
-        }, 200);
+            if (value.trim()) {
+                const r = this._docsModalRoot();
+                r?.querySelector('.docs-content')?.scrollTo({ top: 0 });
+                r?.querySelector('.modal-content')?.scrollTo({ top: 0 });
+            }
+        }, 150);
     }
 
     _clearSectionSearch() {
-        const root = this.shadowRoot?.querySelector('.docs-markdown');
+        const root = this._docsModalRoot()?.querySelector('.docs-markdown');
         if (!root) {
             return;
         }
@@ -393,7 +456,7 @@ export class CodeDocsModal extends PlatformModal {
     }
 
     _applySectionSearch(rawQuery) {
-        const root = this.shadowRoot?.querySelector('.docs-markdown');
+        const root = this._docsModalRoot()?.querySelector('.docs-markdown');
         if (!root) {
             return;
         }
@@ -403,6 +466,10 @@ export class CodeDocsModal extends PlatformModal {
             return;
         }
         const heads = [...root.querySelectorAll('h2[id^="doc-"]')];
+        if (heads.length === 0) {
+            this._applySectionSearchByTopLevelBlocks(root, q);
+            return;
+        }
         for (const h2 of heads) {
             const parts = [h2];
             let el = h2;
@@ -422,6 +489,21 @@ export class CodeDocsModal extends PlatformModal {
                 p.style.display = 'none';
                 p.setAttribute('data-docs-search-hidden', '');
             });
+        }
+    }
+
+    /**
+     * Если marked убрал id у h2, фильтруем только прямых потомков .docs-markdown.
+     */
+    _applySectionSearchByTopLevelBlocks(root, q) {
+        for (const child of root.children) {
+            const text = (child.textContent || '').toLowerCase();
+            const show = text.includes(q);
+            if (show) {
+                continue;
+            }
+            child.style.display = 'none';
+            child.setAttribute('data-docs-search-hidden', '');
         }
     }
 

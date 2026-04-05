@@ -5,7 +5,7 @@
 """
 
 import pytest
-from apps.flows.src.tools.base import InlineTool
+from apps.flows.src.tools.base import CodeTool
 from core.state import ExecutionState
 
 
@@ -14,7 +14,7 @@ class TestToolRegistryInlineConfig:
 
     @pytest.mark.asyncio
     async def test_get_tool_from_dict_config(self, container):
-        """ToolRegistry создает InlineTool из dict конфига."""
+        """ToolRegistry создает CodeTool из dict конфига."""
         config = {
             "tool_id": "inline_calculator",
             "description": "Простой калькулятор",
@@ -27,7 +27,7 @@ class TestToolRegistryInlineConfig:
 
         tool = await container.tool_registry.create_tool(config)
 
-        assert isinstance(tool, InlineTool)
+        assert isinstance(tool, CodeTool)
         assert tool.name == "inline_calculator"
         assert tool.description == "Простой калькулятор"
 
@@ -43,7 +43,7 @@ class TestToolRegistryInlineConfig:
 
     @pytest.mark.asyncio
     async def test_get_tool_from_dict_minimal(self, container):
-        """ToolRegistry создает InlineTool из минимального dict."""
+        """ToolRegistry создает CodeTool из минимального dict."""
         config = {
             "tool_id": "simple",
             "code": "async def execute(args, state):\n    return 'ok'",
@@ -51,7 +51,7 @@ class TestToolRegistryInlineConfig:
 
         tool = await container.tool_registry.create_tool(config)
 
-        assert isinstance(tool, InlineTool)
+        assert isinstance(tool, CodeTool)
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -90,9 +90,9 @@ class TestToolRegistryInlineConfig:
         tools = await container.tool_registry.create_tools(tools_config)
 
         assert len(tools) == 2
-        assert isinstance(tools[0], InlineTool)
+        assert isinstance(tools[0], CodeTool)
         assert tools[0].name == "inline_calc"
-        assert isinstance(tools[1], InlineTool)
+        assert isinstance(tools[1], CodeTool)
         assert tools[1].name == "inline_doubler"
 
     @pytest.mark.asyncio
@@ -110,13 +110,13 @@ class TestToolRegistryInlineConfig:
             await container.tool_registry.create_tool(config)
 
 
-class TestInlineToolSchema:
+class TestCodeToolSchema:
     """Тесты схемы inline tools."""
 
     @pytest.mark.asyncio
     async def test_inline_tool_openai_schema(self):
-        """InlineTool генерирует корректную OpenAI схему."""
-        tool = InlineTool(
+        """CodeTool генерирует корректную OpenAI схему."""
+        tool = CodeTool(
             tool_id="greeter",
             code="async def execute(args, state):\n    return f\"Hello, {args['name']}!\"",
             description="Приветствует пользователя",
@@ -140,8 +140,8 @@ class TestInlineToolSchema:
 
     @pytest.mark.asyncio
     async def test_inline_tool_with_state_access(self):
-        """InlineTool имеет доступ к state."""
-        tool = InlineTool(
+        """CodeTool имеет доступ к state."""
+        tool = CodeTool(
             tool_id="state_reader",
             code="""async def execute(args, state):
     user = state.get('user', {})
@@ -162,13 +162,13 @@ class TestInlineToolSchema:
         assert result == "User: Alice"
 
 
-class TestInlineToolsExecution:
+class TestCodeToolsExecution:
     """Тесты выполнения inline tools."""
 
     @pytest.mark.asyncio
     async def test_inline_tool_with_complex_logic(self):
         """Inline tool с complex логикой."""
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="data_processor",
             code="""async def execute(args, state):
     items = args.get('items', [])
@@ -208,7 +208,7 @@ class TestInlineToolsExecution:
     @pytest.mark.asyncio
     async def test_inline_tool_uses_allowed_modules(self):
         """Inline tool может использовать разрешенные модули."""
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="json_tool",
             code="""async def execute(args, state):
     import json
@@ -230,7 +230,7 @@ class TestInlineToolsExecution:
     @pytest.mark.asyncio
     async def test_inline_tool_math_operations(self):
         """Inline tool с math операциями."""
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="math_tool",
             code="""async def execute(args, state):
     import math
@@ -255,7 +255,7 @@ class TestInlineToolsExecution:
         assert result["ceil"] == 6
 
 
-class TestInlineToolsInFlowConfig:
+class TestCodeToolsInFlowConfig:
     """Тесты inline tools в конфигурации flow."""
 
     @pytest.mark.asyncio
@@ -291,8 +291,8 @@ class TestInlineToolsInFlowConfig:
         assert len(tools) == 2
 
         # Проверяем inline tools
-        assert isinstance(tools[0], InlineTool)
-        assert isinstance(tools[1], InlineTool)
+        assert isinstance(tools[0], CodeTool)
+        assert isinstance(tools[1], CodeTool)
 
         formatter = tools[1]
         state = ExecutionState(
@@ -325,7 +325,7 @@ class TestInlineToolsInFlowConfig:
         tools = await container.tool_registry.create_tools(tools_config)
 
         assert len(tools) == 3
-        assert all(isinstance(t, InlineTool) for t in tools)
+        assert all(isinstance(t, CodeTool) for t in tools)
 
         state = ExecutionState(
             task_id="test-task",

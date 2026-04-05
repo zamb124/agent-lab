@@ -14,7 +14,7 @@ import hashlib
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -65,7 +65,7 @@ class BaseTool(ABC):
 
     Определение параметров:
         - args_schema: Pydantic модель для автогенерации схемы (рекомендуется)
-        - parameters: Dict для ручного задания схемы (для inline tools)
+        - parameters: Dict для ручного задания схемы (для тулов из поля code в конфиге)
 
     Mock режим:
         - Определить mock_response для простых случаев
@@ -75,7 +75,13 @@ class BaseTool(ABC):
     Permissions:
         - permission: группы с доступом к tool
         - При отсутствии прав возвращается строка агенту
+
+    listed_in_platform_tool_docs:
+        Участвует ли класс в разделе platform tools у /code/completions и /code/documentation
+        (процессный ToolRegistry после register_builtin_tools).
     """
+
+    listed_in_platform_tool_docs: ClassVar[bool] = True
 
     name: str = "base_tool"
     description: str = "Базовый инструмент"
@@ -245,11 +251,16 @@ class BaseTool(ABC):
         return f"{self.__class__.__name__}(name={self.name})"
 
 
-class InlineTool(BaseTool):
+class CodeTool(BaseTool):
     """
-    Инструмент из inline кода.
-    Использует SafeEval для выполнения.
+    Тул из Python-кода в конфиге (поле code).
+    Выполнение через SafeEval.execute_tool.
+
+    Не кладётся в процессный ToolRegistry.register и не показывается в platform tools документации:
+    экземпляры живут только в списке tools конкретной llm_node (materialize).
     """
+
+    listed_in_platform_tool_docs: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -264,7 +275,7 @@ class InlineTool(BaseTool):
         resources: Optional[Dict[str, Any]] = None,
     ):
         self.name = tool_id
-        self.description = description or f"Inline tool: {tool_id}"
+        self.description = description or f"Code tool: {tool_id}"
         self.permission = permission
         self.tags = tags or ["misc"]
         self.react_role = react_role

@@ -4,6 +4,7 @@
  */
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class GlassInput extends PlatformElement {
@@ -82,6 +83,7 @@ export class GlassInput extends PlatformElement {
         error: { type: Boolean },
         prefix: { type: String },
         suffix: { type: String },
+        autocomplete: { type: String },
     };
 
     constructor() {
@@ -90,6 +92,7 @@ export class GlassInput extends PlatformElement {
         this.name = '';
         this.value = '';
         this.placeholder = '';
+        this.autocomplete = undefined;
         this.disabled = false;
         this.required = false;
         this.error = false;
@@ -141,6 +144,7 @@ export class GlassInput extends PlatformElement {
                     name=${this.name}
                     .value=${this.value}
                     placeholder=${this.placeholder}
+                    autocomplete=${ifDefined(this.autocomplete)}
                     ?disabled=${this.disabled}
                     ?required=${this.required}
                     @input=${this._onInput}

@@ -15,7 +15,7 @@ from apps.flows.src.models.enums import CodeMode, NodeType
 from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
-from apps.flows.src.tools.base import BaseTool, InlineTool
+from apps.flows.src.tools.base import BaseTool, CodeTool
 from apps.flows.src.tools.mcp_wrapper import MCPTool
 
 logger = get_logger(__name__)
@@ -27,7 +27,7 @@ class ToolRegistry:
     
     Единая точка для:
     - Регистрации builtin tools
-    - Создания inline tools из конфигов
+    - Создания тулов из конфигов с полем code
     - Создания node-as-tool wrappers
     - Получения tools по имени
     """
@@ -37,7 +37,11 @@ class ToolRegistry:
         self._initialized = False
 
     def register(self, tool: BaseTool) -> None:
-        """Регистрирует tool."""
+        """Регистрирует tool в процессном реестре (builtin, MCPTool и т.д.)."""
+        if isinstance(tool, CodeTool):
+            raise ValueError(
+                "CodeTool не регистрируется в ToolRegistry: только materialize → список tools ноды."
+            )
         self._tools[tool.name] = tool
         logger.debug(f"Tool зарегистрирован: {tool.name}")
 
@@ -106,7 +110,7 @@ class ToolRegistry:
         """
         Единая материализация runnable tool.
 
-        Исполнение только через инлайн-код (InlineTool / нода как tool). Записи в
+        Исполнение только через код в конфиге (CodeTool / нода как tool). Записи в
         ``tool_repository`` — шаблоны с полем ``code``; процессный ``registry.get`` (FunctionTool)
         для runtime flow не используется.
 
@@ -114,7 +118,7 @@ class ToolRegistry:
         1. ``code_mode=mcp_tool`` → MCPTool
         2. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → merge из ``tool_repository``
         3. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
-        4. Непустой ``code`` → InlineTool
+        4. Непустой ``code`` → CodeTool
         5. ``type=code`` без кода → NodeAsToolWrapper
         6. иначе ValueError
         """
@@ -186,7 +190,7 @@ class ToolRegistry:
             code_text = ref["code"]
             if not isinstance(code_text, str):
                 raise ValueError(f"Tool 'code' must be str, got {type(code_text)}")
-            return self._create_inline_tool_from_config(ref)
+            return self._create_code_tool_from_config(ref)
 
         if node_exec_kind == NodeType.CODE.value:
             return self._create_node_as_tool(ref)
@@ -206,7 +210,7 @@ class ToolRegistry:
         self, tool_refs: List[Union[str, Dict[str, Any], ToolReference]]
     ) -> List[BaseTool]:
         """
-        Создает список tools из inline конфигов (только InlineTool / нода как tool).
+        Создает список tools из конфигов (CodeTool / нода как tool).
 
         Args:
             tool_refs: Список dict-конфигов или ToolReference
@@ -230,9 +234,9 @@ class ToolRegistry:
 
         return tools
 
-    def _create_inline_tool_from_config(self, config: Dict[str, Any]) -> BaseTool:
+    def _create_code_tool_from_config(self, config: Dict[str, Any]) -> BaseTool:
         """
-        Создает InlineTool из inline конфига.
+        Создает CodeTool из dict-конфига (поле code).
 
         Args:
             config: {
@@ -243,13 +247,13 @@ class ToolRegistry:
             }
 
         Returns:
-            InlineTool (только для списка ноды; в глобальный реестр не кладём, иначе
-            инлайн с тем же именем затеняет встроенные FunctionTool между тестами/flow).
+            CodeTool (только для списка ноды; в глобальный реестр не кладём, иначе
+            тулы с тем же именем затеняют встроенные FunctionTool между тестами/flow).
         """
-        tool_id = config.get("tool_id", "inline_tool")
+        tool_id = config.get("tool_id", "code_tool")
         code = config.get("code")
         if not code:
-            raise ValueError(f"Inline tool '{tool_id}' requires 'code' field")
+            raise ValueError(f"Code tool '{tool_id}' requires 'code' field")
         code = strip_forbidden_platform_import_lines(code)
 
         parameters = None
@@ -274,7 +278,7 @@ class ToolRegistry:
 
         resources = config.get("resources")
 
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id=tool_id,
             code=code,
             title=config.get("title"),

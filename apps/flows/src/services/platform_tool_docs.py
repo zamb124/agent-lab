@@ -65,6 +65,8 @@ async def collect_platform_tool_docs() -> List[PlatformToolDoc]:
     for name, tool in registry.list_all().items():
         if name in merged:
             continue
+        if not getattr(type(tool), "listed_in_platform_tool_docs", True):
+            continue
         schema = tool.parameters
         args_json = json.dumps(schema, ensure_ascii=False, indent=2)
         merged[name] = PlatformToolDoc(

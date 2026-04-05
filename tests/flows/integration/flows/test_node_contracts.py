@@ -20,7 +20,7 @@ from apps.flows.src.runtime.nodes import (
     create_node,
 )
 from apps.flows.src.models import Edge
-from apps.flows.src.tools import InlineTool
+from apps.flows.src.tools.base import CodeTool
 from core.state import ExecutionState
 
 
@@ -634,7 +634,7 @@ class TestComplexPipeline:
         2. Transform (CodeNode): трансформирует
         3. Load (CodeNode): сохраняет с save_to_messages
         """
-        extract_tool = InlineTool(
+        extract_tool = CodeTool(
             tool_id="extract",
             code="""
 async def execute(args, state):
@@ -650,7 +650,7 @@ async def execute(args, state):
 """,
         )
         
-        load_tool = InlineTool(
+        load_tool = CodeTool(
             tool_id="load",
             code="""
 async def execute(args, state):
@@ -774,7 +774,7 @@ async def run(state):
     return state
 """
         
-        urgent_tool = InlineTool(
+        urgent_tool = CodeTool(
             tool_id="urgent_handler",
             code="""
 async def execute(args, state):
@@ -788,7 +788,7 @@ async def execute(args, state):
 """,
         )
         
-        normal_tool = InlineTool(
+        normal_tool = CodeTool(
             tool_id="normal_handler",
             code="""
 async def execute(args, state):

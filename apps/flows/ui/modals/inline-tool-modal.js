@@ -1,5 +1,5 @@
 /**
- * InlineToolModal - универсальная модалка для редактирования inline инструментов
+ * Модалка редактирования tool в llm_node (code, flow, llm_node, …) из канвы / редактора.
  * Inline-код в LLM: сохраняется как type code. Редактор кода — code-node-editor. Также flow, llm_node, external_api, remote_flow, mcp.
  */
 import { html, css } from 'lit';

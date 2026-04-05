@@ -16,7 +16,6 @@ from apps.flows.src.runtime.nodes import (
     CodeNode,
     LlmNode,
 )
-from apps.flows.src.tools import InlineTool
 from core.state import ExecutionState
 
 
