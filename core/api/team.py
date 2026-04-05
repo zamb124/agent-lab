@@ -1,0 +1,52 @@
+"""
+API для получения участников команды компании.
+
+Доступен во всех сервисах через core/app/factory.py.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
+
+from core.context import get_context
+
+router = APIRouter(tags=["team"])
+
+
+class TeamMemberResponse(BaseModel):
+    user_id: str
+    name: str
+    email: str | None = None
+    roles: list[str] = Field(default_factory=list)
+    joined_at: datetime | None = None
+    avatar_url: str | None = None
+
+
+@router.get("/members", response_model=list[TeamMemberResponse])
+async def get_team_members(request: Request) -> list[TeamMemberResponse]:
+    ctx = get_context()
+    if not ctx or not ctx.user or not ctx.active_company:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    company = ctx.active_company
+    user_repo = request.app.state.container.user_repository
+
+    members: list[TeamMemberResponse] = []
+    for user_id, roles in company.members.items():
+        member_user = await user_repo.get(user_id)
+        if not member_user:
+            continue
+        member_email = member_user.emails[0] if member_user.emails else None
+        members.append(TeamMemberResponse(
+            user_id=user_id,
+            name=member_user.name,
+            email=member_email,
+            roles=roles if isinstance(roles, list) else [roles],
+            joined_at=member_user.created_at,
+            avatar_url=member_user.avatar_url,
+        ))
+
+    return members

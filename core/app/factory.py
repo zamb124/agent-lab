@@ -49,6 +49,7 @@ from core.websocket.router import router as ws_router
 from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
 from core.api.companies import router as core_companies_router
+from core.api.team import router as core_team_router
 from core.push.router import router as push_router
 from core.push.apns_credentials import resolve_apns_credentials
 from core.push.apns_service import init_apns_push_service
@@ -304,6 +305,10 @@ def create_service_app(
     calendar_prefix = f"/{public_segment}/api/calendar"
     logger.info(f"Подключение core calendar роутера ({calendar_prefix}/*)")
     app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
+
+    team_prefix = f"/{public_segment}/api/team"
+    logger.info(f"Подключение core team роутера ({team_prefix}/*)")
+    app.include_router(core_team_router, prefix=team_prefix, tags=["team"])
 
     if service_name != "frontend":
         companies_prefix = f"/{public_segment}/api/companies"

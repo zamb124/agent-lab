@@ -1,51 +1,17 @@
 """
-API для управления командой компании
+API для управления командой компании.
+
+GET /members перенесён в core/api/team.py (доступен во всех сервисах).
 """
 import logging
 from typing import List
 from fastapi import APIRouter, HTTPException, Request
 from apps.frontend.dependencies import ContainerDep
-from apps.frontend.models import TeamMemberInfo, TeamInvite, TeamMemberUpdate
+from apps.frontend.models import TeamInvite, TeamMemberUpdate
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/team", tags=["team"])
-
-
-@router.get("/members", response_model=List[TeamMemberInfo])
-async def get_team_members(request: Request, container: ContainerDep):
-    """
-    Получить список участников команды
-    
-    Returns:
-        Список участников с их ролями
-    """
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    
-    if not hasattr(request.state, 'company') or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-    
-    user = request.state.user
-    company = request.state.company
-    
-    user_repo = container.user_repository
-    
-    members = []
-    for user_id, roles in company.members.items():
-        member_user = await user_repo.get(user_id)
-        if member_user:
-            member_email = member_user.emails[0] if member_user.emails else None
-            members.append(TeamMemberInfo(
-                user_id=user_id,
-                name=member_user.name,
-                email=member_email,
-                roles=roles if isinstance(roles, list) else [roles],
-                joined_at=member_user.created_at,
-                avatar_url=member_user.avatar_url,
-            ))
-    
-    return members
 
 
 @router.post("/invite")

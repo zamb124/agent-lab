@@ -1072,7 +1072,8 @@ export class PlatformCalendarModal extends PlatformModal {
                 background: color-mix(in srgb, #99A6F9 10%, var(--glass-solid-medium));
             }
 
-            .week-day-col.drag-over {
+            .week-day-col.drag-over,
+            .day-tracks.drag-over {
                 background: color-mix(in srgb, #99A6F9 8%, transparent);
             }
 
@@ -2055,10 +2056,6 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     async _loadTeamMembers() {
-        if (!this.services.has('team')) {
-            this._teamMembers = [];
-            return;
-        }
         const teamMembers = await this.services.get('team').getMembers();
         if (!Array.isArray(teamMembers)) {
             throw new Error('Team members response must be array');
@@ -2274,6 +2271,16 @@ export class PlatformCalendarModal extends PlatformModal {
             }
             return null;
         }
+        if (this._view === 'day') {
+            const tracks = root.querySelector('.day-tracks');
+            if (tracks) {
+                const rect = tracks.getBoundingClientRect();
+                if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                    return tracks;
+                }
+            }
+            return null;
+        }
         return null;
     }
 
@@ -2318,6 +2325,22 @@ export class PlatformCalendarModal extends PlatformModal {
                 }
             }
             return null;
+        }
+        if (this._view === 'day') {
+            const tracks = root.querySelector('.day-tracks');
+            if (!tracks) {
+                return null;
+            }
+            const rect = tracks.getBoundingClientRect();
+            if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+                return null;
+            }
+            const relativeY = clientY - rect.top;
+            const hourPx = 52;
+            const totalMinutes = Math.round((relativeY / hourPx) * 60);
+            const snappedMinutes = Math.round(totalMinutes / 15) * 15;
+            const clampedMinutes = Math.max(0, Math.min(snappedMinutes, 24 * 60 - 15));
+            return { date: this._anchorDate, minutes: clampedMinutes };
         }
         return null;
     }
@@ -2589,8 +2612,10 @@ export class PlatformCalendarModal extends PlatformModal {
                                             type="button"
                                             class="day-event-block event-chip"
                                             data-color=${colorKey}
-                                            style=${`top:${top}px;height:${height}px`}
+                                            ?data-dragging=${this._dragEvent?.event_id === event.event_id}
+                                            style=${`top:${top}px;height:${height}px;touch-action:none`}
                                             @click=${() => this._fillFormFromEvent(event)}
+                                            @pointerdown=${(e) => this._onDragStart(event, e)}
                                         >
                                             <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
                                             <span class="event-chip-title">${event.title}</span>

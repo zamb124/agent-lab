@@ -4,7 +4,6 @@
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { CompaniesService } from '@platform/services/companies.service.js';
-import { TeamService } from '../services/team.service.js';
 import { ApiKeysService } from '../services/api-keys.service.js';
 import { BillingService } from '../services/billing.service.js';
 import { SettingsService } from '../services/settings.service.js';
@@ -195,7 +194,6 @@ export class FrontendApp extends PlatformApp {
         
         const baseUrl = this.getBaseUrl();
         this.services.register('companies', new CompaniesService(baseUrl));
-        this.services.register('team', new TeamService(baseUrl));
         this.services.register('apiKeys', new ApiKeysService(baseUrl));
         this.services.register('billing', new BillingService(baseUrl));
         this.services.register('settings', new SettingsService(baseUrl));
