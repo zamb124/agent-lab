@@ -321,6 +321,20 @@ export class FlowCanvas extends PlatformElement {
         return false;
     }
 
+    /**
+     * Разрешает однократное редактирование node_id в property panel (как после дублирования).
+     * @param {string} nodeId
+     */
+    setAllowNodeIdRenameOnce(nodeId) {
+        for (const nodeConfig of this.nodeConfigs.values()) {
+            if (nodeConfig.nodeId === nodeId) {
+                nodeConfig.allowNodeIdRenameOnce = true;
+                return;
+            }
+        }
+        throw new Error(`[FlowCanvas] setAllowNodeIdRenameOnce: node not found: ${nodeId}`);
+    }
+
     _toggleBreakpoint() {
         if (this.contextMenu && this.breakpointManager) {
             const nodeId = this.contextMenu.nodeId;

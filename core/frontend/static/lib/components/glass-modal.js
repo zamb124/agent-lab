@@ -667,6 +667,27 @@ export class GlassModal extends PlatformElement {
 
     _handleMouseDown(e) {
         if (this._isFullscreen) return;
+        if (e.button !== 0) {
+            return;
+        }
+        for (const node of e.composedPath()) {
+            if (node === this.shadowRoot || node === this) {
+                break;
+            }
+            if (node instanceof HTMLElement) {
+                const tag = node.tagName;
+                if (
+                    tag === 'BUTTON' ||
+                    tag === 'INPUT' ||
+                    tag === 'TEXTAREA' ||
+                    tag === 'SELECT' ||
+                    tag === 'A' ||
+                    node.getAttribute('role') === 'button'
+                ) {
+                    return;
+                }
+            }
+        }
 
         const modal = this.shadowRoot?.querySelector('.modal');
         if (!modal) return;

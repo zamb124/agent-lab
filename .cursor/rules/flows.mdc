@@ -32,7 +32,7 @@ alwaysApply: false
 ## UI: drop graph `code` с палитры
 
 - **`flow-canvas/events.js`**: для `type === 'code'` без `isResource` эмитится **`code-node-drop`** (не вызывается `_addNode` сразу).
-- **`flow-editor-page`**: по событию открывается тот же **`tool-picker-modal`**, что у **`llm_node`** («Add tools»): каталог **`GET /api/v1/tools/all`**, с атрибутом **`code-node-placement`** — в списке только **`item_type !== 'flow'`**, выбор карточки ведёт себя как **один** tool (без мультивыбора). **Save** (иконка в шапке): при выбранном tool — **`GET /api/v1/tools/{id}`**, на канву **`_addNode`** + **`_onNodeUpdated`** с полями из каталога (`code`, `args_schema`, …); без выбора или **0** в **`tools-selected`** — пустая code-нода. **Cancel / закрытие без Save** — только пустая нода.
+- **`flow-editor-page`**: по событию открывается тот же **`tool-picker-modal`**, что у **`llm_node`** («Add tools»): каталог **`GET /api/v1/tools/all`**, с атрибутом **`code-node-placement`** — в списке только **`item_type !== 'flow'`**, выбор карточки ведёт себя как **один** tool (без мультивыбора). **Save** (иконка в шапке): при выбранном tool — **`GET /api/v1/tools/{id}`**, на канву **`_addNode`** + **`_onNodeUpdated`** с полями из каталога (`code`, `args_schema`, …); без выбора или **0** в **`tools-selected`** — пустая code-нода. **Cancel / закрытие без Save** — только пустая нода. После создания ноды с дропа: **`flow-canvas.setAllowNodeIdRenameOnce(nodeId)`** + **`FlowsStore.selectNode(nodeId)`**, чтобы в панели **один раз** можно было сменить **`node_id`** (как после дублирования ноды).
 
 ## Каналы и выполнение графа
 

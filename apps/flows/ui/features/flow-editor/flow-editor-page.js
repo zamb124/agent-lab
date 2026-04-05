@@ -694,13 +694,14 @@ export class FlowEditorPage extends PlatformElement {
             { once: true },
         );
         await canvas._addNode(item, posX, posY);
-        if (!nodeConfig) {
-            return;
-        }
         if (!addedNodeId) {
             throw new Error('[FlowEditorPage] code-node-drop: node-added without nodeId');
         }
-        this._onNodeUpdated({ detail: { nodeId: addedNodeId, nodeConfig } });
+        if (nodeConfig) {
+            this._onNodeUpdated({ detail: { nodeId: addedNodeId, nodeConfig } });
+        }
+        canvas.setAllowNodeIdRenameOnce(addedNodeId);
+        FlowsStore.selectNode(addedNodeId);
     }
 
     async _fillCodeNodeFromCatalogTool(canvas, item, posX, posY, toolIds) {

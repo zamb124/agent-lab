@@ -34,6 +34,10 @@ def _escape_table_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
+def _escape_html_text(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def build_documentation_markdown(
     response: DocumentationResponse,
     *,
@@ -173,11 +177,13 @@ def _module_method_to_md(m: ModuleMethod) -> list[str]:
 
 
 def _platform_tool_to_md(t: PlatformToolDoc) -> list[str]:
+    title = (t.display_name or "").strip() or t.tool_id
+    safe_title = _escape_html_text(title)
     out = [
-        f"### `{t.tool_id}`",
+        f'<h3 class="docs-platform-tool-title">{safe_title}</h3>',
         "",
-        f"**Подпись:** {t.display_name}",
-        f"**Источник:** `{t.source}`",
+        f"- **tool_id:** `{t.tool_id}`",
+        f"- **Источник:** `{t.source}`",
     ]
     if t.tags:
         out.append("**Теги:** " + ", ".join(f"`{x}`" for x in t.tags))

@@ -100,11 +100,40 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {"name": "TaskStatus", "type": "class", "doc": "Статус с состоянием и сообщением"},
     ],
     "httpx": [
-        {"name": "get", "type": "function", "doc": "GET запрос: response = await httpx.get('https://api.example.com/data', params={'id': 1}); data = response.json()"},
-        {"name": "post", "type": "function", "doc": "POST запрос: response = await httpx.post('https://api.example.com/data', json={'name': 'test'})"},
-        {"name": "put", "type": "function", "doc": "PUT запрос: response = await httpx.put('https://api.example.com/data/1', json={'name': 'updated'})"},
-        {"name": "patch", "type": "function", "doc": "PATCH запрос: response = await httpx.patch('https://api.example.com/data/1', json={'name': 'patched'})"},
-        {"name": "delete", "type": "function", "doc": "DELETE запрос: response = await httpx.delete('https://api.example.com/data/1')"},
+        {
+            "name": "get",
+            "type": "function",
+            "doc": (
+                "GET запрос: response = await httpx.get(`https://api.example.com/data`, params={'id': 1}); "
+                "data = response.json()"
+            ),
+        },
+        {
+            "name": "post",
+            "type": "function",
+            "doc": (
+                "POST запрос: response = await httpx.post(`https://api.example.com/data`, json={'name': 'test'})"
+            ),
+        },
+        {
+            "name": "put",
+            "type": "function",
+            "doc": (
+                "PUT запрос: response = await httpx.put(`https://api.example.com/data/1`, json={'name': 'updated'})"
+            ),
+        },
+        {
+            "name": "patch",
+            "type": "function",
+            "doc": (
+                "PATCH запрос: response = await httpx.patch(`https://api.example.com/data/1`, json={'name': 'patched'})"
+            ),
+        },
+        {
+            "name": "delete",
+            "type": "function",
+            "doc": "DELETE запрос: response = await httpx.delete(`https://api.example.com/data/1`)",
+        },
         {"name": "request", "type": "function", "doc": "Универсальный запрос: response = await httpx.request('POST', url, json={...})"},
     ],
     "llm": [
