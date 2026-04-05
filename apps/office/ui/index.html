@@ -35,6 +35,29 @@
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
 
+    <style id="office-documents-primary-buttons">
+        /* Те же углы, что у documents_logo.svg / заголовков; наследуется в portal-модалки на body. */
+        body.platform-shell {
+            --platform-btn-primary-bg: linear-gradient(
+                105deg,
+                #3ec9d8 0%,
+                #6cb1e1 42%,
+                #737ce9 100%
+            );
+            --platform-btn-primary-border: transparent;
+            --platform-btn-primary-bg-hover: linear-gradient(
+                105deg,
+                #48d4e2 0%,
+                #78b9ea 42%,
+                #828df0 100%
+            );
+            --platform-btn-primary-border-hover: transparent;
+            --platform-btn-primary-text: #ffffff;
+            --platform-btn-primary-shadow: 0 2px 14px rgba(70, 89, 184, 0.22);
+            --platform-btn-primary-shadow-hover: 0 4px 20px rgba(70, 89, 184, 0.32);
+        }
+    </style>
+
     <script type="module">
         import '/static/core/lib/components/app-loader.js';
     </script>

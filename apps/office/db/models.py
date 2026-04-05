@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
@@ -20,6 +20,7 @@ class OfficeDocumentCatalog(Base):
     namespace: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     owner_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

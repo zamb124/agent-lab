@@ -58,6 +58,8 @@ export class GraphCanvas extends PlatformElement {
         this.relationshipTypeColors = new Map();
         this.incidentWeightSubtitleFn = null;
         this._graphInstance = null;
+        this._graphContainerEl = null;
+        this._resizeObserver = null;
         this._autoFitPending = false;
         this._hoveredNodeId = '';
         this._lastClickNodeId = '';
@@ -113,6 +115,11 @@ export class GraphCanvas extends PlatformElement {
             window.removeEventListener('theme-change', this._themeChangeHandler);
             this._themeChangeHandler = null;
         }
+        if (this._resizeObserver) {
+            this._resizeObserver.disconnect();
+            this._resizeObserver = null;
+        }
+        this._graphContainerEl = null;
         if (this._graphInstance) {
             this._graphInstance._destructor();
             this._graphInstance = null;
@@ -231,6 +238,7 @@ export class GraphCanvas extends PlatformElement {
         if (!container) {
             throw new Error('Graph canvas container is not available');
         }
+        this._graphContainerEl = container;
         const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
         this._graphInstance = factory()(container)
             .backgroundColor(canvasBg)
@@ -419,6 +427,24 @@ export class GraphCanvas extends PlatformElement {
         this._graphInstance.d3VelocityDecay(0.5);
         this._graphInstance.d3Force('box', this._createBoundingForce(GRAPH_WORLD_RADIUS));
         this._graphInstance.nodeRelSize(GRAPH_PRESETS[this.graphPreset].nodeRelSize);
+        this._applyGraphDimensionsFromContainer();
+        this._resizeObserver = new ResizeObserver(() => {
+            this._applyGraphDimensionsFromContainer();
+        });
+        this._resizeObserver.observe(container);
+    }
+
+    _applyGraphDimensionsFromContainer() {
+        if (!this._graphInstance || !this._graphContainerEl) {
+            return;
+        }
+        const widthPx = this._graphContainerEl.clientWidth;
+        const heightPx = this._graphContainerEl.clientHeight;
+        if (widthPx <= 0 || heightPx <= 0) {
+            return;
+        }
+        this._graphInstance.width(widthPx);
+        this._graphInstance.height(heightPx);
     }
 
     _createBoundingForce(worldRadius) {

@@ -242,8 +242,10 @@ export class GraphPage extends PlatformElement {
 
 
             .canvas-layout {
+                flex: 1;
                 width: 100%;
                 height: 100%;
+                min-width: 0;
                 min-height: 0;
             }
 
@@ -255,9 +257,13 @@ export class GraphPage extends PlatformElement {
                 background: var(--bg-secondary);
             }
 
-            .canvas-stage .graph-canvas {
+            /* Класс .graph-canvas внутри shadow у <graph-canvas>; растягиваем сам хост на всю сцену */
+            .canvas-stage > graph-canvas {
                 position: absolute;
                 inset: 0;
+                z-index: 0;
+                min-width: 0;
+                min-height: 0;
             }
 
             .overlay-card {

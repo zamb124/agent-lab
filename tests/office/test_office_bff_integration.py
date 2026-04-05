@@ -20,6 +20,21 @@ from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 pytestmark = [pytest.mark.timeout(120)]
 
 
+async def _first_accessible_catalog_id(office_client, headers: dict[str, str]) -> str:
+    r = await office_client.get("/documents/api/v1/catalogs", headers=headers)
+    assert r.status_code == 200
+    items = r.json()["items"]
+    if not items:
+        cr = await office_client.post(
+            "/documents/api/v1/catalogs",
+            headers=headers,
+            json={"title": "bff-integration-catalog"},
+        )
+        assert cr.status_code == 200
+        return cr.json()["catalog_id"]
+    return items[0]["catalog_id"]
+
+
 @pytest.fixture
 async def office_saved_file_http():
     state = {"body": b"initial-bytes-for-office-callback-test"}
@@ -82,11 +97,12 @@ async def test_office_list_namespaces_uses_shared_namespace_repository(
 
 @pytest.mark.asyncio
 async def test_office_empty_document_list_rename_delete(office_client, auth_headers_system, unique_id):
+    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
     title = f"Empty doc {unique_id}"
     cr = await office_client.post(
         "/documents/api/v1/documents/empty",
         headers=auth_headers_system,
-        json={"title": title},
+        json={"title": title, "catalog_id": catalog_id},
     )
     assert cr.status_code == 200
     created = cr.json()
@@ -127,6 +143,7 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
 
 @pytest.mark.asyncio
 async def test_office_upload_csv_cell_type(office_client, auth_headers_system, unique_id):
+    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
     files = {
         "file": (
             f"sheet-{unique_id}.csv",
@@ -138,7 +155,7 @@ async def test_office_upload_csv_cell_type(office_client, auth_headers_system, u
         "/documents/api/v1/documents",
         headers=auth_headers_system,
         files=files,
-        data={"title": f"CSV {unique_id}"},
+        data={"title": f"CSV {unique_id}", "catalog_id": catalog_id},
     )
     assert r.status_code == 200
     j = r.json()
@@ -151,6 +168,7 @@ async def test_office_upload_csv_cell_type(office_client, auth_headers_system, u
 async def test_office_empty_document_cell_slide_csv_editor_type(
     office_client, auth_headers_system, unique_id
 ):
+    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
     cases: list[tuple[dict[str, str], str]] = [
         ({"title": f"Cell {unique_id}", "document_type": "cell"}, "cell"),
         ({"title": f"Slide {unique_id}", "document_type": "slide"}, "slide"),
@@ -164,10 +182,11 @@ async def test_office_empty_document_cell_slide_csv_editor_type(
         ),
     ]
     for payload, expected_dt in cases:
+        body = {**payload, "catalog_id": catalog_id}
         cr = await office_client.post(
             "/documents/api/v1/documents/empty",
             headers=auth_headers_system,
-            json=payload,
+            json=body,
         )
         assert cr.status_code == 200, payload
         binding_id = cr.json()["binding_id"]
@@ -199,10 +218,11 @@ async def test_office_empty_rejects_spreadsheet_format_for_word(
 
 @pytest.mark.asyncio
 async def test_office_editor_config_download_roundtrip(office_client, auth_headers_system, unique_id):
+    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
     cr = await office_client.post(
         "/documents/api/v1/documents/empty",
         headers=auth_headers_system,
-        json={"title": f"Editor {unique_id}"},
+        json={"title": f"Editor {unique_id}", "catalog_id": catalog_id},
     )
     assert cr.status_code == 200
     binding_id = cr.json()["binding_id"]
@@ -249,10 +269,11 @@ async def test_onlyoffice_callback_saves_to_s3(
     unique_id,
     office_saved_file_http,
 ):
+    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
     cr = await office_client.post(
         "/documents/api/v1/documents/empty",
         headers=auth_headers_system,
-        json={"title": f"Callback {unique_id}"},
+        json={"title": f"Callback {unique_id}", "catalog_id": catalog_id},
     )
     assert cr.status_code == 200
     binding_id = cr.json()["binding_id"]

@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+import './platform-icon.js';
 
 export class AuthModal extends PlatformElement {
     static properties = {
@@ -287,7 +288,7 @@ export class AuthModal extends PlatformElement {
                         @click=${() => this.handleProviderClick('yandex')}
                         ?disabled=${this.loading}
                     >
-                        <img src="/static/frontend/assets/icons/providers/yandex.svg" class="provider-icon" alt="Yandex">
+                        <platform-icon name="yandex" size="24" colored></platform-icon>
                         <span>${t('auth.yandex')}</span>
                     </button>
 
@@ -296,7 +297,7 @@ export class AuthModal extends PlatformElement {
                         @click=${() => this.handleProviderClick('google')}
                         ?disabled=${this.loading}
                     >
-                        <img src="/static/frontend/assets/icons/providers/google.svg" class="provider-icon" alt="Google">
+                        <platform-icon name="google" size="24" colored></platform-icon>
                         <span>${t('auth.google')}</span>
                     </button>
 

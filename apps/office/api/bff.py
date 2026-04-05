@@ -389,6 +389,7 @@ async def list_catalogs(c: OfficeContainer = Depends(_container)) -> OfficeCatal
                 owner_display_name=display_name,
                 owner_avatar_url=avatar_url,
                 is_owner=cat.owner_user_id == ctx.user.user_id,
+                is_public=cat.is_public,
             )
         )
     return OfficeCatalogListResponse(items=out)
@@ -409,6 +410,7 @@ async def create_catalog(
         namespace=ctx.active_namespace,
         title=body.title,
         owner_user_id=ctx.user.user_id,
+        is_public=body.is_public,
     )
     display_name, avatar_url = await _user_display(c, cat.owner_user_id)
     return OfficeCatalogDetailResponse(
@@ -418,6 +420,7 @@ async def create_catalog(
         owner_display_name=display_name,
         owner_avatar_url=avatar_url,
         is_owner=True,
+        is_public=cat.is_public,
     )
 
 
@@ -454,6 +457,7 @@ async def get_catalog(
         owner_display_name=display_name,
         owner_avatar_url=avatar_url,
         is_owner=cat.owner_user_id == ctx.user.user_id,
+        is_public=cat.is_public,
     )
 
 
@@ -475,12 +479,16 @@ async def patch_catalog(
         ctx.user.user_id,
     )
     if not is_owner:
-        raise HTTPException(status_code=403, detail="Только владелец может переименовать каталог")
-    updated = await c.catalog_repository.update_title(
+        raise HTTPException(
+            status_code=403,
+            detail="Только владелец может изменять каталог",
+        )
+    updated = await c.catalog_repository.update_catalog(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
-        body.title,
+        title=body.title,
+        is_public=body.is_public,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Каталог не найден")
@@ -492,6 +500,7 @@ async def patch_catalog(
         owner_display_name=display_name,
         owner_avatar_url=avatar_url,
         is_owner=True,
+        is_public=updated.is_public,
     )
 
 

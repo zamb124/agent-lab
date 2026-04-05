@@ -141,6 +141,10 @@ class ServiceClient:
         """PUT запрос к сервису"""
         return await self.request(service, "PUT", path, **kwargs)
     
+    async def patch(self, service: str, path: str, **kwargs) -> Any:
+        """PATCH запрос к сервису"""
+        return await self.request(service, "PATCH", path, **kwargs)
+
     async def delete(self, service: str, path: str, **kwargs) -> Any:
         """DELETE запрос к сервису"""
         return await self.request(service, "DELETE", path, **kwargs)

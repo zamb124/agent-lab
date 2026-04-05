@@ -31,16 +31,27 @@ export class PlatformButton extends LitElement {
             cursor: not-allowed;
         }
         
-        /* Primary */
+        /* Primary: сервис может задать --platform-btn-primary-* (см. documents index.html) */
         button.primary {
-            color: white;
-            background: var(--accent, #10b981);
-            border-color: var(--accent, #10b981);
+            color: var(--platform-btn-primary-text, white);
+            background: var(--platform-btn-primary-bg, var(--accent, #10b981));
+            border-color: var(--platform-btn-primary-border, var(--accent, #10b981));
+            box-shadow: var(--platform-btn-primary-shadow, none);
         }
-        
+
         button.primary:hover:not(:disabled) {
-            background: var(--accent-hover, #059669);
-            border-color: var(--accent-hover, #059669);
+            background: var(
+                --platform-btn-primary-bg-hover,
+                var(--accent-hover, #059669)
+            );
+            border-color: var(
+                --platform-btn-primary-border-hover,
+                var(--accent-hover, #059669)
+            );
+            box-shadow: var(
+                --platform-btn-primary-shadow-hover,
+                var(--platform-btn-primary-shadow, none)
+            );
         }
         
         /* Secondary */

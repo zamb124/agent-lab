@@ -81,17 +81,36 @@ export class OfficeAPIService extends BaseService {
 
     /**
      * @param {string} title
+     * @param {{ is_public?: boolean }} [options]
      */
-    async createCatalog(title) {
-        return this.post('/catalogs', { title });
+    async createCatalog(title, options = {}) {
+        const is_public =
+            options && Object.prototype.hasOwnProperty.call(options, 'is_public')
+                ? Boolean(options.is_public)
+                : true;
+        return this.post('/catalogs', { title, is_public });
     }
 
     /**
      * @param {string} catalogId
-     * @param {string} title
+     * @param {{ title?: string, is_public?: boolean }} payload
      */
-    async patchCatalog(catalogId, title) {
-        return this.patch(`/catalogs/${encodeURIComponent(catalogId)}`, { title });
+    async patchCatalog(catalogId, payload) {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('patchCatalog: payload is required');
+        }
+        const body = {};
+        if (Object.prototype.hasOwnProperty.call(payload, 'title')) {
+            body.title = payload.title;
+        }
+        if (Object.prototype.hasOwnProperty.call(payload, 'is_public')) {
+            body.is_public = Boolean(payload.is_public);
+        }
+        const keys = Object.keys(body);
+        if (keys.length === 0) {
+            throw new Error('patchCatalog: укажите title и/или is_public');
+        }
+        return this.patch(`/catalogs/${encodeURIComponent(catalogId)}`, body);
     }
 
     /**

@@ -46,6 +46,7 @@ class CatalogRepository:
                 namespace=namespace,
                 title="Общие",
                 owner_user_id=owner_user_id,
+                is_public=True,
                 created_at=datetime.now(timezone.utc),
             )
             session.add(row)
@@ -76,6 +77,8 @@ class CatalogRepository:
         cat = await self.get(catalog_id, company_id, namespace)
         if cat is None:
             return False
+        if cat.is_public:
+            return True
         if cat.owner_user_id == user_id:
             return True
         async with self._db.session() as session:
@@ -130,6 +133,7 @@ class CatalogRepository:
                     OfficeDocumentCatalog.company_id == company_id,
                     OfficeDocumentCatalog.namespace == namespace,
                     or_(
+                        OfficeDocumentCatalog.is_public.is_(True),
                         OfficeDocumentCatalog.owner_user_id == user_id,
                         member_exists,
                     ),
@@ -145,6 +149,7 @@ class CatalogRepository:
         namespace: str,
         title: str,
         owner_user_id: str,
+        is_public: bool = True,
     ) -> OfficeDocumentCatalog:
         catalog_id = uuid.uuid4().hex
         row = OfficeDocumentCatalog(
@@ -153,6 +158,7 @@ class CatalogRepository:
             namespace=namespace,
             title=title.strip(),
             owner_user_id=owner_user_id,
+            is_public=is_public,
             created_at=datetime.now(timezone.utc),
         )
         async with self._db.session() as session:
@@ -161,12 +167,14 @@ class CatalogRepository:
             await session.refresh(row)
         return row
 
-    async def update_title(
+    async def update_catalog(
         self,
         catalog_id: str,
         company_id: str,
         namespace: str,
-        title: str,
+        *,
+        title: str | None = None,
+        is_public: bool | None = None,
     ) -> Optional[OfficeDocumentCatalog]:
         async with self._db.session() as session:
             result = await session.execute(
@@ -179,7 +187,10 @@ class CatalogRepository:
             row = result.scalar_one_or_none()
             if row is None:
                 return None
-            row.title = title.strip()
+            if title is not None:
+                row.title = title.strip()
+            if is_public is not None:
+                row.is_public = is_public
             await session.commit()
             await session.refresh(row)
             return row
@@ -236,6 +247,8 @@ class CatalogRepository:
         cat = await self.get(catalog_id, company_id, namespace)
         if cat is None:
             raise ValueError("Каталог не найден")
+        if cat.is_public:
+            raise ValueError("Публичный каталог доступен всей компании в этом пространстве")
         if cat.owner_user_id == user_id:
             raise ValueError("Владелец уже имеет полный доступ к каталогу")
         async with self._db.session() as session:

@@ -107,10 +107,18 @@ class OfficeNamespaceCreateResponse(BaseModel):
 
 class OfficeCatalogCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
+    is_public: bool = True
 
 
 class OfficeCatalogPatchRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=500)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    is_public: bool | None = None
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> Self:
+        if self.title is None and self.is_public is None:
+            raise ValueError("Укажите title и/или is_public")
+        return self
 
 
 class OfficeCatalogListItem(BaseModel):
@@ -121,6 +129,7 @@ class OfficeCatalogListItem(BaseModel):
     owner_display_name: str
     owner_avatar_url: str | None = None
     is_owner: bool
+    is_public: bool
 
 
 class OfficeCatalogListResponse(BaseModel):
@@ -134,6 +143,7 @@ class OfficeCatalogDetailResponse(BaseModel):
     owner_display_name: str
     owner_avatar_url: str | None = None
     is_owner: bool
+    is_public: bool
 
 
 class OfficeCatalogMemberAddRequest(BaseModel):
