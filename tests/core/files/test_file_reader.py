@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import pytest
 
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.reader import FileReader, FileReadError
-from core.files.reader.models import FileReadKind
+from core.files.reader.models import FileReadKind, ReadOptions
 
 
 @pytest.mark.asyncio
@@ -94,3 +95,15 @@ def test_recognize_file_type_pdf_sniff_overrides_extension() -> None:
     pdf_head = b"%PDF-1.4\n%..."
     info = reader.recognize_file_type(file_name="wrong.txt", head=pdf_head)
     assert info.detected_kind == FileReadKind.PDF
+
+
+@pytest.mark.asyncio
+async def test_read_image_empty_vision_prompt_raises(tmp_path) -> None:
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    path = tmp_path / "x.png"
+    path.write_bytes(png)
+    reader = FileReader()
+    with pytest.raises(ValueError, match="vision_prompt"):
+        await reader.read(source=path, options=ReadOptions(vision_prompt=""))

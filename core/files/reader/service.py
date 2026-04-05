@@ -54,6 +54,11 @@ _OFFICE_EXTENSIONS = {
 }
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
 
+_DEFAULT_IMAGE_VISION_PROMPT = (
+    "Извлеки весь видимый текст с изображения. "
+    "Если текста нет, кратко опиши содержимое одним абзацем."
+)
+
 
 def _normalize_extension(file_name: str) -> str:
     return Path(file_name).suffix.lower()
@@ -164,10 +169,13 @@ async def _read_image_impl(
     from core.tracing.operation_span import traced_operation
 
     b64 = base64.b64encode(raw).decode("utf-8")
-    prompt = (
-        "Извлеки весь видимый текст с изображения. "
-        "Если текста нет, кратко опиши содержимое одним абзацем."
-    )
+    if opts.vision_prompt is not None:
+        stripped = opts.vision_prompt.strip()
+        if not stripped:
+            raise ValueError("ReadOptions.vision_prompt задан пустой строкой")
+        prompt = stripped
+    else:
+        prompt = _DEFAULT_IMAGE_VISION_PROMPT
     message = Message(
         message_id=str(uuid.uuid4()),
         role=Role.user,

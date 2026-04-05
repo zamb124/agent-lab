@@ -186,6 +186,7 @@ JSON Schema для LLM - какие параметры tool принимает:
 ## FileReader и read_file
 
 - Единый разбор файлов в **`core/files/reader`**: **`FileReader.read`** → **`FileReadResult`** (страницы, текст, `checksum` вложений в каноне с `FileRecord`).
+- Для **изображений** в **`ReadOptions.vision_prompt`** (и аргумент **`vision_prompt`** у tool **`read_file`**) задаётся инструкция vision-модели; пустая строка — **`ValueError`**, **`None`** — встроенный промпт извлечения текста.
 - Системный tool **`read_file`** (`apps/flows/tools/files.py`) вызывает `FileReader` для пути из **`state.files`**; в том же модуле планируются прочие file-тулы.
 - В **eval** (`PythonNamespaceBuilder`): сырой диск — **`read_path_bytes`** / **`read_path_base64`**; структурированное чтение — экземпляр **`reader`** (`FileReader`), вызов **`await reader.read(source=..., file_name=...)`**.
 - Подсказки для редактора inline Python (API док-провайдер): записи **`reader`**, **`read_path_bytes`**, **`read_path_base64`** в **`core/docs/data/python/globals.py`**; шаблоны с **`reader.read`** — **`core/docs/data/python/templates.py`** (`file_processing`, `fn_file_process`).

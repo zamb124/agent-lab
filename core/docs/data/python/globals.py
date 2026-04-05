@@ -149,7 +149,9 @@ GLOBALS: List[Dict[str, Any]] = [
             "- reader.recognize_file_type(file_name='a.png', head=raw[:8192])  # FileTypeInfo: detected_kind, mime_type\n"
             "Результат: FileReadResult — pages (список ReadPage с text), page_count, detected_kind, mime_type, "
             "source_checksum, warnings. Для страниц PDF с include_asset_bytes в ReadOptions — растры в assets.\n"
-            "Изображения вызывают vision-модель; для сырых байт без разбора используй read_path_bytes."
+            "Изображения: vision-модель; в ReadOptions поле vision_prompt — своя инструкция (что извлечь/как описать), "
+            "иначе встроенный промпт извлечения текста.\n"
+            "Для сырых байт без разбора используй read_path_bytes."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["files", "reader"],

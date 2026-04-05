@@ -62,6 +62,10 @@ class ReadOptions(BaseModel):
     source_file_id: Optional[str] = None
     source_checksum: Optional[str] = None
     vision_model: str = "google/gemini-2.5-flash-preview"
+    vision_prompt: Optional[str] = Field(
+        default=None,
+        description="Текст инструкции для vision-модели при разборе изображений; иначе встроенный промпт извлечения текста.",
+    )
 
 
 class FileTypeInfo(BaseModel):

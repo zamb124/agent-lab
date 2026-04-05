@@ -72,7 +72,9 @@ def _read_file_mock(args: dict, state: Any = None) -> dict:
     description=(
         "Читает прикреплённый файл и возвращает структурированный результат (страницы, текст, checksum). "
         "file_name — имя файла из state.files; если не указано, берётся первый файл. "
-        "include_asset_bytes — включать base64 вложений (тяжёлый ответ, по умолчанию false)."
+        "include_asset_bytes — включать base64 вложений (тяжёлый ответ, по умолчанию false). "
+        "vision_prompt — для изображений: инструкция vision-модели (что извлечь или как интерпретировать); "
+        "без неё используется стандартное извлечение текста и краткое описание."
     ),
     tags=["files", "ocr", "document"],
     mock_response=_read_file_mock,
@@ -80,6 +82,7 @@ def _read_file_mock(args: dict, state: Any = None) -> dict:
 async def read_file(
     file_name: Optional[str] = None,
     include_asset_bytes: bool = False,
+    vision_prompt: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> dict:
     state = state or {}
@@ -101,6 +104,7 @@ async def read_file(
     opts = ReadOptions(
         include_asset_bytes=include_asset_bytes,
         source_file_id=finfo.get("file_id"),
+        vision_prompt=vision_prompt,
     )
     reader = FileReader()
     try:
