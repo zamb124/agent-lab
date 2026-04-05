@@ -65,7 +65,7 @@ x-common-env: &common-env
   RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-${LLM_OPENROUTER_API_KEY:-}}
   # OnlyOffice + публичный origin платформы (браузер и исходящие запросы DS). Переопределение: .env на сервере.
   SERVER__PLATFORM_PUBLIC_BASE_URL: ${SERVER__PLATFORM_PUBLIC_BASE_URL:-https://humanitec.ru}
-  OFFICE__DOCUMENT_SERVER_PUBLIC_URL: ${OFFICE_DOCUMENT_SERVER_PUBLIC_URL:-https://humanitec.ru}
+  OFFICE__DOCUMENT_SERVER_PUBLIC_URL: ${OFFICE_DOCUMENT_SERVER_PUBLIC_URL:-https://onlyoffice.humanitec.ru}
   OFFICE__JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-me-in-production}
   OFFICE__CALLBACK_PUBLIC_BASE_URL: ${OFFICE_CALLBACK_PUBLIC_BASE_URL:-https://humanitec.ru}
 
