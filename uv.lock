@@ -89,6 +89,7 @@ core = [
     { name = "pywebpush" },
     { name = "pyyaml" },
     { name = "redis" },
+    { name = "reportlab" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
 ]
@@ -189,6 +190,7 @@ core = [
     { name = "pywebpush", specifier = ">=2.1.2" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "redis", specifier = ">=7.0.0" },
+    { name = "reportlab", specifier = ">=4.4.7" },
     { name = "sqlalchemy", extras = ["asyncpg"], specifier = ">=2.0.23" },
     { name = "uvicorn", specifier = ">=0.37.0" },
 ]

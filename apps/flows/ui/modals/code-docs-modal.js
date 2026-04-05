@@ -31,35 +31,88 @@ function neutralizeDocumentationImages(html) {
     });
 }
 
-/**
- * Группируем h2#doc-* и следующий контент в .docs-section — фильтр только по этим блокам; заголовок и оглавление остаются снаружи.
- */
-function ensureDocsSectionWrappers(root) {
-    if (!root || root.querySelector('.docs-section')) {
+const FIND_MARK_CLASS = 'docs-in-page-find';
+
+function _escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function _unwrapFindMarks(root) {
+    if (!root) {
         return;
     }
-    const heads = [...root.querySelectorAll('h2[id^="doc-"]')];
-    if (heads.length === 0) {
-        return;
-    }
-    for (const h2 of heads) {
-        if (h2.closest('.docs-section')) {
+    const marks = [...root.querySelectorAll(`mark.${FIND_MARK_CLASS}`)];
+    for (const mark of marks) {
+        const parent = mark.parentNode;
+        if (!parent) {
             continue;
         }
-        const section = document.createElement('div');
-        section.className = 'docs-section';
-        h2.parentNode.insertBefore(section, h2);
-        section.appendChild(h2);
-        let el = h2.nextSibling;
-        while (el) {
-            const next = el.nextSibling;
-            if (el.nodeType === Node.ELEMENT_NODE && el.matches?.('h2[id^="doc-"]')) {
-                break;
-            }
-            section.appendChild(el);
-            el = next;
+        while (mark.firstChild) {
+            parent.insertBefore(mark.firstChild, mark);
         }
+        parent.removeChild(mark);
     }
+    root.normalize();
+}
+
+function _collectTextNodesForFind(root) {
+    const out = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            const t = node.nodeValue;
+            if (!t || t.length === 0) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            const el = node.parentElement;
+            if (!el) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            if (el.closest(`mark.${FIND_MARK_CLASS}`)) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            const tag = el.tagName;
+            if (tag === 'SCRIPT' || tag === 'STYLE') {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+        },
+    });
+    let cur;
+    while ((cur = walker.nextNode())) {
+        out.push(cur);
+    }
+    return out;
+}
+
+function _wrapMatchesInTextNode(textNode, needle) {
+    const re = new RegExp(_escapeRegExp(needle), 'gi');
+    const text = textNode.nodeValue;
+    const matches = [...text.matchAll(re)];
+    if (matches.length === 0) {
+        return;
+    }
+    const parent = textNode.parentNode;
+    if (!parent) {
+        return;
+    }
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    for (const m of matches) {
+        const idx = m.index;
+        const chunk = m[0];
+        if (idx > last) {
+            frag.appendChild(document.createTextNode(text.slice(last, idx)));
+        }
+        const mark = document.createElement('mark');
+        mark.className = FIND_MARK_CLASS;
+        mark.appendChild(document.createTextNode(chunk));
+        frag.appendChild(mark);
+        last = idx + chunk.length;
+    }
+    if (last < text.length) {
+        frag.appendChild(document.createTextNode(text.slice(last)));
+    }
+    parent.replaceChild(frag, textNode);
 }
 
 const DOC_SECTION_IDS = [
@@ -211,6 +264,20 @@ export class CodeDocsModal extends PlatformModal {
                 color: var(--text-tertiary);
                 background: var(--glass-solid-subtle);
                 border-radius: var(--radius-sm);
+            }
+
+            .docs-markdown mark.docs-in-page-find {
+                padding: 0 2px;
+                margin: 0 -2px;
+                border-radius: 2px;
+                background: color-mix(in srgb, #fbbf24 55%, transparent);
+                color: inherit;
+                box-shadow: 0 0 0 1px color-mix(in srgb, #f59e0b 40%, transparent);
+            }
+
+            .docs-markdown mark.docs-in-page-find.docs-in-page-find-active {
+                background: color-mix(in srgb, #f59e0b 70%, transparent);
+                box-shadow: 0 0 0 2px var(--accent);
             }
 
             .docs-content {
@@ -375,6 +442,7 @@ export class CodeDocsModal extends PlatformModal {
         this.perspective = 'editor';
         this._markdown = '';
         this._loading = false;
+        this._findActiveIndex = 0;
     }
 
     async showModal(options = {}) {
@@ -410,16 +478,13 @@ export class CodeDocsModal extends PlatformModal {
             if (input) {
                 input.value = '';
             }
-            this._clearSectionSearch();
+            this._findActiveIndex = 0;
+            this._clearInPageFind();
         }
         void this.updateComplete.then(() => {
-            const root = this._docsModalRoot()?.querySelector('.docs-markdown');
-            if (root) {
-                ensureDocsSectionWrappers(root);
-            }
             const value = this._getSearchInputValue().trim();
             if (value) {
-                this._applySectionSearch(value);
+                this._applyInPageFind(value);
             }
         });
     }
@@ -486,7 +551,7 @@ export class CodeDocsModal extends PlatformModal {
     _onNativeSearchInput(e) {
         const t = e.target;
         const value = t && typeof t.value === 'string' ? t.value : '';
-        this._applySectionSearch(value);
+        this._applyInPageFind(value);
     }
 
     _onNativeSearchKeydown(e) {
@@ -494,51 +559,68 @@ export class CodeDocsModal extends PlatformModal {
             return;
         }
         e.preventDefault();
-        const value = e.target && typeof e.target.value === 'string' ? e.target.value : '';
-        this._applySectionSearch(value);
-    }
-
-    _clearSectionSearch() {
         const root = this._docsModalRoot()?.querySelector('.docs-markdown');
         if (!root) {
             return;
         }
-        root.querySelectorAll('.docs-section').forEach((el) => {
-            el.hidden = false;
-        });
-        for (const child of root.children) {
-            child.hidden = false;
+        const marks = [...root.querySelectorAll(`mark.${FIND_MARK_CLASS}`)];
+        if (marks.length === 0) {
+            const value = e.target && typeof e.target.value === 'string' ? e.target.value : '';
+            this._applyInPageFind(value);
+            return;
         }
-        root.querySelectorAll('[data-docs-search-hidden]').forEach((el) => {
-            el.style.removeProperty('display');
-            el.removeAttribute('data-docs-search-hidden');
-            el.hidden = false;
-        });
+        this._findActiveIndex = (this._findActiveIndex + 1) % marks.length;
+        this._syncFindActiveHighlight(root);
     }
 
-    _applySectionSearch(rawQuery) {
+    _clearInPageFind() {
         const root = this._docsModalRoot()?.querySelector('.docs-markdown');
         if (!root) {
             return;
         }
-        ensureDocsSectionWrappers(root);
-        const q = rawQuery.trim().toLowerCase();
-        this._clearSectionSearch();
+        _unwrapFindMarks(root);
+        this._findActiveIndex = 0;
+    }
+
+    _syncFindActiveHighlight(root) {
+        const marks = [...root.querySelectorAll(`mark.${FIND_MARK_CLASS}`)];
+        for (const m of marks) {
+            m.classList.remove('docs-in-page-find-active');
+        }
+        if (marks.length === 0) {
+            return;
+        }
+        const i = Math.min(Math.max(this._findActiveIndex, 0), marks.length - 1);
+        const el = marks[i];
+        el.classList.add('docs-in-page-find-active');
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    _applyInPageFind(rawQuery) {
+        const root = this._docsModalRoot()?.querySelector('.docs-markdown');
+        if (!root) {
+            return;
+        }
+        const q = rawQuery.trim();
+        _unwrapFindMarks(root);
+        this._findActiveIndex = 0;
         if (!q) {
             return;
         }
-        const sections = [...root.querySelectorAll('.docs-section')];
-        if (sections.length > 0) {
-            for (const sec of sections) {
-                const blob = (sec.textContent || '').toLowerCase();
-                sec.hidden = !blob.includes(q);
+        const qLower = q.toLowerCase();
+        const nodes = _collectTextNodesForFind(root);
+        for (let i = nodes.length - 1; i >= 0; i--) {
+            const tn = nodes[i];
+            if (!tn.parentNode || tn.nodeType !== Node.TEXT_NODE) {
+                continue;
             }
-            return;
+            const nv = tn.nodeValue;
+            if (!nv || !nv.toLowerCase().includes(qLower)) {
+                continue;
+            }
+            _wrapMatchesInTextNode(tn, q);
         }
-        for (const child of root.children) {
-            const blob = (child.textContent || '').toLowerCase();
-            child.hidden = !blob.includes(q);
-        }
+        this._syncFindActiveHighlight(root);
     }
 
     _scrollToAnchor(id) {
