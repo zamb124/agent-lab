@@ -299,6 +299,17 @@ export class AccessRequestModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const title = this._sending
+            ? this.i18n.t('access_request_modal.sending')
+            : this.i18n.t('access_requests.send_request');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSendRequest(),
+            disabled: this._sending,
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="footer-actions">
@@ -308,14 +319,6 @@ export class AccessRequestModal extends PlatformModal {
                     @click=${() => this.close()}
                 >
                     ${this.i18n.t('cancel', {}, 'common')}
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._sending}
-                    @click=${this._onSendRequest}
-                >
-                    ${this._sending ? this.i18n.t('access_request_modal.sending') : this.i18n.t('access_requests.send_request')}
                 </button>
             </div>
         `;

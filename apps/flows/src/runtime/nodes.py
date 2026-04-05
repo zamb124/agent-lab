@@ -591,12 +591,17 @@ class LlmNode(BaseNode):
             base_url = self.llm_config_dict.get("base_url")
 
         logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, provider={provider}")
+        max_tok = None
+        if self._node_config and self._node_config.llm_override:
+            max_tok = self._node_config.llm_override.max_tokens
+
         return get_llm(
             model_name=model,
             temperature=temp,
             provider=provider,
             api_key=api_key,
             base_url=base_url,
+            max_tokens=max_tok,
             state=state,
         )
 
@@ -604,13 +609,9 @@ class LlmNode(BaseNode):
         """Создает конфигурацию по умолчанию."""
         llm_override = None
         if self.llm_config_dict:
-            llm_override = NodeLLMOverride(
-                model=self.llm_config_dict.get("model"),
-                temperature=self.llm_config_dict.get("temperature"),
-                provider=self.llm_config_dict.get("provider"),
-                api_key=self.llm_config_dict.get("api_key"),
-                base_url=self.llm_config_dict.get("base_url"),
-            )
+            allowed = set(NodeLLMOverride.model_fields.keys())
+            raw_llm = {k: v for k, v in self.llm_config_dict.items() if k in allowed}
+            llm_override = NodeLLMOverride.model_validate(raw_llm)
 
         react_config = None
         react_dict = self.config.get("react") if self.config else None
@@ -708,12 +709,8 @@ class CodeNode(BaseNode):
     Универсальная нода для выполнения кода.
     
     Поддерживает разные языки (python, javascript, go).
-    Унифицированный вызов через runner.execute_tool(code, args, state).
-    
-    args_schema опционален - если задан, args заполняются из inputs,
-    если нет - args будет пустым dict.
-    
-    tool_id - загрузка готового tool из реестра вместо inline кода.
+    Только runner.execute_tool(code, args, state) по строке ``code`` из конфига;
+    ``tool_id`` — идентификатор для UI/ссылок, не путь к FunctionTool в процессе.
     """
 
     def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
@@ -726,7 +723,6 @@ class CodeNode(BaseNode):
         self.args_schema = cfg.get("args_schema")
         
         self._runner = None
-        self._registry_tool = None
         
         # Для Python можно загрузить из function path
         if self.language == "python" and self.code is None and cfg.get("function"):
@@ -749,38 +745,19 @@ class CodeNode(BaseNode):
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """
-        Выполняет код через runner.execute_tool().
-        
-        Унифицированный путь: всегда execute_tool(code, args, state).
-        args формируется из inputs (может быть пустым).
+        Выполняет только inline ``code`` через runner.execute_tool(code, args, state).
         """
-        # Загрузка tool из реестра
-        if self.tool_id:
-            return await self._run_registry_tool(state, inputs)
-        
-        if not self.code:
-            raise ValueError(f"Node '{self.node_id}': code or tool_id required")
-        
+        if not self.code or not str(self.code).strip():
+            raise ValueError(
+                f"Node '{self.node_id}': требуется непустой inline code (tool_id без кода не исполняется)"
+            )
+
         args = self._build_args(inputs)
         logger.info(f"[node:{self.node_id}] execute_tool с args: {list(args.keys())}")
-        
-        # Резолвим ресурсы для ноды
+
         resources = await self._resolve_resources(state)
-        
         runner = self._get_runner(resources=resources)
         return await runner.execute_tool(self.code, args, state)
-
-    async def _run_registry_tool(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
-        """Выполняет tool загруженный из реестра."""
-        if self._registry_tool is None:
-            container = get_container()
-            self._registry_tool = await container.tool_registry.create_tool({"tool_id": self.tool_id})
-            if self._registry_tool is None:
-                raise ValueError(f"Tool '{self.tool_id}' not found")
-        
-        args = self._build_args(inputs)
-        logger.info(f"[node:{self.node_id}] registry tool '{self._registry_tool.name}' с args: {list(args.keys())}")
-        return await self._registry_tool.run(args, state)
 
     def _build_args(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Формирует args из inputs с учетом defaults из args_schema."""
@@ -1125,6 +1102,7 @@ async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:
     
     Zero-Guess: неизвестный тип = исключение.
     """
+    node_config = dict(node_config)
     node_type_value = node_config.get("type")
     if node_type_value is None:
         raise ValueError(f"Node '{node_id}': type is required")

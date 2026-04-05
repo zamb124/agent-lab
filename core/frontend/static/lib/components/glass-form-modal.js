@@ -66,22 +66,39 @@ export class PlatformFormModal extends PlatformModal {
         throw new Error('handleSubmit must be implemented');
     }
 
-    async _onSubmit(e) {
-        e.preventDefault();
-        
+    _saveHeaderTitle() {
+        return this.i18n.t('modal.save', {}, 'shell');
+    }
+
+    async _performSave() {
         const errors = this.validateForm();
         if (Object.keys(errors).length > 0) {
             this.formErrors = errors;
             return;
         }
-        
+
         this.formErrors = {};
         this.loading = true;
 
         const data = this.getFormData();
         await this.handleSubmit(data);
-        
+
         this.loading = false;
+    }
+
+    async _onSubmit(e) {
+        e.preventDefault();
+        await this._performSave();
+    }
+
+    renderSaveHeaderButton() {
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._performSave(),
+            disabled: this.loading,
+            title: this.loading
+                ? this.i18n.t('modal.saving', {}, 'shell')
+                : this._saveHeaderTitle(),
+        });
     }
 
     resetForm() {
@@ -100,15 +117,7 @@ export class PlatformFormModal extends PlatformModal {
         return html`
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" @click=${this.close}>
-                    Отмена
-                </button>
-                <button 
-                    type="button" 
-                    class="btn btn-primary" 
-                    ?disabled=${this.loading}
-                    @click=${this._onSubmit}
-                >
-                    ${this.loading ? 'Сохранение...' : 'Сохранить'}
+                    ${this.i18n.t('form_modal.cancel', {}, 'shell')}
                 </button>
             </div>
         `;

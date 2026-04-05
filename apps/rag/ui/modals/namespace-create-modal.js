@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 
@@ -23,6 +24,43 @@ export class NamespaceCreateModal extends PlatformModal {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-4);
+            }
+
+            .modal-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+            }
+
+            .modal-header-buttons {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+            }
+
+            .header-icon-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
+                height: 36px;
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+
+            .header-icon-btn:hover:not(:disabled) {
+                background: var(--glass-tint-subtle, rgba(0, 0, 0, 0.06));
+                color: var(--text-primary);
+            }
+
+            .header-icon-btn:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
             }
         `
     ];
@@ -92,7 +130,23 @@ export class NamespaceCreateModal extends PlatformModal {
                 <div class="modal md" @click=${(e) => e.stopPropagation()}>
                     <div class="modal-header">
                         <h2 class="modal-title">${this.i18n.t('modals.create_namespace.title')}</h2>
-                        <button class="close-button" @click=${this._handleClose}>✕</button>
+                        <div class="modal-header-buttons">
+                            <button
+                                type="button"
+                                class="header-icon-btn"
+                                title=${this._loading
+                                    ? this.i18n.t('modals.create_namespace.creating')
+                                    : this.i18n.t('modals.create_namespace.create')}
+                                aria-label=${this._loading
+                                    ? this.i18n.t('modals.create_namespace.creating')
+                                    : this.i18n.t('modals.create_namespace.create')}
+                                ?disabled=${!this._name.trim() || this._loading}
+                                @click=${this._handleSubmit}
+                            >
+                                <platform-icon name="save" size="16"></platform-icon>
+                            </button>
+                            <button class="close-button" @click=${this._handleClose}>✕</button>
+                        </div>
                     </div>
                     <div class="modal-content">
                         <div class="form">
@@ -124,13 +178,6 @@ export class NamespaceCreateModal extends PlatformModal {
                     <div class="modal-actions">
                         <button class="btn btn-secondary" @click=${this._handleClose}>
                             ${this.i18n.t('modals.create_namespace.cancel')}
-                        </button>
-                        <button 
-                            class="btn btn-primary" 
-                            @click=${this._handleSubmit}
-                            ?disabled=${!this._name.trim() || this._loading}
-                        >
-                            ${this._loading ? this.i18n.t('modals.create_namespace.creating') : this.i18n.t('modals.create_namespace.create')}
                         </button>
                     </div>
                 </div>

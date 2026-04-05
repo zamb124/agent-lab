@@ -274,21 +274,22 @@ export class OfficeNamespaceModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const title = this._saving
+            ? this.i18n.t('namespace_modal.creating', {}, 'crm')
+            : this.i18n.t('namespace_modal.submit', {}, 'crm');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: this._saving || !this._name.trim(),
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="footer-actions">
                 <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
                     ${this.i18n.t('cancel', {}, 'common')}
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._saving || !this._name.trim()}
-                    @click=${this._onSave}
-                >
-                    ${this._saving
-                        ? this.i18n.t('namespace_modal.creating', {}, 'crm')
-                        : this.i18n.t('namespace_modal.submit', {}, 'crm')}
                 </button>
             </div>
         `;

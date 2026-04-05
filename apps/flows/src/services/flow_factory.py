@@ -157,7 +157,12 @@ class FlowFactory:
         resolved_variables = await self._resolve_variables(effective["variables"])
 
         edges = [
-            {"from": e.from_node, "to": e.to_node, "condition": e.condition}
+            {
+                "from": e.from_node,
+                "to": e.to_node,
+                "condition": e.condition,
+                "contributes_to_join": e.contributes_to_join,
+            }
             for e in effective["edges"]
         ]
 

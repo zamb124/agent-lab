@@ -344,12 +344,12 @@
         },
         {
           "check": {
-            "type": "function",
+            "type": "inline_code",
             "agent": null,
             "value": "def check(s, r):\n    return '25' in r"
           },
           "input": {
-            "type": "function",
+            "type": "inline_code",
             "agent": null,
             "value": "def generate():\n    return 'Сколько будет 5 * 5?'"
           }
@@ -512,12 +512,12 @@
       "turns": [
         {
           "check": {
-            "type": "function",
+            "type": "inline_code",
             "agent": null,
             "value": "def check(state, response):\n    return len(response) > 5"
           },
           "input": {
-            "type": "function",
+            "type": "inline_code",
             "agent": null,
             "value": "def generate():\n    return 'Тестовое сообщение'"
           }
@@ -602,20 +602,7 @@
               "tags": [],
               "store": {},
               "tools": [
-                {
-                  "tags": [],
-                  "type": "function",
-                  "title": "Калькулятор",
-                  "params": {},
-                  "tool_id": "calculator",
-                  "mock_map": null,
-                  "code_mode": "code_reference",
-                  "permission": null,
-                  "description": null,
-                  "inline_code": null,
-                  "function_path": null,
-                  "call_parameters": {}
-                }
+                "calculator"
               ],
               "prompt": "Оцени диалог. Проверь корректность ответов. Верни JSON: {\"passed\": true, \"scores\": {\"accuracy\": 9, \"helpfulness\": 8}, \"feedback\": \"...\"}",
               "source": "manual",
@@ -637,20 +624,7 @@
               "tags": [],
               "store": {},
               "tools": [
-                {
-                  "tags": [],
-                  "type": "function",
-                  "title": "Калькулятор",
-                  "params": {},
-                  "tool_id": "calculator",
-                  "mock_map": null,
-                  "code_mode": "code_reference",
-                  "permission": null,
-                  "description": null,
-                  "inline_code": null,
-                  "function_path": null,
-                  "call_parameters": {}
-                }
+                "calculator"
               ],
               "prompt": "Ты умный тестер. Используй калькулятор для проверки вычислений. Заверши [TEST_COMPLETE].",
               "source": "manual",
@@ -677,12 +651,12 @@
       "turns": [
         {
           "check": {
-            "type": "function",
+            "type": "inline_code",
             "agent": null,
             "value": "def check(state, response):\n    has_number = any(c.isdigit() for c in response)\n    return {'has_number': has_number, 'long_enough': len(response) > 10}"
           },
           "input": {
-            "type": "function",
+            "type": "inline_code",
             "agent": null,
             "value": "def generate():\n    import random\n    return f'Случайное число: {random.randint(1, 100)}'"
           }

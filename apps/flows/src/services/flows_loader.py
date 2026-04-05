@@ -24,7 +24,8 @@ from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, FlowConfig, ToolReference
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.tools.base import BaseTool, ToolType
+from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import FunctionTool
 
 logger = get_logger(__name__)
@@ -483,7 +484,7 @@ class FlowsLoader:
         
         Для каждой ноды:
         1. Заменяет tool_id на полные конфиги с кодом
-        2. Валидирует уникальность reason/exit tools по tool_type
+        2. Валидирует уникальность reason/exit tools по react_role
         3. Для нод типа tool с tool_id инлайнит код из tools_cache
         """
         for node_id, node_config in nodes.items():
@@ -571,17 +572,24 @@ class FlowsLoader:
 
         elif isinstance(tool, dict):
             tool_id = tool.get("tool_id")
-            tool_type = tool.get("type")
+            exec_kind = tool.get("type")
             
             # Если это llm_node (агент как инструмент) - рекурсивно инлайним его tools
-            if tool_type == "llm_node" or tool.get("prompt"):
+            if exec_kind == "llm_node" or tool.get("prompt"):
                 return self._inline_llm_node_tool(tool, context, depth)
             
             # Tool с tool_id без code - ищем в caches
             # Полностью определённые inline tools (не требуют поиска в кэшах)
-            inline_node_types = {"channel", "flow", "mcp", "external_api", "remote_flow", "code"}
-            if tool_type in inline_node_types:
-                logger.debug(f"{context}: inline tool '{tool_id}' с type='{tool_type}'")
+            inline_node_types = {
+                "channel",
+                "flow",
+                "mcp",
+                "external_api",
+                "remote_flow",
+                "code",
+            }
+            if exec_kind in inline_node_types:
+                logger.debug(f"{context}: inline tool '{tool_id}' с type='{exec_kind}'")
                 return tool
             
             if tool_id and not tool.get("code"):
@@ -694,8 +702,8 @@ class FlowsLoader:
         Raises:
             ValueError: Если найдено более 1 reasoning или exit tool
         """
-        reason_tools = [t for t in tools if t.get("tool_type") == "reason"]
-        exit_tools = [t for t in tools if t.get("tool_type") == "exit"]
+        reason_tools = [t for t in tools if t.get("react_role") == "reason"]
+        exit_tools = [t for t in tools if t.get("react_role") == "exit"]
         
         if len(reason_tools) > 1:
             names = [t.get("tool_id") or t.get("name") for t in reason_tools]
@@ -937,7 +945,7 @@ async def load_tools_to_db(
                     args_schema=args_schema_dict,
                     mock_map=mock_map,
                     tags=tool_instance.tags,
-                    tool_type=tool_instance.tool_type.value,
+                    react_role=tool_instance.react_role,
                 )
                 
                 await tool_repository.set(tool_ref)
@@ -969,7 +977,7 @@ async def load_tools_to_db(
                     mock_map = {"default_response": tool_class.mock_response}
 
                 tags = getattr(tool_class, "tags", [])
-                tool_type = getattr(tool_class, "tool_type", ToolType.TOOL)
+                react_role = getattr(tool_class, "react_role", ReactToolRole.STANDARD)
 
                 tool_ref = ToolReference(
                     tool_id=tool_id,
@@ -979,7 +987,7 @@ async def load_tools_to_db(
                     args_schema=args_schema_dict,
                     mock_map=mock_map,
                     tags=tags,
-                    tool_type=tool_type.value if hasattr(tool_type, "value") else "tool",
+                    react_role=react_role,
                 )
 
                 await tool_repository.set(tool_ref)

@@ -9,18 +9,14 @@ GLOBALS: List[Dict[str, Any]] = [
     # State - главная сущность
     {
         "name": "state",
-        "type": "Dict[str, Any]",
+        "type": "ExecutionState",
         "doc": (
-            "Главный объект данных (передаётся в run(state)):\n"
-            "- state['content'] - текст последнего сообщения пользователя\n"
-            "- state['response'] - ответ для пользователя (установите)\n"
-            "- state['messages'] - история сообщений List[Message]\n"
-            "- state['files'] - файлы [{name, path, mime_type}]\n"
-            "- state['user_id'] - ID пользователя\n"
-            "- state['user_groups'] - группы пользователя\n"
-            "- state['variables'] - переменные агента\n"
-            "- state['current_nodes'] - текущие ноды\n"
-            "- state['custom_key'] - любые ваши данные"
+            "Состояние выполнения (run(state)); доступ и как к dict: state['content'], state.get('key').\n"
+            "- task_id, context_id, user_id, session_id — обязательные системные поля\n"
+            "- content — вход пользователя; response — ответ агента; result — результат ноды/tool\n"
+            "- messages — List[Message]; files — [{name, path, mime_type, ...}]\n"
+            "- user_groups — группы; variables — переменные агента; current_nodes — активные ноды\n"
+            "- Доп. поля через присваивание (extra); сериализация: state.model_dump()"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["core", "data"],
@@ -30,13 +26,32 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "llm",
         "type": "SafeLLMClient",
         "doc": (
-            "LLM клиент для вызова моделей. Использование:\n"
-            "- await llm.chat_simple('Привет!') -> str\n"
-            "- await llm.chat(messages) -> Message\n"
-            "- await llm.chat_with_tools(messages, tools) -> Message"
+            "await llm.chat(messages, *ключевые_аргументы). Первый аргумент messages:\n"
+            "str | list[str] | Message | list[Message] | dict | list[dict] (роли/контент нормализуются рантаймом).\n"
+            "Возврат: Message (текст, tool_calls в metadata) или экземпляр response_model при structured output.\n"
+            "Ключевые параметры (все опциональны, кроме смысла вызова):\n"
+            "- model — имя модели; response_model — Pydantic-модель для JSON по схеме\n"
+            "- tools — список: готовые OpenAI dict ИЛИ результат @tool(...) (имя функции после декоратора — экземпляр tool с to_openai_schema); сырую функцию без @tool передавать нельзя\n"
+            "- temperature, top_p, top_k, max_tokens, frequency_penalty, presence_penalty — семплинг и лимиты\n"
+            "- seed — детерминизм (если провайдер поддерживает); reasoning_effort — строка для reasoning API\n"
+            "- extra_body — dict: произвольные поля тела HTTP-запроса к провайдеру; мержатся последними и перекрывают совпадения\n"
+            "Текст ответа удобно брать: from a2a.utils.message import get_message_text\nget_message_text(msg)"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["llm", "ai"],
+    },
+    {
+        "name": "tool",
+        "type": "decorator",
+        "doc": (
+            "Декоратор для функции, которую нужно отдать в llm.chat(..., tools=[...]).\n"
+            "@tool(name='add', description='Складывает a и b', tags=['math'])\n"
+            "def add(a: int, b: int): return a + b\n"
+            "После этого add — экземпляр BaseTool; схема аргументов из аннотаций (state в сигнатуре не попадает в JSON schema).\n"
+            "Вызов: await llm.chat('сколько 3+4?', tools=[add]). Ответ может содержать tool_calls в metadata; исполнить логику тула вручную (например await add.run(args, state)) или свой ReAct-цикл — платформа внутри одного llm.chat цикл не крутит."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["llm", "tools"],
     },
     # Контекст и канал
     {
@@ -44,7 +59,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "type": "SafeContext",
         "doc": (
             "Контекст выполнения (только чтение):\n"
-            "- context.channel - канал (a2a, telegram, api)\n"
+            "- context.channel - канал (a2a, api, telegram, max, voip; без контекста — 'unknown')\n"
             "- context.user_id - ID пользователя\n"
             "- context.session_id - ID сессии\n"
             "- context.flow_id - ID агента\n"
@@ -112,7 +127,7 @@ GLOBALS: List[Dict[str, Any]] = [
     {
         "name": "set_nested",
         "type": "function",
-        "doc": "Установить вложенное значение по пути:\nstate = set_nested(state, 'user.name', 'Иван')",
+        "doc": "Записать значение по пути (мутирует state, тот же объект возвращается):\nset_nested(state, 'user.name', 'Иван')",
         "perspectives": ["editor", "flow", "node"],
         "tags": ["state", "utility"],
     },
@@ -125,9 +140,52 @@ GLOBALS: List[Dict[str, Any]] = [
         "tags": ["files", "utility"],
     },
     {
+        "name": "reader",
+        "type": "FileReader",
+        "doc": (
+            "Структурированное чтение файлов (PDF, текст, office, таблицы, изображения через vision LLM).\n"
+            "- await reader.read(source=Path('/abs/path/to/file.pdf'))  # путь из file_info['path']\n"
+            "- await reader.read(source=raw_bytes, file_name='x.pdf')  # file_name обязателен для bytes\n"
+            "- reader.recognize_file_type(file_name='a.png', head=raw[:8192])  # FileTypeInfo: detected_kind, mime_type\n"
+            "Результат: FileReadResult — pages (список ReadPage с text), page_count, detected_kind, mime_type, "
+            "source_checksum, warnings. Для страниц PDF с include_asset_bytes в ReadOptions — растры в assets.\n"
+            "Изображения вызывают vision-модель; для сырых байт без разбора используй read_path_bytes."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "reader"],
+    },
+    {
+        "name": "read_path_bytes",
+        "type": "function",
+        "doc": (
+            "Сырые байты или текст с диска (без разбора документа):\n"
+            "data = read_path_bytes(path)  # mode='rb' по умолчанию; mode='r' -> str UTF-8\n"
+            "Для PDF/Office/картинок: await reader.read(source=Path(...))."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "utility"],
+    },
+    {
+        "name": "read_path_base64",
+        "type": "function",
+        "doc": (
+            "Прочитать файл с диска и вернуть base64-строку:\n"
+            "b64 = read_path_base64(file_info['path'])"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "utility"],
+    },
+    {
+        "name": "Path",
+        "type": "pathlib.Path",
+        "doc": "pathlib.Path в namespace:\nawait reader.read(source=Path(file_info['path']))",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "path"],
+    },
+    {
         "name": "get_user",
         "type": "function",
-        "doc": "Получить информацию о пользователе:\nuser = get_user(state)\n# -> {id, email, grps}",
+        "doc": "Сводка из state:\nuser = get_user(state)\n# -> {id, groups} (groups из user_groups)",
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["user", "utility"],
     },
@@ -200,7 +258,11 @@ GLOBALS: List[Dict[str, Any]] = [
     {
         "name": "FilePart",
         "type": "class",
-        "doc": "Файловая часть сообщения:\nFilePart(file=FileWithBytes(name='doc.pdf', bytes=data))",
+        "doc": (
+            "Файловая часть:\n"
+            "FilePart(file=FileWithBytes(name='doc.pdf', bytes=base64_str, mime_type='application/pdf'))\n"
+            "Поле bytes — base64-строка, не сырые bytes."
+        ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["a2a", "types", "files"],
     },

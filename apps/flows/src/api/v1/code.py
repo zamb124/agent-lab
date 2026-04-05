@@ -259,7 +259,7 @@ async def get_tool_source(tool_path: str) -> SourceResponse:
     """
     Возвращает исходный код tool класса по его пути.
     
-    Пример: tools.calculator.Calculator
+    Пример: apps.flows.tools.math_tools.calculator
     """
     if not tool_path:
         raise HTTPException(status_code=400, detail="tool_path is required")
@@ -493,6 +493,14 @@ async def parse_signature(request: ParseSignatureRequest) -> ParseSignatureRespo
         return ParseSignatureResponse(success=False, error=f"Ошибка парсинга: {e}")
 
 
+def _require_execute_node_type(node_type: str) -> str:
+    if node_type in ("tool", "function"):
+        raise SafeEvalError(
+            "Тип ноды 'tool'/'function' снят с контракта: укажите type='code' и обновите данные миграцией"
+        )
+    return node_type
+
+
 class ExecuteRequest(BaseModel):
     """Запрос на выполнение ноды."""
     node_type: str = "code"
@@ -527,7 +535,8 @@ def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> L
         "current_nodes", "skill_id", "flow_config_version", "user_groups",
         "interrupt_path", "tool_results", "triggers", "files",
         "breakpoints", "scheduled_tasks", "reasoning_history",
-        "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt"
+        "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt",
+        "join_arrived_preds",
     }
     all_keys = set(old.keys()) | set(new.keys())
 
@@ -572,7 +581,7 @@ async def validate_code(request: ValidateRequest) -> ValidateResponse:
     Валидирует код без выполнения.
     """
     code = request.code
-    node_type = request.node_type or "code"
+    node_type = _require_execute_node_type(request.node_type or "code")
     warnings = []
 
     if not code or not code.strip():
@@ -633,6 +642,7 @@ async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
         input_state_normalized.setdefault("flow_config_version", None)
         input_state_normalized.setdefault("result", None)
         input_state_normalized.setdefault("validation", None)
+        input_state_normalized.setdefault("join_arrived_preds", {})
         
         node_config = await _build_node_config(request)
         output_state = await _execute_node(node_config, input_state_normalized, flow_id=flow_id)
@@ -701,7 +711,7 @@ def _validate_node_config(config: Dict[str, Any]) -> None:
 async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
     """Строит node_config из ExecuteRequest."""
     config = request.node_config.copy()
-    config["type"] = request.node_type
+    config["type"] = _require_execute_node_type(str(request.node_type))
     
     # Обратная совместимость: если node_config пустой, но есть поля напрямую в request
     # (старый формат API)

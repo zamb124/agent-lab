@@ -399,37 +399,48 @@ export class BillingAdminPage extends PlatformElement {
             }
 
             .usage-filters-bar {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: flex-end;
-                gap: var(--space-3);
                 margin-bottom: var(--space-3);
+                width: 100%;
+                overflow-x: auto;
+                overflow-y: visible;
+                padding-bottom: var(--space-1);
             }
 
-            .usage-filters-bar .filters-grid {
+            .usage-filters-row {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                align-items: flex-end;
+                gap: var(--space-2);
+                min-width: min-content;
+            }
+
+            .usage-filters-row > label.field {
                 flex: 1 1 0;
-                min-width: min(100%, 12rem);
+                min-width: 6.5rem;
+                max-width: 11rem;
                 margin-bottom: 0;
             }
 
-            .usage-filters-actions {
-                flex: 0 1 min(28rem, 100%);
-                min-width: 0;
+            .usage-filters-row > label.field.usage-filter-datetime {
+                flex: 1 1 8rem;
+                min-width: 8rem;
+                max-width: 10rem;
             }
 
-            .usage-filters-actions-row {
+            .usage-filters-row > label.field.usage-filter-limit {
+                flex: 0 0 4.5rem;
+                min-width: 4rem;
+                max-width: 4.75rem;
+            }
+
+            .usage-filters-submit {
                 display: flex;
-                flex-wrap: wrap;
+                flex-direction: row;
+                flex-wrap: nowrap;
                 align-items: center;
-                justify-content: flex-end;
                 gap: var(--space-2);
-            }
-
-            .filters-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-                gap: var(--space-3);
-                margin-bottom: var(--space-3);
+                flex: 0 0 auto;
             }
 
             .billing-suggest-wrap {
@@ -475,7 +486,7 @@ export class BillingAdminPage extends PlatformElement {
                 outline: none;
             }
 
-            .filters-grid .billing-suggest-wrap input {
+            .usage-filters-row .billing-suggest-wrap input {
                 width: 100%;
                 box-sizing: border-box;
                 padding: var(--space-2) var(--space-3);
@@ -491,8 +502,10 @@ export class BillingAdminPage extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 line-height: 1.35;
-                flex: 1 1 12rem;
-                min-width: 0;
+                max-width: min(22rem, 40vw);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
             label.field {
                 display: flex;
@@ -1405,7 +1418,7 @@ export class BillingAdminPage extends PlatformElement {
                 ${this._usageError ? html`<div class="err">${this._usageError}</div>` : ''}
 
                 <div class="usage-filters-bar">
-                    <div class="filters-grid">
+                    <div class="usage-filters-row">
                         ${this._renderUsageSuggest(
                             'company',
                             html`${this._t('filter_company')} ${this._hint('hint_filter_company')}`,
@@ -1418,7 +1431,7 @@ export class BillingAdminPage extends PlatformElement {
                             'resource_name',
                             html`${this._t('filter_resource')} ${this._hint('hint_filter_resource')}`,
                         )}
-                        <label class="field">
+                        <label class="field usage-filter-datetime">
                             <span class="field-label-row">${this._t('filter_from')} ${this._hint('hint_filter_from')}</span>
                             <platform-date-picker
                                 mode="datetime"
@@ -1428,7 +1441,7 @@ export class BillingAdminPage extends PlatformElement {
                                 @change=${(e) => { this._uFrom = e.target.value || ''; }}
                             ></platform-date-picker>
                         </label>
-                        <label class="field">
+                        <label class="field usage-filter-datetime">
                             <span class="field-label-row">${this._t('filter_to')} ${this._hint('hint_filter_to')}</span>
                             <platform-date-picker
                                 mode="datetime"
@@ -1438,21 +1451,22 @@ export class BillingAdminPage extends PlatformElement {
                                 @change=${(e) => { this._uTo = e.target.value || ''; }}
                             ></platform-date-picker>
                         </label>
-                        <label class="field">
+                        <label class="field usage-filter-limit">
                             <span class="field-label-row">${this._t('filter_limit')} ${this._hint('hint_filter_limit')}</span>
                             <input type="number" min="1" max="5000" .value=${String(this._uLimit)}
                                 @input=${(e) => { this._uLimit = Number(e.target.value) || 200; }} />
                         </label>
-                    </div>
-                    <div class="usage-filters-actions">
-                        <div class="usage-filters-actions-row">
+                        <div class="usage-filters-submit">
                             ${this._iconBtn('search', {
                                 variant: 'primary',
-                                title: this._t('apply'),
+                                title: `${this._t('apply')}. ${this._t('usage_facet_hint')}`,
                                 disabled: this._usageLoading,
                                 onClick: () => { this._uOffset = 0; void this._loadUsage(); },
                             })}
-                            <span class="usage-filters-hint">${this._t('usage_facet_hint')}</span>
+                            <span
+                                class="usage-filters-hint"
+                                title=${this._t('usage_facet_hint')}
+                            >${this._t('usage_facet_hint')}</span>
                         </div>
                     </div>
                 </div>

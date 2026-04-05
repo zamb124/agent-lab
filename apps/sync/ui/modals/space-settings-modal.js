@@ -424,33 +424,47 @@ export class SpaceSettingsModal extends PlatformModal {
         }
     }
 
-    renderFooter() {
+    _onPrimarySave() {
+        this._submit().catch((err) => {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            this.error(errMsg);
+            this._saving = false;
+        });
+    }
+
+    _spaceSettingsPrimaryVisible() {
         const ui = SyncStore.state.ui;
         const isCreate = ui.spaceSettingsCreate;
         const id = this._spaceId;
-        if (!isCreate && (typeof id !== 'string' || id === '')) {
-            return html``;
-        }
-        const primaryLabel = isCreate
+        return isCreate || (typeof id === 'string' && id !== '');
+    }
+
+    _spaceSettingsPrimaryTitle() {
+        const ui = SyncStore.state.ui;
+        const isCreate = ui.spaceSettingsCreate;
+        return isCreate
             ? (this._saving ? this._tp('space_settings.creating') : this._tp('space_settings.create'))
             : (this._saving ? this._tp('space_settings.saving') : this._tp('space_settings.save'));
+    }
+
+    renderSaveHeaderButton() {
+        if (!this._spaceSettingsPrimaryVisible()) {
+            return html``;
+        }
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onPrimarySave(),
+            disabled: this._saving,
+            title: this._spaceSettingsPrimaryTitle(),
+        });
+    }
+
+    renderFooter() {
+        if (!this._spaceSettingsPrimaryVisible()) {
+            return html``;
+        }
         return html`
             <div class="actions">
                 <button type="button" class="btn" @click=${this._onCancel}>${this._tp('chat_view.cancel')}</button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._saving}
-                    @click=${() => {
-                        this._submit().catch((err) => {
-                            const errMsg = err instanceof Error ? err.message : String(err);
-                            this.error(errMsg);
-                            this._saving = false;
-                        });
-                    }}
-                >
-                    ${primaryLabel}
-                </button>
             </div>
         `;
     }

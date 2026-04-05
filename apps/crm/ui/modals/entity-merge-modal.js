@@ -405,23 +405,23 @@ export class EntityMergeModal extends PlatformModal {
         `;
     }
 
-    renderFooter() {
+    renderSaveHeaderButton() {
         const canMerge = !this._loading
             && !this._error
             && this._left
             && this._right
             && this._survivorIsLeft !== null;
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onMerge(),
+            disabled: !canMerge || this._saving,
+            title: this.i18n.t('entity_merge.submit'),
+        });
+    }
+
+    renderFooter() {
         return html`
             <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
                 ${this.i18n.t('actions.cancel')}
-            </button>
-            <button
-                type="button"
-                class="btn btn-primary"
-                ?disabled=${!canMerge || this._saving}
-                @click=${() => this._onMerge()}
-            >
-                ${this.i18n.t('entity_merge.submit')}
             </button>
         `;
     }

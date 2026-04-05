@@ -169,15 +169,22 @@ class TemplateCreateModal extends PlatformModal {
         `;
     }
 
-    renderFooter() {
+    renderSaveHeaderButton() {
         const t = (k, p) => this.i18n.t(k, p ?? {});
         const submitDisabled = this._saving || !this._templateId.trim() || !this._name.trim();
+        const title = this._saving ? t('create_modal.creating') : t('create_modal.submit');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: submitDisabled,
+            title,
+        });
+    }
+
+    renderFooter() {
+        const t = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="footer-actions">
                 <button type="button" class="btn btn-secondary" @click=${() => this.close()}>${t('create_modal.cancel')}</button>
-                <button type="button" class="btn btn-primary" ?disabled=${submitDisabled} @click=${this._onSave}>
-                    ${this._saving ? t('create_modal.creating') : t('create_modal.submit')}
-                </button>
             </div>
         `;
     }

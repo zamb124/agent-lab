@@ -808,7 +808,20 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
             )
             failed_row = await container.call_recording_repository.get(recording_id)
             if failed_row is not None:
-                await publish_realtime_events([event_call_recording_failed(_recording_read_from_entity(failed_row))])
+                failed_read = _recording_read_from_entity(failed_row)
+                fail_recipients = await container.channel_repository.list_member_user_ids(
+                    failed_read.channel_id,
+                    company_id=company_id,
+                )
+                await publish_realtime_events(
+                    [
+                        event_call_recording_failed(
+                            failed_read,
+                            company_id=company_id,
+                            recipient_user_ids=fail_recipients,
+                        ),
+                    ],
+                )
             raise
 
 
@@ -933,7 +946,19 @@ async def transcribe_audio_message_core(
                     message_id=message_id,
                     company_id=company_id,
                 )
-                await publish_realtime_events([event_message_updated(done_message)])
+                done_recipients = await container.channel_repository.list_member_user_ids(
+                    channel_id,
+                    company_id=company_id,
+                )
+                await publish_realtime_events(
+                    [
+                        event_message_updated(
+                            done_message,
+                            company_id=company_id,
+                            recipient_user_ids=done_recipients,
+                        ),
+                    ],
+                )
         except Exception as exc:
             failed_contents = _replace_audio_transcription(
                 contents=source_contents,
@@ -951,7 +976,19 @@ async def transcribe_audio_message_core(
                 message_id=message_id,
                 company_id=company_id,
             )
-            await publish_realtime_events([event_message_updated(failed_message)])
+            fail_audio_recipients = await container.channel_repository.list_member_user_ids(
+                channel_id,
+                company_id=company_id,
+            )
+            await publish_realtime_events(
+                [
+                    event_message_updated(
+                        failed_message,
+                        company_id=company_id,
+                        recipient_user_ids=fail_audio_recipients,
+                    ),
+                ],
+            )
             logger.warning(
                 "Расшифровка аудиосообщения завершилась ошибкой: channel_id=%s message_id=%s error=%s",
                 channel_id,
@@ -1075,7 +1112,19 @@ async def transcribe_video_message_core(
                 message_id=message_id,
                 company_id=company_id,
             )
-            await publish_realtime_events([event_message_updated(done_message)])
+            done_video_recipients = await container.channel_repository.list_member_user_ids(
+                channel_id,
+                company_id=company_id,
+            )
+            await publish_realtime_events(
+                [
+                    event_message_updated(
+                        done_message,
+                        company_id=company_id,
+                        recipient_user_ids=done_video_recipients,
+                    ),
+                ],
+            )
     except Exception as exc:
         failed_contents = _replace_video_transcription(
             contents=source_contents,
@@ -1093,7 +1142,19 @@ async def transcribe_video_message_core(
             message_id=message_id,
             company_id=company_id,
         )
-        await publish_realtime_events([event_message_updated(failed_message)])
+        fail_video_recipients = await container.channel_repository.list_member_user_ids(
+            channel_id,
+            company_id=company_id,
+        )
+        await publish_realtime_events(
+            [
+                event_message_updated(
+                    failed_message,
+                    company_id=company_id,
+                    recipient_user_ids=fail_video_recipients,
+                ),
+            ],
+        )
         logger.warning(
             "Расшифровка видеосообщения завершилась ошибкой: channel_id=%s message_id=%s error=%s",
             channel_id,
@@ -1276,6 +1337,12 @@ async def sync_speech_to_chat_poll_task(
         await asyncio.sleep(_speech_to_chat_poll_sleep_seconds(is_continuation=is_continuation))
     from apps.sync.realtime.speech_to_chat_workflow import run_speech_to_chat_poll_cycle
 
+    container = get_sync_container()
+    call_row = await container.call_repository.get_call(call_id, company_id)
+    if call_row is None:
+        raise ValueError(f"Звонок {call_id} не найден для speech_to_chat poll.")
+    poll_user_id = call_row.created_by_user_id
+
     async with traced_operation(
         "sync.speech_to_chat.poll_cycle",
         event_type="sync.speech_to_chat",
@@ -1284,6 +1351,7 @@ async def sync_speech_to_chat_poll_task(
         resource_id=call_id,
         extra_attributes={
             trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            trace_attributes.ATTR_USER_ID: poll_user_id,
             trace_attributes.ATTR_CALL_ID: call_id,
         },
     ):

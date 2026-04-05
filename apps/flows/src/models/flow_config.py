@@ -78,6 +78,12 @@ class Edge(StrictBaseModel):
         default=None,
         description="Условие перехода. Примеры: 'validation.valid == true', 'stage == \"done\"'",
     )
+    contributes_to_join: bool = Field(
+        default=True,
+        description=(
+            "При incoming_policy=all у целевой ноды: ребро участвует в AND; false = переход без ожидания остальных входов"
+        ),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -85,14 +91,14 @@ class Edge(StrictBaseModel):
 class InputType(str, Enum):
     """Тип входа для теста."""
     TEXT = "text"
-    FUNCTION = "function"
+    INLINE_CODE = "inline_code"
     NODE = "node"
 
 
 class CheckType(str, Enum):
     """Тип проверки для теста."""
     STRING = "string"
-    FUNCTION = "function"
+    INLINE_CODE = "inline_code"
     NODE = "node"
 
 
@@ -102,11 +108,11 @@ class InputConfig(StrictBaseModel):
     
     Примеры:
     - {"type": "text", "value": "Привет"}
-    - {"type": "function", "value": "def generate(): return 'test'"}
+    - {"type": "inline_code", "value": "def generate(): return 'test'"}
     - {"type": "node", "value": "tester_node_id"}
     - {"type": "node", "node": {...}}  # inline node config как dict
     """
-    type: InputType = Field(..., description="Тип входа: text, function, node")
+    type: InputType = Field(..., description="Тип входа: text, inline_code, node")
     value: str = Field(default="", description="Текст | inline код | node_id")
     node: Optional[Dict[str, Any]] = Field(
         default=None, description="Inline нода как dict (будет преобразована в NodeConfig)"
@@ -133,11 +139,11 @@ class CheckConfig(StrictBaseModel):
     
     Примеры:
     - {"type": "string", "value": "contains:привет"}
-    - {"type": "function", "value": "def check(s,r): return 'ok' in r"}
+    - {"type": "inline_code", "value": "def check(s,r): return 'ok' in r"}
     - {"type": "node", "value": "judge_node_id"}
     - {"type": "node", "node": {...}}  # inline node config как dict
     """
-    type: CheckType = Field(..., description="Тип проверки: string, function, node")
+    type: CheckType = Field(..., description="Тип проверки: string, inline_code, node")
     value: str = Field(default="", description="Checker expr | inline код | node_id")
     node: Optional[Dict[str, Any]] = Field(
         default=None, description="Inline нода-судья как dict (будет преобразована в NodeConfig)"

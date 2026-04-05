@@ -360,8 +360,8 @@ export class ToolPickerModal extends PlatformModal {
     }
 
     _isReasonTool(item) {
-        return item.tool_type === 'reason' || 
-               item.tool_type === 'exit' || 
+        return item.react_role === 'reason' || 
+               item.react_role === 'exit' || 
                item.tool_id === 'reason' || 
                item.tool_id === 'final_answer';
     }
@@ -576,13 +576,18 @@ export class ToolPickerModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: false,
+            title: this.i18n.t('tool_picker.add_with_count', { count: this.selectedTools.size }),
+        });
+    }
+
     renderFooter() {
         return html`
             <button type="button" class="btn btn-secondary" @click=${this.close}>
                 ${this.i18n.t('editor.cancel')}
-            </button>
-            <button type="button" class="btn btn-primary" @click=${this._onSave}>
-                ${this.i18n.t('tool_picker.add_with_count', { count: this.selectedTools.size })}
             </button>
         `;
     }

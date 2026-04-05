@@ -8,8 +8,7 @@ const TEMPLATE_IDS = [
     { id: 'react', icon: 'ai', color: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)' },
     { id: 'graph', icon: 'workflow', color: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)' },
     { id: 'multi_agent', icon: 'agent', color: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)' },
-    { id: 'function', icon: 'code', color: 'linear-gradient(135deg, #84cc16 0%, #10b981 100%)' },
-    { id: 'tool', icon: 'tool', color: 'linear-gradient(135deg, #f97316 0%, #f59e0b 100%)' },
+    { id: 'code', icon: 'code', color: 'linear-gradient(135deg, #84cc16 0%, #10b981 100%)' },
     { id: 'external', icon: 'cloud', color: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' },
 ];
 
@@ -212,44 +211,23 @@ export class FlowCreateModal extends PlatformModal {
                     variables: {}
                 };
             
-            case 'function':
+            case 'code':
                 return {
                     flow_id: flowId,
                     name: g('flow_name'),
                     description: g('description'),
-                    tags: this._tagsFromGen('function'),
-                    entry: 'process',
+                    tags: this._tagsFromGen('code'),
+                    entry: 'main',
                     nodes: {
-                        process: {
+                        main: {
                             type: 'code',
-                            code: 'def execute(args, state):\n    """Process data"""\n    result = args.get("input", "")\n    return {"output": f"Processed: {result}"}'
-                        }
+                            code: 'def execute(args, state):\n    """Process data"""\n    result = args.get("input", "")\n    return {"output": f"Processed: {result}"}',
+                        },
                     },
-                    edges: [
-                        { from_node: 'process', to_node: null }
-                    ],
-                    variables: {}
+                    edges: [{ from_node: 'main', to_node: null }],
+                    variables: {},
                 };
-            
-            case 'tool':
-                return {
-                    flow_id: flowId,
-                    name: g('flow_name'),
-                    description: g('description'),
-                    tags: this._tagsFromGen('tool'),
-                    entry: 'tool_node',
-                    nodes: {
-                        tool_node: {
-                            type: 'code',
-                            code: 'def execute(args, state):\n    """Tool run"""\n    return {"result": f"Result: {args}"}',
-                        }
-                    },
-                    edges: [
-                        { from_node: 'tool_node', to_node: null }
-                    ],
-                    variables: {}
-                };
-            
+
             case 'external':
                 return {
                     flow_id: flowId,

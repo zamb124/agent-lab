@@ -44,7 +44,10 @@ class FileRecord(BaseModel):
     storage_url: Optional[str] = Field(default=None, description="Прямой URL источника файла для proxy-download")
     content_type: str = Field(description="MIME тип файла")
     file_size: int = Field(description="Размер файла в байтах")
-    checksum: Optional[str] = Field(default=None, description="MD5 или другая контрольная сумма")
+    checksum: Optional[str] = Field(
+        default=None,
+        description="SHA-256 hex содержимого файла (как при upload в core.files.api)",
+    )
     status: FileStatus = Field(default=FileStatus.UPLOADING, description="Статус файла")
     uploaded_by: Optional[str] = Field(default=None, description="ID пользователя который загрузил")
     company_id: Optional[str] = Field(default=None, description="ID компании владельца файла")

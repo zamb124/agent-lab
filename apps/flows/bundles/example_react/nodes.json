@@ -8,11 +8,11 @@
     "tools": [
       "calculator",
       "ask_user",
-      "vision_analyze",
+      "read_file",
       "example_subflow",
       {
         "tool_id": "format_greeting",
-        "type": "function",
+        "type": "code",
         "description": "Форматирует приветствие с именем пользователя",
         "args_schema": {
           "name": {"type": "string", "description": "Имя пользователя"},

@@ -45,20 +45,13 @@ async def execute_tool(
         set_context(Context.from_dict(context_data))
 
     container = get_container()
-    
+
     if isinstance(tool_id_or_config, str):
         tool_id = tool_id_or_config
-        # Сначала проверяем зарегистрированные builtin tools (FunctionTool)
-        tool = container.tool_registry.get(tool_id)
-        if not tool:
-            # Если не найден - создаем InlineTool
-            tool = await container.tool_registry.create_tool({"tool_id": tool_id})
+        tool = await container.tool_registry.create_tool({"tool_id": tool_id})
     else:
         tool_id = tool_id_or_config.get("tool_id", "unknown")
-        # Для inline config сначала проверяем builtin
-        tool = container.tool_registry.get(tool_id)
-        if not tool:
-            tool = await container.tool_registry.create_tool(tool_id_or_config)
+        tool = await container.tool_registry.create_tool(tool_id_or_config)
     logger.debug(f"Executing tool: {tool_id}")
 
     from core.state import ExecutionState

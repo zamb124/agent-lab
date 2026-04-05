@@ -248,17 +248,14 @@ export class BaseNodeModal extends PlatformFormModal {
         `;
     }
 
+    _saveHeaderTitle() {
+        return this.i18n.t('inline_tool_modal.save');
+    }
+
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${this.close}>
                 ${this.i18n.t('editor.cancel')}
-            </platform-button>
-            <platform-button 
-                variant="primary" 
-                ?loading=${this.loading}
-                @click=${this._onSubmit}
-            >
-                ${this.i18n.t('inline_tool_modal.save')}
             </platform-button>
         `;
     }

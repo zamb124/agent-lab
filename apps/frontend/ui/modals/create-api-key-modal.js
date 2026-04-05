@@ -363,6 +363,19 @@ export class CreateApiKeyModal extends PlatformModal {
         return this._createdKey ? this._renderSuccess() : this._renderForm();
     }
 
+    renderSaveHeaderButton() {
+        if (this._createdKey) {
+            return html``;
+        }
+        const td = (k, p) => this.i18n.t(k, p ?? {});
+        const title = this._loading ? td('api_key_modal.creating') : td('api_key_modal.submit');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._handleCreate(),
+            disabled: this._loading,
+            title,
+        });
+    }
+
     renderFooter() {
         return this._createdKey ? html`` : this._renderFormActions();
     }
@@ -422,13 +435,6 @@ export class CreateApiKeyModal extends PlatformModal {
                     ?disabled=${this._loading}
                 >
                     ${td('api_key_modal.cancel')}
-                </button>
-                <button
-                    class="btn btn-primary"
-                    @click=${this._handleCreate}
-                    ?disabled=${this._loading}
-                >
-                    ${this._loading ? td('api_key_modal.creating') : td('api_key_modal.submit')}
                 </button>
             </div>
         `;

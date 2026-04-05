@@ -7,8 +7,9 @@
 
 import logging
 import tiktoken
-from typing import List, Optional
+from typing import Any, List, Optional
 
+from core.context import get_context
 from core.http import get_httpx_client
 from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
@@ -224,6 +225,18 @@ class EmbeddingService:
         token_count = self.count_tokens(texts)
         resource_hint = self._active_model or (self.models[0] if self.models else "embedding")
 
+        trace_extra: dict[str, Any] = {
+            trace_attributes.ATTR_EMBED_TEXT_COUNT: len(texts),
+            trace_attributes.ATTR_EMBED_BATCH_SIZE: self.BATCH_SIZE,
+            trace_attributes.ATTR_LLM_INPUT_TOKENS: token_count,
+        }
+        actx = get_context()
+        if actx is not None:
+            if actx.active_company is not None:
+                trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
+            if actx.user is not None and str(actx.user.user_id).strip() != "":
+                trace_extra[trace_attributes.ATTR_USER_ID] = str(actx.user.user_id).strip()
+
         async with traced_operation(
             "rag.embed.batch",
             event_type="rag.embeddings",
@@ -232,11 +245,7 @@ class EmbeddingService:
             billing_resource_name=f"embedding:{resource_hint}",
             billing_quantity=token_count,
             billing_pending_settlement=True,
-            extra_attributes={
-                trace_attributes.ATTR_EMBED_TEXT_COUNT: len(texts),
-                trace_attributes.ATTR_EMBED_BATCH_SIZE: self.BATCH_SIZE,
-                trace_attributes.ATTR_LLM_INPUT_TOKENS: token_count,
-            },
+            extra_attributes=trace_extra,
         ) as span:
             logger.info(f"Генерация embeddings для {len(texts)} текстов ({token_count} токенов)")
 

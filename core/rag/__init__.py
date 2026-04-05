@@ -5,6 +5,8 @@ RAG система с поддержкой различных провайдер
 Провайдеры:
 - agentset: Внешний SaaS (Agentset.ai)
 - pgvector: PostgreSQL + pgvector
+
+Парсинг файлов для индексации: core.files.reader.FileReader (единая схема FileReadResult).
 """
 
 from .base_provider import BaseRAGProvider
@@ -16,7 +18,7 @@ from .factory import (
 )
 from .repository import RAGRepository
 from .providers import AgentsetRAGProvider, PgVectorProvider
-from .services import DocumentParser, EmbeddingService
+from .services import EmbeddingService
 
 __all__ = [
     # Base
@@ -36,7 +38,5 @@ __all__ = [
     "AgentsetRAGProvider",
     "PgVectorProvider",
     # Services
-    "DocumentParser",
     "EmbeddingService",
 ]
-

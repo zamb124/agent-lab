@@ -558,7 +558,11 @@ async def join_via_link(
         call = await container.call_repository.get_call(link.call_id, link.company_id)
     else:
         livekit_room_name = f"link-{link_token[:16]}"
-        await _livekit_client(settings).create_room(livekit_room_name)
+        await _livekit_client(settings).create_room(
+            livekit_room_name,
+            company_id=link.company_id,
+            user_id=identity,
+        )
 
         call = SyncCall(
             call_id=uuid4().hex,

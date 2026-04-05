@@ -18,33 +18,35 @@ export class JsonFieldEditor extends PlatformElement {
                 align-self: stretch;
                 width: 100%;
                 max-width: 100%;
-                min-height: 0;
+                min-height: var(--editor-min-height, 160px);
             }
 
             :host([bounded]:not(.fullscreen)) .editor-shell {
-                max-height: min(42vh, 380px);
-                min-height: 0;
+                max-height: min(50vh, 440px);
+                min-height: var(--editor-min-height, 160px);
+                display: flex;
+                flex-direction: column;
                 overflow: hidden;
             }
 
             :host([bounded]:not(.fullscreen)) .editor-container {
-                flex: 1 1 0%;
-                min-height: 0;
+                flex: 1 1 auto;
+                min-height: var(--editor-min-height, 160px);
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
             }
 
             :host([bounded]:not(.fullscreen)) #codemirror-container {
-                flex: 1 1 0%;
-                min-height: 0 !important;
+                flex: 1 1 auto;
+                min-height: var(--editor-min-height, 160px) !important;
                 overflow: hidden;
                 position: relative;
             }
 
             :host([bounded]:not(.fullscreen)) #codemirror-container .cm-editor {
                 height: 100% !important;
-                min-height: 0 !important;
+                min-height: var(--editor-min-height, 160px) !important;
                 max-height: 100%;
                 overflow: hidden !important;
                 display: flex !important;
@@ -52,7 +54,7 @@ export class JsonFieldEditor extends PlatformElement {
             }
 
             :host([bounded]:not(.fullscreen)) #codemirror-container .cm-scroller {
-                flex: 1 1 0% !important;
+                flex: 1 1 auto !important;
                 min-height: 0 !important;
                 overflow: auto !important;
             }
@@ -328,8 +330,17 @@ export class JsonFieldEditor extends PlatformElement {
         };
     }
 
+    _syncHostMinHeightVar() {
+        const h =
+            typeof this.minHeight === 'number' && !Number.isNaN(this.minHeight) && this.minHeight > 0
+                ? this.minHeight
+                : 100;
+        this.style.setProperty('--editor-min-height', `${h}px`);
+    }
+
     async firstUpdated() {
         document.addEventListener('keydown', this._boundKeydown);
+        this._syncHostMinHeightVar();
         await this._initCodeMirror();
     }
 
@@ -640,6 +651,10 @@ export class JsonFieldEditor extends PlatformElement {
     }
 
     updated(changedProperties) {
+        if (changedProperties.has('minHeight')) {
+            this._syncHostMinHeightVar();
+        }
+
         if (changedProperties.has('value') && this._editorView) {
             const currentValue = this._editorView.state.doc.toString();
             if (this.value !== currentValue) {
@@ -685,7 +700,11 @@ export class JsonFieldEditor extends PlatformElement {
     }
 
     render() {
-        const style = this.minHeight ? `--editor-min-height: ${this.minHeight}px` : '';
+        const minPx =
+            typeof this.minHeight === 'number' && !Number.isNaN(this.minHeight) && this.minHeight > 0
+                ? this.minHeight
+                : 100;
+        const style = `--editor-min-height: ${minPx}px`;
         const showHeaderRow = this.showToolbar || this._fullscreen;
         const showFab = !showHeaderRow;
 

@@ -10,7 +10,8 @@ import inspect
 import os
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, get_type_hints
 
-from apps.flows.src.tools.base import BaseTool, ToolType
+from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.mock import get_mock_for_tool
 from apps.flows.src.models.tool_reference import CallParameter
 from core.logging import get_logger
@@ -41,7 +42,7 @@ class FunctionTool(BaseTool):
         tags: List[str],
         mock_response: Any = None,
         permission: Optional[str] = None,
-        tool_type: ToolType = ToolType.TOOL,
+        react_role: ReactToolRole = ReactToolRole.STANDARD,
         cost: float = 0.0,
         billing_name: Optional[str] = None,
         free_for_plans: Optional[List[str]] = None,
@@ -53,7 +54,7 @@ class FunctionTool(BaseTool):
         self.tags = tags
         self._mock_response = mock_response
         self.permission = permission
-        self.tool_type = tool_type
+        self.react_role = react_role
         self.args_schema = None
         self._parameters = self._extract_parameters(func)
         
@@ -176,7 +177,7 @@ def tool(
     tags: List[str],
     mock_response: Any = None,
     permission: Optional[str] = None,
-    tool_type: ToolType = ToolType.TOOL,
+    react_role: ReactToolRole = ReactToolRole.STANDARD,
     cost: float = 0.0,
     billing_name: Optional[str] = None,
     free_for_plans: Optional[List[str]] = None,
@@ -191,7 +192,7 @@ def tool(
         tags: Теги/категории (обязательный)
         mock_response: Mock ответ - строка, dict или callable
         permission: Группа с доступом к tool
-        tool_type: Тип tool (TOOL, REASON, EXIT)
+        react_role: Роль в ReAct (standard, reason, exit)
         cost: Стоимость использования tool (для биллинга)
         billing_name: Имя для биллинга (по умолчанию = name)
         free_for_plans: Список тарифов с бесплатным доступом
@@ -219,7 +220,7 @@ def tool(
             tags=tags,
             mock_response=mock_response,
             permission=permission,
-            tool_type=tool_type,
+            react_role=react_role,
             cost=cost,
             billing_name=billing_name,
             free_for_plans=free_for_plans,

@@ -117,6 +117,8 @@ async def upload_document(
     document_id = file_record.file_id
     metadata_dict["document_id"] = document_id
     metadata_dict["s3_bucket"] = file_record.s3_bucket
+    metadata_dict["company_id"] = company_id
+    metadata_dict["uploaded_by_user_id"] = user_id
 
     task_id_placeholder = f"task_{document_id}"
     status_repo = container.document_status_repository

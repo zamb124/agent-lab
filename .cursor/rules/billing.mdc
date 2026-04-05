@@ -56,7 +56,7 @@ alwaysApply: false
 | LLM (ReAct цикл) | `core/tracing/tracer.py` (`record_llm_response`) | `llm:{model}` | input_tokens + output_tokens |
 | LLM (invoke_llm task) | `apps/flows/src/tasks/llm_tasks.py` | `llm:default` (обновляется из usage) | total_tokens |
 | LLM (LLMResource) | `apps/flows/src/resources/wrappers/llm_resource.py` | `llm:{model}` | 1 |
-| LLM (OCR vision) | `apps/flows/tools/ocr_document.py` | `llm:{model}` | 1 |
+| LLM (vision, FileReader / изображения) | `core/files/reader/service.py` (`core.files.reader.image`) | `llm:{model}` | 1 |
 | Embeddings | `core/rag/services/embedding_service.py` | `embedding:{model}` | token_count |
 | STT audio | `apps/sync/realtime/tasks.py` | `tool:stt_sync_message` | 1 |
 | STT video | `apps/sync/realtime/tasks.py` | `tool:stt_sync_video` | 1 |

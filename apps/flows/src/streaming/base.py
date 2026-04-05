@@ -73,7 +73,7 @@ class BaseEmitter(ABC):
         tool_name: str,
         tool_args: Dict[str, Any],
         tool_call_id: str,
-        tool_type: str = "tool",
+        react_role: str = "standard",
     ) -> None:
         """Публикует событие вызова инструмента."""
         artifact = Artifact(

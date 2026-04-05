@@ -128,12 +128,21 @@ class PythonCompiler:
         # Ищем функцию execute
         if "execute" in namespace:
             return namespace["execute"], False
-        
-        # Автопоиск последней функции (точка входа всегда последняя)
-        matches = re.findall(r"(?:async\s+)?def\s+(\w+)\s*\(", code)
-        if matches:
-            last_func_name = matches[-1]
-            if last_func_name in namespace:
-                return namespace[last_func_name], False
-        
+
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            raise SafeEvalError(f"Syntax error: {e}") from e
+
+        top_level_funcs = [
+            n
+            for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        if top_level_funcs:
+            entry_name = top_level_funcs[-1].name
+            fn = namespace.get(entry_name)
+            if callable(fn):
+                return fn, False
+
         raise SafeEvalError("No function found in code")

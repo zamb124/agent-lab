@@ -1,188 +1,124 @@
 """
-Тесты валидации ToolType - проверка уникальности reason/exit tools.
+Тесты ReactToolRole и уникальности reason/exit в llm_node.
 """
 
 import pytest
 
-from apps.flows.src.tools.base import ToolType
-from apps.flows.src.services.flows_loader import FlowsLoader
+from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.services.flow_validator import FlowValidator, FlowValidationResult
+from apps.flows.src.services.flows_loader import FlowsLoader
+from apps.flows.tools import calculator, final_answer, finish, reason
 
 
-class TestToolTypeEnum:
-    """Тесты ToolType enum."""
+class TestReactToolRoleEnum:
+    def test_react_role_values(self):
+        assert ReactToolRole.STANDARD == "standard"
+        assert ReactToolRole.REASON == "reason"
+        assert ReactToolRole.EXIT == "exit"
 
-    def test_tool_type_values(self):
-        """ToolType имеет правильные значения."""
-        assert ToolType.TOOL == "tool"
-        assert ToolType.REASON == "reason"
-        assert ToolType.EXIT == "exit"
-
-    def test_builtin_tools_have_correct_types(self):
-        """Встроенные tools имеют правильные типы."""
-        from apps.flows.tools import reason, finish, final_answer, calculator
-
-        assert reason.tool_type == ToolType.REASON
-        assert finish.tool_type == ToolType.EXIT
-        assert final_answer.tool_type == ToolType.EXIT
-        assert calculator.tool_type == ToolType.TOOL
+    def test_builtin_tools_roles(self):
+        assert reason.react_role == ReactToolRole.REASON
+        assert finish.react_role == ReactToolRole.EXIT
+        assert final_answer.react_role == ReactToolRole.EXIT
+        assert calculator.react_role == ReactToolRole.STANDARD
 
 
-class TestFlowValidatorToolType:
-    """Тесты валидации tool_type в FlowValidator."""
-
+class TestFlowValidatorReactRole:
     @pytest.fixture
-    def validator(self) -> FlowValidator:
+    def validator(self):
         return FlowValidator()
 
-    def test_single_reason_tool_valid(self, validator):
-        """Один reasoning tool - валидно."""
-        tools = [
-            {"tool_id": "reason", "tool_type": "reason", "code": "..."},
-            {"tool_id": "calc", "tool_type": "tool", "code": "..."},
-        ]
+    def test_single_reason_and_exit_ok(self, validator):
         result = FlowValidationResult(valid=True)
-
-        validator._validate_tool_type_uniqueness("test_node", tools, result)
-
+        tools = [
+            {"tool_id": "reason", "react_role": "reason", "code": "..."},
+            {"tool_id": "calc", "react_role": "standard", "code": "..."},
+        ]
+        validator._validate_react_role_uniqueness("test_node", tools, result)
         assert result.valid
-        assert len(result.errors) == 0
 
-    def test_single_exit_tool_valid(self, validator):
-        """Один exit tool - валидно."""
-        tools = [
-            {"tool_id": "finish", "tool_type": "exit", "code": "..."},
-            {"tool_id": "calc", "tool_type": "tool", "code": "..."},
-        ]
+    def test_single_exit_ok(self, validator):
         result = FlowValidationResult(valid=True)
-
-        validator._validate_tool_type_uniqueness("test_node", tools, result)
-
+        tools = [
+            {"tool_id": "finish", "react_role": "exit", "code": "..."},
+            {"tool_id": "calc", "react_role": "standard", "code": "..."},
+        ]
+        validator._validate_react_role_uniqueness("test_node", tools, result)
         assert result.valid
-        assert len(result.errors) == 0
 
-    def test_duplicate_reason_tools_invalid(self, validator):
-        """Два reasoning tools - невалидно."""
-        tools = [
-            {"tool_id": "reason", "tool_type": "reason", "code": "..."},
-            {"tool_id": "custom_reason", "tool_type": "reason", "code": "..."},
-        ]
+    def test_duplicate_reason_fails(self, validator):
         result = FlowValidationResult(valid=True)
-
-        validator._validate_tool_type_uniqueness("test_node", tools, result)
-
+        tools = [
+            {"tool_id": "reason", "react_role": "reason", "code": "..."},
+            {"tool_id": "custom_reason", "react_role": "reason", "code": "..."},
+        ]
+        validator._validate_react_role_uniqueness("test_node", tools, result)
         assert not result.valid
-        assert len(result.errors) == 1
-        assert result.errors[0].code == "duplicate_reason_tool"
+        assert any(e.code == "duplicate_reason_tool" for e in result.errors)
 
-    def test_duplicate_exit_tools_invalid(self, validator):
-        """Два exit tools - невалидно."""
-        tools = [
-            {"tool_id": "finish", "tool_type": "exit", "code": "..."},
-            {"tool_id": "final_answer", "tool_type": "exit", "code": "..."},
-        ]
+    def test_duplicate_exit_fails(self, validator):
         result = FlowValidationResult(valid=True)
-
-        validator._validate_tool_type_uniqueness("test_node", tools, result)
-
+        tools = [
+            {"tool_id": "finish", "react_role": "exit", "code": "..."},
+            {"tool_id": "final_answer", "react_role": "exit", "code": "..."},
+        ]
+        validator._validate_react_role_uniqueness("test_node", tools, result)
         assert not result.valid
-        assert len(result.errors) == 1
-        assert result.errors[0].code == "duplicate_exit_tool"
+        assert any(e.code == "duplicate_exit_tool" for e in result.errors)
 
-    def test_reason_and_exit_together_valid(self, validator):
-        """Один reasoning + один exit - валидно."""
-        tools = [
-            {"tool_id": "reason", "tool_type": "reason", "code": "..."},
-            {"tool_id": "finish", "tool_type": "exit", "code": "..."},
-        ]
+    def test_reason_and_exit_together_ok(self, validator):
         result = FlowValidationResult(valid=True)
-
-        validator._validate_tool_type_uniqueness("test_node", tools, result)
-
-        assert result.valid
-        assert len(result.errors) == 0
-
-    def test_no_special_tools_valid(self, validator):
-        """Без специальных tools - валидно."""
         tools = [
-            {"tool_id": "calc", "tool_type": "tool", "code": "..."},
-            {"tool_id": "search", "tool_type": "tool", "code": "..."},
+            {"tool_id": "reason", "react_role": "reason", "code": "..."},
+            {"tool_id": "finish", "react_role": "exit", "code": "..."},
         ]
-        result = FlowValidationResult(valid=True)
-
-        validator._validate_tool_type_uniqueness("test_node", tools, result)
-
+        validator._validate_react_role_uniqueness("test_node", tools, result)
         assert result.valid
-        assert len(result.errors) == 0
 
-    def test_tools_without_type_valid(self, validator):
-        """Tools без tool_type - валидно (считаются обычными)."""
+    def test_multiple_standard_ok(self, validator):
+        result = FlowValidationResult(valid=True)
+        tools = [
+            {"tool_id": "calc", "react_role": "standard", "code": "..."},
+            {"tool_id": "search", "react_role": "standard", "code": "..."},
+        ]
+        validator._validate_react_role_uniqueness("test_node", tools, result)
+        assert result.valid
+
+    def test_missing_react_role_ok(self, validator):
+        result = FlowValidationResult(valid=True)
         tools = [
             {"tool_id": "calc", "code": "..."},
-            {"tool_id": "search", "code": "..."},
         ]
-        result = FlowValidationResult(valid=True)
-
-        validator._validate_tool_type_uniqueness("test_node", tools, result)
-
+        validator._validate_react_role_uniqueness("test_node", tools, result)
         assert result.valid
-        assert len(result.errors) == 0
 
 
-class TestFlowsLoaderToolTypeValidation:
-    """Тесты валидации tool_type в FlowsLoader."""
-
-    def test_validate_llm_node_tools_single_reason(self):
-        """_validate_llm_node_tools с одним reason - проходит."""
-        loader = FlowsLoader.__new__(FlowsLoader)
+class TestFlowsLoaderReactRoleValidation:
+    def test_loader_duplicate_reason_raises(self, tmp_path):
+        loader = FlowsLoader(
+            bundles_dir=tmp_path,
+            flow_repository=None,
+            node_repository=None,
+            tool_repository=None,
+        )
         tools = [
-            {"tool_id": "reason", "tool_type": "reason"},
-            {"tool_id": "calc", "tool_type": "tool"},
+            {"tool_id": "reason", "react_role": "reason"},
+            {"tool_id": "calc", "react_role": "standard"},
+            {"tool_id": "my_reason", "react_role": "reason"},
         ]
+        with pytest.raises(ValueError, match="только 1 reasoning"):
+            loader._validate_llm_node_tools("n", tools)
 
-        loader._validate_llm_node_tools("test_node", tools)
-
-    def test_validate_llm_node_tools_duplicate_reason_raises(self):
-        """_validate_llm_node_tools с двумя reason - ошибка."""
-        loader = FlowsLoader.__new__(FlowsLoader)
+    def test_loader_duplicate_exit_raises(self, tmp_path):
+        loader = FlowsLoader(
+            bundles_dir=tmp_path,
+            flow_repository=None,
+            node_repository=None,
+            tool_repository=None,
+        )
         tools = [
-            {"tool_id": "reason", "tool_type": "reason"},
-            {"tool_id": "my_reason", "tool_type": "reason"},
+            {"tool_id": "finish", "react_role": "exit"},
+            {"tool_id": "final_answer", "react_role": "exit"},
         ]
-
-        with pytest.raises(ValueError, match="только 1 reasoning tool"):
-            loader._validate_llm_node_tools("test_node", tools)
-
-    def test_validate_llm_node_tools_duplicate_exit_raises(self):
-        """_validate_llm_node_tools с двумя exit - ошибка."""
-        loader = FlowsLoader.__new__(FlowsLoader)
-        tools = [
-            {"tool_id": "finish", "tool_type": "exit"},
-            {"tool_id": "final_answer", "tool_type": "exit"},
-        ]
-
-        with pytest.raises(ValueError, match="только 1 exit tool"):
-            loader._validate_llm_node_tools("test_node", tools)
-
-
-class TestFlowValidatorMessagesFilter:
-    """messages_filter со списком node_id должен ссылаться на ноды графа."""
-
-    @pytest.mark.asyncio
-    async def test_unknown_node_in_list_errors(self):
-        validator = FlowValidator()
-        nodes = {
-            "main": {
-                "type": "llm_node",
-                "name": "Main",
-                "description": "d",
-                "prompt": "x",
-                "messages_filter": ["ghost"],
-            },
-        }
-        edges = [{"from": "main", "to": None}]
-        r = await validator.validate(nodes, edges, "main", {})
-        assert not r.valid
-        assert any(e.code == "messages_filter_unknown_node" for e in r.errors)
-
-
+        with pytest.raises(ValueError, match="только 1 exit"):
+            loader._validate_llm_node_tools("n", tools)

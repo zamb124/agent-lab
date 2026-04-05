@@ -213,7 +213,7 @@ class TestSchedulingTools:
     @pytest.mark.asyncio
     async def test_schedule_one_time_task_tool(self, app, container, unique_id, make_state):
         """Tool schedule_one_time_task создает задачу."""
-        tool = container.tool_registry.get("schedule_one_time_task")
+        tool = await container.tool_registry.create_tool({"tool_id": "schedule_one_time_task"})
         state = make_state(unique_id)
         
         run_at = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=2)).isoformat()
@@ -235,7 +235,7 @@ class TestSchedulingTools:
     @pytest.mark.asyncio
     async def test_schedule_cron_task_tool(self, app, container, unique_id, make_state):
         """Tool schedule_cron_task создает периодическую задачу."""
-        tool = container.tool_registry.get("schedule_cron_task")
+        tool = await container.tool_registry.create_tool({"tool_id": "schedule_cron_task"})
         state = make_state(unique_id)
         
         result = await tool.run(
@@ -255,7 +255,7 @@ class TestSchedulingTools:
     @pytest.mark.asyncio
     async def test_schedule_interval_task_tool(self, app, container, unique_id, make_state):
         """Tool schedule_interval_task создает интервальную задачу."""
-        tool = container.tool_registry.get("schedule_interval_task")
+        tool = await container.tool_registry.create_tool({"tool_id": "schedule_interval_task"})
         state = make_state(unique_id)
         
         result = await tool.run(
@@ -274,8 +274,8 @@ class TestSchedulingTools:
     @pytest.mark.asyncio
     async def test_list_scheduled_tasks_tool(self, app, container, unique_id, make_state):
         """Tool list_scheduled_tasks показывает задачи."""
-        schedule_tool = container.tool_registry.get("schedule_one_time_task")
-        list_tool = container.tool_registry.get("list_scheduled_tasks")
+        schedule_tool = await container.tool_registry.create_tool({"tool_id": "schedule_one_time_task"})
+        list_tool = await container.tool_registry.create_tool({"tool_id": "list_scheduled_tasks"})
         
         state = make_state(unique_id, "list")
         
@@ -297,8 +297,8 @@ class TestSchedulingTools:
     @pytest.mark.asyncio
     async def test_cancel_scheduled_task_tool(self, app, container, unique_id, make_state):
         """Tool cancel_scheduled_task отменяет задачу."""
-        schedule_tool = container.tool_registry.get("schedule_one_time_task")
-        cancel_tool = container.tool_registry.get("cancel_scheduled_task")
+        schedule_tool = await container.tool_registry.create_tool({"tool_id": "schedule_one_time_task"})
+        cancel_tool = await container.tool_registry.create_tool({"tool_id": "cancel_scheduled_task"})
         
         state = make_state(unique_id, "cancel")
         
@@ -322,7 +322,7 @@ class TestSchedulingTools:
     @pytest.mark.asyncio
     async def test_schedule_tool_call_task(self, app, container, unique_id, make_state):
         """Можно запланировать вызов tool."""
-        tool = container.tool_registry.get("schedule_one_time_task")
+        tool = await container.tool_registry.create_tool({"tool_id": "schedule_one_time_task"})
         state = make_state(unique_id)
         
         run_at = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=5)).isoformat()

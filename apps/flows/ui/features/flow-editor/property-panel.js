@@ -23,7 +23,6 @@ export class PropertyPanel extends PlatformElement {
         flowId: { type: String, attribute: 'flow-id' },
         skillId: { type: String, attribute: 'skill-id' },
         flowConfig: { type: Object },
-        flowSource: { type: String },
         flowVariables: { type: Object },
         previewExecutionState: { type: Object },
         expanded: { type: Boolean },
@@ -36,7 +35,6 @@ export class PropertyPanel extends PlatformElement {
         this.flowId = '';
         this.skillId = 'base';
         this.flowConfig = null;
-        this.flowSource = '';
         this.flowVariables = {};
         this.previewExecutionState = null;
         this.expanded = false;
@@ -64,7 +62,7 @@ export class PropertyPanel extends PlatformElement {
             this.config = null;
             return;
         }
-        
+
         // Если это новая нода (нет code/prompt), добавляем дефолтные значения
         if (!config.code && !config.prompt && !config.name) {
             const defaultCode = this.i18n.t('node_defaults.python_stub');
@@ -72,7 +70,6 @@ export class PropertyPanel extends PlatformElement {
             const defaults = {
                 'llm_node': { name: this.i18n.t('node_defaults.name_llm_node'), prompt: '', code: null },
                 'code': { name: this.i18n.t('node_defaults.name_function'), code: defaultCode },
-                'function': { name: this.i18n.t('node_defaults.name_function'), code: defaultCode },
                 'flow': { name: this.i18n.t('node_defaults.name_flow'), flow_id: '' },
                 'external_api': { name: this.i18n.t('node_defaults.name_api'), url: '', method: 'GET' },
                 'remote_flow': { name: this.i18n.t('node_defaults.name_remote_flow'), url: '' },
@@ -97,7 +94,8 @@ export class PropertyPanel extends PlatformElement {
             config: e.detail.config
         });
         
-        this.config = e.detail.config;
+        const next = e.detail.config;
+        this.config = next;
         this.emit('node-updated', {
             nodeId: this.node.id || this.node.nodeId,
             nodeConfig: this.config,
@@ -115,10 +113,6 @@ export class PropertyPanel extends PlatformElement {
 
     _onNodeIdChanged(e) {
         this.emit('node-id-changed', e.detail);
-    }
-
-    _onFlowReloadFromBundle(e) {
-        this.emit('flow-reload-from-bundle', e.detail);
     }
 
     _graphNodesFromFlow() {
@@ -156,7 +150,8 @@ export class PropertyPanel extends PlatformElement {
         }
 
         const nodeType = this.node.type;
-        
+        const allowNodeIdRenameOnce = this.node.allowNodeIdRenameOnce === true;
+
         switch (nodeType) {
             case 'llm_node':
                 return html`<llm-node-editor
@@ -164,15 +159,14 @@ export class PropertyPanel extends PlatformElement {
                     .nodeId=${this.node.id || this.node.nodeId}
                     .flowId=${this.flowId}
                     .skillId=${this.skillId}
-                    .flowSource=${this.flowSource}
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     .graphNodes=${this._graphNodesFromFlow()}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
-                    @flow-reload-from-bundle=${this._onFlowReloadFromBundle}
                 ></llm-node-editor>`;
             case 'code':
                 return html`<code-node-editor
@@ -183,36 +177,11 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
                 ></code-node-editor>`;
-            case 'function':
-                return html`<function-node-editor
-                    .nodeConfig=${this.config}
-                    .nodeId=${this.node.id || this.node.nodeId}
-                    .flowId=${this.flowId}
-                    .skillId=${this.skillId}
-                    .flowVariables=${this.flowVariables}
-                    .previewExecutionState=${this.previewExecutionState}
-                    ?expanded=${this.expanded}
-                    @config-change=${this._onConfigChanged}
-                    @node-delete=${this._onNodeDeleted}
-                    @node-id-changed=${this._onNodeIdChanged}
-                ></function-node-editor>`;
-            case 'tool':
-                return html`<tool-node-editor
-                    .nodeConfig=${this.config}
-                    .nodeId=${this.node.id || this.node.nodeId}
-                    .flowId=${this.flowId}
-                    .skillId=${this.skillId}
-                    .flowVariables=${this.flowVariables}
-                    .previewExecutionState=${this.previewExecutionState}
-                    ?expanded=${this.expanded}
-                    @config-change=${this._onConfigChanged}
-                    @node-delete=${this._onNodeDeleted}
-                    @node-id-changed=${this._onNodeIdChanged}
-                ></tool-node-editor>`;
             case 'external_api':
                 return html`<external-api-editor
                     .nodeConfig=${this.config}
@@ -222,6 +191,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -235,6 +205,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -248,6 +219,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -261,6 +233,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -274,6 +247,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}

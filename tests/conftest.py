@@ -484,6 +484,16 @@ async def setup_database_before_tests():
     print("Все порты очищены после тестов\n")
 
 
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def platform_notification_manager_redis(setup_database_before_tests):
+    """Redis Pub/Sub для notify_user; без этого CRM и др. падают до старта flows lifespan."""
+    from core.websocket.manager import notification_manager
+
+    redis_url = os.environ.get("DATABASE__REDIS_URL", "redis://localhost:63792/0")
+    await notification_manager.start_redis_listener(redis_url)
+    yield
+
+
 # Синхронизация session-scoped fixtures для pytest-xdist
 # Первый worker инициализирует БД, остальные ждут
 _APP_INIT_LOCK = "/tmp/platform_test_app_init.lock"
@@ -1025,7 +1035,7 @@ def inline_tools():
             "description": "Завершает агента и возвращает финальный ответ",
             "args_schema": {"answer": {"type": "string", "description": "Финальный ответ"}},
             "code": "async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
-            "tool_type": "exit"
+            "react_role": "exit"
         },
         "ask_user": {
             "tool_id": "ask_user",
@@ -1041,7 +1051,7 @@ def inline_tools():
             "description": "Рассуждение агента",
             "args_schema": {"thought": {"type": "string", "description": "Ход мысли"}},
             "code": "async def execute(args: dict, state: dict = None):\n    return args.get('thought', '')",
-            "tool_type": "reason"
+            "react_role": "reason"
         }
     }
 
@@ -1415,7 +1425,7 @@ async def test_agent_for_tool(container, unique_id):
         entry="main",
         nodes={
             "main": {
-                "type": "function",
+                "type": "code",
                 "code": "async def run(state):\n    return state",
             }
         },

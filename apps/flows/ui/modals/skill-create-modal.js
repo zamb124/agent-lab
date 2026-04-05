@@ -225,13 +225,18 @@ export class SkillCreateModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onCreate(),
+            disabled: false,
+            title: this.i18n.t('skill_create.create'),
+        });
+    }
+
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${this.close}>
                 ${this.i18n.t('editor.cancel')}
-            </platform-button>
-            <platform-button variant="primary" @click=${this._onCreate}>
-                ${this.i18n.t('skill_create.create')}
             </platform-button>
         `;
     }

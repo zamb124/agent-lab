@@ -101,16 +101,16 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {"name": "lru_cache", "type": "function", "doc": "Кеширование: @lru_cache(maxsize=128)"},
     ],
     "pydantic": [
-        {"name": "BaseModel", "type": "class", "doc": "Базовый класс модели с валидацией: class User(BaseModel): name: str"},
-        {"name": "Field", "type": "function", "doc": "Поле с метаданными: name: str = Field(..., min_length=1)"},
-        {"name": "validator", "type": "decorator", "doc": "Валидатор поля: @validator('email')"},
-        {"name": "root_validator", "type": "decorator", "doc": "Валидатор всей модели: @root_validator"},
+        {"name": "BaseModel", "type": "class", "doc": "Базовый класс модели: class User(BaseModel): name: str"},
+        {"name": "Field", "type": "function", "doc": "Поле: name: str = Field(..., min_length=1)"},
+        {"name": "field_validator", "type": "decorator", "doc": "Валидатор поля (v2): @field_validator('email')"},
+        {"name": "model_validator", "type": "decorator", "doc": "Валидатор модели (v2): @model_validator(mode='after')"},
     ],
     "a2a.types": [
         {"name": "Message", "type": "class", "doc": "A2A сообщение: Message(messageId, role, parts, metadata)"},
         {"name": "Part", "type": "class", "doc": "Часть сообщения: Part(root=TextPart(text='...'))"},
         {"name": "TextPart", "type": "class", "doc": "Текстовая часть: TextPart(text='Привет')"},
-        {"name": "FilePart", "type": "class", "doc": "Файловая часть: FilePart(file=FileWithBytes(...))"},
+        {"name": "FilePart", "type": "class", "doc": "Файл: FilePart(file=FileWithBytes(name, bytes=base64_str, mime_type))"},
         {"name": "DataPart", "type": "class", "doc": "Структурированные данные: DataPart(data={'key': 'value'})"},
         {"name": "Role", "type": "enum", "doc": "Роль сообщения: Role.user или Role.agent"},
         {"name": "Artifact", "type": "class", "doc": "Артефакт задачи: Artifact(artifactId, parts)"},
@@ -127,15 +127,10 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {"name": "request", "type": "function", "doc": "Универсальный запрос: response = await httpx.request('POST', url, json={...})"},
     ],
     "llm": [
-        {"name": "chat", "type": "function", "doc": """Единый метод вызова LLM. Примеры:
-- Простой: msg = await llm.chat('Привет!')
-- Параметры: msg = await llm.chat('...', temperature=0.7, max_tokens=500, top_p=0.9)
-- Structured: user = await llm.chat('Extract: John 25', response_model=UserModel)
-- Tools: msg = await llm.chat(messages, tools=[...])
-Возвращает Message или экземпляр response_model."""},
+        {"name": "chat", "type": "function", "doc": """await llm.chat(..., tools=[...]). tools: OpenAI dict или объекты @tool / BaseTool (to_openai_schema). Сырую def без @tool не передавать."""},
     ],
     "context": [
-        {"name": "channel", "type": "property", "doc": "Канал коммуникации: 'a2a', 'telegram', 'api'"},
+        {"name": "channel", "type": "property", "doc": "Канал: 'a2a', 'api', 'telegram', 'max', 'voip'"},
         {"name": "user_id", "type": "property", "doc": "ID пользователя"},
         {"name": "session_id", "type": "property", "doc": "ID сессии"},
         {"name": "flow_id", "type": "property", "doc": "ID агента"},
@@ -152,10 +147,7 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {"name": "debug", "type": "function", "doc": "Отладка: logger.debug('Debug info')"},
     ],
     "state": [
-        {"name": "get", "type": "function", "doc": "Получить значение: state.get('key', default)"},
-        {"name": "keys", "type": "function", "doc": "Список ключей: state.keys()"},
-        {"name": "values", "type": "function", "doc": "Список значений: state.values()"},
-        {"name": "items", "type": "function", "doc": "Пары ключ-значение: state.items()"},
-        {"name": "update", "type": "function", "doc": "Обновить: state.update({'key': 'value'})"},
+        {"name": "get", "type": "method", "doc": "state.get('key', default) — как у dict"},
+        {"name": "model_dump", "type": "method", "doc": "Сериализация в dict: state.model_dump()"},
     ],
 }

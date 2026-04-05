@@ -40,7 +40,7 @@ INLINE_FINISH = {
     "description": "Завершает агента",
     "args_schema": {"answer": {"type": "string"}},
     "code": "async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
-    "tool_type": "exit"
+    "react_role": "exit"
 }
 
 INLINE_ASK_USER = {

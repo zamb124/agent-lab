@@ -281,7 +281,7 @@ class TestRunner:
         if input_config.type == InputType.TEXT:
             return input_config.value, None
 
-        if input_config.type == InputType.FUNCTION:
+        if input_config.type == InputType.INLINE_CODE:
             fn = compile_function(input_config.value, "generate")
             sig = inspect.signature(fn)
             if len(sig.parameters) == 0:
@@ -306,7 +306,7 @@ class TestRunner:
             result = self._execute_string_checker(check_config.value, state_dict, response)
             return {"result": 10.0 if result else 0.0}
 
-        if check_config.type == CheckType.FUNCTION:
+        if check_config.type == CheckType.INLINE_CODE:
             fn = compile_function(check_config.value, "check")
             result = fn(state_dict, response)
             return self._normalize_check_result(result)

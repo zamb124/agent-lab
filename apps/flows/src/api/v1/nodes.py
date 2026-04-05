@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from apps.flows.src.container import FlowContainer, get_container
 from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, ToolReference, NodeLLMOverride
+from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.tool_reference import CallParameter
 
 logger = get_logger(__name__)
@@ -34,7 +35,7 @@ class NodeCreateRequest(BaseModel):
     """Запрос на создание ноды"""
 
     node_id: str
-    type: str  # llm_node, function, tool, flow, remote_flow, external_api
+    type: str  # llm_node, code, flow, remote_flow, external_api, mcp, channel
     name: str
     description: Optional[str] = None
     prompt: Optional[str] = None
@@ -86,11 +87,19 @@ def _convert_inline_tool(tool_data: Dict[str, Any]) -> ToolReference:
                 description=v.get("description", "")
             )
     
+    react_role_raw = tool_data.get("react_role")
+    react_role = (
+        ReactToolRole(react_role_raw)
+        if react_role_raw
+        else ReactToolRole.STANDARD
+    )
+
     return ToolReference(
         tool_id=tool_data["tool_id"],
         description=tool_data.get("description"),
         code=tool_data.get("code"),
         args_schema=args_schema,
+        react_role=react_role,
     )
 
 

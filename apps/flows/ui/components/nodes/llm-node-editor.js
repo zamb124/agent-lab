@@ -7,10 +7,14 @@ import { BaseNodeEditor } from './base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
 import '../editors/llm-config-editor.js';
 import '../editors/tag-input.js';
-import '../../modals/inline-tool-modal.js';
 import '../../modals/tool-picker-modal.js';
-import { confirm } from '../../modals/confirm-modal.js';
+import { openInlineToolModal } from '../../utils/open-inline-tool-modal.js';
+import {
+    getLlmToolChipAccentHex,
+    getLlmToolChipIconName,
+} from '../../utils/llm-tool-chips.js';
 import '../editors/json-field-editor.js';
+import '@platform/lib/components/platform-switch.js';
 
 export class LlmNodeEditor extends BaseNodeEditor {
     static styles = [
@@ -47,35 +51,76 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 background: var(--accent-subtle);
             }
             
-            .tools-list {
+            .tools-inline-list {
                 display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px;
             }
-            
-            .tool-item {
+
+            .tool-chip {
+                --tool-accent: #64748b;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                max-width: 100%;
+                min-width: 0;
+                padding: 4px 8px 4px 6px;
+                border-radius: 999px;
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                border: 1px solid color-mix(in srgb, var(--tool-accent) 42%, transparent);
+                background: color-mix(in srgb, var(--tool-accent) 12%, transparent);
+                color: var(--text-primary);
+                box-sizing: border-box;
+            }
+
+            .tool-chip-icon-wrap {
+                flex-shrink: 0;
                 display: flex;
                 align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                background: var(--glass-tint-subtle);
-                border-radius: var(--radius-md);
-                font-size: var(--text-sm);
+                justify-content: center;
+                line-height: 0;
+                color: var(--tool-accent);
             }
-            
-            .tool-item-name {
-                flex: 1;
-                color: var(--text-primary);
+
+            .tool-chip-label {
+                min-width: 0;
+                max-width: min(200px, 100%);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
-            
-            .tool-item-remove {
+
+            .tool-chip-label.is-editable {
+                cursor: pointer;
+            }
+
+            .tool-chip-label.is-editable:hover {
+                color: var(--accent);
+            }
+
+            .tool-chip-remove {
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                margin: 0;
+                border: none;
+                background: transparent;
                 color: var(--text-tertiary);
                 cursor: pointer;
-                padding: 2px;
+                border-radius: var(--radius-sm);
+                line-height: 0;
             }
-            
-            .tool-item-remove:hover {
+
+            .tool-chip-remove:hover {
                 color: var(--error);
+            }
+
+            :host([expanded]) .tool-chip-label {
+                max-width: min(140px, 100%);
             }
             
             .empty-tools {
@@ -141,87 +186,80 @@ export class LlmNodeEditor extends BaseNodeEditor {
             .loop-config-row:last-child {
                 margin-bottom: 0;
             }
-            
-            .checkbox-row {
+
+            .loop-mode-iter-row {
                 display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                margin-top: var(--space-2);
-            }
-            
-            .checkbox-row input[type="checkbox"] {
-                width: 16px;
-                height: 16px;
-                cursor: pointer;
-            }
-            
-            .checkbox-row label {
-                cursor: pointer;
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-            }
-            
-            .tool-item.is-inline {
-                background: var(--accent-subtle);
-                border: 1px solid var(--accent-light);
-            }
-            
-            .tool-item.is-subflow-tool .tool-item-icon {
-                color: #9333ea;
-            }
-            
-            .tool-item.is-mcp {
-                background: rgba(16, 185, 129, 0.1);
-                border: 1px solid rgba(16, 185, 129, 0.3);
-            }
-            
-            .tool-item.is-mcp .tool-item-icon {
-                color: #10b981;
-            }
-            
-            .tool-item-name {
-                cursor: pointer;
-            }
-            
-            .tool-item-name:hover {
-                color: var(--accent);
-            }
-            
-            .mode-toggle-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-2);
+                flex-direction: row;
+                align-items: flex-start;
+                gap: var(--space-3);
                 margin-bottom: var(--space-2);
             }
 
-            .mode-toggle-header .section-title {
-                margin: 0;
+            .loop-mode-iter-row .loop-mode-field {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
             }
 
-            .reload-from-bundle-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                padding: var(--space-2);
-                border: none;
-                background: transparent;
-                color: var(--text-secondary);
-                border-radius: var(--radius-sm);
-                cursor: pointer;
-                flex-shrink: 0;
+            .loop-mode-iter-row .max-iter-field {
+                flex: 0 0 7.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
             }
 
-            .reload-from-bundle-btn:hover:not(:disabled) {
-                color: var(--accent);
-                background: var(--glass-tint-subtle);
+            .loop-mode-iter-row .max-iter-field .form-input {
+                width: 100%;
+                box-sizing: border-box;
             }
 
-            .reload-from-bundle-btn:disabled {
-                opacity: 0.35;
-                cursor: not-allowed;
+            .loop-explicit-row {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: var(--space-3);
+                align-items: start;
+                margin-top: var(--space-2);
             }
 
+            .loop-explicit-row.has-reminder {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            @media (max-width: 520px) {
+                .loop-explicit-row.has-reminder {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            .loop-explicit-left {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                min-width: 0;
+            }
+
+            .loop-explicit-strict-block {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+            }
+
+            .loop-explicit-reminder {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+
+            .loop-config-hints {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1) var(--space-3);
+                margin-top: var(--space-1);
+            }
+            
             .mode-toggle-row {
                 display: flex;
                 gap: var(--space-3);
@@ -359,8 +397,6 @@ export class LlmNodeEditor extends BaseNodeEditor {
         graphNodes: { type: Array },
         messagesFilterMode: { type: String },
         messagesFilterCustomIds: { type: Array },
-        flowSource: { type: String },
-        reloadFromBundleLoading: { type: Boolean },
     };
 
     constructor() {
@@ -379,41 +415,8 @@ export class LlmNodeEditor extends BaseNodeEditor {
         this.graphNodes = [];
         this.messagesFilterMode = 'all';
         this.messagesFilterCustomIds = [];
-        this.flowSource = '';
-        this.reloadFromBundleLoading = false;
     }
 
-    _canReloadFromBundle() {
-        return this.flowSource === 'file' && !!this.flowId;
-    }
-
-    async _onReloadFromBundle() {
-        if (!this._canReloadFromBundle() || this.reloadFromBundleLoading) {
-            return;
-        }
-        const agreed = await confirm(
-            this.i18n.t('editor.reinit_confirm_message'),
-            {
-                title: this.i18n.t('editor.reinit_confirm_title'),
-                variant: 'warning',
-                confirmText: this.i18n.t('editor.reinit_confirm_ok'),
-                cancelText: this.i18n.t('editor.cancel'),
-            },
-        );
-        if (!agreed) {
-            return;
-        }
-        this.reloadFromBundleLoading = true;
-        try {
-            await this.a2a.reloadFlowFromBundle(this.flowId);
-            this.emit('flow-reload-from-bundle', { flowId: this.flowId });
-        } catch (err) {
-            this.error(err.message || String(err));
-        } finally {
-            this.reloadFromBundleLoading = false;
-        }
-    }
-    
     _getDefaultSchema() {
         return {
             type: 'object',
@@ -432,6 +435,12 @@ export class LlmNodeEditor extends BaseNodeEditor {
             this._parseTools();
             this._parseReactConfig();
             this._parseMessagesFilter();
+            queueMicrotask(() => {
+                const editor = this.shadowRoot?.querySelector('llm-config-editor');
+                if (editor) {
+                    editor.setValue(this.nodeConfig.llm && typeof this.nodeConfig.llm === 'object' ? this.nodeConfig.llm : {});
+                }
+            });
         }
     }
     
@@ -578,8 +587,8 @@ export class LlmNodeEditor extends BaseNodeEditor {
         this._updateReactConfig();
     }
     
-    _onStrictChange(e) {
-        this.strict = e.target.checked;
+    _onStrictSwitchChange(e) {
+        this.strict = e.detail.value;
         this._updateReactConfig();
     }
     
@@ -661,12 +670,12 @@ export class LlmNodeEditor extends BaseNodeEditor {
                         if (toolData && toolData.code) {
                             newTools.push({
                                 tool_id: toolData.tool_id,
-                                type: 'tool',
+                                type: 'code',
                                 name: toolData.title || toolData.tool_id,
                                 description: toolData.description || '',
                                 code: toolData.code,
                                 args_schema: toolData.args_schema || {},
-                                tool_type: toolData.tool_type
+                                react_role: toolData.react_role || 'standard',
                             });
                             this.inlineTools.set(toolData.tool_id, newTools[newTools.length - 1]);
                         } else {
@@ -697,28 +706,21 @@ export class LlmNodeEditor extends BaseNodeEditor {
     
     _onCreateInline(toolType) {
         this.showAddMenu = false;
-        
-        const modal = document.createElement('inline-tool-modal');
-        modal.mode = 'create';
-        modal.toolType = toolType;
-        modal.flowVariables = this.flowVariables;
-        modal.flowId = this.flowId;
-        modal.skillId = this.skillId;
-        modal.previewExecutionState = this.previewExecutionState;
-        
-        modal.addEventListener('tool-saved', (e) => {
-            const { toolId, config: toolConfig } = e.detail;
-            const tools = [...(this.nodeConfig.tools || []), toolConfig];
-            this.inlineTools.set(toolId, toolConfig);
-            this._updateConfig('tools', tools);
+
+        openInlineToolModal({
+            mode: 'create',
+            toolType,
+            flowVariables: this.flowVariables,
+            flowId: this.flowId,
+            skillId: this.skillId,
+            previewExecutionState: this.previewExecutionState,
+            onToolSaved: (detail) => {
+                const { toolId, config: toolConfig } = detail;
+                const tools = [...(this.nodeConfig.tools || []), toolConfig];
+                this.inlineTools.set(toolId, toolConfig);
+                this._updateConfig('tools', tools);
+            },
         });
-        
-        document.body.appendChild(modal);
-        modal.showModal();
-        
-        modal.addEventListener('close', () => {
-            modal.remove();
-        }, { once: true });
     }
     
     _isMCPTool(tool) {
@@ -735,74 +737,59 @@ export class LlmNodeEditor extends BaseNodeEditor {
     }
     
     _onEditTool(toolId) {
-        // Проверяем MCP инструмент
         if (toolId.startsWith('mcp:')) {
             const { server_id, tool_name } = this._parseMCPToolId(toolId);
-            
-            const modal = document.createElement('inline-tool-modal');
-            modal.mode = 'edit';
-            modal.toolType = 'mcp';
-            modal.toolConfig = {
-                tool_id: toolId,
-                type: 'mcp',
-                server_id: server_id,
-                tool_name: tool_name,
-            };
-            modal.flowVariables = this.flowVariables;
-            modal.flowId = this.flowId;
-            modal.skillId = this.skillId;
-            modal.previewExecutionState = this.previewExecutionState;
-            
-            modal.addEventListener('tool-saved', (e) => {
-                const { toolId: savedToolId, config: savedConfig } = e.detail;
-                const tools = (this.nodeConfig.tools || []).map(t => {
-                    const tid = typeof t === 'string' ? t : t.tool_id;
-                    return tid === toolId ? savedConfig : t;
-                });
-                this._updateConfig('tools', tools);
+
+            openInlineToolModal({
+                mode: 'edit',
+                toolType: 'mcp',
+                toolConfig: {
+                    tool_id: toolId,
+                    type: 'mcp',
+                    server_id: server_id,
+                    tool_name: tool_name,
+                },
+                flowVariables: this.flowVariables,
+                flowId: this.flowId,
+                skillId: this.skillId,
+                previewExecutionState: this.previewExecutionState,
+                onToolSaved: (detail) => {
+                    const { config: savedConfig } = detail;
+                    const tools = (this.nodeConfig.tools || []).map((t) => {
+                        const tid = typeof t === 'string' ? t : t.tool_id;
+                        return tid === toolId ? savedConfig : t;
+                    });
+                    this._updateConfig('tools', tools);
+                },
             });
-            
-            document.body.appendChild(modal);
-            modal.showModal();
-            
-            modal.addEventListener('close', () => {
-                modal.remove();
-            }, { once: true });
             return;
         }
-        
+
         const toolConfig = this.inlineTools.get(toolId);
         if (!toolConfig) {
             return;
         }
-        
-        const toolType = toolConfig.type || 'tool';
-        
-        const modal = document.createElement('inline-tool-modal');
-        modal.mode = 'edit';
-        modal.toolType = toolType;
-        modal.toolConfig = toolConfig;
-        modal.flowVariables = this.flowVariables;
-        modal.flowId = this.flowId;
-        modal.skillId = this.skillId;
-        modal.previewExecutionState = this.previewExecutionState;
-        
-        modal.addEventListener('tool-saved', (e) => {
-            const { toolId: savedToolId, config: savedConfig } = e.detail;
-            const tools = (this.nodeConfig.tools || []).map(t => {
-                const tid = typeof t === 'string' ? t : t.tool_id;
-                return tid === savedToolId ? savedConfig : t;
-            });
-            this.inlineTools.set(savedToolId, savedConfig);
-            this._updateConfig('tools', tools);
+
+        const toolType = toolConfig.type || 'code';
+
+        openInlineToolModal({
+            mode: 'edit',
+            toolType,
+            toolConfig,
+            flowVariables: this.flowVariables,
+            flowId: this.flowId,
+            skillId: this.skillId,
+            previewExecutionState: this.previewExecutionState,
+            onToolSaved: (detail) => {
+                const { toolId: savedToolId, config: savedConfig } = detail;
+                const tools = (this.nodeConfig.tools || []).map((t) => {
+                    const tid = typeof t === 'string' ? t : t.tool_id;
+                    return tid === savedToolId ? savedConfig : t;
+                });
+                this.inlineTools.set(savedToolId, savedConfig);
+                this._updateConfig('tools', tools);
+            },
         });
-        
-        document.body.appendChild(modal);
-        modal.showModal();
-        
-        modal.addEventListener('close', () => {
-            modal.remove();
-        }, { once: true });
     }
     
     _onRemoveTool(toolId) {
@@ -838,30 +825,58 @@ export class LlmNodeEditor extends BaseNodeEditor {
         }
         return toolId;
     }
+
+    /**
+     * Для строковой ссылки на tool подставляет объект из inlineTools (если есть),
+     * чтобы иконка и тон совпадали с inline-конфигом.
+     */
+    _graphHintForToolId(toolId) {
+        if (typeof toolId !== 'string' || toolId.length === 0) {
+            return null;
+        }
+        const nodes = this.graphNodes || [];
+        const hit = nodes.find((n) => n.id === toolId);
+        if (!hit?.type) {
+            return null;
+        }
+        const graphTypes = new Set([
+            'llm_node',
+            'flow',
+            'code',
+            'external_api',
+            'remote_flow',
+            'channel',
+        ]);
+        const effectiveType = hit.type;
+        if (!graphTypes.has(effectiveType)) {
+            return null;
+        }
+        return { tool_id: toolId, type: effectiveType };
+    }
+
+    _effectiveToolForUi(tool) {
+        if (typeof tool === 'object' && tool !== null) {
+            return tool;
+        }
+        if (typeof tool !== 'string') {
+            return tool;
+        }
+        const fromMap = this.inlineTools.get(tool);
+        if (fromMap) {
+            return fromMap;
+        }
+        const fromGraph = this._graphHintForToolId(tool);
+        if (fromGraph) {
+            return fromGraph;
+        }
+        return tool;
+    }
     
     _isInlineTool(tool) {
         if (typeof tool === 'object' && tool.code) {
             return true;
         }
         return false;
-    }
-    
-    _getToolIcon(tool) {
-        const toolId = typeof tool === 'string' ? tool : tool.tool_id;
-        
-        if (toolId?.startsWith('mcp:')) {
-            return 'plug';
-        }
-        
-        if (typeof tool === 'object') {
-            if (tool.type === 'flow') {
-                return 'workflow';
-            }
-            if (tool.type === 'llm_node') {
-                return 'llm_node';
-            }
-        }
-        return 'tool';
     }
     
     _isSubflowTool(tool) {
@@ -1007,17 +1022,8 @@ export class LlmNodeEditor extends BaseNodeEditor {
                 </div>
                 
                 <div class="section">
-                    <div class="section-header mode-toggle-header">
+                    <div class="section-header">
                         <span class="section-title">${this.i18n.t('llm_node.section_output_mode')}</span>
-                        <button
-                            type="button"
-                            class="reload-from-bundle-btn"
-                            title=${this.i18n.t('llm_node.reload_from_bundle_title')}
-                            ?disabled=${!this._canReloadFromBundle() || this.reloadFromBundleLoading}
-                            @click=${this._onReloadFromBundle}
-                        >
-                            <platform-icon name="refresh" size="16"></platform-icon>
-                        </button>
                     </div>
                     <div class="loop-config">
                         <div class="mode-toggle-row">
@@ -1065,82 +1071,78 @@ export class LlmNodeEditor extends BaseNodeEditor {
                         <span class="section-title">${this.i18n.t('llm_node.section_react_loop')}</span>
                     </div>
                     <div class="loop-config">
-                        <div class="loop-config-row">
-                            <div class="form-label">
+                        <div class="loop-mode-iter-row">
+                            <div class="loop-mode-field">
                                 <span class="form-label-text">${this.i18n.t('llm_node.loop_mode_label')}</span>
-                            </div>
-                            <select 
-                                class="form-input form-select"
-                                .value=${this.loopMode}
-                                @change=${this._onLoopModeChange}
-                            >
-                                <option value="auto">${this.i18n.t('llm_node.loop_mode_auto')}</option>
-                                <option value="explicit">${this.i18n.t('llm_node.loop_mode_explicit')}</option>
-                            </select>
-                            <span class="form-label-hint">${this.i18n.t('llm_node.loop_mode_hint')}</span>
-                        </div>
-                        
-                        ${this.loopMode === 'explicit' ? html`
-                            <div class="loop-config-row">
-                                <div class="form-label">
-                                    <span class="form-label-text">${this.i18n.t('llm_node.exit_tool_label')}</span>
-                                </div>
-                                <select 
+                                <select
                                     class="form-input form-select"
-                                    .value=${this.exitTool}
-                                    @change=${this._onExitToolChange}
+                                    .value=${this.loopMode}
+                                    @change=${this._onLoopModeChange}
                                 >
-                                    ${(config.tools || []).map(tool => {
-                                        const toolId = typeof tool === 'string' ? tool : tool.tool_id;
-                                        const toolName = this._getToolDisplayName(tool);
-                                        return html`<option value="${toolId}">${toolName}</option>`;
-                                    })}
+                                    <option value="auto">${this.i18n.t('llm_node.loop_mode_auto')}</option>
+                                    <option value="explicit">${this.i18n.t('llm_node.loop_mode_explicit')}</option>
                                 </select>
-                                <span class="form-label-hint">${this.i18n.t('llm_node.exit_tool_hint')}</span>
                             </div>
-                            
-                            <div class="checkbox-row">
-                                <input 
-                                    type="checkbox" 
-                                    id="strict-mode"
-                                    .checked=${this.strict}
-                                    @change=${this._onStrictChange}
-                                />
-                                <label for="strict-mode">${this.i18n.t('llm_node.strict_mode_label')}</label>
-                            </div>
-                            <span class="form-label-hint">${this.i18n.t('llm_node.strict_mode_hint')}</span>
-                            
-                            ${this.strict ? html`
-                                <div class="loop-config-row">
-                                    <div class="form-label">
-                                        <span class="form-label-text">${this.i18n.t('llm_node.reminder_text_label')}</span>
-                                    </div>
-                                    <textarea 
-                                        class="form-input form-textarea"
-                                        rows="2"
-                                        .value=${this.reminderMessage}
-                                        @change=${this._onReminderMessageChange}
-                                        placeholder=${this.i18n.t('llm_node.reminder_placeholder')}
-                                    ></textarea>
-                                    <span class="form-label-hint">${this.i18n.t('llm_node.reminder_hint')}</span>
-                                </div>
-                            ` : ''}
-                        ` : ''}
-                        
-                        <div class="loop-config-row">
-                            <div class="form-label">
+                            <div class="max-iter-field">
                                 <span class="form-label-text">${this.i18n.t('llm_node.max_iterations_label')}</span>
+                                <input
+                                    type="number"
+                                    class="form-input"
+                                    min="1"
+                                    max="100"
+                                    .value=${this.maxIterations}
+                                    @change=${this._onMaxIterationsChange}
+                                />
                             </div>
-                            <input 
-                                type="number" 
-                                class="form-input"
-                                min="1"
-                                max="100"
-                                .value=${this.maxIterations}
-                                @change=${this._onMaxIterationsChange}
-                            />
+                        </div>
+                        <div class="loop-config-hints">
+                            <span class="form-label-hint">${this.i18n.t('llm_node.loop_mode_hint')}</span>
                             <span class="form-label-hint">${this.i18n.t('llm_node.max_iterations_hint')}</span>
                         </div>
+
+                        ${this.loopMode === 'explicit' ? html`
+                            <div class="loop-explicit-row ${this.strict ? 'has-reminder' : ''}">
+                                <div class="loop-explicit-left">
+                                    <div class="loop-explicit-strict-block">
+                                        <platform-switch
+                                            ?checked=${this.strict}
+                                            size="sm"
+                                            .label=${this.i18n.t('llm_node.strict_mode_label')}
+                                            @change=${this._onStrictSwitchChange}
+                                        ></platform-switch>
+                                        <span class="form-label-hint">${this.i18n.t('llm_node.strict_mode_hint')}</span>
+                                    </div>
+                                    <div>
+                                        <span class="form-label-text">${this.i18n.t('llm_node.exit_tool_label')}</span>
+                                        <select
+                                            class="form-input form-select"
+                                            .value=${this.exitTool}
+                                            @change=${this._onExitToolChange}
+                                        >
+                                            ${(config.tools || []).map(tool => {
+                                                const toolId = typeof tool === 'string' ? tool : tool.tool_id;
+                                                const toolName = this._getToolDisplayName(tool);
+                                                return html`<option value="${toolId}">${toolName}</option>`;
+                                            })}
+                                        </select>
+                                        <span class="form-label-hint">${this.i18n.t('llm_node.exit_tool_hint')}</span>
+                                    </div>
+                                </div>
+                                ${this.strict ? html`
+                                    <div class="loop-explicit-reminder">
+                                        <span class="form-label-text">${this.i18n.t('llm_node.reminder_text_label')}</span>
+                                        <textarea
+                                            class="form-input form-textarea"
+                                            rows="3"
+                                            .value=${this.reminderMessage}
+                                            @change=${this._onReminderMessageChange}
+                                            placeholder=${this.i18n.t('llm_node.reminder_placeholder')}
+                                        ></textarea>
+                                        <span class="form-label-hint">${this.i18n.t('llm_node.reminder_hint')}</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
                 
@@ -1153,17 +1155,13 @@ export class LlmNodeEditor extends BaseNodeEditor {
                             
                             ${this.showAddMenu ? html`
                                 <div class="tools-add-menu" @click=${(e) => e.stopPropagation()}>
-                                    <div class="menu-item" @click=${() => this._onCreateInline('tool')}>
-                                        <platform-icon name="tool" size="14"></platform-icon>
+                                    <div class="menu-item" @click=${() => this._onCreateInline('code')}>
+                                        <platform-icon name="code" size="14"></platform-icon>
                                         <span>${this.i18n.t('llm_node.inline_add_tool')}</span>
                                     </div>
                                     <div class="menu-item" @click=${() => this._onCreateInline('llm_node')}>
                                         <platform-icon name="llm_node" size="14"></platform-icon>
                                         <span>${this.i18n.t('llm_node.inline_add_react_flow')}</span>
-                                    </div>
-                                    <div class="menu-item" @click=${() => this._onCreateInline('function')}>
-                                        <platform-icon name="code" size="14"></platform-icon>
-                                        <span>${this.i18n.t('llm_node.inline_add_function')}</span>
                                     </div>
                                     <div class="menu-divider"></div>
                                     <div class="menu-item" @click=${() => this._onCreateInline('external_api')}>
@@ -1178,27 +1176,50 @@ export class LlmNodeEditor extends BaseNodeEditor {
                             ` : ''}
                         </div>
                     </div>
-                    <div class="tools-list">
+                    <div class="tools-inline-list">
                         ${(config.tools || []).length > 0 
                             ? (config.tools || []).map(tool => {
                                 const toolId = typeof tool === 'string' ? tool : tool.tool_id;
                                 const displayName = this._getToolDisplayName(tool);
-                                const isInline = this._isInlineTool(tool);
-                                const isSubflow = this._isSubflowTool(tool);
-                                const isMCP = this._isMCPTool(tool);
-                                const icon = this._getToolIcon(tool);
-                                const canEdit = isInline || isSubflow || isMCP;
+                                const effective = this._effectiveToolForUi(tool);
+                                const icon = getLlmToolChipIconName(effective);
+                                const accent = getLlmToolChipAccentHex(effective);
+                                const canEdit =
+                                    this._isInlineTool(effective) ||
+                                    this._isSubflowTool(effective) ||
+                                    this._isMCPTool(effective);
+                                const removeAria = this.i18n.t('llm_node.tool_chip_remove_aria', {
+                                    id: String(toolId),
+                                });
                                 return html`
-                                    <div class="tool-item ${isInline ? 'is-inline' : ''} ${isSubflow ? 'is-subflow-tool' : ''} ${isMCP ? 'is-mcp' : ''}">
-                                        <platform-icon class="tool-item-icon" name="${icon}" size="14"></platform-icon>
-                                        <span 
-                                            class="tool-item-name ${canEdit ? '' : 'not-editable'}"
-                                            @click=${() => canEdit ? this._onEditTool(toolId) : null}
-                                            style="${canEdit ? 'cursor: pointer;' : 'cursor: default;'}"
-                                        >${displayName}</span>
-                                        <span class="tool-item-remove" @click=${() => this._onRemoveTool(toolId)}>
-                                            <platform-icon name="x" size="12"></platform-icon>
+                                    <div class="tool-chip" style="--tool-accent: ${accent}">
+                                        <span class="tool-chip-icon-wrap" aria-hidden="true">
+                                            <platform-icon name="${icon}" size="14"></platform-icon>
                                         </span>
+                                        <span
+                                            class="tool-chip-label ${canEdit ? 'is-editable' : ''}"
+                                            title=${displayName}
+                                            role=${canEdit ? 'button' : undefined}
+                                            tabindex=${canEdit ? '0' : undefined}
+                                            @click=${() => (canEdit ? this._onEditTool(toolId) : undefined)}
+                                            @keydown=${(e) => {
+                                                if (
+                                                    canEdit &&
+                                                    (e.key === 'Enter' || e.key === ' ')
+                                                ) {
+                                                    e.preventDefault();
+                                                    this._onEditTool(toolId);
+                                                }
+                                            }}
+                                        >${displayName}</span>
+                                        <button
+                                            type="button"
+                                            class="tool-chip-remove"
+                                            aria-label=${removeAria}
+                                            @click=${() => this._onRemoveTool(toolId)}
+                                        >
+                                            <platform-icon name="x" size="12"></platform-icon>
+                                        </button>
                                     </div>
                                 `;
                             })

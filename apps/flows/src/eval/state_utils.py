@@ -171,17 +171,17 @@ def get_files(state: 'ExecutionState | dict') -> List[Dict[str, Any]]:
         return []
 
 
-def read_file(file_path: str, mode: str = "rb") -> bytes:
+def read_path_bytes(file_path: str, mode: str = "rb") -> bytes:
     """
-    Безопасно читает файл по пути.
-    
+    Читает сырые байты или текст с диска по пути (без семантики документа).
+
     Args:
         file_path: Путь к файлу
         mode: Режим чтения ("rb" для бинарного, "r" для текстового)
-    
+
     Returns:
         Содержимое файла (bytes для "rb", str для "r")
-    
+
     Raises:
         SafeEvalError: Если файл не найден или ошибка чтения
     """
@@ -195,20 +195,20 @@ def read_file(file_path: str, mode: str = "rb") -> bytes:
         return path.read_text(encoding="utf-8")
 
 
-def read_file_base64(file_path: str) -> str:
+def read_path_base64(file_path: str) -> str:
     """
     Читает файл и возвращает base64 строку.
-    
+
     Args:
         file_path: Путь к файлу
-    
+
     Returns:
         Base64 строка
-    
+
     Raises:
         SafeEvalError: Если файл не найден или ошибка чтения
     """
-    data = read_file(file_path, mode="rb")
+    data = read_path_bytes(file_path, mode="rb")
     return base64.b64encode(data).decode("utf-8")
 
 

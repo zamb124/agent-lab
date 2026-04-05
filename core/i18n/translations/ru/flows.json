@@ -278,7 +278,18 @@
     }
   },
   "flow_canvas": {
+    "fanin_input_hint": "Двойной щелчок: ANY или ALL. Перетаскивание связи к порту работает как обычно.",
+    "context_menu_fan_in_policy": "Политика входа (ANY / ALL)",
+    "context_menu_fan_in_policy_disabled_hint": "Нужны две или больше входящих связи к этой ноде.",
+    "incoming_policy_modal": {
+      "title": "Вход в ноду",
+      "option_any_title": "ANY",
+      "option_any_desc": "Нода запускается при завершении любого входящего ребра.",
+      "option_all_title": "ALL",
+      "option_all_desc": "Нода ждёт завершения по всем входящим рёбрам (AND-join)."
+    },
     "inherited_badge_title": "Унаследовано из base",
+    "tool_chip_readonly_title": "Только ссылка на инструмент; правка в панели свойств недоступна",
     "channel_badge": {
       "telegram": "Telegram",
       "email": "Email",
@@ -388,6 +399,7 @@
     "max_iterations_label": "Макс. итераций",
     "loop_mode_label": "Режим цикла",
     "tools_mode_label": "Режим Tools",
+    "tool_chip_remove_aria": "Удалить инструмент {{id}} из списка",
     "section_tools": "Инструменты",
     "inline_menu": "Inline ▼",
     "add_tool": "+ Добавить",
@@ -609,11 +621,24 @@
     "placeholder_api_key": "sk-... или @var:my_api_key",
     "hint_api_key": "Напрямую или через переменную @var:имя_переменной",
     "label_base_url": "Base URL (опционально)",
-    "placeholder_base_url": "https://api.openai.com/v1"
+    "placeholder_base_url": "https://api.openai.com/v1",
+    "advanced_toggle": "Дополнительно",
+    "advanced_hint": "Поля OpenAI-совместимого API; провайдер может игнорировать часть из них. Полный контроль — блок JSON ниже.",
+    "placeholder_top_p_default": "1",
+    "placeholder_top_k_example": "40",
+    "placeholder_penalty_default": "0",
+    "placeholder_seed_example": "42",
+    "label_freq_penalty": "frequency_penalty",
+    "label_pres_penalty": "presence_penalty",
+    "label_seed": "seed",
+    "label_reasoning": "reasoning_effort",
+    "reasoning_unset": "Не задавать",
+    "label_extra_json": "Доп. параметры (JSON)",
+    "hint_extra_json": "Объект, ключи мержатся в тело запроса последними и перекрывают значения из полей выше.",
+    "err_extra_json": "Невалидный JSON в доп. параметрах",
+    "err_extra_not_object": "Доп. параметры: нужен JSON-объект {}, не массив"
   },
   "test_panel": {
-    "err_session_list": "Список сессий: {{message}}",
-    "err_select_session": "Выберите сессию",
     "running": "Выполнение...",
     "hint_execute": "Нажмите Execute для запуска",
     "err_run": "Ошибка выполнения",
@@ -623,12 +648,6 @@
     "success": "Выполнено успешно",
     "input_state_title": "Input State (JSON)",
     "reset": "Сбросить",
-    "session_label": "Сессия",
-    "session_loading": "Загрузка…",
-    "session_select_placeholder": "— выберите —",
-    "apply_state": "Подставить state",
-    "refresh_sessions_title": "Обновить список",
-    "refresh": "Обновить",
     "title": "Тестирование",
     "validate": "Validate",
     "execute": "Execute",
@@ -748,6 +767,8 @@
     "node_id_empty": "Node ID не может быть пустым",
     "node_id_format": "Node ID должен начинаться с буквы и содержать только буквы, цифры и _",
     "node_id_hint": "Уникальный идентификатор ноды (латиница, цифры, _)",
+    "node_id_locked_hint": "ID нельзя менять после создания. Ноду, созданную через «Дублировать» в меню карточки, можно переименовать один раз.",
+    "node_id_rename_once_hint": "Один раз задайте уникальный ID; после сохранения изменить его будет нельзя.",
     "section_main": "Основное",
     "placeholder_node_name": "Название ноды",
     "placeholder_node_description": "Описание назначения",
@@ -928,13 +949,9 @@
         "name": "Multi-flow",
         "description": "Несколько вложенных flow и llm_node. Для сложных многошаговых сценариев."
       },
-      "function": {
-        "name": "Function flow",
-        "description": "Flow на основе Python функций. Подходит для вычислений и трансформаций данных."
-      },
-      "tool": {
-        "name": "Tool flow",
-        "description": "Узкий flow-инструмент. Выполняет одну задачу и может вызываться из других flow."
+      "code": {
+        "name": "Code flow",
+        "description": "Flow на основе code-ноды (Python). Вычисления, трансформации и узкие инструменты, вызываемые из других flow."
       },
       "external": {
         "name": "External flow",
@@ -959,14 +976,9 @@
         "tags": "новый,multi-flow",
         "prompt": "Вы супервизор, координирующий вложенные flow и tools. Делегируйте задачи подходящим нодам."
       },
-      "function": {
-        "flow_name": "Новый Function flow",
-        "description": "Flow на основе функций",
-        "tags": "новый,code"
-      },
-      "tool": {
-        "flow_name": "Новый Tool flow",
-        "description": "Узкий flow-инструмент",
+      "code": {
+        "flow_name": "Новый Code flow",
+        "description": "Flow на основе code-ноды",
         "tags": "новый,code"
       },
       "external": {
@@ -991,11 +1003,11 @@
     "placeholder_name": "Название инструмента",
     "field_description": "Описание",
     "placeholder_description": "Что делает этот инструмент?",
-    "field_tool_type": "Тип инструмента",
-    "option_tool": "Tool — обычный инструмент",
-    "option_reason": "Reason — инструмент для размышлений",
-    "option_exit": "Exit — инструмент для завершения",
-    "tool_type_hint": "Reason/Exit инструменты имеют особую роль в ReAct агентах",
+    "field_react_role": "Роль в ReAct",
+    "option_standard": "Обычный инструмент",
+    "option_reason": "Reason — размышление",
+    "option_exit": "Exit — завершение",
+    "react_role_hint": "Reason и Exit задают особое поведение в цикле ReAct",
     "args_schema_label": "Args Schema",
     "args_schema_hint": "JSON схема аргументов (например: {\"query\": {\"type\": \"string\"}})",
     "code_label": "Код",
@@ -1005,17 +1017,16 @@
     "title_create": "Создать {{label}}",
     "title_edit": "Редактировать {{label}}",
     "types": {
-      "tool": "Tool",
+      "code": "Code",
       "llm_node": "LLM Node",
       "flow": "Flow",
-      "function": "Function",
       "external_api": "External API",
       "remote_flow": "Remote A2A flow",
       "mcp": "MCP Tool"
     },
     "type_fallback": "Инструмент",
     "err_editor_missing": "Редактор не найден",
-    "err_code_tool": "Код обязателен для tool",
+    "err_code_tool": "Укажите код инструмента",
     "err_prompt_llm": "Промпт обязателен для llm_node",
     "err_name_required": "Название обязательно",
     "err_unknown_type": "Неизвестный тип инструмента: {{type}}",

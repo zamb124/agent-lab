@@ -323,6 +323,45 @@ def run(state):
         assert result.parsed == {"name": "test"}
 
     @pytest.mark.asyncio
+    async def test_safe_eval_reader_read_path(self, tmp_path) -> None:
+        path = tmp_path / "se.txt"
+        path.write_text("safe_eval_reader", encoding="utf-8")
+        code = f"""
+async def run(state):
+    from pathlib import Path
+    res = await reader.read(source=Path({repr(str(path))}))
+    state['first_page'] = res.pages[0].text if res.pages else ''
+    return state
+"""
+        state = ExecutionState(
+            task_id="test",
+            context_id="test",
+            user_id="test",
+            session_id="test:test",
+        )
+        result = await safe_eval(code, state)
+        assert result.__pydantic_extra__["first_page"] == "safe_eval_reader"
+
+    @pytest.mark.asyncio
+    async def test_safe_eval_read_path_bytes(self, tmp_path) -> None:
+        path = tmp_path / "raw.bin"
+        path.write_bytes(b"abc\xff")
+        code = f"""
+def run(state):
+    data = read_path_bytes({repr(str(path))})
+    state['n'] = len(data)
+    return state
+"""
+        state = ExecutionState(
+            task_id="test",
+            context_id="test",
+            user_id="test",
+            session_id="test:test",
+        )
+        result = await safe_eval(code, state)
+        assert result.__pydantic_extra__["n"] == 4
+
+    @pytest.mark.asyncio
     async def test_safe_eval_with_datetime(self):
         """Использование datetime модуля."""
         code = """
@@ -779,4 +818,115 @@ async def run(state):
         result = await safe_eval(code, state)
         assert hasattr(result, 'answer')
         assert result.answer is not None
+
+    @pytest.mark.asyncio
+    async def test_llm_chat_accepts_tool_decorator_instance(self) -> None:
+        code = """
+@tool(name="double_n", description="Удваивает целое", tags=["test"])
+def double_n(x: int) -> int:
+    return x * 2
+
+async def run(state):
+    msg = await llm.chat("ignore", tools=[double_n])
+    state["got_message"] = msg is not None
+    return state
+"""
+        state = ExecutionState(
+            task_id="test",
+            context_id="test",
+            user_id="test",
+            session_id="test:test",
+        )
+        result = await safe_eval(code, state)
+        assert result.__pydantic_extra__["got_message"] is True
+
+    @pytest.mark.asyncio
+    async def test_llm_chat_rejects_raw_callable_in_tools(self) -> None:
+        code = """
+async def run(state):
+    def inner(v: int) -> int:
+        return v
+    await llm.chat("x", tools=[inner])
+    return state
+"""
+        state = ExecutionState(
+            task_id="test",
+            context_id="test",
+            user_id="test",
+            session_id="test:test",
+        )
+        with pytest.raises(SafeEvalError, match="tools\\[0\\]"):
+            await safe_eval(code, state)
+
+    @pytest.mark.asyncio
+    async def test_inline_node_tool_llm_returns_tool_call_then_run_executes(
+        self,
+        mock_llm_with_queue,
+    ) -> None:
+        """
+        В коде ноды: @tool + llm.chat(..., tools=[fn]). Mock LLM отдаёт tool_call;
+        аргументы парсятся, tool.run выполняется на реальном FunctionTool.
+        """
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "node_inline_multiply",
+                    "args": {"a": 6, "b": 7},
+                },
+            ]
+        )
+        code = """
+import json
+
+@tool(
+    name="node_inline_multiply",
+    description="Умножает целое a на целое b",
+    tags=["test"],
+)
+def node_inline_multiply(a: int, b: int) -> int:
+    return a * b
+
+async def run(state):
+    schema = node_inline_multiply.to_openai_schema()
+    fn = schema.get("function") or {}
+    state["schema_ok"] = (
+        schema.get("type") == "function"
+        and fn.get("name") == "node_inline_multiply"
+    )
+    state["schema_name"] = fn.get("name")
+    props = (fn.get("parameters") or {}).get("properties") or {}
+    state["schema_has_a"] = "a" in props and "b" in props
+
+    msg = await llm.chat("Посчитай произведение через tool", tools=[node_inline_multiply])
+    calls = (msg.metadata or {}).get("tool_calls") or []
+    if not calls:
+        raise ValueError("mock должен вернуть tool_calls")
+    entry = calls[0]
+    name = entry.get("name")
+    if name is None and isinstance(entry.get("function"), dict):
+        name = entry["function"].get("name")
+    args = entry.get("arguments")
+    if args is None and isinstance(entry.get("function"), dict):
+        args = entry["function"].get("arguments")
+    if isinstance(args, str):
+        args = json.loads(args)
+    state["parsed_tool_name"] = name
+    state["parsed_args"] = dict(args)
+    state["product"] = await node_inline_multiply.run(args, state)
+    return state
+"""
+        state = ExecutionState(
+            task_id="test",
+            context_id="test",
+            user_id="test",
+            session_id="test:test",
+        )
+        result = await safe_eval(code, state)
+        assert result["schema_ok"] is True
+        assert result["schema_name"] == "node_inline_multiply"
+        assert result["schema_has_a"] is True
+        assert result["parsed_tool_name"] == "node_inline_multiply"
+        assert result["parsed_args"] == {"a": 6, "b": 7}
+        assert result["product"] == 42
 

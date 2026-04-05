@@ -38,6 +38,13 @@ async def upload_document_task(
     container = get_rag_container()
     status_repo = container.document_status_repository
 
+    trace_company_id = metadata.get("company_id")
+    trace_user_id = metadata.get("uploaded_by_user_id")
+    if not trace_company_id or str(trace_company_id).strip() == "":
+        raise ValueError("metadata.company_id обязателен для rag.worker.index.upload_s3.")
+    if not trace_user_id or str(trace_user_id).strip() == "":
+        raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.index.upload_s3.")
+
     async with traced_operation(
         "rag.worker.index.upload_s3",
         event_type="rag.ingest",
@@ -45,6 +52,8 @@ async def upload_document_task(
         resource_type="rag.namespace",
         resource_id=namespace_id,
         extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: str(trace_company_id).strip(),
+            trace_attributes.ATTR_USER_ID: str(trace_user_id).strip(),
             trace_attributes.ATTR_RAG_STAGE: "upload_from_s3",
             "platform.rag.document_name": document_name,
             "platform.rag.s3_key": s3_key,
@@ -78,7 +87,12 @@ async def upload_document_task(
 
 
 @broker.task(retry_on_error=True, max_retries=3, queue_name="rag")
-async def delete_document_task(namespace_id: str, document_id: str) -> Dict[str, Any]:
+async def delete_document_task(
+    namespace_id: str,
+    document_id: str,
+    company_id: str,
+    user_id: str,
+) -> Dict[str, Any]:
     """
     Удаление документа из vector_documents.
 
@@ -91,13 +105,20 @@ async def delete_document_task(namespace_id: str, document_id: str) -> Dict[str,
     """
     logger.info(f"RAG Worker: удаление документа {document_id} из namespace {namespace_id}")
 
+    if company_id.strip() == "" or user_id.strip() == "":
+        raise ValueError("company_id и user_id обязательны для rag.worker.index.delete.")
+
     async with traced_operation(
         "rag.worker.index.delete",
         event_type="rag.delete",
         operation_category="rag_ingest",
         resource_type="rag.document",
         resource_id=document_id,
-        extra_attributes={"platform.rag.namespace_id": namespace_id},
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id.strip(),
+            trace_attributes.ATTR_USER_ID: user_id.strip(),
+            "platform.rag.namespace_id": namespace_id,
+        },
     ):
         provider = get_default_rag_provider()
         success = await provider.delete_document(namespace_id, document_id)
@@ -144,6 +165,13 @@ async def process_document_upload(
     await status_repo.update_status(document_id, "processing")
     logger.info(f"RAG Worker: статус -> processing для {document_id}")
 
+    trace_company_id = metadata.get("company_id")
+    trace_user_id = metadata.get("uploaded_by_user_id")
+    if not trace_company_id or str(trace_company_id).strip() == "":
+        raise ValueError("metadata.company_id обязателен для rag.worker.ingest.full.")
+    if not trace_user_id or str(trace_user_id).strip() == "":
+        raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.ingest.full.")
+
     async with traced_operation(
         "rag.worker.ingest.full",
         event_type="rag.ingest",
@@ -151,6 +179,8 @@ async def process_document_upload(
         resource_type="rag.document",
         resource_id=document_id,
         extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: str(trace_company_id).strip(),
+            trace_attributes.ATTR_USER_ID: str(trace_user_id).strip(),
             trace_attributes.ATTR_RAG_DOCUMENT_ID: document_id,
             trace_attributes.ATTR_RAG_STAGE: "upload_parse_index",
             "platform.rag.namespace_id": namespace_id,

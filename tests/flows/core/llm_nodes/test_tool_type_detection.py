@@ -1,9 +1,9 @@
 """
-Тесты определения reason и exit tools по ToolType.
+Тесты определения reason и exit tools по ReactToolRole.
 
 Проверяет что LlmNodeRunner:
-- Корректно определяет имя reason tool по ToolType.REASON
-- Корректно определяет имя exit tool по ToolType.EXIT
+- Корректно определяет имя reason tool по ReactToolRole.REASON
+- Корректно определяет имя exit tool по ReactToolRole.EXIT
 - Использует правильные имена в reminder сообщениях
 - Работает с кастомными tools (не только стандартные reason/finish)
 """
@@ -15,7 +15,8 @@ from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.models import NodeConfig, ReactConfig, ReactLoopMode
 from apps.flows.src.models.node_config import NodeLLMOverride
 from core.state import ExecutionState
-from apps.flows.src.tools.base import BaseTool, ToolType
+from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.tools import reason, finish, final_answer, calculator
 
@@ -25,7 +26,7 @@ class CustomReasonTool(BaseTool):
     
     name = "my_think"
     description = "Custom reasoning tool"
-    tool_type = ToolType.REASON
+    react_role = ReactToolRole.REASON
     
     async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         thought = args.get("thought", "")
@@ -41,7 +42,7 @@ class CustomExitTool(BaseTool):
     
     name = "complete"
     description = "Custom exit tool"
-    tool_type = ToolType.EXIT
+    react_role = ReactToolRole.EXIT
     
     async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         return args.get("answer", "Done")
@@ -52,7 +53,7 @@ class RegularTool(BaseTool):
     
     name = "helper"
     description = "Regular helper tool"
-    tool_type = ToolType.TOOL
+    react_role = ReactToolRole.STANDARD
     
     async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         return "helped"
@@ -207,7 +208,7 @@ class TestGetExitToolName:
         assert result is None
 
 
-class TestToolTypeCombinations:
+class TestReactRoleCombinations:
     """Тесты комбинаций reason и exit tools."""
 
     @pytest.fixture
@@ -278,19 +279,19 @@ class TestStandardToolsHaveCorrectType:
 
     def test_reason_has_reason_type(self):
         """reason tool имеет тип REASON."""
-        assert reason.tool_type == ToolType.REASON
+        assert reason.react_role == ReactToolRole.REASON
 
     def test_finish_has_exit_type(self):
         """finish tool имеет тип EXIT."""
-        assert finish.tool_type == ToolType.EXIT
+        assert finish.react_role == ReactToolRole.EXIT
 
     def test_final_answer_has_exit_type(self):
         """final_answer tool имеет тип EXIT."""
-        assert final_answer.tool_type == ToolType.EXIT
+        assert final_answer.react_role == ReactToolRole.EXIT
 
-    def test_calculator_has_tool_type(self):
-        """calculator tool имеет тип TOOL."""
-        assert calculator.tool_type == ToolType.TOOL
+    def test_calculator_has_standard_react_role(self):
+        """calculator — роль standard."""
+        assert calculator.react_role == ReactToolRole.STANDARD
 
 
 class TestExitToolInjection:

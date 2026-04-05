@@ -115,11 +115,16 @@ flow-canvas #drawflow-area {
     transform: scale(1.2) !important;
 }
 
-/* Connection lines (SVG) */
-.drawflow svg {
+/* Connection lines (SVG): только линии графа */
+.drawflow > svg {
     z-index: 1 !important;
     position: absolute !important;
     overflow: visible !important;
+}
+
+.drawflow .drawflow-node svg {
+    position: static !important;
+    z-index: auto !important;
 }
 
 .drawflow .connection {
@@ -262,6 +267,16 @@ flow-canvas .context-menu-item.active {
     color: #10b981;
 }
 
+flow-canvas .context-menu-item.disabled {
+    color: var(--text-tertiary, rgba(15, 23, 42, 0.45));
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+flow-canvas .context-menu-item.disabled:hover {
+    background: transparent !important;
+}
+
 flow-canvas .context-menu-separator {
     height: 1px;
     background: rgba(255,255,255,0.08);
@@ -362,10 +377,6 @@ flow-canvas .context-menu-separator {
 
 .drawflow .drawflow-node.is-entry-node {
     border-color: #10b981;
-}
-
-.drawflow .drawflow-node.is-entry-node .inputs {
-    display: none !important;
 }
 
 .drawflow .drawflow-node.node-running {

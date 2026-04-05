@@ -539,6 +539,17 @@ export class EntityModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const title = this._saving
+            ? this.i18n.t('entity_modal.saving')
+            : this.i18n.t('save', {}, 'common');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: this._saving,
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="footer-actions">
@@ -548,16 +559,6 @@ export class EntityModal extends PlatformModal {
                     @click=${() => this.close()}
                 >
                     ${this.i18n.t('cancel', {}, 'common')}
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._saving}
-                    @click=${this._onSave}
-                >
-                    ${this._saving
-                        ? this.i18n.t('entity_modal.saving')
-                        : this.i18n.t('save', {}, 'common')}
                 </button>
             </div>
         `;

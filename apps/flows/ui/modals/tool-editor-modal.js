@@ -125,7 +125,7 @@ export class ToolEditorModal extends PlatformModal {
         previewExecutionState: { type: Object },
         name: { type: String },
         description: { type: String },
-        toolType: { type: String },
+        reactRole: { type: String },
         code: { type: String },
         language: { type: String },
         argsSchema: { type: String },
@@ -140,7 +140,7 @@ export class ToolEditorModal extends PlatformModal {
         this.title = '';
         this.name = '';
         this.description = '';
-        this.toolType = 'tool';
+        this.reactRole = 'standard';
         this.language = 'python';
         this.code = `async def execute(args):
     """
@@ -167,7 +167,8 @@ export class ToolEditorModal extends PlatformModal {
             this.title = this.i18n.t('tool_editor_modal.title_edit');
             this.name = this.toolConfig.name || '';
             this.description = this.toolConfig.description || '';
-            this.toolType = this.toolConfig.tool_type || 'tool';
+            const rr = this.toolConfig.react_role || this.toolConfig.tool_type;
+            this.reactRole = rr === 'tool' || rr === undefined ? 'standard' : rr;
             this.code = this.toolConfig.code || this.code;
             this.argsSchema = typeof this.toolConfig.args_schema === 'string' 
                 ? this.toolConfig.args_schema 
@@ -208,7 +209,7 @@ export class ToolEditorModal extends PlatformModal {
         try {
             const response = await this.a2a.post('/api/v1/code/validate', {
                 code,
-                node_type: 'tool'
+                node_type: 'code'
             });
             
             if (response.valid) {
@@ -247,7 +248,7 @@ export class ToolEditorModal extends PlatformModal {
         try {
             const response = await this.a2a.post('/api/v1/code/execute', {
                 code,
-                node_type: 'tool',
+                node_type: 'code',
                 state,
                 args: state,
                 args_schema: argsSchema
@@ -302,10 +303,10 @@ export class ToolEditorModal extends PlatformModal {
         
         const config = {
             tool_id: toolId,
-            type: 'tool',
+            type: 'code',
             name: this.name.trim(),
             description: this.description.trim(),
-            tool_type: this.toolType,
+            react_role: this.reactRole,
             code: code,
             args_schema: argsSchema,
         };
@@ -339,7 +340,7 @@ export class ToolEditorModal extends PlatformModal {
         }
         modal.showModal({
             language: e.detail.language || this.language || 'python',
-            nodeType: 'tool',
+            nodeType: 'code',
             perspective: 'editor',
         });
     }
@@ -373,18 +374,18 @@ export class ToolEditorModal extends PlatformModal {
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">${this.i18n.t('tool_editor_modal.field_tool_type')}</label>
+                    <label class="form-label">${this.i18n.t('tool_editor_modal.field_react_role')}</label>
                     <select 
                         class="form-select"
-                        .value=${this.toolType}
-                        @change=${(e) => this.toolType = e.target.value}
+                        .value=${this.reactRole}
+                        @change=${(e) => this.reactRole = e.target.value}
                     >
-                        <option value="tool">${this.i18n.t('tool_editor_modal.option_tool')}</option>
+                        <option value="standard">${this.i18n.t('tool_editor_modal.option_standard')}</option>
                         <option value="reason">${this.i18n.t('tool_editor_modal.option_reason')}</option>
                         <option value="exit">${this.i18n.t('tool_editor_modal.option_exit')}</option>
                     </select>
                     <span class="form-hint">
-                        ${this.i18n.t('tool_editor_modal.tool_type_hint')}
+                        ${this.i18n.t('tool_editor_modal.react_role_hint')}
                     </span>
                 </div>
                 
@@ -403,7 +404,7 @@ export class ToolEditorModal extends PlatformModal {
                     <code-editor
                         .value=${this.code}
                         .language=${this.language || 'python'}
-                        node-type="tool"
+                        node-type="code"
                         min-height="300"
                         @change=${this._onCodeChange}
                         @language-change=${this._onLanguageChange}
@@ -421,14 +422,23 @@ export class ToolEditorModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const title =
+            this.mode === 'create'
+                ? this.i18n.t('inline_tool_modal.create')
+                : this.i18n.t('inline_tool_modal.save');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: false,
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="action-row">
                 <button type="button" class="btn btn-secondary" @click=${this.close}>
                     ${this.i18n.t('editor.cancel')}
-                </button>
-                <button type="button" class="btn btn-primary" @click=${this._onSave}>
-                    ${this.mode === 'create' ? this.i18n.t('inline_tool_modal.create') : this.i18n.t('inline_tool_modal.save')}
                 </button>
             </div>
         `;

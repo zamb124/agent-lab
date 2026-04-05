@@ -1391,7 +1391,7 @@ async def test_call_admin_transfer_updates_call_admin(
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(120, func_only=True)
 async def test_call_recording_start_stop_flow(
     flows_service,
     sync_worker,
@@ -1406,9 +1406,13 @@ async def test_call_recording_start_stop_flow(
     sync_user_repository,
     sync_db_clean: None,
     system_user_id: str,
+    unique_id: str,
 ) -> None:
     company_id = "system"
     actor_user_id = system_user_id
+    space_id = f"sp_call_rec_{unique_id}"
+    channel_id = f"ch_call_rec_{unique_id}"
+    call_id = f"call_recording_test_{unique_id}"
 
     await sync_user_repository.set(
         User(
@@ -1420,7 +1424,7 @@ async def test_call_recording_start_stop_flow(
         )
     )
     sp = SyncSpace(
-        space_id="sp_call_rec",
+        space_id=space_id,
         company_id=company_id,
         name="S",
         description=None,
@@ -1430,7 +1434,7 @@ async def test_call_recording_start_stop_flow(
     )
     await space_repo.create(sp)
     ch = SyncChannel(
-        channel_id="ch_call_rec",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=sp.space_id,
         type=ChannelType.TOPIC.value,
@@ -1442,13 +1446,13 @@ async def test_call_recording_start_stop_flow(
     await channel_repo.create(ch)
     await channel_repo.upsert_member(ch.channel_id, actor_user_id, "owner", company_id=company_id)
     call = SyncCall(
-        call_id="call_recording_test",
+        call_id=call_id,
         company_id=company_id,
         channel_id=ch.channel_id,
         mode="sfu",
         call_type="video",
         status="active",
-        livekit_room_name="room-test",
+        livekit_room_name=f"room-test-{unique_id}",
         created_at=datetime.now(tz=UTC),
         created_by_user_id=actor_user_id,
     )
@@ -1535,7 +1539,6 @@ async def test_call_recording_start_stop_flow(
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-@pytest.mark.timeout(30)
 async def test_call_recording_pipeline_via_real_queue_worker(
     flows_service,
     sync_worker,

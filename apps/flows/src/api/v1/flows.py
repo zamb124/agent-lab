@@ -44,8 +44,8 @@ async def _inline_tools_in_nodes(
         if tools:
             node_config["tools"] = await _inline_tools_list(tools, container)
         
-        # Инлайним code для tool нод с tool_id
-        if node_config.get("type") == "tool" and node_config.get("tool_id") and not node_config.get("code"):
+        # Инлайним code для code-нод с tool_id без кода
+        if node_config.get("type") == "code" and node_config.get("tool_id") and not node_config.get("code"):
             tool_id = node_config["tool_id"]
             tool_ref = await container.tool_repository.get(tool_id)
             if tool_ref and tool_ref.code:
@@ -466,9 +466,9 @@ async def _validate_tool_nodes(
     nodes: Dict[str, Dict[str, Any]], 
     container: FlowContainer
 ) -> None:
-    """Валидирует tool_id в tool нодах."""
+    """Валидирует tool_id в code-нодах при отсутствии inline code."""
     for node_id, node_config in nodes.items():
-        if node_config.get("type") == "tool":
+        if node_config.get("type") == "code":
             tool_id = node_config.get("tool_id")
             has_code = "code" in node_config and node_config.get("code")
             

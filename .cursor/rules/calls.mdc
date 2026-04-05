@@ -41,17 +41,19 @@ alwaysApply: false
 
 Сервер **не участвует** в медиа-потоке при P2P. При SFU — только LiveKit.
 
-В коде [`call_handlers.py`](apps/sync/realtime/call_handlers.py) сейчас **`P2P_MAX = 0`**: все звонки — **SFU**. **Speech-to-chat** (речь в ленту): канал **`speech_to_chat_enabled`**, серверный LiveKit egress → S3 → `messages.send`; пустой `file_results` у egress — догрузка сегментов листингом S3 по префиксу `sync-speech/...` и курсору **`last_segment_s3_key`**. Полное описание пайплайнов, locks и флагов — **[`sync.mdc`](.cursor/rules/sync.mdc)**; параметры — **[`SpeechToChatConfig`](core/config/models.py)**, TTL lock авто-STT — **`transcribe_audio_redis_lock_ttl_seconds`** в [`BaseSettings`](core/config/base.py).
+В коде [`call_handlers.py`](apps/sync/realtime/call_handlers.py) сейчас **`P2P_MAX = 0`**: все звонки — **SFU**. **Speech-to-chat** (речь в ленту): канал **`speech_to_chat_enabled`**, серверный LiveKit segmented egress микрофона → S3 → `messages.send`; пустой `file_results` у egress — догрузка сегментов листингом S3 по префиксу `sync-speech/...` и курсору **`last_segment_s3_key`**. Длительность сегмента egress — **`calls.speech_to_chat.segment_seconds`** (по умолчанию 60 с; при смене очень больших значений сверять с лимитами вашей версии LiveKit Egress на стенде). После скачивания сегмента воркер: **`volumedetect`** — если **`max_volume` < `speech_segment_discard_below_max_volume_db`**, сообщение в канал не создаётся, курсор сегмента всё равно сдвигается; иначе **обрезка кромочной тишины** (`silenceremove` + `areverse` в [`core/files/audio_silence.py`](core/files/audio_silence.py)) с порогами **`speech_segment_trim_*`**; если после обрезки длительность < **`speech_segment_min_post_duration_ms`**, публикация тоже пропускается. Полное описание пайплайнов, locks и флагов — **[`sync.mdc`](.cursor/rules/sync.mdc)**; TTL lock авто-STT — **`transcribe_audio_redis_lock_ttl_seconds`** в [`BaseSettings`](core/config/base.py).
 
 ## Сигналинг
 
 ```
 Мутации (call.invite/accept/decline/hangup):
   /sync/ws → TaskIQ (sync queue) → call_handlers.py → SyncCall БД
-             → notification_manager.publish(user_id, event) → /ws/notifications
+             → publish_realtime_events → Redis sync.realtime.events
+             → PubSubFanout в ws.py → только сокеты (company_id, user_id) из recipient_user_ids
+               (участники канала звонка; call.signal — один target_user_id)
 
 P2P relay (call.signal):
-  /sync/ws → ws.py (ПРЯМОЙ relay, без TaskIQ) → notification_manager.publish(target_user_id)
+  /sync/ws → ws.py (ПРЯМОЙ relay, без TaskIQ) → тот же Redis + fanout только на target_user_id
              Обход TaskIQ критичен для WebRTC latency!
 
 Токен SFU:
@@ -68,13 +70,13 @@ P2P relay (call.signal):
 | `call.hangup` | да | Участник завершает |
 | `call.signal` | **НЕТ** | P2P relay (offer/answer/ICE), прямой путь в ws.py |
 
-## WS События (→ /ws/notifications, targeted)
+## WS События (→ /sync/ws, изолировано по компании и каналу)
 
 `call.incoming`, `call.accepted`, `call.declined`, `call.ended`, `call.signal`, `call.participant_joined`, `call.participant_left`
 
 К телу `call.incoming` (после `CallRead`) сервер добавляет: `initiator_user_id`, `caller_display_name` (имя из `UserRepository`), `incoming_channel_kind` (`direct` / `group` / `topic`), для не-direct при непустом имени — `channel_display_name`. Клиент баннера: заголовок через `SyncStore.channelDisplayTitle` если канал уже в store, иначе подсказки с сервера.
 
-Все события доставляются через `notification_manager.publish(user_id, ...)` → `platform:notifications` Redis → `/ws/notifications`.
+В Redis публикуется `RealtimeEvent` с полями `company_id` и `recipient_user_ids` (маршрутизация); в WebSocket клиенту уходит только `{type, channel_id?, payload}` — без утечки списка получателей. Call-события уходят **только участникам канала** (не всей компании). Платформенные тосты `/ws/notifications` для call-событий не используются.
 
 ## REST API
 
@@ -102,7 +104,7 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 | Файл | Содержимое |
 |---|---|
 | `models.py` | `TurnCredentials`, `CallMode`, `SignalType` |
-| `livekit_client.py` | `LiveKitClient` — create_room, delete_room, generate_token, start/stop egress в S3. `_api_url()` конвертирует `ws://` → `http://` для Twirp API |
+| `livekit_client.py` | `LiveKitClient` — create_room, delete_room, generate_token, start/stop egress в S3; трейсируемые вызовы требуют **`company_id` и `user_id`** (платформенный журнал). `_api_url()` конвертирует `ws://` → `http://` для Twirp API |
 | `turn.py` | `generate_turn_credentials()` — HMAC-SHA1, алгоритм coturn REST |
 
 ### CallOverlay SFU (переподключение)

@@ -100,7 +100,9 @@ class TestS3Integration:
         from core.config import get_settings
 
         s = get_settings()
-        for cfg_key in s.s3.buckets:
+        for cfg_key, bucket_cfg in s.s3.buckets.items():
+            if not bucket_cfg.enabled:
+                continue
             c = S3ClientFactory.create_client_for_bucket(cfg_key)
             try:
                 assert c.require_bucket_config_key() == cfg_key

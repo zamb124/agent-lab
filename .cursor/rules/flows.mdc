@@ -18,6 +18,17 @@ alwaysApply: false
 - Хардкод кириллицы в **`apps/flows/ui/**/*.js`** — ориентир для выноса в JSON; то же правило сканирования: **`uv run python scripts/report_ui_i18n_gaps.py --app flows`** (или устаревший **`scripts/report_flows_i18n_gaps.py`**). Полный список без фильтра комментариев: **`scripts/report_ui_cyrillic.sh`**.
 - Сообщения **`console.*` и технические комментарии** в коде — на **английском** (без ключей i18n), чтобы не раздувать бандл и не дублировать переводы для отладки.
 
+## UI: редактор LLM у llm_node (`llm-config-editor`)
+
+- Блок в стиле «острова» (как `loop-config`): две строки — модель + температура; max tokens + провайдер; раскрываемый **Advanced** (top_p, top_k, frequency_penalty, presence_penalty, seed, reasoning_effort) и мини **JSON** для `extra_request_body`.
+- Схема: `NodeLLMOverride` в `apps/flows/src/models/node_config.py` (строгая модель, произвольные ключи запроса только внутри `extra_request_body`).
+- Рантайм: `split_llm_override_for_client` / `stream_kwargs_from_override` в `apps/flows/src/runtime/llm_override_params.py`; `get_llm` / `get_llm_for_state` принимают `max_tokens` ноды; `LLMClient.stream` добавляет `seed`, `reasoning_effort` и мержит `extra_body` **последним** в JSON тела POST `/chat/completions` (перекрывает поля из контролов и базового body).
+
+## Канва Drawflow: чипы tools у llm_node
+
+- Под карточкой `llm_node` — круглые чипы с **`platform-icon`**; тон (**фон + обводка + цвет иконки**) задаётся **`--tool-chip-accent`** из `getLlmToolChipAccentHex` — те же `#RRGGBB`, что **`_getNodeColor`** на канве, ссылка на инструмент строкой (без inline) — `#64748b`. Объект с **`code`** (в т.ч. системный `ask_user` как inline в массиве `tools`) — как **`code`**, без отдельной иконки/цвета по `tool_id`. Подсказка с именем — **`title`**. Клик по редактируемому чипу открывает **`inline-tool-modal`** через **`openInlineToolModal`**; разметка — `apps/flows/ui/utils/llm-tool-chips.js`.
+- После сохранения из модалки канва эмитит **`node-updated`** с тем же контрактом, что `property-panel`; **`flow-editor-page`** вешает `@node-updated` на **`flow-canvas`**, чтобы обновить store и канву.
+
 ## Каналы и выполнение графа
 
 Запрос пользователя в `BaseChannel.process_task` (A2A и остальные каналы) всегда идёт через `runtime_flow.run` / `Flow._execute_loop`: ноды выполняются по `edges`, состояние меняется в этом цикле. Отдельного пути «только runner на entry-`llm_node`» нет; дублирующих путей исполнения в канале не держим.
@@ -42,9 +53,22 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 | mcp | MCPNode | MCP tools |
 | channel | ChannelNode | Отправка сообщений (Telegram, Webhook) |
 
+В `nodes[*].type` допускаются **только** значения из таблицы. Строк **`tool`** / **`function`** как типа ноды графа **нет**; при необходимости одноразово прогоняется миграция данных (`scripts/migrate_flows_contract.py`).
+
+## Evaluation (`flow.evaluation`)
+
+У шагов тест-кейса поля **`input.type`** и **`check.type`**: `text` | **`inline_code`** | `node` (и для check ещё `string`). Значение **`function`** в JSON больше не используется; при миграции старых конфигов `flow_contract_normalize` переписывает его в **`inline_code`**.
+
+## Элементы `llm_node.tools[]`
+
+- Строка `tool_id` после инлайна в БД/рантайме — полный dict.
+- Dict с полем **`type`** из NodeType (`code`, `flow`, `llm_node`, …) задаёт исполнение через `ToolRegistry.materialize` → `InlineTool` или `NodeAsToolWrapper`.
+- Inline-код: непустой **`code`** (для ветки code обычно `type: "code"`).
+- **`react_role`**: `standard` | `reason` | `exit` — роль в ReAct (не путать с `type` ноды и не путать с wire-форматом OpenAI `function` в сообщениях).
+
 ## Bundles (`apps/flows/bundles/<id>/flow.json`)
 
-Запись в БД из bundle задаёт `FlowConfig.source == "file"`. Перезагрузка одного агента в namespace компании без полного `company/init`: `POST /flows/api/v1/flows/{flow_id}/reload-from-bundle` — вызывает `FlowsLoader.reload_flow_bundle(flow_id)` (тот же путь, что при загрузке registry). В UI редактора LLM-ноды кнопка с иконкой `refresh` активна только при `source=file`.
+Запись в БД из bundle задаёт `FlowConfig.source == "file"`. Перезагрузка одного агента в namespace компании без полного `company/init`: `POST /flows/api/v1/flows/{flow_id}/reload-from-bundle` — вызывает `FlowsLoader.reload_flow_bundle(flow_id)` (тот же путь, что при загрузке registry). В UI редактора flow кнопка переинициализации из bundle — в шапке (`editor-header`), активна при `source=file`.
 
 При загрузке в БД `FlowsLoader` инлайнит:
 - `prompt: "prompts/foo.md"` — текст промпта из файла;
@@ -356,7 +380,7 @@ Flow (конфиг) → Skill → Node (каждый уровень переоп
 ## REST: state для редактора и Execute (TestPanel)
 
 - `GET /api/v1/code/editor-state?flow_id=...&skill_id=default` — стартовый `ExecutionState` как при запуске через `FlowFactory.get_flow` и `create_initial_state`: резолвнутые variables, `flow_config`, формат `session_id`. UI подставляет в TestPanel через `FlowsStore.previewExecutionState`. Требуется аутентифицированный пользователь в контексте (401 без user).
-- `GET /api/v1/tasks/state?session_id=...` (или `context_id` + `flow_id`) — сохранённый state сессии; в UI — выбор сессии в TestPanel и «Подставить state».
+- `GET /api/v1/tasks/state?session_id=...` (или `context_id` + `flow_id`) — сохранённый state сессии для просмотра и внешних сценариев. В TestPanel редактора ноды state вводится только вручную в JSON (без выбора сессии из списка).
 
 ## Файлы
 

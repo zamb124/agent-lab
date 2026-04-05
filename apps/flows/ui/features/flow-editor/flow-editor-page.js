@@ -812,19 +812,6 @@ export class FlowEditorPage extends PlatformElement {
         this.success(this.i18n.t('editor.reinit_success'));
     }
 
-    async _onFlowReloadFromBundle(e) {
-        const flowId = e.detail?.flowId || this.flowId;
-        if (!flowId) {
-            return;
-        }
-        try {
-            await this._completeReloadFromBundle(flowId);
-        } catch (err) {
-            console.error('[FlowEditorPage] flow reload from bundle:', err);
-            this.error(err.message || String(err));
-        }
-    }
-
     async _onReloadFromBundleRequested() {
         const flowId = this.flowId;
         if (!flowId || this.state.value.flowConfig?.source !== 'file') {
@@ -1051,7 +1038,13 @@ export class FlowEditorPage extends PlatformElement {
             });
             return null;
         }
-        
+
+        const canvas = this.querySelector('flow-canvas');
+        const allowNodeIdRenameOnce =
+            typeof canvas?.getAllowNodeIdRenameOnce === 'function'
+                ? canvas.getAllowNodeIdRenameOnce(selectedNodeId)
+                : false;
+
         console.log('[FlowEditorPage] Rendering panel for node:', selectedNode);
         
         const color = selectedNode.color || '#6b7280';
@@ -1089,18 +1082,16 @@ export class FlowEditorPage extends PlatformElement {
                 </div>
                 <div class="floating-panel-body">
                     <property-panel
-                        .node=${{ id: selectedNodeId, ...selectedNode }}
+                        .node=${{ id: selectedNodeId, ...selectedNode, allowNodeIdRenameOnce }}
                         .flowId=${this.flowId}
                         .skillId=${currentSkillId}
                         .flowConfig=${flowConfig}
-                        .flowSource=${flowConfig?.source || ''}
                         .flowVariables=${flowConfig?.variables || {}}
                         .previewExecutionState=${previewExecutionState}
                         ?expanded=${panelExpanded}
                         @node-updated=${this._onNodeUpdated}
                         @node-deleted=${this._onNodeDeleted}
                         @node-id-changed=${this._onNodeIdChanged}
-                        @flow-reload-from-bundle=${this._onFlowReloadFromBundle}
                     ></property-panel>
                 </div>
             </div>
@@ -1237,6 +1228,7 @@ export class FlowEditorPage extends PlatformElement {
                         <flow-canvas
                             @node-selected=${this._onNodeSelected}
                             @node-unselected=${this._onNodeUnselected}
+                            @node-updated=${this._onNodeUpdated}
                             @node-added=${this._onNodeAdded}
                             @resource-selected=${this._onResourceSelected}
                             @resource-added=${this._onResourceAdded}

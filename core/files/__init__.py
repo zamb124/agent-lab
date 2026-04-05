@@ -2,6 +2,14 @@
 Files - работа с файлами и S3.
 """
 
+from core.files.checksum import compute_content_checksum_sha256
+from core.files.reader import (
+    FileReadError,
+    FileReader,
+    FileReadResult,
+    ReadOptions,
+    ReadPage,
+)
 from core.files.s3_client import S3Client, S3ClientFactory, get_default_s3_client, close_default_s3_client
 from core.files.models import (
     FileRecord,
@@ -27,6 +35,12 @@ from core.files.api import build_file_api_router
 from core.files.streaming import stream_s3_file
 
 __all__ = [
+    "compute_content_checksum_sha256",
+    "FileReadError",
+    "FileReader",
+    "FileReadResult",
+    "ReadOptions",
+    "ReadPage",
     "S3Client",
     "S3ClientFactory",
     "get_default_s3_client",

@@ -37,7 +37,7 @@ export class OfficeApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
-                /* Палитра сервиса: градиент как у documents_logo.svg (#4adede -> #787ff6). */
+                /* Service palette: gradient aligned with documents_logo.svg (#4adede -> #787ff6). */
                 --documents-title-gradient: linear-gradient(
                     105deg,
                     #3ec9d8 0%,
@@ -50,7 +50,7 @@ export class OfficeApp extends PlatformApp {
                 --documents-surface-muted: #eef8fc;
                 --documents-stroke: rgba(100, 170, 215, 0.45);
                 --documents-link-hover: #3585c4;
-                /* Основной текст в тон градиенту лого (хвост #737ce9, затемнён для контраста). */
+                /* Primary text hue matches logo gradient tail #737ce9, darkened for contrast. */
                 --text-primary: rgba(46, 58, 124, 0.94);
             }
 

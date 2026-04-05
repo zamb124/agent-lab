@@ -44,6 +44,8 @@ alwaysApply: false
 
 **Колонки `company_id` / `namespace` в БД:** при сохранении span, если в итоговых атрибутах есть **`platform.tenant.company_id`** или **`platform.tenant.namespace`** (непустые строки), они задают колонки **поверх** значений из `get_context()`. Так воркеры и фоновые задачи фиксируют tenant без HTTP-контекста.
 
+**Обязательные атрибуты для платформенного журнала (админ-трейсинг, разрез по тенанту и субъекту):** у span, сохраняемого в `platform_tracing`, должны быть непустые **`platform.tenant.company_id`** и **`platform.user.id`** (константы `ATTR_TENANT_COMPANY_ID` / `ATTR_USER_ID` в `core/tracing/attributes.py`). При сохранении, если в итоговых атрибутах ещё нет `platform.user.id`, он **дописывается из `get_context().user.user_id`** (аналогично подстановке компании из контекста). Операции без HTTP-контекста (воркеры, LiveKit из sync) обязаны передавать оба id в **`extra_attributes`** `traced_operation` или в вызываемом API (например **`LiveKitClient`**: обязательные `company_id` и `user_id` на всех трейсируемых методах). Фоновые задачи без пользователя в payload должны явно задавать субъект (например инициатор или зарезервированный id), а не оставлять пустое поле в UI.
+
 ## Инициализация процесса (запись возможна только после этого)
 
 1. **`setup_tracing(settings.tracing)`** — OTLP/экспортеры по `TracingConfig`.

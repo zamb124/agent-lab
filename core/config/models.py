@@ -462,7 +462,29 @@ class S3Config(BaseModel):
 class SpeechToChatConfig(BaseModel):
     """Серверный egress «речь в ленту»: сегменты LiveKit и опрос TaskIQ в sync worker."""
 
-    segment_seconds: int = Field(default=12, ge=1)
+    segment_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Длительность одного сегмента segmented egress (сек). Дольше — реже сообщения в ленту.",
+    )
+    speech_segment_discard_below_max_volume_db: float = Field(
+        default=-45.0,
+        description="Если volumedetect max_volume (dB) строго меньше порога, сегмент не публикуется в канал.",
+    )
+    speech_segment_trim_silence_threshold_db: float = Field(
+        default=-50.0,
+        description="Порог silenceremove (dB) при обрезке тишины с начала и конца сегмента.",
+    )
+    speech_segment_trim_min_silence_sec: float = Field(
+        default=0.35,
+        ge=0.05,
+        description="Минимальная длительность участка тишины (сек), чтобы silenceremove считал её границей.",
+    )
+    speech_segment_min_post_duration_ms: int = Field(
+        default=200,
+        ge=0,
+        description="После volumedetect/trim не публиковать сегмент короче (мс).",
+    )
     poll_initial_delay_seconds: float = Field(default=4.0, ge=0)
     poll_interval_seconds: float = Field(default=4.0, ge=0)
     poll_lock_ttl_seconds: int = Field(

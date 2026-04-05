@@ -230,12 +230,8 @@ def run(state):
         data = response.json()
         assert data["success"] is True
         
-        # Проверяем diff
-        diff = data["diff"]
-        assert len(diff) == 2
-        
-        # Найдём diff items
-        diff_by_path = {d["path"]: d for d in diff}
+        diff_by_path = {d["path"]: d for d in data["diff"]}
+        assert len(diff_by_path) == 2
         
         # new_field - добавлено
         assert "new_field" in diff_by_path

@@ -840,6 +840,29 @@ export class GlassModal extends PlatformElement {
         return '';
     }
 
+    renderSaveHeaderButton() {
+        return html``;
+    }
+
+    _renderHeaderSaveIcon(options) {
+        const { onClick, disabled = false, title } = options;
+        if (!title) {
+            throw new Error('GlassModal._renderHeaderSaveIcon: title is required');
+        }
+        return html`
+            <button
+                type="button"
+                class="header-btn header-save-btn"
+                title=${title}
+                aria-label=${title}
+                ?disabled=${disabled}
+                @click=${onClick}
+            >
+                <platform-icon name="save" size="16"></platform-icon>
+            </button>
+        `;
+    }
+
     renderBody() {
         return html`<slot name="content"></slot>`;
     }
@@ -901,6 +924,7 @@ export class GlassModal extends PlatformElement {
                         <h2 class="modal-title">${this.renderHeader()}</h2>
                         <div class="header-buttons">
                             ${this.renderHeaderActions()}
+                            ${this.renderSaveHeaderButton()}
                             <button
                                 class="header-btn fullscreen-btn"
                                 @click=${this.toggleFullscreen}

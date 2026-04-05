@@ -981,33 +981,37 @@ export class ChannelSettingsModal extends PlatformModal {
         `;
     }
 
-    renderFooter() {
+    _onChannelProfilePrimarySave() {
+        const createMode = this.createMode;
+        const run = createMode ? this._createChannel() : this._saveChannelProfile();
+        run.catch((err) => {
+            this._error = err instanceof Error ? err.message : String(err);
+            this._savingProfile = false;
+        });
+    }
+
+    renderSaveHeaderButton() {
         if (!this.open || !this.channel) {
             return html``;
         }
         const createMode = this.createMode;
-        const primaryLabel = createMode
+        const title = createMode
             ? (this._savingProfile ? this._tp('channel_settings.creating') : this._tp('channel_settings.create'))
             : (this._savingProfile ? this._tp('channel_settings.saving') : this._tp('channel_settings.save'));
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onChannelProfilePrimarySave(),
+            disabled: this._savingProfile,
+            title,
+        });
+    }
+
+    renderFooter() {
+        if (!this.open || !this.channel) {
+            return html``;
+        }
         return html`
             <div class="actions">
                 <button type="button" class="btn" @click=${this._close}>${this._tp('chat_view.cancel')}</button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._savingProfile}
-                    @click=${() => {
-                        const run = createMode
-                            ? this._createChannel()
-                            : this._saveChannelProfile();
-                        run.catch((err) => {
-                            this._error = err instanceof Error ? err.message : String(err);
-                            this._savingProfile = false;
-                        });
-                    }}
-                >
-                    ${primaryLabel}
-                </button>
             </div>
         `;
     }

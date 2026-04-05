@@ -1485,18 +1485,21 @@ export class AIAnalysisModal extends PlatformModal {
         return this.i18n.t('ai_analysis_modal.object_fallback');
     }
 
+    renderSaveHeaderButton() {
+        const title = this._saving
+            ? this.i18n.t('entity_modal.saving')
+            : this.i18n.t('save', {}, 'common');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: this._saving || this._analyzing || this.loading,
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="footer-actions">
                 <button class="btn btn-secondary" type="button" @click=${() => this.close()}>${this.i18n.t('ai_analysis_modal.back_to_note')}</button>
-                <button
-                    class="btn ${this._analyzing || this.loading ? 'btn-disabled' : 'btn-primary'}"
-                    type="button"
-                    ?disabled=${this._saving || this._analyzing || this.loading}
-                    @click=${this._onSave}
-                >
-                    ${this._saving ? this.i18n.t('entity_modal.saving') : this.i18n.t('save', {}, 'common')}
-                </button>
             </div>
         `;
     }

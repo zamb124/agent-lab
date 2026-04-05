@@ -151,7 +151,6 @@ export class RemoteFlowNodeModal extends BaseNodeModal {
                     </div>
                     
                     <test-panel
-                        .flowId=${this.flowId || ''}
                         .inputState=${this._buildDefaultState()}
                         .defaultInputState=${this._buildDefaultState()}
                         @validate=${this._onValidate}

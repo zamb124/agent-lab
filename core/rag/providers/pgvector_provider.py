@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.db.models import VectorDocument
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
-from core.rag.services.document_parser import DocumentParser
+from core.files.reader import FileReader, ReadOptions
+from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.rag.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,7 @@ class PgVectorProvider(BaseRAGProvider):
             self._embedding_service.generate_embedding = fake_generate_embedding
             logger.info("PgVector провайдер: mock embeddings для тестов")
 
-        self._parser = DocumentParser()
+        self._file_reader = FileReader()
         self._chunk_size = config.get("chunk_size", self.DEFAULT_CHUNK_SIZE)
         self._chunk_overlap = config.get("chunk_overlap", self.DEFAULT_CHUNK_OVERLAP)
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -163,6 +164,37 @@ class PgVectorProvider(BaseRAGProvider):
             chunks.append(chunk_text)
             start = end - self._chunk_overlap
         return chunks
+
+    def _chunks_from_file_read_result(
+        self,
+        read_result: FileReadResult,
+    ) -> List[tuple[str, Dict[str, Any]]]:
+        """Чанки для embeddings строго из FileReadResult.pages."""
+        out: List[tuple[str, Dict[str, Any]]] = []
+        doc_checksum = read_result.source_checksum or ""
+        for page in read_result.pages:
+            body = (page.text or "").strip()
+            if not body:
+                continue
+            base_meta: Dict[str, Any] = {
+                "file_read_page_index": page.index,
+                "file_read_page_label": page.label,
+                "file_read_source_checksum": doc_checksum,
+                "file_read_detected_kind": read_result.detected_kind.value,
+                "file_read_page_count": read_result.page_count,
+            }
+            if page.assets:
+                base_meta["file_read_page_asset_checksums"] = [a.checksum for a in page.assets]
+            subchunks = self._chunk_text(body)
+            for sci, chunk_text in enumerate(subchunks):
+                meta = {**base_meta, "file_read_subchunk_index": sci}
+                out.append((chunk_text, meta))
+        if not out:
+            raise ValueError(
+                "После FileReader нет текста для индексации (пустые страницы). "
+                f"file={read_result.file_name}"
+            )
+        return out
 
     # -- Namespaces --
 
@@ -251,18 +283,23 @@ class PgVectorProvider(BaseRAGProvider):
         )
 
         doc_name = document_name or original_filename
-        file_text = self._parser.parse_file(file_path)
-        file_type = self._parser.get_file_type(original_filename)
 
         doc_metadata = metadata or {}
-        doc_metadata["file_type"] = file_type
+        read_result = await self._file_reader.read(
+            source=file_path,
+            file_name=doc_name,
+            options=ReadOptions(),
+        )
+        doc_metadata["file_type"] = read_result.detected_kind.value
         doc_metadata["s3_key"] = s3_key
         doc_metadata["s3_bucket"] = bucket_name
         doc_metadata["original_filename"] = original_filename
+        if read_result.source_checksum:
+            doc_metadata["source_checksum"] = read_result.source_checksum
 
-        return await self._upload_text_internal(
+        return await self._upload_file_read_internal(
             namespace_id=namespace_id,
-            text_content=file_text,
+            read_result=read_result,
             document_name=doc_name,
             metadata=doc_metadata,
         )
@@ -282,18 +319,23 @@ class PgVectorProvider(BaseRAGProvider):
         )
 
         filename = document_name or original_filename
-        file_text = self._parser.parse_bytes(file_data, filename)
-        file_type = self._parser.get_file_type(filename)
 
-        doc_metadata["file_type"] = file_type
+        read_result = await self._file_reader.read(
+            source=file_data,
+            file_name=filename,
+            options=ReadOptions(),
+        )
+        doc_metadata["file_type"] = read_result.detected_kind.value
         doc_metadata["s3_key"] = s3_key
         doc_metadata["s3_bucket"] = bucket_name
         doc_metadata["original_filename"] = original_filename
+        if read_result.source_checksum:
+            doc_metadata["source_checksum"] = read_result.source_checksum
 
-        logger.info(f"Документ из S3 индексируется: {s3_key}")
-        return await self._upload_text_internal(
+        logger.info(f"Документ из S3 индексируется через FileReader: {s3_key}")
+        return await self._upload_file_read_internal(
             namespace_id=namespace_id,
-            text_content=file_text,
+            read_result=read_result,
             document_name=filename,
             metadata=doc_metadata,
         )
@@ -318,17 +360,16 @@ class PgVectorProvider(BaseRAGProvider):
             metadata=doc_metadata,
         )
 
-    async def _upload_text_internal(
+    async def _upload_file_read_internal(
         self,
         namespace_id: str,
-        text_content: str,
+        read_result: FileReadResult,
         document_name: str,
         metadata: Dict[str, Any],
     ) -> RAGDocument:
-        """Chunk + embed + batch INSERT в vector_documents."""
+        """Chunk + embed из FileReadResult (единая схема с flows FileReader)."""
         document_id = metadata.get("document_id") or str(uuid.uuid4())
 
-        # Удаляем существующие чанки этого документа
         async with self._session_factory() as session:
             stmt = delete(VectorDocument).where(
                 VectorDocument.namespace_id == namespace_id,
@@ -339,14 +380,14 @@ class PgVectorProvider(BaseRAGProvider):
             if result.rowcount:
                 logger.info(f"Удалены старые чанки документа '{document_name}': {result.rowcount}")
 
-        chunks = self._chunk_text(text_content)
-        if not chunks:
-            raise ValueError("Документ пустой или не удалось разбить на chunks")
+        chunk_pairs = self._chunks_from_file_read_result(read_result)
+        chunks = [pair[0] for pair in chunk_pairs]
+        chunk_metas = [pair[1] for pair in chunk_pairs]
 
         embeddings = await self._embedding_service.generate_embeddings(chunks)
 
         rows = []
-        for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
+        for i, (chunk, emb, chunk_meta) in enumerate(zip(chunks, embeddings, chunk_metas)):
             rows.append(
                 VectorDocument(
                     id=f"{document_id}_{i}",
@@ -360,6 +401,7 @@ class PgVectorProvider(BaseRAGProvider):
                     total_chunks=len(chunks),
                     metadata_={
                         **metadata,
+                        **chunk_meta,
                         "document_id": document_id,
                         "document_name": document_name,
                         "chunk_index": i,
@@ -378,6 +420,30 @@ class PgVectorProvider(BaseRAGProvider):
             name=document_name,
             namespace=namespace_id,
             status="completed",
+            metadata=metadata,
+        )
+
+    async def _upload_text_internal(
+        self,
+        namespace_id: str,
+        text_content: str,
+        document_name: str,
+        metadata: Dict[str, Any],
+    ) -> RAGDocument:
+        """Прямой текст (без файла): одна логическая страница в FileReadResult."""
+        page = ReadPage(index=0, text=text_content, assets=[], label=None)
+        read_result = FileReadResult(
+            file_name=document_name,
+            mime_type="text/plain",
+            detected_kind=FileReadKind.TEXT,
+            page_count=1,
+            pages=[page],
+            warnings=[],
+        )
+        return await self._upload_file_read_internal(
+            namespace_id=namespace_id,
+            read_result=read_result,
+            document_name=document_name,
             metadata=metadata,
         )
 

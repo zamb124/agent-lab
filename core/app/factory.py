@@ -202,8 +202,10 @@ def create_service_app(
         if on_shutdown:
             await on_shutdown(app, container)
         
-        # Остановка notification manager
-        await notification_manager.stop_redis_listener()
+        # В одном процессе pytest поднимается несколько приложений (flows, office, rag, sync);
+        # stop_redis_listener обнуляет глобальный клиент и ломает notify_user в чужих тестах.
+        if os.environ.get("TESTING") != "true":
+            await notification_manager.stop_redis_listener()
     
     # Создание приложения
     app = FastAPI(

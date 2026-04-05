@@ -415,12 +415,16 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         """
         cid = company_id or self._get_company_id()
         resolved_namespace = namespace or "default"
+        actx = get_context()
+        if actx is None or actx.user is None or str(actx.user.user_id).strip() == "":
+            raise ValueError("Контекст пользователя обязателен для семантического поиска CRM.")
         async with traced_operation(
             "crm.semantic.search_entities",
             event_type="crm.search",
             operation_category="embedding",
             extra_attributes={
                 trace_attributes.ATTR_TENANT_COMPANY_ID: cid,
+                trace_attributes.ATTR_USER_ID: str(actx.user.user_id).strip(),
                 trace_attributes.ATTR_CRM_QUERY_MODE: "semantic_vector",
                 trace_attributes.ATTR_CRM_ENTITY_TYPE: entity_type or "",
                 "platform.crm.search_limit": limit,

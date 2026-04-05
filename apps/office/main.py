@@ -14,7 +14,7 @@ from apps.office.config import OfficeSettings
 from apps.office.container import get_office_container
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
-from core.config import get_settings
+from apps.office.config import get_office_settings
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ if office_ui_path.exists():
 @app.get("/documents/health")
 async def documents_health():
     """Тот же JSON, что /health и /office/health; публичный префикс UI — /documents."""
-    return build_health_payload(get_settings())
+    return build_health_payload(get_office_settings())
 
 
 @app.get("/documents")
@@ -76,9 +76,7 @@ async def serve_documents_ui(path: str = "") -> FileResponse:
 if __name__ == "__main__":
     import uvicorn
 
-    from core.config import get_settings
-
-    settings = get_settings()
+    settings = get_office_settings()
     uvicorn.run(
         "apps.office.main:app",
         host=settings.server.host,

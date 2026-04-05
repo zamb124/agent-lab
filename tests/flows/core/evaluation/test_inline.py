@@ -2,8 +2,8 @@
 Unit тесты для всех комбинаций input/check типов.
 
 Комбинации:
-- InputType: text, function, agent
-- CheckType: string, function, agent
+- InputType: text, inline_code, node
+- CheckType: string, inline_code, node
 
 Все 9 комбинаций должны работать.
 """
@@ -72,13 +72,13 @@ class TestInputText:
 
 
 class TestInputFunction:
-    """Тесты для InputType.FUNCTION (inline код)."""
+    """Тесты для InputType.INLINE_CODE (inline код)."""
 
     @pytest.mark.asyncio
     async def test_function_simple(self, runner, execution_state):
         """Простая inline функция."""
         input_config = InputConfig(
-            type=InputType.FUNCTION,
+            type=InputType.INLINE_CODE,
             value='def generate():\n    return "Generated"',
         )
         text, files = await runner._get_input(input_config, execution_state)
@@ -88,7 +88,7 @@ class TestInputFunction:
     async def test_function_with_logic(self, runner, execution_state):
         """Inline функция с логикой."""
         input_config = InputConfig(
-            type=InputType.FUNCTION,
+            type=InputType.INLINE_CODE,
             value="""def generate():
     items = [1, 2, 3]
     return f"Sum: {sum(items)}"
@@ -101,7 +101,7 @@ class TestInputFunction:
     async def test_function_multiline(self, runner, execution_state):
         """Многострочная inline функция."""
         input_config = InputConfig(
-            type=InputType.FUNCTION,
+            type=InputType.INLINE_CODE,
             value="""def generate():
     greeting = "Hello"
     name = "World"
@@ -189,13 +189,13 @@ class TestCheckString:
 
 
 class TestCheckFunction:
-    """Тесты для CheckType.FUNCTION (inline код)."""
+    """Тесты для CheckType.INLINE_CODE (inline код)."""
 
     @pytest.mark.asyncio
     async def test_function_returns_bool(self, runner, execution_state):
         """Inline checker возвращает bool -> нормализуется в Dict[str, float]."""
         check = CheckConfig(
-            type=CheckType.FUNCTION,
+            type=CheckType.INLINE_CODE,
             value='def check(state, response):\n    return "ok" in response',
         )
         result = await runner._execute_check(check, execution_state, "Everything is ok", [])
@@ -215,7 +215,7 @@ class TestCheckFunction:
             expected="success",
         )
         check = CheckConfig(
-            type=CheckType.FUNCTION,
+            type=CheckType.INLINE_CODE,
             value='def check(state, response):\n    return state.get("expected") in response',
         )
         result = await runner._execute_check(check, state, "Operation success", [])
@@ -225,7 +225,7 @@ class TestCheckFunction:
     async def test_function_returns_dict(self, runner, execution_state):
         """Inline checker возвращает dict scores -> нормализуется."""
         check = CheckConfig(
-            type=CheckType.FUNCTION,
+            type=CheckType.INLINE_CODE,
             value="""def check(state, response):
     return {
         "has_greeting": "hello" in response.lower(),
@@ -240,7 +240,7 @@ class TestCheckFunction:
     async def test_function_complex_logic(self, runner, execution_state):
         """Inline checker со сложной логикой."""
         check = CheckConfig(
-            type=CheckType.FUNCTION,
+            type=CheckType.INLINE_CODE,
             value="""def check(state, response):
     words = response.lower().split()
     required = ["order", "confirmed"]
@@ -279,13 +279,13 @@ class TestTestCaseConfigAllCombinations:
                 TestTurn(
                     input=InputConfig(type=InputType.TEXT, value="Hello"),
                     check=CheckConfig(
-                        type=CheckType.FUNCTION,
+                        type=CheckType.INLINE_CODE,
                         value='def check(s, r): return len(r) > 0',
                     ),
                 )
             ],
         )
-        assert tc.turns[0].check.type == CheckType.FUNCTION
+        assert tc.turns[0].check.type == CheckType.INLINE_CODE
 
     def test_text_agent(self):
         """text -> agent."""
@@ -307,14 +307,14 @@ class TestTestCaseConfigAllCombinations:
             turns=[
                 TestTurn(
                     input=InputConfig(
-                        type=InputType.FUNCTION,
+                        type=InputType.INLINE_CODE,
                         value='def generate(): return "Test"',
                     ),
                     check=CheckConfig(type=CheckType.STRING, value="length:1"),
                 )
             ],
         )
-        assert tc.turns[0].input.type == InputType.FUNCTION
+        assert tc.turns[0].input.type == InputType.INLINE_CODE
 
     def test_function_function(self):
         """function -> function."""
@@ -323,18 +323,18 @@ class TestTestCaseConfigAllCombinations:
             turns=[
                 TestTurn(
                     input=InputConfig(
-                        type=InputType.FUNCTION,
+                        type=InputType.INLINE_CODE,
                         value='def generate(): return "Test"',
                     ),
                     check=CheckConfig(
-                        type=CheckType.FUNCTION,
+                        type=CheckType.INLINE_CODE,
                         value='def check(s, r): return True',
                     ),
                 )
             ],
         )
-        assert tc.turns[0].input.type == InputType.FUNCTION
-        assert tc.turns[0].check.type == CheckType.FUNCTION
+        assert tc.turns[0].input.type == InputType.INLINE_CODE
+        assert tc.turns[0].check.type == CheckType.INLINE_CODE
 
     def test_function_agent(self):
         """function -> agent."""
@@ -343,7 +343,7 @@ class TestTestCaseConfigAllCombinations:
             turns=[
                 TestTurn(
                     input=InputConfig(
-                        type=InputType.FUNCTION,
+                        type=InputType.INLINE_CODE,
                         value='def generate(): return "Test"',
                     ),
                     check=CheckConfig(
@@ -381,13 +381,13 @@ class TestTestCaseConfigAllCombinations:
                 TestTurn(
                     input=InputConfig(type=InputType.NODE, value="tester_id"),
                     check=CheckConfig(
-                        type=CheckType.FUNCTION,
+                        type=CheckType.INLINE_CODE,
                         value='def check(s, r): return True',
                     ),
                 )
             ],
         )
-        assert tc.turns[0].check.type == CheckType.FUNCTION
+        assert tc.turns[0].check.type == CheckType.INLINE_CODE
 
     def test_agent_agent(self):
         """agent -> agent (full agent test)."""

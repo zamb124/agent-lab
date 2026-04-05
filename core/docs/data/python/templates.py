@@ -77,8 +77,11 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     Returns:
         Текстовый ответ от LLM
     """
-    response = await llm.chat_simple(prompt)
-    return response
+    msg = await llm.chat(prompt)
+    if not msg.parts:
+        return ""
+    part = msg.parts[0].root
+    return getattr(part, "text", "") or ""
 ''',
     },
     {
@@ -152,11 +155,15 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     
     results = []
     for file_info in files:
-        content = read_file(file_info["path"])
+        from pathlib import Path
+        res = await reader.read(source=Path(file_info["path"]))
+        preview = res.pages[0].text[:2000] if res.pages else ""
         results.append({
             "name": file_info["name"],
-            "size": len(content),
             "mime_type": file_info.get("mime_type", "unknown"),
+            "detected_kind": str(res.detected_kind),
+            "page_count": res.page_count,
+            "text_preview": preview,
         })
     
     return {"files": results}
@@ -248,9 +255,12 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     content = state.get("content", "")
     
     prompt = f"Обработай следующий запрос: {content}"
-    response = await llm.chat_simple(prompt)
-    
-    state["response"] = response
+    msg = await llm.chat(prompt)
+    text = ""
+    if msg.parts:
+        part = msg.parts[0].root
+        text = getattr(part, "text", "") or ""
+    state["response"] = text
     return state
 ''',
     },
@@ -272,8 +282,12 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
 
 Ответь одним словом - категорией."""
     
-    category = await llm.chat_simple(prompt)
-    state["category"] = category.strip().lower()
+    msg = await llm.chat(prompt)
+    raw = ""
+    if msg.parts:
+        part = msg.parts[0].root
+        raw = getattr(part, "text", "") or ""
+    state["category"] = raw.strip().lower()
     
     return state
 ''',
@@ -332,10 +346,14 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     
     results = []
     for file_info in files:
-        content = read_file(file_info["path"])
+        from pathlib import Path
+        res = await reader.read(source=Path(file_info["path"]))
+        preview = res.pages[0].text[:2000] if res.pages else ""
         results.append({
             "name": file_info["name"],
-            "size": len(content),
+            "detected_kind": str(res.detected_kind),
+            "page_count": res.page_count,
+            "text_preview": preview,
         })
     
     state["files_info"] = results

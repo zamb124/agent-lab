@@ -14,7 +14,7 @@ from apps.flows_worker.broker import broker
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.eval_task import execute_inline_code
 from apps.flows.src.tasks.tool_tasks import execute_tool
-from apps.flows.src.tasks import calendar_sync_tasks
+import apps.idle_worker.tasks.calendar_sync_tasks as calendar_sync_tasks
 from core.models import (
     CalendarEventSource,
     CalendarIntegration,

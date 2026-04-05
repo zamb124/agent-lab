@@ -402,6 +402,16 @@ export class CreateEmbedModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
+        const title = this._loading ? td('embed_create_modal.creating') : td('embed_create_modal.submit');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._handleCreate(),
+            disabled: this._loading || this._flowsLoading,
+            title,
+        });
+    }
+
     renderFooter() {
         const td = (k, p) => this.i18n.t(k, p ?? {});
         return html`
@@ -412,13 +422,6 @@ export class CreateEmbedModal extends PlatformModal {
                     ?disabled=${this._loading}
                 >
                     ${td('embed_create_modal.cancel')}
-                </button>
-                <button
-                    class="btn btn-primary"
-                    @click=${this._handleCreate}
-                    ?disabled=${this._loading || this._flowsLoading}
-                >
-                    ${this._loading ? td('embed_create_modal.creating') : td('embed_create_modal.submit')}
                 </button>
             </div>
         `;

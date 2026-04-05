@@ -8,7 +8,6 @@
   GET    /{file_id}             — метаданные файла
 """
 
-import hashlib
 import logging
 import mimetypes
 from pathlib import Path
@@ -92,7 +91,9 @@ def build_file_api_router(
         context = get_context()
         company_id = context.active_company.company_id
         user_id = context.user.user_id
-        checksum = hashlib.sha256(data).hexdigest()
+        from core.files.checksum import compute_content_checksum_sha256
+
+        checksum = compute_content_checksum_sha256(data)
 
         repo = get_file_repo()
         processor = FileProcessor(file_repository=repo)

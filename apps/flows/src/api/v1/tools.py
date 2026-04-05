@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from apps.flows.src.container import FlowContainer, get_container
 from core.logging import get_logger
 from apps.flows.src.models import ToolReference, CallParameter
+from apps.flows.src.models.enums import ReactToolRole
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,7 @@ class ToolCreateRequest(BaseModel):
     code: Optional[str] = None
     args_schema: Optional[dict] = None
     tags: Optional[List[str]] = None
+    react_role: Optional[str] = None
 
 
 class ToolResponse(BaseModel):
@@ -43,7 +45,7 @@ class ToolResponse(BaseModel):
     tags: List[str] = []
     permission: Optional[str | List[str]] = None
     item_type: str = "tool"  # tool или flow (запись из репозитория flows)
-    tool_type: Optional[str] = None  # tool, reason, exit
+    react_role: Optional[str] = None
     code_mode: Optional[str] = None  # inline_code или mcp_tool
     mcp_server_id: Optional[str] = None  # ID MCP сервера
 
@@ -64,7 +66,7 @@ async def list_tools(
             tags=t.tags or ["misc"],
             permission=t.permission,
             item_type="tool",
-            tool_type=t.tool_type,
+            react_role=t.react_role.value,
         )
         for t in tools
     ]
@@ -89,7 +91,7 @@ async def list_all_tools_and_flows(
             tags=t.tags or ["misc"],
             permission=t.permission,
             item_type="tool",
-            tool_type=t.tool_type,
+            react_role=t.react_role.value,
             code_mode=t.code_mode.value if t.code_mode else None,
             mcp_server_id=t.mcp_server_id,
         ))
@@ -126,7 +128,7 @@ async def get_tool(
         tags=tool.tags or ["misc"],
         permission=tool.permission,
         item_type="tool",
-        tool_type=tool.tool_type,
+        react_role=tool.react_role.value,
     )
 
 
@@ -144,6 +146,12 @@ async def create_tool(
                     description=param_def.get("description", ""),
                 )
     
+    react_role = (
+        ReactToolRole(request.react_role)
+        if request.react_role
+        else ReactToolRole.STANDARD
+    )
+
     ref = ToolReference(
         tool_id=request.tool_id,
         title=request.title,
@@ -151,6 +159,7 @@ async def create_tool(
         code=request.code,
         args_schema=args_schema,
         tags=request.tags or [],
+        react_role=react_role,
     )
 
     await container.tool_repository.set(ref)
@@ -162,7 +171,7 @@ async def create_tool(
         code=ref.code,
         args_schema=ref.args_schema if ref.args_schema else None,
         tags=ref.tags,
-        tool_type=ref.tool_type,
+        react_role=ref.react_role.value,
     )
 
 

@@ -122,11 +122,49 @@ flow-canvas #drawflow-area {
     transform: scale(1.2) !important;
 }
 
-/* Connection lines (SVG) */
-.drawflow svg {
+.drawflow .drawflow-node.fan-in-active .inputs {
+    left: -12px !important;
+}
+
+.drawflow .drawflow-node.fan-in-active .inputs .input {
+    width: 24px !important;
+    height: 24px !important;
+    background: radial-gradient(
+        circle at 50% 45%,
+        rgba(167, 139, 250, 0.42) 0%,
+        rgba(91, 33, 182, 0.38) 55%,
+        rgba(30, 27, 55, 0.92) 100%
+    ) !important;
+    border: 2.5px solid rgba(196, 181, 253, 0.75) !important;
+    box-shadow: 0 0 0 1px rgba(15, 15, 25, 0.35) !important;
+}
+
+.drawflow .drawflow-node.fan-in-active .inputs .input:hover {
+    background: radial-gradient(
+        circle at 50% 45%,
+        rgba(167, 139, 250, 0.55) 0%,
+        rgba(91, 33, 182, 0.48) 55%,
+        rgba(30, 27, 55, 0.95) 100%
+    ) !important;
+    border-color: #34d399 !important;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35) !important;
+}
+
+.drawflow .drawflow-node.fan-in-active.fan-in-policy-all .inputs .input {
+    border-color: rgba(192, 132, 252, 0.95) !important;
+    box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.45) !important;
+}
+
+/* Connection lines (SVG): graph edges only; do not alter SVG inside nodes */
+.drawflow > svg {
     z-index: 1 !important;
     position: absolute !important;
     overflow: visible !important;
+}
+
+.drawflow .drawflow-node svg {
+    position: static !important;
+    z-index: auto !important;
 }
 
 .drawflow .connection {
@@ -268,6 +306,16 @@ flow-canvas .context-menu-item.active {
     color: #10b981;
 }
 
+flow-canvas .context-menu-item.disabled {
+    color: var(--text-tertiary, rgba(255, 255, 255, 0.38));
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+flow-canvas .context-menu-item.disabled:hover {
+    background: transparent !important;
+}
+
 flow-canvas .context-menu-separator {
     height: 1px;
     background: rgba(255,255,255,0.08);
@@ -276,11 +324,122 @@ flow-canvas .context-menu-separator {
 
 /* AGENT NODE CONTENT STYLES */
 .drawflow .agent-node {
-    padding: 14px 18px !important;
     display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    position: relative !important;
+}
+
+.drawflow .agent-node-main {
+    display: flex !important;
+    flex-direction: row !important;
     align-items: center !important;
     gap: 14px !important;
+    padding: 14px 18px !important;
     position: relative !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+}
+
+.drawflow .agent-node-tools {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 5px !important;
+    padding: 0 10px 10px 14px !important;
+    margin-top: -4px !important;
+    box-sizing: border-box !important;
+}
+
+.drawflow .agent-node-tool-chip {
+    --tool-chip-accent: #94a3b8;
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    border: 1px solid color-mix(in srgb, var(--tool-chip-accent) 48%, transparent) !important;
+    background: color-mix(in srgb, var(--tool-chip-accent) 26%, transparent) !important;
+    color: var(--tool-chip-accent) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box !important;
+    line-height: 0 !important;
+}
+
+.drawflow .agent-node-tool-chip platform-icon {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: inherit !important;
+}
+
+.drawflow .agent-node-tool-chip--readonly {
+    cursor: default !important;
+    opacity: 0.82 !important;
+    pointer-events: auto !important;
+}
+
+.drawflow .agent-node-tool-chip--editable {
+    cursor: pointer !important;
+    margin: 0 !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+}
+
+.drawflow .agent-node-tool-chip--editable:hover {
+    border-color: color-mix(in srgb, var(--tool-chip-accent) 72%, transparent) !important;
+    background: color-mix(in srgb, var(--tool-chip-accent) 40%, transparent) !important;
+    filter: saturate(1.12) brightness(1.06) !important;
+}
+
+.drawflow .drawflow-node .inputs > .node-fanin-trigger {
+    position: absolute !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 24px !important;
+    height: 24px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    pointer-events: none !important;
+    z-index: 4 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+}
+
+.drawflow .drawflow-node .inputs > .node-fanin-trigger[hidden] {
+    display: none !important;
+}
+
+.drawflow .drawflow-node .inputs .node-fanin-trigger .node-fanin-svg {
+    display: block !important;
+    width: 13px !important;
+    height: 13px !important;
+    flex-shrink: 0 !important;
+}
+
+.drawflow .node-fanin-icon {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 0 !important;
+    color: #f5f3ff !important;
+    filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.55));
+}
+
+.drawflow .drawflow-node .inputs > .node-fanin-trigger.node-fanin-policy-all .node-fanin-icon {
+    color: rgba(216, 201, 255, 0.98) !important;
 }
 
 .drawflow .agent-node-icon {
@@ -376,10 +535,6 @@ flow-canvas .context-menu-separator {
 
 .drawflow .drawflow-node.is-entry-node {
     border-color: #10b981;
-}
-
-.drawflow .drawflow-node.is-entry-node .inputs {
-    display: none !important;
 }
 
 .drawflow .drawflow-node.node-running {
@@ -497,6 +652,53 @@ flow-canvas .context-menu-separator {
 
 [data-theme="light"] .drawflow .agent-node-type {
     color: #64748b !important;
+}
+
+[data-theme="light"] .drawflow .agent-node-tool-chip {
+    border-color: color-mix(in srgb, var(--tool-chip-accent) 40%, transparent) !important;
+    background: color-mix(in srgb, var(--tool-chip-accent) 18%, transparent) !important;
+}
+
+[data-theme="light"] .drawflow .agent-node-tool-chip--editable:hover {
+    border-color: color-mix(in srgb, var(--tool-chip-accent) 58%, transparent) !important;
+    background: color-mix(in srgb, var(--tool-chip-accent) 30%, transparent) !important;
+}
+
+[data-theme="light"] .drawflow .drawflow-node.fan-in-active .inputs .input {
+    width: 24px !important;
+    height: 24px !important;
+    background: radial-gradient(
+        circle at 50% 40%,
+        rgba(196, 181, 253, 0.85) 0%,
+        rgba(167, 139, 250, 0.45) 45%,
+        rgba(139, 92, 246, 0.28) 100%
+    ) !important;
+    border: 2.5px solid rgba(124, 58, 237, 0.5) !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset !important;
+}
+
+[data-theme="light"] .drawflow .drawflow-node.fan-in-active .inputs .input:hover {
+    background: radial-gradient(
+        circle at 50% 40%,
+        rgba(196, 181, 253, 0.95) 0%,
+        rgba(167, 139, 250, 0.55) 45%,
+        rgba(139, 92, 246, 0.38) 100%
+    ) !important;
+    border-color: #10b981 !important;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25) !important;
+}
+
+[data-theme="light"] .drawflow .drawflow-node.fan-in-active.fan-in-policy-all .inputs .input {
+    border-color: rgba(109, 40, 217, 0.65) !important;
+}
+
+[data-theme="light"] .drawflow .node-fanin-icon {
+    color: #4c1d95 !important;
+    filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.95));
+}
+
+[data-theme="light"] .drawflow .drawflow-node .inputs > .node-fanin-trigger.node-fanin-policy-all .node-fanin-icon {
+    color: rgba(79, 70, 229, 0.95) !important;
 }
 
 [data-theme="light"] .drawflow .drawflow-node .input,

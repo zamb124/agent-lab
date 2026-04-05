@@ -31,6 +31,10 @@ from apps.sync.realtime.commands import CommandEnvelope, MessagesSendPayload
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
 from core.files.audio_probe import probe_audio_duration_ms_from_bytes
+from core.files.audio_silence import (
+    trim_leading_trailing_silence_from_bytes,
+    volumedetect_max_volume_db_from_bytes,
+)
 from core.files.audio_transcode import transcode_audio_bytes_to_m4a_aac
 from core.files.processors import FileProcessor
 from core.files.s3_client import S3ClientFactory
@@ -319,9 +323,42 @@ async def _post_segment_file_as_message(
         raw, original_name=original_name, mime_type=mime_type
     )
 
-    duration_ms = await probe_audio_duration_ms_from_bytes(
-        normalized_audio, Path(upload_name).suffix.lower() or ".bin"
-    )
+    stc = settings.calls.speech_to_chat
+    upload_suffix = Path(upload_name).suffix.lower() or ".bin"
+    base_upload_mime = upload_mime.split(";")[0].strip().lower()
+    if base_upload_mime.startswith("audio/"):
+        max_vol_db = await volumedetect_max_volume_db_from_bytes(
+            normalized_audio, upload_suffix
+        )
+        if max_vol_db < stc.speech_segment_discard_below_max_volume_db:
+            logger.info(
+                "speech_to_chat: сегмент без существенного сигнала call_id=%s track=%s max_volume_db=%s",
+                call_id,
+                row.track_sid,
+                max_vol_db,
+            )
+            return
+        normalized_audio = await trim_leading_trailing_silence_from_bytes(
+            normalized_audio,
+            source_suffix=upload_suffix,
+            threshold_db=stc.speech_segment_trim_silence_threshold_db,
+            min_silence_sec=stc.speech_segment_trim_min_silence_sec,
+        )
+        duration_ms = await probe_audio_duration_ms_from_bytes(
+            normalized_audio, upload_suffix
+        )
+        if duration_ms < stc.speech_segment_min_post_duration_ms:
+            logger.info(
+                "speech_to_chat: после обрезки тишины сегмент слишком короткий call_id=%s track=%s duration_ms=%s",
+                call_id,
+                row.track_sid,
+                duration_ms,
+            )
+            return
+    else:
+        duration_ms = await probe_audio_duration_ms_from_bytes(
+            normalized_audio, upload_suffix
+        )
     if duration_ms <= 0:
         raise ValueError("Не удалось определить длительность сегмента speech-to-chat.")
 
@@ -656,6 +693,8 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                                 s3_secret_key=sk,
                                 s3_region=region,
                                 s3_bucket=bucket,
+                                company_id=company_id,
+                                user_id=identity,
                                 s3_endpoint=endpoint,
                                 api=api,
                             )
@@ -711,12 +750,15 @@ async def stop_speech_egresses_for_call_room(
     call_id: str,
     company_id: str,
     room_name: str,
+    actor_user_id: str,
 ) -> None:
     container = get_sync_container()
     repo = container.call_speech_egress_track_repository
     rows = await repo.list_for_call(call_id, company_id)
     if len(rows) == 0:
         return
+    if actor_user_id.strip() == "":
+        raise ValueError("actor_user_id обязателен для stop_speech_egresses_for_call_room.")
 
     settings = get_settings()
     lk = LiveKitClient(
@@ -737,7 +779,12 @@ async def stop_speech_egresses_for_call_room(
             for row in rows:
                 info: Any | None = None
                 try:
-                    info = await lk.stop_egress(egress_id=row.egress_id, api=api)
+                    info = await lk.stop_egress(
+                        egress_id=row.egress_id,
+                        company_id=company_id,
+                        user_id=actor_user_id,
+                        api=api,
+                    )
                 except TwirpError as exc:
                     if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
                         logger.warning(

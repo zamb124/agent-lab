@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 
@@ -206,6 +207,19 @@ export class EditTeamMemberModal extends PlatformModal {
             : this._renderRoles(isCompanyOwner);
     }
 
+    renderSaveHeaderButton() {
+        if (this._loadingSettings) {
+            return html``;
+        }
+        const td = (k) => this.i18n.t(k, {});
+        const title = this._saving ? td('team_modal.saving') : td('team_modal.save');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._handleSave(),
+            disabled: this._saving,
+            title,
+        });
+    }
+
     renderFooter() {
         const td = (k) => this.i18n.t(k, {});
         return this._loadingSettings
@@ -218,13 +232,6 @@ export class EditTeamMemberModal extends PlatformModal {
                         ?disabled=${this._saving}
                     >
                         ${td('team_modal.cancel')}
-                    </button>
-                    <button
-                        class="btn btn-primary"
-                        @click=${this._handleSave}
-                        ?disabled=${this._saving}
-                    >
-                        ${this._saving ? td('team_modal.saving') : td('team_modal.save')}
                     </button>
                 </div>
             `;

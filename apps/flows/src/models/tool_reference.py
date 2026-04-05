@@ -4,9 +4,9 @@
 
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .enums import CodeMode
+from .enums import CodeMode, ReactToolRole
 
 # Тип для permission: строка или список строк
 Permission = Optional[Union[str, List[str]]]
@@ -26,12 +26,12 @@ class ToolReference(BaseModel):
     model_config = ConfigDict(json_schema_extra={"storage_prefix": "tool"})
 
     tool_id: str = Field(..., description="ID инструмента")
+    name: Optional[str] = Field(
+        default=None,
+        description="Подпись в UI (flows editor, модалки). Если не задана — title или tool_id.",
+    )
     title: Optional[str] = Field(default=None, description="Название для отображения")
     description: Optional[str] = Field(default=None, description="Описание инструмента")
-    type: str = Field(
-        default="tool",
-        description="Тип инструмента (tool, function, external_api)",
-    )
     args_schema: Dict[str, CallParameter] = Field(
         default_factory=dict, description="Схема аргументов {param_name: {type, description}}"
     )
@@ -51,14 +51,26 @@ class ToolReference(BaseModel):
         if v is None:
             return []
         return v
+
+    @model_validator(mode="after")
+    def default_display_name(self):
+        raw = (self.name or "").strip()
+        if raw:
+            return self
+        t = (self.title or "").strip()
+        label = t if t else self.tool_id.strip()
+        if not label:
+            raise ValueError("tool_id must be non-empty for display name")
+        object.__setattr__(self, "name", label)
+        return self
     
     tags: List[str] = Field(
         default_factory=list,
         description="Группы/категории тула: misc, math, docs, api, validation",
     )
-    tool_type: str = Field(
-        default="tool",
-        description="Тип инструмента: tool, reason, exit"
+    react_role: ReactToolRole = Field(
+        default=ReactToolRole.STANDARD,
+        description="Роль в ReAct: standard, reason, exit",
     )
     public_fields: Optional[List[str]] = Field(
         default=None,
@@ -83,7 +95,7 @@ class ToolReference(BaseModel):
         """Преобразует в формат для registry API (совместимость с platformweb)"""
         return {
             "name": self.tool_id,
-            "type": self.type,
+            "type": "inline_code",
             "attributes": {
                 "description": self.description or "",
                 "args_schema": {

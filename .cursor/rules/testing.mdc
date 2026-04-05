@@ -25,6 +25,8 @@ alwaysApply: false
 
 Встроенный **`faulthandler_timeout`** отключён (**`0`**): он только печатает стеки и не гарантирует остановку; дублировать смысла нет. Для **`real_taskiq`** в `tests/conftest.py` остаётся хук **`pytest_runtest_call`** (на случай снова включить `faulthandler_timeout` в конфиге).
 
+**Redis / `notification_manager`:** в одном процессе pytest поднимается несколько приложений (`create_service_app`). При **`TESTING=true`** в **`core/app/factory.py`** при shutdown **не** вызывается **`notification_manager.stop_redis_listener()`**, иначе следующий тест в том же gw-worker получает **`Redis client not initialized`**. Сессионная фикстура **`platform_notification_manager_redis`** в **`tests/conftest.py`** поднимает listener один раз на worker. Тесты, подписывающиеся на **`platform:notifications`**, не должны подменять **`notification_manager._redis_client`** и обнулять его в `finally`; при общем канале отбирать своё сообщение по уникальному полю в payload (например **`message_id`**), а не по одному `get_message`.
+
 Прервать прогон: **Ctrl+C** или `pkill -f "pytest.*tests/"`. Лог: `make test WORKERS=2 2>&1 | tee logs/make-test.log`.
 
 ### Разделение runtime `make app` и тестовых cleanup

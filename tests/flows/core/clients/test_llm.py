@@ -58,7 +58,7 @@ class TestMockLLMStreaming:
 
     @pytest.mark.asyncio
     async def test_stream_yields_final_status_event(self):
-        """stream yield'ит финальный TaskStatusUpdateEvent."""
+        """stream yield'ит завершающий TaskStatusUpdateEvent (completed; final=False как в LLMClient)."""
         mock = MockLLM()
         mock.configure(default_response="Test response")
 
@@ -67,9 +67,9 @@ class TestMockLLMStreaming:
             events.append(event)
 
         status_events = [e for e in events if isinstance(e, TaskStatusUpdateEvent)]
-        final_events = [e for e in status_events if e.final]
-        assert len(final_events) == 1
-        assert final_events[0].status.state.value == "completed"
+        completed = [e for e in status_events if e.status.state.value == "completed"]
+        assert len(completed) == 1
+        assert completed[0].final is False
 
     @pytest.mark.asyncio
     async def test_stream_with_response_queue(self):

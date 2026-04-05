@@ -278,7 +278,18 @@
     }
   },
   "flow_canvas": {
+    "fanin_input_hint": "Double-click: ANY or ALL. Drag connections to the port as usual.",
+    "context_menu_fan_in_policy": "Fan-in policy (ANY / ALL)",
+    "context_menu_fan_in_policy_disabled_hint": "Requires at least two incoming edges to this node.",
+    "incoming_policy_modal": {
+      "title": "Incoming edges",
+      "option_any_title": "ANY",
+      "option_any_desc": "Run the node when any incoming edge completes.",
+      "option_all_title": "ALL",
+      "option_all_desc": "Wait for all incoming edges (AND-join)."
+    },
     "inherited_badge_title": "Inherited from base",
+    "tool_chip_readonly_title": "Tool reference only; editing is not available from the canvas",
     "channel_badge": {
       "telegram": "Telegram",
       "email": "Email",
@@ -388,6 +399,7 @@
     "max_iterations_label": "Max iterations",
     "loop_mode_label": "Loop mode",
     "tools_mode_label": "Tools mode",
+    "tool_chip_remove_aria": "Remove tool {{id}} from list",
     "section_tools": "Tools",
     "inline_menu": "Inline ▼",
     "add_tool": "+ Add",
@@ -609,11 +621,24 @@
     "placeholder_api_key": "sk-... or @var:my_api_key",
     "hint_api_key": "Direct value or @var:variable_name",
     "label_base_url": "Base URL (optional)",
-    "placeholder_base_url": "https://api.openai.com/v1"
+    "placeholder_base_url": "https://api.openai.com/v1",
+    "advanced_toggle": "Advanced",
+    "advanced_hint": "OpenAI-compatible API fields; your provider may ignore some. Full control: JSON block below.",
+    "placeholder_top_p_default": "1",
+    "placeholder_top_k_example": "40",
+    "placeholder_penalty_default": "0",
+    "placeholder_seed_example": "42",
+    "label_freq_penalty": "frequency_penalty",
+    "label_pres_penalty": "presence_penalty",
+    "label_seed": "seed",
+    "label_reasoning": "reasoning_effort",
+    "reasoning_unset": "Unset",
+    "label_extra_json": "Extra parameters (JSON)",
+    "hint_extra_json": "Object merged into the request body last; overrides values from the fields above.",
+    "err_extra_json": "Invalid JSON in extra parameters",
+    "err_extra_not_object": "Extra parameters must be a JSON object {}, not an array"
   },
   "test_panel": {
-    "err_session_list": "Could not load sessions: {{message}}",
-    "err_select_session": "Select a session",
     "running": "Running...",
     "hint_execute": "Click Execute to run",
     "err_run": "Execution error",
@@ -623,12 +648,6 @@
     "success": "Completed successfully",
     "input_state_title": "Input State (JSON)",
     "reset": "Reset",
-    "session_label": "Session",
-    "session_loading": "Loading…",
-    "session_select_placeholder": "— select —",
-    "apply_state": "Apply state",
-    "refresh_sessions_title": "Refresh list",
-    "refresh": "Refresh",
     "title": "Test",
     "validate": "Validate",
     "execute": "Execute",
@@ -748,6 +767,8 @@
     "node_id_empty": "Node ID cannot be empty",
     "node_id_format": "Node ID must start with a letter and contain only letters, digits and _",
     "node_id_hint": "Unique node id (latin letters, digits, _)",
+    "node_id_locked_hint": "The ID cannot be changed after the node is created. A node created with «Duplicate» from the card menu can be renamed once.",
+    "node_id_rename_once_hint": "Set a unique ID once; after you save it, it cannot be changed again.",
     "section_main": "General",
     "placeholder_node_name": "Node name",
     "placeholder_node_description": "What this node does",
@@ -928,13 +949,9 @@
         "name": "Multi-flow",
         "description": "Nested flows and llm_nodes for multi-step scenarios."
       },
-      "function": {
-        "name": "Function flow",
-        "description": "Python functions for computation and data transforms."
-      },
-      "tool": {
-        "name": "Tool flow",
-        "description": "Narrow tool flow: one task, callable from other flows."
+      "code": {
+        "name": "Code flow",
+        "description": "Single code node (Python): transforms, computations, or a narrow tool callable from other flows."
       },
       "external": {
         "name": "External flow",
@@ -959,14 +976,9 @@
         "tags": "new,multi-flow",
         "prompt": "You are a supervisor coordinating nested flows and tools. Delegate to the right nodes."
       },
-      "function": {
-        "flow_name": "New Function flow",
-        "description": "Function-based flow",
-        "tags": "new,code"
-      },
-      "tool": {
-        "flow_name": "New Tool flow",
-        "description": "Narrow tool flow",
+      "code": {
+        "flow_name": "New Code flow",
+        "description": "Code-node flow",
         "tags": "new,code"
       },
       "external": {
@@ -991,11 +1003,11 @@
     "placeholder_name": "Tool name",
     "field_description": "Description",
     "placeholder_description": "What does this tool do?",
-    "field_tool_type": "Tool type",
-    "option_tool": "Tool — standard tool",
-    "option_reason": "Reason — reasoning tool",
-    "option_exit": "Exit — completion tool",
-    "tool_type_hint": "Reason/Exit tools have a special role in ReAct agents",
+    "field_react_role": "ReAct role",
+    "option_standard": "Standard tool",
+    "option_reason": "Reason — reasoning step",
+    "option_exit": "Exit — completion",
+    "react_role_hint": "Reason and Exit change behavior in the ReAct loop",
     "args_schema_label": "Args Schema",
     "args_schema_hint": "JSON schema for arguments (e.g. {\"query\": {\"type\": \"string\"}})",
     "code_label": "Code",
@@ -1005,17 +1017,16 @@
     "title_create": "Create {{label}}",
     "title_edit": "Edit {{label}}",
     "types": {
-      "tool": "Tool",
+      "code": "Code",
       "llm_node": "LLM Node",
       "flow": "Flow",
-      "function": "Function",
       "external_api": "External API",
       "remote_flow": "Remote A2A flow",
       "mcp": "MCP Tool"
     },
     "type_fallback": "Tool",
     "err_editor_missing": "Editor not found",
-    "err_code_tool": "Code is required for tool",
+    "err_code_tool": "Tool code is required",
     "err_prompt_llm": "Prompt is required for llm_node",
     "err_name_required": "Name is required",
     "err_unknown_type": "Unknown tool type: {{type}}",

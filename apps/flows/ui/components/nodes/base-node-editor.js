@@ -114,6 +114,48 @@ export class BaseNodeEditor extends PlatformElement {
                 border-color: var(--accent);
                 box-shadow: 0 0 0 3px var(--accent-glow);
             }
+
+            /* Higher specificity than .form-input and :host-context(light) .form-input in form.styles */
+            .form-input.node-id-input--locked {
+                background: rgba(255, 255, 255, 0.04);
+                background-image: none;
+                color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+                border-color: var(--border-subtle, rgba(255, 255, 255, 0.08));
+                box-shadow: none;
+                cursor: not-allowed;
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+            }
+
+            .form-input.node-id-input--locked:hover {
+                border-color: var(--border-subtle, rgba(255, 255, 255, 0.08));
+                box-shadow: none;
+            }
+
+            .form-input.node-id-input--locked:focus {
+                outline: none;
+                background: rgba(255, 255, 255, 0.04);
+                background-image: none;
+                border-color: var(--border-subtle, rgba(255, 255, 255, 0.1));
+                box-shadow: none;
+                color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+            }
+
+            :host-context([data-theme='light']) .form-input.node-id-input--locked {
+                color: rgba(34, 34, 34, 0.42);
+                background: rgba(34, 34, 34, 0.07);
+                background-image: none;
+                border-color: rgba(34, 34, 34, 0.12);
+                box-shadow: inset 0 1px 0 rgba(34, 34, 34, 0.04);
+            }
+
+            :host-context([data-theme='light']) .form-input.node-id-input--locked:focus {
+                color: rgba(34, 34, 34, 0.42);
+                background: rgba(34, 34, 34, 0.07);
+                background-image: none;
+                border-color: rgba(34, 34, 34, 0.14);
+                box-shadow: inset 0 1px 0 rgba(34, 34, 34, 0.04);
+            }
         `
     ];
 
@@ -125,6 +167,7 @@ export class BaseNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         previewExecutionState: { type: Object },
         expanded: { type: Boolean },
+        allowNodeIdRenameOnce: { type: Boolean },
     };
 
     constructor() {
@@ -136,6 +179,7 @@ export class BaseNodeEditor extends PlatformElement {
         this.flowVariables = {};
         this.previewExecutionState = null;
         this.expanded = false;
+        this.allowNodeIdRenameOnce = false;
         this._testStateSnapshot = { content: '', messages: [], variables: {} };
     }
 
@@ -146,7 +190,6 @@ export class BaseNodeEditor extends PlatformElement {
     _renderTestPanel() {
         return html`
             <test-panel
-                .flowId=${this.flowId || ''}
                 .inputState=${this._testStateSnapshot}
                 .defaultInputState=${this._testStateSnapshot}
                 ?expanded=${this.expanded}
@@ -179,8 +222,12 @@ export class BaseNodeEditor extends PlatformElement {
         this._updateConfig(field, value);
     }
 
+    _executePayloadNodeType() {
+        return this.nodeConfig?.type || this._nodeType;
+    }
+
     async _onValidate(e) {
-        const nodeType = this.nodeConfig?.type || this._nodeType;
+        const nodeType = this._executePayloadNodeType();
         
         console.log('[BaseNodeEditor] _onValidate called', {
             nodeId: this.nodeId,
@@ -220,7 +267,7 @@ export class BaseNodeEditor extends PlatformElement {
     }
 
     async _onExecute(e) {
-        const nodeType = this.nodeConfig?.type || this._nodeType;
+        const nodeType = this._executePayloadNodeType();
         
         console.log('[BaseNodeEditor] _onExecute called', {
             nodeId: this.nodeId,
@@ -278,8 +325,13 @@ export class BaseNodeEditor extends PlatformElement {
      * Валидирует формат и эмитит событие для обновления
      */
     _onNodeIdChange(e) {
+        if (!this.allowNodeIdRenameOnce) {
+            e.target.value = this.nodeId;
+            return;
+        }
+
         const newId = e.target.value.trim();
-        
+
         if (!newId) {
             this.error(this.i18n.t('base_node_editor.node_id_empty'));
             e.target.value = this.nodeId;
@@ -305,19 +357,23 @@ export class BaseNodeEditor extends PlatformElement {
      * Унифицированный компонент для всех типов нод
      */
     renderNodeIdField() {
+        const hintKey = this.allowNodeIdRenameOnce
+            ? 'base_node_editor.node_id_rename_once_hint'
+            : 'base_node_editor.node_id_locked_hint';
         return html`
             <div class="form-group">
                 <div class="form-label">
                     <span class="form-label-text">${this.i18n.t('node_modal.common.sidebar_node_id')}</span>
                 </div>
-                <input 
-                    type="text" 
-                    class="form-input"
+                <input
+                    type="text"
+                    class="form-input${this.allowNodeIdRenameOnce ? '' : ' node-id-input--locked'}"
                     .value=${this.nodeId}
+                    ?readonly=${!this.allowNodeIdRenameOnce}
                     @change=${this._onNodeIdChange}
                     placeholder=${this.i18n.t('base_node_editor.placeholder_node_id')}
                 />
-                <span class="form-label-hint">${this.i18n.t('base_node_editor.node_id_hint')}</span>
+                <span class="form-label-hint">${this.i18n.t(hintKey)}</span>
             </div>
         `;
     }

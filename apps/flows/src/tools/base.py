@@ -14,10 +14,11 @@ import hashlib
 import os
 import re
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
+
+from apps.flows.src.models.enums import ReactToolRole
 
 
 def sanitize_tool_name(name: str) -> str:
@@ -38,13 +39,6 @@ def sanitize_tool_name(name: str) -> str:
 if TYPE_CHECKING:
     from core.state import ExecutionState
     from apps.flows.src.runtime.exceptions import FlowInterrupt
-
-
-class ToolType(str, Enum):
-    """Тип tool для llm_node."""
-    TOOL = "tool"
-    REASON = "reason"
-    EXIT = "exit"
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.config import get_settings
@@ -88,7 +82,7 @@ class BaseTool(ABC):
     args_schema: Optional[Type[BaseModel]] = None
     permission: Permission = None
     tags: List[str] = []  # Группы/категории: misc, math, docs, api, validation
-    tool_type: ToolType = ToolType.TOOL  # reason/exit tools могут быть только по 1
+    react_role: ReactToolRole = ReactToolRole.STANDARD
 
     # Mock ответ для тестов (переопределить в наследниках)
     mock_response: Any = "mock_result"
@@ -266,14 +260,14 @@ class InlineTool(BaseTool):
         parameters: Optional[Dict[str, Any]] = None,
         permission: Permission = None,
         tags: Optional[List[str]] = None,
-        tool_type: ToolType = ToolType.TOOL,
+        react_role: ReactToolRole = ReactToolRole.STANDARD,
         resources: Optional[Dict[str, Any]] = None,
     ):
         self.name = tool_id
         self.description = description or f"Inline tool: {tool_id}"
         self.permission = permission
         self.tags = tags or ["misc"]
-        self.tool_type = tool_type
+        self.react_role = react_role
         self._code = code
         self._resources_config = resources or {}
 
@@ -382,14 +376,14 @@ class ExternalAPITool(BaseTool):
         response_mapping: Optional[Dict[str, str]] = None,
         permission: Permission = None,
         tags: Optional[List[str]] = None,
-        tool_type: ToolType = ToolType.TOOL,
+        react_role: ReactToolRole = ReactToolRole.STANDARD,
     ):
         self.api_id = api_id
         self.name = api_id
         self.description = description or f"External API: {api_id}"
         self.permission = permission
         self.tags = tags or ["api"]
-        self.tool_type = tool_type
+        self.react_role = react_role
         self._url = url
         self._method = method
         self._headers = headers or {}

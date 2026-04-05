@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ast
 import builtins as b
+import datetime as stdlib_datetime
 import importlib
 import math
 import operator
@@ -36,10 +37,12 @@ from apps.flows.src.eval.state_utils import (
     get_tool_result,
     get_user,
     merge_state,
-    read_file,
-    read_file_base64,
+    read_path_bytes,
+    read_path_base64,
     set_nested,
 )
+from core.files.reader import FileReader
+from apps.flows.src.tools.decorator import tool
 from apps.flows.src.eval.wrappers import (
     HttpxModule,
     SafeChannel,
@@ -48,7 +51,9 @@ from apps.flows.src.eval.wrappers import (
 )
 from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
+from apps.flows.tools.scheduling import _extract_ids_from_state
 from core.errors import SafeEvalError
+from core.scheduler.models import ContentType
 from core.logging import get_logger
 
 
@@ -149,8 +154,9 @@ class PythonNamespaceBuilder:
         namespace["add_agent_message"] = add_agent_message
         
         # Утилиты для работы с файлами
-        namespace["read_file"] = read_file
-        namespace["read_file_base64"] = read_file_base64
+        namespace["read_path_bytes"] = read_path_bytes
+        namespace["read_path_base64"] = read_path_base64
+        namespace["reader"] = FileReader()
         namespace["Path"] = pathlib.Path
         
         # Interrupt для запроса информации у пользователя
@@ -185,10 +191,17 @@ class PythonNamespaceBuilder:
         
         # Настройки
         namespace["get_settings"] = get_settings
-        
-        # BaseTool для создания инструментов в inline коде
+
+        namespace["get_container"] = get_container
+        # Шаблоны из tool_repository часто без импортов; в исходниках было ``from datetime import datetime``.
+        namespace["datetime"] = stdlib_datetime.datetime
+        namespace["ContentType"] = ContentType
+        namespace["_extract_ids_from_state"] = _extract_ids_from_state
+
+        # BaseTool и @tool: функция из кода -> схема для llm.chat(..., tools=[...])
         container = get_container()
         namespace["BaseTool"] = container.base_tool_class
+        namespace["tool"] = tool
         
         # Ресурсы агента (code modules, llm, rag, http и др.)
         for resource_id, resource in self.resources.items():

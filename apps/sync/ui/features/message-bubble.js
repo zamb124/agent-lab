@@ -674,7 +674,7 @@ export class MessageBubble extends PlatformElement {
                 background: rgba(51, 65, 85, 0.3);
             }
 
-            /* Иначе flex (bubble-contents + время) с min-width:0 сжимает platform-audio-message-player до «таблетки». */
+            /* Without this, flex (bubble-contents + time) with min-width:0 shrinks the audio player to a pill. */
             .bubble.bubble--media {
                 min-width: min(288px, 100%);
             }
@@ -690,7 +690,7 @@ export class MessageBubble extends PlatformElement {
                 max-width: 100%;
             }
 
-            /* Светло-зелёный фон своих пузырей: дефолтные цвета плеера сливаются с фоном — волна и время «пропадают». */
+            /* Own-bubble mint background: default player colors blend in; wave and time need darker tokens. */
             .bubble.own.bubble--media platform-audio-message-player {
                 --platform-audio-bar-inactive: rgba(4, 52, 34, 0.58);
                 --platform-audio-bar-active: rgba(2, 36, 24, 0.98);

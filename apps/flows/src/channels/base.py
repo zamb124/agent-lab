@@ -796,9 +796,8 @@ class BaseChannel(ABC):
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
-        
-        skills = await container.flow_factory.get_skills(self.flow_id)
-        if skill_id in skills:
+
+        if config.skills and skill_id in config.skills:
             raise ValueError(f"Skill '{skill_id}' already exists")
         
         skill_body = data.get("skill_body", {})
@@ -881,9 +880,8 @@ class BaseChannel(ABC):
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
-        
-        skills = await container.flow_factory.get_skills(self.flow_id)
-        if skill_id not in skills:
+
+        if not config.skills or skill_id not in config.skills:
             raise ValueError(f"Skill '{skill_id}' not found")
         
         skill_body = data.get("skill_body", {})
@@ -966,22 +964,18 @@ class BaseChannel(ABC):
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
-        
-        skills = await container.flow_factory.get_skills(self.flow_id)
-        if skill_id not in skills:
+
+        if not config.skills or skill_id not in config.skills:
             raise ValueError(f"Skill '{skill_id}' not found")
-        
-        if config.skills and skill_id in config.skills:
-            del config.skills[skill_id]
-            await container.flow_repository.set(config)
-            logger.info(f"Deleted skill: {skill_id}")
-            return {
-                "status": "success",
-                "message": f"Skill '{skill_id}' deleted successfully",
-                "skill_id": skill_id,
-            }
-        
-        raise ValueError(f"Skill '{skill_id}' not found")
+
+        del config.skills[skill_id]
+        await container.flow_repository.set(config)
+        logger.info(f"Deleted skill: {skill_id}")
+        return {
+            "status": "success",
+            "message": f"Skill '{skill_id}' deleted successfully",
+            "skill_id": skill_id,
+        }
     
     # === Tools ===
     

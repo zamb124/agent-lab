@@ -108,6 +108,14 @@ from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 logger = get_logger(__name__)
 
 
+async def _channel_recipient_user_ids(
+    channels: ChannelRepository,
+    channel_id: str,
+    company_id: str,
+) -> list[str]:
+    return await channels.list_member_user_ids(channel_id, company_id=company_id)
+
+
 async def _maybe_start_speech_to_chat_poll(
     *,
     call_id: str,
@@ -200,7 +208,11 @@ async def _stop_and_finalize_recording(
         recording.provider_job_id,
     )
     try:
-        await livekit_client.stop_egress(egress_id=recording.provider_job_id)
+        await livekit_client.stop_egress(
+            egress_id=recording.provider_job_id,
+            company_id=company_id,
+            user_id=actor_user_id,
+        )
     except TwirpError as exc:
         if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
             logger.warning(
@@ -575,7 +587,11 @@ async def execute_command(
     if cmd.type == "spaces.create":
         payload = SpacesCreatePayload.model_validate(cmd.payload)
         space = await _create_space(payload.body, actor_user_id=cmd.actor_user_id, company_id=cmd.company_id, spaces=spaces)
-        return CommandExecutionResult(ok=True, result=space, events=[event_space_created(space)])
+        return CommandExecutionResult(
+            ok=True,
+            result=space,
+            events=[event_space_created(space, company_id=cmd.company_id)],
+        )
 
     if cmd.type == "spaces.update":
         payload = SpacesUpdatePayload.model_validate(cmd.payload)
@@ -597,7 +613,18 @@ async def execute_command(
             channels=channels,
             spaces=spaces,
         )
-        return CommandExecutionResult(ok=True, result=channel, events=[event_channel_created(channel)])
+        ch_recipients = await _channel_recipient_user_ids(channels, channel.id, cmd.company_id)
+        return CommandExecutionResult(
+            ok=True,
+            result=channel,
+            events=[
+                event_channel_created(
+                    channel,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=ch_recipients,
+                ),
+            ],
+        )
 
     if cmd.type == "channels.update":
         payload = ChannelsUpdatePayload.model_validate(cmd.payload)
@@ -627,6 +654,7 @@ async def execute_command(
             read_at,
             company_id=cmd.company_id,
         )
+        read_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, cmd.company_id)
         return CommandExecutionResult(
             ok=True,
             result=None,
@@ -635,6 +663,8 @@ async def execute_command(
                     payload.channel_id,
                     cmd.actor_user_id,
                     read_at,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=read_recipients,
                 ),
             ],
         )
@@ -656,6 +686,7 @@ async def execute_command(
         if user_repository is None:
             raise ValueError("user_repository обязателен для channels.typing.")
         user_brief = await _user_brief(user_repository, cmd.actor_user_id)
+        typing_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, cmd.company_id)
         return CommandExecutionResult(
             ok=True,
             result=None,
@@ -665,6 +696,8 @@ async def execute_command(
                     thread_id=payload.thread_id if payload.thread_id else None,
                     typing=payload.typing,
                     user=user_brief,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=typing_recipients,
                 ),
             ],
         )
@@ -679,7 +712,18 @@ async def execute_command(
             messages=messages,
             user_repository=user_repository,
         )
-        return CommandExecutionResult(ok=True, result=thread, events=[event_thread_created(thread)])
+        thread_recipients = await _channel_recipient_user_ids(channels, thread.channel_id, cmd.company_id)
+        return CommandExecutionResult(
+            ok=True,
+            result=thread,
+            events=[
+                event_thread_created(
+                    thread,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=thread_recipients,
+                ),
+            ],
+        )
 
     if cmd.type == "messages.send":
         payload = MessagesSendPayload.model_validate(cmd.payload)
@@ -714,7 +758,14 @@ async def execute_command(
             actor_user_id=cmd.actor_user_id,
             channels=channels,
         )
-        evs: list[RealtimeEvent] = [event_message_created(message)]
+        lane_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, cmd.company_id)
+        evs: list[RealtimeEvent] = [
+            event_message_created(
+                message,
+                company_id=cmd.company_id,
+                recipient_user_ids=lane_recipients,
+            ),
+        ]
         channel_entity = await channels.get(payload.channel_id)
         if channel_entity is None:
             raise ValueError(f"Канал {payload.channel_id} не найден.")
@@ -741,7 +792,13 @@ async def execute_command(
                         if proc_entity is None:
                             raise RuntimeError("Сообщение пропало после запуска авто-транскрипции.")
                         message = await _message_read_from_db(proc_entity, messages, user_repository)
-                        evs.append(event_message_updated(message))
+                        evs.append(
+                            event_message_updated(
+                                message,
+                                company_id=cmd.company_id,
+                                recipient_user_ids=lane_recipients,
+                            ),
+                        )
                         from apps.sync.realtime.tasks import sync_transcribe_audio_message_task
 
                         await sync_transcribe_audio_message_task.kiq(
@@ -754,9 +811,12 @@ async def execute_command(
 
     if cmd.type == "messages.mark_read":
         payload = MessagesMarkReadPayload.model_validate(cmd.payload)
+        status_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, cmd.company_id)
         event = event_message_status_changed(
             payload.channel_id,
             MessageStatusChangedPayload(message_id=payload.message_id, status=MessageStatus.READ),
+            company_id=cmd.company_id,
+            recipient_user_ids=status_recipients,
         )
         return CommandExecutionResult(ok=True, result=None, events=[event])
 
@@ -834,10 +894,17 @@ async def execute_command(
             company_id=cmd.company_id,
             actor_user_id=cmd.actor_user_id,
         )
+        tr_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, cmd.company_id)
         return CommandExecutionResult(
             ok=True,
             result=updated_read,
-            events=[event_message_updated(updated_read)],
+            events=[
+                event_message_updated(
+                    updated_read,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=tr_recipients,
+                ),
+            ],
         )
 
     if cmd.type == "messages.transcribe_video":
@@ -880,10 +947,17 @@ async def execute_command(
             company_id=cmd.company_id,
             actor_user_id=cmd.actor_user_id,
         )
+        tv_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, cmd.company_id)
         return CommandExecutionResult(
             ok=True,
             result=updated_read,
-            events=[event_message_updated(updated_read)],
+            events=[
+                event_message_updated(
+                    updated_read,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=tv_recipients,
+                ),
+            ],
         )
 
     if cmd.type == "messages.transcribe_call":
@@ -908,7 +982,11 @@ async def execute_command(
     if cmd.type == "git.resources.upsert":
         payload = GitResourcesUpsertPayload.model_validate(cmd.payload)
         ref = await _upsert_git_resource(payload.body, company_id=cmd.company_id, git_refs=git_refs)
-        return CommandExecutionResult(ok=True, result=ref, events=[event_git_resource_upserted(ref)])
+        return CommandExecutionResult(
+            ok=True,
+            result=ref,
+            events=[event_git_resource_upserted(ref, company_id=cmd.company_id)],
+        )
 
     if cmd.type in (
         "call.invite",
@@ -941,7 +1019,13 @@ async def execute_command(
                 messages=messages,
                 user_repository=user_repository,
             )
-            evs.append(event_message_created(started_read))
+            evs.append(
+                event_message_created(
+                    started_read,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=member_ids,
+                ),
+            )
             if len(member_ids) <= 1:
                 now = datetime.now(UTC)
                 await calls.update_call_status(out.call_id, "active", started_at=now)
@@ -954,7 +1038,7 @@ async def execute_command(
                     channels=channels,
                 )
         elif cmd.type == "call.accept":
-            out, evs, became_active = await handle_call_accept(cmd, calls=calls)
+            out, evs, became_active = await handle_call_accept(cmd, calls=calls, channels=channels)
             if became_active:
                 await _maybe_start_speech_to_chat_poll(
                     call_id=out.call_id,
@@ -964,7 +1048,7 @@ async def execute_command(
                     channels=channels,
                 )
         elif cmd.type == "call.decline":
-            out, evs = await handle_call_decline(cmd, calls=calls)
+            out, evs = await handle_call_decline(cmd, calls=calls, channels=channels)
         elif cmd.type == "call.hangup":
             payload = CallHangupPayload.model_validate(cmd.payload)
             auto_stopped_recording_event: RealtimeEvent | None = None
@@ -979,8 +1063,15 @@ async def execute_command(
                         actor_user_id=cmd.actor_user_id,
                         call_recordings=call_recordings,
                     )
-                    auto_stopped_recording_event = event_call_recording_stopped(stopped_recording)
-            out, evs, call_fully_ended = await handle_call_hangup(cmd, calls=calls)
+                    rec_stop_recipients = await _channel_recipient_user_ids(
+                        channels, call.channel_id, cmd.company_id
+                    )
+                    auto_stopped_recording_event = event_call_recording_stopped(
+                        stopped_recording,
+                        company_id=cmd.company_id,
+                        recipient_user_ids=rec_stop_recipients,
+                    )
+            out, evs, call_fully_ended = await handle_call_hangup(cmd, calls=calls, channels=channels)
             if auto_stopped_recording_event is not None:
                 evs.append(auto_stopped_recording_event)
             if call_fully_ended:
@@ -995,7 +1086,16 @@ async def execute_command(
                     messages=messages,
                     user_repository=user_repository,
                 )
-                evs.append(event_message_created(boundary_read))
+                hangup_recipients = await _channel_recipient_user_ids(
+                    channels, out.channel_id, cmd.company_id
+                )
+                evs.append(
+                    event_message_created(
+                        boundary_read,
+                        company_id=cmd.company_id,
+                        recipient_user_ids=hangup_recipients,
+                    ),
+                )
         elif cmd.type == "call.recording.start":
             payload = CallRecordingStartPayload.model_validate(cmd.payload)
             call = await calls.get_call(payload.call_id, cmd.company_id)
@@ -1049,7 +1149,11 @@ async def execute_command(
                 egress_filepath,
                 real_bucket_name,
             )
-            await livekit_client.create_room(call.livekit_room_name)
+            await livekit_client.create_room(
+                call.livekit_room_name,
+                company_id=cmd.company_id,
+                user_id=cmd.actor_user_id,
+            )
             egress_info = await livekit_client.start_room_composite_egress_to_s3(
                 room_name=call.livekit_room_name,
                 filepath=egress_filepath,
@@ -1057,6 +1161,8 @@ async def execute_command(
                 s3_secret_key=bucket_config.secret_access_key,
                 s3_region=bucket_config.region_name,
                 s3_bucket=real_bucket_name,
+                company_id=cmd.company_id,
+                user_id=cmd.actor_user_id,
                 s3_endpoint=_normalize_s3_egress_endpoint(bucket_config.endpoint_url),
                 audio_only=(call.call_type == "audio"),
             )
@@ -1082,7 +1188,16 @@ async def execute_command(
             )
             await call_recordings.create(recording)
             out = _recording_read_from_entity(recording)
-            evs = [event_call_recording_started(out)]
+            rec_started_recipients = await _channel_recipient_user_ids(
+                channels, call.channel_id, cmd.company_id
+            )
+            evs = [
+                event_call_recording_started(
+                    out,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=rec_started_recipients,
+                ),
+            ]
         elif cmd.type == "call.recording.stop":
             payload = CallRecordingStopPayload.model_validate(cmd.payload)
             call = await calls.get_call(payload.call_id, cmd.company_id)
@@ -1104,7 +1219,16 @@ async def execute_command(
                 actor_user_id=cmd.actor_user_id,
                 call_recordings=call_recordings,
             )
-            evs = [event_call_recording_stopped(out)]
+            rec_stopped_recipients = await _channel_recipient_user_ids(
+                channels, call.channel_id, cmd.company_id
+            )
+            evs = [
+                event_call_recording_stopped(
+                    out,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=rec_stopped_recipients,
+                ),
+            ]
         elif cmd.type == "call.admin.transfer":
             payload = CallTransferAdminPayload.model_validate(cmd.payload)
             call = await calls.get_call(payload.call_id, cmd.company_id)
@@ -1126,7 +1250,14 @@ async def execute_command(
             updated_call = await calls.get_call(call.call_id, cmd.company_id)
             updated_participants = await calls.list_participants(call.call_id)
             out = _call_read_from_entities(updated_call, updated_participants)
-            evs = [event_call_admin_changed(out)]
+            admin_recipients = await _channel_recipient_user_ids(channels, out.channel_id, cmd.company_id)
+            evs = [
+                event_call_admin_changed(
+                    out,
+                    company_id=cmd.company_id,
+                    recipient_user_ids=admin_recipients,
+                ),
+            ]
         else:
             raise RuntimeError(f"Неизвестный call.* тип команды: {cmd.type!r}.")
         return CommandExecutionResult(ok=True, result=out, events=evs)
@@ -1491,7 +1622,14 @@ async def _handle_messages_edit(
     if m2 is None:
         raise RuntimeError("Сообщение пропало после редактирования.")
     read = await _message_read_from_db(m2, messages, user_repository)
-    return read, [event_message_updated(read)]
+    edit_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, company_id)
+    return read, [
+        event_message_updated(
+            read,
+            company_id=company_id,
+            recipient_user_ids=edit_recipients,
+        ),
+    ]
 
 
 async def _handle_messages_delete(
@@ -1516,7 +1654,15 @@ async def _handle_messages_delete(
     now = datetime.now(tz=UTC)
     await messages.soft_delete_message(payload.message_id, now)
     ch = await channels.get(payload.channel_id)
-    evs: list[RealtimeEvent] = [event_message_deleted(payload.channel_id, payload.message_id)]
+    del_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, company_id)
+    evs: list[RealtimeEvent] = [
+        event_message_deleted(
+            payload.channel_id,
+            payload.message_id,
+            company_id=company_id,
+            recipient_user_ids=del_recipients,
+        ),
+    ]
     if ch is not None:
         pids = list(ch.pinned_message_ids or []) if isinstance(ch.pinned_message_ids, list) else []
         if payload.message_id in pids:
@@ -1524,7 +1670,13 @@ async def _handle_messages_delete(
             await channels.set_pinned_message_ids(payload.channel_id, new_pids, company_id=company_id)
             ch2 = await channels.get(payload.channel_id)
             if ch2 is not None:
-                evs.append(event_channel_pins_changed(_channel_read_entity(ch2)))
+                evs.append(
+                    event_channel_pins_changed(
+                        _channel_read_entity(ch2),
+                        company_id=company_id,
+                        recipient_user_ids=del_recipients,
+                    ),
+                )
     return evs
 
 
@@ -1575,7 +1727,14 @@ async def _handle_messages_forward(
         forwarded_from_channel_id=payload.from_channel_id,
         forwarded_from_channel_name=fwd_label,
     )
-    return new_read, [event_message_created(new_read)]
+    fwd_recipients = await _channel_recipient_user_ids(channels, payload.to_channel_id, company_id)
+    return new_read, [
+        event_message_created(
+            new_read,
+            company_id=company_id,
+            recipient_user_ids=fwd_recipients,
+        ),
+    ]
 
 
 async def _handle_messages_react(
@@ -1604,9 +1763,20 @@ async def _handle_messages_react(
     if m2 is None:
         raise RuntimeError("Сообщение пропало после реакции.")
     read = await _message_read_from_db(m2, messages, user_repository)
+    react_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, company_id)
     return read, [
-        event_message_reaction_changed(payload.channel_id, payload.message_id, new_reactions),
-        event_message_updated(read),
+        event_message_reaction_changed(
+            payload.channel_id,
+            payload.message_id,
+            new_reactions,
+            company_id=company_id,
+            recipient_user_ids=react_recipients,
+        ),
+        event_message_updated(
+            read,
+            company_id=company_id,
+            recipient_user_ids=react_recipients,
+        ),
     ]
 
 
@@ -1643,4 +1813,11 @@ async def _handle_messages_pin(
     if ch2 is None:
         raise RuntimeError("Канал пропал после обновления.")
     cr = _channel_read_entity(ch2)
-    return cr, [event_channel_pins_changed(cr)]
+    pin_recipients = await _channel_recipient_user_ids(channels, payload.channel_id, company_id)
+    return cr, [
+        event_channel_pins_changed(
+            cr,
+            company_id=company_id,
+            recipient_user_ids=pin_recipients,
+        ),
+    ]

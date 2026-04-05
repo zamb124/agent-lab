@@ -262,6 +262,7 @@ class MockLLM:
         response_format: Optional[Dict[str, Any]] = None,
         task_id: Optional[str] = None,
         context_id: Optional[str] = None,
+        **_: Any,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream метод - 100% реалистичная симуляция OpenAI streaming.
@@ -346,8 +347,7 @@ class MockLLM:
                 final=False,
             )
         else:
-            # Финальное событие - только если нет tool_calls
-            # Если есть tool_calls, агент продолжит после их выполнения
+            # Без tool_calls: статус завершения шага LLM (не конец A2A-задачи, см. factory.stream).
             final_message = None
             if content:
                 final_message = Message(
@@ -359,7 +359,7 @@ class MockLLM:
                 contextId=context_id,
                 taskId=task_id,
                 status=TaskStatus(state=TaskState.completed, message=final_message),
-                final=True,
+                final=False,
             )
 
     @overload
@@ -376,6 +376,9 @@ class MockLLM:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> T: ...
 
     @overload
@@ -392,6 +395,9 @@ class MockLLM:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> Message: ...
 
     async def chat(
@@ -407,10 +413,14 @@ class MockLLM:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> Message | T:
         """
         Единый метод вызова MockLLM (совместим с LLMClient.chat).
         """
+        del seed, reasoning_effort, extra_body
         normalized = _normalize_messages(messages)
         
         response_format = None

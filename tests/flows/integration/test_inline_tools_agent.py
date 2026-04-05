@@ -103,7 +103,10 @@ class TestToolRegistryInlineConfig:
             "description": "Без кода",
         }
 
-        with pytest.raises(ValueError, match="requires 'type' or 'code' field"):
+        with pytest.raises(
+            ValueError,
+            match=r"Tool 'broken': нет inline code в конфиге и нет шаблона в tool_repository",
+        ):
             await container.tool_registry.create_tool(config)
 
 

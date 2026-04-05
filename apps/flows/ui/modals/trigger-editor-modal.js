@@ -743,17 +743,16 @@ export class TriggerEditorModal extends PlatformFormModal {
         `;
     }
 
+    _saveHeaderTitle() {
+        return this.triggerId
+            ? this.i18n.t('inline_tool_modal.save')
+            : this.i18n.t('inline_tool_modal.create');
+    }
+
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${this.close}>
                 ${this.i18n.t('editor.cancel')}
-            </platform-button>
-            <platform-button 
-                variant="primary" 
-                ?loading=${this.loading}
-                @click=${this._onSubmit}
-            >
-                ${this.triggerId ? this.i18n.t('inline_tool_modal.save') : this.i18n.t('inline_tool_modal.create')}
             </platform-button>
         `;
     }

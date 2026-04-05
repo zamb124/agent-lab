@@ -61,6 +61,27 @@ class NodeLLMOverride(StrictBaseModel):
     provider: Optional[str] = Field(default=None, description="Провайдер: openai, openrouter, bothub")
     api_key: Optional[str] = Field(default=None, description="API ключ (напрямую или @var:my_key)")
     base_url: Optional[str] = Field(default=None, description="Base URL провайдера (напрямую или @var:my_url)")
+    top_p: Optional[float] = Field(default=None, description="Nucleus sampling top_p")
+    top_k: Optional[int] = Field(default=None, description="Top-K семплирование")
+    frequency_penalty: Optional[float] = Field(default=None, description="Штраф за частоту токенов")
+    presence_penalty: Optional[float] = Field(default=None, description="Штраф за присутствие токенов")
+    seed: Optional[int] = Field(default=None, description="Seed для детерминизма")
+    reasoning_effort: Optional[
+        Literal["none", "minimal", "low", "medium", "high", "xhigh"]
+    ] = Field(default=None, description="Усилие reasoning (OpenAI-совместимые модели)")
+    extra_request_body: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Доп. поля тела POST /chat/completions; мержатся поверх полей из контролов",
+    )
+
+    @field_validator("extra_request_body", mode="before")
+    @classmethod
+    def _extra_must_be_object(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        raise ValueError("extra_request_body должен быть объектом JSON, не массивом и не скаляром")
 
 
 class NodeConfig(StrictBaseModel):
@@ -86,6 +107,7 @@ class NodeConfig(StrictBaseModel):
     # ОБЯЗАТЕЛЬНЫЕ ПОЛЯ
     node_id: str = Field(..., description="Уникальный идентификатор ноды")
     type: NodeType = Field(..., description="Тип ноды - NodeType Enum")
+    
     name: str = Field(..., description="Название ноды")
     
     @field_validator("node_id", mode="before")
@@ -128,6 +150,22 @@ class NodeConfig(StrictBaseModel):
             "список — только сообщения с metadata.node_id из списка (user и agent по тегу)"
         ),
     )
+    incoming_policy: Literal["any", "all"] = Field(
+        default="any",
+        description=(
+            "Fan-in: any — нода ставится в очередь при первом сработавшем входе; "
+            "all — ждать все входы с contributes_to_join=true на рёбрах"
+        ),
+    )
+
+    @field_validator("incoming_policy", mode="before")
+    @classmethod
+    def validate_incoming_policy(cls, v: Any) -> str:
+        if v is None:
+            return "any"
+        if v not in ("any", "all"):
+            raise ValueError(f"incoming_policy: ожидается 'any' или 'all', получено {v!r}")
+        return v
 
     @field_validator("messages_filter", mode="before")
     @classmethod
@@ -169,7 +207,7 @@ class NodeConfig(StrictBaseModel):
         description="Маппинг полей JSON -> state fields. Если None - поля записываются напрямую"
     )
     
-    # Для function ноды
+    # Для code-ноды (inline)
     code: Optional[str] = Field(default=None, description="Inline Python код")
     
     # Ресурсы ноды

@@ -31,6 +31,13 @@ PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
         "fashn_buyer_agent": 0.0,
         "*": 0.05,
     },
+    "embedding": {"*": 0.0005},
+    "livekit": {
+        "room_create": 0.1,
+        "egress_composite": 1.0,
+        "egress_segmented": 0.5,
+        "*": 0.0,
+    },
 }
 
 

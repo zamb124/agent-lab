@@ -13,7 +13,8 @@ from core.logging import get_logger
 from apps.flows.src.models import ToolReference
 from apps.flows.src.models.enums import CodeMode, NodeType
 from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.tools.base import BaseTool, InlineTool, ToolType
+from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.tools.base import BaseTool, InlineTool
 from apps.flows.src.tools.mcp_wrapper import MCPTool
 
 logger = get_logger(__name__)
@@ -60,8 +61,7 @@ class ToolRegistry:
             calculator,
             final_answer,
             finish,
-            nsis_api,
-            vision_analyze,
+            read_file,
             reason,
             self_check,
             ask_user,
@@ -76,8 +76,7 @@ class ToolRegistry:
             calculator,
             final_answer,
             finish,
-            nsis_api,
-            vision_analyze,
+            read_file,
             reason,
             self_check,
             ask_user,
@@ -98,42 +97,66 @@ class ToolRegistry:
     # Методы создания tools
     # =========================================================================
 
-    async def create_tool(self, tool_ref: Union[str, Dict[str, Any]]) -> BaseTool:
+    async def materialize(self, tool_ref: Union[Dict[str, Any], ToolReference]) -> BaseTool:
         """
-        Создает tool из inline конфига.
+        Единая материализация runnable tool.
 
-        Поддерживает все типы нод как tools:
-        - code: InlineTool с Python/JS/Go кодом
-        - llm_node: NodeAsToolWrapper с ReAct агентом
-        - flow: NodeAsToolWrapper с вложенным flow
-        - remote_flow: NodeAsToolWrapper с A2A flow
-        - external_api: NodeAsToolWrapper с HTTP API
-        - mcp: MCPTool
+        Исполнение только через инлайн-код (InlineTool / нода как tool). Записи в
+        ``tool_repository`` — шаблоны с полем ``code``; процессный ``registry.get`` (FunctionTool)
+        для runtime flow не используется.
 
-        Args:
-            tool_ref: inline конфиг (dict)
-
-        Returns:
-            BaseTool
+        Порядок веток:
+        1. ``code_mode=mcp_tool`` → MCPTool
+        2. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``) → merge из ``tool_repository``; без шаблона или без ``code`` → ValueError
+        3. Поле ``type`` из NodeType / ``channel`` или наличие ``prompt`` → NodeAsToolWrapper
+        4. Непустой ``code`` → InlineTool
+        5. ``type=code`` без кода → NodeAsToolWrapper
+        6. иначе ValueError
         """
-        if isinstance(tool_ref, str):
-            raise ValueError(
-                f"Tool '{tool_ref}' passed as string. All tools must be inline with code. "
-                f"Flow must be assembled with FlowsLoader which inlines all tools."
-            )
-        
-        if not isinstance(tool_ref, dict):
-            raise ValueError(f"Tool ref must be dict with inline code, got {type(tool_ref)}")
-        
-        tool_type = tool_ref.get("type")
+        if isinstance(tool_ref, ToolReference):
+            ref: Dict[str, Any] = tool_ref.model_dump(exclude_none=True)
+        elif isinstance(tool_ref, dict):
+            ref = dict(tool_ref)
+        else:
+            raise ValueError(f"Tool ref must be dict or ToolReference, got {type(tool_ref)}")
 
-        # MCP tool
-        code_mode = tool_ref.get("code_mode")
+        code_mode = ref.get("code_mode")
         if code_mode == CodeMode.MCP_TOOL.value or code_mode == CodeMode.MCP_TOOL:
-            return await self._create_mcp_tool(tool_ref)
-        
-        # Все типы нод кроме code -> NodeAsToolWrapper
-        if tool_type in (
+            return await self._create_mcp_tool(ref)
+
+        def _has_nonempty_inline_code(r: Dict[str, Any]) -> bool:
+            c = r.get("code")
+            return isinstance(c, str) and bool(c.strip())
+
+        def _tool_lookup_id(r: Dict[str, Any]) -> Optional[str]:
+            raw = r.get("tool_id") or r.get("name")
+            return raw if isinstance(raw, str) and raw else None
+
+        tid = _tool_lookup_id(ref)
+        if (
+            tid
+            and not _has_nonempty_inline_code(ref)
+            and not ref.get("prompt")
+            and not tid.startswith("mcp:")
+        ):
+            from apps.flows.src.container import get_container
+
+            container = get_container()
+            stored = await container.tool_repository.get(tid)
+            if stored is None:
+                raise ValueError(
+                    f"Tool '{tid}': нет inline code в конфиге и нет шаблона в tool_repository"
+                )
+            ref = {**stored.model_dump(exclude_none=True), **ref}
+            if not _has_nonempty_inline_code(ref):
+                raise ValueError(
+                    f"Tool '{tid}': шаблон в tool_repository без непустого поля code"
+                )
+            tid = _tool_lookup_id(ref)
+
+        node_exec_kind = ref.get("type")
+
+        if node_exec_kind in (
             NodeType.LLM_NODE.value,
             NodeType.FLOW.value,
             NodeType.REMOTE_FLOW.value,
@@ -141,28 +164,34 @@ class ToolRegistry:
             NodeType.MCP.value,
             NodeType.CHANNEL.value,
             "channel",
-        ) or tool_ref.get("prompt"):
-            return self._create_node_as_tool(tool_ref)
-        
-        # code node -> InlineTool (если есть code) или NodeAsToolWrapper
-        code = tool_ref.get("code")
-        if code:
-            return self._create_inline_tool_from_config(tool_ref)
-        
-        # Fallback для type=code без code -> NodeAsToolWrapper
-        if tool_type == NodeType.CODE.value:
-            return self._create_node_as_tool(tool_ref)
-        
-        raise ValueError(f"Tool config requires 'type' or 'code' field: {tool_ref}")
+        ) or ref.get("prompt"):
+            return self._create_node_as_tool(ref)
+
+        if _has_nonempty_inline_code(ref):
+            code_text = ref["code"]
+            if not isinstance(code_text, str):
+                raise ValueError(f"Tool 'code' must be str, got {type(code_text)}")
+            return self._create_inline_tool_from_config(ref)
+
+        if node_exec_kind == NodeType.CODE.value:
+            return self._create_node_as_tool(ref)
+
+        raise ValueError(f"Tool config requires 'type' or 'code' field: {ref}")
+
+    async def create_tool(self, tool_ref: Union[str, Dict[str, Any], ToolReference]) -> BaseTool:
+        """Алиас на ``materialize``; строки запрещены (инлайн через FlowsLoader)."""
+        if isinstance(tool_ref, str):
+            raise ValueError(
+                f"Tool '{tool_ref}' passed as string. All tools must be inline with code. "
+                f"Flow must be assembled with FlowsLoader which inlines all tools."
+            )
+        return await self.materialize(tool_ref)
 
     async def create_tools(
         self, tool_refs: List[Union[str, Dict[str, Any], ToolReference]]
     ) -> List[BaseTool]:
         """
-        Создает список tools из inline конфигов.
-        
-        Для builtin tools (FunctionTool) возвращает зарегистрированный инстанс.
-        Для inline tools создает InlineTool из кода.
+        Создает список tools из inline конфигов (только InlineTool / нода как tool).
 
         Args:
             tool_refs: Список dict-конфигов или ToolReference
@@ -170,39 +199,19 @@ class ToolRegistry:
         Returns:
             Список BaseTool
         """
-        tools = []
+        tools: List[BaseTool] = []
 
         for ref in tool_refs:
-            tool = None
-            if isinstance(ref, dict):
-                tool_id = ref.get("tool_id")
-                # Сначала проверяем builtin tools (FunctionTool)
-                if tool_id:
-                    builtin = self.get(tool_id)
-                    if builtin:
-                        tool = builtin
-                    else:
-                        tool = await self.create_tool(ref)
-                else:
-                    tool = await self.create_tool(ref)
-            elif isinstance(ref, ToolReference):
-                # Сначала проверяем builtin
-                builtin = self.get(ref.tool_id)
-                if builtin:
-                    tool = builtin
-                elif not ref.code:
-                    raise ValueError(f"ToolReference '{ref.tool_id}' requires 'code' field")
-                else:
-                    tool = self._create_inline_tool_from_reference(ref)
-            elif isinstance(ref, str):
+            if isinstance(ref, str):
                 raise ValueError(
                     f"Tool '{ref}' passed as string. All tools must be inline with code. "
                     f"Flow must be assembled with FlowsLoader which inlines all tools."
                 )
-            else:
+            if isinstance(ref, ToolReference):
+                ref = ref.model_dump(exclude_none=True)
+            if not isinstance(ref, dict):
                 raise ValueError(f"Unknown tool ref type: {type(ref)}")
-
-            tools.append(tool)
+            tools.append(await self.materialize(ref))
 
         return tools
 
@@ -219,7 +228,8 @@ class ToolRegistry:
             }
 
         Returns:
-            InlineTool
+            InlineTool (только для списка ноды; в глобальный реестр не кладём, иначе
+            инлайн с тем же именем затеняет встроенные FunctionTool между тестами/flow).
         """
         tool_id = config.get("tool_id", "inline_tool")
         code = config.get("code")
@@ -239,10 +249,13 @@ class ToolRegistry:
                         description=schema.get("description", ""),
                     )
 
-        tool_type_str = config.get("tool_type", "tool")
-        tool_type = ToolType(tool_type_str) if isinstance(tool_type_str, str) else tool_type_str
+        rr_raw = config.get("react_role", ReactToolRole.STANDARD.value)
+        react_role = (
+            ReactToolRole(rr_raw) if isinstance(rr_raw, str) else rr_raw
+        )
+        if not isinstance(react_role, ReactToolRole):
+            react_role = ReactToolRole.STANDARD
 
-        # Resources из конфига (могут быть унаследованы от node)
         resources = config.get("resources")
 
         tool = InlineTool(
@@ -251,11 +264,9 @@ class ToolRegistry:
             title=config.get("title"),
             description=config.get("description"),
             parameters=parameters,
-            tool_type=tool_type,
+            react_role=react_role,
             resources=resources,
         )
-        
-        self.register(tool)
         return tool
 
     async def _create_mcp_tool(self, config: Dict[str, Any]) -> BaseTool:
@@ -311,30 +322,6 @@ class ToolRegistry:
             description=config.get("description"),
             parameters=parameters,
             tags=config.get("tags"),
-        )
-        
-        self.register(tool)
-        return tool
-
-    def _create_inline_tool_from_reference(self, ref: ToolReference) -> BaseTool:
-        """
-        Создает InlineTool из ToolReference.
-
-        Args:
-            ref: ToolReference с code
-
-        Returns:
-            InlineTool
-        """
-        if not ref.code:
-            raise ValueError(f"ToolReference '{ref.tool_id}' requires 'code' field")
-
-        tool = InlineTool(
-            tool_id=ref.tool_id,
-            code=ref.code,
-            title=ref.title,
-            description=ref.description,
-            parameters=ref.args_schema,
         )
         
         self.register(tool)

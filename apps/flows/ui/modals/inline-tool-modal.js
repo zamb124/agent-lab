@@ -1,9 +1,10 @@
 /**
  * InlineToolModal - универсальная модалка для редактирования inline инструментов
- * Поддерживает все типы: tool, flow, llm_node, function, external_api, remote_flow
+ * Inline-код в LLM: сохраняется как type code. Редактор кода — code-node-editor. Также flow, llm_node, external_api, remote_flow, mcp.
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { FlowsStore } from '../store/flows.store.js';
 import '../components/nodes/index.js';
 
 export class InlineToolModal extends PlatformModal {
@@ -17,6 +18,15 @@ export class InlineToolModal extends PlatformModal {
             .modal-content-wrapper {
                 position: relative;
                 min-height: 400px;
+            }
+
+            .modal.fullscreen .modal-content-wrapper {
+                min-height: 0;
+                flex: 1 1 auto;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+                overflow: hidden;
             }
 
             .action-row {
@@ -69,7 +79,7 @@ export class InlineToolModal extends PlatformModal {
     constructor() {
         super();
         this.toolConfig = {};
-        this.toolType = 'tool';
+        this.toolType = 'code';
         this.mode = 'create';
         this.flowVariables = {};
         this.flowId = '';
@@ -114,7 +124,7 @@ export class InlineToolModal extends PlatformModal {
 
         const config = editor.nodeConfig;
         
-        if (this.toolType === 'tool' && (!config.code || !config.code.trim())) {
+        if (this.toolType === 'code' && (!config.code || !config.code.trim())) {
             this.error(this.i18n.t('inline_tool_modal.err_code_tool'));
             return;
         }
@@ -132,10 +142,11 @@ export class InlineToolModal extends PlatformModal {
         // Генерируем tool_id если его нет
         const toolId = this.toolConfig.tool_id || this._generateToolId(config.name);
         
+        const persistedType = this.toolType === 'code' ? 'code' : this.toolType;
         const finalConfig = {
             ...config,
             tool_id: toolId,
-            type: this.toolType,
+            type: persistedType,
         };
         
         this.emit('tool-saved', { toolId, config: finalConfig });
@@ -149,48 +160,72 @@ export class InlineToolModal extends PlatformModal {
             .replace(/^_+|_+$/g, '');
     }
 
+    /**
+     * Тот же expanded, что у панели свойств при развороте: двухколоночный sidebar + основная зона.
+     * В модалке включается вместе с «на весь экран» GlassModal.
+     */
+    _editorExpanded() {
+        return this._isFullscreen;
+    }
+
+    _shellNodeId() {
+        const tid = this.toolConfig?.tool_id;
+        if (tid == null) {
+            return '';
+        }
+        const s = String(tid).trim();
+        return s;
+    }
+
+    _graphNodesFromCurrentFlow() {
+        const raw = FlowsStore.state.editor?.flowConfig?.nodes;
+        if (!raw || typeof raw !== 'object') {
+            return [];
+        }
+        return Object.keys(raw).map((id) => ({
+            id,
+            name: raw[id]?.name || id,
+            type: raw[id]?.type || '',
+        }));
+    }
+
     _renderEditor() {
         const config = this.toolConfig;
-        
+        const expanded = this._editorExpanded();
+        const nodeId = this._shellNodeId();
+        const graphNodes = this._graphNodesFromCurrentFlow();
+
         switch (this.toolType) {
-            case 'tool':
+            case 'code':
                 return html`
-                    <tool-node-editor
+                    <code-node-editor
                         data-editor
                         .nodeConfig=${config}
+                        .nodeId=${nodeId}
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
                         .previewExecutionState=${this.previewExecutionState}
+                        ?expanded=${expanded}
                         @config-change=${this._onConfigChanged}
-                    ></tool-node-editor>
+                    ></code-node-editor>
                 `;
-            
+
             case 'llm_node':
             case 'flow':
                 return html`
                     <llm-node-editor
                         data-editor
                         .nodeConfig=${config}
+                        .nodeId=${nodeId}
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
                         .previewExecutionState=${this.previewExecutionState}
+                        .graphNodes=${graphNodes}
+                        ?expanded=${expanded}
                         @config-change=${this._onConfigChanged}
                     ></llm-node-editor>
-                `;
-            
-            case 'function':
-                return html`
-                    <function-node-editor
-                        data-editor
-                        .nodeConfig=${config}
-                        .flowId=${this.flowId}
-                        .skillId=${this.skillId}
-                        .flowVariables=${this.flowVariables}
-                        .previewExecutionState=${this.previewExecutionState}
-                        @config-change=${this._onConfigChanged}
-                    ></function-node-editor>
                 `;
             
             case 'external_api':
@@ -198,10 +233,12 @@ export class InlineToolModal extends PlatformModal {
                     <external-api-editor
                         data-editor
                         .nodeConfig=${config}
+                        .nodeId=${nodeId}
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
                         .previewExecutionState=${this.previewExecutionState}
+                        ?expanded=${expanded}
                         @config-change=${this._onConfigChanged}
                     ></external-api-editor>
                 `;
@@ -211,10 +248,12 @@ export class InlineToolModal extends PlatformModal {
                     <remote-flow-editor
                         data-editor
                         .nodeConfig=${config}
+                        .nodeId=${nodeId}
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
                         .previewExecutionState=${this.previewExecutionState}
+                        ?expanded=${expanded}
                         @config-change=${this._onConfigChanged}
                     ></remote-flow-editor>
                 `;
@@ -224,10 +263,12 @@ export class InlineToolModal extends PlatformModal {
                     <mcp-node-editor
                         data-editor
                         .nodeConfig=${config}
+                        .nodeId=${nodeId}
                         .flowId=${this.flowId}
                         .skillId=${this.skillId}
                         .flowVariables=${this.flowVariables}
                         .previewExecutionState=${this.previewExecutionState}
+                        ?expanded=${expanded}
                         @config-change=${this._onConfigChanged}
                     ></mcp-node-editor>
                 `;
@@ -245,14 +286,23 @@ export class InlineToolModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const title =
+            this.mode === 'create'
+                ? this.i18n.t('inline_tool_modal.create')
+                : this.i18n.t('inline_tool_modal.save');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: false,
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="action-row">
                 <button type="button" class="btn btn-secondary" @click=${this.close}>
                     ${this.i18n.t('editor.cancel')}
-                </button>
-                <button type="button" class="btn btn-primary" @click=${this._onSave}>
-                    ${this.mode === 'create' ? this.i18n.t('inline_tool_modal.create') : this.i18n.t('inline_tool_modal.save')}
                 </button>
             </div>
         `;

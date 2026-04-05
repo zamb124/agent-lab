@@ -260,6 +260,17 @@ export class NamespaceModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const title = this._saving
+            ? this.i18n.t('namespace_modal.creating')
+            : this.i18n.t('namespace_modal.submit');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: this._saving || !this._name.trim(),
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="footer-actions">
@@ -269,16 +280,6 @@ export class NamespaceModal extends PlatformModal {
                     @click=${() => this.close()}
                 >
                     ${this.i18n.t('cancel', {}, 'common')}
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._saving || !this._name.trim()}
-                    @click=${this._onSave}
-                >
-                    ${this._saving
-                        ? this.i18n.t('namespace_modal.creating')
-                        : this.i18n.t('namespace_modal.submit')}
                 </button>
             </div>
         `;

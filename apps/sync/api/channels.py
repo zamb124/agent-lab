@@ -185,5 +185,18 @@ async def add_member(channel_id: str, body: ChannelMemberAdd) -> ChannelMemberRe
         channel_id, body.user_id, body.role,
         company_id=company_id,
     )
-    await publish_realtime_events([event_channel_member_added(channel_id, body.user_id)])
+    member_recipients = await container.channel_repository.list_member_user_ids(
+        channel_id,
+        company_id=company_id,
+    )
+    await publish_realtime_events(
+        [
+            event_channel_member_added(
+                channel_id,
+                body.user_id,
+                company_id=company_id,
+                recipient_user_ids=member_recipients,
+            ),
+        ],
+    )
     return ChannelMemberRead(user_id=body.user_id, role=body.role)

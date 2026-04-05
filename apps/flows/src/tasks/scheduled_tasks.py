@@ -227,12 +227,8 @@ async def _execute_tool_call_task(
     tool_args: Dict[str, Any],
     context: Context,
 ) -> Dict[str, Any]:
-    """Выполняет tool_call task - вызывает tool напрямую."""
-    tool_registry = container.tool_registry
-    tool = tool_registry.get(tool_name)
-    
-    if not tool:
-        raise ValueError(f"Tool not found: {tool_name}")
+    """Выполняет tool_call task — только инлайн-тулы из tool_repository."""
+    tool = await container.tool_registry.create_tool({"tool_id": tool_name})
     
     state = ExecutionState.create(
         task_id=str(uuid.uuid4()),

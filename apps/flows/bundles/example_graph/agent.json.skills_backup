@@ -7,23 +7,23 @@
   "entry": "start",
   "nodes": {
     "start": {
-      "type": "function",
+      "type": "code",
       "code": "def run(state):\n    state['path'] = 'base'\n    state['stage'] = 'start'\n    return state"
     },
     "node_a": {
-      "type": "function",
+      "type": "code",
       "code": "def run(state):\n    state['node'] = 'A'\n    return state"
     },
     "node_b": {
-      "type": "function",
+      "type": "code",
       "code": "def run(state):\n    state['node'] = 'B'\n    return state"
     },
     "node_c": {
-      "type": "function",
+      "type": "code",
       "code": "def run(state):\n    state['node'] = 'C'\n    return state"
     },
     "finish": {
-      "type": "function",
+      "type": "code",
       "code": "def run(state):\n    state['stage'] = 'finish'\n    return state"
     }
   },
@@ -52,7 +52,7 @@
       "description": "nodes_mode=merge - переопределяет start, остальные из base",
       "nodes": {
         "start": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['path'] = 'merge_override'\n    state['stage'] = 'start_merged'\n    return state"
         }
       },
@@ -63,7 +63,7 @@
       "description": "nodes_mode=merge - добавляет новую ноду extra, остальные из base",
       "nodes": {
         "extra_node": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['extra'] = True\n    return state"
         }
       },
@@ -80,19 +80,19 @@
       "entry": "new_start",
       "nodes": {
         "new_start": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['path'] = 'replace_full'\n    return state"
         },
         "new_a": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['new'] = 'A'\n    return state"
         },
         "new_b": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['new'] = 'B'\n    return state"
         },
         "new_finish": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['complete'] = True\n    return state"
         }
       },
@@ -111,11 +111,11 @@
       "description": "nodes_mode=replace - ТОЛЬКО 2 ноды! Остальные base ноды УДАЛЕНЫ",
       "nodes": {
         "start": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['path'] = 'replace_partial'\n    return state"
         },
         "node_a": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['node'] = 'A_REPLACED'\n    return state"
         }
       },
@@ -180,7 +180,7 @@
       "description": "Всё в режиме merge - комбинация base + skill",
       "nodes": {
         "start": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['path'] = 'all_merge'\n    return state"
         }
       },
@@ -201,11 +201,11 @@
       "entry": "replaced_start",
       "nodes": {
         "replaced_start": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['path'] = 'all_replace'\n    return state"
         },
         "replaced_end": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['done'] = True\n    return state"
         }
       },
@@ -225,7 +225,7 @@
       "description": "nodes=merge, edges=replace, variables=merge - смешанный режим",
       "nodes": {
         "start": {
-          "type": "function",
+          "type": "code",
           "code": "def run(state):\n    state['path'] = 'mixed'\n    return state"
         }
       },

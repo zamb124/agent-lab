@@ -7,7 +7,7 @@
 import pytest
 
 from core.state import ExecutionState
-from apps.flows.tools.reason import reason
+from apps.flows.tools import reason
 
 
 class TestReasonTool:
@@ -106,9 +106,9 @@ class TestReasonTool:
         assert reason.name == "reason"
 
     def test_tool_has_correct_type(self):
-        """Tool имеет tool_type REASON."""
-        from apps.flows.src.tools.base import ToolType
-        assert reason.tool_type == ToolType.REASON
+        """Tool имеет react_role REASON."""
+        from apps.flows.src.models.enums import ReactToolRole
+        assert reason.react_role == ReactToolRole.REASON
 
     def test_tool_has_tags(self):
         """Tool имеет теги reasoning и internal."""

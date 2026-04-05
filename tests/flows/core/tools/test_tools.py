@@ -164,6 +164,17 @@ class TestAskUserTool:
 
         assert exc_info.value.question == "Как вас зовут?"
 
+    @pytest.mark.asyncio
+    async def test_registry_create_tool_minimal_dict_from_repository(self, app):
+        """create_tool({tool_id}) поднимает шаблон из tool_repository и даёт InlineTool."""
+        from apps.flows.src.container import get_container
+        from apps.flows.src.tools.base import InlineTool
+
+        container = get_container()
+        tool = await container.tool_registry.create_tool({"tool_id": "ask_user"})
+        assert isinstance(tool, InlineTool)
+        assert tool.name == "ask_user"
+
 
 class TestFinishTool:
     """Тесты finish tool."""

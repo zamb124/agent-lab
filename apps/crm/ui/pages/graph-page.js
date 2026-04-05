@@ -257,7 +257,7 @@ export class GraphPage extends PlatformElement {
                 background: var(--bg-secondary);
             }
 
-            /* Класс .graph-canvas внутри shadow у <graph-canvas>; растягиваем сам хост на всю сцену */
+            /* .graph-canvas lives in <graph-canvas> shadow; stretch the host to fill the stage */
             .canvas-stage > graph-canvas {
                 position: absolute;
                 inset: 0;

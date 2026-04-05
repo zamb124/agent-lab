@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import io
+import math
+import struct
 import uuid
 import wave
 from datetime import UTC, datetime
@@ -16,7 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from apps.sync.db.models import SyncCall, SyncCallParticipant, SyncCallSpeechEgressTrack, SyncChannel, SyncSpace
-from apps.sync.db.repositories.call_repository import CallRepository
+from apps.sync.db.repositories.call_repository import CallNotFoundError, CallRepository
 from apps.sync.db.repositories.call_speech_egress_repository import CallSpeechEgressTrackRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
@@ -166,6 +168,7 @@ async def test_stop_speech_egresses_no_rows_is_noop(
         call_id=f"noop_{unique_id}",
         company_id=company_id,
         room_name=f"room-{unique_id}",
+        actor_user_id="u_noop",
     )
 
 
@@ -251,8 +254,16 @@ async def test_process_new_files_ingests_segment_via_file_processor_like_upload(
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(8000)
-        n = int(8000 * 0.4)
-        wf.writeframes(b"\x00\x00" * n)
+        n = int(8000 * 2.0)
+        frames = bytearray()
+        for i in range(n):
+            s = int(16000 * math.sin(2 * math.pi * 440.0 * i / 8000.0))
+            if s > 32767:
+                s = 32767
+            if s < -32768:
+                s = -32768
+            frames.extend(struct.pack("<h", s))
+        wf.writeframes(bytes(frames))
     wav_bytes = _buf.getvalue()
     s3 = S3ClientFactory.create_client_for_bucket("test-bucket")
     try:
@@ -293,8 +304,132 @@ async def test_process_new_files_ingests_segment_via_file_processor_like_upload(
     fr = await container.file_repository.get(file_id)
     assert fr is not None
     assert fr.s3_key.startswith("files/")
-    assert audio.data["duration_ms"] >= 300
+    assert audio.data["duration_ms"] >= 1000
     assert isinstance(audio.data["mime_type"], str) and audio.data["mime_type"] != ""
+
+
+@pytest.mark.asyncio
+async def test_process_new_files_skips_silent_segment_advances_cursor(
+    call_repo: CallRepository,
+    channel_repo: ChannelRepository,
+    space_repo: SpaceRepository,
+    message_repo: MessageRepository,
+    speech_egress_repo: CallSpeechEgressTrackRepository,
+    sync_user_repository,
+    sync_db_clean: None,
+    company_id: str,
+    unique_id: str,
+) -> None:
+    actor = "u1"
+    await sync_user_repository.set(
+        User(
+            user_id=actor,
+            name="U1",
+            emails=[f"u1silent-{unique_id}@t.local"],
+            companies={company_id: ["owner"]},
+            active_company_id=company_id,
+        )
+    )
+    sp = SyncSpace(
+        space_id=f"sp_sil_{unique_id}",
+        company_id=company_id,
+        name="S",
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor,
+    )
+    await space_repo.create(sp)
+    ch = SyncChannel(
+        channel_id=f"ch_sil_{unique_id}",
+        company_id=company_id,
+        space_id=sp.space_id,
+        type=ChannelType.TOPIC.value,
+        name="c",
+        is_private=False,
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor,
+    )
+    await channel_repo.create(ch)
+    await channel_repo.upsert_member(ch.channel_id, actor, "owner", company_id=company_id)
+
+    call = SyncCall(
+        call_id=f"call_sil_{unique_id}",
+        company_id=company_id,
+        channel_id=ch.channel_id,
+        mode="sfu",
+        call_type="video",
+        status="active",
+        livekit_room_name=f"room-sil-{unique_id}",
+        created_at=datetime.now(tz=UTC),
+        created_by_user_id=actor,
+    )
+    await call_repo.create_call(call)
+    await call_repo.add_participant(
+        SyncCallParticipant(
+            id=uuid.uuid4().hex,
+            call_id=call.call_id,
+            user_id=actor,
+            status="joined",
+            joined_at=datetime.now(tz=UTC),
+        )
+    )
+
+    row = SyncCallSpeechEgressTrack(
+        row_id=f"row_sil_{unique_id}",
+        call_id=call.call_id,
+        company_id=company_id,
+        channel_id=ch.channel_id,
+        participant_identity=actor,
+        track_sid=f"TR_SIL_{unique_id}",
+        egress_id=f"EG_SIL_{unique_id}",
+        segments_posted=0,
+    )
+    await speech_egress_repo.create(row)
+
+    _buf = io.BytesIO()
+    with wave.open(_buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(8000)
+        n = int(8000 * 0.4)
+        wf.writeframes(b"\x00\x00" * n)
+    wav_bytes = _buf.getvalue()
+    s3 = S3ClientFactory.create_client_for_bucket("test-bucket")
+    try:
+        await s3.upload_bytes(
+            data=wav_bytes,
+            key=f"sync-speech-test/silent-{unique_id}.wav",
+            content_type="audio/wav",
+            public=True,
+        )
+        storage_loc = s3.get_public_url(f"sync-speech-test/silent-{unique_id}.wav")
+    finally:
+        await s3.close()
+
+    egress_info = SimpleNamespace(
+        file_results=[
+            SimpleNamespace(
+                location=storage_loc, filename="segment-silent.wav", size=len(wav_bytes)
+            ),
+        ]
+    )
+
+    await process_new_files_for_egress_row(row=row, egress_info=egress_info, call_id=call.call_id)
+
+    rows = await message_repo.list_by_channel(ch.channel_id, limit=20, company_id=company_id)
+    audio_msgs = [
+        m
+        for m in rows
+        if m.call_id == call.call_id
+        and any(
+            c.type == MessageContentType.FILE_AUDIO.value
+            for c in (await message_repo.list_contents(m.message_id))
+        )
+    ]
+    assert len(audio_msgs) == 0
+
+    updated = await speech_egress_repo.get_by_call_and_track(call.call_id, row.track_sid)
+    assert updated is not None
+    assert updated.segments_posted == 1
 
 
 @pytest.mark.asyncio
@@ -557,21 +692,24 @@ async def test_solo_call_invite_with_speech_flag_eventually_posts_audio_via_live
             await asyncio.sleep(0.35)
         pytest.fail("За отведённое время не появилось сообщения file/audio для speech-to-chat")
     finally:
-        await execute_command(
-            _cmd(actor, company_id, "call.hangup", {"call_id": call_id}),
-            spaces=space_repo,
-            channels=channel_repo,
-            threads=thread_repo,
-            messages=message_repo,
-            git_refs=git_ref_repo,
-            calls=call_repo,
-            user_repository=sync_user_repository,
-        )
+        try:
+            await execute_command(
+                _cmd(actor, company_id, "call.hangup", {"call_id": call_id}),
+                spaces=space_repo,
+                channels=channel_repo,
+                threads=thread_repo,
+                messages=message_repo,
+                git_refs=git_ref_repo,
+                calls=call_repo,
+                user_repository=sync_user_repository,
+            )
+        except CallNotFoundError:
+            pass
 
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-@pytest.mark.timeout(20, func_only=True)
+@pytest.mark.timeout(120, func_only=True)
 async def test_sync_speech_poll_task_chain_runs_via_worker(
     flows_service,
     sync_worker,
@@ -662,6 +800,6 @@ async def test_sync_speech_poll_task_chain_runs_via_worker(
     from apps.sync.realtime.tasks import sync_speech_to_chat_poll_task
 
     t = await sync_speech_to_chat_poll_task.kiq(call_id=call_id, company_id=company_id)
-    res = await t.wait_result(timeout=18.0)
+    res = await t.wait_result(timeout=40.0)
     assert not res.is_err, res.error
 

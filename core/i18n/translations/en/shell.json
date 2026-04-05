@@ -25,7 +25,9 @@
   "modal": {
     "fullscreen_exit": "Exit full screen",
     "fullscreen_enter": "Full screen",
-    "close": "Close"
+    "close": "Close",
+    "save": "Save",
+    "saving": "Saving…"
   },
   "sidebar": {
     "expand": "Expand sidebar",
@@ -58,7 +60,8 @@
     "error_update_prefix": "Update failed:"
   },
   "form_modal": {
-    "unsaved_close": "You have unsaved changes. Close without saving?"
+    "unsaved_close": "You have unsaved changes. Close without saving?",
+    "cancel": "Cancel"
   },
   "company": {
     "create_title": "Create company",

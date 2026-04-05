@@ -256,6 +256,17 @@ export class ShareModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const title = this._saving
+            ? this.i18n.t('share_modal.saving')
+            : this.i18n.t('share_modal.submit_grant');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onShare(),
+            disabled: this._saving || !this._targetId.trim(),
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="footer-actions">
@@ -265,16 +276,6 @@ export class ShareModal extends PlatformModal {
                     @click=${() => this.close()}
                 >
                     ${this.i18n.t('cancel', {}, 'common')}
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._saving || !this._targetId.trim()}
-                    @click=${this._onShare}
-                >
-                    ${this._saving
-                        ? this.i18n.t('share_modal.saving')
-                        : this.i18n.t('share_modal.submit_grant')}
                 </button>
             </div>
         `;

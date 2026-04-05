@@ -30,8 +30,8 @@ from apps.flows.src.eval.state_utils import (
     get_tool_result,
     get_user,
     merge_state,
-    read_file,
-    read_file_base64,
+    read_path_bytes,
+    read_path_base64,
     set_nested,
 )
 from apps.flows.src.eval.wrappers import (

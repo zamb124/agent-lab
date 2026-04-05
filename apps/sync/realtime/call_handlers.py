@@ -1,7 +1,6 @@
 """Обработчики realtime-команд для WebRTC звонков.
 
-Все события публикуются через sync.realtime.events → /sync/ws (broadcast).
-Клиент фильтрует по channel_id / target_user_id в payload.
+События публикуются в Redis и доходят до /sync/ws только участникам канала (и call.signal — адресно).
 notification_manager здесь не используется — call-события не платформенные уведомления.
 """
 
@@ -42,6 +41,16 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+
+async def _call_event_recipients(
+    channels: ChannelRepository,
+    *,
+    channel_id: str,
+    company_id: str,
+) -> list[str]:
+    return await channels.list_member_user_ids(channel_id, company_id=company_id)
+
+
 # P2P сигналинг (RTCPeerConnection + offer/answer/ICE relay) не реализован на клиенте.
 # Все звонки используют SFU через LiveKit.
 # Когда P2P будет реализован — вернуть P2P_MAX = 2.
@@ -78,11 +87,7 @@ async def handle_call_invite(
     channels: ChannelRepository,
     user_repository: UserRepository | None = None,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
-    """Создаёт звонок.
-
-    Возвращает call.incoming как broadcast-событие для /sync/ws.
-    Клиент фильтрует: показывает баннер только тем, кто не является инициатором.
-    """
+    """Создаёт звонок и событие call.incoming только для участников канала."""
     payload = CallInvitePayload.model_validate(cmd.payload)
 
     if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
@@ -108,7 +113,11 @@ async def handle_call_invite(
             api_secret=settings.calls.livekit_api_secret,
         )
         livekit_room_name = f"call-{uuid4().hex}"
-        await lk.create_room(livekit_room_name)
+        await lk.create_room(
+            livekit_room_name,
+            company_id=cmd.company_id,
+            user_id=cmd.actor_user_id,
+        )
 
     call = SyncCall(
         call_id=uuid4().hex,
@@ -135,9 +144,11 @@ async def handle_call_invite(
     participants = await calls.list_participants(call.call_id)
     call_read = _call_read_from_entities(call, participants)
 
-    # Broadcast через sync.realtime.events → /sync/ws.
-    # Payload содержит initiator_user_id — клиент не показывает баннер инициатору.
-    incoming = event_call_incoming(call_read)
+    incoming = event_call_incoming(
+        call_read,
+        company_id=cmd.company_id,
+        recipient_user_ids=member_ids,
+    )
     incoming.payload["initiator_user_id"] = cmd.actor_user_id
 
     ch_entity = await channels.get(payload.channel_id)
@@ -162,6 +173,7 @@ async def handle_call_invite(
 async def handle_call_accept(
     cmd: CommandEnvelope,
     calls: CallRepository,
+    channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent], bool]:
     """Третий элемент: звонок только что перешёл ringing → active (для маркера в чате)."""
     payload = CallAcceptPayload.model_validate(cmd.payload)
@@ -187,15 +199,29 @@ async def handle_call_accept(
         await calls.get_call(payload.call_id, cmd.company_id), participants
     )
 
+    recipients = await _call_event_recipients(
+        channels, channel_id=call.channel_id, company_id=cmd.company_id
+    )
     return call_read, [
-        event_call_accepted(payload.call_id, cmd.actor_user_id),
-        event_call_participant_joined(payload.call_id, cmd.actor_user_id),
+        event_call_accepted(
+            payload.call_id,
+            cmd.actor_user_id,
+            company_id=cmd.company_id,
+            recipient_user_ids=recipients,
+        ),
+        event_call_participant_joined(
+            payload.call_id,
+            cmd.actor_user_id,
+            company_id=cmd.company_id,
+            recipient_user_ids=recipients,
+        ),
     ], bool(became_active and was_ringing)
 
 
 async def handle_call_decline(
     cmd: CommandEnvelope,
     calls: CallRepository,
+    channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
     payload = CallDeclinePayload.model_validate(cmd.payload)
     call = await calls.get_call(payload.call_id, cmd.company_id)
@@ -207,12 +233,23 @@ async def handle_call_decline(
     participants = await calls.list_participants(payload.call_id)
     call_read = _call_read_from_entities(call, participants)
 
-    return call_read, [event_call_declined(payload.call_id, cmd.actor_user_id)]
+    recipients = await _call_event_recipients(
+        channels, channel_id=call.channel_id, company_id=cmd.company_id
+    )
+    return call_read, [
+        event_call_declined(
+            payload.call_id,
+            cmd.actor_user_id,
+            company_id=cmd.company_id,
+            recipient_user_ids=recipients,
+        ),
+    ]
 
 
 async def handle_call_hangup(
     cmd: CommandEnvelope,
     calls: CallRepository,
+    channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent], bool]:
     """Третий элемент: звонок полностью завершён (последний участник вышел)."""
     payload = CallHangupPayload.model_validate(cmd.payload)
@@ -229,8 +266,16 @@ async def handle_call_hangup(
     participants = await calls.list_participants(payload.call_id)
     active_count = sum(1 for p in participants if p.status == "joined")
 
+    recipients = await _call_event_recipients(
+        channels, channel_id=call.channel_id, company_id=cmd.company_id
+    )
     events: list[RealtimeEvent] = [
-        event_call_participant_left(payload.call_id, cmd.actor_user_id)
+        event_call_participant_left(
+            payload.call_id,
+            cmd.actor_user_id,
+            company_id=cmd.company_id,
+            recipient_user_ids=recipients,
+        ),
     ]
 
     call_fully_ended = False
@@ -243,6 +288,7 @@ async def handle_call_hangup(
                 call_id=payload.call_id,
                 company_id=cmd.company_id,
                 room_name=call.livekit_room_name,
+                actor_user_id=cmd.actor_user_id,
             )
             settings = get_settings()
             lk = LiveKitClient(
@@ -251,7 +297,11 @@ async def handle_call_hangup(
                 api_secret=settings.calls.livekit_api_secret,
             )
             try:
-                await lk.delete_room(call.livekit_room_name)
+                await lk.delete_room(
+                    call.livekit_room_name,
+                    company_id=cmd.company_id,
+                    user_id=cmd.actor_user_id,
+                )
             except TwirpError as exc:
                 if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
                     logger.warning(
@@ -269,7 +319,13 @@ async def handle_call_hangup(
         ended_call = await calls.get_call(payload.call_id, cmd.company_id)
         final_participants = await calls.list_participants(payload.call_id)
         call_read = _call_read_from_entities(ended_call, final_participants)
-        events.append(event_call_ended(call_read))
+        events.append(
+            event_call_ended(
+                call_read,
+                company_id=cmd.company_id,
+                recipient_user_ids=recipients,
+            ),
+        )
         call_fully_ended = True
     else:
         call_read = _call_read_from_entities(call, participants)

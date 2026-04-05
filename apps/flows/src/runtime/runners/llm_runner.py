@@ -21,6 +21,10 @@ from apps.flows.src.runtime.a2a_messages import (
     build_user_message as new_user_message,
 )
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.llm_override_params import (
+    split_llm_override_for_client,
+    stream_kwargs_from_override,
+)
 from core.clients.llm import StreamEvent, get_llm_for_state
 from apps.flows.src.container import get_container
 from core.logging import get_logger
@@ -35,7 +39,7 @@ from apps.flows.src.variables import VariableResolver
 from core.errors import ToolExecutionError
 
 from .base_runner import BaseLlmNodeRunner
-from apps.flows.src.tools.base import ToolType
+from apps.flows.src.models.enums import ReactToolRole
 
 logger = get_logger(__name__)
 
@@ -289,9 +293,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             response_format = None
 
         loop_mode, exit_tool, max_iterations, strict, reminder_message = self._get_react_config()
-        reason_tool = self._find_tool_by_type(ToolType.REASON)
+        reason_tool = self._find_tool_by_react_role(ReactToolRole.REASON)
         reason_tool_name = reason_tool.name if reason_tool else None
-        exit_tool_obj = self._find_tool_by_type(ToolType.EXIT)
+        exit_tool_obj = self._find_tool_by_react_role(ReactToolRole.EXIT)
         exit_tool_name = (exit_tool_obj.name if exit_tool_obj else None) or exit_tool
 
         system_msg = new_system_message(
@@ -422,9 +426,15 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 tool_args = tc.get("arguments", {})
                                 
                                 tool_obj = next((t for t in self.tools if t.name == tool_name), None)
-                                tool_type = tool_obj.tool_type.value if tool_obj else "tool"
-                                
-                                await emitter.emit_tool_call(tool_name, tool_args, tool_call_id, tool_type)
+                                react_role = (
+                                    tool_obj.react_role.value
+                                    if tool_obj
+                                    else ReactToolRole.STANDARD.value
+                                )
+
+                                await emitter.emit_tool_call(
+                                    tool_name, tool_args, tool_call_id, react_role
+                                )
 
                             try:
                                 tool_results = await self._execute_tools_parallel(
@@ -580,11 +590,27 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         response_format: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Вызывает LLM - ТОЛЬКО STREAM."""
-        model = self.node_config.llm_override.model if self.node_config and self.node_config.llm_override else None
-        temp = self.node_config.llm_override.temperature if self.node_config and self.node_config.llm_override else None
-        llm = get_llm_for_state(state, model_name=model, temperature=temp)
-
-        async for event in llm.stream(messages, tools, response_format, task_id, context_id):
+        override = self.node_config.llm_override if self.node_config else None
+        model, temp, provider, api_key, base_url, max_tok = split_llm_override_for_client(override)
+        llm = get_llm_for_state(
+            state,
+            model_name=model,
+            temperature=temp,
+            provider=provider,
+            api_key=api_key,
+            base_url=base_url,
+            max_tokens=max_tok,
+        )
+        stream_kw = stream_kwargs_from_override(override)
+        async for event in llm.stream(
+            messages,
+            tools,
+            response_format,
+            task_id,
+            context_id,
+            max_tokens=max_tok,
+            **stream_kw,
+        ):
             yield event
 
     async def _execute_tools_parallel(

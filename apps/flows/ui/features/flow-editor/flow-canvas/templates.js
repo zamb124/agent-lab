@@ -35,7 +35,12 @@ function renderZoomControls(component) {
 
 function renderContextMenu(component) {
     const menu = component.contextMenu;
-    
+    const incomingCount = menu.incomingEdgeCount ?? 0;
+    const fanInPolicyEnabled = incomingCount >= 2;
+    const fanInHint = fanInPolicyEnabled
+        ? ''
+        : component.i18n.t('flow_canvas.context_menu_fan_in_policy_disabled_hint');
+
     return html`
         <div 
             class="context-menu"
@@ -56,6 +61,15 @@ function renderContextMenu(component) {
             >
                 <platform-icon name="breakpoint" size="14"></platform-icon>
                 ${menu.hasBreakpoint ? 'Remove Breakpoint' : 'Toggle Breakpoint'}
+            </div>
+            <div class="context-menu-separator"></div>
+            <div
+                class="context-menu-item ${fanInPolicyEnabled ? '' : 'disabled'}"
+                title=${fanInHint}
+                @click=${() => component._onFanInPolicyContextMenuItemClick(fanInPolicyEnabled)}
+            >
+                <platform-icon name="circular-connection" size="14"></platform-icon>
+                ${component.i18n.t('flow_canvas.context_menu_fan_in_policy')}
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item" @click=${component._duplicateNode}>

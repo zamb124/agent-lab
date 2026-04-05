@@ -204,15 +204,23 @@ export class VariableEditorModal extends PlatformModal {
         `;
     }
 
-    renderFooter() {
+    renderSaveHeaderButton() {
         const isEdit = !!this.variableName;
+        const title = isEdit
+            ? this.i18n.t('flow_variable_editor.btn_save')
+            : this.i18n.t('flow_variable_editor.btn_create');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: false,
+            title,
+        });
+    }
+
+    renderFooter() {
         return html`
             <div class="modal-actions-inner">
                 <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
                     ${this.i18n.t('flow_variable_editor.btn_cancel')}
-                </button>
-                <button type="button" class="btn btn-primary" @click=${this._onSave}>
-                    ${isEdit ? this.i18n.t('flow_variable_editor.btn_save') : this.i18n.t('flow_variable_editor.btn_create')}
                 </button>
             </div>
         `;

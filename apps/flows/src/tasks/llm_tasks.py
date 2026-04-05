@@ -7,6 +7,7 @@ TaskIQ tasks для LLM вызовов.
 from typing import Any, Dict, List, Optional
 
 from core.clients.llm import get_llm
+from core.context import get_context
 from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
@@ -37,6 +38,14 @@ async def invoke_llm(
     """
     llm = get_llm()
 
+    trace_extra: dict[str, str] = {}
+    actx = get_context()
+    if actx is not None:
+        if actx.active_company is not None:
+            trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
+        if actx.user is not None and str(actx.user.user_id).strip() != "":
+            trace_extra[trace_attributes.ATTR_USER_ID] = str(actx.user.user_id).strip()
+
     async with traced_operation(
         "flows.llm.invoke_task",
         event_type="llm.invoke",
@@ -45,6 +54,7 @@ async def invoke_llm(
         billing_resource_name="llm:default",
         billing_quantity=1,
         billing_pending_settlement=True,
+        extra_attributes=trace_extra if trace_extra else None,
     ) as span:
         content_parts: list[str] = []
         reasoning_parts: list[str] = []

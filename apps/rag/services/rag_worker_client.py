@@ -52,11 +52,15 @@ class RAGWorkerClient:
         self,
         namespace_id: str,
         document_id: str,
+        company_id: str,
+        user_id: str,
     ) -> Dict[str, Any]:
         """Отправляет задачу удаления документа в RAG Worker."""
         task = await delete_document_task.kiq(
             namespace_id=namespace_id,
             document_id=document_id,
+            company_id=company_id,
+            user_id=user_id,
         )
 
         logger.info(f"RAG: задача удаления {document_id}, task_id={task.task_id}")

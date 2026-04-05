@@ -6,13 +6,24 @@ alwaysApply: false
 
 ## Основной принцип
 
-Tools = inline конфиги внутри ноды / FlowConfig. Декоратор @tool устарел!
+Tools = inline конфиги внутри ноды / FlowConfig. Встроенные tools также оформляются через декоратор `@tool` в `apps/flows/tools/`.
+
+Встроенные тулы жизненного цикла ответа агента (**`reason`**, **`ask_user`**, **`self_check`**, **`final_answer`**, **`finish`**) собраны в **`apps/flows/tools/agent_session_tools.py`**.
+
+Встроенный **`calculator`** (tool_id без изменений) живёт в **`apps/flows/tools/math_tools.py`** (не `math.py`, чтобы не путать со stdlib **`math`** при импортах).
+
+Единая материализация runnable tool: **`ToolRegistry.materialize`** (алиас `create_tool` для dict/`ToolReference`).
+
+Исполнение: только **`InlineTool`** / нода как tool по полю **`code`** (из конфига или merge с **`tool_repository`**). Вызова «живого» **`FunctionTool`** из процессного реестра по **`tool_id`** нет — код в репозитории это **шаблон** для подстановки, не отдельный runtime-путь.
+
+**`PythonNamespaceBuilder`**: для фрагментов без импортов (как в шаблонах из БД) в namespace есть, среди прочего, **`get_container`**, **`datetime`** (класс `datetime.datetime`, как после `from datetime import datetime`), **`ContentType`**, **`_extract_ids_from_state`** — чтобы scheduling-шаблоны выполнялись без дублирования преамбулы в каждой записи.
 
 ## Структура tool
 
     {
         "tool_id": "calculator",
         "type": "code",
+        "react_role": "standard",
         "description": "Вычисляет выражение",
         "args_schema": {
             "expression": {"type": "string", "description": "Выражение"}
@@ -21,6 +32,16 @@ Tools = inline конфиги внутри ноды / FlowConfig. Декорат
         "output_mapping": {"result": "calc_result"},
         "code": "def execute(args, state):\n    return {'result': eval(args['expression'])}"
     }
+
+## ToolReference.name
+
+В **`ToolReference`** поле **`name`** — подпись для UI (редактор, **inline-tool-modal**). Если в JSON не задано, при **`model_validate`** оно выставляется из **`title`** (непустой), иначе из **`tool_id`**. В БД у тула из `@tool` historically задаётся **`title`**, а не **`name`**, поэтому без этого шага в конфиге не было **`name`**.
+
+## UI: inline-tool-modal
+
+Редактирование инструмента с полем **`code`**: в **`inline-tool-modal`** ветка **`type: code`** и **`code-node-editor`**. Легаси типов ноды **`tool`** / **`function`** на графе нет.
+
+Режим **«на весь экран»** у GlassModal (`_isFullscreen`) пробрасывается в редакторы как **`expanded`**, чтобы раскладка совпадала с развёрнутой **property-panel** (sidebar + основная колонка). Для **`llm-node-editor`** подставляется **`graphNodes`** из **`FlowsStore.state.editor.flowConfig.nodes`** (как в панели).
 
 ## args_schema
 
@@ -149,7 +170,22 @@ JSON Schema для LLM - какие параметры tool принимает:
     container = get_container()
     tool = await container.tool_registry.create_tool(tool_config)
 
+`create_tool({"tool_id": "…"})` без `code`/`prompt`: сначала **`registry.get(tool_id)`** (встроенные), иначе **`tool_repository.get`** и мерж в полный конфиг — так же работает `CodeNode` с полем `tool_id` (тест-панель Execute).
+
 ## Параллельное выполнение
 
 Когда LLM возвращает несколько tool_calls - все выполняются параллельно.
 Результаты мержатся в tool_results и messages.
+
+## Inline Python: `llm.chat` и function calling из кода
+
+- В namespace есть **`tool`** (`apps/flows/src/tools/decorator.py`) и **`BaseTool`**: функцию оборачивают **`@tool(name=..., description=..., tags=[...])`**, после чего имя функции — экземпляр с **`to_openai_schema()`**.
+- **`SafeLLMClient.chat`** (`apps/flows/src/eval/wrappers.py`) нормализует **`tools`**: OpenAI-**`dict`** или объекты с **`to_openai_schema`**; сырая **`def`** без обёртки — **`SafeEvalError`** с пояснением.
+- Выполнение tool по **`tool_calls`** из ответа LLM в одном вызове `llm.chat` автоматически не делается: агент сам исполняет цикл или вызывает **`tool_instance.run(args, state)`** в коде ноды.
+
+## FileReader и read_file
+
+- Единый разбор файлов в **`core/files/reader`**: **`FileReader.read`** → **`FileReadResult`** (страницы, текст, `checksum` вложений в каноне с `FileRecord`).
+- Системный tool **`read_file`** (`apps/flows/tools/files.py`) вызывает `FileReader` для пути из **`state.files`**; в том же модуле планируются прочие file-тулы.
+- В **eval** (`PythonNamespaceBuilder`): сырой диск — **`read_path_bytes`** / **`read_path_base64`**; структурированное чтение — экземпляр **`reader`** (`FileReader`), вызов **`await reader.read(source=..., file_name=...)`**.
+- Подсказки для редактора inline Python (API док-провайдер): записи **`reader`**, **`read_path_bytes`**, **`read_path_base64`** в **`core/docs/data/python/globals.py`**; шаблоны с **`reader.read`** — **`core/docs/data/python/templates.py`** (`file_processing`, `fn_file_process`).

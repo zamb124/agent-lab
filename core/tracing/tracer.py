@@ -152,6 +152,13 @@ class PlatformTracer:
                 all_attrs[attr.ATTR_TENANT_COMPANY_ID] = company_id
             if namespace and attr.ATTR_TENANT_NAMESPACE not in all_attrs:
                 all_attrs[attr.ATTR_TENANT_NAMESPACE] = namespace
+            ctx_user_id = app_ctx.user.user_id if app_ctx.user else None
+            if (
+                ctx_user_id is not None
+                and str(ctx_user_id).strip() != ""
+                and attr.ATTR_USER_ID not in all_attrs
+            ):
+                all_attrs[attr.ATTR_USER_ID] = str(ctx_user_id).strip()
 
         cid_attr = all_attrs.get(attr.ATTR_TENANT_COMPANY_ID)
         if cid_attr is not None:

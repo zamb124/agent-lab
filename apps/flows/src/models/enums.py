@@ -42,17 +42,16 @@ class NodeType(str, Enum):
     CHANNEL = "channel"             # Отправка сообщений в каналы (Telegram, Email)
 
 
-class ToolType(str, Enum):
+class ReactToolRole(str, Enum):
     """
-    Типы инструментов.
-    
-    Определяет способ выполнения инструмента.
+    Роль инструмента в ReAct-цикле llm_node.
+
+    Не пересекается с NodeType и с полем type у inline-tool (тип исполнения: code, flow, …).
     """
-    
-    FUNCTION = "function"           # Python функция (inline или CODE_REFERENCE)
-    EXTERNAL_API = "external_api"   # HTTP API вызов
-    SYSTEM = "system"               # Системный tool (ask_user, finish)
-    TOOL = "tool"                   # Обычный tool (default)
+
+    STANDARD = "standard"
+    REASON = "reason"
+    EXIT = "exit"
 
 
 class EventType(str, Enum):

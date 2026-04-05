@@ -108,7 +108,7 @@ export class OfficeAPIService extends BaseService {
         }
         const keys = Object.keys(body);
         if (keys.length === 0) {
-            throw new Error('patchCatalog: укажите title и/или is_public');
+            throw new Error('patchCatalog: provide title and/or is_public');
         }
         return this.patch(`/catalogs/${encodeURIComponent(catalogId)}`, body);
     }

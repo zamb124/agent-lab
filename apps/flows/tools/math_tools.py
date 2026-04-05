@@ -1,8 +1,4 @@
-"""
-Калькулятор - инструмент для математических вычислений.
-Использует ast для безопасного парсинга выражений.
-Весь код самодостаточен для инлайнинга.
-"""
+"""Математический tool `calculator`: безопасное вычисление выражений через ast."""
 
 import ast
 import math
@@ -18,7 +14,6 @@ from apps.flows.src.tools import tool
     tags=["math"],
 )
 async def calculator(expression: str, state: Optional[dict] = None) -> str:
-    """Вычисляет математическое выражение через безопасный AST парсер."""
     ops = {
         ast.Add: operator.add,
         ast.Sub: operator.sub,
@@ -30,18 +25,30 @@ async def calculator(expression: str, state: Optional[dict] = None) -> str:
         ast.USub: operator.neg,
         ast.UAdd: operator.pos,
     }
-    
+
     funcs = {
-        "sin": math.sin, "cos": math.cos, "tan": math.tan,
-        "asin": math.asin, "acos": math.acos, "atan": math.atan,
-        "sqrt": math.sqrt, "pow": math.pow, "exp": math.exp,
-        "log": math.log, "log10": math.log10, "log2": math.log2,
-        "ceil": math.ceil, "floor": math.floor,
-        "abs": abs, "round": round, "min": min, "max": max,
+        "sin": math.sin,
+        "cos": math.cos,
+        "tan": math.tan,
+        "asin": math.asin,
+        "acos": math.acos,
+        "atan": math.atan,
+        "sqrt": math.sqrt,
+        "pow": math.pow,
+        "exp": math.exp,
+        "log": math.log,
+        "log10": math.log10,
+        "log2": math.log2,
+        "ceil": math.ceil,
+        "floor": math.floor,
+        "abs": abs,
+        "round": round,
+        "min": min,
+        "max": max,
     }
-    
+
     consts = {"pi": math.pi, "e": math.e, "tau": math.tau}
-    
+
     def eval_node(node):
         if isinstance(node, ast.Expression):
             return eval_node(node.body)
@@ -69,7 +76,7 @@ async def calculator(expression: str, state: Optional[dict] = None) -> str:
                 raise ValueError(f"Unsupported function: {fn}")
             return funcs[fn](*[eval_node(a) for a in node.args])
         raise ValueError("Unsupported expression type")
-    
+
     tree = ast.parse(expression, mode="eval")
     result = eval_node(tree)
     return f"Результат: {result}"

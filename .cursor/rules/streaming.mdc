@@ -53,6 +53,8 @@ assert emitter.events[1]["kind"] == "task-status-update"
 
 Файл: `apps/flows/src/streaming/subscriber.py`
 
+Подписка завершается на `is_final_event`: `TaskStatusUpdateEvent` с `final=True` и терминальным `state` (`completed`, `failed`, `input-required`, `canceled`). **Завершение одного вызова LLM** в `core/clients/llm` (`stream`) не должно использовать `final=True` при `state=completed` — иначе SSE обрывается до `node_complete` следующих нод и до `Emitter.emit_complete`. Конец A2A-задачи — только события канала: `emit_complete`, `emit_interrupt`, `emit_error`.
+
 ```python
 from apps.flows.src.streaming import EventSubscriber
 

@@ -590,17 +590,14 @@ export class EdgeConditionModal extends PlatformFormModal {
         `;
     }
 
+    _saveHeaderTitle() {
+        return this.i18n.t('edge_condition_modal.apply');
+    }
+
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${this.close}>
                 ${this.i18n.t('editor.cancel')}
-            </platform-button>
-            <platform-button 
-                variant="primary" 
-                ?loading=${this.loading}
-                @click=${this._onSubmit}
-            >
-                ${this.i18n.t('edge_condition_modal.apply')}
             </platform-button>
         `;
     }

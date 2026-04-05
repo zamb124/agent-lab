@@ -328,6 +328,13 @@ class ExecutionState(FlexibleBaseModel):
         default_factory=list,
         description="Scheduled tasks созданные в текущей сессии"
     )
+
+    join_arrived_preds: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description=(
+            "AND-join (incoming_policy=all): target_node_id -> предки, уже пришедшие в текущем цикле ожидания"
+        ),
+    )
     
     # ========================================================================
     # История системных промптов
