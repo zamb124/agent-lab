@@ -359,7 +359,7 @@
         "permissions_enabled": true
       },
       "office": {
-        "document_server_public_url": "http://localhost:8002",
+        "document_server_public_url": "https://onlyoffice.humanitec.ru",
         "jwt_secret": "dev-onlyoffice-jwt-secret",
         "callback_public_base_url": "http://host.docker.internal:8008",
         "download_token_ttl_seconds": 900,
