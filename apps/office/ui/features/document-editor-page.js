@@ -6,6 +6,7 @@
 import { html, css, nothing } from 'lit';
 import { guard } from 'lit/directives/guard.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { isPlausibleOfficeBindingId } from '../utils/office-binding-id.js';
 
 /**
  * frameEditorId в URL от DS часто без дефисов в UUID, id плейсхолдера — с дефисами.
@@ -401,10 +402,11 @@ export class DocumentEditorPage extends PlatformElement {
     }
 
     /**
-     * @param {string} origin
+     * @param {string} scriptSrc — полный URL скрипта
+     * @param {string} logicalDsOrigin — origin Document Server (без слэша), для маркера и iframe
      */
-    async _ensureDocsApi(origin) {
-        const base = origin.replace(/\/$/, '');
+    async _injectOoScript(scriptSrc, logicalDsOrigin) {
+        const base = logicalDsOrigin.replace(/\/$/, '');
         if (typeof window.DocsAPI !== 'undefined' && window.__ooDocsApiOrigin === base) {
             return;
         }
@@ -416,24 +418,39 @@ export class DocumentEditorPage extends PlatformElement {
             }
             delete window.__ooDocsApiOrigin;
         }
-        const src = `${base}/web-apps/apps/api/documents/api.js`;
         await new Promise((resolve, reject) => {
             const s = document.createElement('script');
-            s.src = src;
+            s.src = scriptSrc;
             s.async = true;
             s.onload = () => {
                 window.__ooDocsApiOrigin = base;
                 resolve();
             };
-            s.onerror = () => reject(new Error(`Document editor api.js: ${src}`));
+            s.onerror = () => reject(new Error(`Document editor api.js: ${scriptSrc}`));
             document.head.appendChild(s);
         });
+    }
+
+    /**
+     * api.js с публичного origin DS (тот же host, что /documents — ingress или dev-proxy).
+     * @param {string} dsOrigin
+     */
+    async _ensureDocsApi(dsOrigin) {
+        const ds = dsOrigin.replace(/\/$/, '');
+        const scriptSrc = `${ds}/web-apps/apps/api/documents/api.js`;
+        await this._injectOoScript(scriptSrc, ds);
     }
 
     async _bootEditor() {
         const id = (this.bindingId || '').trim();
         if (!id) {
             this._loadError = this.i18n.t('editor.errNoId');
+            this._initializing = false;
+            this.requestUpdate();
+            return;
+        }
+        if (!isPlausibleOfficeBindingId(id)) {
+            this._loadError = this.i18n.t('editor.errInvalidBindingId');
             this._initializing = false;
             this.requestUpdate();
             return;

@@ -110,6 +110,7 @@
     "back": "Back to list",
     "loading": "Opening editor…",
     "errNoId": "Document is not specified",
+    "errInvalidBindingId": "Invalid document link. Open the file from the document list.",
     "errNoApi": "API service is not available",
     "errBadConfig": "Empty editor configuration",
     "errDocsApi": "Failed to load document editor API",

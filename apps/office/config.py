@@ -50,7 +50,10 @@ class OfficeIntegrationConfig(BaseModel):
 
     document_server_public_url: str = Field(
         default="",
-        description="Origin Document Server (скрипт api.js), например http://localhost:8088",
+        description=(
+            "Origin для api.js и статики DS в браузере — тот же публичный host, что страница /documents "
+            "(ingress или dev middleware + document_server_dev_upstream_url)."
+        ),
     )
     jwt_secret: str = Field(
         default="",

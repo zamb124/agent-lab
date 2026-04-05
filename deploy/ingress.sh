@@ -8,7 +8,20 @@
 #   domain.com/rag         → rag       (8004)
 #   domain.com/sync        → sync      (8005, websocket)
 #   domain.com/documents   → office    (8008, BFF «Документы» + OnlyOffice BFF)
+#   domain.com/web-apps    → onlyoffice (порт публикации DS на хосте, обычно 8088)
+#   domain.com/common      → onlyoffice
+#   domain.com/cache       → onlyoffice
+#   domain.com/fonts       → onlyoffice
+#   domain.com/sdkjs       → onlyoffice
+#   DS 7.3+: браузер также запрашивает /{semver}-{hex}/web-apps/..., /{semver}-{hex}/sdkjs/...,
+#   /{semver}-{hex}/doc/... (Socket.IO), /{semver}-{hex}/fonts/... плюс POST /downloadfile/... у корня. Prefix /web-apps не покрывает — на nginx-ingress
+#   нужен regex path или server-snippet (см. office.mdc). Локально: DevInterServiceProxy.
+#   (полный список префиксов — office.mdc «Ingress и OnlyOffice»)
 #   *.domain.com/*         → те же правила (поддомены компаний)
+#
+# OnlyOffice: браузер грузит api.js и /common/index.html с того же origin, что /documents;
+# без этих путей в ingress редактор ломается. В ingress.services — несколько записей с
+# name "onlyoffice", один port (хост:8088), разные path (см. пример ниже).
 #
 # Конфиг в conf.local.json:
 #   "selectel": { "ip": "...", "login": "...", "ssh_port": "22" }
@@ -21,6 +34,11 @@
 #       {"name": "crm",      "port": 8003, "path": "/crm",     "websocket": false},
 #       {"name": "rag",      "port": 8004, "path": "/rag",     "websocket": false},
 #       {"name": "sync",     "port": 8005, "path": "/sync",    "websocket": true},
+#       {"name": "onlyoffice","port": 8088, "path": "/web-apps","websocket": false},
+#       {"name": "onlyoffice","port": 8088, "path": "/common", "websocket": false},
+#       {"name": "onlyoffice","port": 8088, "path": "/cache", "websocket": false},
+#       {"name": "onlyoffice","port": 8088, "path": "/fonts", "websocket": false},
+#       {"name": "onlyoffice","port": 8088, "path": "/sdkjs", "websocket": false},
 #       {"name": "office",   "port": 8008, "path": "/documents","websocket": false}
 #     ],
 #     "wildcard_tls_secret": "humanitec-ru-wildcard-tls"
@@ -59,6 +77,19 @@ log "Сервер: ${LOGIN}@${IP}:${SSH_PORT}"
 if ! jq -e '.ingress.services | map(.path) | index("/documents") != null' "${CONF_LOCAL_JSON}" >/dev/null 2>&1; then
   echo "ПРЕДУПРЕЖДЕНИЕ: в ingress.services нет office с path /documents — https://${DOMAIN}/documents уйдёт во frontend (404)." >&2
   echo "Добавьте: {\"name\":\"office\",\"port\":8008,\"path\":\"/documents\",\"websocket\":false}" >&2
+fi
+
+_DS_PREFIXES='["/web-apps","/common","/cache","/fonts","/sdkjs"]'
+if jq -e '.ingress.services | map(.path) | index("/documents") != null' "${CONF_LOCAL_JSON}" >/dev/null 2>&1; then
+  _has_ds="$(jq -r --argjson p "${_DS_PREFIXES}" '
+    ($p) as $want
+    | [ .ingress.services[].path ] as $paths
+    | ($want | map(. as $x | ($paths | index($x) != null)) | any)
+  ' "${CONF_LOCAL_JSON}")"
+  if [[ "${_has_ds}" != "true" ]]; then
+    echo "ПРЕДУПРЕЖДЕНИЕ: есть /documents (office), но нет ни одного префикса OnlyOffice (/web-apps, /common, /cache, /fonts, /sdkjs)." >&2
+    echo "Редактор OnlyOffice на https://${DOMAIN}/documents не сможет грузить статику DS с того же origin. Учти также путь /{версия}-{hash}/web-apps (DS 7.3+) — см. начало deploy/ingress.sh и office.mdc." >&2
+  fi
 fi
 
 SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 -p ${SSH_PORT} ${LOGIN}@${IP}"

@@ -116,6 +116,14 @@ class ServerConfig(BaseModel):
         default="https://humanitec.ru",
         description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
     )
+    document_server_dev_upstream_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "development/test: реальный HTTP origin Document Server для DevInterServiceProxy "
+            "(/web-apps, /common, /cache, /fonts, /sdkjs). Публичный origin в editor-config — "
+            "office.document_server_public_url (тот же host, что shell, например :8002)."
+        ),
+    )
 
     # Порты по умолчанию для каждого сервиса
     _default_ports: Dict[str, int] = {

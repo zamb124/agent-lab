@@ -8,7 +8,8 @@
     "rag_service_url": "http://localhost:8004",
     "sync_service_url": "http://localhost:8005",
     "office_service_url": "http://localhost:8008",
-    "platform_public_base_url": "https://humanitec.ru"
+    "platform_public_base_url": "https://humanitec.ru",
+    "document_server_dev_upstream_url": "http://localhost:8088"
   },
   "database": {
     "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shared",
@@ -358,7 +359,7 @@
         "permissions_enabled": true
       },
       "office": {
-        "document_server_public_url": "http://localhost:8088",
+        "document_server_public_url": "http://localhost:8002",
         "jwt_secret": "dev-onlyoffice-jwt-secret",
         "callback_public_base_url": "http://host.docker.internal:8008",
         "download_token_ttl_seconds": 900,

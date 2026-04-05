@@ -15,6 +15,7 @@ import '../features/document-editor-page.js';
 import '../features/office-catalogs-dashboard.js';
 import '../features/office-documents-shell-actions.js';
 import '../modals/office-namespace-modal.js';
+import { isPlausibleOfficeBindingId } from '../utils/office-binding-id.js';
 
 export class OfficeApp extends PlatformApp {
     static properties = {
@@ -286,8 +287,14 @@ export class OfficeApp extends PlatformApp {
         }
         const rest = path.slice(base.length).replace(/^\//, '');
         if (rest.startsWith('edit/')) {
-            const raw = rest.slice(5);
-            this._editBindingId = decodeURIComponent(raw);
+            const raw = decodeURIComponent(rest.slice(5));
+            if (!isPlausibleOfficeBindingId(raw)) {
+                window.history.replaceState({}, '', '/documents');
+                this._view = 'list';
+                this._editBindingId = '';
+                return;
+            }
+            this._editBindingId = raw;
             this._view = 'edit';
         } else if (rest === 'catalogs') {
             this._view = 'catalogs';
@@ -351,6 +358,9 @@ export class OfficeApp extends PlatformApp {
             return shell;
         }
         if (!this._servicesInitialized || !this._authChecked) {
+            return html`<app-loader></app-loader>`;
+        }
+        if (!this._isAuthenticated) {
             return html`<app-loader></app-loader>`;
         }
         const isEdit = this._view === 'edit' && this._editBindingId;

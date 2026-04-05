@@ -13,7 +13,7 @@ const SERVICE_PORT_BY_ID = {
     crm: '8003',
     rag: '8004',
     sync: '8005',
-    documents: '8008',
+    documents: '8002',
 };
 
 /**

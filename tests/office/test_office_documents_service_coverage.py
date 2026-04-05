@@ -668,3 +668,4 @@ async def test_upload_filename_blob_spreadsheet_mime_stores_cell_and_editor_cell
     cfg = _decode_editor_config_token(er.json()["token"])
     assert cfg["documentType"] == "cell"
     assert cfg["document"]["fileType"] == "xlsx"
+

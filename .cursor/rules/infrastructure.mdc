@@ -22,7 +22,7 @@ alwaysApply: false
 
 ## Маршрутизация (Ingress)
 
-Один ingress `humanitec-ingress` с path-based роутингом — работает одинаково для корневого домена и поддоменов компаний. Аннотация **`nginx.ingress.kubernetes.io/proxy-body-size: "100m"`** на `humanitec-ingress` (см. `deploy/ingress.sh`) — без неё nginx ingress отдаёт **413** на большие POST (например `/documents`). Отдельный `livekit-ingress` для WebRTC:
+Один ingress `humanitec-ingress` с path-based роутингом — работает одинаково для корневого домена и поддоменов компаний. Список сервисов и путей задаётся в **`conf.local.json`** → **`ingress.services`**, применяется скриптом **`deploy/ingress.sh`** (создаёт Service/Endpoints на IP хоста и Ingress; префиксы OnlyOffice — см. **`office.mdc`**). Аннотация **`nginx.ingress.kubernetes.io/proxy-body-size: "100m"`** на `humanitec-ingress` (см. `deploy/ingress.sh`) — без неё nginx ingress отдаёт **413** на большие POST (например `/documents`). Отдельный `livekit-ingress` для WebRTC:
 
 ```
 humanitec.ru/           → frontend-svc  :8002
@@ -30,6 +30,11 @@ humanitec.ru/flows      → flows (apps.flows) :8001
 humanitec.ru/crm        → crm-svc       :8003
 humanitec.ru/rag        → rag-svc       :8004
 humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
+humanitec.ru/web-apps   → onlyoffice-svc :8088  (Document Server на хосте)
+humanitec.ru/common     → onlyoffice-svc :8088
+humanitec.ru/cache      → onlyoffice-svc :8088
+humanitec.ru/fonts      → onlyoffice-svc :8088
+humanitec.ru/sdkjs      → onlyoffice-svc :8088
 
 *.humanitec.ru/*        → те же правила (поддомен = slug компании)
 

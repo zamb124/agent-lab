@@ -368,7 +368,7 @@ export class DashboardPage extends PlatformElement {
             crm: '8003',
             rag: '8004',
             sync: '8005',
-            documents: '8008',
+            documents: '8002',
         };
 
         const targetPort = servicePortById[serviceId];

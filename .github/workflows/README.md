@@ -74,12 +74,12 @@
 │  humanitec.ru/rag      → rag      :8004                         │
 │  humanitec.ru/sync     → sync     :8005                         │
 │  humanitec.ru/documents → office  :8008 (BFF + UI документов)   │
-│  humanitec.ru/onlyoffice или отдельный хост → DS :8088 (api.js) │
+│  humanitec.ru/web-apps|common|cache|fonts|sdkjs → DS :8088        │
 │  *.humanitec.ru        → frontend :8002 (поддомены компаний)    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-В **`conf.local.json`** на машине, с которой запускают **`deploy/ingress.sh`**, в **`ingress.services`** обязательно добавить **`office`** с **`"path": "/documents"`** и **`"port": 8008`**, иначе **`/documents`** не попадёт в BFF и пользователь увидит платформенный 404.
+В **`conf.local.json`** на машине, с которой запускают **`deploy/ingress.sh`**, в **`ingress.services`** обязательно добавить **`office`** с **`"path": "/documents"`** и **`"port": 8008`**, иначе **`/documents`** не попадёт в BFF и пользователь увидит платформенный 404. Для OnlyOffice — пять записей **`onlyoffice`** с **`path`** **`/web-apps`**, **`/common`**, **`/cache`**, **`/fonts`**, **`/sdkjs`** на порт публикации DS (**8088**); см. шапку **`deploy/ingress.sh`**.
 
 ## Postgres: `migrations/postgres/init.sql`
 
@@ -170,12 +170,12 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 
 В **`docker-compose-prod.yaml`** поднимаются **`onlyoffice-documentserver`** (**`onlyoffice/documentserver`**, Community Edition, порт **8088**) и BFF **`office`** (**8008**). Секрет JWT должен совпадать в контейнере DS и в BFF (**`OFFICE__JWT_SECRET`** / **`ONLYOFFICE_JWT_SECRET`**).
 
-В **`x-common-env`** заданы дефолты Humanitec: **`SERVER__PLATFORM_PUBLIC_BASE_URL`** = `https://humanitec.ru`, **`OFFICE__DOCUMENT_SERVER_PUBLIC_URL`** = `https://onlyoffice.humanitec.ru`, **`OFFICE__CALLBACK_PUBLIC_BASE_URL`** = `https://humanitec.ru` (ingress с **`/documents`** на office). Другой домен (например `qqq.humanitec.ru`) — в `.env` на сервере: **`OFFICE_CALLBACK_PUBLIC_BASE_URL=https://qqq.humanitec.ru`**, **`SERVER__PLATFORM_PUBLIC_BASE_URL=https://qqq.humanitec.ru`** (и при необходимости секреты из `deploy.yml`).
+В **`x-common-env`** заданы дефолты Humanitec: **`SERVER__PLATFORM_PUBLIC_BASE_URL`** = `https://humanitec.ru`, **`OFFICE__DOCUMENT_SERVER_PUBLIC_URL`** = `https://humanitec.ru` (тот же host, что UI; префиксы **`/web-apps`**, **`/common`**, … на DS — через **`deploy/ingress.sh`** и **`ingress.services`**), **`OFFICE__CALLBACK_PUBLIC_BASE_URL`** = `https://humanitec.ru`. Другой домен (например `qqq.humanitec.ru`) — в `.env` на сервере: **`OFFICE_CALLBACK_PUBLIC_BASE_URL=https://qqq.humanitec.ru`**, **`SERVER__PLATFORM_PUBLIC_BASE_URL=https://qqq.humanitec.ru`**, **`OFFICE_DOCUMENT_SERVER_PUBLIC_URL`** на тот же публичный origin (и при необходимости секреты из `deploy.yml`).
 
 | Secret | Описание |
 |---|---|
 | `ONLYOFFICE_JWT_SECRET` | Обязателен в проде: общий секрет JWT для DS и BFF. |
-| `OFFICE_DOCUMENT_SERVER_PUBLIC_URL` | Опционально: переопределяет дефолт **`https://onlyoffice.humanitec.ru`**. |
+| `OFFICE_DOCUMENT_SERVER_PUBLIC_URL` | Опционально: переопределяет дефолт **`https://humanitec.ru`**. |
 | `OFFICE_CALLBACK_PUBLIC_BASE_URL` | Опционально: переопределяет дефолт **`https://humanitec.ru`** (должен быть origin, с которого DS достучится до **`/documents/api/v1/...`**). |
 | `SERVER__PLATFORM_PUBLIC_BASE_URL` | Опционально: в `.env` на сервере переопределяет дефолт **`https://humanitec.ru`** (логотип в JWT редактора). |
 
