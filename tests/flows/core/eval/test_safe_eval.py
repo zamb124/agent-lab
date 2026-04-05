@@ -930,3 +930,13 @@ async def run(state):
         assert result["parsed_args"] == {"a": 6, "b": 7}
         assert result["product"] == 42
 
+
+def test_python_namespace_has_no_get_container() -> None:
+    """В inline namespace нет доступа к DI-контейнеру."""
+    from apps.flows.src.eval.namespace import PythonNamespaceBuilder
+
+    ns = PythonNamespaceBuilder().build()
+    assert "get_container" not in ns
+    assert "writer" in ns
+    assert callable(getattr(ns["writer"], "create_file", None))
+

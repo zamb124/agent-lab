@@ -211,7 +211,19 @@ class BaseContainer:
         """FileRepository для работы с файлами"""
         from core.files.file_repository import FileRepository
         return FileRepository(storage=self.shared_storage)
-    
+
+    @lazy
+    def file_processor(self):
+        """
+        Один процессор на процесс контейнера: shared FileRepository + S3.
+        Новый экземпляр FileProcessor(...) с тем же репозиторием не менял бы поведение — это та же логика;
+        кеш здесь убирает лишние объекты и явно «один на контейнер». Сервис с другим file_repository
+        (например office) переопределяет file_repository и при необходимости file_processor.
+        """
+        from core.files.processors import FileProcessor
+
+        return FileProcessor(file_repository=self.file_repository)
+
     @lazy
     def namespace_repository(self):
         """NamespaceRepository для работы с namespace"""

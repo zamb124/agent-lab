@@ -42,6 +42,7 @@ from apps.flows.src.eval.state_utils import (
     set_nested,
 )
 from core.files.reader import FileReader
+from core.files.writer import FileWriter
 from apps.flows.src.tools.decorator import tool
 from apps.flows.src.eval.wrappers import (
     HttpxModule,
@@ -192,7 +193,7 @@ class PythonNamespaceBuilder:
         # Настройки
         namespace["get_settings"] = get_settings
 
-        namespace["get_container"] = get_container
+        # get_container в namespace не даём: inline-код не должен иметь доступ к DI и репозиториям.
         # Шаблоны из tool_repository часто без импортов; в исходниках было ``from datetime import datetime``.
         namespace["datetime"] = stdlib_datetime.datetime
         namespace["ContentType"] = ContentType
@@ -200,6 +201,7 @@ class PythonNamespaceBuilder:
 
         # BaseTool и @tool: функция из кода -> схема для llm.chat(..., tools=[...])
         container = get_container()
+        namespace["writer"] = FileWriter()
         namespace["BaseTool"] = container.base_tool_class
         namespace["tool"] = tool
         

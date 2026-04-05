@@ -1,14 +1,59 @@
 """
 Тулы для работы с файлами в flow (вложения state.files).
 
-Сейчас: read_file. Сюда же добавляются создание файлов и прочие file-операции.
+read_file — чтение вложений; create_file — FileWriter() + create_file (процесс настроен через FileWriter.configure_process_upload при старте).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from apps.flows.src.tools import tool
-from core.files.reader import FileReadError, FileReader, ReadOptions
+from core.files.models import FileResponse
+from core.files.reader import FileReader, FileReadError, ReadOptions
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
+from core.files.writer import FileWriteError, FileWriter
+
+_CREATE_FILE_TOOL_DESCRIPTION = """
+Создаёт файл в хранилище платформы и возвращает ссылку на скачивание.
+
+Ответ при успехе: success=true, file_id, url (путь для скачивания), original_name, content_type,
+file_size, checksum (если есть), is_public.
+Ответ при ошибке: success=false, error (текст причины: нет компании в контексте, неверный base64, нет расширения в имени и т.д.).
+
+Параметры вызова:
+- content (строка): всегда передаётся как текст в JSON. Содержимое зависит от content_mode.
+- original_name (строка): имя файла с расширением, например report.docx или data.xlsx.
+  Расширение обязательно — по нему выбирается формат результата. Без точки и расширения вызов завершится ошибкой.
+- content_mode (строка, по умолчанию auto): как интерпретировать content.
+  • auto — для строки платформа сама определяет: markdown, base64 или обычный текст.
+    Бинарник через этот tool: закодируй в base64 в content и поставь content_mode=base64.
+  • markdown — content трактуется как Markdown (GFM): заголовки, списки, **жирный**, ссылки, таблицы с |.
+  • base64 — content — одна строка base64 (без переносов); декодируется в байты и кладётся в файл как есть (тип по расширению).
+  • raw — content кодируется в UTF-8 и записывается в файл как есть (для .md/.txt и т.п.).
+
+Формат результата по расширению original_name (режим markdown или auto с распознанным markdown):
+- .md — текст Markdown как файл.
+- .txt — обычный текст.
+- .html — HTML с разметкой из Markdown; картинки из ![](https://...) подтягиваются по URL и встраиваются.
+- .pdf — PDF-документ из Markdown (таблицы |...|, абзацы, встроенные по URL картинки).
+- .docx — Word из Markdown (таблицы и картинки по URL).
+- .xlsx — таблица Excel: GFM-таблицы из Markdown становятся листами/ячейками; картинки по возможности вставляются.
+
+Картинки в Markdown: только стандартный синтаксис с URL, например ![описание](https://example.com/image.png).
+По http/https файл скачивается и вставляется в html/pdf/docx/xlsx. Локальные пути без URL не подставляются.
+
+Примеры JSON-аргументов для вызова tool:
+1) Отчёт в Word из Markdown:
+   {"content": "# Итог\\n\\n- пункт 1\\n- пункт 2\\n\\n| Кол1 | Кол2 |\\n| --- | --- |\\n| a | b |", "original_name": "otchet.docx", "content_mode": "markdown"}
+2) Простой текстовый файл:
+   {"content": "Строка1\\nСтрока2", "original_name": "notes.txt", "content_mode": "raw"}
+3) То же через auto (если текст не похож на base64):
+   {"content": "# Заголовок\\n\\nТекст", "original_name": "page.html", "content_mode": "auto"}
+4) Положить уже закодированные байты (например готовый маленький бинарник в base64):
+   {"content": "UEsDBBQAAAAIA...", "original_name": "dump.bin", "content_mode": "base64"}
+
+Когда выбирать этот tool: пользователь просит сформировать файл (отчёт, таблицу, PDF, HTML, docx) и получить ссылку.
+После успеха сообщи пользователю url или file_id из ответа.
+""".strip()
 
 
 def _find_file(files: List[Dict[str, Any]], name: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -70,11 +115,10 @@ def _read_file_mock(args: dict, state: Any = None) -> dict:
 @tool(
     name="read_file",
     description=(
-        "Читает прикреплённый файл и возвращает структурированный результат (страницы, текст, checksum). "
-        "file_name — имя файла из state.files; если не указано, берётся первый файл. "
-        "include_asset_bytes — включать base64 вложений (тяжёлый ответ, по умолчанию false). "
-        "vision_prompt — для изображений: инструкция vision-модели (что извлечь или как интерпретировать); "
-        "без неё используется стандартное извлечение текста и краткое описание."
+        "Читает вложение из state.files. Передаёшь file_name (как в записи name) — tool сам находит объект файла в state "
+        "и вызывает FileReader.read. Если file_name не указан, берётся первый файл из state.files. "
+        "include_asset_bytes — base64 вложений в ответе PDF (тяжело). "
+        "vision_prompt — для картинок: инструкция vision-модели."
     ),
     tags=["files", "ocr", "document"],
     mock_response=_read_file_mock,
@@ -117,3 +161,44 @@ async def read_file(
         return {"success": False, "error": str(exc)}
 
     return {"success": True, **result.model_dump(mode="json")}
+
+
+def _create_file_mock(args: dict, state: Any = None) -> dict:
+    return {
+        "success": True,
+        "file_id": "file_mockcreate01",
+        "original_name": args.get("original_name") or "out.md",
+        "content_type": "text/plain",
+        "file_size": 1,
+        "url": "/flows/api/v1/files/download/file_mockcreate01",
+        "checksum": None,
+        "is_public": True,
+    }
+
+
+@tool(
+    name="create_file",
+    description=_CREATE_FILE_TOOL_DESCRIPTION,
+    tags=["files", "storage"],
+    mock_response=_create_file_mock,
+)
+async def create_file(
+    content: str,
+    original_name: str,
+    content_mode: Literal["auto", "markdown", "base64", "raw"] = "auto",
+    state: Optional[dict] = None,
+) -> dict:
+    """Создаёт файл в хранилище. Подробное описание и примеры JSON — в description tool (см. _CREATE_FILE_TOOL_DESCRIPTION)."""
+    writer = FileWriter()
+    try:
+        record = await writer.create_file(
+            content=content,
+            original_name=original_name,
+            content_mode=content_mode,
+            public=True,
+        )
+    except FileWriteError as exc:
+        return {"success": False, "error": str(exc)}
+
+    response = FileResponse.from_record(record)
+    return {"success": True, **response.model_dump(mode="json")}

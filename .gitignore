@@ -40,3 +40,6 @@ core/frontend/pwa/assetlinks.json
 
 # Сгенерированные скриншоты App Store (исходники в mobile/screens/source/)
 mobile/screens/generated/
+
+# FileWriter: выход тестов (перезапись при прогоне)
+tests/core/files/file_writer_output/

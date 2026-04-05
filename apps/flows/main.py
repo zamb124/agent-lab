@@ -58,7 +58,13 @@ async def _build_scheduler_auth_context(container: object, trace_id: str, sessio
 
 async def on_startup(app: FastAPI, container, settings: FlowSettings):
     """Логика при старте сервиса flows."""
-    
+    from core.files.writer import FileWriter
+
+    FileWriter.configure_process_upload(
+        file_processor=container.file_processor,
+        download_url_prefix=f"/{settings.server.name}/api/v1/files/download",
+    )
+
     # Подключаемся к Redis с retry
     logger.info("Connecting to Redis...")
     max_startup_retries = 5

@@ -59,6 +59,7 @@ class ToolRegistry:
 
         from apps.flows.tools import (
             calculator,
+            create_file,
             final_answer,
             finish,
             read_file,
@@ -74,6 +75,7 @@ class ToolRegistry:
 
         builtin_tools = [
             calculator,
+            create_file,
             final_answer,
             finish,
             read_file,

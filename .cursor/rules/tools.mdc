@@ -12,11 +12,13 @@ Tools = inline конфиги внутри ноды / FlowConfig. Встроен
 
 Встроенный **`calculator`** (tool_id без изменений) живёт в **`apps/flows/tools/math_tools.py`** (не `math.py`, чтобы не путать со stdlib **`math`** при импортах).
 
+Файлы: **`read_file`** и **`create_file`** в **`apps/flows/tools/files.py`**. Подробное описание **`create_file`** для LLM — **`_CREATE_FILE_TOOL_DESCRIPTION`**. При старте flows / flows_worker: **`FileWriter.configure_process_upload(file_processor=..., download_url_prefix=...)`**; в теле **`create_file`** — **`writer = FileWriter()`** и **`await writer.create_file(...)`**. Inline: **`writer = FileWriter()`** в namespace (см. **`globals.py`**). PDF из markdown: ReportLab + встроенный **Noto Sans Regular** (**`core/files/writer/fonts/`**, OFL), иначе кириллица даёт «квадратики» (стандартные Helvetica в ReportLab без кириллицы).
+
 Единая материализация runnable tool: **`ToolRegistry.materialize`** (алиас `create_tool` для dict/`ToolReference`).
 
 Исполнение: только **`InlineTool`** / нода как tool по полю **`code`** (из конфига или merge с **`tool_repository`**). Вызова «живого» **`FunctionTool`** из процессного реестра по **`tool_id`** нет — код в репозитории это **шаблон** для подстановки, не отдельный runtime-путь.
 
-**`PythonNamespaceBuilder`**: для фрагментов без импортов (как в шаблонах из БД) в namespace есть, среди прочего, **`get_container`**, **`datetime`** (класс `datetime.datetime`, как после `from datetime import datetime`), **`ContentType`**, **`_extract_ids_from_state`** — чтобы scheduling-шаблоны выполнялись без дублирования преамбулы в каждой записи.
+**`PythonNamespaceBuilder`**: **`reader`**, **`writer`** (экземпляр **`FileWriter()`** с дефолтами из **`FileWriter.configure_process_upload`** при старте процесса), **`datetime`**, **`ContentType`**, **`_extract_ids_from_state`**. **`get_container` в eval не экспортируется**. Загрузка: **`await writer.create_file(...)`**.
 
 ## Структура tool
 
@@ -165,9 +167,8 @@ JSON Schema для LLM - какие параметры tool принимает:
 
 ## ToolRegistry
 
-Создаёт tools из конфига:
+Создаёт tools из конфига (внутри сервиса flows / API, не из eval):
 
-    container = get_container()
     tool = await container.tool_registry.create_tool(tool_config)
 
 `create_tool({"tool_id": "…"})` без `code`/`prompt`: сначала **`registry.get(tool_id)`** (встроенные), иначе **`tool_repository.get`** и мерж в полный конфиг — так же работает `CodeNode` с полем `tool_id` (тест-панель Execute).

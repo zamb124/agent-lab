@@ -42,6 +42,14 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     container = get_container()
     state.container = container
 
+    from core.files.writer import FileWriter
+
+    s = get_settings()
+    FileWriter.configure_process_upload(
+        file_processor=container.file_processor,
+        download_url_prefix=f"/{s.server.name}/api/v1/files/download",
+    )
+
     # Внутри воркера выполняем ноды напрямую, без рекурсивного kiq().
     container.use_worker = False
 

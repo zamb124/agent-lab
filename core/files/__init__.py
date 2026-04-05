@@ -10,6 +10,15 @@ from core.files.reader import (
     ReadOptions,
     ReadPage,
 )
+from core.files.writer import (
+    ContentKind,
+    FileWriteError,
+    FileWriteResult,
+    FileWriter,
+    WriteOptions,
+    classify_content,
+    write_bytes_via_processor,
+)
 from core.files.s3_client import S3Client, S3ClientFactory, get_default_s3_client, close_default_s3_client
 from core.files.models import (
     FileRecord,
@@ -36,11 +45,18 @@ from core.files.streaming import stream_s3_file
 
 __all__ = [
     "compute_content_checksum_sha256",
+    "classify_content",
+    "ContentKind",
     "FileReadError",
     "FileReader",
     "FileReadResult",
     "ReadOptions",
     "ReadPage",
+    "FileWriteError",
+    "FileWriteResult",
+    "FileWriter",
+    "WriteOptions",
+    "write_bytes_via_processor",
     "S3Client",
     "S3ClientFactory",
     "get_default_s3_client",

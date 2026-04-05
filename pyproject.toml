@@ -29,6 +29,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["apps", "core"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"core/files/writer/fonts/NotoSans-Regular.ttf" = "core/files/writer/fonts/NotoSans-Regular.ttf"
+"core/files/writer/fonts/OFL.txt" = "core/files/writer/fonts/OFL.txt"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
@@ -92,6 +96,10 @@ core = [
     "gunicorn>=21.2.0",
     "pgvector>=0.3.6",
     "croniter>=6.2.2",
+    "markdown>=3.10",
+    "python-docx>=1.2.0",
+    "openpyxl>=3.1.5",
+    "pillow>=12.0.0",
 ]
 
 agents = [
