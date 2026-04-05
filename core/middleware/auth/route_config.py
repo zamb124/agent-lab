@@ -178,9 +178,9 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/invites/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/invites/*", context_type="api", auth_required=True),
 
-    # API фронтенда для управления командой
+    # Core team API на всех сервисах
     RouteRule("/api/team/*", context_type="api", auth_required=True),
-    RouteRule("/frontend/api/team/*", context_type="api", auth_required=True),
+    RouteRule("/*/api/team/*", context_type="api", auth_required=True),
     
     # API фронтенда для управления API ключами
     RouteRule("/api/api-keys/*", context_type="api", auth_required=True),
