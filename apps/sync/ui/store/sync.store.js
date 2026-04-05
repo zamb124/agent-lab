@@ -852,6 +852,12 @@ export const SyncStore = {
         }
         const sid = channel.space_id;
         if (typeof sid !== 'string' || sid === '') {
+            if (channel.type === 'calendar_meeting') {
+                return t('sync_store.channel_meta_calendar_meeting', {});
+            }
+            if (channel.type === 'group') {
+                return t('sync_store.channel_meta_group', {});
+            }
             throw new Error(t('sync_store.err_channel_row_no_space_id', {}));
         }
         const sp = baseStore.state.spaces.list.find(x => x.id === sid);

@@ -3,13 +3,20 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from apps.frontend.config import get_frontend_settings
 from apps.frontend.dependencies import ContainerDep
-from apps.frontend.models import PlatformTracingFacetsResponse, PlatformTracingSpansPageResponse
+from apps.frontend.models import (
+    PlatformTracingFacetItem,
+    PlatformTracingFacetItemsResponse,
+    PlatformTracingFacetsResponse,
+    PlatformTracingSpansPageResponse,
+)
+from core.db.repositories.company_repository import CompanyRepository
+from core.db.repositories.user_repository import UserRepository
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, ADMIN_SPANS_MAX_LIMIT
 from core.tracing.span_tree import build_span_tree
@@ -35,20 +42,69 @@ def _require_tracing_db() -> None:
         )
 
 
-@router.get("/facets/companies", response_model=PlatformTracingFacetsResponse)
+_ID_SHORT_LEN = 8
+
+
+def _short_id_fragment(entity_id: str) -> str:
+    if len(entity_id) <= _ID_SHORT_LEN:
+        return entity_id
+    return f"{entity_id[:_ID_SHORT_LEN]}..."
+
+
+def _company_facet_label(company_id: str, name: Optional[str]) -> str:
+    if name:
+        return f"{name} ({_short_id_fragment(company_id)})"
+    return company_id
+
+
+def _user_facet_label(user_id: str, name: Optional[str]) -> str:
+    if name:
+        return f"{name} ({_short_id_fragment(user_id)})"
+    return user_id
+
+
+async def _enrich_span_items(
+    items: List[Dict[str, Any]],
+    company_repository: CompanyRepository,
+    user_repository: UserRepository,
+) -> None:
+    company_ids = {s["company_id"] for s in items if s.get("company_id")}
+    user_ids = {s["user_id"] for s in items if s.get("user_id")}
+    companies = (
+        await company_repository.get_many(list(company_ids)) if company_ids else {}
+    )
+    users = await user_repository.get_many(list(user_ids)) if user_ids else {}
+    for item in items:
+        co = companies.get(item.get("company_id"))
+        item["company_name"] = co.name if co else None
+        u = users.get(item.get("user_id"))
+        item["user_display_name"] = u.name if u else item.get("user_name")
+
+
+@router.get("/facets/companies", response_model=PlatformTracingFacetItemsResponse)
 async def facet_companies(
     request: Request,
     container: ContainerDep,
     q: Optional[str] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
-) -> PlatformTracingFacetsResponse:
+) -> PlatformTracingFacetItemsResponse:
     _require_system(request)
     _require_tracing_db()
-    items = await container.span_repository.admin_facet_distinct_company_ids(q=q, limit=limit)
-    return PlatformTracingFacetsResponse(items=items)
+    ids = await container.span_repository.admin_facet_distinct_company_ids(q=q, limit=limit)
+    companies = await container.company_repository.get_many(ids) if ids else {}
+    items = []
+    for cid in ids:
+        co = companies.get(cid)
+        items.append(
+            PlatformTracingFacetItem(
+                value=cid,
+                label=_company_facet_label(cid, co.name if co else None),
+            )
+        )
+    return PlatformTracingFacetItemsResponse(items=items)
 
 
-@router.get("/facets/users", response_model=PlatformTracingFacetsResponse)
+@router.get("/facets/users", response_model=PlatformTracingFacetItemsResponse)
 async def facet_users(
     request: Request,
     container: ContainerDep,
@@ -56,16 +112,26 @@ async def facet_users(
     company_id: Optional[str] = Query(default=None),
     namespace: Optional[str] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
-) -> PlatformTracingFacetsResponse:
+) -> PlatformTracingFacetItemsResponse:
     _require_system(request)
     _require_tracing_db()
-    items = await container.span_repository.admin_facet_distinct_user_ids(
+    ids = await container.span_repository.admin_facet_distinct_user_ids(
         q=q,
         company_id=company_id,
         namespace=namespace,
         limit=limit,
     )
-    return PlatformTracingFacetsResponse(items=items)
+    users = await container.user_repository.get_many(ids) if ids else {}
+    items = []
+    for uid in ids:
+        u = users.get(uid)
+        items.append(
+            PlatformTracingFacetItem(
+                value=uid,
+                label=_user_facet_label(uid, u.name if u else None),
+            )
+        )
+    return PlatformTracingFacetItemsResponse(items=items)
 
 
 @router.get("/facets/services", response_model=PlatformTracingFacetsResponse)
@@ -186,6 +252,7 @@ async def list_spans(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+    await _enrich_span_items(items, container.company_repository, container.user_repository)
     return PlatformTracingSpansPageResponse(items=items, next_cursor=next_cursor)
 
 
@@ -198,6 +265,7 @@ async def get_trace_tree(
     _require_system(request)
     _require_tracing_db()
     spans = await container.span_repository.get_trace(trace_id)
+    await _enrich_span_items(spans, container.company_repository, container.user_repository)
     tree = build_span_tree(spans)
     return {
         "trace_id": trace_id,

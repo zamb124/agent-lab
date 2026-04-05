@@ -239,6 +239,8 @@
     "err_channel_filter_multi": "To create a channel, leave only one space in the filter or reset the filter (show all channels).",
     "err_create_space_first": "Create a space first.",
     "channel_meta_direct": "Direct",
+    "channel_meta_calendar_meeting": "Meeting",
+    "channel_meta_group": "Group",
     "channel_meta_space_unavailable": "Space unavailable",
     "channel_meta_unnamed": "Untitled",
     "typing_one": "{{name}} is typing…",

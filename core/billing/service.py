@@ -208,13 +208,7 @@ class BillingService:
         
         actual_company.balance -= cost
         actual_company.current_month_spent += cost
-        
-        if actual_company.balance < 0:
-            raise ValueError(
-                f"Баланс компании {actual_company.company_id} ушел в минус: {actual_company.balance:.2f}₽. "
-                f"Это не должно было произойти - была ошибка в can_use_resource"
-            )
-        
+
         logger.info(f"Обновляем компанию {actual_company.company_id}:")
         logger.info(f"Баланс: {old_balance:.2f}₽ → {actual_company.balance:.2f}₽")
         logger.info(f"Потрачено в месяце: {old_spent:.2f}₽ → {actual_company.current_month_spent:.2f}₽")
@@ -286,10 +280,6 @@ class BillingService:
         unit_cost = await self.get_resource_cost_for_company(company, resource_name)
         cost = unit_cost * quantity
 
-        ok, reason = await self.can_use_resource(user, company, resource_name, quantity=quantity)
-        if not ok:
-            raise ValueError(f"span {span_id}: {reason}")
-
         meta: Dict[str, Any] = {
             "span_id": span_id,
             "trace_id": span_dict.get("trace_id"),
@@ -347,10 +337,6 @@ class BillingService:
 
         unit_cost = await self._unit_cost_for_company(company, resource_name)
         cost = unit_cost * quantity
-
-        ok, reason = await self.can_use_resource(user, company, resource_name, quantity=quantity)
-        if not ok:
-            raise ValueError(f"span {span_id} rule {rule.rule_id}: {reason}")
 
         meta: Dict[str, Any] = {
             "span_id": span_id,

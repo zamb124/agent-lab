@@ -97,7 +97,7 @@ core/frontend/static/
 
 **Панель уведомлений:** `platform-notification-manager` — список открывается `position: fixed` с координатами от кнопки (`getBoundingClientRect`), ширина панели **`min(400px, 80vw)`** (на узком экране остаётся запас слева/справа). `z-index: var(--z-notification-panel, 30000)`, чтобы не уходить под соседний `platform-island` (flex + порядок DOM). Клик вне компонента закрывает панель. Toast (`glass-toast`): хост **`width: min(80vw, 400px); left: auto`**, иначе в Safari блок с `position: fixed` без ширины растягивается на весь вьюпорт.
 
-**Контекстная подсказка «?»:** `platform-help-hint` (`core/frontend/static/lib/components/platform-help-hint.js`) — компактная кнопка «?» со всплывающим текстом при наведении и при фокусе. Текст подсказки — свойство **`text`** (в Lit: `.text=${'…'}`); подпись для доступности кнопки — атрибут **`label`** (по умолчанию «Справка»). Пузырёк рендерится **`position: fixed`** и получает **`z-index` через `nextModalLayerZIndex()`** из `core/frontend/static/lib/utils/modal-z-stack.js` при открытии (выше модалок и не обрезается `overflow` у предков). Регистрация: side-effect `import '@platform/lib/components/platform-help-hint.js'` в `index.js` приложения, где тег используется. Для пояснения неочевидных переключателей и полей **нужно брать этот компонент**, а не свои кнопки «?» и отдельные стили тултипов.
+**Контекстная подсказка «?»:** `platform-help-hint` (`core/frontend/static/lib/components/platform-help-hint.js`) — компактная кнопка «?» со всплывающим текстом при наведении и при фокусе. Текст подсказки — свойство **`text`** (в Lit: `.text=${'…'}`); подпись для доступности кнопки — атрибут **`label`** (по умолчанию «Справка»). **Пузырёк монтируется в `document.body`** (`position: fixed`, координаты от `getBoundingClientRect` кнопки), **`z-index` через `nextModalLayerZIndex()`** — всегда поверх сайдбара shell и контента, без ограничения stacking context предков. Регистрация: side-effect `import '@platform/lib/components/platform-help-hint.js'` в `index.js` приложения, где тег используется. Для пояснения неочевидных переключателей и полей **нужно брать этот компонент**, а не свои кнопки «?» и отдельные стили тултипов.
 
 **Стек z-index для модалок и полноэкранных слоёв:** `core/frontend/static/lib/utils/modal-z-stack.js` — `nextModalLayerZIndex()` даёт монотонно растущее значение выше `--z-notification-panel` / `--z-modal` и т.д. При **каждом** открытии модалки выставлять на хосте `--platform-modal-layer-z` (делают `GlassModal`, `PlatformLightModal`, `auth-modal`, `company-modal`). Полноэкранные оверлеи вне этого набора (например `call-overlay`, `call-incoming` в Sync) при монтировании тоже вызывают `nextModalLayerZIndex()` и ту же CSS-переменную. В flows полноэкранный режим `json-field-editor` и `code-editor` (`apps/flows/ui/components/editors/`): если найден ближайший предок с классом `modal-content`, `modal-content-wrapper` или `floating-panel-body` — класс `fullscreen-embedded`, хост в DOM, `position: absolute; inset: 0` внутри контейнера (**без** `overflow: hidden` на предке — иначе залипала прокрутка `floating-panel-body`). Иначе — перенос в `document.body`, `position: fixed`, `--platform-modal-layer-z`, флаг `_fsPortalReparent`. У `json-field-editor` атрибут **`bounded`** — ограничение высоты и внутренний скролл CodeMirror (например Output Schema в `llm-node-editor`). `FlowEditorPage.updated` снимает застрявший класс `editor-fullscreen-embed-clip` с `.floating-panel-body` для старых сессий. `BaseNodeEditor`: expanded `panel-layout` — `align-items: flex-start`. У `.floating-panel-body` в `island.styles.js` с колонкой flex у панели нужны **`min-height: 0`**, **`flex: 1`**, **`overflow-y: auto`** — иначе тело не сжимается и скролл не появляется. Токен `--z-notification-panel` в `tokens.css`.
 
@@ -257,11 +257,11 @@ class MyModal extends GlassModal {
 - API компонента:
   - `text` — основной текст подсказки (обязателен)
   - `label` — aria-label для кнопки подсказки
-  - `strategy="fixed|local"` — режим позиционирования (`fixed` по умолчанию, `local` для плотных форм/гридов)
+  - `strategy` — устаревшее, игнорируется; пузырь всегда в `body` + `nextModalLayerZIndex()`
 - Поведение:
   - открытие по hover/focus
   - закрытие по mouseleave/focusout/Escape
-  - пузырь рендерится с `position: fixed` и z-index из modal-layer, чтобы не обрезаться контейнерами
+  - пузырь в `document.body`, `position: fixed`, z-index из modal-layer (поверх сайдбара и overflow)
 
 **Короткие методы notify:**
 - `this.success(message)` — зелёное уведомление

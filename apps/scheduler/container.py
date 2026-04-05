@@ -2,12 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from core.container import BaseContainer, lazy
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def scheduler_broker_for_queue(queue_name: str) -> Any:
+    """Брокер TaskIQ для AsyncKicker: задача должна быть зарегистрирована на этом брокере."""
+    from apps.crm_worker.broker import broker as crm_broker
+    from apps.flows_worker.broker import broker as flows_broker
+    from apps.idle_worker.broker import broker as idle_broker
+    from apps.rag_worker.broker import broker as rag_broker
+    from apps.sync.realtime.broker import broker as sync_broker
+
+    mapping: dict[str, Any] = {
+        "flows_worker": flows_broker,
+        "idle": idle_broker,
+        "crm": crm_broker,
+        "rag": rag_broker,
+        "sync": sync_broker,
+    }
+    if queue_name not in mapping:
+        raise ValueError(f"Неизвестная очередь для scheduler kicker: {queue_name}")
+    return mapping[queue_name]
 
 
 class SchedulerContainer(BaseContainer):
@@ -25,15 +45,14 @@ class SchedulerContainer(BaseContainer):
 
     @lazy
     def scheduler_service(self):
-        from apps.flows_worker.broker import broker
         from apps.scheduler.config import get_scheduler_settings
         from core.scheduler import SchedulerService
 
         settings = get_scheduler_settings()
         return SchedulerService(
             repository=self.scheduler_task_repository,
-            broker=broker,
             redis_url=settings.database.redis_url,
+            broker_for_queue=scheduler_broker_for_queue,
         )
 
 

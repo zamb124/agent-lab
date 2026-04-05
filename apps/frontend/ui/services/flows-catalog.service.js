@@ -20,4 +20,14 @@ export class FlowsCatalogService extends BaseService {
         }
         return data;
     }
+
+    async listTools() {
+        const data = await this.get('/flows/api/v1/tools/');
+        if (!Array.isArray(data)) {
+            throw new Error(
+                `Expected array from GET /flows/api/v1/tools/, got ${typeof data}`,
+            );
+        }
+        return data;
+    }
 }

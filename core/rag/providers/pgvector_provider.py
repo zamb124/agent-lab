@@ -109,17 +109,12 @@ class PgVectorProvider(BaseRAGProvider):
         if not dimension:
             raise ValueError("embedding.dimension обязателен в конфигурации")
 
-        cost_per_1m_tokens = config.get("embedding_cost_per_1m_tokens", 5.0)
-        platform_markup = config.get("embedding_platform_markup", 1.1)
-
         self._embedding_service = EmbeddingService(
             api_key=api_key,
             models=[model],
             base_url=embedding_base_url or None,
             timeout=timeout,
             dimension=dimension,
-            cost_per_1m_tokens=cost_per_1m_tokens,
-            platform_markup=platform_markup,
         )
 
         if os.environ.get("TESTING") == "true" or os.environ.get("RAG__EMBEDDING__MOCK") == "true":

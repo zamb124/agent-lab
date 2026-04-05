@@ -63,21 +63,25 @@ DEFAULT_TARIFF_PRICES = {
         "llm": {"*": 1.5},
         "tools": {"*": 1.5},
         "embedding": {"*": 1.5},
+        "livekit": {"*": 1.5},
     },
     TariffPlan.BASIC: {
         "llm": {"*": 1.25},
         "tools": {"*": 1.25},
         "embedding": {"*": 1.25},
+        "livekit": {"*": 1.25},
     },
     TariffPlan.PREMIUM: {
         "llm": {"*": 1.1},
         "tools": {"*": 1.1},
         "embedding": {"*": 1.1},
+        "livekit": {"*": 1.1},
     },
     TariffPlan.ENTERPRISE: {
         "llm": {"*": 1.1},
         "tools": {"*": 1.1},
         "embedding": {"*": 1.1},
+        "livekit": {"*": 1.1},
     }
 }
 

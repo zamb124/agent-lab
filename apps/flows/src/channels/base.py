@@ -42,7 +42,7 @@ from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeve
 from apps.flows.src.state import create_initial_state
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
-from apps.flows.src.tasks.push_notification_tasks import send_task_update
+from apps.idle_worker.tasks.push_notification_tasks import send_task_update
 from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
 from apps.flows.src.utils import extract_json_from_response

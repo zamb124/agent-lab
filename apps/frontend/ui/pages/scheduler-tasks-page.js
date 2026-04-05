@@ -303,6 +303,7 @@ export class SchedulerTasksPage extends PlatformElement {
             const response = await this.services.get('schedulerTasks').list({
                 status: this.statusFilter || undefined,
                 target_service: this.serviceFilter || undefined,
+                limit: 500,
             });
             if (Array.isArray(response)) {
                 this.tasks = response.map((task) => this._normalizeTask(task));

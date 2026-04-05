@@ -7,6 +7,8 @@ LLMResource - wrapper для llm ресурса.
 from typing import Any, Dict, List, Optional
 
 from core.logging import get_logger
+from core.models.billing_models import UsageType
+from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
 
@@ -71,9 +73,18 @@ class LLMResource:
             Сгенерированный текст
         """
         client = self._get_client()
-        
-        response = await client.chat(prompt)
-        return self._extract_text(response)
+
+        async with traced_operation(
+            "flows.llm_resource.complete",
+            event_type="llm.complete",
+            operation_category="llm",
+            billing_usage_type=UsageType.LLM_REQUEST.value,
+            billing_resource_name=f"llm:{self.model}",
+            billing_quantity=1,
+            billing_pending_settlement=True,
+        ):
+            response = await client.chat(prompt)
+            return self._extract_text(response)
     
     async def chat(
         self,
@@ -93,9 +104,18 @@ class LLMResource:
             Ответ модели
         """
         client = self._get_client()
-        
-        response = await client.chat(messages)
-        return self._extract_text(response)
+
+        async with traced_operation(
+            "flows.llm_resource.chat",
+            event_type="llm.chat",
+            operation_category="llm",
+            billing_usage_type=UsageType.LLM_REQUEST.value,
+            billing_resource_name=f"llm:{self.model}",
+            billing_quantity=1,
+            billing_pending_settlement=True,
+        ):
+            response = await client.chat(messages)
+            return self._extract_text(response)
     
     def _extract_text(self, response: Any) -> str:
         """Извлекает текст из ответа LLM."""
@@ -123,14 +143,23 @@ class LLMResource:
             Ответ с tool_calls если есть
         """
         client = self._get_client()
-        
-        client_with_tools = client.bind_tools(tools)
-        response = await client_with_tools.ainvoke(messages)
-        
-        return {
-            "content": response.content if hasattr(response, "content") else "",
-            "tool_calls": response.tool_calls if hasattr(response, "tool_calls") else [],
-        }
+
+        async with traced_operation(
+            "flows.llm_resource.chat_with_tools",
+            event_type="llm.chat_with_tools",
+            operation_category="llm",
+            billing_usage_type=UsageType.LLM_REQUEST.value,
+            billing_resource_name=f"llm:{self.model}",
+            billing_quantity=1,
+            billing_pending_settlement=True,
+        ):
+            client_with_tools = client.bind_tools(tools)
+            response = await client_with_tools.ainvoke(messages)
+
+            return {
+                "content": response.content if hasattr(response, "content") else "",
+                "tool_calls": response.tool_calls if hasattr(response, "tool_calls") else [],
+            }
     
     def __repr__(self) -> str:
         return f"<LLMResource provider={self.provider} model={self.model}>"

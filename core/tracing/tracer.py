@@ -535,14 +535,26 @@ class PlatformTracer:
         response_content: Optional[str] = None,
         tool_calls: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
-        """Записывает результат LLM вызова в span."""
+        """Записывает результат LLM вызова в span и помечает для billing settlement."""
+        total_tokens = input_tokens + output_tokens
         span.set_attributes(
             {
                 attr.ATTR_LLM_INPUT_TOKENS: input_tokens,
                 attr.ATTR_LLM_OUTPUT_TOKENS: output_tokens,
-                attr.ATTR_LLM_TOTAL_TOKENS: input_tokens + output_tokens,
+                attr.ATTR_LLM_TOTAL_TOKENS: total_tokens,
                 attr.ATTR_LLM_HAS_TOOL_CALLS: has_tool_calls,
                 attr.ATTR_LLM_DURATION_MS: duration_ms,
+            }
+        )
+
+        span_attrs = getattr(span, "attributes", None) or {}
+        model = span_attrs.get(attr.ATTR_LLM_MODEL, "unknown")
+        span.set_attributes(
+            {
+                attr.ATTR_BILLING_USAGE_TYPE: "llm_request",
+                attr.ATTR_BILLING_RESOURCE_NAME: f"llm:{model}",
+                attr.ATTR_BILLING_QUANTITY: total_tokens,
+                attr.ATTR_BILLING_PENDING_SETTLEMENT: True,
             }
         )
         

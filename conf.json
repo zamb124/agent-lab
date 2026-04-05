@@ -41,13 +41,20 @@
         "nano_banana_generation": 0.5,
         "fashn_buyer_agent": 0.0,
         "*": 0.05
+      },
+      "embedding": { "*": 0.0005 },
+      "livekit": {
+        "room_create": 0.1,
+        "egress_composite": 1.0,
+        "egress_segmented": 0.5,
+        "*": 0.0
       }
     },
     "span_settlement": {
-      "enabled": false,
+      "enabled": true,
       "cron": "*/15 * * * *",
-      "lookback_minutes": 90,
-      "batch_limit": 200,
+      "lookback_minutes": 360,
+      "batch_limit": 500,
       "fallback_user_id": ""
     }
   },
@@ -411,6 +418,8 @@
     "turn_credential_ttl": 86400
   },
   "calendar_sync": {
+    "enabled": true,
+    "cron": "*/1 * * * *",
     "sync_meeting_reminder_enabled": true,
     "sync_meeting_reminder_cron": "*/1 * * * *",
     "sync_meeting_reminder_limit": 500

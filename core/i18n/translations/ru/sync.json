@@ -239,6 +239,8 @@
     "err_channel_filter_multi": "Чтобы создать канал, оставь в фильтре одно пространство или сбрось фильтр (покажи все каналы).",
     "err_create_space_first": "Сначала создай пространство.",
     "channel_meta_direct": "Личный",
+    "channel_meta_calendar_meeting": "Встреча",
+    "channel_meta_group": "Группа",
     "channel_meta_space_unavailable": "Пространство недоступно",
     "channel_meta_unnamed": "Без названия",
     "typing_one": "{{name}} печатает…",

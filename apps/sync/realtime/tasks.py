@@ -48,71 +48,6 @@ from core.utils.tokens import get_token_service
 logger = get_logger(__name__)
 
 
-async def _record_sync_stt_billing(
-    *,
-    actor_user_id: str,
-    company_id: str,
-    audio_bytes_len: int,
-) -> None:
-    from core.billing import get_billing_service
-
-    container = get_sync_container()
-    billing = get_billing_service()
-    user = await container.user_repository.get(actor_user_id)
-    if user is None:
-        raise ValueError(f"Пользователь {actor_user_id} не найден для учёта STT.")
-    company = await container.company_repository.get(company_id)
-    if company is None:
-        raise ValueError(f"Компания {company_id} не найдена для учёта STT.")
-    settings = get_settings()
-    resource_name = "tool:stt_sync_message"
-    cost = await billing.get_resource_cost_for_company(company, resource_name)
-    await billing.record_usage(
-        user=user,
-        company=company,
-        resource_name=resource_name,
-        cost=cost,
-        usage_type=UsageType.TOOL_CALL,
-        quantity=1,
-        metadata={
-            "audio_bytes": audio_bytes_len,
-            "stt_provider": settings.stt.provider,
-        },
-    )
-
-
-async def _record_sync_finalize_recording_billing(
-    *,
-    actor_user_id: str,
-    company_id: str,
-    recording_id: str,
-    egress_id: str,
-) -> None:
-    from core.billing import get_billing_service
-
-    container = get_sync_container()
-    billing = get_billing_service()
-    user = await container.user_repository.get(actor_user_id)
-    if user is None:
-        raise ValueError(f"Пользователь {actor_user_id} не найден для учёта финализации записи.")
-    company = await container.company_repository.get(company_id)
-    if company is None:
-        raise ValueError(f"Компания {company_id} не найдена для учёта финализации записи.")
-    resource_name = "tool:livekit_recording_finalize"
-    cost = await billing.get_resource_cost_for_company(company, resource_name)
-    await billing.record_usage(
-        user=user,
-        company=company,
-        resource_name=resource_name,
-        cost=cost,
-        usage_type=UsageType.TOOL_CALL,
-        quantity=1,
-        metadata={
-            "recording_id": recording_id,
-            "egress_id": egress_id,
-        },
-    )
-
 _TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
   return redis.call('del', KEYS[1])
@@ -756,6 +691,8 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
         operation_category="livekit_egress",
         billing_usage_type=UsageType.TOOL_CALL.value,
         billing_resource_name="tool:livekit_recording_finalize",
+        billing_quantity=1,
+        billing_pending_settlement=True,
         resource_type="sync_call_recording",
         resource_id=recording_id,
         extra_attributes={
@@ -852,12 +789,6 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 payload=send_payload.model_dump(mode="json"),
             )
             await dispatch_sync_command(cmd)
-            await _record_sync_finalize_recording_billing(
-                actor_user_id=recording.started_by_user_id,
-                company_id=company_id,
-                recording_id=recording.recording_id,
-                egress_id=provider_job_id,
-            )
             logger.info(
                 "sync_finalize_recording_task posted video message: recording_id=%s channel_id=%s",
                 recording.recording_id,
@@ -957,6 +888,8 @@ async def transcribe_audio_message_core(
                 operation_category="stt",
                 billing_usage_type=UsageType.TOOL_CALL.value,
                 billing_resource_name="tool:stt_sync_message",
+                billing_quantity=1,
+                billing_pending_settlement=True,
                 resource_type="sync_message",
                 resource_id=message_id,
                 extra_attributes={
@@ -1001,11 +934,6 @@ async def transcribe_audio_message_core(
                     company_id=company_id,
                 )
                 await publish_realtime_events([event_message_updated(done_message)])
-                await _record_sync_stt_billing(
-                    actor_user_id=actor_user_id,
-                    company_id=company_id,
-                    audio_bytes_len=audio_len,
-                )
         except Exception as exc:
             failed_contents = _replace_audio_transcription(
                 contents=source_contents,
@@ -1099,6 +1027,8 @@ async def transcribe_video_message_core(
             operation_category="stt",
             billing_usage_type=UsageType.TOOL_CALL.value,
             billing_resource_name="tool:stt_sync_message",
+            billing_quantity=1,
+            billing_pending_settlement=True,
             resource_type="sync_message",
             resource_id=message_id,
             extra_attributes={
@@ -1146,11 +1076,6 @@ async def transcribe_video_message_core(
                 company_id=company_id,
             )
             await publish_realtime_events([event_message_updated(done_message)])
-            await _record_sync_stt_billing(
-                actor_user_id=actor_user_id,
-                company_id=company_id,
-                audio_bytes_len=len(audio_bytes),
-            )
     except Exception as exc:
         failed_contents = _replace_video_transcription(
             contents=source_contents,

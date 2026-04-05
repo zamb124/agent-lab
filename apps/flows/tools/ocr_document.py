@@ -96,6 +96,8 @@ async def vision_analyze(
     
     from core.clients.llm.factory import get_vision_llm
     from core.logging import get_logger
+    from core.models.billing_models import UsageType
+    from core.tracing.operation_span import traced_operation
     
     logger = get_logger(__name__)
     
@@ -194,10 +196,19 @@ async def vision_analyze(
     
     logger.info(f"Vision analyze: model={model}, prompt_len={len(prompt)}, file={file_info.get('name')}")
     
-    # Вызываем LLM
     llm = get_vision_llm(model_name=model)
-    result = await llm.invoke([message], json_output=json_output)
-    
+
+    async with traced_operation(
+        "flows.tools.ocr_vision",
+        event_type="llm.vision",
+        operation_category="llm",
+        billing_usage_type=UsageType.LLM_REQUEST.value,
+        billing_resource_name=f"llm:{model}",
+        billing_quantity=1,
+        billing_pending_settlement=True,
+    ):
+        result = await llm.invoke([message], json_output=json_output)
+
     return {
         "success": True,
         "result": result,

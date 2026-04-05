@@ -2,21 +2,17 @@
 Сервис для генерации embeddings через OpenRouter и другие совместимые API.
 
 Поддерживает fallback между моделями одной размерности.
-Включает billing для учёта использования.
+Биллинг: span'ы с billing_pending_settlement — фоновая джоба settlement.
 """
 
 import logging
 import tiktoken
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional
 
 from core.http import get_httpx_client
-from core.context import get_context
 from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
-
-if TYPE_CHECKING:
-    from core.billing.service import BillingService
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +56,6 @@ class EmbeddingService:
     - OpenRouter API (по умолчанию)
     - Любой OpenAI-совместимый API
     - Fallback между моделями одной размерности
-    - Billing для учёта использования
     """
     
     OPENROUTER_URL = "https://openrouter.ai/api/v1/embeddings"
@@ -73,22 +68,7 @@ class EmbeddingService:
         base_url: Optional[str] = None,
         timeout: int = 15,
         dimension: Optional[int] = None,
-        # Billing параметры
-        cost_per_1m_tokens: float = 5.0,
-        platform_markup: float = 1.1,
-        billing_service: Optional["BillingService"] = None,
     ):
-        """
-        Args:
-            api_key: API ключ (OpenRouter по умолчанию)
-            models: Список моделей для fallback (первая рабочая будет использована)
-            base_url: Кастомный URL API (по умолчанию OpenRouter)
-            timeout: Таймаут запросов
-            dimension: Ожидаемая размерность (для валидации)
-            cost_per_1m_tokens: Средняя цена за 1M токенов (в рублях)
-            platform_markup: Наценка платформы (1.1 = +10%)
-            billing_service: Сервис биллинга (опционально)
-        """
         if not api_key:
             raise ValueError("API key обязателен для EmbeddingService")
         
@@ -96,12 +76,6 @@ class EmbeddingService:
         self.timeout = timeout
         self.dimension = dimension
         
-        # Billing
-        self.cost_per_1m_tokens = cost_per_1m_tokens
-        self.platform_markup = platform_markup
-        self.billing_service = billing_service
-        
-        # Tokenizer для подсчёта токенов
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
         
         # Список моделей для fallback
@@ -129,57 +103,10 @@ class EmbeddingService:
         return self._active_model or self.models[0]
     
     def count_tokens(self, texts: List[str]) -> int:
-        """Подсчитывает количество токенов в текстах"""
         total = 0
         for text in texts:
             total += len(self._tokenizer.encode(text))
         return total
-    
-    def calculate_cost(self, token_count: int) -> float:
-        """
-        Рассчитывает стоимость embedding.
-        
-        cost = (tokens / 1M) * cost_per_1m * platform_markup
-        """
-        base_cost = (token_count / 1_000_000) * self.cost_per_1m_tokens
-        return base_cost * self.platform_markup
-    
-    def _get_billing_service(self):
-        """Получает billing_service из контекста или параметра инициализации"""
-        if self.billing_service:
-            return self.billing_service
-        
-        from core.billing import get_billing_service
-        return get_billing_service()
-    
-    async def _record_usage(self, token_count: int, cost: float):
-        """Записывает использование embedding в billing"""
-        context = get_context()
-        
-        # Проверяем контекст пользователя - без user/company это системная операция
-        if not context or not context.user or not context.active_company:
-            logger.debug("Системная операция embedding без контекста пользователя")
-            return
-        
-        # Есть user/company - billing обязателен
-        billing = self.billing_service or self._get_billing_service()
-        
-        logger.info(f"Embedding billing: записываем {token_count} tokens, cost={cost:.4f}₽")
-        
-        await billing.record_usage(
-            user=context.user,
-            company=context.active_company,
-            resource_name=f"embedding:{self._active_model or 'unknown'}",
-            cost=cost,
-            usage_type=UsageType.EMBEDDING_REQUEST,
-            quantity=token_count,
-            metadata={
-                "model": self._active_model,
-                "tokens": token_count,
-                "cost_per_1m_tokens": self.cost_per_1m_tokens,
-                "platform_markup": self.platform_markup,
-            }
-        )
     
     async def _try_model(self, model: str, texts: List[str]) -> Optional[List[List[float]]]:
         """
@@ -303,6 +230,8 @@ class EmbeddingService:
             operation_category="embedding",
             billing_usage_type=UsageType.EMBEDDING_REQUEST.value,
             billing_resource_name=f"embedding:{resource_hint}",
+            billing_quantity=token_count,
+            billing_pending_settlement=True,
             extra_attributes={
                 trace_attributes.ATTR_EMBED_TEXT_COUNT: len(texts),
                 trace_attributes.ATTR_EMBED_BATCH_SIZE: self.BATCH_SIZE,
@@ -324,13 +253,14 @@ class EmbeddingService:
 
             resolved_model = self._active_model or ""
             span.set_attribute(trace_attributes.ATTR_EMBED_MODEL, resolved_model)
-
-            cost = self.calculate_cost(token_count)
-            await self._record_usage(token_count, cost)
+            span.set_attribute(
+                trace_attributes.ATTR_BILLING_RESOURCE_NAME,
+                f"embedding:{resolved_model}",
+            )
 
             logger.info(
                 f"Сгенерировано {len(all_embeddings)} embeddings "
-                f"(model={self._active_model}, tokens={token_count}, cost={cost:.4f}₽)"
+                f"(model={self._active_model}, tokens={token_count})"
             )
             return all_embeddings
     

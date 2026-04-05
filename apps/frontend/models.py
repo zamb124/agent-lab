@@ -102,10 +102,23 @@ class ChangePlanRequest(BaseModel):
     plan: str = Field(description="Новый тарифный план")
 
 
+class PlatformTracingFacetItem(BaseModel):
+    """Одна подсказка с id для фильтра и человекочитаемой подписью."""
+
+    value: str
+    label: str
+
+
 class PlatformTracingFacetsResponse(BaseModel):
     """Подсказки для автокомплита (distinct значения)."""
 
     items: List[str]
+
+
+class PlatformTracingFacetItemsResponse(BaseModel):
+    """Подсказки company/user: value = id, label = имя + короткий id."""
+
+    items: List[PlatformTracingFacetItem]
 
 
 class PlatformTracingSpansPageResponse(BaseModel):

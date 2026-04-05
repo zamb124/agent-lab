@@ -16,11 +16,19 @@ from a2a.types import (
 )
 
 from core.logging import get_logger
-from apps.flows.src.services.push_notifications import REDIS_PREFIX, REDIS_TTL, _get_redis
+from apps.flows.src.container import get_container
 
 from apps.idle_worker.broker import broker as idle_broker
 
+REDIS_PREFIX = "push_notification:"
+REDIS_TTL = 86400 * 7  # 7 days
+
 logger = get_logger(__name__)
+
+
+def _get_redis():
+    """Получает Redis клиент из контейнера."""
+    return get_container().redis_client
 
 
 @idle_broker.task(task_name="push_config_set", queue_name="idle")
@@ -226,4 +234,3 @@ async def send_task_failed(task_id: str, context_id: str, error: str) -> None:
 async def send_task_input_required(task_id: str, context_id: str, question: str) -> None:
     """Уведомление о необходимости ввода."""
     await send_task_update(task_id, context_id, "input-required", question, True)
-

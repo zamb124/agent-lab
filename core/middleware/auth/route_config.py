@@ -259,6 +259,20 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/platform-tracing", context_type="frontend", auth_required=True),
     RouteRule("/platform-billing", context_type="frontend", auth_required=True),
 
+    # Те же страницы консоли, если путь приходит с префиксом сервиса (/frontend/...).
+    # Иначе refresh даёт 404: префикс /frontend/ исключён из анонимного SPA-fallback.
+    RouteRule("/frontend/dashboard", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/team", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/api-keys", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/billing", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/embed-configs", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/settings/*", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/settings", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/scheduler-tasks", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/lead-requests", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/platform-tracing", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/platform-billing", context_type="frontend", auth_required=True),
+
     # Scheduler service API
     RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),
     

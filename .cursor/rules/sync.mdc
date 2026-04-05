@@ -141,7 +141,7 @@ WebSocket /sync/ws        ────┘
 ### Календарные уведомления
 
 - Уведомления о новых событиях внешних календарей не реализуются в `apps/sync/*`.
-- Источник календарных уведомлений: фоновая задача `calendar_sync_tick` (`apps/flows/src/tasks/calendar_sync_tasks.py`) через `core.websocket.publisher.notify_user`.
+- Источник календарных уведомлений: фоновая задача `calendar_sync_tick` (`apps/idle_worker/tasks/calendar_sync_tasks.py`) через `core.websocket.publisher.notify_user`.
 - Если нужен единый UX в Sync UI, обрабатывается общий поток платформенных уведомлений (`platform-notification-manager`), без дублирования бизнес-логики календаря в sync handlers.
 
 ### Платформенные встречи (календарь → Sync)
@@ -267,7 +267,7 @@ apps/sync/ui/
 - Подзаголовок шапки DM: печать или `getPeerPresenceSubtitle` (не сырой `direct`). Сайдбар списка каналов/личных: та же логика печати vs превью (см. выше).
 - Auth при 401 → `redirectToAuth()` → платформенный login flow
 - Store — единственный источник состояния, UI получает данные через `SyncStore.subscribe()`
-- Сайдбар «Каналы» и сетка `channel-picker`: `ui.sidebarSpaceFilterIds` (persist) — мультивыбор пространств; пустой массив = все topic-каналы; иначе фильтр **ИЛИ**. Метка справа в строке — `channelRowMetaLabel` (имя пространства или «Личный»). Создание канала: `openChannelSettingsCreate` фиксирует `channelSettingsCreateSpaceId` через `resolveSpaceIdForNewChannel` (одно пространство в фильтре, иначе `selectedSpaceId` / первое пространство; при нескольких выбранных тегах — `Error` до открытия модалки). После `loadSpaces` из фильтра убираются id, которых нет в загруженном списке пространств; `resolveSpaceIdForNewChannel` смотрит только на такие же валидные id.
+- Сайдбар «Каналы» и сетка `channel-picker`: `ui.sidebarSpaceFilterIds` (persist) — мультивыбор пространств; пустой массив = все topic-каналы; иначе фильтр **ИЛИ**. Метка справа в строке — `channelRowMetaLabel` (имя пространства, «Личный» для direct, локализованные подписи для `calendar_meeting`/`group` без `space_id`). Создание канала: `openChannelSettingsCreate` фиксирует `channelSettingsCreateSpaceId` через `resolveSpaceIdForNewChannel` (одно пространство в фильтре, иначе `selectedSpaceId` / первое пространство; при нескольких выбранных тегах — `Error` до открытия модалки). После `loadSpaces` из фильтра убираются id, которых нет в загруженном списке пространств; `resolveSpaceIdForNewChannel` смотрит только на такие же валидные id.
 - Смена канала (сайдбар, channel-picker, восстановление из persist) — всегда `SyncStore.selectChannelAndLoadMessages(syncApi, spaceId, channelId)`; для direct `spaceId` — `null`, иначе список сообщений не подгрузится
 - После `loadSpaces` + `loadChannels` вызывать `SyncStore.sanitizeChatSelectionAfterLoad()`: в persist хранится `selectedSpaceId` без привязки к пользователю — если у текущего юзера нет topic-каналов в выбранном пространстве, список «Каналы» пустой; санитайз переключает пространство на первое, где есть каналы пользователя (или сбрасывает, если только direct)
 - `loadSpaces` / `loadChannels` / `loadCompanyMembers`: при ошибке запроса сбрасывать `loading: false`, иначе вечный «Загрузка…»

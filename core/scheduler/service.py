@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -25,10 +26,15 @@ from core.scheduler.source import get_schedule_source
 class SchedulerService:
     """Бизнес-логика scheduler control-plane."""
 
-    def __init__(self, repository: SchedulerTaskRepository, broker: Any, redis_url: str) -> None:
+    def __init__(
+        self,
+        repository: SchedulerTaskRepository,
+        redis_url: str,
+        broker_for_queue: Callable[[str], Any],
+    ) -> None:
         self._repository = repository
-        self._broker = broker
         self._redis_url = redis_url
+        self._broker_for_queue = broker_for_queue
 
     @staticmethod
     def _status_value(status: ScheduledTaskStatus | str) -> str:
@@ -83,9 +89,10 @@ class SchedulerService:
     async def _create_schedule(self, task: PlatformScheduledTask) -> str:
         source = get_schedule_source(self._redis_url)
         await source.startup()
+        broker = self._broker_for_queue(task.queue_name)
         kicker = AsyncKicker(
             task_name=task.task_name,
-            broker=self._broker,
+            broker=broker,
             labels=self._build_task_labels(task),
         )
 
@@ -251,9 +258,10 @@ class SchedulerService:
         task = await self.get(company_id, schedule_task_id)
         if task.status not in (ScheduledTaskStatus.PENDING, ScheduledTaskStatus.PAUSED):
             raise ValueError(f"cannot run-now task with status={self._status_value(task.status)}")
+        broker = self._broker_for_queue(task.queue_name)
         kicker = AsyncKicker(
             task_name=task.task_name,
-            broker=self._broker,
+            broker=broker,
             labels=self._build_task_labels(task),
         )
         await kicker.kiq(**task.payload)

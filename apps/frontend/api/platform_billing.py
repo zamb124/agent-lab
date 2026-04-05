@@ -17,10 +17,14 @@ from apps.frontend.models import (
     PlatformBillingPricesResponse,
     PlatformBillingSettlementRulesResponse,
     PlatformBillingUsageReportResponse,
+    PlatformTracingFacetItem,
+    PlatformTracingFacetItemsResponse,
 )
 from core.billing.service import STORAGE_SETTLEMENT_RULES_JSON, company_resource_prices_storage_key
 from core.billing.settlement_rules import parse_settlement_rules_json
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.models.billing_models import UsageType
+from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _facet_query_fragment
 
 router = APIRouter(prefix="/api/platform-billing", tags=["platform-billing"])
 
@@ -166,23 +170,75 @@ async def put_company_billing_prices(
     return {"status": "ok"}
 
 
+@router.get("/facets/usage-types", response_model=PlatformTracingFacetItemsResponse)
+async def facet_usage_types(
+    request: Request,
+    container: ContainerDep,
+    q: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+) -> PlatformTracingFacetItemsResponse:
+    _require_system(request)
+    enum_values = {e.value for e in UsageType}
+    frag = _facet_query_fragment(q)
+    from_db = await container.usage_repository.admin_facet_distinct_usage_types(
+        q=q if frag is not None else None,
+        limit=limit,
+    )
+    merged = sorted(enum_values | set(from_db))
+    if frag is not None:
+        fl = frag.lower()
+        merged = [x for x in merged if fl in x.lower()]
+    merged = merged[:limit]
+    return PlatformTracingFacetItemsResponse(
+        items=[PlatformTracingFacetItem(value=v, label=v) for v in merged],
+    )
+
+
+@router.get("/facets/resource-names", response_model=PlatformTracingFacetItemsResponse)
+async def facet_resource_names(
+    request: Request,
+    container: ContainerDep,
+    q: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+) -> PlatformTracingFacetItemsResponse:
+    _require_system(request)
+    names = await container.usage_repository.admin_facet_distinct_resource_names(q=q, limit=limit)
+    return PlatformTracingFacetItemsResponse(
+        items=[PlatformTracingFacetItem(value=n, label=n) for n in names],
+    )
+
+
 @router.get("/usage-report", response_model=PlatformBillingUsageReportResponse)
 async def get_usage_report(
     request: Request,
     container: ContainerDep,
     company_id: Optional[str] = Query(default=None),
     usage_type: Optional[str] = Query(default=None),
+    resource_name: Optional[str] = Query(default=None),
     from_time: Optional[datetime] = Query(default=None, alias="from"),
     to_time: Optional[datetime] = Query(default=None, alias="to"),
     limit: int = Query(default=200, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
 ) -> PlatformBillingUsageReportResponse:
     _require_system(request)
     items = await container.usage_repository.admin_search_usage_records(
         company_id=company_id,
         usage_type=usage_type,
+        resource_name=resource_name,
         from_time=from_time,
         to_time=to_time,
         limit=limit,
+        offset=offset,
     )
     serialized = [rec.model_dump(mode="json") for rec in items]
+    company_ids = {cid for row in serialized if (cid := row.get("company_id"))}
+    companies = (
+        await container.company_repository.get_many(list(company_ids)) if company_ids else {}
+    )
+    for row in serialized:
+        cid = row.get("company_id")
+        if not cid:
+            continue
+        co = companies.get(cid)
+        row["company_name"] = co.name if co else None
     return PlatformBillingUsageReportResponse(items=serialized)

@@ -42,7 +42,7 @@ from apps.flows.src.services.push_notifications import dict_to_config
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
 from apps.flows.src.streaming.subscriber import EventSubscriber, StreamEvent
-from apps.flows.src.tasks.push_notification_tasks import (
+from apps.idle_worker.tasks.push_notification_tasks import (
     delete_config,
     get_config,
     list_configs,

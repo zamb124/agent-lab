@@ -77,6 +77,33 @@ async def test_platform_billing_usage_report_system(frontend_client_system):
 
 
 @pytest.mark.asyncio
+async def test_platform_billing_facets_usage_types_forbidden_non_system(frontend_client_with_auth):
+    response = await frontend_client_with_auth.get("/frontend/api/platform-billing/facets/usage-types")
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_facets_usage_types_system(frontend_client_system):
+    response = await frontend_client_system.get("/frontend/api/platform-billing/facets/usage-types")
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    values = {item["value"] for item in data["items"]}
+    assert "tool_call" in values
+    assert "llm_request" in values
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_facets_resource_names_system(frontend_client_system):
+    response = await frontend_client_system.get("/frontend/api/platform-billing/facets/resource-names")
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert isinstance(data["items"], list)
+
+
+@pytest.mark.asyncio
 async def test_platform_billing_settlement_rules_roundtrip(frontend_client_system, frontend_container, unique_id):
     key = STORAGE_SETTLEMENT_RULES_JSON
     prev = await frontend_container.shared_storage.get(key, force_global=True)

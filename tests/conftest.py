@@ -800,7 +800,7 @@ def sync_tools(request, monkeypatch):
         yield
         return
     from apps.flows.src.tasks import flow_tasks, tool_tasks
-    from apps.flows.src.tasks import push_notification_tasks
+    import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
     
     class SyncTaskResult:
         """Имитация результата TaskIQ task."""

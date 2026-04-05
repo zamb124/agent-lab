@@ -86,7 +86,11 @@ class _FakeScheduleSource:
 @pytest.mark.asyncio
 async def test_create_cron_schedule_sets_next_run_at() -> None:
     repository = _InMemorySchedulerRepository()
-    service = SchedulerService(repository=repository, broker=object(), redis_url="redis://localhost:6379/0")
+    service = SchedulerService(
+        repository=repository,
+        redis_url="redis://localhost:6379/0",
+        broker_for_queue=lambda _q: object(),
+    )
 
     async def _fake_create_schedule(task: PlatformScheduledTask) -> str:
         return "schedule-1"
@@ -133,7 +137,11 @@ async def test_list_enriches_missing_next_run_at_for_pending_cron() -> None:
         error_message=None,
     )
     repository = _InMemorySchedulerRepository(task=task)
-    service = SchedulerService(repository=repository, broker=object(), redis_url="redis://localhost:6379/0")
+    service = SchedulerService(
+        repository=repository,
+        redis_url="redis://localhost:6379/0",
+        broker_for_queue=lambda _q: object(),
+    )
 
     items = await service.list(company_id="system", filters=PlatformScheduleFilter())
 
@@ -165,7 +173,11 @@ async def test_resume_cron_schedule_updates_next_run_at() -> None:
         error_message=None,
     )
     repository = _InMemorySchedulerRepository(task=task)
-    service = SchedulerService(repository=repository, broker=object(), redis_url="redis://localhost:6379/0")
+    service = SchedulerService(
+        repository=repository,
+        redis_url="redis://localhost:6379/0",
+        broker_for_queue=lambda _q: object(),
+    )
 
     async def _fake_create_schedule(task: PlatformScheduledTask) -> str:
         return "schedule-2"
@@ -204,7 +216,11 @@ async def test_get_redis_snapshot_returns_taskiq_schedule_data(monkeypatch: pyte
         error_message=None,
     )
     repository = _InMemorySchedulerRepository(task=task)
-    service = SchedulerService(repository=repository, broker=object(), redis_url="redis://localhost:6379/0")
+    service = SchedulerService(
+        repository=repository,
+        redis_url="redis://localhost:6379/0",
+        broker_for_queue=lambda _q: object(),
+    )
     redis_schedule = ScheduledTask(
         task_name="sync_llm_models_task",
         labels={"source": "taskiq"},
@@ -255,7 +271,11 @@ async def test_get_redis_snapshot_handles_missing_schedule_id_without_redis_call
         error_message=None,
     )
     repository = _InMemorySchedulerRepository(task=task)
-    service = SchedulerService(repository=repository, broker=object(), redis_url="redis://localhost:6379/0")
+    service = SchedulerService(
+        repository=repository,
+        redis_url="redis://localhost:6379/0",
+        broker_for_queue=lambda _q: object(),
+    )
     monkeypatch.setattr(
         "core.scheduler.service.get_schedule_source",
         lambda redis_url: (_ for _ in ()).throw(RuntimeError("redis access is not expected")),

@@ -38,6 +38,8 @@ from apps.flows.src.models.external_api import ExternalAPIConfig, ParameterSchem
 from core.state import ExecutionState, InterruptData
 from core.logging import get_logger
 from core.errors import ResourceNotFoundError
+from core.models.billing_models import UsageType
+from core.tracing.operation_span import traced_operation
 
 if TYPE_CHECKING:
     from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
@@ -1086,12 +1088,25 @@ class ChannelNode(BaseNode):
         config = {**self.channel_config}
         config = VarResolver.resolve_deep(config, all_variables)
         
-        result = await handler.execute_action(
-            action=self.action,
-            params=inputs,
-            config=config,
-            variables=all_variables,
-        )
+        async with traced_operation(
+            "flows.channel.execute_action",
+            event_type="channel.action",
+            operation_category="channel",
+            billing_usage_type=UsageType.TOOL_CALL.value,
+            billing_resource_name=f"tool:channel_{self.channel.value}",
+            billing_quantity=1,
+            billing_pending_settlement=True,
+            extra_attributes={
+                "platform.channel.type": self.channel.value,
+                "platform.channel.action": self.action,
+            },
+        ):
+            result = await handler.execute_action(
+                action=self.action,
+                params=inputs,
+                config=config,
+                variables=all_variables,
+            )
         
         setattr(state, "channel_result", result)
         setattr(state, "result", result)

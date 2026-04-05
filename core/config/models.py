@@ -593,6 +593,13 @@ def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
             "fashn_buyer_agent": 0.0,
             "*": 0.05,
         },
+        "embedding": {"*": 0.0005},
+        "livekit": {
+            "room_create": 0.1,
+            "egress_composite": 1.0,
+            "egress_segmented": 0.5,
+            "*": 0.0,
+        },
     }
 
 
@@ -601,8 +608,8 @@ class BillingSpanSettlementConfig(BaseModel):
 
     enabled: bool = False
     cron: str = "*/15 * * * *"
-    lookback_minutes: int = 90
-    batch_limit: int = 200
+    lookback_minutes: int = 360
+    batch_limit: int = 500
     fallback_user_id: str = Field(
         default="",
         description="user_id для UsageRecord, если в span нет user_id (иначе span пропускается с ошибкой в логе)",

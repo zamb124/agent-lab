@@ -9,6 +9,17 @@ import '@platform/lib/components/platform-button.js';
 const FACET_DEBOUNCE_MS = 300;
 const API_BASE = '/frontend/api/platform-tracing';
 
+function _facetItemIsObject(item) {
+    return item !== null && typeof item === 'object' && typeof item.value === 'string';
+}
+
+function _shortIdHint(id) {
+    if (!id) {
+        return '';
+    }
+    return id.length > 8 ? `${id.slice(0, 8)}...` : id;
+}
+
 const FACET_PATHS = {
     company: 'facets/companies',
     user: 'facets/users',
@@ -389,8 +400,8 @@ export class TracingPage extends PlatformElement {
         void this._loadFacet(kind, q);
     }
 
-    _pickSuggest(kind, value) {
-        const v = value ?? '';
+    _pickSuggest(kind, raw) {
+        const v = _facetItemIsObject(raw) ? raw.value : (raw ?? '');
         if (kind === 'company') {
             this._fCompany = v;
             this._pickCompany = v;
@@ -436,7 +447,7 @@ export class TracingPage extends PlatformElement {
                                               @mousedown=${(e) => e.preventDefault()}
                                               @click=${() => this._pickSuggest(kind, item)}
                                           >
-                                              ${item}
+                                              ${_facetItemIsObject(item) ? item.label : item}
                                           </button>
                                       `
                                   )}
@@ -581,6 +592,30 @@ export class TracingPage extends PlatformElement {
         this._detailTitle = '';
     }
 
+    _cellCompany(row) {
+        const cid = row.company_id ?? '';
+        const name = row.company_name;
+        if (name) {
+            return html`
+                <div>${name}</div>
+                <div class="muted">${_shortIdHint(cid)}</div>
+            `;
+        }
+        return cid;
+    }
+
+    _cellUser(row) {
+        const uid = row.user_id ?? '';
+        const display = row.user_display_name;
+        if (display) {
+            return html`
+                <div>${display}</div>
+                <div class="muted">${uid}</div>
+            `;
+        }
+        return uid;
+    }
+
     render() {
         const t = (k) => this.i18n.t(k, {});
         return html`
@@ -660,8 +695,8 @@ export class TracingPage extends PlatformElement {
                                                     <td>${row.span_id ?? ''}</td>
                                                     <td>${row.service_name ?? ''}</td>
                                                     <td>${row.operation_name ?? ''}</td>
-                                                    <td>${row.company_id ?? ''}</td>
-                                                    <td>${row.user_id ?? ''}</td>
+                                                    <td>${this._cellCompany(row)}</td>
+                                                    <td>${this._cellUser(row)}</td>
                                                     <td>${row.event_type ?? ''}</td>
                                                 </tr>
                                             `

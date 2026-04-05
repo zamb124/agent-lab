@@ -224,6 +224,8 @@ export class FrontendApp extends PlatformApp {
             '/embed-configs',
             '/scheduler-tasks',
             '/lead-requests',
+            '/platform-tracing',
+            '/platform-billing',
         ]);
         if (exact.has(path)) {
             return true;

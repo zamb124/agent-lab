@@ -125,6 +125,8 @@ async def test_platform_tracing_spans_system_filters_and_cursor(
     body1 = r1.json()
     assert len(body1["items"]) == 1
     assert body1["items"][0]["operation_name"] == op
+    assert "company_name" in body1["items"][0]
+    assert "user_display_name" in body1["items"][0]
     assert body1["next_cursor"]
 
     r2 = await frontend_client_system.get(
@@ -225,13 +227,15 @@ async def test_platform_tracing_facet_users_scoped_by_company(
     )
     assert r.status_code == 200
     items = r.json()["items"]
-    assert uid_x in items
+    values = {x["value"] for x in items}
+    assert uid_x in values
     r2 = await frontend_client_system.get(
         "/frontend/api/platform-tracing/facets/users",
         params={"q": unique_id, "company_id": co_x, "namespace": "nope"},
     )
     assert r2.status_code == 200
-    assert uid_x not in r2.json()["items"]
+    values2 = {x["value"] for x in r2.json()["items"]}
+    assert uid_x not in values2
 
 
 @pytest.mark.asyncio

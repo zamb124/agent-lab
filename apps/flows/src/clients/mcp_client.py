@@ -21,6 +21,8 @@ from apps.flows.src.models.mcp import (
 )
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.models.billing_models import UsageType
+from core.tracing.operation_span import traced_operation
 from core.variables import VarResolver
 
 logger = get_logger(__name__)
@@ -261,15 +263,28 @@ class MCPClient:
             await self.initialize()
         
         logger.debug(f"MCP tool call: {tool_name}")
-        
-        result, _ = await self._rpc_call(
-            "tools/call",
-            {
-                "name": tool_name,
-                "arguments": arguments or {},
+
+        async with traced_operation(
+            "flows.mcp.call_tool",
+            event_type="mcp.call_tool",
+            operation_category="mcp",
+            billing_usage_type=UsageType.TOOL_CALL.value,
+            billing_resource_name=f"tool:mcp_{self.config.server_id}",
+            billing_quantity=1,
+            billing_pending_settlement=True,
+            extra_attributes={
+                "platform.mcp.server_id": self.config.server_id,
+                "platform.mcp.tool_name": tool_name,
             },
-        )
-        
+        ):
+            result, _ = await self._rpc_call(
+                "tools/call",
+                {
+                    "name": tool_name,
+                    "arguments": arguments or {},
+                },
+            )
+
         return MCPCallResult(
             is_error=result.get("isError", False),
             content=result.get("content", []),
