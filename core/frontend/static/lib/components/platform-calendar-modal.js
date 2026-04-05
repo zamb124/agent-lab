@@ -885,24 +885,13 @@ export class PlatformCalendarModal extends PlatformModal {
             .month-cell-events {
                 flex: 1;
                 min-height: 0;
-                display: grid;
-                gap: 6px;
-                grid-auto-rows: minmax(0, 1fr);
-                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                overflow-y: auto;
+                scrollbar-width: thin;
             }
 
-            .month-cell-more {
-                font-size: 10px;
-                color: var(--text-tertiary);
-                text-align: center;
-                padding: 2px 0;
-                cursor: pointer;
-                flex-shrink: 0;
-            }
-
-            .month-cell-more:hover {
-                color: var(--accent-tertiary);
-            }
 
             .event-chip {
                 font-size: var(--text-xs);
@@ -917,7 +906,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 display: grid;
                 gap: 6px;
                 min-width: 0;
-                min-height: 0;
+                flex-shrink: 0;
                 align-content: start;
             }
 
@@ -3291,7 +3280,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     >
                         <div class="date-label">${cell.date.getDate()}</div>
                         <div class="month-cell-events">
-                            ${cell.events.slice(0, 3).map((event) => html`
+                            ${cell.events.map((event) => html`
                                 <button
                                     class="event-chip ${this._selectedEventId === event.event_id ? 'active' : ''}"
                                     data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
@@ -3321,13 +3310,6 @@ export class PlatformCalendarModal extends PlatformModal {
                                 </button>
                             `)}
                         </div>
-                        ${cell.events.length > 3 ? html`
-                            <div class="month-cell-more" @click=${(e) => {
-                                e.stopPropagation();
-                                this._anchorDate = cell.iso;
-                                this._onViewChange('day');
-                            }}>+${cell.events.length - 3}</div>
-                        ` : ''}
                     </article>
                 `)}
             </div>
