@@ -295,9 +295,21 @@ async def update_entity(
 @router.delete("/{entity_id}")
 async def delete_entity(
     entity_id: str,
-    service: EntityService = Depends(get_entity_service)
+    service: EntityService = Depends(get_entity_service),
+    access_control: AccessControlService = Depends(get_access_control_service),
 ):
     """Каскадное удаление entity"""
+    entity = await service.get_entity(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+
+    if not user_id or not await access_control.can_write_entity(entity, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
     success = await service.delete_entity(entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Entity not found")

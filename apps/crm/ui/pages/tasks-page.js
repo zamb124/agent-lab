@@ -5,6 +5,7 @@ import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
 import '../modals/entity-modal.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 
 const TASK_DND_MIME = 'application/x-crm-task-id';
 
@@ -19,6 +20,7 @@ export class TasksPage extends PlatformElement {
         _draggingTaskId: { state: true },
         _dndInsert: { state: true },
         _dndSourceStatus: { state: true },
+        _boardBusy: { state: true },
     };
 
     static styles = [
@@ -172,6 +174,15 @@ export class TasksPage extends PlatformElement {
 
             /* === BOARD (desktop) === */
 
+            .board-shell {
+                flex: 1;
+                min-height: 0;
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
             .board {
                 flex: 1;
                 min-height: 0;
@@ -179,6 +190,43 @@ export class TasksPage extends PlatformElement {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
                 gap: var(--space-3);
                 overflow: auto;
+                transition: filter 0.2s ease, opacity 0.2s ease;
+            }
+
+            .board-shell.busy .board {
+                filter: saturate(0.92);
+                opacity: 0.92;
+            }
+
+            .board-overlay {
+                position: absolute;
+                inset: 0;
+                z-index: 6;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                pointer-events: auto;
+                background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+                animation: board-overlay-in 0.2s ease;
+            }
+
+            @keyframes board-overlay-in {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .board {
+                    transition: none;
+                }
+
+                .board-overlay {
+                    animation: none;
+                }
             }
 
             .column {
@@ -249,6 +297,10 @@ export class TasksPage extends PlatformElement {
                 .column-body {
                     transition: none;
                 }
+
+                .task-card {
+                    transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast), opacity var(--duration-fast), box-shadow var(--duration-fast);
+                }
             }
 
             /* === TASK CARDS === */
@@ -262,7 +314,7 @@ export class TasksPage extends PlatformElement {
                 flex-direction: column;
                 gap: 10px;
                 cursor: pointer;
-                transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast), opacity var(--duration-fast), box-shadow var(--duration-fast);
+                transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
             }
 
             .task-card:hover {
@@ -513,6 +565,7 @@ export class TasksPage extends PlatformElement {
         this._draggingTaskId = null;
         this._dndInsert = null;
         this._dndSourceStatus = null;
+        this._boardBusy = false;
         this._currentNamespace = null;
 
         this._unsubscribe = CRMStore.subscribe((state) => {
@@ -583,8 +636,11 @@ export class TasksPage extends PlatformElement {
         throw new Error('Invalid namespace value');
     }
 
-    async _loadTasks() {
-        this._loading = true;
+    async _loadTasks(options = {}) {
+        const silent = options?.silent === true;
+        if (!silent) {
+            this._loading = true;
+        }
         const crmApi = this.crmApi;
         const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
         const tasks = await crmApi.getEntities({
@@ -593,7 +649,9 @@ export class TasksPage extends PlatformElement {
             limit: 200,
         });
         this._tasks = Array.isArray(tasks) ? tasks : [];
-        this._loading = false;
+        if (!silent) {
+            this._loading = false;
+        }
     }
 
     _openTask(taskId) {
@@ -601,14 +659,71 @@ export class TasksPage extends PlatformElement {
         CRMStore.setCurrentEntity(taskId);
     }
 
+    _taskViewTransitionName(taskId) {
+        const safe = String(taskId).replace(/[^a-zA-Z0-9_-]/g, '_');
+        return `crm-task-${safe}`;
+    }
+
     async _moveTask(task, targetStatus) {
+        const from = this._taskStatus(task);
+        if (from === targetStatus) {
+            return;
+        }
+        if (this._boardBusy) {
+            return;
+        }
+
+        const taskId = task.entity_id;
+        const prevTasks = this._tasks.map((t) => ({
+            ...t,
+            attributes: { ...(t.attributes || {}) },
+        }));
+
+        const applyOptimistic = () => {
+            this._tasks = this._tasks.map((t) => {
+                if (t.entity_id !== taskId) {
+                    return t;
+                }
+                return {
+                    ...t,
+                    attributes: { ...(t.attributes || {}), status: targetStatus },
+                };
+            });
+        };
+
+        this._boardBusy = true;
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!reducedMotion && typeof document.startViewTransition === 'function') {
+            const transition = document.startViewTransition(async () => {
+                applyOptimistic();
+                await this.updateComplete;
+            });
+            try {
+                await transition.finished;
+            } catch {
+                /* View Transition aborted */
+            }
+        } else {
+            applyOptimistic();
+            await this.updateComplete;
+        }
+
         const crmApi = this.crmApi;
         const attributes = {
             ...(task.attributes || {}),
             status: targetStatus,
         };
-        await crmApi.updateEntity(task.entity_id, { attributes });
-        await this._loadTasks();
+
+        try {
+            await crmApi.updateEntity(taskId, { attributes });
+            await this._loadTasks({ silent: true });
+        } catch (e) {
+            this._tasks = prevTasks;
+            const message = e?.message ?? String(e);
+            this.error(this.i18n.t('tasks_page.move_failed', { message }));
+        } finally {
+            this._boardBusy = false;
+        }
     }
 
     _scheduleClearSuppressTaskClick() {
@@ -878,7 +993,12 @@ export class TasksPage extends PlatformElement {
                 </div>
             </div>
 
-            <div class="board">
+            <div class="board-shell ${this._boardBusy ? 'busy' : ''}">
+                <div
+                    class="board"
+                    aria-busy=${this._boardBusy ? 'true' : 'false'}
+                    aria-live=${this._boardBusy ? 'polite' : 'off'}
+                >
                 ${taskStatuses.map((s) => {
                     const isActive = !this._isMobile || this._activeStatus === s.id;
                     const statusTasks = tasksByStatus[s.id];
@@ -905,6 +1025,7 @@ export class TasksPage extends PlatformElement {
                                         <article
                                             class="task-card"
                                             data-task-id=${task.entity_id}
+                                            style=${`view-transition-name: ${this._taskViewTransitionName(task.entity_id)}`}
                                             @click=${(e) => this._onTaskCardClick(task, e)}
                                         >
                                             <div class="task-card-top">
@@ -945,6 +1066,18 @@ export class TasksPage extends PlatformElement {
                         </section>
                     `;
                 })}
+                </div>
+                ${this._boardBusy
+                    ? html`
+                        <div
+                            class="board-overlay"
+                            role="status"
+                            aria-label=${this.i18n.t('tasks_page.board_syncing')}
+                        >
+                            <glass-spinner size="lg"></glass-spinner>
+                        </div>
+                    `
+                    : ''}
             </div>
         `;
     }

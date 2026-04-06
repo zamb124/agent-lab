@@ -5,11 +5,14 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { CRMStore } from '../store/crm.store.js';
 import '../components/entity-card.js';
 import '../modals/entity-modal.js';
 import '../modals/entity-merge-modal.js';
 import '@platform/lib/components/platform-icon.js';
+
+const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
 
 export class EntitiesPage extends PlatformElement {
     static properties = {
@@ -24,6 +27,8 @@ export class EntitiesPage extends PlatformElement {
         _isMobile: { state: true },
         _mobileTab: { state: true },
         _debounceTimer: { state: true },
+        _mergeDragSourceId: { state: true },
+        _mergeDropHoverId: { state: true },
     };
 
     static styles = [
@@ -242,6 +247,22 @@ export class EntitiesPage extends PlatformElement {
                 background: var(--crm-selected-bg);
             }
 
+            .entity-card-item.merge-drag-source {
+                opacity: 0.55;
+            }
+
+            .entity-card-item.merge-drop-hover {
+                border-color: var(--crm-button-primary-bg);
+                box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+            }
+
+            .merge-dnd-hint {
+                margin: 0 0 var(--space-2) 0;
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.4;
+            }
+
             .card-header {
                 display: flex;
                 align-items: center;
@@ -328,11 +349,66 @@ export class EntitiesPage extends PlatformElement {
                 white-space: nowrap;
             }
 
-            .card-status-dot {
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
+            .entity-card-drag-handle {
                 flex-shrink: 0;
+                width: 32px;
+                height: 32px;
+                margin: -4px -4px 0 0;
+                padding: 0;
+                box-sizing: border-box;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: grab;
+                touch-action: none;
+                user-select: none;
+                -webkit-user-select: none;
+                transition: color var(--duration-fast), background var(--duration-fast);
+            }
+
+            .entity-card-drag-handle * {
+                pointer-events: none;
+            }
+
+            .entity-card-drag-handle:hover {
+                color: var(--text-secondary);
+                background: var(--crm-surface-tint);
+            }
+
+            .entity-card-drag-handle:active {
+                cursor: grabbing;
+            }
+
+            .card-header-end {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-shrink: 0;
+                margin-left: auto;
+            }
+
+            .card-delete-btn {
+                width: 32px;
+                height: 32px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                padding: 0;
+                border-radius: var(--radius-md);
+                border: 1px solid rgba(244, 63, 94, 0.35);
+                background: var(--crm-surface-muted);
+                color: var(--error, #f43f5e);
+                cursor: pointer;
+                transition: background var(--duration-fast), border-color var(--duration-fast);
+            }
+
+            .card-delete-btn:hover {
+                background: rgba(244, 63, 94, 0.12);
+                border-color: var(--error, #f43f5e);
             }
 
             .empty {
@@ -583,6 +659,8 @@ export class EntitiesPage extends PlatformElement {
         this._mobileTab = 'list';
         this._debounceTimer = null;
         this._entitiesMergeFirstId = '';
+        this._mergeDragSourceId = '';
+        this._mergeDropHoverId = '';
         this._goToImportWizard = this._goToImportWizard.bind(this);
 
         this._unsubscribe = CRMStore.subscribe((state) => {
@@ -688,6 +766,7 @@ export class EntitiesPage extends PlatformElement {
         if (!a || !b || a === b) {
             throw new Error('Merge requires two distinct entity IDs');
         }
+        this._entitiesMergeFirstId = '';
         const modal = document.createElement('entity-merge-modal');
         modal.entityIdA = a;
         modal.entityIdB = b;
@@ -697,6 +776,83 @@ export class EntitiesPage extends PlatformElement {
         modal.addEventListener('merged', () => {
             this._applyFilters();
         });
+    }
+
+    _clearMergeDnDVisual() {
+        this._mergeDragSourceId = '';
+        this._mergeDropHoverId = '';
+    }
+
+    _onMergeCardDragStart(event, entityId) {
+        if (this._isMobile) {
+            return;
+        }
+        const id = typeof entityId === 'string' ? entityId.trim() : '';
+        if (!id) {
+            event.preventDefault();
+            return;
+        }
+        this._mergeDragSourceId = id;
+        this._mergeDropHoverId = '';
+        event.dataTransfer.setData(MERGE_DRAG_MIME, id);
+        event.dataTransfer.setData('text/plain', id);
+        event.dataTransfer.effectAllowed = 'copyMove';
+    }
+
+    _onMergeCardDragEnd() {
+        this._clearMergeDnDVisual();
+    }
+
+    _onMergeCardDragOver(event, targetEntityId) {
+        if (this._isMobile) {
+            return;
+        }
+        const sourceId = this._mergeDragSourceId;
+        const tid = typeof targetEntityId === 'string' ? targetEntityId.trim() : '';
+        if (!sourceId || !tid || sourceId === tid) {
+            return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        if (this._mergeDropHoverId !== tid) {
+            this._mergeDropHoverId = tid;
+        }
+    }
+
+    _onMergeCardDragLeave(event, targetEntityId) {
+        if (this._isMobile) {
+            return;
+        }
+        const tid = typeof targetEntityId === 'string' ? targetEntityId.trim() : '';
+        const related = event.relatedTarget;
+        if (related instanceof Node && event.currentTarget.contains(related)) {
+            return;
+        }
+        if (this._mergeDropHoverId === tid) {
+            this._mergeDropHoverId = '';
+        }
+    }
+
+    _onMergeCardDrop(event, targetEntityId) {
+        if (this._isMobile) {
+            return;
+        }
+        event.preventDefault();
+        const tid = typeof targetEntityId === 'string' ? targetEntityId.trim() : '';
+        let sid = '';
+        try {
+            sid = event.dataTransfer.getData(MERGE_DRAG_MIME).trim();
+        } catch {
+            sid = '';
+        }
+        if (!sid) {
+            sid = event.dataTransfer.getData('text/plain').trim();
+        }
+        this._clearMergeDnDVisual();
+        if (!sid || !tid || sid === tid) {
+            return;
+        }
+        this._openMergeModal(sid, tid);
     }
 
     _onEntityListClick(entityId, event) {
@@ -780,15 +936,63 @@ export class EntitiesPage extends PlatformElement {
         return `${normalized.slice(0, maxLength).trimEnd()}...`;
     }
 
-    _getStatusColor(status) {
-        if (status === 'active') return '#4ade80';
-        if (status === 'archived') return '#94a3b8';
-        if (status === 'draft') return '#facc15';
-        return '#94a3b8';
-    }
-
     _hasActiveFilters() {
         return this._selectedType || this._selectedStatus || this._query.trim().length > 0;
+    }
+
+    _platformAuthUserId(user) {
+        if (!user || typeof user !== 'object') {
+            return null;
+        }
+        if (typeof user.user_id === 'string' && user.user_id.trim().length > 0) {
+            return user.user_id.trim();
+        }
+        if (typeof user.id === 'string' && user.id.trim().length > 0) {
+            return user.id.trim();
+        }
+        return null;
+    }
+
+    _isEntityOwner(entity) {
+        const uid = this._platformAuthUserId(this.auth?.user);
+        if (!uid || !entity || typeof entity.user_id !== 'string' || entity.user_id.trim().length === 0) {
+            return false;
+        }
+        return entity.user_id.trim() === uid;
+    }
+
+    async _confirmDeleteEntity(entity) {
+        if (!entity?.entity_id) {
+            return;
+        }
+        const displayName =
+            typeof entity.name === 'string' && entity.name.trim().length > 0
+                ? entity.name.trim()
+                : entity.entity_id;
+        const confirmed = await platformConfirm(
+            this.i18n.t('entities_page.delete_entity_confirm', { name: displayName }),
+            {
+                title: this.i18n.t('entities_page.delete_entity_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.i18n.t('delete', {}, 'common'),
+                cancelText: this.i18n.t('cancel', {}, 'common'),
+            }
+        );
+        if (!confirmed) {
+            return;
+        }
+        try {
+            await CRMStore.deleteEntity(this.crmApi, entity.entity_id);
+        } catch {
+            this.error(this.i18n.t('entities_page.delete_entity_failed'));
+        }
+    }
+
+    _onDeleteEntityFromList(event, entity) {
+        event.stopPropagation();
+        event.preventDefault();
+        this._confirmDeleteEntity(entity);
     }
 
     render() {
@@ -872,6 +1076,9 @@ export class EntitiesPage extends PlatformElement {
                             </button>
                         ` : ''}
                     </div>
+                    ${this._entities.length >= 2 && !this._loading
+                        ? html`<p class="merge-dnd-hint">${this.i18n.t('entities_page.merge_dnd_hint')}</p>`
+                        : ''}
                 </div>
             ` : ''}
 
@@ -914,10 +1121,23 @@ export class EntitiesPage extends PlatformElement {
         const bgColor = this._hexToRgba(typeConfig.color, 0.15);
         const isActive = entity.entity_id === this._currentEntityId;
         const tags = Array.isArray(entity.tags) ? entity.tags.slice(0, 3) : [];
+        const showDelete = this._isEntityOwner(entity);
+        const eid = entity.entity_id;
+        const mergeSource = this._mergeDragSourceId === eid;
+        const mergeHover =
+            !this._isMobile &&
+            this._mergeDropHoverId === eid &&
+            this._mergeDragSourceId &&
+            this._mergeDragSourceId !== eid;
+
+        const showHeaderEnd = !this._isMobile || showDelete;
 
         return html`
             <article
-                class="entity-card-item ${isActive ? 'active' : ''}"
+                class="entity-card-item ${isActive ? 'active' : ''} ${mergeSource ? 'merge-drag-source' : ''} ${mergeHover ? 'merge-drop-hover' : ''}"
+                @dragover=${(e) => this._onMergeCardDragOver(e, eid)}
+                @dragleave=${(e) => this._onMergeCardDragLeave(e, eid)}
+                @drop=${(e) => this._onMergeCardDrop(e, eid)}
                 @click=${(e) => this._onEntityListClick(entity.entity_id, e)}
             >
                 <div class="card-header">
@@ -925,9 +1145,43 @@ export class EntitiesPage extends PlatformElement {
                         <platform-icon name="${typeConfig.icon}" size="18"></platform-icon>
                     </div>
                     <h3 class="card-title">${entity.name}</h3>
-                    ${entity.status ? html`
-                        <span class="card-status-dot" style="background: ${this._getStatusColor(entity.status)}" title="${entity.status}"></span>
-                    ` : ''}
+                    ${showHeaderEnd
+                        ? html`
+                            <div class="card-header-end">
+                                ${!this._isMobile
+                                    ? html`
+                                        <div
+                                            class="entity-card-drag-handle"
+                                            draggable="true"
+                                            title=${this.i18n.t('entities_page.drag_merge_handle')}
+                                            role="button"
+                                            tabindex="0"
+                                            aria-label=${this.i18n.t('entities_page.drag_merge_handle')}
+                                            @dragstart=${(e) => this._onMergeCardDragStart(e, eid)}
+                                            @dragend=${this._onMergeCardDragEnd}
+                                            @click=${(e) => e.stopPropagation()}
+                                        >
+                                            <platform-icon name="drag-handle" size="18" ?filled=${true}></platform-icon>
+                                        </div>
+                                    `
+                                    : ''}
+                                ${showDelete
+                                    ? html`
+                                        <button
+                                            type="button"
+                                            class="card-delete-btn"
+                                            draggable="false"
+                                            title=${this.i18n.t('entities_page.delete_entity_tooltip')}
+                                            aria-label=${this.i18n.t('entities_page.delete_entity_tooltip')}
+                                            @click=${(e) => this._onDeleteEntityFromList(e, entity)}
+                                        >
+                                            <platform-icon name="trash" size="16"></platform-icon>
+                                        </button>
+                                    `
+                                    : ''}
+                            </div>
+                        `
+                        : ''}
                 </div>
                 ${entity.description ? html`
                     <p class="card-description">${this._getLimitedText(entity.description)}</p>

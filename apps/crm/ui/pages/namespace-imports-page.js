@@ -110,6 +110,15 @@ export class NamespaceImportsPage extends PlatformElement {
                 cursor: pointer;
             }
             .soft-btn.danger { border-color: var(--error, #f43f5e); color: var(--error, #f43f5e); }
+            .import-open-detail-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+            .import-open-detail-btn platform-icon {
+                flex-shrink: 0;
+                color: inherit;
+            }
             .imports-table-shell {
                 width: 100%;
                 border-radius: var(--radius-xl);
@@ -154,7 +163,7 @@ export class NamespaceImportsPage extends PlatformElement {
                 font-variant-numeric: tabular-nums;
             }
             .imports-table th.th-actions {
-                text-align: right;
+                text-align: center;
             }
             .imports-list-loading {
                 font-size: var(--text-sm);
@@ -164,13 +173,14 @@ export class NamespaceImportsPage extends PlatformElement {
             }
             .import-actions-cell {
                 min-width: 0;
+                text-align: center;
             }
             .import-actions-row {
                 display: flex;
                 flex-wrap: wrap;
                 gap: var(--space-2);
                 align-items: center;
-                justify-content: flex-end;
+                justify-content: center;
             }
             .import-icon-btn {
                 width: 36px;
@@ -1115,7 +1125,14 @@ export class NamespaceImportsPage extends PlatformElement {
                                             <td class="import-actions-cell">
                                                 <div class="import-actions-row">
                                                     ${canDetail
-                                                        ? html`<button type="button" class="soft-btn" @click=${() => this._openImportDetail(row.import_id)}>${this.i18n.t('knowledge_import.action_open_detail')}</button>`
+                                                        ? html`<button
+                                                              type="button"
+                                                              class="soft-btn import-open-detail-btn"
+                                                              @click=${() => this._openImportDetail(row.import_id)}
+                                                          >
+                                                              <platform-icon name="doc-detail" size="16"></platform-icon>
+                                                              <span>${this.i18n.t('knowledge_import.action_open_detail')}</span>
+                                                          </button>`
                                                         : null}
                                                     ${row.status === 'running' || row.status === 'pending'
                                                         ? html`<button
@@ -1459,18 +1476,21 @@ export class NamespaceImportsPage extends PlatformElement {
                             ` : html`<p>${this.i18n.t('knowledge_import.detail_no_entities')}</p>`}
                         ` : ''}
                     </div>
-                    <div slot="actions" class="wizard-nav crm-import-glass-actions">
-                        <platform-button variant="secondary" @click=${this._closeImportDetail}>
-                            ${this.i18n.t('close', {}, 'common')}
-                        </platform-button>
-                        ${this._detailPayload && (this._detailPayload.review_completed_at == null || this._detailPayload.review_completed_at === '')
-                            ? html`
-                                <platform-button variant="primary" ?disabled=${this._detailApproving} @click=${() => this._approveImportReview()}>
-                                    ${this.i18n.t('knowledge_import.detail_approve')}
-                                </platform-button>
-                            `
-                            : ''}
-                    </div>
+                    ${this._detailPayload &&
+                    !this._detailLoading &&
+                    (this._detailPayload.review_completed_at == null || this._detailPayload.review_completed_at === '')
+                        ? html`
+                              <div slot="actions" class="wizard-nav crm-import-glass-actions">
+                                  <platform-button
+                                      variant="primary"
+                                      ?disabled=${this._detailApproving}
+                                      @click=${() => this._approveImportReview()}
+                                  >
+                                      ${this.i18n.t('knowledge_import.detail_approve')}
+                                  </platform-button>
+                              </div>
+                          `
+                        : ''}
                 </glass-modal>
             ` : ''}
         `;

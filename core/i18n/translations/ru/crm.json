@@ -568,7 +568,8 @@
         "request_approve": "Одобрить",
         "empty_pick_title": "Выберите сущность",
         "empty_pick_subtitle": "из списка слева",
-        "request_access_tooltip": "Запросить доступ"
+        "request_access_tooltip": "Запросить доступ",
+        "delete_entity_tooltip": "Удалить сущность"
     },
     "grants": {
         "success_entity_public": "Сущность стала публичной",
@@ -833,14 +834,22 @@
         "next_to_progress": "В работу",
         "next_to_done": "Готово",
         "next_revert": "Вернуть",
-        "drag_hint": "Перетащить задачу"
+        "drag_hint": "Перетащить задачу",
+        "board_syncing": "Сохранение статуса задачи",
+        "move_failed": "Не удалось изменить статус задачи: {{message}}"
     },
     "entities_page": {
         "status_active": "Активные",
         "status_archived": "Архив",
         "tab_list": "Список",
         "tab_card": "Карточка",
-        "empty_filters_hint": "Создайте первую или измените фильтры"
+        "empty_filters_hint": "Создайте первую или измените фильтры",
+        "delete_entity_title": "Удаление сущности",
+        "delete_entity_confirm": "Удалить «{{name}}»? Связи и вложения будут удалены безвозвратно.",
+        "delete_entity_tooltip": "Удалить сущность",
+        "delete_entity_failed": "Не удалось удалить сущность",
+        "merge_dnd_hint": "Перетащите карточку за ручку справа на другую, чтобы открыть слияние. Также: Shift+клик по двум карточкам по очереди.",
+        "drag_merge_handle": "Перетащите на другую карточку для слияния"
     },
     "import_wizard_cta": {
         "empty_notes_hint": "Ещё нет заметок — можно импортировать ваши знания через мастер импорта.",

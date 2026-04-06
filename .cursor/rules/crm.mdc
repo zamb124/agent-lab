@@ -9,6 +9,7 @@ description: "CRM NetWorkle система управления сущностя
 
 - **Primary `platform-button` в CRM:** в **`apps/crm/ui/index.html`** на **`body.platform-shell`** заданы **`--platform-btn-primary-*`** из **`--crm-button-primary-*`** (и тени как у **`crm-app`**), т.к. **`glass-modal`** и др. порталятся в **`document.body`** и иначе брали бы зелёный фолбэк из **`platform-button.js`**. См. аналог **`apps/office/ui/index.html`**.
 - **История импорта знаний** (`namespace-imports-page`): опрос списка при **`running` / `pending`** — **`_loadImports({ silent: true })`**, без строки «Загрузка…», чтобы не дёргать вёрстку; первая загрузка страницы — с индикатором. Статусы и режим в таблице — теги и i18n (`job_status_*`, `import_list_mode_*`), не сырые значения API.
+- **Доска задач** (`tasks-page`): смена колонки (кнопка / DnD) — оптимистичный статус в списке, **`document.startViewTransition`** (если нет `prefers-reduced-motion` и API есть) + уникальный **`view-transition-name`** на карточке; пока идёт **`updateEntity`** и тихая перезагрузка **`_loadTasks({ silent: true })`** — **`_boardBusy`**, оверлей с **`glass-spinner`** на **`board-shell`**, без **`_loading`** на всю доску (иначе мигание «Загрузка…»).
 - Тексты **`apps/crm/ui`** — **`this.i18n.t('группа.ключ')`**, namespace по умолчанию **`crm`** (`/crm`), файлы **`core/i18n/translations/{ru,en}/crm.json`**, парность и **`make check-i18n`**.
 - **Мобильный хедер CRM** (`< 768px`): единая строка **`crm-mobile-app-header`** в **`crm-app.js`** — заголовок или поле поиска (иконка поиска + input) в той же линии для **notes / entities / tasks**. Синхрон строки поиска: **`CRMStore.ui.notesPageSearchQuery`**, **`tasksListSearchQuery`**, фильтр **`entities.filters.search`**. Глобальная кнопка «AI» в шелле не используется (анализ заметок — в контексте карточки / модалки).
 - **Daily notes — период по умолчанию:** `CRMStore.ui.dailyNotesRange` при первом заходе и при миграции persist — **текущая календарная неделя (пн–вс, локальная зона)**; `dailyNotesRangePersistVersion === 2` в persist, при отсутствии версии в сохранённом состоянии merge подставляет неделю. Сброс при невалидном выборе в date-picker — снова неделя (`defaultDailyNotesRange`).
@@ -27,6 +28,7 @@ description: "CRM NetWorkle система управления сущностя
 ## Слияние сущностей (merge)
 
 - **HTTP:** `POST /crm/api/v1/entities/merge` с телом `EntityMergeRequest` (`survivor_entity_id`, `source_entity_id`, `scalar_choices`, `attribute_choices`); ответ `EntityMergeResponse` — актуальная survivor-сущность и `merged_from_entity_id`.
+- **UI списка сущностей** (`entities-page`): слияние через DnD — перетаскивание **с ручки** `drag-handle` (как на доске задач) на другую карточку → `entity-merge-modal` (MIME `application/x-crm-entity-merge` + fallback `text/plain`); альтернатива — Shift+клик по двум карточкам. На мобильном viewport ручки нет, только Shift+клик.
 - **Survivor** сохраняет `entity_id`; **source** удаляется после переноса данных. Связи source **не теряются:** в `relationships` все вхождения `source_entity_id` / `target_entity_id`, равные id source, заменяются на id survivor (`RelationshipRepository.rewrite_entity_id`), затем **дедуп** по ключу `(namespace, source, target, relationship_type)` и удаление петель `source == target` (`deduplicate_relationships_for_entity`).
 - **Поля:** конфликтующие скаляры из набора `name`, `description`, `status`, `entity_subtype`, `priority`, `note_date`, `due_date` требуют записи в `scalar_choices`; конфликтующие ключи `attributes` — в `attribute_choices`. Лишние ключи в choices → `422`. `tags` / `assignees` объединяются с дедупликацией порядка; `attachment_ids` — объединение; перед удалением source у source очищается список вложений, чтобы каскад не удалил документы, уже учтённые у survivor.
 - **Дополнительно:** переназначение `crm_entities.source_entity_id` (`EntityRepository.rewrite_source_entity_id_references`), гранты и запросы доступа на entity (`AccessGrantRepository.remap_entity_resource_id` + дедуп грантов, `AccessRequestRepository.remap_entity_resource_id` + дедуп pending).
@@ -367,7 +369,7 @@ company_id="acme", namespace="default"   # По умолчанию
 - `POST /entities` - создать
 - `GET /entities/{id}` - получить (+ access control)
 - `PUT /entities/{id}` - обновить
-- `DELETE /entities/{id}` - удалить (+ cascade)
+- `DELETE /entities/{id}` - удалить (+ cascade); проверка `can_write_entity`, как у `PUT`
 - `GET /entities` - поиск (семантический + фильтры)
 
 **Types:**

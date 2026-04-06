@@ -568,7 +568,8 @@
         "request_approve": "Approve",
         "empty_pick_title": "Select an entity",
         "empty_pick_subtitle": "from the list on the left",
-        "request_access_tooltip": "Request access"
+        "request_access_tooltip": "Request access",
+        "delete_entity_tooltip": "Delete entity"
     },
     "grants": {
         "success_entity_public": "Entity is now public",
@@ -833,14 +834,22 @@
         "next_to_progress": "Start",
         "next_to_done": "Complete",
         "next_revert": "Reopen",
-        "drag_hint": "Drag task"
+        "drag_hint": "Drag task",
+        "board_syncing": "Saving task status",
+        "move_failed": "Could not update task status: {{message}}"
     },
     "entities_page": {
         "status_active": "Active",
         "status_archived": "Archived",
         "tab_list": "List",
         "tab_card": "Card",
-        "empty_filters_hint": "Create one or adjust filters"
+        "empty_filters_hint": "Create one or adjust filters",
+        "delete_entity_title": "Delete entity",
+        "delete_entity_confirm": "Delete \"{{name}}\"? Relationships and attachments will be removed permanently.",
+        "delete_entity_tooltip": "Delete entity",
+        "delete_entity_failed": "Could not delete entity",
+        "merge_dnd_hint": "Drag a card by the handle on the right onto another card to merge. Or Shift+click two cards in turn.",
+        "drag_merge_handle": "Drag onto another card to merge"
     },
     "import_wizard_cta": {
         "empty_notes_hint": "No notes yet—you can import your knowledge using the import wizard.",

@@ -6,6 +6,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { CRMStore } from '../store/crm.store.js';
 import './grants-panel.js';
 import '@platform/lib/components/platform-icon.js';
@@ -23,6 +24,7 @@ export class EntityCard extends PlatformElement {
         _requestsLoading: { state: true },
         _processingRequestId: { state: true },
         _graphVisible: { state: true },
+        _deleting: { state: true },
     };
 
     static styles = [
@@ -144,6 +146,22 @@ export class EntityCard extends PlatformElement {
                 background: var(--crm-surface);
                 color: var(--text-primary);
                 border-color: var(--accent-subtle);
+            }
+
+            .icon-btn.danger {
+                border-color: rgba(244, 63, 94, 0.4);
+                color: var(--error, #f43f5e);
+            }
+
+            .icon-btn.danger:hover:not(:disabled) {
+                background: rgba(244, 63, 94, 0.12);
+                border-color: var(--error, #f43f5e);
+                color: var(--error, #f43f5e);
+            }
+
+            .icon-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
             }
 
             .content {
@@ -375,6 +393,7 @@ export class EntityCard extends PlatformElement {
         this._requestsLoading = false;
         this._processingRequestId = '';
         this._graphVisible = false;
+        this._deleting = false;
 
         this._unsubscribe = CRMStore.subscribe(state => {
             this._entity = state.entities.currentEntity;
@@ -405,12 +424,30 @@ export class EntityCard extends PlatformElement {
         const card = await CRMStore.loadEntityCard(crmApi, this.entityId);
 
         const currentUser = this.auth?.user;
-        this._isOwner = currentUser && card.entity?.user_id === currentUser.user_id;
+        const authUserId = this._platformAuthUserId(currentUser);
+        const entityOwnerId =
+            typeof card.entity?.user_id === 'string' && card.entity.user_id.trim().length > 0
+                ? card.entity.user_id.trim()
+                : null;
+        this._isOwner = Boolean(authUserId && entityOwnerId && entityOwnerId === authUserId);
         if (this._isOwner) {
             await this._loadPendingRequests();
         } else {
             this._pendingAccessRequests = [];
         }
+    }
+
+    _platformAuthUserId(user) {
+        if (!user || typeof user !== 'object') {
+            return null;
+        }
+        if (typeof user.user_id === 'string' && user.user_id.trim().length > 0) {
+            return user.user_id.trim();
+        }
+        if (typeof user.id === 'string' && user.id.trim().length > 0) {
+            return user.id.trim();
+        }
+        return null;
     }
 
     _resolveRequestEntityId(request) {
@@ -526,6 +563,37 @@ export class EntityCard extends PlatformElement {
         modal.showModal();
         modal.addEventListener('close', () => modal.remove());
         modal.addEventListener('saved', () => this._loadEntityCard());
+    }
+
+    async _onDelete() {
+        if (!this.entityId || !this._entity || this._deleting) {
+            return;
+        }
+        const displayName =
+            typeof this._entity.name === 'string' && this._entity.name.trim().length > 0
+                ? this._entity.name.trim()
+                : this.entityId;
+        const confirmed = await platformConfirm(
+            this.i18n.t('entities_page.delete_entity_confirm', { name: displayName }),
+            {
+                title: this.i18n.t('entities_page.delete_entity_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.i18n.t('delete', {}, 'common'),
+                cancelText: this.i18n.t('cancel', {}, 'common'),
+            }
+        );
+        if (!confirmed) {
+            return;
+        }
+        this._deleting = true;
+        try {
+            await CRMStore.deleteEntity(this.crmApi, this.entityId);
+        } catch {
+            this.error(this.i18n.t('entities_page.delete_entity_failed'));
+        } finally {
+            this._deleting = false;
+        }
     }
 
     _onRequestAccess() {
@@ -731,6 +799,16 @@ export class EntityCard extends PlatformElement {
                     ${this._isOwner ? html`
                         <button class="icon-btn" @click=${this._onEdit} title=${this.i18n.t('edit', {}, 'common')}>
                             <platform-icon name="edit" size="16"></platform-icon>
+                        </button>
+                        <button
+                            class="icon-btn danger"
+                            type="button"
+                            title=${this.i18n.t('entity_card.delete_entity_tooltip')}
+                            aria-label=${this.i18n.t('entity_card.delete_entity_tooltip')}
+                            ?disabled=${this._deleting}
+                            @click=${this._onDelete}
+                        >
+                            <platform-icon name="trash" size="16"></platform-icon>
                         </button>
                     ` : html`
                         <button class="icon-btn" @click=${this._onRequestAccess} title=${this.i18n.t('entity_card.request_access_tooltip')}>

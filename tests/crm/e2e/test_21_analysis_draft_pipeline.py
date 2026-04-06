@@ -7,8 +7,12 @@ E2E: черновик AI analyze на сервере — draft_version, PATCH д
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
+
+from apps.crm.models.api import AIAnalysisDraftStored, AIExtractedEntity
+from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError, EntityService
 
 _ANALYZE_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
@@ -416,3 +420,113 @@ class TestAnalysisDraftPipeline:
             headers=auth_headers_system,
         )
         assert second.status_code == 422, second.text
+
+
+class TestAnalysisDraftApplyPartialFailureCompensation:
+    """
+    Параллельный apply строк черновика: при постоянной ошибке одной строки
+    уже созданные сущности удаляются, черновик на заметке сохраняется.
+
+    Вызов EntityService.apply_analysis_draft в процессе теста (не HTTP/TaskIQ),
+    иначе monkeypatch на EntityService не попал бы в crm_worker.
+    """
+
+    @pytest.mark.timeout(20)
+    @pytest.mark.asyncio
+    async def test_compensation_deletes_partial_creates_on_row_failure(
+        self,
+        crm_client,
+        unique_id: str,
+        auth_headers_system: dict,
+        crm_container,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        note_name = f"Компенсация-apply {unique_id}"
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": note_name,
+                "description": "Заметка с черновиком для сценария частичного сбоя apply",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        ok_name = f"OK_ROW_TASK_{unique_id}"
+        fail_name = f"FAIL_ROW_CONTACT_{unique_id}"
+        stored = AIAnalysisDraftStored(
+            draft_version=1,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            note=None,
+            entities=[
+                AIExtractedEntity(
+                    draft_entity_id=f"draft-ok-{unique_id}",
+                    entity_type="task",
+                    name=ok_name,
+                    description="Описание задачи достаточной длины для apply черновика",
+                    dedup_action="create",
+                ),
+                AIExtractedEntity(
+                    draft_entity_id=f"draft-fail-{unique_id}",
+                    entity_type="contact",
+                    name=fail_name,
+                    description="Описание контакта достаточной длины для apply черновика",
+                    dedup_action="create",
+                ),
+            ],
+            relationships=[],
+        )
+
+        entity_service = crm_container.entity_service
+        note_row = await entity_service.get_entity(note_id)
+        if not note_row:
+            raise AssertionError(f"note {note_id} not found")
+        attrs = dict(note_row.attributes or {})
+        attrs["ai_analysis_draft"] = stored.model_dump(mode="json")
+        await entity_service.update_entity(note_id, {"attributes": attrs})
+
+        orig = EntityService._persist_analysis_draft_entity_row
+
+        async def _patched(
+            self,
+            ent: AIExtractedEntity,
+            namespace: str,
+            merge_target_locks: dict,
+        ):
+            if ent.name == fail_name:
+                raise ValueError("simulated_row_persist_failure")
+            return await orig(self, ent, namespace, merge_target_locks)
+
+        monkeypatch.setattr(EntityService, "_persist_analysis_draft_entity_row", _patched)
+
+        with pytest.raises(ApplyAnalysisDraftEntityFailuresError) as exc_info:
+            await entity_service.apply_analysis_draft(note_id)
+
+        failed = {f[0]: f for f in exc_info.value.failures}
+        assert f"draft-fail-{unique_id}" in failed
+
+        note_after = await entity_service.get_entity(note_id)
+        if not note_after:
+            raise AssertionError(f"note {note_id} missing after apply failure")
+        draft_raw = (note_after.attributes or {}).get("ai_analysis_draft")
+        assert isinstance(draft_raw, dict)
+        assert draft_raw.get("draft_version") == 1
+
+        ok_tasks = await entity_service.list_entities(
+            entity_type="task",
+            namespace="default",
+            filters={"name": ok_name},
+            limit=20,
+        )
+        assert ok_tasks == []
+
+        fail_contacts = await entity_service.list_entities(
+            entity_type="contact",
+            namespace="default",
+            filters={"name": fail_name},
+            limit=20,
+        )
+        assert fail_contacts == []
