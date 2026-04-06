@@ -16,6 +16,7 @@ from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 from apps.flows.src.tools.base import BaseTool, CodeTool
+from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
 from apps.flows.src.tools.mcp_wrapper import MCPTool
 
 logger = get_logger(__name__)
@@ -65,6 +66,9 @@ class ToolRegistry:
         from apps.flows.tools import (
             calculator,
             create_file,
+            rag_add_text,
+            rag_create_namespace,
+            rag_search,
             crm_analyze_note_text,
             crm_create_note,
             crm_create_note_and_analyze,
@@ -87,6 +91,9 @@ class ToolRegistry:
         builtin_tools = [
             calculator,
             create_file,
+            rag_add_text,
+            rag_create_namespace,
+            rag_search,
             crm_analyze_note_text,
             crm_create_note,
             crm_create_note_and_analyze,
@@ -266,18 +273,29 @@ class ToolRegistry:
             raise ValueError(f"Code tool '{tool_id}' requires 'code' field")
         code = strip_forbidden_platform_import_lines(code)
 
-        parameters = None
+        parameters_cp: Optional[Dict[str, CallParameter]] = None
         args_schema = config.get("args_schema")
         if args_schema:
-            parameters = {}
+            parameters_cp = {}
             for name, schema in args_schema.items():
                 if isinstance(schema, CallParameter):
-                    parameters[name] = schema
+                    parameters_cp[name] = schema
                 else:
-                    parameters[name] = CallParameter(
+                    parameters_cp[name] = CallParameter(
                         type=schema.get("type", "string"),
                         description=schema.get("description", ""),
+                        required=schema.get("required", True),
                     )
+
+        ps_raw = config.get("parameters_schema")
+        resolved_schema: Optional[Dict[str, Any]] = None
+        if ps_raw and isinstance(ps_raw, dict) and ps_raw.get("type") == "object":
+            resolved_schema = ps_raw
+        elif parameters_cp:
+            resolved_schema = resolve_tool_parameters_schema(
+                parameters_schema=None,
+                args_schema=parameters_cp,
+            )
 
         rr_raw = config.get("react_role", ReactToolRole.STANDARD.value)
         react_role = (
@@ -293,7 +311,7 @@ class ToolRegistry:
             code=code,
             title=config.get("title"),
             description=config.get("description"),
-            parameters=parameters,
+            parameters_schema=resolved_schema,
             react_role=react_role,
             resources=resources,
         )

@@ -727,6 +727,9 @@ export class FlowEditorPage extends PlatformElement {
         if (toolData.args_schema && typeof toolData.args_schema === 'object') {
             nodeConfig.args_schema = toolData.args_schema;
         }
+        if (toolData.parameters_schema && typeof toolData.parameters_schema === 'object') {
+            nodeConfig.parameters_schema = toolData.parameters_schema;
+        }
         if (typeof toolData.description === 'string' && toolData.description.trim()) {
             nodeConfig.description = toolData.description.trim();
         }
@@ -1141,7 +1144,7 @@ export class FlowEditorPage extends PlatformElement {
         
         const panelClasses = ['floating-panel'];
         if (panelExpanded) panelClasses.push('expanded');
-        if (this._panelEntering) panelClasses.push('entering');
+        if (this._panelEntering && !panelExpanded) panelClasses.push('entering');
 
         return html`
             <div 
@@ -1203,7 +1206,7 @@ export class FlowEditorPage extends PlatformElement {
         
         const panelClasses = ['floating-panel'];
         if (panelExpanded) panelClasses.push('expanded');
-        if (this._panelEntering) panelClasses.push('entering');
+        if (this._panelEntering && !panelExpanded) panelClasses.push('entering');
 
         return html`
             <div 

@@ -55,6 +55,8 @@ async def _inline_tools_in_nodes(
                         k: {"type": v.type, "description": v.description}
                         for k, v in tool_ref.args_schema.items()
                     }
+                if tool_ref.parameters_schema:
+                    node_config["parameters_schema"] = tool_ref.parameters_schema
                 if tool_ref.description and not node_config.get("description"):
                     node_config["description"] = tool_ref.description
     return nodes

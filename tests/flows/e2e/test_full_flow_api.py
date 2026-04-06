@@ -309,16 +309,15 @@ class TestE2EInterruptInCodeNodeV2:
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
 async def run(state):
-    # Проверяем есть ли уже имя
-    if state.variables.get('user_name'):
+    # Не используем ключ user_name: в state.variables уже есть user_name из JWT
+    # (flow_variables_from_request_context), иначе interrupt никогда не сработает.
+    if state.variables.get('interrupt_demo_name'):
         return state
-    
-    # Если пришел ответ от пользователя (после resume)
+
     if state.content and state.content != 'Start':
-        state.variables['user_name'] = state.content
+        state.variables['interrupt_demo_name'] = state.content
         return state
-    
-    # Бросаем FlowInterrupt для запроса имени
+
     raise FlowInterrupt(question='Как вас зовут?')
 """,
                     },
@@ -326,7 +325,7 @@ async def run(state):
                         "type": "code",
                         "code": """
 async def run(state):
-    name = state.variables.get('user_name', 'Guest')
+    name = state.variables.get('interrupt_demo_name', 'Guest')
     state.response = f'Привет, {name}!'
     return state
 """,

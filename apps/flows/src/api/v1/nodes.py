@@ -73,6 +73,8 @@ def _tool_ref_to_response(tool_ref: ToolReference) -> Any:
                 k: {"type": v.type, "description": v.description}
                 for k, v in tool_ref.args_schema.items()
             }
+        if tool_ref.parameters_schema:
+            result["parameters_schema"] = tool_ref.parameters_schema
         return result
     return tool_ref.tool_id
 
@@ -83,8 +85,9 @@ def _convert_inline_tool(tool_data: Dict[str, Any]) -> ToolReference:
     if "args_schema" in tool_data:
         for k, v in tool_data["args_schema"].items():
             args_schema[k] = CallParameter(
-                type=v.get("type", "string"), 
-                description=v.get("description", "")
+                type=v.get("type", "string"),
+                description=v.get("description", ""),
+                required=v.get("required", True),
             )
     
     react_role_raw = tool_data.get("react_role")
@@ -99,6 +102,7 @@ def _convert_inline_tool(tool_data: Dict[str, Any]) -> ToolReference:
         description=tool_data.get("description"),
         code=tool_data.get("code"),
         args_schema=args_schema,
+        parameters_schema=tool_data.get("parameters_schema"),
         react_role=react_role,
     )
 

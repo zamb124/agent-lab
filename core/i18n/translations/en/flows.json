@@ -743,10 +743,20 @@
     "no_templates": "No templates",
     "title_code": "Code",
     "templates": "Templates",
+    "docs": "Docs",
+    "more_actions": "More actions",
+    "back": "Back",
+    "language": "Language",
     "fullscreen_min": "Minimize",
     "fullscreen_max": "Fullscreen",
     "node_file_drop_hint": "Drag a file chip from «Attached files» into the editor to insert get_files + reader.read (same as the read_file tool).",
     "node_file_drop_python_only": "Dropping an attached file into code is supported only for Python."
+  },
+  "code_node_editor": {
+    "editor_section_title": "Editor",
+    "pane_code": "Code",
+    "pane_schema": "Schema",
+    "parameters_schema_hint": "JSON Schema for the tool argument object for the LLM (type: object, properties, required, field constraints). Single source for the tool parameter schema."
   },
   "code_modal": {
     "title": "Agent code",
@@ -902,8 +912,6 @@
       "tool_id_label": "Tool ID *",
       "tool_id_hint": "Load tool from registry",
       "function_path_label": "Function Path *",
-      "args_schema_label": "Args Schema",
-      "args_schema_hint": "Parameter schema (optional)",
       "help_title": "Help",
       "help_after_execute": "— function with parameters (args, state)",
       "help_after_run": "— simple function (state only)",
@@ -913,7 +921,8 @@
       "code_label": "Code",
       "err_tool_id": "Enter Tool ID",
       "err_function_path": "Enter function path",
-      "err_code": "Enter code"
+      "err_code": "Enter code",
+      "err_parameters_schema_invalid": "Invalid parameters_schema: type must be object with a properties object"
     },
     "channel": {
       "err_node_id": "Node ID is required",
@@ -1000,7 +1009,6 @@
     "title_create": "Create Inline Tool",
     "title_edit": "Edit Tool",
     "err_editors": "Editors are not initialized",
-    "err_args_schema": "Invalid args_schema format",
     "code_valid": "Code is valid",
     "validation_error": "Validation error: {{message}}",
     "execute_ok": "Executed successfully",
@@ -1016,10 +1024,10 @@
     "option_reason": "Reason — reasoning step",
     "option_exit": "Exit — completion",
     "react_role_hint": "Reason and Exit change behavior in the ReAct loop",
-    "args_schema_label": "Args Schema",
-    "args_schema_hint": "JSON schema for arguments (e.g. {\"query\": {\"type\": \"string\"}})",
     "code_label": "Code",
-    "error_unknown": "Unknown error"
+    "error_unknown": "Unknown error",
+    "err_parameters_schema": "Invalid JSON in parameters_schema",
+    "err_parameters_schema_invalid": "parameters_schema must be an object with type: object and properties"
   },
   "inline_tool_modal": {
     "title_create": "Create {{label}}",
@@ -1038,6 +1046,7 @@
     "err_prompt_llm": "Prompt is required for llm_node",
     "err_name_required": "Name is required",
     "err_unknown_type": "Unknown tool type: {{type}}",
+    "err_parameters_schema_invalid": "Invalid parameters_schema for the LLM (type: object and properties required)",
     "create": "Create",
     "save": "Save"
   },

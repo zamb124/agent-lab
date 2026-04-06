@@ -14,9 +14,10 @@ import importlib
 import inspect
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Type
 
 import yaml
+from pydantic import BaseModel
 
 from apps.flows.src.db import NodeRepository, FlowRepository, ToolRepository
 from core.context import get_context
@@ -27,9 +28,60 @@ from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import FunctionTool
+from apps.flows.src.tools.json_schema_parameters import (
+    call_parameters_to_parameters_schema,
+    pydantic_model_to_parameters_schema,
+)
 from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 
 logger = get_logger(__name__)
+
+
+def _call_parameters_from_pydantic_model(model: Type[BaseModel]) -> Dict[str, CallParameter]:
+    """Собирает CallParameter из JSON Schema Pydantic-модели (для tool_repository при load_tools_to_db)."""
+
+    schema = model.model_json_schema()
+    properties = schema.get("properties") or {}
+    required_names = set(schema.get("required") or [])
+
+    def prop_type(info: dict[str, Any]) -> str:
+        t = info.get("type")
+        if isinstance(t, list):
+            non_null = [x for x in t if x != "null"]
+            if len(non_null) == 1:
+                t = non_null[0]
+            else:
+                return "string"
+        if t == "integer":
+            return "integer"
+        if t == "number":
+            return "number"
+        if t == "boolean":
+            return "boolean"
+        if t == "array":
+            return "array"
+        if t == "object":
+            return "object"
+        any_of = info.get("anyOf")
+        if isinstance(any_of, list):
+            for br in any_of:
+                if isinstance(br, dict) and br.get("type") not in (None, "null"):
+                    return prop_type(br)
+        return "string"
+
+    out: Dict[str, CallParameter] = {}
+    for name, raw in properties.items():
+        if not isinstance(raw, dict):
+            continue
+        desc = raw.get("description", "")
+        if not isinstance(desc, str):
+            desc = str(desc)
+        out[name] = CallParameter(
+            type=prop_type(raw),
+            description=desc,
+            required=name in required_names,
+        )
+    return out
 
 
 class FlowsLoader:
@@ -262,7 +314,11 @@ class FlowsLoader:
                 if "args_schema" in tool_data:
                     args_schema = tool_data.pop("args_schema")
                     tool_data["args_schema"] = {
-                        k: CallParameter(type=v.get("type", "string"), description=v.get("description", ""))
+                        k: CallParameter(
+                            type=v.get("type", "string"),
+                            description=v.get("description", ""),
+                            required=v.get("required", True),
+                        )
                         for k, v in args_schema.items()
                     }
                 result.append(ToolReference(**tool_data))
@@ -505,6 +561,10 @@ class FlowsLoader:
                                 k: {"type": v.type, "description": v.description}
                                 for k, v in tool_ref.args_schema.items()
                             }
+                        if tool_ref.parameters_schema and not node_config.get(
+                            "parameters_schema"
+                        ):
+                            node_config["parameters_schema"] = tool_ref.parameters_schema
                         logger.debug(f"Node '{node_id}': инлайнен код tool '{tool_id}'")
                     else:
                         raise ValueError(
@@ -927,9 +987,19 @@ async def load_tools_to_db(
                         break
                 source_code = strip_forbidden_platform_import_lines("\n".join(lines[func_start:]))
                 
-                # args_schema из _parameters
-                args_schema_dict: Dict[str, CallParameter] = dict(tool_instance._parameters)
-                
+                if tool_instance.args_schema is not None:
+                    args_schema_dict = _call_parameters_from_pydantic_model(tool_instance.args_schema)
+                    parameters_schema_full = pydantic_model_to_parameters_schema(
+                        tool_instance.args_schema
+                    )
+                else:
+                    args_schema_dict = dict(tool_instance._parameters)
+                    parameters_schema_full = (
+                        call_parameters_to_parameters_schema(args_schema_dict)
+                        if args_schema_dict
+                        else None
+                    )
+
                 # mock_response
                 mock_map = None
                 if tool_instance._mock_response is not None:
@@ -943,12 +1013,13 @@ async def load_tools_to_db(
                     title=tool_id,
                     description=tool_instance.description,
                     code=source_code,
+                    parameters_schema=parameters_schema_full,
                     args_schema=args_schema_dict,
                     mock_map=mock_map,
                     tags=tool_instance.tags,
                     react_role=tool_instance.react_role,
                 )
-                
+
                 await tool_repository.set(tool_ref)
                 loaded.append(tool_id)
                 logger.info(f"  {tool_id}: FunctionTool")
@@ -962,16 +1033,13 @@ async def load_tools_to_db(
                 # Извлекаем исходный код класса
                 source_code = inspect.getsource(tool_class)
 
-                # args_schema из Pydantic модели
                 args_schema_dict: Dict[str, CallParameter] = {}
+                parameters_schema_full = None
                 if tool_class.args_schema:
-                    schema = tool_class.args_schema.model_json_schema()
-                    properties = schema.get("properties", {})
-                    for param_name, param_info in properties.items():
-                        args_schema_dict[param_name] = CallParameter(
-                            type=param_info.get("type", "string"),
-                            description=param_info.get("description", ""),
-                        )
+                    args_schema_dict = _call_parameters_from_pydantic_model(tool_class.args_schema)
+                    parameters_schema_full = pydantic_model_to_parameters_schema(
+                        tool_class.args_schema
+                    )
 
                 mock_map = None
                 if hasattr(tool_class, "mock_response"):
@@ -985,6 +1053,7 @@ async def load_tools_to_db(
                     title=tool_class.__name__,
                     description=tool_class.description,
                     code=source_code,
+                    parameters_schema=parameters_schema_full,
                     args_schema=args_schema_dict,
                     mock_map=mock_map,
                     tags=tags,

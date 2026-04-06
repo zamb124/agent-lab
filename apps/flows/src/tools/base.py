@@ -10,6 +10,7 @@ Permissions:
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import os
 import re
@@ -269,6 +270,7 @@ class CodeTool(BaseTool):
         title: Optional[str] = None,
         description: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        parameters_schema: Optional[Dict[str, Any]] = None,
         permission: Permission = None,
         tags: Optional[List[str]] = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
@@ -282,8 +284,20 @@ class CodeTool(BaseTool):
         self._code = code
         self._resources_config = resources or {}
 
-        # Параметры из args_schema
-        if parameters:
+        if parameters_schema is not None:
+            if not isinstance(parameters_schema, dict):
+                raise ValueError(f"CodeTool '{tool_id}': parameters_schema must be a dict")
+            if parameters_schema.get("type") != "object":
+                raise ValueError(
+                    f"CodeTool '{tool_id}': parameters_schema must have type: object"
+                )
+            props = parameters_schema.get("properties")
+            if not isinstance(props, dict):
+                raise ValueError(
+                    f"CodeTool '{tool_id}': parameters_schema must contain object properties"
+                )
+            self._parameters = copy.deepcopy(parameters_schema)
+        elif parameters:
             props = {}
             required = []
             for param_name, param_info in parameters.items():
@@ -295,7 +309,13 @@ class CodeTool(BaseTool):
                     if hasattr(param_info, "description")
                     else param_info.get("description", ""),
                 }
-                required.append(param_name)
+                is_req = (
+                    param_info.required
+                    if hasattr(param_info, "required")
+                    else param_info.get("required", True)
+                )
+                if is_req:
+                    required.append(param_name)
             self._parameters = {"type": "object", "properties": props, "required": required}
         else:
             self._parameters = None

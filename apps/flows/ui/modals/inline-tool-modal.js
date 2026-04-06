@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { FlowsStore } from '../store/flows.store.js';
 import '../components/nodes/index.js';
+import { isValidLlmParametersSchema } from '../utils/flow-parameters-schema.js';
 
 export class InlineToolModal extends PlatformModal {
     static styles = [
@@ -122,8 +123,20 @@ export class InlineToolModal extends PlatformModal {
             return;
         }
 
+        if (typeof editor.flushEmbeddedJsonEditors === 'function') {
+            editor.flushEmbeddedJsonEditors();
+        }
+
         const config = editor.nodeConfig;
-        
+
+        if (this.toolType === 'code') {
+            const ps = config.parameters_schema;
+            if (ps !== undefined && ps !== null && !isValidLlmParametersSchema(ps)) {
+                this.error(this.i18n.t('inline_tool_modal.err_parameters_schema_invalid'));
+                return;
+            }
+        }
+
         if (this.toolType === 'code' && (!config.code || !config.code.trim())) {
             this.error(this.i18n.t('inline_tool_modal.err_code_tool'));
             return;

@@ -18,28 +18,33 @@ export class JsonFieldEditor extends PlatformElement {
                 align-self: stretch;
                 width: 100%;
                 max-width: 100%;
-                min-height: var(--editor-min-height, 160px);
+                min-height: 0;
             }
 
             :host([bounded]:not(.fullscreen)) .editor-shell {
+                box-sizing: border-box;
+                height: min(50vh, 440px);
                 max-height: min(50vh, 440px);
-                min-height: var(--editor-min-height, 160px);
+                min-height: min(
+                    var(--editor-min-height, 160px),
+                    min(50vh, 440px)
+                );
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
             }
 
             :host([bounded]:not(.fullscreen)) .editor-container {
-                flex: 1 1 auto;
-                min-height: var(--editor-min-height, 160px);
+                flex: 1 1 0%;
+                min-height: 0;
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
             }
 
             :host([bounded]:not(.fullscreen)) #codemirror-container {
-                flex: 1 1 auto;
-                min-height: var(--editor-min-height, 160px) !important;
+                flex: 1 1 0%;
+                min-height: 0 !important;
                 overflow: hidden;
                 position: relative;
             }
@@ -54,7 +59,7 @@ export class JsonFieldEditor extends PlatformElement {
             }
 
             :host([bounded]:not(.fullscreen)) #codemirror-container .cm-scroller {
-                flex: 1 1 auto !important;
+                flex: 1 1 0% !important;
                 min-height: 0 !important;
                 overflow: auto !important;
             }
@@ -399,6 +404,11 @@ export class JsonFieldEditor extends PlatformElement {
                 }
             });
         });
+    }
+
+    /** Родитель скрывал вкладку (display:none) — заново измерить область прокрутки CM. */
+    refreshLayout() {
+        this._scheduleEditorMeasure();
     }
 
     _getFullscreenEmbedRoot() {

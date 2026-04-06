@@ -18,6 +18,11 @@ alwaysApply: false
 - Хардкод кириллицы в **`apps/flows/ui/**/*.js`** — ориентир для выноса в JSON; то же правило сканирования: **`uv run python scripts/report_ui_i18n_gaps.py --app flows`** (или устаревший **`scripts/report_flows_i18n_gaps.py`**). Полный список без фильтра комментариев: **`scripts/report_ui_cyrillic.sh`**.
 - Сообщения **`console.*` и технические комментарии** в коде — на **английском** (без ключей i18n), чтобы не раздувать бандл и не дублировать переводы для отладки.
 
+## UI: `code-editor` (Code / Schema) и parameters_schema
+
+- Режим **`code-schema-mode`**: если редактор **не** во внутреннем полноэкране и родитель не в широком режиме (`parent-layout-wide`), в шапке вкладки «Код» вместо длинного ряда кнопок — одна **`more-vert`**, в дропдауне: язык, шаблоны (второй уровень со списком), Docs, копирование, полноэкран. Во внутреннем полноэкране или при **`parent-layout-wide`** (полноэкран модалки / развёрнутая панель) — однострочная шапка.
+- **`code-node-editor`**: схема параметров для LLM редактируется только на вкладке **«Схема»** (**`parameters_schema`**). Отдельного UI для **`args_schema`** нет; при сохранении инлайн-tool из **`tool-editor-modal`** в конфиг уходит **`args_schema: {}`**, источник правды — **`parameters_schema`**. В старых JSON нод могут остаться оба поля — рантайм по-прежнему **`resolve_tool_parameters_schema`**.
+
 ## UI: редактор LLM у llm_node (`llm-config-editor`)
 
 - Блок в стиле «острова» (как `loop-config`): две строки — модель + температура; max tokens + провайдер; раскрываемый **Advanced** (top_p, top_k, frequency_penalty, presence_penalty, seed, reasoning_effort) и мини **JSON** для `extra_request_body`.

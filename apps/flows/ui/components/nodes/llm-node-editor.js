@@ -675,6 +675,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
                                 description: toolData.description || '',
                                 code: toolData.code,
                                 args_schema: toolData.args_schema || {},
+                                parameters_schema: toolData.parameters_schema,
                                 react_role: toolData.react_role || 'standard',
                             });
                             this.inlineTools.set(toolData.tool_id, newTools[newTools.length - 1]);

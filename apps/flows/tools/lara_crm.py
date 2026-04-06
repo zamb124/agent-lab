@@ -8,7 +8,7 @@ import json
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from apps.flows.src.tools import tool
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -45,9 +45,10 @@ class CrmSearchEntitiesArgs(BaseModel):
     query: str = Field(
         ...,
         min_length=1,
+        validation_alias=AliasChoices("query", "search"),
         description=(
             "Текст семантического поиска (вектор по name/description), как в строке «Поиск» в списке сущностей: "
-            "имена, фрагменты названий, ключевые слова; не пересказ всего диалога."
+            "имена, фрагменты названий, ключевые слова; не пересказ всего диалога. Имя аргумента в вызове — query."
         ),
     )
     entity_type: Optional[str] = Field(
@@ -121,16 +122,24 @@ def _compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
     ),
 )
 async def crm_search_entities(
-    query: str,
+    query: Optional[str] = None,
+    search: Optional[str] = None,
     entity_type: Optional[str] = None,
     entity_subtype: Optional[str] = None,
     namespace: Optional[str] = None,
     limit: int = 100,
     state: Optional[dict] = None,
 ) -> str:
+    q = (query or "").strip() if query else ""
+    if not q and search:
+        q = str(search).strip()
+    if not q:
+        raise ValueError(
+            "Нужен непустой параметр query — короткая строка семантического поиска (ключевые слова из запроса пользователя)."
+        )
     ns = namespace if namespace else _require_context_namespace()
     params: Dict[str, Any] = {
-        "query": query.strip(),
+        "query": q,
         "namespace": ns,
         "limit": max(1, min(1000, int(limit))),
     }
@@ -333,7 +342,8 @@ async def crm_create_note_and_analyze(
     name="crm_analyze_note_text",
     description=(
         "Запускает AI-анализ текста заметки в CRM (извлечение сущностей). "
-        "Передай text и note_id (id заметки). Возвращает JSON с кратким summary и blocks для чата."
+        "Обязательно: text и note_id. Параметр namespace обычно не передавай — берётся из сессии CRM; "
+        "если всё же передан непустой, используется он. Возвращает JSON с кратким summary и blocks для чата."
     ),
     tags=["crm", "lara", "ai"],
     mock_response=_analyze_mock,
@@ -343,9 +353,10 @@ async def crm_analyze_note_text(
     note_id: str,
     extract_entity_types: Optional[List[str]] = None,
     mentioned_entity_ids: Optional[List[str]] = None,
+    namespace: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> str:
-    ns = _require_context_namespace()
+    ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
     body: Dict[str, Any] = {
         "text": text,
         "namespace": ns,

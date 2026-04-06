@@ -38,10 +38,8 @@ async def collect_platform_tool_docs() -> List[PlatformToolDoc]:
     if ctx and ctx.active_company:
         refs = await container.tool_repository.list_all(limit=5000)
         for ref in refs:
-            args_blob: dict = {}
-            for k, p in (ref.args_schema or {}).items():
-                args_blob[k] = p.model_dump()
-            args_json = json.dumps(args_blob, ensure_ascii=False, indent=2)
+            effective = ref.effective_parameters_schema()
+            args_json = json.dumps(effective, ensure_ascii=False, indent=2)
             code_preview: str | None = None
             if ref.code and isinstance(ref.code, str) and ref.code.strip():
                 raw = ref.code.strip()

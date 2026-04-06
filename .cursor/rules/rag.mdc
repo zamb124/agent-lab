@@ -3,6 +3,7 @@ description: "RAG система - провайдеры, namespaces, докум�
 alwaysApply: false
 globs:
   - "core/rag/**/*"
+  - "core/clients/rag_client.py"
   - "apps/rag/**/*"
   - "tests/rag/**/*"
 ---
@@ -34,6 +35,7 @@ apps/rag/
 ├── api/                     # REST API endpoints
 │   ├── providers.py         # Управление провайдерами
 │   ├── namespaces.py        # Управление namespaces
+│   ├── namespace_access.py # Проверка namespace ↔ компания, лимиты metadata/text
 │   ├── documents.py         # Управление документами
 │   └── search.py            # Семантический поиск
 ├── services/
@@ -104,8 +106,15 @@ DELETE /rag/api/v1/namespaces/{id}?provider={name}
 GET    /rag/api/v1/namespaces/{id}/documents?provider={name}
 POST   /rag/api/v1/namespaces/{id}/documents?provider={name}
        (multipart/form-data: file, metadata JSON)
+POST   /rag/api/v1/namespaces/{id}/ingest-text?provider={name}
+       (JSON: text, document_name?, metadata?, document_id? — синхронная индексация текста;
+       namespace должен быть зарегистрирован для текущей компании в репозитории namespaces)
 DELETE /rag/api/v1/namespaces/{id}/documents/{document_id}?provider={name}
 ```
+
+**Доступ к namespace:** для `ingest-text` и `POST .../namespaces/{id}/search` перед вызовом провайдера выполняется проверка `namespace_repository.get(id)` и совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` та же проверка для каждого элемента `namespace_ids`.
+
+**Межсервисный клиент:** `core/clients/rag_client.py` — `RagClient` поверх `ServiceClient` к сервису `rag` (`create_namespace`, `ingest_text`, `search`, `global_search`).
 
 **Search:**
 ```

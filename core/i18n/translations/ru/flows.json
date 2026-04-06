@@ -743,10 +743,20 @@
     "no_templates": "Нет шаблонов",
     "title_code": "Код",
     "templates": "Шаблоны",
+    "docs": "Документация",
+    "more_actions": "Дополнительно",
+    "back": "Назад",
+    "language": "Язык",
     "fullscreen_min": "Свернуть",
     "fullscreen_max": "На весь экран",
     "node_file_drop_hint": "Перетащите чип файла из «Закреплённые файлы» в редактор — вставится чтение вложения (get_files + reader.read, как tool read_file).",
     "node_file_drop_python_only": "Вставка вложения в код поддерживается только для языка Python."
+  },
+  "code_node_editor": {
+    "editor_section_title": "Редактор",
+    "pane_code": "Код",
+    "pane_schema": "Схема",
+    "parameters_schema_hint": "JSON Schema объекта аргументов для LLM (type: object, properties, required и ограничения полей). Единственный источник схемы параметров для тула."
   },
   "code_modal": {
     "title": "Код агента",
@@ -902,8 +912,6 @@
       "tool_id_label": "Tool ID *",
       "tool_id_hint": "Загрузка tool из реестра",
       "function_path_label": "Function Path *",
-      "args_schema_label": "Args Schema",
-      "args_schema_hint": "Схема параметров (опционально)",
       "help_title": "Справка",
       "help_after_execute": "— функция с параметрами",
       "help_after_run": "— простая функция",
@@ -913,7 +921,8 @@
       "code_label": "Code",
       "err_tool_id": "Укажите Tool ID",
       "err_function_path": "Укажите путь к функции",
-      "err_code": "Введите код"
+      "err_code": "Введите код",
+      "err_parameters_schema_invalid": "Невалидная parameters_schema: нужны type: object и объект properties"
     },
     "channel": {
       "err_node_id": "Node ID обязателен",
@@ -1000,7 +1009,6 @@
     "title_create": "Создать Inline Tool",
     "title_edit": "Редактировать Tool",
     "err_editors": "Редакторы не инициализированы",
-    "err_args_schema": "Неверный формат args_schema",
     "code_valid": "Код валиден",
     "validation_error": "Ошибка валидации: {{message}}",
     "execute_ok": "Выполнено успешно",
@@ -1016,10 +1024,10 @@
     "option_reason": "Reason — размышление",
     "option_exit": "Exit — завершение",
     "react_role_hint": "Reason и Exit задают особое поведение в цикле ReAct",
-    "args_schema_label": "Args Schema",
-    "args_schema_hint": "JSON схема аргументов (например: {\"query\": {\"type\": \"string\"}})",
     "code_label": "Код",
-    "error_unknown": "Неизвестная ошибка"
+    "error_unknown": "Неизвестная ошибка",
+    "err_parameters_schema": "Некорректный JSON в parameters_schema",
+    "err_parameters_schema_invalid": "parameters_schema: нужен объект с type: object и properties"
   },
   "inline_tool_modal": {
     "title_create": "Создать {{label}}",
@@ -1038,6 +1046,7 @@
     "err_prompt_llm": "Промпт обязателен для llm_node",
     "err_name_required": "Название обязательно",
     "err_unknown_type": "Неизвестный тип инструмента: {{type}}",
+    "err_parameters_schema_invalid": "Невалидная parameters_schema для LLM (нужны type: object и properties)",
     "create": "Создать",
     "save": "Сохранить"
   },

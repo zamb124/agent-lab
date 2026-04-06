@@ -58,6 +58,10 @@ export class BaseNodeEditor extends PlatformElement {
                 gap: var(--space-4);
             }
 
+            :host([expanded]) .panel-main {
+                min-height: 0;
+            }
+
             :host([expanded][data-editor-fullscreen]) .panel-sidebar,
             :host([expanded]:has(code-editor.fullscreen)) .panel-sidebar,
             :host([expanded]:has(json-field-editor.fullscreen)) .panel-sidebar {

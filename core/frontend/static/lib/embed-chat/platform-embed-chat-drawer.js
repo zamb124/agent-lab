@@ -109,6 +109,20 @@ export class PlatformEmbedChatDrawer extends LitElement {
             inset: 0;
             z-index: 24990;
             background: rgba(0, 0, 0, 0.45);
+            opacity: 1;
+            visibility: visible;
+            transition:
+                opacity 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+                visibility 0s linear 0s;
+        }
+
+        .backdrop.backdrop--hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition:
+                opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                visibility 0s linear 0.28s;
         }
 
         :host([data-embed-theme='light']) .backdrop {
@@ -137,6 +151,20 @@ export class PlatformEmbedChatDrawer extends LitElement {
             background: var(--embed-drawer-panel-bg, rgba(24, 26, 34, 0.97));
             border: 1px solid var(--embed-drawer-panel-border, rgba(255, 255, 255, 0.1));
             box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+            transition:
+                opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+                top 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                right 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                bottom 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                left 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                width 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                max-height 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                border-radius 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.38s ease,
+                visibility 0s linear 0s;
         }
 
         :host([data-embed-theme='light']) .panel {
@@ -146,9 +174,33 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
 
         .panel.panel--collapsed {
-            visibility: hidden;
-            pointer-events: none;
             opacity: 0;
+            transform: translate3d(calc(100% + 28px), 0, 0);
+            pointer-events: none;
+            visibility: hidden;
+            transition:
+                opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+                top 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                right 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                bottom 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                left 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                width 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                max-height 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                border-radius 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.38s ease,
+                visibility 0s linear 0.36s;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .backdrop,
+            .backdrop.backdrop--hidden,
+            .panel,
+            .panel.panel--collapsed,
+            .panel:fullscreen {
+                transition-duration: 0.01ms !important;
+                transition-delay: 0s !important;
+            }
         }
 
         .panel-head {
@@ -254,6 +306,20 @@ export class PlatformEmbedChatDrawer extends LitElement {
             border-radius: 0;
             padding: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px))
                 max(16px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
+            transition:
+                opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+                top 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                right 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                bottom 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                left 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                width 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                height 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                max-height 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                border-radius 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                padding 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.38s ease,
+                visibility 0s linear 0s;
         }
     `;
 
@@ -585,7 +651,11 @@ export class PlatformEmbedChatDrawer extends LitElement {
                   `
                 : ''}
 
-            ${this.open ? html`<div class="backdrop" @click=${this._close}></div>` : ''}
+            <div
+                class="backdrop ${this.open ? '' : 'backdrop--hidden'}"
+                aria-hidden="true"
+                @click=${this._close}
+            ></div>
             <div
                 class="panel ${this.panelMaximized ? 'panel--maximized' : ''} ${!this.open ? 'panel--collapsed' : ''}"
                 aria-hidden=${this.open ? 'false' : 'true'}

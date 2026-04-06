@@ -6,7 +6,7 @@ import json
 from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from apps.rag_worker.tasks.indexing_tasks import upload_document_task
 from core.context import get_context
@@ -17,6 +17,11 @@ from core.rag.factory import get_rag_provider
 from core.rag.models import RAGDocument
 from ..container import RAGContainer
 from ..dependencies import get_container_dep
+from .namespace_access import (
+    require_registered_rag_namespace,
+    validate_ingest_text_body,
+    validate_rag_user_metadata,
+)
 
 logger = get_logger(__name__)
 
@@ -34,6 +39,70 @@ class DocumentUploadResponse(BaseModel):
     task_id: str
     status: str
     file: FileResponse
+
+
+class IngestTextRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(..., min_length=1)
+    document_name: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    document_id: Optional[str] = None
+
+
+class IngestTextResponse(BaseModel):
+    document_id: str
+    document_name: str
+    namespace_id: str
+    status: str
+    provider: str
+
+
+@router.post("/namespaces/{namespace_id}/ingest-text", response_model=IngestTextResponse)
+async def ingest_text(
+    namespace_id: str,
+    request: IngestTextRequest,
+    provider: Optional[str] = Query(None),
+    container: RAGContainer = Depends(get_container_dep),
+) -> IngestTextResponse:
+    """
+    Синхронная индексация произвольного текста в namespace (без файла и S3).
+    Namespace должен существовать в репозитории текущей компании.
+    """
+    from core.config import get_settings
+
+    await require_registered_rag_namespace(namespace_id, container)
+    validate_rag_user_metadata(request.metadata)
+    text = validate_ingest_text_body(request.text)
+
+    context = get_context()
+    company_id = context.active_company.company_id
+    user_id = context.user.user_id
+
+    merged_meta: Dict[str, Any] = dict(request.metadata)
+    merged_meta["company_id"] = company_id
+    merged_meta["uploaded_by_user_id"] = user_id
+    if request.document_id:
+        merged_meta["document_id"] = request.document_id
+
+    settings = get_settings()
+    rag_provider = get_rag_provider(provider) if provider else container.rag_provider
+    provider_name = provider or settings.rag.default_provider
+
+    doc = await rag_provider.upload_document_from_text(
+        namespace_id=namespace_id,
+        text=text,
+        document_name=request.document_name,
+        metadata=merged_meta,
+    )
+
+    return IngestTextResponse(
+        document_id=doc.document_id,
+        document_name=doc.name,
+        namespace_id=namespace_id,
+        status=doc.status,
+        provider=provider_name,
+    )
 
 
 @router.get("/namespaces/{namespace_id}/documents", response_model=DocumentListResponse)

@@ -8,6 +8,7 @@ import re
 import secrets
 import json
 from dataclasses import dataclass
+from enum import Enum
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -41,6 +42,11 @@ SYNC_LINK_TOKEN_META = "sync_link_token"
 SYNC_CHANNEL_ID_META = "sync_channel_id"
 SYNC_MEETING_FLAG_META = "sync_meeting"
 SYNC_REMINDER_SENT_META = "sync_join_reminder_sent_at"
+
+
+def _enum_field_to_str(value: Enum | str) -> str:
+    """StrictBaseModel с use_enum_values отдаёт enum-поля как str; в API внешних сервисов нужна строка."""
+    return value.value if isinstance(value, Enum) else value
 
 
 @dataclass(frozen=True)
@@ -278,7 +284,7 @@ class YandexCalDavClient:
                 calendar_id=calendar_id,
                 external_event_id=uid,
             )
-        status = event.status.value.upper()
+        status = _enum_field_to_str(event.status).upper()
         ics = "\r\n".join(
             [
                 "BEGIN:VCALENDAR",
@@ -1275,7 +1281,7 @@ class CalendarService:
                 "summary": event.title,
                 "description": event.description or "",
                 "location": event.location or "",
-                "status": event.status.value,
+                "status": _enum_field_to_str(event.status),
                 "start": {"dateTime": _iso_datetime(event.start_at), "timeZone": event.timezone},
                 "end": {"dateTime": _iso_datetime(event.end_at), "timeZone": event.timezone},
             }

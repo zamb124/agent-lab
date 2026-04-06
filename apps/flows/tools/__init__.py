@@ -16,6 +16,7 @@ from .lara_crm import (
     push_embed_blocks,
 )
 from .math_tools import calculator
+from .rag import rag_add_text, rag_create_namespace, rag_search
 from .scheduling import (
     cancel_scheduled_task,
     list_scheduled_tasks,
@@ -38,6 +39,9 @@ __all__ = [
     "finish",
     "list_scheduled_tasks",
     "push_embed_blocks",
+    "rag_add_text",
+    "rag_create_namespace",
+    "rag_search",
     "read_file",
     "reason",
     "self_check",

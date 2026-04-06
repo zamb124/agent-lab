@@ -37,7 +37,8 @@ from apps.sync.sender_display import sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
 from core.clients.stt_client import STTClientFactory
 from core.config import get_settings
-from core.files.models import VideoAttachmentContent
+from core.files.models import FileRecord, FileStatus, VideoAttachmentContent
+from core.files.s3_client import S3ClientFactory
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.tracing import attributes as trace_attributes
@@ -666,6 +667,75 @@ async def handle_command(cmd: dict[str, Any]) -> dict[str, Any]:
     return await dispatch_sync_command(command)
 
 
+def _call_recording_s3_object_key(*, company_id: str, call_id: str, recording_id: str) -> str:
+    """Тот же путь, что при call.recording.start (RoomComposite egress в S3)."""
+    return f"sync-recordings/{company_id}/{call_id}/{recording_id}.mp4"
+
+
+async def _register_platform_file_record_for_call_recording(
+    *,
+    raw_file_id: str,
+    company_id: str,
+    call_id: str,
+    recording_id: str,
+    started_by_user_id: str,
+    raw_original_name: str,
+    raw_storage_url: str,
+) -> int:
+    """
+    Единый GET /sync/api/v1/files/download/{id} читает FileRepository (shared), не sync_files.
+    Без записи здесь — 404 для плеера, скачивания и transcribe_video.
+    """
+    settings = get_settings()
+    bucket_key = settings.s3.default_bucket
+    if not settings.s3.enabled or bucket_key == "":
+        raise ValueError("S3 не настроен: нельзя зарегистрировать запись встречи в FileRepository.")
+
+    s3_key = _call_recording_s3_object_key(
+        company_id=company_id,
+        call_id=call_id,
+        recording_id=recording_id,
+    )
+    s3_client = S3ClientFactory.create_client_for_bucket(bucket_key)
+    meta = await s3_client.get_object_metadata(s3_key)
+    provider_name = s3_client.provider_name
+    logical_bucket_key = s3_client.require_bucket_config_key()
+    s3_endpoint_url = s3_client.endpoint_url
+    await s3_client.close()
+
+    content_length = meta.get("content_length")
+    if not isinstance(content_length, int) or content_length < 0:
+        raise ValueError(f"S3 head_object для записи встречи: неверный ContentLength: {content_length!r}")
+    raw_ct = meta.get("content_type")
+    content_type = (
+        raw_ct.strip()
+        if isinstance(raw_ct, str) and raw_ct.strip() != ""
+        else "video/mp4"
+    )
+
+    api_prefix = f"/{settings.server.name}/api/v1"
+    download_prefix = f"{api_prefix.rstrip('/')}/files/download"
+    file_record = FileRecord(
+        file_id=raw_file_id,
+        provider=provider_name,
+        original_name=raw_original_name,
+        s3_key=s3_key,
+        s3_bucket=logical_bucket_key,
+        s3_endpoint=s3_endpoint_url,
+        storage_url=raw_storage_url,
+        content_type=content_type,
+        file_size=content_length,
+        status=FileStatus.READY,
+        uploaded_by=started_by_user_id,
+        company_id=company_id,
+        is_public=True,
+        download_url=f"{download_prefix}/{raw_file_id}",
+    )
+    container = get_sync_container()
+    await container.file_repository.set(file_record)
+    return content_length
+
+
 @broker.task
 async def sync_finalize_recording_task(recording_id: str, company_id: str, actor_user_id: str) -> None:
     logger.info(
@@ -726,12 +796,21 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
             raw_original_name = parsed_storage_url.path.rsplit("/", 1)[-1]
             if raw_original_name == "":
                 raise ValueError(f"Не удалось определить имя файла egress из URL: {raw_storage_url}")
+            recording_file_size = await _register_platform_file_record_for_call_recording(
+                raw_file_id=raw_file_id,
+                company_id=company_id,
+                call_id=recording.call_id,
+                recording_id=recording.recording_id,
+                started_by_user_id=recording.started_by_user_id,
+                raw_original_name=raw_original_name,
+                raw_storage_url=raw_storage_url,
+            )
             raw_file = SyncFile(
                 file_id=raw_file_id,
                 company_id=company_id,
                 original_name=raw_original_name,
                 mime_type="video/mp4",
-                size_bytes=0,
+                size_bytes=recording_file_size,
                 storage_url=raw_storage_url,
                 checksum=None,
             )
@@ -741,7 +820,7 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
             else:
                 existing_raw.original_name = raw_original_name
                 existing_raw.mime_type = "video/mp4"
-                existing_raw.size_bytes = 0
+                existing_raw.size_bytes = recording_file_size
                 existing_raw.storage_url = raw_storage_url
                 existing_raw.checksum = None
                 await container.sync_file_repository.update(existing_raw)
@@ -763,7 +842,7 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                             file_id=raw_file_id,
                             filename=raw_original_name,
                             mime_type="video/mp4",
-                            size=0,
+                            size=recording_file_size,
                             duration_ms=None,
                             transcription_status=AudioTranscriptionStatus.IDLE,
                             transcription_text=None,

@@ -185,6 +185,17 @@ class TestFlowsLoader:
         if "calculator" in loaded:
             tool = await container.tool_repository.get("calculator")
             assert tool is not None
+            assert tool.parameters_schema is not None
+            assert tool.parameters_schema.get("type") == "object"
+            assert "properties" in tool.parameters_schema
+
+        if "crm_search_entities" in loaded:
+            crm_tool = await container.tool_repository.get("crm_search_entities")
+            assert crm_tool is not None
+            assert crm_tool.parameters_schema is not None
+            props = crm_tool.parameters_schema.get("properties") or {}
+            assert "query" in props
+            assert "minimum" in props.get("limit", {})
 
 
 class TestFlowDiscoveryService:

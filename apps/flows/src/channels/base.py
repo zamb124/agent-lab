@@ -1055,31 +1055,43 @@ class BaseChannel(ABC):
         
         # Добавляем inline tools
         for tool_id, tool_config in inline_tools.items():
-            tools_info.append({
-                "name": tool_id,
-                "type": "function",
-                "attributes": {
-                    "description": tool_config.get("description", ""),
-                    "code": tool_config.get("code", ""),
-                    "args_schema": tool_config.get("args_schema", {}),
-                    "source": "inline",
-                },
-            })
+            inline_attrs: dict = {
+                "description": tool_config.get("description", ""),
+                "code": tool_config.get("code", ""),
+                "args_schema": tool_config.get("args_schema", {}),
+                "source": "inline",
+            }
+            ps = tool_config.get("parameters_schema")
+            if ps:
+                inline_attrs["parameters_schema"] = ps
+            tools_info.append(
+                {
+                    "name": tool_id,
+                    "type": "function",
+                    "attributes": inline_attrs,
+                }
+            )
         
         # Добавляем referenced tools
         for tool_id in sorted(tools_set):
             tool_ref = await container.tool_repository.get(tool_id)
             if tool_ref:
                 info = tool_ref.to_registry_format()
-                tools_info.append({
-                    "name": tool_id,
-                    "type": "function",
-                    "attributes": {
-                        "description": info.get("description", ""),
-                        "source": "reference",
-                        "args_schema": info.get("attributes", {}).get("args_schema", {}),
-                    },
-                })
+                ref_attrs = info.get("attributes", {})
+                ref_payload: dict = {
+                    "description": ref_attrs.get("description", ""),
+                    "source": "reference",
+                    "args_schema": ref_attrs.get("args_schema", {}),
+                }
+                if ref_attrs.get("parameters_schema"):
+                    ref_payload["parameters_schema"] = ref_attrs["parameters_schema"]
+                tools_info.append(
+                    {
+                        "name": tool_id,
+                        "type": "function",
+                        "attributes": ref_payload,
+                    }
+                )
             else:
                 flow_config = await container.flow_repository.get(tool_id)
                 if flow_config:

@@ -7,6 +7,10 @@ import '../components/editors/code-editor.js';
 import '../components/editors/json-field-editor.js';
 import '../components/editors/test-panel.js';
 import './code-docs-modal.js';
+import { isValidLlmParametersSchema } from '../utils/flow-parameters-schema.js';
+
+const DEFAULT_PARAMETERS_SCHEMA_STR = () =>
+    JSON.stringify({ type: 'object', properties: {}, required: [] }, null, 2);
 
 export class ToolEditorModal extends PlatformModal {
     static styles = [
@@ -115,6 +119,26 @@ export class ToolEditorModal extends PlatformModal {
             .btn-secondary:hover {
                 background: var(--glass-tint-strong);
             }
+
+            .editor-btn {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                padding: var(--space-1) var(--space-2);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                transition: all var(--duration-fast) var(--easing-default);
+            }
+
+            .editor-btn:hover {
+                color: var(--text-primary);
+                border-color: var(--accent);
+                background: var(--glass-tint-medium);
+            }
         `
     ];
 
@@ -128,7 +152,8 @@ export class ToolEditorModal extends PlatformModal {
         reactRole: { type: String },
         code: { type: String },
         language: { type: String },
-        argsSchema: { type: String },
+        parametersSchema: { type: String },
+        _codeMainPane: { type: String, state: true },
     };
 
     constructor() {
@@ -157,7 +182,8 @@ export class ToolEditorModal extends PlatformModal {
 
     return {"result": "success"}
 `;
-        this.argsSchema = '{}';
+        this.parametersSchema = DEFAULT_PARAMETERS_SCHEMA_STR();
+        this._codeMainPane = 'code';
     }
 
     connectedCallback() {
@@ -170,11 +196,14 @@ export class ToolEditorModal extends PlatformModal {
             const rr = this.toolConfig.react_role || this.toolConfig.tool_type;
             this.reactRole = rr === 'tool' || rr === undefined ? 'standard' : rr;
             this.code = this.toolConfig.code || this.code;
-            this.argsSchema = typeof this.toolConfig.args_schema === 'string' 
-                ? this.toolConfig.args_schema 
-                : JSON.stringify(this.toolConfig.args_schema || {}, null, 2);
+            const ps = this.toolConfig.parameters_schema;
+            this.parametersSchema =
+                ps && typeof ps === 'object'
+                    ? JSON.stringify(ps, null, 2)
+                    : DEFAULT_PARAMETERS_SCHEMA_STR();
         } else {
             this.title = this.i18n.t('tool_editor_modal.title_create');
+            this.parametersSchema = DEFAULT_PARAMETERS_SCHEMA_STR();
         }
     }
 
@@ -186,26 +215,15 @@ export class ToolEditorModal extends PlatformModal {
     }
 
     _onValidate = async (e) => {
-        const { state } = e.detail;
         const codeEditor = this.shadowRoot.querySelector('code-editor');
-        const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
-        
-        if (!codeEditor || !jsonEditor) {
+
+        if (!codeEditor) {
             this.error(this.i18n.t('tool_editor_modal.err_editors'));
             return;
         }
-        
+
         const code = codeEditor.getValue();
-        const argsSchemaStr = jsonEditor.getValue();
-        
-        let argsSchema = {};
-        try {
-            argsSchema = argsSchemaStr ? JSON.parse(argsSchemaStr) : {};
-        } catch (e) {
-            this.error(this.i18n.t('tool_editor_modal.err_args_schema'));
-            return;
-        }
-        
+
         try {
             const response = await this.a2a.post('/api/v1/code/validate', {
                 code,
@@ -227,31 +245,35 @@ export class ToolEditorModal extends PlatformModal {
     _onExecute = async (e) => {
         const { state } = e.detail;
         const codeEditor = this.shadowRoot.querySelector('code-editor');
-        const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
-        
-        if (!codeEditor || !jsonEditor) {
+        const psEditor = this.shadowRoot.querySelector('json-field-editor[name="parameters_schema"]');
+
+        if (!codeEditor) {
             this.error(this.i18n.t('tool_editor_modal.err_editors'));
             return;
         }
-        
+
         const code = codeEditor.getValue();
-        const argsSchemaStr = jsonEditor.getValue();
-        
-        let argsSchema = {};
-        try {
-            argsSchema = argsSchemaStr ? JSON.parse(argsSchemaStr) : {};
-        } catch (e) {
-            this.error(this.i18n.t('tool_editor_modal.err_args_schema'));
-            return;
+
+        let parametersSchema = undefined;
+        if (psEditor && psEditor.isValid()) {
+            const ps = psEditor.getParsedValue();
+            if (ps && typeof ps === 'object' && Object.keys(ps).length > 0) {
+                if (!isValidLlmParametersSchema(ps)) {
+                    this.error(this.i18n.t('tool_editor_modal.err_parameters_schema_invalid'));
+                    return;
+                }
+                parametersSchema = ps;
+            }
         }
-        
+
         try {
             const response = await this.a2a.post('/api/v1/code/execute', {
                 code,
                 node_type: 'code',
                 state,
                 args: state,
-                args_schema: argsSchema
+                args_schema: {},
+                ...(parametersSchema !== undefined ? { parameters_schema: parametersSchema } : {}),
             });
             
             if (response.success) {
@@ -271,36 +293,45 @@ export class ToolEditorModal extends PlatformModal {
 
     _onSave() {
         const codeEditor = this.shadowRoot.querySelector('code-editor');
-        const jsonEditor = this.shadowRoot.querySelector('json-field-editor');
-        
+        const psEditor = this.shadowRoot.querySelector('json-field-editor[name="parameters_schema"]');
+
         if (!this.name.trim()) {
             this.error(this.i18n.t('tool_editor_modal.err_name'));
             return;
         }
-        
-        if (!codeEditor || !jsonEditor) {
+
+        if (!codeEditor) {
             this.error(this.i18n.t('tool_editor_modal.err_editors'));
             return;
         }
-        
+
         const code = codeEditor.getValue();
-        const argsSchemaStr = jsonEditor.getValue();
-        
+
         if (!code.trim()) {
             this.error(this.i18n.t('tool_editor_modal.err_code'));
             return;
         }
-        
-        let argsSchema = {};
-        try {
-            argsSchema = argsSchemaStr ? JSON.parse(argsSchemaStr) : {};
-        } catch (e) {
-            this.error(this.i18n.t('tool_editor_modal.err_args_schema'));
+
+        if (!psEditor) {
+            this.error(this.i18n.t('tool_editor_modal.err_editors'));
             return;
         }
-        
+        if (!psEditor.isValid()) {
+            this.error(this.i18n.t('tool_editor_modal.err_parameters_schema'));
+            return;
+        }
+        const ps = psEditor.getParsedValue();
+        if (!ps || typeof ps !== 'object' || Object.keys(ps).length === 0) {
+            this.error(this.i18n.t('tool_editor_modal.err_parameters_schema'));
+            return;
+        }
+        if (!isValidLlmParametersSchema(ps)) {
+            this.error(this.i18n.t('tool_editor_modal.err_parameters_schema_invalid'));
+            return;
+        }
+
         const toolId = this.toolConfig.tool_id || this._generateToolId(this.name);
-        
+
         const config = {
             tool_id: toolId,
             type: 'code',
@@ -308,7 +339,8 @@ export class ToolEditorModal extends PlatformModal {
             description: this.description.trim(),
             react_role: this.reactRole,
             code: code,
-            args_schema: argsSchema,
+            args_schema: {},
+            parameters_schema: ps,
         };
         
         this.emit('tool-saved', { toolId, config });
@@ -323,6 +355,10 @@ export class ToolEditorModal extends PlatformModal {
     }
 
     _onCodeChange(e) {
+        // json-field-editor в slot schema-body всплывает на code-editor — не подменять поле code.
+        if (e.target !== e.currentTarget) {
+            return;
+        }
         this.code = e.detail.value;
         if (e.detail.language) {
             this.language = e.detail.language;
@@ -345,8 +381,15 @@ export class ToolEditorModal extends PlatformModal {
         });
     }
 
-    _onArgsSchemaChange(e) {
-        this.argsSchema = e.detail.value;
+    _onParametersSchemaChange(e) {
+        this.parametersSchema = e.detail.value;
+    }
+
+    _onToolEditorCodeSchemaPane(e) {
+        const pane = e.detail?.pane;
+        if (pane === 'code' || pane === 'schema') {
+            this._codeMainPane = pane;
+        }
     }
 
     renderBody() {
@@ -390,18 +433,12 @@ export class ToolEditorModal extends PlatformModal {
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label required">${this.i18n.t('tool_editor_modal.args_schema_label')}</label>
-                    <json-field-editor
-                        .value=${this.argsSchema}
-                        min-height="120"
-                        hint=${this.i18n.t('tool_editor_modal.args_schema_hint')}
-                        @change=${this._onArgsSchemaChange}
-                    ></json-field-editor>
-                </div>
-                
-                <div class="form-group">
                     <label class="form-label required">${this.i18n.t('tool_editor_modal.code_label')}</label>
                     <code-editor
+                        code-schema-mode
+                        ?parent-layout-wide=${this._isFullscreen}
+                        .activeSchemaPane=${this._codeMainPane}
+                        @code-schema-pane-change=${this._onToolEditorCodeSchemaPane}
                         .value=${this.code}
                         .language=${this.language || 'python'}
                         node-type="code"
@@ -409,7 +446,17 @@ export class ToolEditorModal extends PlatformModal {
                         @change=${this._onCodeChange}
                         @language-change=${this._onLanguageChange}
                         @open-docs=${this._onOpenDocs}
-                    ></code-editor>
+                    >
+                        <div slot="schema-body">
+                            <json-field-editor
+                                name="parameters_schema"
+                                .value=${this.parametersSchema}
+                                min-height="280"
+                                hint=${this.i18n.t('code_node_editor.parameters_schema_hint')}
+                                @change=${this._onParametersSchemaChange}
+                            ></json-field-editor>
+                        </div>
+                    </code-editor>
                 </div>
                 
                 <test-panel

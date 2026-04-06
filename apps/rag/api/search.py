@@ -13,6 +13,7 @@ from core.rag.factory import get_rag_provider
 from core.config import get_settings
 from ..container import RAGContainer
 from ..dependencies import get_container_dep
+from .namespace_access import require_registered_rag_namespace
 
 logger = get_logger(__name__)
 
@@ -52,6 +53,8 @@ async def search_in_namespace(
     Returns:
         Результаты поиска
     """
+    await require_registered_rag_namespace(namespace_id, container)
+
     settings = get_settings()
     
     try:
@@ -118,6 +121,9 @@ async def global_search(
             status_code=400,
             detail="No namespaces provided"
         )
+
+    for ns_id in valid_namespace_ids:
+        await require_registered_rag_namespace(ns_id, container)
     
     settings = get_settings()
     

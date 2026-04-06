@@ -262,7 +262,7 @@ class CalendarIntegrationSqlRepository:
                 select(CalendarIntegrationRecord).where(
                     CalendarIntegrationRecord.company_id == company_id,
                     CalendarIntegrationRecord.user_id == user_id,
-                    CalendarIntegrationRecord.provider == provider.value,
+                    CalendarIntegrationRecord.provider == _enum_value(provider),
                 )
             )
             row = result.scalar_one_or_none()

@@ -32,8 +32,16 @@ class ToolReference(BaseModel):
     )
     title: Optional[str] = Field(default=None, description="Название для отображения")
     description: Optional[str] = Field(default=None, description="Описание инструмента")
+    parameters_schema: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Полная JSON Schema объекта параметров для LLM (type: object, properties, required, "
+            "minLength, default, items и т.д.). Имеет приоритет над args_schema при сборке схемы для модели."
+        ),
+    )
     args_schema: Dict[str, CallParameter] = Field(
-        default_factory=dict, description="Схема аргументов {param_name: {type, description}}"
+        default_factory=dict,
+        description="Legacy: плоская схема {param_name: CallParameter}; если parameters_schema нет — строится LLM-схема отсюда",
     )
     mock_map: Optional[Dict[str, Any]] = Field(
         default=None, description="Mock данные для api_call tools"
@@ -91,17 +99,29 @@ class ToolReference(BaseModel):
         description="Имя tool на MCP сервере"
     )
 
+    def effective_parameters_schema(self) -> Dict[str, Any]:
+        """Схема параметров для LLM: parameters_schema или сборка из args_schema."""
+        from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
+
+        return resolve_tool_parameters_schema(
+            parameters_schema=self.parameters_schema,
+            args_schema=self.args_schema,
+        )
+
     def to_registry_format(self) -> Dict[str, Any]:
         """Преобразует в формат для registry API (совместимость с platformweb)"""
+        attrs: Dict[str, Any] = {
+            "description": self.description or "",
+            "args_schema": {
+                k: {"type": v.type, "description": v.description}
+                for k, v in self.args_schema.items()
+            },
+        }
+        if self.parameters_schema:
+            attrs["parameters_schema"] = self.parameters_schema
         return {
             "name": self.tool_id,
             "type": "inline_code",
-            "attributes": {
-                "description": self.description or "",
-                "args_schema": {
-                    k: {"type": v.type, "description": v.description}
-                    for k, v in self.args_schema.items()
-                },
-            },
+            "attributes": attrs,
             "mock_map": self.mock_map,
         }
