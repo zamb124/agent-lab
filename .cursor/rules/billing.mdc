@@ -19,7 +19,7 @@ alwaysApply: false
 
 ### Pre-flight: баланс > 0 перед тарифицируемыми операциями
 
-Перед стартом операций, которые создают span с **`billing_pending_settlement`** (LLM в flows, RAG embed, vision reader, billable LiveKit), вызывается **`BillingService.require_balance_for_billable_operation(company_id)`**: при **`Company.balance <= 0`** — **`BillingBalanceBlockedError`** (HTTP **403** с `code: billing_balance_blocked` через `create_service_app`). Флаги **`billing.balance_enforcement_enabled`** и **`billing.balance_enforcement_exempt_company_ids`** в конфиге (`BillingConfig`); по умолчанию в exempt — **`system`**.
+Перед стартом операций, которые создают span с **`billing_pending_settlement`** (LLM в flows, RAG embed, vision reader, billable LiveKit), вызывается **`BillingService.require_balance_for_billable_operation(company_id, user_id, operation_code=..., notification_service=...)`**: обязательны **`user_id`** (для **`notify_user`**) и код операции из набора **`BALANCE_BLOCK_OPERATION_*`** в `core/billing/service.py`. При **`Company.balance <= 0`** — сначала **`notify_user`** с текстом из **`billing.notifications.*`** (`core/i18n/translations/*/billing.json`, язык из контекста или RU), затем **`BillingBalanceBlockedError`** (HTTP **403** с `code: billing_balance_blocked` через `create_service_app`). Флаги **`billing.balance_enforcement_enabled`** и **`billing.balance_enforcement_exempt_company_ids`** в конфиге (`BillingConfig`); по умолчанию в exempt — **`system`**.
 
 Это **не** заменяет settlement: фоновая джоба по-прежнему пишет usage без pre-flight; при нуле баланса запись usage после уже выполненной операции по текущим правилам возможна. Оценка по токенам до вызова LLM отдельно не делается (фаза 1 — только **balance > 0**).
 

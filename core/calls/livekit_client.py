@@ -25,6 +25,10 @@ from livekit.api import (
 from livekit.protocol.egress import EgressInfo, ListEgressRequest
 
 from core.billing import get_billing_service
+from core.billing.service import (
+    BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
+    BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
+)
 from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
@@ -72,7 +76,12 @@ class LiveKitClient:
 
     async def create_room(self, room_name: str, *, company_id: str, user_id: str) -> None:
         """Создаёт LiveKit комнату. Если уже существует — не ошибка."""
-        await get_billing_service().require_balance_for_billable_operation(company_id)
+        await get_billing_service().require_balance_for_billable_operation(
+            company_id,
+            user_id,
+            operation_code=BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
+            notification_service="sync",
+        )
         async with traced_operation(
             "livekit.room.create",
             event_type="livekit.room",
@@ -181,7 +190,12 @@ class LiveKitClient:
                 )
             ],
         )
-        await get_billing_service().require_balance_for_billable_operation(company_id)
+        await get_billing_service().require_balance_for_billable_operation(
+            company_id,
+            user_id,
+            operation_code=BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
+            notification_service="sync",
+        )
         async with traced_operation(
             "livekit.egress.room_composite_s3",
             event_type="livekit.egress",
@@ -267,7 +281,12 @@ class LiveKitClient:
                 audio_bitrate=128,
             ),
         )
-        await get_billing_service().require_balance_for_billable_operation(company_id)
+        await get_billing_service().require_balance_for_billable_operation(
+            company_id,
+            user_id,
+            operation_code=BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
+            notification_service="sync",
+        )
         async with traced_operation(
             "livekit.egress.track_composite_segmented",
             event_type="livekit.egress",

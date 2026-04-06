@@ -10,6 +10,7 @@ import tiktoken
 from typing import Any, List, Optional
 
 from core.billing import get_billing_service
+from core.billing.service import BALANCE_BLOCK_OPERATION_EMBEDDING
 from core.context import get_context
 from core.http import get_httpx_client
 from core.models.billing_models import UsageType
@@ -234,9 +235,14 @@ class EmbeddingService:
         actx = get_context()
         if actx is None or actx.active_company is None:
             raise ValueError("Контекст с active_company обязателен для generate_embeddings")
+        if actx.user is None or not str(actx.user.user_id).strip():
+            raise ValueError("Контекст с user обязателен для generate_embeddings (биллинг и уведомления)")
 
         await get_billing_service().require_balance_for_billable_operation(
-            actx.active_company.company_id
+            actx.active_company.company_id,
+            str(actx.user.user_id).strip(),
+            operation_code=BALANCE_BLOCK_OPERATION_EMBEDDING,
+            notification_service="rag",
         )
         trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
         if actx.user is not None and str(actx.user.user_id).strip() != "":

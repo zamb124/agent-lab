@@ -98,6 +98,18 @@
     "process_description": "After clicking the button, you will be redirected to the YooMoney page for secure payment. After successful payment, funds will be automatically credited to the company balance.",
     "proceed_to_payment": "Proceed to payment"
   },
+  "notifications": {
+    "balance_blocked_title": "Insufficient balance",
+    "balance_blocked_message": "The operation «{operation}» was not started: company «{company_name}» has a non-positive balance ({balance} RUB). Top up your balance in Billing.",
+    "balance_blocked_api_detail": "Insufficient funds: company {company_id}, balance {balance} RUB. Operation: {operation}.",
+    "blocked_operation": {
+      "llm": "Language model request",
+      "embedding": "Indexing (embeddings)",
+      "vision": "Image recognition (vision)",
+      "livekit_room": "Call room creation",
+      "livekit_egress": "Call recording or export (egress)"
+    }
+  },
   "frontend_console": {
     "loading": "Loading...",
     "page_title": "Billing",

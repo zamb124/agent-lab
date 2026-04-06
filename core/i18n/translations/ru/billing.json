@@ -98,6 +98,18 @@
     "process_description": "После нажатия кнопки вы будете перенаправлены на страницу ЮMoney для безопасной оплаты. После успешной оплаты средства автоматически зачислятся на баланс компании.",
     "proceed_to_payment": "Перейти к оплате"
   },
+  "notifications": {
+    "balance_blocked_title": "Недостаточно средств",
+    "balance_blocked_message": "Операция «{operation}» не запущена: у компании «{company_name}» неположительный баланс ({balance} ₽). Пополните баланс в разделе «Тарифы и оплата».",
+    "balance_blocked_api_detail": "Недостаточно средств: компания {company_id}, баланс {balance} ₽. Операция: {operation}.",
+    "blocked_operation": {
+      "llm": "Запрос к языковой модели",
+      "embedding": "Индексация (эмбеддинги)",
+      "vision": "Распознавание изображения (vision)",
+      "livekit_room": "Создание комнаты звонка",
+      "livekit_egress": "Запись или экспорт звонка (egress)"
+    }
+  },
   "frontend_console": {
     "loading": "Загрузка...",
     "page_title": "Биллинг",

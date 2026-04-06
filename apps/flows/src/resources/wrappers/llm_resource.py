@@ -6,6 +6,7 @@ LLMResource - wrapper для llm ресурса.
 
 from typing import Any, Dict, List, Optional
 
+from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.context import get_context
 from core.logging import get_logger
 from core.models.billing_models import UsageType
@@ -20,8 +21,13 @@ async def _require_balance_for_llm_resource() -> None:
     actx = get_context()
     if actx is None or actx.active_company is None:
         raise ValueError("Контекст с active_company обязателен для LLMResource")
+    if actx.user is None or not str(actx.user.user_id).strip():
+        raise ValueError("Контекст с user обязателен для LLMResource (биллинг и уведомления)")
     await get_container().billing_service.require_balance_for_billable_operation(
-        actx.active_company.company_id
+        actx.active_company.company_id,
+        str(actx.user.user_id).strip(),
+        operation_code=BALANCE_BLOCK_OPERATION_LLM,
+        notification_service="flows",
     )
 
 

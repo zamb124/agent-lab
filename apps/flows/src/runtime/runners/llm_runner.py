@@ -25,6 +25,7 @@ from apps.flows.src.runtime.llm_override_params import (
     split_llm_override_for_client,
     stream_kwargs_from_override,
 )
+from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.config import get_settings
 from core.context import get_context
 from core.clients.llm import LLMClient, MockLLM, StreamEvent, get_llm_for_state
@@ -278,9 +279,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         actx = get_context()
         if actx is None or actx.active_company is None:
             raise ValueError("Контекст с active_company обязателен для LLM-ноды")
+        if actx.user is None or not str(actx.user.user_id).strip():
+            raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
         container = get_container()
         await container.billing_service.require_balance_for_billable_operation(
-            actx.active_company.company_id
+            actx.active_company.company_id,
+            str(actx.user.user_id).strip(),
+            operation_code=BALANCE_BLOCK_OPERATION_LLM,
+            notification_service="flows",
         )
 
         # Определяем режим: structured_output или tools

@@ -13,6 +13,8 @@ from typing import Optional, Dict, Any
 from typing import TYPE_CHECKING
 
 from core.context import get_context
+from core.i18n import t
+from core.models.i18n_models import Language
 from core.models.identity_models import User, Company
 from core.models.billing_models import UsageRecord, UsageType, TariffPlan, DEFAULT_TARIFF_PRICES
 from core.tracing import attributes as trace_attr
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
     from core.db.storage import Storage
 
 from core.billing.exceptions import BillingBalanceBlockedError
+from core.websocket.publisher import Notification, NotificationType, notify_user
 from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
@@ -38,6 +41,20 @@ from core.billing.settlement_rules import (
 logger = logging.getLogger(__name__)
 
 STORAGE_SETTLEMENT_RULES_JSON = "billing:settlement_rules_json"
+
+BALANCE_BLOCK_OPERATION_LLM = "llm"
+BALANCE_BLOCK_OPERATION_EMBEDDING = "embedding"
+BALANCE_BLOCK_OPERATION_VISION = "vision"
+BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM = "livekit_room"
+BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS = "livekit_egress"
+
+_BALANCE_BLOCK_OPERATION_I18N_KEYS: dict[str, str] = {
+    BALANCE_BLOCK_OPERATION_LLM: "billing.notifications.blocked_operation.llm",
+    BALANCE_BLOCK_OPERATION_EMBEDDING: "billing.notifications.blocked_operation.embedding",
+    BALANCE_BLOCK_OPERATION_VISION: "billing.notifications.blocked_operation.vision",
+    BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM: "billing.notifications.blocked_operation.livekit_room",
+    BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS: "billing.notifications.blocked_operation.livekit_egress",
+}
 
 
 def company_resource_prices_storage_key(company_id: str) -> str:
@@ -94,25 +111,78 @@ class BillingService:
         )
         self._balance_enforcement_exempt_company_ids = frozenset(exempt)
     
-    async def require_balance_for_billable_operation(self, company_id: str) -> None:
+    async def require_balance_for_billable_operation(
+        self,
+        company_id: str,
+        user_id: str,
+        *,
+        operation_code: str,
+        notification_service: str = "frontend",
+    ) -> None:
         """
         Pre-flight перед операцией, которая создаёт span с pending_settlement.
-        Не заменяет фоновое settlement и не оценивает стоимость по токенам.
+        При блокировке по балансу отправляет notify_user с пояснением (язык из контекста или RU).
         """
         if not self._balance_enforcement_enabled:
             return
         cid = (company_id or "").strip()
         if not cid:
             raise ValueError("company_id обязателен для проверки баланса")
+        uid = (user_id or "").strip()
+        if not uid:
+            raise ValueError("user_id обязателен для проверки баланса и уведомления")
+        if operation_code not in _BALANCE_BLOCK_OPERATION_I18N_KEYS:
+            raise ValueError(
+                f"Неизвестный operation_code для биллинга: {operation_code!r}. "
+                f"Допустимо: {sorted(_BALANCE_BLOCK_OPERATION_I18N_KEYS.keys())}"
+            )
+        svc = (notification_service or "").strip()
+        if not svc:
+            raise ValueError("notification_service не может быть пустым")
         if cid in self._balance_enforcement_exempt_company_ids:
             return
         company = await self._company_repository.get(cid)
         if company is None:
             raise ValueError(f"Компания {cid} не найдена")
         if company.balance <= 0:
-            raise BillingBalanceBlockedError(
-                f"Недостаточно средств: баланс компании {cid} неположительный ({company.balance})."
+            ctx = get_context()
+            lang = ctx.language if ctx is not None and ctx.language is not None else Language.RU
+            op_key = _BALANCE_BLOCK_OPERATION_I18N_KEYS[operation_code]
+            operation_label = t(op_key, language=lang)
+            title = t("billing.notifications.balance_blocked_title", language=lang)
+            balance_s = f"{company.balance:.2f}"
+            message = t(
+                "billing.notifications.balance_blocked_message",
+                language=lang,
+                operation=operation_label,
+                company_name=company.name,
+                balance=balance_s,
             )
+            await notify_user(
+                uid,
+                Notification(
+                    type=NotificationType.SYSTEM,
+                    title=title,
+                    message=message,
+                    service=svc,
+                    priority="high",
+                    action_url="/billing",
+                    data={
+                        "event": "billing.balance_blocked",
+                        "company_id": cid,
+                        "operation_code": operation_code,
+                        "code": "billing_balance_blocked",
+                    },
+                ),
+            )
+            detail = t(
+                "billing.notifications.balance_blocked_api_detail",
+                language=lang,
+                company_id=cid,
+                balance=balance_s,
+                operation=operation_label,
+            )
+            raise BillingBalanceBlockedError(detail)
     
     async def can_use_resource(
         self,

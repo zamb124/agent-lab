@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Union
 
 from core.billing import get_billing_service
+from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
 from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef, file_id_from_download_url, normalize_file_ref
@@ -331,8 +332,13 @@ async def _read_image_impl(
     actx = get_context()
     if actx is None or actx.active_company is None:
         raise ValueError("Контекст с active_company обязателен для vision-чтения изображения")
+    if actx.user is None or not str(actx.user.user_id).strip():
+        raise ValueError("Контекст с user обязателен для vision-чтения изображения (биллинг и уведомления)")
     await get_billing_service().require_balance_for_billable_operation(
-        actx.active_company.company_id
+        actx.active_company.company_id,
+        str(actx.user.user_id).strip(),
+        operation_code=BALANCE_BLOCK_OPERATION_VISION,
+        notification_service="frontend",
     )
     async with traced_operation(
         "core.files.reader.image",
