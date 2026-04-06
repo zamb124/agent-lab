@@ -7,7 +7,9 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { CRMStore } from '../store/crm.store.js';
+import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import './grants-panel.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -25,6 +27,10 @@ export class EntityCard extends PlatformElement {
         _processingRequestId: { state: true },
         _graphVisible: { state: true },
         _deleting: { state: true },
+        _headerMenuOpen: { state: true },
+        _headerMenuAnchor: { state: true },
+        _headerMenuZ: { state: true },
+        _entityGrants: { state: true },
     };
 
     static styles = [
@@ -162,6 +168,47 @@ export class EntityCard extends PlatformElement {
             .icon-btn:disabled {
                 opacity: 0.5;
                 cursor: not-allowed;
+            }
+
+            .header-menu-root {
+                position: relative;
+            }
+
+            .header-dropdown {
+                min-width: 240px;
+                padding: var(--space-2);
+                background: var(--crm-surface);
+                border: 1px solid var(--crm-stroke-strong);
+                border-radius: var(--radius-lg);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+            }
+
+            .header-dropdown-item {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                padding: var(--space-2) var(--space-3);
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                text-align: left;
+                cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .header-dropdown-item:hover {
+                background: var(--crm-surface-muted);
+            }
+
+            .header-dropdown-item.danger {
+                color: var(--error, #f43f5e);
+            }
+
+            .header-dropdown-item.danger:hover {
+                background: rgba(244, 63, 94, 0.1);
             }
 
             .content {
@@ -394,26 +441,169 @@ export class EntityCard extends PlatformElement {
         this._processingRequestId = '';
         this._graphVisible = false;
         this._deleting = false;
+        this._headerMenuOpen = false;
+        this._headerMenuAnchor = null;
+        this._headerMenuZ = 0;
+        this._entityGrants = [];
+        this._syncedAccessRequestsForEntityId = '';
+        this._boundAuthChangeForOwnership = this._onAuthChangeForOwnership.bind(this);
+        this._boundCloseHeaderMenu = this._closeHeaderMenuOnOutside.bind(this);
 
         this._unsubscribe = CRMStore.subscribe(state => {
             this._entity = state.entities.currentEntity;
             this._relatedEntities = state.entities.currentEntityRelated || [];
             this._entityTypes = state.entities.entityTypes || [];
             this._loading = state.entities.cardLoading || false;
+            this._entityGrants = state.grants.currentEntityGrants || [];
+            this._syncOwnershipAndAccessUI();
         });
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChangeForOwnership);
+        document.addEventListener('pointerdown', this._boundCloseHeaderMenu, true);
+        this._syncOwnershipAndAccessUI();
+    }
+
     disconnectedCallback() {
+        document.removeEventListener('pointerdown', this._boundCloseHeaderMenu, true);
+        window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChangeForOwnership);
         super.disconnectedCallback();
         this._unsubscribe?.();
+    }
+
+    _onAuthChangeForOwnership() {
+        this._syncOwnershipAndAccessUI();
     }
 
     updated(changedProperties) {
         if (changedProperties.has('entityId')) {
             this._graphVisible = false;
+            this._headerMenuOpen = false;
+            this._syncedAccessRequestsForEntityId = '';
             if (this.entityId) {
                 this._loadEntityCard();
             }
+        }
+    }
+
+    _closeHeaderMenuOnOutside(ev) {
+        if (!this._headerMenuOpen) {
+            return;
+        }
+        const root = this.renderRoot;
+        const trigger = root.querySelector('.header-menu-trigger');
+        const panel = root.querySelector('.header-dropdown');
+        if (!trigger || !panel) {
+            return;
+        }
+        const path = ev.composedPath();
+        for (const n of path) {
+            if (n === trigger || n === panel) {
+                return;
+            }
+            if (n instanceof Node && trigger.contains(n)) {
+                return;
+            }
+            if (n instanceof Node && panel.contains(n)) {
+                return;
+            }
+        }
+        this._headerMenuOpen = false;
+        this.requestUpdate();
+    }
+
+    _toggleHeaderMenu(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (this._headerMenuOpen) {
+            this._headerMenuOpen = false;
+            return;
+        }
+        const btn = ev.currentTarget;
+        const r = btn.getBoundingClientRect();
+        this._headerMenuAnchor = {
+            top: Math.round(r.bottom + 6),
+            right: Math.round(document.documentElement.clientWidth - r.right),
+        };
+        this._headerMenuZ = nextModalLayerZIndex();
+        this._headerMenuOpen = true;
+    }
+
+    _hasPublicGrant() {
+        return this._entityGrants.some((g) => g.grant_type === 'public');
+    }
+
+    async _headerMenuMakePublic() {
+        this._headerMenuOpen = false;
+        if (!this.entityId) {
+            return;
+        }
+        const crmApi = this.crmApi;
+        await CRMStore.makeEntityPublic(crmApi, this.entityId);
+        this.success(this.i18n.t('grants.success_entity_public'));
+    }
+
+    _headerMenuShareUser() {
+        this._headerMenuOpen = false;
+        if (!this.entityId) {
+            return;
+        }
+        const modal = document.createElement('share-modal');
+        modal.entityId = this.entityId;
+        modal.shareType = 'user';
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('shared', () => {
+            void CRMStore.loadEntityGrants(this.crmApi, this.entityId);
+        });
+    }
+
+    _headerMenuShareCompany() {
+        this._headerMenuOpen = false;
+        if (!this.entityId) {
+            return;
+        }
+        const modal = document.createElement('share-modal');
+        modal.entityId = this.entityId;
+        modal.shareType = 'company';
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('shared', () => {
+            void CRMStore.loadEntityGrants(this.crmApi, this.entityId);
+        });
+    }
+
+    _syncOwnershipAndAccessUI() {
+        const authUserId = this._platformAuthUserId(this.auth?.user);
+        const entity = this._entity;
+        const eid = typeof entity?.entity_id === 'string' ? entity.entity_id.trim() : '';
+        const entityOwnerId =
+            typeof entity?.user_id === 'string' && entity.user_id.trim().length > 0
+                ? entity.user_id.trim()
+                : null;
+        const nextOwner = Boolean(authUserId && entityOwnerId && eid && entityOwnerId === authUserId);
+        const prevOwner = this._isOwner;
+        this._isOwner = nextOwner;
+
+        if (!nextOwner) {
+            this._pendingAccessRequests = [];
+            this._syncedAccessRequestsForEntityId = '';
+            if (prevOwner !== nextOwner) {
+                this.requestUpdate();
+            }
+            return;
+        }
+
+        const shouldLoadRequests = eid !== this._syncedAccessRequestsForEntityId || (!prevOwner && nextOwner);
+        if (shouldLoadRequests) {
+            this._syncedAccessRequestsForEntityId = eid;
+            this._loadPendingRequests();
+        } else if (prevOwner !== nextOwner) {
+            this.requestUpdate();
         }
     }
 
@@ -421,20 +611,8 @@ export class EntityCard extends PlatformElement {
         if (!this.entityId) return;
 
         const crmApi = this.crmApi;
-        const card = await CRMStore.loadEntityCard(crmApi, this.entityId);
-
-        const currentUser = this.auth?.user;
-        const authUserId = this._platformAuthUserId(currentUser);
-        const entityOwnerId =
-            typeof card.entity?.user_id === 'string' && card.entity.user_id.trim().length > 0
-                ? card.entity.user_id.trim()
-                : null;
-        this._isOwner = Boolean(authUserId && entityOwnerId && entityOwnerId === authUserId);
-        if (this._isOwner) {
-            await this._loadPendingRequests();
-        } else {
-            this._pendingAccessRequests = [];
-        }
+        await CRMStore.loadEntityCard(crmApi, this.entityId);
+        this._syncOwnershipAndAccessUI();
     }
 
     _platformAuthUserId(user) {
@@ -566,6 +744,7 @@ export class EntityCard extends PlatformElement {
     }
 
     async _onDelete() {
+        this._headerMenuOpen = false;
         if (!this.entityId || !this._entity || this._deleting) {
             return;
         }
@@ -800,16 +979,71 @@ export class EntityCard extends PlatformElement {
                         <button class="icon-btn" @click=${this._onEdit} title=${this.i18n.t('edit', {}, 'common')}>
                             <platform-icon name="edit" size="16"></platform-icon>
                         </button>
-                        <button
-                            class="icon-btn danger"
-                            type="button"
-                            title=${this.i18n.t('entity_card.delete_entity_tooltip')}
-                            aria-label=${this.i18n.t('entity_card.delete_entity_tooltip')}
-                            ?disabled=${this._deleting}
-                            @click=${this._onDelete}
-                        >
-                            <platform-icon name="trash" size="16"></platform-icon>
-                        </button>
+                        <div class="header-menu-root">
+                            <button
+                                class="icon-btn header-menu-trigger"
+                                type="button"
+                                title=${this.i18n.t('entity_card.actions_menu_tooltip')}
+                                aria-label=${this.i18n.t('entity_card.actions_menu_tooltip')}
+                                aria-haspopup="menu"
+                                aria-expanded=${this._headerMenuOpen ? 'true' : 'false'}
+                                @click=${this._toggleHeaderMenu}
+                            >
+                                <platform-icon name="more-vertical" size="16"></platform-icon>
+                            </button>
+                            ${this._headerMenuOpen && this._headerMenuAnchor
+                                ? html`
+                                    <div
+                                        class="header-dropdown"
+                                        role="menu"
+                                        style="position: fixed; top: ${this._headerMenuAnchor.top}px; right: ${this._headerMenuAnchor.right}px; z-index: ${this._headerMenuZ}"
+                                        @pointerdown=${(e) => e.stopPropagation()}
+                                    >
+                                        ${!this._hasPublicGrant()
+                                            ? html`
+                                                <button
+                                                    type="button"
+                                                    class="header-dropdown-item"
+                                                    role="menuitem"
+                                                    @click=${this._headerMenuMakePublic}
+                                                >
+                                                    <platform-icon name="globe" size="16"></platform-icon>
+                                                    ${this.i18n.t('grants.make_public_entity')}
+                                                </button>
+                                            `
+                                            : ''}
+                                        <button
+                                            type="button"
+                                            class="header-dropdown-item"
+                                            role="menuitem"
+                                            @click=${this._headerMenuShareUser}
+                                        >
+                                            <platform-icon name="user" size="16"></platform-icon>
+                                            ${this.i18n.t('grants.share_user')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="header-dropdown-item"
+                                            role="menuitem"
+                                            @click=${this._headerMenuShareCompany}
+                                        >
+                                            <platform-icon name="building-one" size="16"></platform-icon>
+                                            ${this.i18n.t('grants.share_company')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="header-dropdown-item danger"
+                                            role="menuitem"
+                                            ?disabled=${this._deleting}
+                                            @click=${this._onDelete}
+                                        >
+                                            <platform-icon name="trash" size="16"></platform-icon>
+                                            ${this.i18n.t('entity_card.delete_entity_tooltip')}
+                                        </button>
+                                    </div>
+                                `
+                                : ''}
+                        </div>
                     ` : html`
                         <button class="icon-btn" @click=${this._onRequestAccess} title=${this.i18n.t('entity_card.request_access_tooltip')}>
                             <platform-icon name="lock" size="16"></platform-icon>

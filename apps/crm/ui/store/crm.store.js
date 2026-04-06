@@ -281,6 +281,7 @@ const baseStore = new BaseStore('crm', {
         draftByNoteId: {},
         analyzeContextNote: null,
         resolvedDraftEntityIds: {},
+        importReview: null,
     },
     loading: false,
     error: null,
@@ -792,8 +793,125 @@ export const CRMStore = {
                 suggestions: [],
                 analyzeContextNote: null,
                 resolvedDraftEntityIds: {},
+                importReview: null,
             },
         }));
+    },
+
+    clearKnowledgeImportReview() {
+        baseStore.setState((s) => ({
+            ai: {
+                ...s.ai,
+                importReview: null,
+                suggestions: [],
+                analyzeContextNote: null,
+                resolvedDraftEntityIds: {},
+            },
+        }));
+    },
+
+    async hydrateKnowledgeImportReview(crmApi, importId, summaryPreloaded = null) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const id = typeof importId === 'string' ? importId.trim() : '';
+        if (!id) {
+            throw new Error('importId is required');
+        }
+        const summary = summaryPreloaded ?? await crmApi.getKnowledgeImportCreatedEntities(id);
+        const rows = Array.isArray(summary.entities) ? summary.entities : [];
+        if (rows.length === 0) {
+            throw new Error('Нет сущностей для просмотра');
+        }
+        const full = await Promise.all(rows.map((r) => crmApi.getEntity(r.entity_id)));
+        const resolvedDraftEntityIds = {};
+        const suggestions = [];
+        for (const ent of full) {
+            if (!ent || typeof ent.entity_id !== 'string') {
+                continue;
+            }
+            const eid = ent.entity_id;
+            const kid = `ki:${eid}`;
+            resolvedDraftEntityIds[kid] = eid;
+            const desc = typeof ent.description === 'string' ? ent.description : '';
+            const attrs = ent.attributes && typeof ent.attributes === 'object' && !Array.isArray(ent.attributes)
+                ? { ...ent.attributes }
+                : {};
+            suggestions.push({
+                entity_type: ent.entity_type,
+                entity_subtype: ent.entity_subtype || undefined,
+                name: ent.name,
+                description: desc,
+                attributes: attrs,
+                draft_entity_id: kid,
+                dedup_action: 'merge',
+                dedup_existing_id: eid,
+                dedup_existing_name: ent.name,
+                dedup_confidence: 1,
+            });
+        }
+        const anchor = full.find((e) => e && e.entity_type === 'note') || full[0];
+        if (!anchor || typeof anchor.entity_id !== 'string') {
+            throw new Error('Не найдена якорная сущность для просмотра');
+        }
+        const anchorDesc = typeof anchor.description === 'string' ? anchor.description : '';
+        const analyzeContextNote = {
+            draft_entity_id: `ki:${anchor.entity_id}`,
+            entity_type: anchor.entity_type,
+            name: anchor.name,
+            description: anchorDesc,
+        };
+        baseStore.setState((s) => ({
+            ai: {
+                ...s.ai,
+                importReview: { importId: id, anchorNote: anchor },
+                suggestions,
+                analyzeContextNote,
+                resolvedDraftEntityIds,
+            },
+        }));
+    },
+
+    async persistKnowledgeImportReview(crmApi) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const pack = baseStore.state.ai.importReview;
+        if (!pack || typeof pack.importId !== 'string') {
+            throw new Error('Режим просмотра импорта не активен');
+        }
+        const importId = pack.importId;
+        const suggestions = baseStore.state.ai.suggestions;
+        for (const s of suggestions) {
+            if (isRelationshipSuggestion(s)) {
+                continue;
+            }
+            const entityId = typeof s.dedup_existing_id === 'string' ? s.dedup_existing_id.trim() : '';
+            if (!entityId) {
+                throw new Error('У строки нет entity_id');
+            }
+            const name = normalizeString(s.name);
+            if (!name) {
+                throw new Error('Имя сущности не может быть пустым');
+            }
+            await crmApi.updateEntity(entityId, {
+                name,
+                description: s.description || null,
+                attributes: s.attributes && typeof s.attributes === 'object' ? s.attributes : {},
+            });
+        }
+        await crmApi.completeKnowledgeImportReview(importId);
+        baseStore.setState((s) => ({
+            ai: {
+                ...s.ai,
+                importReview: null,
+                suggestions: [],
+                analyzeContextNote: null,
+                resolvedDraftEntityIds: {},
+            },
+        }));
+        await this.loadNotes(crmApi);
+        await this.loadEntities(crmApi);
     },
 
     _replaceDraftAndSuggestions(noteId, draftStored) {

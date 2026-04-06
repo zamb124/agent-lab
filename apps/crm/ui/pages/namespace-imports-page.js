@@ -10,7 +10,7 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/file-text-preview-modal.js';
-import '../modals/entity-modal.js';
+import '../modals/ai-analysis-modal.js';
 
 const MAX_INLINE_TEXT = 100000;
 const POLL_MS = 3000;
@@ -43,11 +43,6 @@ export class NamespaceImportsPage extends PlatformElement {
         _splitByHeadings: { state: true },
         _chunkMaxChars: { state: true },
         _starting: { state: true },
-        _detailOpen: { state: true },
-        _detailLoading: { state: true },
-        _detailImportId: { state: true },
-        _detailPayload: { state: true },
-        _detailApproving: { state: true },
     };
 
     static styles = [
@@ -101,23 +96,52 @@ export class NamespaceImportsPage extends PlatformElement {
                 cursor: pointer;
             }
             .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-            .soft-btn {
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface-elevated);
-                color: var(--text-primary);
-                border-radius: var(--radius-md);
-                padding: var(--space-2) var(--space-3);
-                cursor: pointer;
-            }
-            .soft-btn.danger { border-color: var(--error, #f43f5e); color: var(--error, #f43f5e); }
             .import-open-detail-btn {
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-2);
+                border-radius: var(--radius-md);
+                padding: var(--space-2) var(--space-3);
+                cursor: pointer;
+                font-size: var(--text-sm);
+                font-weight: 600;
+                border: 1px solid rgba(74, 222, 128, 0.65);
+                color: #86efac;
+                background: rgba(22, 101, 52, 0.42);
+                box-shadow:
+                    0 0 0 1px rgba(74, 222, 128, 0.22),
+                    inset 0 0 12px rgba(34, 197, 94, 0.18);
+                transition:
+                    background-color 0.15s ease,
+                    border-color 0.15s ease,
+                    color 0.15s ease,
+                    box-shadow 0.15s ease;
+            }
+            .import-open-detail-btn:hover {
+                border-color: #4ade80;
+                color: #bbf7d0;
+                background: rgba(21, 128, 61, 0.52);
+                box-shadow:
+                    0 0 14px rgba(34, 197, 94, 0.45),
+                    inset 0 0 16px rgba(22, 163, 74, 0.28);
             }
             .import-open-detail-btn platform-icon {
                 flex-shrink: 0;
                 color: inherit;
+            }
+            :host-context([data-theme='light']) .import-open-detail-btn {
+                border-color: rgba(22, 163, 74, 0.55);
+                color: #15803d;
+                background: rgba(220, 252, 231, 0.9);
+                box-shadow:
+                    0 0 0 1px rgba(74, 222, 128, 0.35),
+                    inset 0 0 10px rgba(187, 247, 208, 0.55);
+            }
+            :host-context([data-theme='light']) .import-open-detail-btn:hover {
+                border-color: #16a34a;
+                color: #166534;
+                background: rgba(187, 247, 208, 0.96);
+                box-shadow: 0 0 16px rgba(34, 197, 94, 0.35);
             }
             .imports-table-shell {
                 width: 100%;
@@ -207,12 +231,27 @@ export class NamespaceImportsPage extends PlatformElement {
             }
             .import-icon-btn--cancel {
                 border-color: rgba(251, 191, 36, 0.5);
-                color: #fde047;
+                color: #fbbf24;
             }
             .import-icon-btn--cancel:hover {
                 border-color: rgba(253, 224, 71, 0.85);
-                color: #fef9c3;
+                color: #fcd34d;
                 box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.25);
+            }
+            .import-cancel-glyph {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 18px;
+                height: 18px;
+                flex-shrink: 0;
+                color: inherit;
+            }
+
+            .import-cancel-glyph svg {
+                display: block;
+                width: 100%;
+                height: 100%;
             }
             .import-icon-btn--rollback {
                 border-color: rgba(248, 113, 113, 0.65);
@@ -336,7 +375,7 @@ export class NamespaceImportsPage extends PlatformElement {
         this._wizardOpen = false;
         this._wizardStep = 0;
         this._selectedTypeIds = [];
-        this._mode = 'notes_only';
+        this._mode = 'graph';
         this._pasteText = '';
         this._pendingFiles = [];
         this._uploadingFiles = false;
@@ -348,12 +387,6 @@ export class NamespaceImportsPage extends PlatformElement {
         this._starting = false;
         this._pollTimer = null;
         this._unsub = null;
-        this._detailOpen = false;
-        this._detailLoading = false;
-        this._detailImportId = '';
-        this._detailPayload = null;
-        this._detailApproving = false;
-        this._closeImportDetail = this._closeImportDetail.bind(this);
     }
 
     _getPendingFileIds() {
@@ -424,7 +457,7 @@ export class NamespaceImportsPage extends PlatformElement {
     _openWizard() {
         this._wizardStep = 0;
         this._selectedTypeIds = [];
-        this._mode = 'notes_only';
+        this._mode = 'graph';
         this._pasteText = '';
         this._pendingFiles = [];
         this._uploadingFiles = false;
@@ -814,10 +847,10 @@ export class NamespaceImportsPage extends PlatformElement {
         };
         const crmApi = this.services.get('crmApi');
         this._starting = true;
+        this._closeWizard();
         try {
             await crmApi.startKnowledgeImport(body);
             this.success(this.i18n.t('knowledge_import.started'));
-            this._closeWizard();
             await this._loadImports({ silent: true });
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -938,129 +971,55 @@ export class NamespaceImportsPage extends PlatformElement {
         return html`<span class="ki-import-tag ki-import-tag--mode-${variant}">${label}</span>`;
     }
 
-    async _openImportDetail(importId) {
+    async _openImportReviewModal(importId) {
         const id = typeof importId === 'string' ? importId.trim() : '';
         if (!id) {
             return;
         }
-        this._detailImportId = id;
-        this._detailOpen = true;
-        this._detailPayload = null;
-        await this._reloadImportDetail();
-    }
-
-    _closeImportDetail() {
-        this._detailOpen = false;
-        this._detailImportId = '';
-        this._detailPayload = null;
-    }
-
-    async _reloadImportDetail() {
-        if (!this._detailImportId) {
-            return;
-        }
         const crmApi = this.services.get('crmApi');
-        this._detailLoading = true;
+        let summary;
         try {
-            this._detailPayload = await crmApi.getKnowledgeImportCreatedEntities(this._detailImportId);
+            summary = await crmApi.getKnowledgeImportCreatedEntities(id);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.error(msg);
-            this._closeImportDetail();
-        } finally {
-            this._detailLoading = false;
-        }
-    }
-
-    async _approveImportReview() {
-        if (!this._detailImportId) {
             return;
         }
-        const crmApi = this.services.get('crmApi');
-        this._detailApproving = true;
+        const rows = Array.isArray(summary.entities) ? summary.entities : [];
+        if (rows.length === 0) {
+            const confirmed = await platformConfirm(
+                this.i18n.t('knowledge_import.review_no_entities_body'),
+                {
+                    title: this.i18n.t('knowledge_import.review_no_entities_title'),
+                    confirmText: this.i18n.t('knowledge_import.detail_approve'),
+                },
+            );
+            if (confirmed) {
+                await crmApi.completeKnowledgeImportReview(id);
+                this.success(this.i18n.t('knowledge_import.approve_success'));
+                void this._loadImports({ silent: true });
+            }
+            return;
+        }
         try {
-            await crmApi.completeKnowledgeImportReview(this._detailImportId);
+            await CRMStore.hydrateKnowledgeImportReview(crmApi, id, summary);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(msg);
+            return;
+        }
+        const analysisModal = document.createElement('ai-analysis-modal');
+        document.body.appendChild(analysisModal);
+        analysisModal.showModal();
+        analysisModal.addEventListener('close', () => {
+            CRMStore.clearKnowledgeImportReview();
+            analysisModal.remove();
+            void this._loadImports({ silent: true });
+        });
+        analysisModal.addEventListener('saved', () => {
             this.success(this.i18n.t('knowledge_import.approve_success'));
-            await this._loadImports({ silent: true });
-            await this._reloadImportDetail();
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            this.error(msg);
-        } finally {
-            this._detailApproving = false;
-        }
-    }
-
-    _openEntityEditor(entityId) {
-        const id = typeof entityId === 'string' ? entityId.trim() : '';
-        if (!id) {
-            return;
-        }
-        const modal = document.createElement('entity-modal');
-        modal.entityId = id;
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('saved', () => {
-            void this._reloadImportDetail();
+            void this._loadImports({ silent: true });
         });
-    }
-
-    _shortImportId(importId) {
-        const s = typeof importId === 'string' ? importId.trim() : '';
-        if (s.length <= 12) {
-            return s;
-        }
-        return `${s.slice(0, 8)}…`;
-    }
-
-    _importDetailEntityTheme(index) {
-        const i = Number(index);
-        if (!Number.isFinite(i) || i < 0) {
-            return 'blue';
-        }
-        if (i % 3 === 0) {
-            return 'blue';
-        }
-        if (i % 3 === 1) {
-            return 'yellow';
-        }
-        return 'orange';
-    }
-
-    _importDetailEntityIconName(ent) {
-        return this._importWizardIconForType({
-            type_id: typeof ent?.entity_type === 'string' ? ent.entity_type : '',
-            icon: '',
-        });
-    }
-
-    _importDetailEntityTypeLine(ent) {
-        const t = typeof ent?.entity_type === 'string' ? ent.entity_type.trim() : '';
-        const st = typeof ent?.entity_subtype === 'string' ? ent.entity_subtype.trim() : '';
-        if (t && st) {
-            return `${t} / ${st}`;
-        }
-        if (t) {
-            return t;
-        }
-        return this.i18n.t('entities.type');
-    }
-
-    _importEntityStatusLabel(status) {
-        const s = String(status || '').trim().toLowerCase();
-        const keyByStatus = {
-            active: 'knowledge_import.entity_status_active',
-            draft: 'knowledge_import.entity_status_draft',
-            archived: 'knowledge_import.entity_status_archived',
-            pending: 'knowledge_import.entity_status_pending',
-        };
-        const key = keyByStatus[s];
-        if (key) {
-            return this.i18n.t(key);
-        }
-        const raw = String(status || '').trim();
-        return raw.length > 0 ? raw : '—';
     }
 
     render() {
@@ -1127,8 +1086,8 @@ export class NamespaceImportsPage extends PlatformElement {
                                                     ${canDetail
                                                         ? html`<button
                                                               type="button"
-                                                              class="soft-btn import-open-detail-btn"
-                                                              @click=${() => this._openImportDetail(row.import_id)}
+                                                              class="import-open-detail-btn"
+                                                              @click=${() => this._openImportReviewModal(row.import_id)}
                                                           >
                                                               <platform-icon name="doc-detail" size="16"></platform-icon>
                                                               <span>${this.i18n.t('knowledge_import.action_open_detail')}</span>
@@ -1142,7 +1101,11 @@ export class NamespaceImportsPage extends PlatformElement {
                                                               aria-label=${this.i18n.t('knowledge_import.action_cancel')}
                                                               @click=${() => this._cancelRow(row.import_id)}
                                                           >
-                                                              <platform-icon name="stop" size="18" filled></platform-icon>
+                                                              <span class="import-cancel-glyph" aria-hidden="true">
+                                                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+                                                                      <rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" />
+                                                                  </svg>
+                                                              </span>
                                                           </button>`
                                                         : null}
                                                     ${canRollback
@@ -1409,90 +1372,6 @@ export class NamespaceImportsPage extends PlatformElement {
                 @file-text-preview-cancel=${this._onPreviewCancel}
             ></file-text-preview-modal>
 
-            ${this._detailOpen ? html`
-                <glass-modal
-                    .open=${true}
-                    size="lg"
-                    .heading=${this.i18n.t('knowledge_import.detail_heading', { id: this._shortImportId(this._detailImportId) })}
-                    @modal-closed=${this._closeImportDetail}
-                >
-                    <div slot="content" class="wizard-body crm-import-glass-content">
-                        ${this._detailLoading ? html`<div>${this.i18n.t('knowledge_import.detail_loading')}</div>` : ''}
-                        ${this._detailPayload && !this._detailLoading ? html`
-                            <p>${this.i18n.t('knowledge_import.detail_intro')}</p>
-                            <div class="detail-meta">
-                                <span>${this.i18n.t('knowledge_import.detail_status')}: ${this._detailPayload.status}</span>
-                                <span>${this.i18n.t('knowledge_import.detail_rels')}: ${String(this._detailPayload.relationships_created_count ?? 0)}</span>
-                            </div>
-                            ${Array.isArray(this._detailPayload.missing_entity_ids) && this._detailPayload.missing_entity_ids.length > 0
-                                ? html`<p class="mono">${this.i18n.t('knowledge_import.detail_missing', { count: String(this._detailPayload.missing_entity_ids.length) })}</p>`
-                                : ''}
-                            ${Array.isArray(this._detailPayload.entities) && this._detailPayload.entities.length > 0 ? html`
-                                <h3 class="import-detail-entities-heading">${this.i18n.t('knowledge_import.detail_entities_heading')}</h3>
-                                <div class="import-detail-entities-scroll" role="list">
-                                    ${this._detailPayload.entities.map((ent, index) => {
-                                        const theme = this._importDetailEntityTheme(index);
-                                        const iconName = this._importDetailEntityIconName(ent);
-                                        const typeLine = this._importDetailEntityTypeLine(ent);
-                                        const statusLabel = this._importEntityStatusLabel(ent.status);
-                                        const entName = typeof ent.name === 'string' && ent.name.trim() ? ent.name.trim() : ent.entity_id;
-                                        return html`
-                                            <article
-                                                class="import-detail-entity-card ${theme}"
-                                                role="listitem"
-                                                aria-label=${entName}
-                                            >
-                                                <div class="import-detail-entity-avatar" aria-hidden="true">
-                                                    <platform-icon name=${iconName} size="24"></platform-icon>
-                                                </div>
-                                                <div class="import-detail-entity-main">
-                                                    <div class="import-detail-entity-header">
-                                                        <div class="import-detail-entity-titles">
-                                                            <span class="import-detail-entity-name">${entName}</span>
-                                                            <div class="import-detail-entity-sub">${typeLine}</div>
-                                                        </div>
-                                                        <div class="import-detail-entity-meta">
-                                                            <span class="import-detail-entity-badge ${theme}">${statusLabel}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="import-detail-entity-score-track" aria-hidden="true">
-                                                        <div class="import-detail-entity-score-fill ${theme}" style="width:100%;"></div>
-                                                        <div class="import-detail-entity-score-label">
-                                                            ${this.i18n.t('ai_analysis_modal.score_label', { value: '100' })}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        class="import-detail-entity-open"
-                                                        @click=${() => this._openEntityEditor(ent.entity_id)}
-                                                    >
-                                                        ${this.i18n.t('knowledge_import.detail_edit_entity')}
-                                                    </button>
-                                                </div>
-                                            </article>
-                                        `;
-                                    })}
-                                </div>
-                            ` : html`<p>${this.i18n.t('knowledge_import.detail_no_entities')}</p>`}
-                        ` : ''}
-                    </div>
-                    ${this._detailPayload &&
-                    !this._detailLoading &&
-                    (this._detailPayload.review_completed_at == null || this._detailPayload.review_completed_at === '')
-                        ? html`
-                              <div slot="actions" class="wizard-nav crm-import-glass-actions">
-                                  <platform-button
-                                      variant="primary"
-                                      ?disabled=${this._detailApproving}
-                                      @click=${() => this._approveImportReview()}
-                                  >
-                                      ${this.i18n.t('knowledge_import.detail_approve')}
-                                  </platform-button>
-                              </div>
-                          `
-                        : ''}
-                </glass-modal>
-            ` : ''}
         `;
     }
 }

@@ -90,6 +90,7 @@ def create_service_app(
     on_startup: Optional[Callable] = None,
     on_shutdown: Optional[Callable] = None,
     cors_origins: List[str] = None,
+    cors_allow_origin_regex: Optional[str] = None,
     extra_middlewares: List[Tuple[type, dict]] = None,
     static_mounts: List[Tuple[str, str, str]] = None,
     extra_state: dict = None,
@@ -118,7 +119,8 @@ def create_service_app(
         repository_names: Имена репозиториев для CRUD роутеров
         on_startup: Функция вызываемая при старте (async)
         on_shutdown: Функция вызываемая при остановке (async)
-        cors_origins: Разрешенные origins для CORS
+        cors_origins: Разрешенные origins для CORS (конкретные URL; с credentials нельзя звёздочку как единственный origin)
+        cors_allow_origin_regex: Regex для Origin (Starlette CORSMiddleware), суммируется с allow_origins
         extra_middlewares: Дополнительные middleware [(MiddlewareClass, {kwargs}), ...]
         static_mounts: Статические директории [(path, directory, name), ...]
         api_version: Версия API ("v1" для flows и др., None для frontend)
@@ -233,15 +235,17 @@ def create_service_app(
         for key, value in extra_state.items():
             setattr(app.state, key, value)
     
-    # CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins or [],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    
+    # CORS собираем здесь, подключаем в конце create_service_app (внешний слой стека).
+    # Иначе preflight OPTIONS обрабатывает AuthMiddleware раньше и отдаёт 404 без ACAO.
+    _cors_kw: dict[str, Any] = {
+        "allow_origins": list(cors_origins) if cors_origins else [],
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+    if cors_allow_origin_regex and str(cors_allow_origin_regex).strip():
+        _cors_kw["allow_origin_regex"] = str(cors_allow_origin_regex).strip()
+
     # Proxy headers
     app.add_middleware(
         ProxyHeadersMiddleware,
@@ -440,7 +444,9 @@ def create_service_app(
 </html>"""
         
         logger.info(f"✅ Test endpoint enabled: /{service_name}/test (TESTING mode)")
-    
+
+    app.add_middleware(CORSMiddleware, **_cors_kw)
+
     logger.info(f"{service_name} Service создан")
-    
+
     return app

@@ -1,5 +1,9 @@
 """
-TaskIQ: импорт базы знаний (нарезка, заметки, опционально analyze+apply по чанкам).
+TaskIQ: импорт базы знаний.
+
+Пайплайн: (1) нарезка текста → создание сущностей note (как при ручной заметке);
+(2) при mode=graph — для каждой такой note тот же путь, что у analyze заметки:
+analyze_text_with_ai + apply_analysis_draft. Режим notes_only — только фаза 1.
 """
 
 from __future__ import annotations
@@ -126,6 +130,8 @@ async def run_knowledge_import_task(
                 trace_attributes.ATTR_USER_ID: row.user_id,
             },
         ):
+            import_note_ids: list[str] = []
+
             for idx, chunk in enumerate(chunks):
                 last_chunk_index = idx
                 fresh = await repo.get_for_worker(import_id, company_id)
@@ -160,32 +166,11 @@ async def run_knowledge_import_task(
                     description=chunk,
                     namespace=row.namespace,
                     user_id=row.user_id,
+                    note_date=datetime.now(timezone.utc).date(),
                 )
+                import_note_ids.append(note.entity_id)
                 created_entity_ids.append(note.entity_id)
                 notes_created += 1
-
-                if row.mode == "graph":
-                    req = AIAnalyzeRequest(
-                        text=chunk,
-                        extract_entity_types=row.extract_entity_types,
-                        extract_relationship_types=None,
-                        mentioned_entity_ids=None,
-                        namespace=row.namespace,
-                    )
-                    await entity_service.analyze_text_with_ai(
-                        req,
-                        check_duplicates=True,
-                        note_id=note.entity_id,
-                    )
-                    apply_result = await entity_service.apply_analysis_draft(note.entity_id)
-                    for eid in apply_result.created_entity_ids:
-                        if eid not in created_entity_ids:
-                            created_entity_ids.append(eid)
-                    entities_from_graph += len(apply_result.created_entity_ids)
-                    for rid in apply_result.created_relationship_ids:
-                        if rid not in created_relationship_ids:
-                            created_relationship_ids.append(rid)
-                    relationships_created += len(apply_result.created_relationship_ids)
 
                 await repo.patch_progress(
                     import_id,
@@ -196,6 +181,71 @@ async def run_knowledge_import_task(
                     created_entity_ids=list(created_entity_ids),
                     created_relationship_ids=list(created_relationship_ids),
                 )
+
+            if row.mode == "graph":
+                for idx, note_id in enumerate(import_note_ids):
+                    last_chunk_index = idx
+                    fresh = await repo.get_for_worker(import_id, company_id)
+                    if fresh is None:
+                        raise RuntimeError("Строка импорта исчезла во время выполнения")
+                    if fresh.cancel_requested:
+                        await repo.patch_progress(
+                            import_id,
+                            company_id,
+                            status="cancelled",
+                            completed_at=datetime.now(timezone.utc),
+                            created_entity_ids=created_entity_ids,
+                            created_relationship_ids=created_relationship_ids,
+                            notes_created_count=notes_created,
+                            entities_created_count=entities_from_graph,
+                            relationships_created_count=relationships_created,
+                        )
+                        await _notify_import_user(
+                            row.user_id,
+                            import_id=import_id,
+                            namespace=row.namespace,
+                            status="cancelled",
+                            title="Импорт отменён",
+                            message=f"Импорт {import_id} остановлен по запросу.",
+                        )
+                        return {"status": "cancelled", "import_id": import_id}
+
+                    note_row = await entity_service.get_entity(note_id)
+                    if note_row is None:
+                        raise RuntimeError(f"Заметка импорта не найдена после создания: {note_id}")
+                    analyze_text = note_row.description if note_row.description else ""
+
+                    req = AIAnalyzeRequest(
+                        text=analyze_text,
+                        extract_entity_types=row.extract_entity_types,
+                        extract_relationship_types=None,
+                        mentioned_entity_ids=None,
+                        namespace=row.namespace,
+                    )
+                    await entity_service.analyze_text_with_ai(
+                        req,
+                        check_duplicates=True,
+                        note_id=note_id,
+                    )
+                    apply_result = await entity_service.apply_analysis_draft(note_id)
+                    for eid in apply_result.created_entity_ids:
+                        if eid not in created_entity_ids:
+                            created_entity_ids.append(eid)
+                    entities_from_graph += len(apply_result.created_entity_ids)
+                    for rid in apply_result.created_relationship_ids:
+                        if rid not in created_relationship_ids:
+                            created_relationship_ids.append(rid)
+                    relationships_created += len(apply_result.created_relationship_ids)
+
+                    await repo.patch_progress(
+                        import_id,
+                        company_id,
+                        notes_created_count=notes_created,
+                        entities_created_count=entities_from_graph,
+                        relationships_created_count=relationships_created,
+                        created_entity_ids=list(created_entity_ids),
+                        created_relationship_ids=list(created_relationship_ids),
+                    )
 
         await repo.patch_progress(
             import_id,

@@ -98,6 +98,21 @@ class FlowSettings(BaseSettings):
     mock: MockConfig = Field(default_factory=MockConfig)
     push: PushConfig = Field(default_factory=PushConfig)
 
+    cors_allow_origins: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Явные Origin для CORS (embed/A2A с fetch credentials или Authorization). "
+            "Прод: домены партнёрских сайтов. См. также cors_allow_origin_regex."
+        ),
+    )
+    cors_allow_origin_regex: Optional[str] = Field(
+        default=None,
+        description=(
+            "Regex для разрешённого Origin. Если None и server.debug — в apps/flows/main.py "
+            "подставляется dev-паттерн localhost и *.lvh.me."
+        ),
+    )
+
 
 _settings: Optional[FlowSettings] = None
 

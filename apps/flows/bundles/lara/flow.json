@@ -1,0 +1,37 @@
+{
+  "id": "lara",
+  "name": "Lara",
+  "description": "Ассистент CRM: заметки, анализ, файлы, UI-блоки в чате",
+  "version": "1.0.0",
+  "tags": ["crm", "lara", "assistant"],
+  "permission": ["admin", "developers"],
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "name": "Lara",
+      "prompt": "prompts/main.md",
+      "llm": {
+        "model": "gpt-4o",
+        "temperature": 0.2
+      },
+      "tools": [
+        "ask_user",
+        "crm_create_note",
+        "crm_analyze_note_text",
+        "create_file",
+        "read_file",
+        "push_embed_blocks"
+      ],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from": "main",
+      "to": null
+    }
+  ],
+  "variables": {},
+  "skills": {}
+}

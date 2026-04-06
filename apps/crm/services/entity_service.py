@@ -498,7 +498,7 @@ class EntityService:
     async def merge_entities(self, body: EntityMergeRequest) -> Tuple[CRMEntity, str]:
         """
         Сливает source в survivor: переносит связи и права, объединяет поля по выбору,
-        удаляет source. survivor сохраняет entity_id.
+        удаляет source. survivor сохраняет entity_id и entity_type (тип source может отличаться).
         """
         survivor_id = body.survivor_entity_id.strip()
         source_id = body.source_entity_id.strip()
@@ -519,11 +519,8 @@ class EntityService:
         if survivor.namespace != source.namespace:
             raise ValueError("Разный namespace: слияние запрещено")
 
-        if survivor.entity_type != source.entity_type:
-            raise ValueError("Разный entity_type: слияние запрещено")
-
-        if survivor.entity_type == "note":
-            raise ValueError("Слияние заметок (note) не поддерживается")
+        if survivor.entity_type == "note" and source.entity_type == "note":
+            raise ValueError("Слияние двух заметок (note) не поддерживается")
 
         mapping_survivor = await self._company_mapping_repo.get_by_entity(survivor_id)
         mapping_source = await self._company_mapping_repo.get_by_entity(source_id)
@@ -1508,21 +1505,55 @@ class EntityService:
             created_relationship_ids=created_relationship_ids,
         )
 
+    async def _resolve_storage_type_for_note_family(
+        self,
+        leaf_type_id: str,
+        initial_subtype: Optional[str],
+    ) -> tuple[str, Optional[str]]:
+        """
+        Типы из ветки note в справочнике entity_types (meeting, call, …) в БД храним как
+        entity_type=note и entity_subtype=<type_id>, чтобы строки попадали в /crm/notes и
+        общую логику заметок (edges, summary, WS).
+        """
+        if leaf_type_id == "note":
+            return ("note", initial_subtype)
+
+        seen: set[str] = set()
+        cur: Optional[str] = leaf_type_id
+        while cur and cur not in seen:
+            seen.add(cur)
+            row = await self._entity_type_repo.get_by_type_id(cur)
+            if row is None:
+                raise ValueError(f"Entity type not found: {leaf_type_id}")
+            if row.type_id == "note":
+                return ("note", leaf_type_id)
+            cur = row.parent_type_id
+
+        return (leaf_type_id, initial_subtype)
+
     async def _create_entity_from_draft_row(
         self,
         ent: AIExtractedEntity,
         namespace: str,
     ) -> CRMEntity:
         raw = ent.model_dump()
+        storage_type, storage_subtype = await self._resolve_storage_type_for_note_family(
+            ent.entity_type,
+            ent.entity_subtype,
+        )
+        note_date = self._parse_optional_date_iso(raw.get("note_date"))
+        if storage_type == "note" and note_date is None:
+            note_date = datetime.now(timezone.utc).date()
+
         return await self.create_entity(
-            entity_type=ent.entity_type,
+            entity_type=storage_type,
             name=ent.name,
             description=ent.description,
-            entity_subtype=ent.entity_subtype,
+            entity_subtype=storage_subtype,
             namespace=namespace,
             attributes=raw.get("attributes") or {},
             tags=raw.get("tags") or [],
-            note_date=self._parse_optional_date_iso(raw.get("note_date")),
+            note_date=note_date,
             due_date=self._parse_optional_date_iso(raw.get("due_date")),
             priority=raw.get("priority"),
             assignees=raw.get("assignees") or [],

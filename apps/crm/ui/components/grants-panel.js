@@ -4,7 +4,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -17,7 +16,6 @@ export class GrantsPanel extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
-        buttonStyles,
         css`
             :host {
                 display: block;
@@ -117,41 +115,6 @@ export class GrantsPanel extends PlatformElement {
                 color: var(--error);
             }
 
-            .action-buttons {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-                margin-top: var(--space-3);
-            }
-
-            .action-btn {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-
-            .action-btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-
-            .action-btn.public {
-                border-color: rgba(255, 149, 0, 0.3);
-            }
-
-            .action-btn.public:hover {
-                background: rgba(255, 149, 0, 0.1);
-                color: #ff9500;
-            }
-
             .empty-grants {
                 padding: var(--space-4);
                 text-align: center;
@@ -190,32 +153,6 @@ export class GrantsPanel extends PlatformElement {
         if (!this.entityId) return;
         const crmApi = this.services.get('crmApi');
         await CRMStore.loadEntityGrants(crmApi, this.entityId);
-    }
-
-    async _onMakePublic() {
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.makeEntityPublic(crmApi, this.entityId);
-        this.success(this.i18n.t('grants.success_entity_public'));
-    }
-
-    _onShareToUser() {
-        const modal = document.createElement('share-modal');
-        modal.entityId = this.entityId;
-        modal.shareType = 'user';
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('shared', () => this._loadGrants());
-    }
-
-    _onShareToCompany() {
-        const modal = document.createElement('share-modal');
-        modal.entityId = this.entityId;
-        modal.shareType = 'company';
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('shared', () => this._loadGrants());
     }
 
     async _onRevokeGrant(grantId) {
@@ -274,10 +211,6 @@ export class GrantsPanel extends PlatformElement {
         });
     }
 
-    _hasPublicGrant() {
-        return this._grants.some(g => g.grant_type === 'public');
-    }
-
     render() {
         if (!this.entityId) {
             return '';
@@ -326,23 +259,6 @@ export class GrantsPanel extends PlatformElement {
                         `)}
                     </div>
                 `}
-
-                <div class="action-buttons">
-                    ${!this._hasPublicGrant() ? html`
-                        <button class="action-btn public" @click=${this._onMakePublic}>
-                            <platform-icon name="globe" size="14"></platform-icon>
-                            ${this.i18n.t('grants.make_public_entity')}
-                        </button>
-                    ` : ''}
-                    <button class="action-btn" @click=${this._onShareToUser}>
-                        <platform-icon name="user" size="14"></platform-icon>
-                        ${this.i18n.t('grants.share_user')}
-                    </button>
-                    <button class="action-btn" @click=${this._onShareToCompany}>
-                        <platform-icon name="building-one" size="14"></platform-icon>
-                        ${this.i18n.t('grants.share_company')}
-                    </button>
-                </div>
             </div>
         `;
     }

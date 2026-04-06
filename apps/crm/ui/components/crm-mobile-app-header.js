@@ -15,6 +15,8 @@ export class CrmMobileAppHeader extends PlatformElement {
         extraTitle: { type: String },
         actionIcon: { type: String },
         actionTitle: { type: String },
+        assistantIcon: { type: String, attribute: 'assistant-icon' },
+        assistantTitle: { type: String },
     };
 
     static styles = [
@@ -131,6 +133,8 @@ export class CrmMobileAppHeader extends PlatformElement {
         this.extraTitle = '';
         this.actionIcon = '';
         this.actionTitle = '';
+        this.assistantIcon = '';
+        this.assistantTitle = '';
     }
 
     updated(changed) {
@@ -192,6 +196,17 @@ export class CrmMobileAppHeader extends PlatformElement {
                         </button>
                     ` : ''}
                 `}
+
+                ${this.assistantIcon ? html`
+                    <button
+                        class="icon-btn"
+                        type="button"
+                        title=${this.assistantTitle || ''}
+                        @click=${() => this.emit('header-assistant')}
+                    >
+                        <platform-icon name=${this.assistantIcon} size="16" filled></platform-icon>
+                    </button>
+                ` : ''}
 
                 ${this.extraIcon ? html`
                     <button

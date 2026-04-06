@@ -13,6 +13,8 @@ from httpx import AsyncClient
 
 _CUSTOM_ENTITY_TYPES: list[dict[str, str]] = [
     {"type_id": "note", "name": "Заметка"},
+    {"type_id": "meeting", "name": "Встреча"},
+    {"type_id": "call", "name": "Звонок"},
     {"type_id": "task", "name": "Задача"},
     {"type_id": "contact", "name": "Контакт"},
     {"type_id": "organization", "name": "Организация"},

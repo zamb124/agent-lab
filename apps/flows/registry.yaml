@@ -36,6 +36,10 @@ flows:
     public: true
     description: "Демо агент с Telegram триггерами и ChannelNode"
 
+  - id: lara
+    public: true
+    description: "Lara: ассистент CRM (заметки, анализ, файлы, UI-блоки в чате)"
+
 
 # Тулы
 # ВСЕ тулы загружаются в system namespace при старте

@@ -19,6 +19,7 @@ from apps.crm_worker.broker import broker
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.models.identity_models import Company, User
+from core.models.i18n_models import Language
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 from core.utils.tokens import TokenType, get_token_service
@@ -32,9 +33,11 @@ def _set_crm_context(
     namespace: Optional[str] = None,
     auth_token: Optional[str] = None,
     user_id: Optional[str] = None,
+    interface_language: Optional[str] = None,
 ) -> None:
     normalized_namespace = namespace or "default"
     resolved_user_id = user_id or "crm-worker"
+    lang = Language(interface_language) if interface_language is not None else Language.RU
     context = Context(
         user=User(user_id=resolved_user_id, name="CRM Worker"),
         active_company=Company(company_id=company_id, name=company_id),
@@ -42,6 +45,7 @@ def _set_crm_context(
         channel="taskiq",
         active_namespace=normalized_namespace,
         auth_token=auth_token,
+        language=lang,
     )
     set_context(context)
 

@@ -94,7 +94,7 @@ MergeSide = Literal["survivor", "source"]
 
 
 class EntityMergeRequest(BaseModel):
-    """Слияние source в survivor: survivor сохраняет entity_id, source удаляется."""
+    """Слияние source в survivor: survivor сохраняет entity_id и entity_type, source удаляется."""
 
     survivor_entity_id: str
     source_entity_id: str

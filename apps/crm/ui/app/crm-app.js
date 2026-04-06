@@ -23,6 +23,12 @@ import '../modals/access-request-modal.js';
 import '../modals/namespace-modal.js';
 import '../components/crm-sidebar.js';
 import '../components/crm-mobile-app-header.js';
+import '@platform/lib/embed-chat/platform-embed-chat-drawer.js';
+import {
+    flowsEmbedShouldSendCredentials,
+    resolveCrmLaraFlowsBaseUrl,
+    resolveFlowsEmbedAuthHeaders,
+} from '../utils/crm-lara-flows-base.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/layout/platform-island.js';
 
@@ -237,7 +243,8 @@ export class CRMApp extends PlatformApp {
     }
 
     async checkAuth() {
-        return true;
+        const ok = await this.auth.validateToken();
+        return !!ok;
     }
 
     _openSidebar() {
@@ -330,6 +337,10 @@ export class CRMApp extends PlatformApp {
         if (this._currentView === 'tasks') {
             this._dispatchPageEvent('tasks-refresh');
         }
+    }
+
+    _onMobileAssistant() {
+        window.dispatchEvent(new CustomEvent('humanitec-embed-chat-toggle', { bubbles: true }));
     }
 
     _dispatchPageEvent(eventName) {
@@ -470,6 +481,7 @@ export class CRMApp extends PlatformApp {
 
     _closeAiModal() {
         this._showAiModal = false;
+        CRMStore.clearKnowledgeImportReview();
     }
 
     async _onNamespaceChanged() {
@@ -537,6 +549,8 @@ export class CRMApp extends PlatformApp {
                             ?searchable=${!!viewCfg.searchable}
                             ?searchOpen=${this._mobileSearchOpen}
                             .searchValue=${this._mobileSearchInputValue}
+                            assistant-icon="sparkle"
+                            .assistantTitle=${this.i18n.t('app_shell.embed_chat_toggle')}
                             .extraIcon=${viewCfg.extraIcon || ''}
                             .extraTitle=${viewCfg.extraTitle || ''}
                             .actionIcon=${viewCfg.actionIcon || ''}
@@ -545,6 +559,7 @@ export class CRMApp extends PlatformApp {
                             @header-toggle-search=${this._toggleMobileSearch}
                             @header-search-input=${this._onHeaderSearchInput}
                             @header-search-close=${this._closeMobileSearch}
+                            @header-assistant=${this._onMobileAssistant}
                             @header-extra=${this._onMobileExtra}
                             @header-action=${this._onMobileAction}
                         ></crm-mobile-app-header>
@@ -570,6 +585,15 @@ export class CRMApp extends PlatformApp {
                     @saved=${this._closeAiModal}
                 ></ai-analysis-modal>
             ` : ''}
+
+            <platform-embed-chat-drawer
+                .flowsBaseUrl=${resolveCrmLaraFlowsBaseUrl()}
+                flow-id="lara"
+                toggle-event-name="humanitec-embed-chat-toggle"
+                ?use-credentials=${flowsEmbedShouldSendCredentials(resolveCrmLaraFlowsBaseUrl())}
+                .getAuthToken=${resolveFlowsEmbedAuthHeaders}
+                .locale=${this.services.get('i18n').getCurrentLocale()}
+            ></platform-embed-chat-drawer>
         `;
     }
 }

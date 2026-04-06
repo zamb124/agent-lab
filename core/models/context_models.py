@@ -115,6 +115,7 @@ class Context(BaseModel):
             "language": self.language.value if self.language else "ru",
             "trace_id": self.trace_id,
             "active_namespace": self.active_namespace,
+            "auth_token": self.auth_token,
         }
 
     @classmethod
@@ -146,5 +147,6 @@ class Context(BaseModel):
             language=Language(data.get("language", "ru")),
             trace_id=data.get("trace_id"),
             active_namespace=data.get("active_namespace", "default"),
+            auth_token=data.get("auth_token"),
         )
 

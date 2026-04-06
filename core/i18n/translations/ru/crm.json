@@ -460,6 +460,7 @@
         "mobile_menu": "Меню",
         "mobile_search": "Поиск",
         "mobile_close_search": "Закрыть поиск",
+        "embed_chat_toggle": "Чат с ассистентом",
         "sidebar": {
             "namespace": "Пространство",
             "create_space": "Создать пространство",
@@ -569,7 +570,8 @@
         "empty_pick_title": "Выберите сущность",
         "empty_pick_subtitle": "из списка слева",
         "request_access_tooltip": "Запросить доступ",
-        "delete_entity_tooltip": "Удалить сущность"
+        "delete_entity_tooltip": "Удалить сущность",
+        "actions_menu_tooltip": "Дополнительные действия"
     },
     "grants": {
         "success_entity_public": "Сущность стала публичной",
@@ -744,6 +746,7 @@
         "success": "Сущности объединены",
         "loading": "Загрузка…",
         "err_pair": "Нужны два разных идентификатора сущностей",
+        "type_mismatch_hint": "Типы карточек различаются: после слияния останется тип выбранной базовой карточки; вторая будет удалена.",
         "attr_key": "Атрибут: {key}",
         "field": {
             "name": "Название",
@@ -820,7 +823,8 @@
         "toggle_attrs_show": "Показать атрибуты",
         "toggle_attrs_hide": "Скрыть атрибуты",
         "err_save": "Ошибка сохранения AI-анализа",
-        "back_to_note": "К заметке",
+        "import_review_header_suffix": "Просмотр импорта",
+        "remove_disabled_import": "В просмотре импорта удаление строки недоступно. Меняйте поля здесь или откройте карточку сущности.",
         "dedup_existing": "Существующая",
         "dedup_new": "Новая",
         "score_label": "Оценка — {{value}}%",
@@ -1039,6 +1043,8 @@
         "detail_edit_entity": "Карточка",
         "detail_no_entities": "В журнале нет id сущностей (возможны только связи). Подтвердите просмотр, если всё устраивает.",
         "detail_approve": "Подтвердить просмотр",
+        "review_no_entities_title": "Только связи",
+        "review_no_entities_body": "У этого импорта в журнале нет сущностей (возможны только связи). Подтвердить просмотр без редактирования карточек?",
         "approve_success": "Просмотр импорта подтверждён",
         "action_cancel": "Отменить выполнение",
         "action_rollback": "Откатить созданное",

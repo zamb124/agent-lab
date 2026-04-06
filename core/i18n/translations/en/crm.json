@@ -460,6 +460,7 @@
         "mobile_menu": "Menu",
         "mobile_search": "Search",
         "mobile_close_search": "Close search",
+        "embed_chat_toggle": "Assistant chat",
         "sidebar": {
             "namespace": "Space",
             "create_space": "Create space",
@@ -569,7 +570,8 @@
         "empty_pick_title": "Select an entity",
         "empty_pick_subtitle": "from the list on the left",
         "request_access_tooltip": "Request access",
-        "delete_entity_tooltip": "Delete entity"
+        "delete_entity_tooltip": "Delete entity",
+        "actions_menu_tooltip": "More actions"
     },
     "grants": {
         "success_entity_public": "Entity is now public",
@@ -744,6 +746,7 @@
         "success": "Entities merged",
         "loading": "Loading…",
         "err_pair": "Two different entity IDs are required",
+        "type_mismatch_hint": "Entity types differ: the merged card keeps the base card's type; the other card is removed.",
         "attr_key": "Attribute: {key}",
         "field": {
             "name": "Name",
@@ -820,7 +823,8 @@
         "toggle_attrs_show": "Show attributes",
         "toggle_attrs_hide": "Hide attributes",
         "err_save": "Failed to save AI analysis",
-        "back_to_note": "Back to note",
+        "import_review_header_suffix": "Import review",
+        "remove_disabled_import": "Removing rows is not available in import review. Edit fields here or open the entity card.",
         "dedup_existing": "Existing",
         "dedup_new": "New",
         "score_label": "Score — {{value}}%",
@@ -1039,6 +1043,8 @@
         "detail_edit_entity": "Open card",
         "detail_no_entities": "No entity ids in the log (relationships only). Confirm review if everything looks fine.",
         "detail_approve": "Confirm review",
+        "review_no_entities_title": "Relationships only",
+        "review_no_entities_body": "This import has no entities in the journal (relationships only). Confirm review without editing cards?",
         "approve_success": "Import review confirmed",
         "action_cancel": "Cancel run",
         "action_rollback": "Rollback created",

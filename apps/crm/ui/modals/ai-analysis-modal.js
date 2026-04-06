@@ -21,6 +21,7 @@ export class AIAnalysisModal extends PlatformModal {
         _loadingMessageIndex: { state: true },
         _expandedSuggestions: { state: true },
         _attributeDrafts: { state: true },
+        _importReviewActive: { state: true },
     };
 
     static styles = [
@@ -28,6 +29,26 @@ export class AIAnalysisModal extends PlatformModal {
         css`
             :host {
                 --modal-max-width: 1120px;
+                --ai-analysis-save-bg: #7c3aed;
+                --ai-analysis-save-hover: #6d28d9;
+                --ai-analysis-save-shadow: 0 2px 14px rgba(124, 58, 237, 0.55);
+                --ai-analysis-save-shadow-hover: 0 4px 20px rgba(124, 58, 237, 0.65);
+            }
+
+            .header-btn.header-save-btn--primary {
+                background: var(--ai-analysis-save-bg);
+                color: #ffffff;
+                box-shadow: var(--ai-analysis-save-shadow);
+            }
+
+            .header-btn.header-save-btn--primary:hover:not(:disabled) {
+                background: var(--ai-analysis-save-hover);
+                color: #ffffff;
+                box-shadow: var(--ai-analysis-save-shadow-hover);
+            }
+
+            .header-btn.header-save-btn--primary:disabled {
+                box-shadow: none;
             }
 
             .root {
@@ -144,6 +165,14 @@ export class AIAnalysisModal extends PlatformModal {
                 -webkit-background-clip: text;
                 background-clip: text;
                 -webkit-text-fill-color: transparent;
+            }
+
+            .analysis-header-sub {
+                font-size: var(--text-lg);
+                font-weight: 600;
+                color: var(--text-secondary);
+                -webkit-text-fill-color: var(--text-secondary);
+                background: none;
             }
 
             .summary-text {
@@ -646,9 +675,12 @@ export class AIAnalysisModal extends PlatformModal {
         this._loadingMessageIndex = 0;
         this._expandedSuggestions = [];
         this._attributeDrafts = {};
+        this._importReviewActive = false;
         this._loadingIntervalId = null;
         this._loadingStartedAt = 0;
         this._unsubscribe = null;
+        this.hideHeaderClose = true;
+        this.headerSavePrimary = true;
     }
 
     connectedCallback() {
@@ -678,6 +710,7 @@ export class AIAnalysisModal extends PlatformModal {
         this._currentNoteId = state.entities.currentNoteId;
         this._entityTypes = Array.isArray(state.entities.entityTypes) ? state.entities.entityTypes : [];
         this._relationshipTypes = Array.isArray(state.entities.relationshipTypes) ? state.entities.relationshipTypes : [];
+        this._importReviewActive = Boolean(state.ai.importReview);
         this._analyzing = state.ai.analyzing === true;
         const taskSuggestions = this._getTaskSuggestions();
         const currentDoneMap = new Map(this._taskStates.map((task) => [task.id, task.done]));
@@ -771,6 +804,10 @@ export class AIAnalysisModal extends PlatformModal {
     }
 
     _getCurrentNote() {
+        const ir = CRMStore.state.ai.importReview;
+        if (ir && ir.anchorNote && typeof ir.anchorNote === 'object') {
+            return ir.anchorNote;
+        }
         const note = this._notes.find((entry) => entry.entity_id === this._currentNoteId);
         return note === undefined ? null : note;
     }
@@ -819,6 +856,10 @@ export class AIAnalysisModal extends PlatformModal {
     }
 
     async _onRemoveConnection(index) {
+        if (this._importReviewActive) {
+            this.error(this.i18n.t('ai_analysis_modal.remove_disabled_import'));
+            return;
+        }
         const crmApi = this.services.get('crmApi');
         await CRMStore.removeSuggestionWithServerDraftSync(crmApi, index);
     }
@@ -1139,6 +1180,9 @@ export class AIAnalysisModal extends PlatformModal {
         if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
             return '';
         }
+        if (draftEntityId.startsWith('ki:')) {
+            return draftEntityId.slice(3).trim();
+        }
         const noteId = typeof this._currentNoteId === 'string' ? this._currentNoteId : '';
         const ctx = CRMStore.state.ai.analyzeContextNote;
         if (ctx?.draft_entity_id === draftEntityId && noteId.length > 0) {
@@ -1220,10 +1264,14 @@ export class AIAnalysisModal extends PlatformModal {
     }
 
     renderHeader() {
+        const ir = CRMStore.state.ai.importReview;
         return html`
             <span class="analysis-header-title">
                 <platform-icon name="ai" size="32" colored></platform-icon>
                 ${this.i18n.t('ai_analysis_modal.header_title')}
+                ${ir
+                    ? html`<span class="analysis-header-sub"> · ${this.i18n.t('ai_analysis_modal.import_review_header_suffix')}</span>`
+                    : ''}
             </span>
         `;
     }
@@ -1363,17 +1411,21 @@ export class AIAnalysisModal extends PlatformModal {
                                                     ${dedupBadge.label}
                                                     ${dedupBadge.confidence !== null ? ` ${dedupBadge.confidence}%` : ''}
                                                 </span>
-                                                <button
-                                                    class="remove-connection"
-                                                    type="button"
-                                                    @click=${() => {
-                                                        this._onRemoveConnection(suggestionIndex).catch((err) => {
-                                                            this.error(err?.message || String(err));
-                                                        });
-                                                    }}
-                                                >
-                                                    <platform-icon name="close" size="14"></platform-icon>
-                                                </button>
+                                                ${this._importReviewActive
+                                                    ? null
+                                                    : html`
+                                                          <button
+                                                              class="remove-connection"
+                                                              type="button"
+                                                              @click=${() => {
+                                                                  this._onRemoveConnection(suggestionIndex).catch((err) => {
+                                                                      this.error(err?.message || String(err));
+                                                                  });
+                                                              }}
+                                                          >
+                                                              <platform-icon name="close" size="14"></platform-icon>
+                                                          </button>
+                                                      `}
                                             </div>
                                         </div>
                                         ${dedupBadge.className === 'existing' ? html`
@@ -1451,7 +1503,11 @@ export class AIAnalysisModal extends PlatformModal {
         this._saving = true;
         try {
             const crmApi = this.services.get('crmApi');
-            await CRMStore.confirmAllSuggestions(crmApi);
+            if (CRMStore.state.ai.importReview) {
+                await CRMStore.persistKnowledgeImportReview(crmApi);
+            } else {
+                await CRMStore.confirmAllSuggestions(crmApi);
+            }
             this.dispatchEvent(new CustomEvent('saved'));
             this.close();
         } catch (error) {
@@ -1488,7 +1544,9 @@ export class AIAnalysisModal extends PlatformModal {
     renderSaveHeaderButton() {
         const title = this._saving
             ? this.i18n.t('entity_modal.saving')
-            : this.i18n.t('save', {}, 'common');
+            : (CRMStore.state.ai.importReview
+                ? this.i18n.t('knowledge_import.detail_approve')
+                : this.i18n.t('save', {}, 'common'));
         return this._renderHeaderSaveIcon({
             onClick: () => this._onSave(),
             disabled: this._saving || this._analyzing || this.loading,
@@ -1497,11 +1555,7 @@ export class AIAnalysisModal extends PlatformModal {
     }
 
     renderFooter() {
-        return html`
-            <div class="footer-actions">
-                <button class="btn btn-secondary" type="button" @click=${() => this.close()}>${this.i18n.t('ai_analysis_modal.back_to_note')}</button>
-            </div>
-        `;
+        return html``;
     }
 }
 

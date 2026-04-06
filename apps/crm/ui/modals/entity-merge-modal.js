@@ -137,6 +137,12 @@ export class EntityMergeModal extends PlatformModal {
                 color: var(--color-danger, #e55);
                 font-size: var(--text-sm);
             }
+            .type-hint {
+                margin: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                line-height: 1.45;
+            }
         `,
     ];
 
@@ -313,8 +319,13 @@ export class EntityMergeModal extends PlatformModal {
         if (!this._left || !this._right) {
             return '';
         }
+        const typesDiffer =
+            String(this._left.entity_type || '') !== String(this._right.entity_type || '');
         return html`
             <p class="section-title">${this.i18n.t('entity_merge.pick_base')}</p>
+            ${typesDiffer
+                ? html`<p class="type-hint">${this.i18n.t('entity_merge.type_mismatch_hint')}</p>`
+                : ''}
             <div class="pair-row">
                 <button
                     type="button"

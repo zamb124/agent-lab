@@ -8,6 +8,7 @@
 from .agent_session_tools import ask_user, final_answer, finish, reason, self_check
 from .docx_template import fill_docx_template
 from .files import create_file, read_file
+from .lara_crm import crm_analyze_note_text, crm_create_note, push_embed_blocks
 from .math_tools import calculator
 from .scheduling import (
     cancel_scheduled_task,
@@ -20,12 +21,15 @@ from .scheduling import (
 __all__ = [
     "ask_user",
     "calculator",
+    "crm_analyze_note_text",
+    "crm_create_note",
     "cancel_scheduled_task",
     "create_file",
     "fill_docx_template",
     "final_answer",
     "finish",
     "list_scheduled_tasks",
+    "push_embed_blocks",
     "read_file",
     "reason",
     "self_check",

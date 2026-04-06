@@ -53,8 +53,15 @@ async def analyze_text_with_ai_task(
     namespace: str,
     auth_token: Optional[str],
     user_id: str,
+    interface_language: str,
 ) -> dict[str, Any]:
-    _set_crm_context(company_id, namespace, auth_token, user_id)
+    _set_crm_context(
+        company_id,
+        namespace,
+        auth_token,
+        user_id,
+        interface_language=interface_language,
+    )
     try:
         request = AIAnalyzeRequest.model_validate(request_payload)
     except ValidationError as exc:

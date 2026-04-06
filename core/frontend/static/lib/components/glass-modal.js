@@ -24,6 +24,8 @@ export class GlassModal extends PlatformElement {
         _isDragging: { type: Boolean, state: true },
         _position: { type: Object, state: true },
         _panelEnterActive: { type: Boolean, state: true },
+        hideHeaderClose: { type: Boolean },
+        headerSavePrimary: { type: Boolean },
     };
 
     static styles = [
@@ -287,6 +289,26 @@ export class GlassModal extends PlatformElement {
 
             .header-btn platform-icon {
                 display: flex;
+            }
+
+            .header-btn.header-save-btn--primary {
+                background: var(--crm-button-primary-bg, var(--platform-btn-primary-bg, #6366f1));
+                color: var(--crm-button-primary-text, var(--platform-btn-primary-text, #ffffff));
+            }
+
+            .header-btn.header-save-btn--primary:hover:not(:disabled) {
+                background: var(
+                    --crm-button-primary-hover,
+                    var(--platform-btn-primary-hover, #4f46e5)
+                );
+                color: var(--crm-button-primary-text, var(--platform-btn-primary-text, #ffffff));
+                transform: scale(1.08);
+            }
+
+            .header-btn.header-save-btn--primary:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+                transform: none;
             }
 
             .modal-content {
@@ -870,10 +892,11 @@ export class GlassModal extends PlatformElement {
         if (!title) {
             throw new Error('GlassModal._renderHeaderSaveIcon: title is required');
         }
+        const saveClass = this.headerSavePrimary ? 'header-save-btn--primary' : '';
         return html`
             <button
                 type="button"
-                class="header-btn header-save-btn"
+                class="header-btn header-save-btn ${saveClass}"
                 title=${title}
                 aria-label=${title}
                 ?disabled=${disabled}
@@ -956,13 +979,17 @@ export class GlassModal extends PlatformElement {
                                     size="16"
                                 ></platform-icon>
                             </button>
-                            <button
-                                class="header-btn"
-                                @click=${() => this.close()}
-                                title=${tm('modal.close')}
-                            >
-                                <platform-icon name="close" size="16"></platform-icon>
-                            </button>
+                            ${this.hideHeaderClose
+                                ? ''
+                                : html`
+                                      <button
+                                          class="header-btn"
+                                          @click=${() => this.close()}
+                                          title=${tm('modal.close')}
+                                      >
+                                          <platform-icon name="close" size="16"></platform-icon>
+                                      </button>
+                                  `}
                         </div>
                     </div>
 

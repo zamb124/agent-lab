@@ -439,3 +439,90 @@ class TestKnowledgeImportE2E:
         assert chunk_marker in blob
         assert task_name in blob
         await rollback_knowledge_import(crm_client, auth_headers_system, import_id)
+
+    @pytest.mark.asyncio
+    async def test_graph_mode_meeting_stored_as_note_for_notes_ui(
+        self,
+        crm_client,
+        crm_worker,
+        unique_id,
+        auth_headers_system,
+        mock_llm_redis,
+    ) -> None:
+        ns = f"g_{unique_id}"
+        chunk_marker = f"KN_E2E_MEET_NOTE_{unique_id}"
+        note_title = f"Заметка контейнер {unique_id}"
+        meeting_name = f"Встреча E2E {unique_id}"
+        await mock_llm_redis(
+            [
+                {
+                    "type": "text",
+                    "content": json.dumps(
+                        {
+                            "note": {
+                                "entity_type": "note",
+                                "name": note_title,
+                                "description": f"Текст чанка {chunk_marker}",
+                            },
+                            "entities": [
+                                {
+                                    "entity_type": "meeting",
+                                    "name": meeting_name,
+                                    "description": "Онлайн звонок",
+                                    "attributes": {"origin": "knowledge_import"},
+                                },
+                            ],
+                            "relationships": [
+                                {
+                                    "source_type": "note",
+                                    "source_name": note_title,
+                                    "target_type": "meeting",
+                                    "target_name": meeting_name,
+                                    "relationship_type": "mentions",
+                                    "weight": 1.0,
+                                },
+                            ],
+                            "metadata": _META,
+                        }
+                    ),
+                }
+            ]
+        )
+        body = {
+            "namespace": ns,
+            "mode": "graph",
+            "source_text": f"Контент импорта. {chunk_marker}",
+            "extract_entity_types": ["meeting"],
+            "split_by_headings": False,
+            "chunk_max_chars": 50_000,
+        }
+        response = await crm_client.post(
+            "/crm/api/v1/knowledge-imports",
+            json=body,
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200, response.text
+        import_id = response.json()["import_id"]
+        row = await wait_knowledge_import_terminal(
+            crm_client,
+            auth_headers_system,
+            import_id,
+        )
+        assert row.get("status") == "completed"
+        list_r = await crm_client.get(
+            "/crm/api/v1/entities/",
+            params={
+                "namespace": ns,
+                "entity_type": "note",
+                "entity_subtype": "meeting",
+                "limit": 50,
+            },
+            headers=auth_headers_system,
+        )
+        assert list_r.status_code == 200, list_r.text
+        items = list_r.json()
+        assert any(
+            (e.get("name") or "") == meeting_name and e.get("entity_type") == "note"
+            for e in items
+        ), items
+        await rollback_knowledge_import(crm_client, auth_headers_system, import_id)

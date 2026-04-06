@@ -312,6 +312,15 @@ export class EntitiesPage extends PlatformElement {
                 margin-top: auto;
             }
 
+            .card-footer-end {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: 10px;
+                flex-shrink: 0;
+                margin-left: auto;
+            }
+
             .card-type-badge {
                 display: inline-flex;
                 align-items: center;
@@ -1130,7 +1139,7 @@ export class EntitiesPage extends PlatformElement {
             this._mergeDragSourceId &&
             this._mergeDragSourceId !== eid;
 
-        const showHeaderEnd = !this._isMobile || showDelete;
+        const showHeaderEnd = !this._isMobile;
 
         return html`
             <article
@@ -1148,37 +1157,19 @@ export class EntitiesPage extends PlatformElement {
                     ${showHeaderEnd
                         ? html`
                             <div class="card-header-end">
-                                ${!this._isMobile
-                                    ? html`
-                                        <div
-                                            class="entity-card-drag-handle"
-                                            draggable="true"
-                                            title=${this.i18n.t('entities_page.drag_merge_handle')}
-                                            role="button"
-                                            tabindex="0"
-                                            aria-label=${this.i18n.t('entities_page.drag_merge_handle')}
-                                            @dragstart=${(e) => this._onMergeCardDragStart(e, eid)}
-                                            @dragend=${this._onMergeCardDragEnd}
-                                            @click=${(e) => e.stopPropagation()}
-                                        >
-                                            <platform-icon name="drag-handle" size="18" ?filled=${true}></platform-icon>
-                                        </div>
-                                    `
-                                    : ''}
-                                ${showDelete
-                                    ? html`
-                                        <button
-                                            type="button"
-                                            class="card-delete-btn"
-                                            draggable="false"
-                                            title=${this.i18n.t('entities_page.delete_entity_tooltip')}
-                                            aria-label=${this.i18n.t('entities_page.delete_entity_tooltip')}
-                                            @click=${(e) => this._onDeleteEntityFromList(e, entity)}
-                                        >
-                                            <platform-icon name="trash" size="16"></platform-icon>
-                                        </button>
-                                    `
-                                    : ''}
+                                <div
+                                    class="entity-card-drag-handle"
+                                    draggable="true"
+                                    title=${this.i18n.t('entities_page.drag_merge_handle')}
+                                    role="button"
+                                    tabindex="0"
+                                    aria-label=${this.i18n.t('entities_page.drag_merge_handle')}
+                                    @dragstart=${(e) => this._onMergeCardDragStart(e, eid)}
+                                    @dragend=${this._onMergeCardDragEnd}
+                                    @click=${(e) => e.stopPropagation()}
+                                >
+                                    <platform-icon name="drag-handle" size="18" ?filled=${true}></platform-icon>
+                                </div>
                             </div>
                         `
                         : ''}
@@ -1193,7 +1184,23 @@ export class EntitiesPage extends PlatformElement {
                 ` : ''}
                 <div class="card-footer">
                     <span class="card-type-badge" style="background: ${bgColor}; color: ${typeConfig.color};">${typeConfig.label}</span>
-                    <span class="card-meta">${this._formatDate(entity.created_at)}</span>
+                    <div class="card-footer-end">
+                        <span class="card-meta">${this._formatDate(entity.created_at)}</span>
+                        ${showDelete
+                            ? html`
+                                <button
+                                    type="button"
+                                    class="card-delete-btn"
+                                    draggable="false"
+                                    title=${this.i18n.t('entities_page.delete_entity_tooltip')}
+                                    aria-label=${this.i18n.t('entities_page.delete_entity_tooltip')}
+                                    @click=${(e) => this._onDeleteEntityFromList(e, entity)}
+                                >
+                                    <platform-icon name="trash" size="16"></platform-icon>
+                                </button>
+                            `
+                            : ''}
+                    </div>
                 </div>
             </article>
         `;

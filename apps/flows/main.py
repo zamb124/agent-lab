@@ -30,6 +30,13 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# CORS для A2A/embed с другого порта (CRM :8003 → flows :8001): credentials несовместимы с Allow-Origin: *.
+_FLOWS_DEV_CORS_ORIGIN_REGEX = (
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    r"|"
+    r"^https?://([a-z0-9-]+\.)*lvh\.me(:\d+)?$"
+)
+
 
 async def _build_scheduler_auth_context(container: object, trace_id: str, session_id: str) -> Context:
     company, user = await ensure_system_admin_membership(container)
@@ -201,6 +208,11 @@ async def on_shutdown(app: FastAPI, container):
         logger.error(f"Error closing Redis: {e}")
 
 
+_flow_settings = get_settings()
+_cors_regex = _flow_settings.cors_allow_origin_regex
+if _cors_regex is None and _flow_settings.server.debug and os.getenv("TESTING") != "true":
+    _cors_regex = _FLOWS_DEV_CORS_ORIGIN_REGEX
+
 app = create_service_app(
     service_name="flows",
     settings_class=FlowSettings,
@@ -224,7 +236,8 @@ app = create_service_app(
             "https_only": False,
         }),
     ],
-    cors_origins=["*"],
+    cors_origins=list(_flow_settings.cors_allow_origins),
+    cors_allow_origin_regex=_cors_regex,
     api_version="v1",
     title="Humanitec Flows",
     description="Сервис flows: конфигурации, runtime и A2A",
