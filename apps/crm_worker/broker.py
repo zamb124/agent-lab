@@ -11,6 +11,7 @@ from core.config import get_settings
 from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.logging import get_logger, setup_logging
+from core.files.processors import initialize_default_processors
 from core.scheduler import get_schedule_source
 from core.websocket.manager import notification_manager
 from core.tasks.broker import (
@@ -55,6 +56,8 @@ async def crm_worker_startup(state: TaskiqState) -> None:
     setup_logging(service_name="crm_worker")
     settings = get_settings()
     container = get_crm_container()
+    initialize_default_processors(container.file_repository)
+    logger.info("CRM Worker: FileReader/processors для file_id и S3 (knowledge import, вложения)")
     set_billing_service(container.billing_service)
     logger.info("CRM Worker: BillingService инициализирован")
     if settings.tracing.enabled:

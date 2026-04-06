@@ -197,6 +197,8 @@
     "connecting": "Подключение…",
     "participants_abbr": "{{n}} уч.",
     "copy_link_title": "Скопировать ссылку на звонок",
+    "copy_link_bad_response": "Сервер не вернул ссылку на звонок.",
+    "copy_link_clipboard_failed": "Не удалось скопировать ссылку. Выделите и скопируйте её вручную.",
     "chat_panel_title": "Чат канала",
     "chat_hide": "Скрыть чат",
     "chat_show": "Показать чат",

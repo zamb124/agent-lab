@@ -806,6 +806,7 @@ export class PlatformUser extends PlatformElement {
                 width: 100%;
                 box-sizing: border-box;
                 padding: var(--space-3);
+                color: var(--text-secondary);
                 background: var(--glass-solid-subtle);
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--glass-border-subtle);
@@ -892,8 +893,8 @@ export class PlatformUser extends PlatformElement {
 
             .user-name {
                 font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
+                font-weight: var(--font-medium);
+                color: inherit;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -901,6 +902,7 @@ export class PlatformUser extends PlatformElement {
 
             .user-email {
                 font-size: var(--text-xs);
+                font-weight: var(--font-normal);
                 color: var(--text-tertiary);
                 white-space: nowrap;
                 overflow: hidden;
@@ -955,14 +957,17 @@ export class PlatformUser extends PlatformElement {
                 background: transparent;
                 border: none;
                 cursor: pointer;
+                font-family: inherit;
                 font-size: var(--text-sm);
-                color: var(--text-primary);
-                transition: background var(--duration-fast);
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
+                transition: background var(--duration-fast), color var(--duration-fast);
                 text-align: left;
             }
 
             .menu-item:hover {
                 background: var(--hover-color);
+                color: var(--text-primary);
             }
 
             .menu-item.danger {
@@ -971,6 +976,11 @@ export class PlatformUser extends PlatformElement {
 
             .menu-item.danger:hover {
                 background: var(--error-bg);
+                color: var(--error);
+            }
+
+            .menu-item.danger:hover .menu-icon {
+                color: var(--error);
             }
 
             .menu-item.company-selector {
@@ -993,6 +1003,12 @@ export class PlatformUser extends PlatformElement {
 
             .menu-item.apps-item:hover {
                 background: var(--accent-subtle);
+                color: var(--accent);
+            }
+
+            .menu-item.apps-item:hover .menu-icon,
+            .menu-item.apps-item:hover .expand-icon {
+                color: var(--accent);
             }
 
             .apps-menu-logo {
@@ -1008,13 +1024,17 @@ export class PlatformUser extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                color: var(--text-tertiary);
+            }
+
+            .menu-item:hover .menu-icon {
                 color: var(--text-secondary);
             }
 
             .company-name {
                 font-size: var(--text-sm);
-                color: var(--text-primary);
-                font-weight: var(--font-medium);
+                color: inherit;
+                font-weight: inherit;
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-1);
@@ -1071,13 +1091,16 @@ export class PlatformUser extends PlatformElement {
                 background: var(--glass-solid-medium);
                 text-align: left;
                 cursor: pointer;
-                color: var(--text-primary);
+                font-family: inherit;
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
                 transition: all var(--duration-fast);
             }
 
             .app-card:hover {
                 border-color: var(--border-default);
                 background: var(--glass-solid-strong);
+                color: var(--text-primary);
                 transform: translateY(-1px);
             }
 
@@ -1101,14 +1124,19 @@ export class PlatformUser extends PlatformElement {
 
             .app-card-name {
                 font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
+                font-weight: var(--font-medium);
+                color: inherit;
             }
 
             .app-card-description {
                 font-size: var(--text-xs);
-                color: var(--text-secondary);
+                font-weight: var(--font-normal);
+                color: var(--text-tertiary);
                 line-height: 1.4;
+            }
+
+            .app-card:hover .app-card-description {
+                color: var(--text-secondary);
             }
 
             @media (min-width: 380px) {
@@ -1126,8 +1154,10 @@ export class PlatformUser extends PlatformElement {
                 border: 1px solid transparent;
                 border-radius: var(--radius-md);
                 cursor: pointer;
+                font-family: inherit;
                 font-size: var(--text-sm);
-                color: var(--text-primary);
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
                 transition: all var(--duration-fast);
             }
 
@@ -1147,7 +1177,7 @@ export class PlatformUser extends PlatformElement {
                 background: var(--accent-subtle);
                 border-color: var(--accent);
                 color: var(--accent);
-                font-weight: var(--font-semibold);
+                font-weight: var(--font-medium);
             }
 
             .check-icon {
@@ -1168,7 +1198,8 @@ export class PlatformUser extends PlatformElement {
             .lang-row-label {
                 flex: 1;
                 font-size: var(--text-sm);
-                color: var(--text-primary);
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
                 min-width: 0;
             }
 
@@ -1186,13 +1217,14 @@ export class PlatformUser extends PlatformElement {
                 cursor: pointer;
                 font-size: var(--text-xs);
                 font-family: inherit;
+                font-weight: var(--font-medium);
                 color: var(--text-tertiary);
                 transition: color var(--duration-fast);
             }
 
             .lang-option.active {
-                color: var(--text-primary);
-                font-weight: var(--font-semibold);
+                color: var(--text-secondary);
+                font-weight: var(--font-medium);
             }
 
             .lang-option:hover {

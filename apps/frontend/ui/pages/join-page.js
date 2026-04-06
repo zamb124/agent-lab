@@ -2,7 +2,7 @@
  * Страница принятия приглашения по ссылке.
  *
  * Сценарии:
- *  - Не авторизован: показывает кнопки OAuth; после логина возвращает на эту же страницу с token
+ *  - Не авторизован: показывает кнопки OAuth; после логина возвращает на эту же страницу с ?c=
  *  - Авторизован: сразу вызывает accept
  *  - Уже участник: сообщает об этом
  *  - Токен истёк / использован / поддельный: понятная ошибка
@@ -204,7 +204,7 @@ export class JoinPage extends PlatformElement {
         this._authChecked = false;
         this._isAuthed = false;
         this._showAuthModal = false;
-        this._token = new URLSearchParams(window.location.search).get('token');
+        this._shortCode = new URLSearchParams(window.location.search).get('c');
     }
 
     async connectedCallback() {
@@ -233,7 +233,7 @@ export class JoinPage extends PlatformElement {
     }
 
     async _init() {
-        if (!this._token) {
+        if (!this._shortCode) {
             this._state = 'no-token';
             return;
         }
@@ -259,7 +259,7 @@ export class JoinPage extends PlatformElement {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ token: this._token }),
+                body: JSON.stringify({ short_code: this._shortCode }),
             });
 
             const data = await resp.json();
@@ -296,7 +296,7 @@ export class JoinPage extends PlatformElement {
 
     async _startOAuth(provider) {
         this._loading = true;
-        const returnPath = `/join?token=${encodeURIComponent(this._token)}`;
+        const returnPath = `/join?c=${encodeURIComponent(this._shortCode)}`;
         try {
             const resp = await fetch(
                 `${this._baseUrl}/api/auth/login/${provider}?return_path=${encodeURIComponent(returnPath)}`,

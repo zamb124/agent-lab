@@ -358,6 +358,37 @@ export class GraphPage extends PlatformElement {
                 backdrop-filter: blur(8px);
             }
 
+            .graph-empty-import-cta {
+                position: absolute;
+                z-index: 10;
+                left: 50%;
+                bottom: 72px;
+                transform: translateX(-50%);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 16px;
+                border-radius: 12px;
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                font-size: 13px;
+                max-width: min(360px, 90vw);
+                text-align: center;
+                backdrop-filter: blur(8px);
+            }
+
+            .graph-empty-import-cta button {
+                border: 1px solid var(--crm-button-primary-bg);
+                background: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
+                border-radius: 8px;
+                padding: 8px 14px;
+                font-size: 13px;
+                cursor: pointer;
+            }
+
             .advanced-drawer {
                 position: absolute;
                 right: 16px;
@@ -683,6 +714,14 @@ export class GraphPage extends PlatformElement {
         await this._loadGraphData();
     }
 
+    _goToKnowledgeImport() {
+        const c = CRMStore.state.namespaces.current;
+        const name = typeof c === 'string' && c.trim()
+            ? c.trim()
+            : (c && typeof c === 'object' && typeof c.name === 'string' && c.name.trim() ? c.name.trim() : 'default');
+        CRMStore.setSettingsNamespaceSelection(name);
+        CRMStore.setCurrentView('namespace_imports');
+    }
 
     disconnectedCallback() {
         super.disconnectedCallback();
@@ -2121,6 +2160,15 @@ export class GraphPage extends PlatformElement {
 
                     ${visibleGraph.isFiltered && visibleGraph.isEmpty ? html`
                         <div class="empty-search-state">${this.i18n.t('graph_page.empty_search')}</div>
+                    ` : ''}
+
+                    ${!visibleGraph.isFiltered && visibleGraph.isEmpty ? html`
+                        <div class="graph-empty-import-cta">
+                            <span>${this.i18n.t('graph_page.empty_import_hint')}</span>
+                            <button type="button" @click=${this._goToKnowledgeImport}>
+                                ${this.i18n.t('graph_page.empty_import_cta')}
+                            </button>
+                        </div>
                     ` : ''}
 
                     <graph-context-menu

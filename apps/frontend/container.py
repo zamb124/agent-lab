@@ -53,6 +53,14 @@ class FrontendContainer(BaseContainer):
         from core.db.repositories.usage_repository import UsageRepository
         return UsageRepository(storage=self.shared_storage)
 
+    @lazy
+    def short_link_service(self):
+        from core.short_links import ShortLinkService
+
+        if self.shared_db_url is None or self.shared_db_url == "":
+            raise ValueError("shared_db_url не задан для ShortLinkService")
+        return ShortLinkService(db_url=self.shared_db_url)
+
 
 # === Глобальный контейнер ===
 

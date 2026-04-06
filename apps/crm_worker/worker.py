@@ -15,5 +15,6 @@ from apps.crm_worker.broker import broker as worker_app
 
 import apps.crm_worker.tasks.analysis_tasks  # noqa: F401, E402
 import apps.crm_worker.tasks.daily_summary_tasks  # noqa: F401, E402
+import apps.crm_worker.tasks.knowledge_import_tasks  # noqa: F401, E402
 
 __all__ = ["worker_app"]

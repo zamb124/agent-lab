@@ -115,6 +115,26 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def list_by_entity_ids_ordered(
+        self,
+        entity_ids: List[str],
+        *,
+        company_id: Optional[str] = None,
+    ) -> List[CRMEntity]:
+        cid = company_id or self._get_company_id()
+        normalized = [str(eid).strip() for eid in entity_ids if str(eid).strip()]
+        if not normalized:
+            return []
+        async with self._db.session() as session:
+            stmt = select(CRMEntity).where(
+                CRMEntity.company_id == cid,
+                CRMEntity.entity_id.in_(normalized),
+            )
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
+        by_id = {e.entity_id: e for e in rows}
+        return [by_id[eid] for eid in normalized if eid in by_id]
+
     async def update(self, entity: CRMEntity) -> CRMEntity:
         """Обновляет entity в crm_entities + переиндексирует в vector_documents."""
         async with self._db.session() as session:
@@ -448,17 +468,27 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 search_span.set_attribute("platform.crm.search_hits_raw", 0)
                 return []
 
-            score_by_document_id: Dict[str, float] = {}
+            resolved_order: List[str] = []
+            score_by_resolved: Dict[str, float] = {}
             for item in search_results:
-                if item.document_id not in score_by_document_id:
-                    score_by_document_id[item.document_id] = item.score
+                meta = item.metadata or {}
+                raw_parent = meta.get("entity_id")
+                if raw_parent is not None and str(raw_parent).strip() != "":
+                    resolved_id = str(raw_parent).strip()
+                else:
+                    resolved_id = item.document_id
+                if resolved_id not in score_by_resolved:
+                    score_by_resolved[resolved_id] = item.score
+                    resolved_order.append(resolved_id)
+                elif item.score > score_by_resolved[resolved_id]:
+                    score_by_resolved[resolved_id] = item.score
 
-            ordered_document_ids = list(score_by_document_id.keys())
+            ordered_entity_ids = resolved_order
 
             async with self._db.session() as session:
                 stmt = select(CRMEntity).where(
                     CRMEntity.company_id == cid,
-                    CRMEntity.entity_id.in_(ordered_document_ids),
+                    CRMEntity.entity_id.in_(ordered_entity_ids),
                 )
                 if entity_type:
                     stmt = stmt.where(CRMEntity.entity_type == entity_type)
@@ -473,11 +503,11 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
             entities_by_id = {entity.entity_id: entity for entity in matched_entities}
             scored_entities: List[Tuple[CRMEntity, float]] = []
-            for document_id in ordered_document_ids:
+            for document_id in ordered_entity_ids:
                 entity = entities_by_id.get(document_id)
                 if entity is None:
                     continue
-                score = score_by_document_id[document_id]
+                score = score_by_resolved[document_id]
                 normalized_similarity = max(0.0, min(1.0, float(score)))
                 scored_entities.append((entity, normalized_similarity))
                 if len(scored_entities) >= limit:

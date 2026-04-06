@@ -11,6 +11,7 @@ from starlette.requests import Request
 # Префиксы, для которых нельзя подменять ответ SPA (API и служебные пути)
 SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/api/",
+    "/l/",
     "/flows/",
     "/crm/",
     "/rag/",
@@ -96,6 +97,7 @@ ROUTE_RULES: List[RouteRule] = [
     # Страница входа (redirect после истечения сессии: redirectToAuth() на apex-домене)
     RouteRule("/login", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/login", auth_required=False, context_type="anonymous"),
+    RouteRule("/l/*", auth_required=False, context_type="anonymous"),
     
     # Страницы продуктов (публичный доступ)
     RouteRule("/products/*", auth_required=False, context_type="anonymous"),
@@ -354,6 +356,7 @@ ROUTE_RULES: List[RouteRule] = [
 NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/select-company",
     "/join",
+    "/l/*",
     "/api/companies/check-slug",
     "/api/companies/me",
     "/api/companies",

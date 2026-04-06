@@ -554,6 +554,59 @@ export class CRMAPIService extends BaseService {
         return this.post(`/namespaces/${namespace}/grants/public`);
     }
 
+    // === KNOWLEDGE IMPORT ===
+
+    async uploadFile(file) {
+        if (!file) {
+            throw new Error('File is required');
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        return this.post('/files/', formData);
+    }
+
+    async listKnowledgeImports(namespace, limit = 50) {
+        if (!namespace || typeof namespace !== 'string') {
+            throw new Error('Namespace is required');
+        }
+        return this.get('/knowledge-imports', { namespace, limit });
+    }
+
+    async startKnowledgeImport(body) {
+        if (!body || typeof body !== 'object') {
+            throw new Error('Body is required');
+        }
+        return this.post('/knowledge-imports', body);
+    }
+
+    async cancelKnowledgeImport(importId) {
+        if (!importId) {
+            throw new Error('Import ID is required');
+        }
+        return this.post(`/knowledge-imports/${importId}/cancel`, {});
+    }
+
+    async rollbackKnowledgeImport(importId) {
+        if (!importId) {
+            throw new Error('Import ID is required');
+        }
+        return this.post(`/knowledge-imports/${importId}/rollback`, {});
+    }
+
+    async getKnowledgeImportCreatedEntities(importId) {
+        if (!importId) {
+            throw new Error('Import ID is required');
+        }
+        return this.get(`/knowledge-imports/${importId}/created-entities`, {});
+    }
+
+    async completeKnowledgeImportReview(importId) {
+        if (!importId) {
+            throw new Error('Import ID is required');
+        }
+        return this.post(`/knowledge-imports/${importId}/review-complete`, {});
+    }
+
     // === ATTACHMENTS ===
 
     async getEntityAttachments(entityId) {

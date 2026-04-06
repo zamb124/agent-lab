@@ -91,6 +91,12 @@ export class SettingsHubPage extends PlatformElement {
                 title: this.i18n.t('settings_hub.card_spaces_title'),
                 description: this.i18n.t('settings_hub.card_spaces_description'),
             },
+            {
+                id: 'namespace_imports',
+                icon: 'import',
+                title: this.i18n.t('settings_hub.card_imports_title'),
+                description: this.i18n.t('settings_hub.card_imports_description'),
+            },
         ];
     }
 

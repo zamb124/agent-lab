@@ -197,6 +197,8 @@
     "connecting": "Connecting…",
     "participants_abbr": "{{n}} ppl",
     "copy_link_title": "Copy call link",
+    "copy_link_bad_response": "Server did not return a call link.",
+    "copy_link_clipboard_failed": "Could not copy the link. Select and copy it manually.",
     "chat_panel_title": "Channel chat",
     "chat_hide": "Hide chat",
     "chat_show": "Show chat",

@@ -61,7 +61,7 @@ async def test_platform_calendar_sync_meeting_creates_sync_link_and_delete_remov
     assert token is not None and token != ""
     assert metadata.get("sync_meeting") == "1"
     deep_link = created.get("deep_link")
-    assert isinstance(deep_link, str) and "/sync/join/" in deep_link
+    assert isinstance(deep_link, str) and "/l/" in deep_link
 
     try:
         async with AsyncClient(timeout=30.0) as http:

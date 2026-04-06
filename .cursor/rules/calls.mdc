@@ -96,6 +96,7 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 - Всегда SFU режим (P2P для гостей не поддерживается).
 - `POST /calls/links` с **`call_id`** (оверлей «Скопировать ссылку»): ссылка сразу привязана к текущему `SyncCall` — гость в той же LiveKit-комнате, что и чат (`call-{uuid}`), без отдельной `link-*`.
 - Без `call_id`: первый вход по ссылке создаёт новый `SyncCall` и комнату `link-{tokenPrefix}`; последующие по той же ссылке переиспользуют.
+- Публичный URL для календаря и UI: **`join_url`** в ответе API — `{platform_public_base_url}/l/{code}`; резолв на frontend (`GET /l/{code}`) → редирект на `/sync/join/{link_token}`. Хранение: `platform_short_links` (kind `sync_call_join`), `ShortLinkService` в `core/short_links/`; при удалении ссылки звонка — удаление short link по `link_token`.
 - Страница: `/sync/join/{token}` → `call-join.html` (публичный маршрут в `main.py`).
 - Route config: `/sync/api/v1/calls/join/*` → `auth_required=False`.
 

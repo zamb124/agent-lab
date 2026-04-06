@@ -25,6 +25,7 @@ LitElement (Lit)
             └── GlassModal (модальные окна; тот же класс экспортируется как `PlatformModal` из `glass-modal.js`)
                     └── GlassFormModal (формы в модалках)
                     └── PlatformLightModal (`glass-light-modal.js`) — light DOM (Drawflow и т.п.)
+                    └── FileTextPreviewModal (`file-text-preview-modal.js`) — превью текста из файла: `GET {apiBaseUrl}/files/{file_id}/preview`, i18n `platform.file_preview_modal.*` (третий аргумент `I18nNs.PLATFORM`), события `file-text-preview-confirm` / `file-text-preview-cancel`
 ```
 
 **Все компоненты — от `PlatformElement`; модальные окна — от `GlassModal` / `PlatformModal` или `PlatformFormModal`, либо `PlatformLightModal` когда нужен light DOM.** Drawer и контекстное меню (не полноценное модальное окно) остаются на `PlatformElement` со shared-стилями.

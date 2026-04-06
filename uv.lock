@@ -91,6 +91,7 @@ core = [
     { name = "redis" },
     { name = "reportlab" },
     { name = "sqlalchemy" },
+    { name = "unstructured", extra = ["xlsx"] },
     { name = "uvicorn" },
 ]
 crm = [
@@ -122,7 +123,6 @@ rag = [
 rag-worker = [
     { name = "beautifulsoup4" },
     { name = "tiktoken" },
-    { name = "unstructured", extra = ["xlsx"] },
 ]
 sync = [
     { name = "livekit-api" },
@@ -192,6 +192,7 @@ core = [
     { name = "redis", specifier = ">=7.0.0" },
     { name = "reportlab", specifier = ">=4.4.7" },
     { name = "sqlalchemy", extras = ["asyncpg"], specifier = ">=2.0.23" },
+    { name = "unstructured", extras = ["xlsx"], specifier = ">=0.16.0" },
     { name = "uvicorn", specifier = ">=0.37.0" },
 ]
 crm = [{ name = "tiktoken", specifier = ">=0.9.0" }]
@@ -219,7 +220,6 @@ rag = [{ name = "tiktoken", specifier = ">=0.9.0" }]
 rag-worker = [
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "tiktoken", specifier = ">=0.9.0" },
-    { name = "unstructured", extras = ["xlsx"], specifier = ">=0.16.0" },
 ]
 sync = [
     { name = "livekit-api", specifier = ">=1.1.0" },

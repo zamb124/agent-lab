@@ -6,7 +6,7 @@ API для приглашений в компанию по ссылке.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
-from core.utils.domain import extract_base_domain, get_cookie_domain, is_local
+from core.utils.domain import get_cookie_domain
 from core.utils.invite_tokens import (
     INVITE_EXPIRES_SECONDS,
     burn_invite_token,
@@ -42,7 +42,7 @@ class GenerateInviteResponse(BaseModel):
 
 
 class AcceptInviteRequest(BaseModel):
-    token: str
+    short_code: str
 
 
 class AcceptInviteResponse(BaseModel):
@@ -94,11 +94,9 @@ async def generate_invite(
     svc = get_invite_token_service()
     token, _ = svc.create(company_id=company.company_id, role=body.role)
 
-    raw_host = request.headers.get("host", "").strip()
-    scheme = "https" if request.headers.get("x-forwarded-proto") == "https" else "http"
-    # Apex без slug: Universal Links /join и одна AASA (см. invites.mdc).
-    netloc = raw_host if is_local(raw_host) else extract_base_domain(raw_host)
-    invite_url = f"{scheme}://{netloc}/join?token={token}"
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=INVITE_EXPIRES_SECONDS)
+    short = container.short_link_service
+    invite_url = await short.mint_company_invite(token, expires_at)
 
     logger.info(
         f"Сгенерирован инвайт для компании {company.company_id}, "
@@ -126,9 +124,18 @@ async def accept_invite(
     """
     user = _require_user(request)
 
+    code = body.short_code.strip()
+    if code == "":
+        raise HTTPException(status_code=400, detail="Код приглашения не задан")
+
+    short = container.short_link_service
+    jwt_str = await short.get_invite_jwt_by_code(code)
+    if jwt_str is None:
+        raise HTTPException(status_code=404, detail="Ссылка-приглашение не найдена или истекла")
+
     svc = get_invite_token_service()
     try:
-        invite = svc.validate(body.token)
+        invite = svc.validate(jwt_str)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=410, detail="Ссылка-приглашение устарела")
     except (jwt.InvalidTokenError, ValueError):
@@ -175,6 +182,8 @@ async def accept_invite(
         f"Пользователь {user.user_id} вступил в компанию {company.company_id} "
         f"с ролью {invite.role}"
     )
+
+    await short.delete_by_code(code)
 
     # Перевыпускаем сессионный токен с новым company_id
     token_service = get_token_service()

@@ -195,6 +195,16 @@ export class SpacesPage extends PlatformElement {
         });
     }
 
+    _openNamespaceImports() {
+        const name = this._selectedNamespaceName;
+        if (!name || typeof name !== 'string') {
+            this.warning(this.i18n.t('spaces_page.imports_pick_space'));
+            return;
+        }
+        CRMStore.setSettingsNamespaceSelection(name.trim());
+        CRMStore.setCurrentView('namespace_imports');
+    }
+
     async _selectNamespaceForEditing(namespaceName) {
         try {
             if (!namespaceName || typeof namespaceName !== 'string') {
@@ -449,6 +459,10 @@ export class SpacesPage extends PlatformElement {
                             </div>
                             <div class="hero-subtitle">${this.i18n.t('spaces_page.hero_subtitle')}</div>
                         </div>
+                        <button type="button" class="save-btn soft-btn" @click=${this._openNamespaceImports}>
+                            <platform-icon name="database" size="14"></platform-icon>
+                            ${this.i18n.t('spaces_page.imports_nav')}
+                        </button>
                     </div>
                     <div class="namespace-card-grid">
                         ${this._namespaces.map((namespace) => html`

@@ -331,15 +331,13 @@ async def calendar_sync_meeting_reminder_tick(
     for event in events:
         action_url = event.deep_link
         if action_url is None or action_url == "":
-            base = settings.server.platform_public_base_url
-            if base is None or base.strip() == "":
-                raise ValueError(
-                    "server.platform_public_base_url нужен, если у события нет deep_link для напоминания Sync."
-                )
             token = event.metadata.get("sync_link_token")
             if not token:
                 raise ValueError(f"У события {event.event_id} нет sync_link_token в metadata.")
-            action_url = f"{base.strip().rstrip('/')}/sync/join/{token}"
+            from core.short_links import ShortLinkService
+
+            short = ShortLinkService(db_url=settings.database.shared_url)
+            action_url = await short.mint_sync_call_join(token, event.end_at)
         recipients = await calendar_service.sync_meeting_reminder_recipient_user_ids(event)
         for user_id in recipients:
             await notify_user(

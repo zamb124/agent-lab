@@ -200,6 +200,22 @@ class CRMContainer(BaseContainer):
             access_control=self.access_control_service
         )
 
+    @lazy
+    def knowledge_import_repository(self):
+        from apps.crm.db.repositories.knowledge_import_repository import KnowledgeImportRepository
+
+        return KnowledgeImportRepository(db=self.crm_db)
+
+    @lazy
+    def knowledge_import_service(self):
+        from apps.crm.services.knowledge_import_service import KnowledgeImportService
+
+        return KnowledgeImportService(
+            import_repo=self.knowledge_import_repository,
+            entity_service=self.entity_service,
+            relationship_repo=self.relationship_repository,
+        )
+
 
 # === Глобальный контейнер ===
 

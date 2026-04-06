@@ -19,10 +19,13 @@ from fastapi.responses import Response, StreamingResponse
 
 from core.files.audio_transcode import AudioTranscodeError
 from core.files.http_range import RangeNotSatisfiableError
-from core.files.models import FileRecord, FileResponse
+from core.files.models import FileReadPreviewResponse, FileRecord, FileResponse
 from core.files.processors import FileProcessor
+from core.files.reader.service import FileReadError
 from core.files.s3_client import S3ClientFactory
 from core.files.streaming import stream_s3_file
+
+from .read_preview import build_stored_file_text_preview
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +185,38 @@ def build_file_api_router(
             content=iter([upstream_response.content]),
             media_type=response_content_type,
         )
+
+    @router.get(
+        "/{file_id}/preview",
+        response_model=FileReadPreviewResponse,
+        summary="Превью извлечённого текста файла",
+    )
+    async def get_file_text_preview(file_id: str) -> FileReadPreviewResponse:
+        repo = get_file_repo()
+        file_record = await repo.get(file_id)
+        if file_record is None:
+            raise HTTPException(status_code=404, detail="Файл не найден.")
+
+        is_public = getattr(file_record, "is_public", True)
+        if not is_public:
+            from core.context import get_context
+
+            ctx = get_context()
+            company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+            file_company_id = getattr(file_record, "company_id", None)
+            if company_id != file_company_id:
+                raise HTTPException(status_code=403, detail="Нет доступа к файлу.")
+
+        original_name = getattr(file_record, "original_name", None)
+        if not isinstance(original_name, str):
+            original_name = ""
+        try:
+            return await build_stored_file_text_preview(
+                file_id=file_id,
+                original_name=original_name,
+            )
+        except FileReadError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/{file_id}", response_model=FileResponse, summary="Метаданные файла")
     async def get_file_metadata(file_id: str) -> FileResponse:

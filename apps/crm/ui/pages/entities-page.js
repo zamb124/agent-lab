@@ -347,6 +347,49 @@ export class EntitiesPage extends PlatformElement {
                 gap: var(--space-2);
             }
 
+            .empty.empty-import {
+                gap: var(--space-4);
+                padding: var(--space-6) var(--space-4);
+                max-width: 440px;
+                margin: 0 auto;
+                box-sizing: border-box;
+            }
+
+            .empty-import-text {
+                color: var(--text-secondary);
+                font-size: var(--text-base);
+                line-height: 1.5;
+                margin: 0;
+                text-align: center;
+            }
+
+            .import-wizard-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+                min-height: 40px;
+                border: none;
+                border-radius: var(--radius-full);
+                background: var(--crm-daily-notes-cta-bg);
+                color: var(--text-inverse);
+                font-size: var(--text-sm);
+                font-weight: 500;
+                padding: 0 var(--space-5);
+                cursor: pointer;
+                font-family: inherit;
+                transition: background var(--duration-fast);
+            }
+
+            .import-wizard-btn:hover {
+                background: var(--crm-daily-notes-cta-hover);
+            }
+
+            .import-wizard-btn:focus-visible {
+                outline: 2px solid var(--accent-tertiary);
+                outline-offset: 2px;
+            }
+
             /* === MOBILE === */
 
             .mobile-tabs {
@@ -540,6 +583,7 @@ export class EntitiesPage extends PlatformElement {
         this._mobileTab = 'list';
         this._debounceTimer = null;
         this._entitiesMergeFirstId = '';
+        this._goToImportWizard = this._goToImportWizard.bind(this);
 
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._entities = state.entities.list;
@@ -585,6 +629,15 @@ export class EntitiesPage extends PlatformElement {
         const ns = this._resolveNamespaceName(CRMStore.state.namespaces.current);
         await CRMStore.loadEntityTypes(crmApi, ns || 'default');
         await CRMStore.loadEntities(crmApi);
+    }
+
+    _goToImportWizard() {
+        const c = CRMStore.state.namespaces.current;
+        const name = typeof c === 'string' && c.trim()
+            ? c.trim()
+            : (c && typeof c === 'object' && typeof c.name === 'string' && c.name.trim() ? c.name.trim() : 'default');
+        CRMStore.setSettingsNamespaceSelection(name);
+        CRMStore.setCurrentView('namespace_imports');
     }
 
     _onSearchInput(event) {
@@ -828,10 +881,18 @@ export class EntitiesPage extends PlatformElement {
                         ${this._loading ? html`
                             <div class="empty">${this.i18n.t('loading', {}, 'common')}</div>
                         ` : this._entities.length === 0 ? html`
-                            <div class="empty">
-                                <platform-icon name="database" size="40"></platform-icon>
-                                <span>${this.i18n.t('entities.empty')}</span>
-                                <span style="font-size: var(--text-sm)">${this.i18n.t('entities_page.empty_filters_hint')}</span>
+                            <div class="empty ${!this._hasActiveFilters() ? 'empty-import' : ''}">
+                                ${!this._hasActiveFilters() ? html`
+                                    <p class="empty-import-text">${this.i18n.t('import_wizard_cta.empty_entities_hint')}</p>
+                                    <button class="import-wizard-btn" type="button" @click=${this._goToImportWizard}>
+                                        <platform-icon name="import" size="18"></platform-icon>
+                                        ${this.i18n.t('import_wizard_cta.open_wizard')}
+                                    </button>
+                                ` : html`
+                                    <platform-icon name="database" size="40"></platform-icon>
+                                    <span>${this.i18n.t('entities.empty')}</span>
+                                    <span style="font-size: var(--text-sm)">${this.i18n.t('entities_page.empty_filters_hint')}</span>
+                                `}
                             </div>
                         ` : html`
                             <div class="cards-grid">

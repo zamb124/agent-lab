@@ -544,3 +544,62 @@ class NamespaceTemplateType(Base):
 
     def __repr__(self) -> str:
         return f"<NamespaceTemplateType(template_key='{self.template_key}', type_id='{self.type_id}')>"
+
+
+class CRMKnowledgeImport(Base):
+    """
+    Журнал импорта базы знаний (мастер начальной загрузки): метаданные, прогресс, id для отката.
+    """
+
+    __tablename__ = "crm_knowledge_imports"
+
+    import_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    namespace: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+    extract_entity_types: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True)
+    source_file_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_file_ids: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True)
+    source_text_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    split_by_headings: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    chunk_max_chars: Mapped[int] = mapped_column(Integer, nullable=False, default=50_000)
+
+    taskiq_task_id: Mapped[Optional[str]] = mapped_column(String(220), nullable=True)
+
+    notes_created_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    entities_created_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    relationships_created_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    created_entity_ids: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+    created_relationship_ids: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+    attachment_document_ids: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    chunk_errors: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSONB, nullable=True)
+
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_crm_knowledge_imports_company_ns_status", "company_id", "namespace", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<CRMKnowledgeImport(import_id='{self.import_id}', status='{self.status}')>"

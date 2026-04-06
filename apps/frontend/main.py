@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from apps.frontend.api.auth import router as auth_router
 from apps.frontend.api.companies import router as companies_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
@@ -98,6 +98,15 @@ async def health():
     return {"status": "ok", "service": "frontend"}
 
 
+@app.get("/l/{code}")
+async def resolve_short_link(code: str):
+    container = get_frontend_container()
+    target = await container.short_link_service.resolve_absolute_redirect_url(code.strip())
+    if target is None:
+        raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+    return RedirectResponse(url=target, status_code=303)
+
+
 @app.get("/api/public/legal")
 @app.get("/frontend/api/public/legal")
 async def get_public_legal() -> JSONResponse:
@@ -113,7 +122,7 @@ async def serve_spa(full_path: str = ""):
     # Исключаем API, статику, WebSocket и PWA файлы
     # full_path может начинаться с frontend/ из-за префикса сервиса
     excluded = (
-        "api/", "static/", "ws/",
+        "api/", "static/", "ws/", "l/",
         "documentation/", "documentation",
         "frontend/api/", "frontend/static/", "frontend/ws/",
         "frontend/documentation/", "frontend/documentation",

@@ -15,6 +15,7 @@ from core.db.models.platform import (
     CalendarEventRecord,
     CalendarIntegrationRecord,
     SchedulerTaskRecord,
+    PlatformShortLink,
 )
 from core.db.models.tracing import Spans
 from core.db.models.rag import (
@@ -34,6 +35,7 @@ __all__ = [
     "CalendarEventRecord",
     "CalendarIntegrationRecord",
     "SchedulerTaskRecord",
+    "PlatformShortLink",
     "DocumentProcessingStatus",
     "VectorDocument",
 ]

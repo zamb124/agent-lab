@@ -10,6 +10,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
@@ -1759,11 +1760,17 @@ class CallOverlay extends PlatformElement {
             }),
         });
         if (!res.ok) return;
-        const { join_url } = await res.json();
+        const body = await res.json();
+        const join_url = body.join_url;
+        if (typeof join_url !== 'string' || join_url.trim() === '') {
+            this._mediaSettingsError = this._tp('call_overlay.copy_link_bad_response');
+            this.requestUpdate();
+            return;
+        }
         try {
-            await navigator.clipboard.writeText(join_url);
-        } catch (err) {
-            this._mediaSettingsError = err instanceof Error ? err.message : String(err);
+            await copyTextToClipboard(join_url);
+        } catch {
+            this._mediaSettingsError = this._tp('call_overlay.copy_link_clipboard_failed');
             this.requestUpdate();
             return;
         }

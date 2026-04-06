@@ -38,6 +38,15 @@
       "description": "Your platform home: company settings, billing, and one-click access to every product"
     }
   },
+  "file_preview_modal": {
+    "title": "Text from file",
+    "loading": "Reading file…",
+    "truncated_hint": "Showing an excerpt; the full file is processed on the server during import.",
+    "cancel": "Cancel",
+    "confirm": "Continue",
+    "error_no_file": "No file selected",
+    "error_bad_response": "Invalid server response"
+  },
   "company": {
     "switched": "Company switched",
     "switch_error": "Could not switch company: {{message}}",

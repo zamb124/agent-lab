@@ -30,7 +30,6 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
         "scheduled_start_at": start.isoformat(),
         "scheduled_end_at": end.isoformat(),
         "calendar_member_user_ids": [],
-        "join_url_base": "https://app.test.example.com",
         "call_type": "video",
     }
     create = await sync_client.post(
@@ -42,8 +41,8 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
     created = create.json()
     token = created["link_token"]
     assert created["calendar_event_id"] == event_id
-    assert "sync/join/" in created["join_url"]
-    assert created["join_url"].startswith("https://app.test.example.com/sync/join/")
+    assert "/l/" in created["join_url"]
+    assert created["join_url"].startswith("http://testserver/l/")
 
     dup = await sync_client.post(
         "/sync/api/v1/calls/links",
@@ -92,7 +91,6 @@ async def test_calendar_call_link_patch_updates_window(
             "scheduled_start_at": start.isoformat(),
             "scheduled_end_at": end.isoformat(),
             "calendar_member_user_ids": [],
-            "join_url_base": "https://app.test.example.com",
         },
     )
     assert create.status_code == 201
@@ -107,13 +105,12 @@ async def test_calendar_call_link_patch_updates_window(
             "scheduled_title": f"After {unique_id}",
             "scheduled_start_at": new_start.isoformat(),
             "scheduled_end_at": new_end.isoformat(),
-            "join_url_base": "https://join.test.example.com",
         },
     )
     assert patch.status_code == 200
     patched = patch.json()
     assert patched["title"] == f"After {unique_id}"
-    assert patched["join_url"].startswith("https://join.test.example.com/sync/join/")
+    assert patched["join_url"].startswith("http://testserver/l/")
 
 
 @pytest.mark.asyncio
@@ -178,7 +175,6 @@ async def test_calendar_call_link_patch_syncs_channel_members(
             "scheduled_start_at": start.isoformat(),
             "scheduled_end_at": end.isoformat(),
             "calendar_member_user_ids": [],
-            "join_url_base": "https://app.test.example.com",
         },
     )
     assert create.status_code == 201, create.text

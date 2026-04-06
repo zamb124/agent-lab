@@ -113,6 +113,7 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
     from core.db.migrations import run_migrations_async
 
     bootstrap_migration_registry()
+    await run_migrations_async(service="shared")
     await run_migrations_async(service="sync")
 
     db = SyncDatabase(sync_db_url)
@@ -151,6 +152,16 @@ async def sync_db_clean(sync_database: SyncDatabase) -> None:
         if seq_name:
             await session.execute(text(f"SELECT setval('{seq_name}', 1, false)"))
         await session.commit()
+
+    from core.config import get_settings
+    from core.db.database import get_session_factory
+
+    shared_url = get_settings().database.shared_url
+    if shared_url:
+        factory = await get_session_factory(shared_url)
+        async with factory() as sh:
+            await sh.execute(text("DELETE FROM platform_short_links WHERE kind = 'sync_call_join'"))
+            await sh.commit()
 
 
 @pytest.fixture()

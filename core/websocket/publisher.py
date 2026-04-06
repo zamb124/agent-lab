@@ -25,6 +25,7 @@ class NotificationType(str, Enum):
     SYNC_NEW_MESSAGE = "sync_new_message"
     CRM_DAILY_SUMMARY_UPDATED = "crm_daily_summary_updated"
     CRM_NOTE_UPDATED = "crm_note_updated"
+    CRM_KNOWLEDGE_IMPORT_UPDATED = "crm_knowledge_import_updated"
     CALENDAR_NEW_EVENT = "calendar_new_event"
     CALENDAR_SYNC_MEETING_REMINDER = "calendar_sync_meeting_reminder"
     OFFICE_DOCUMENT_SAVED = "office_document_saved"

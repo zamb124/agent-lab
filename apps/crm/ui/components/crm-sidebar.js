@@ -404,7 +404,7 @@ export class CRMSidebar extends PlatformElement {
                         <span class="nav-label">${this.i18n.t('nav.tasks')}</span>
                     </button>
                     <button
-                        class="nav-item ${['settings', 'templates', 'spaces'].includes(this._currentView) ? 'active' : ''}"
+                        class="nav-item ${['settings', 'templates', 'spaces', 'namespace_imports'].includes(this._currentView) ? 'active' : ''}"
                         @click=${() => this._navigate('settings')}
                     >
                         <div class="nav-icon-wrapper settings">

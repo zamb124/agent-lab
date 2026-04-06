@@ -344,3 +344,25 @@ class PushSubscription(Base):
 
     def __repr__(self) -> str:
         return f"<PushSubscription(user_id={self.user_id}, platform={self.platform})>"
+
+
+class PlatformShortLink(Base):
+    """Короткий публичный код -> полезная нагрузка (вход по звонку Sync, JWT инвайта)."""
+
+    __tablename__ = "platform_short_links"
+
+    code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_platform_short_links_sync_link_token",
+            text("(payload->>'link_token')"),
+            postgresql_where=text("kind = 'sync_call_join'"),
+        ),
+    )

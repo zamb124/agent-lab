@@ -24,6 +24,8 @@ export class DailyNotesPage extends PlatformElement {
         _isMobile: { state: true },
         _summaryOpen: { state: true },
         _notesLeavingIds: { state: true },
+        _namespaceHasAnyEntity: { state: true },
+        _namespaceProbeValid: { state: true },
     };
 
     static styles = [
@@ -556,6 +558,50 @@ export class DailyNotesPage extends PlatformElement {
                 color: var(--text-tertiary);
             }
 
+            .empty-import {
+                flex-direction: column;
+                gap: var(--space-4);
+                padding: var(--space-6) var(--space-4);
+                text-align: center;
+                max-width: 440px;
+                margin: 0 auto;
+                box-sizing: border-box;
+            }
+
+            .empty-import-text {
+                color: var(--text-secondary);
+                font-size: var(--text-base);
+                line-height: 1.5;
+                margin: 0;
+            }
+
+            .import-wizard-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+                min-height: 40px;
+                border: none;
+                border-radius: var(--radius-full);
+                background: var(--crm-daily-notes-cta-bg);
+                color: var(--text-inverse);
+                font-size: var(--text-sm);
+                font-weight: 500;
+                padding: 0 var(--space-5);
+                cursor: pointer;
+                font-family: inherit;
+                transition: background var(--duration-fast);
+            }
+
+            .import-wizard-btn:hover {
+                background: var(--crm-daily-notes-cta-hover);
+            }
+
+            .import-wizard-btn:focus-visible {
+                outline: 2px solid var(--accent-tertiary);
+                outline-offset: 2px;
+            }
+
             .summary-fab {
                 display: none;
             }
@@ -733,9 +779,12 @@ export class DailyNotesPage extends PlatformElement {
         this._isMobile = false;
         this._summaryOpen = false;
         this._notesLeavingIds = [];
+        this._namespaceHasAnyEntity = false;
+        this._namespaceProbeValid = false;
         this._unsubscribe = null;
         this._onPlatformNotification = this._onPlatformNotification.bind(this);
         this._onMobileSearch = this._onMobileSearch.bind(this);
+        this._goToImportWizard = this._goToImportWizard.bind(this);
     }
 
     connectedCallback() {
@@ -756,6 +805,7 @@ export class DailyNotesPage extends PlatformElement {
             const nextNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
             const namespaceChanged = previousNamespace !== nextNamespace;
             if (namespaceChanged) {
+                this._namespaceProbeValid = false;
                 this._reloadNotesForSelectedDate();
                 this._loadDailySummary();
             } else {
@@ -1065,6 +1115,31 @@ export class DailyNotesPage extends PlatformElement {
         });
         this._notes = Array.isArray(notes) ? notes : [];
         await this._loadVisibleNoteEntities();
+        await this._probeNamespaceHasAnyEntity();
+    }
+
+    async _probeNamespaceHasAnyEntity() {
+        const crmApi = this.services.get('crmApi');
+        const raw = this._getCurrentNamespaceName();
+        const namespace = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'default';
+        const list = await crmApi.getEntities({ namespace, limit: 1 });
+        const currentRaw = this._getCurrentNamespaceName();
+        const currentNs = typeof currentRaw === 'string' && currentRaw.trim().length > 0 ? currentRaw.trim() : 'default';
+        if (currentNs !== namespace) {
+            return;
+        }
+        this._namespaceHasAnyEntity = Array.isArray(list) && list.length > 0;
+        this._namespaceProbeValid = true;
+        this.requestUpdate();
+    }
+
+    _goToImportWizard() {
+        const c = CRMStore.state.namespaces.current;
+        const name = typeof c === 'string' && c.trim()
+            ? c.trim()
+            : (c && typeof c === 'object' && typeof c.name === 'string' && c.name.trim() ? c.name.trim() : 'default');
+        CRMStore.setSettingsNamespaceSelection(name);
+        CRMStore.setCurrentView('namespace_imports');
     }
 
     async _onCreateNote() {
@@ -1511,7 +1586,17 @@ export class DailyNotesPage extends PlatformElement {
                 <section class="main-column">
                     <div class="cards-scroll">
                         ${filteredNotes.length === 0 ? html`
-                            <div class="empty">${this.i18n.t('daily_notes_page.empty_period')}</div>
+                            <div class="empty ${this._namespaceProbeValid && !this._namespaceHasAnyEntity ? 'empty-import' : ''}">
+                                ${this._namespaceProbeValid && !this._namespaceHasAnyEntity ? html`
+                                    <p class="empty-import-text">${this.i18n.t('import_wizard_cta.empty_notes_hint')}</p>
+                                    <button class="import-wizard-btn" type="button" @click=${this._goToImportWizard}>
+                                        <platform-icon name="import" size="18"></platform-icon>
+                                        ${this.i18n.t('import_wizard_cta.open_wizard')}
+                                    </button>
+                                ` : html`
+                                    <span>${this.i18n.t('daily_notes_page.empty_period')}</span>
+                                `}
+                            </div>
                         ` : html`
                             <div class="cards-grid">
                                 ${filteredNotes.map((note) => html`

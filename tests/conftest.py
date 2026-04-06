@@ -137,8 +137,8 @@ async def _alembic_version_ready(db_url: str) -> bool:
         await engine.dispose()
 
 
-async def _crm_schema_ready(db_url: str) -> bool:
-    """Проверяет, что в CRM схеме присутствуют ключевые таблицы и колонки."""
+async def _crm_base_schema_ready(db_url: str) -> bool:
+    """Базовая CRM-схема (без журнала knowledge import)."""
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
 
@@ -193,6 +193,37 @@ async def _crm_schema_ready(db_url: str) -> bool:
         return False
     finally:
         await engine.dispose()
+
+
+async def _crm_knowledge_imports_table_ready(db_url: str) -> bool:
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            row = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'crm_knowledge_imports'
+                    """
+                )
+            )
+            return (row.scalar() or 0) == 1
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
+async def _crm_schema_ready(db_url: str) -> bool:
+    """Полная готовность CRM-схемы для тестов (включая импорт знаний)."""
+    return await _crm_base_schema_ready(db_url) and await _crm_knowledge_imports_table_ready(
+        db_url
+    )
 
 
 async def _shared_calendar_schema_ready(db_url: str) -> bool:
@@ -425,6 +456,23 @@ async def setup_database_before_tests():
             tracing_ok = await _tracing_schema_ready(tracing_db_url) if tracing_db_url else True
             if core_ok and office_ok and tracing_ok:
                 print("БД подготовлена другим процессом, пропуск.\n")
+                yield
+            elif (
+                await _alembic_version_ready(shared_db_url)
+                and await _crm_base_schema_ready(crm_db_url)
+                and not await _crm_knowledge_imports_table_ready(crm_db_url)
+                and await _shared_calendar_schema_ready(shared_db_url)
+                and await _shared_scheduler_schema_ready(shared_db_url)
+                and office_ok
+                and tracing_ok
+            ):
+                print("Догрузка миграций CRM (crm_knowledge_imports)...")
+                from core.db.migration_manifest import bootstrap_migration_registry
+                from core.db.migrations import run_migrations_async
+
+                bootstrap_migration_registry()
+                await run_migrations_async(service="crm")
+                print("Миграции CRM догружены!\n")
                 yield
             elif core_ok and office_ok and not tracing_ok:
                 print("Догрузка миграций сервиса tracing (platform_tracing)...")

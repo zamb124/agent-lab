@@ -491,6 +491,10 @@ class EntityService:
         
         return await self._entity_repo.get(entity_id)
 
+    async def list_entities_by_ids_ordered(self, entity_ids: List[str]) -> List[CRMEntity]:
+        """Сущности по списку id в заданном порядке; отсутствующие id пропускаются."""
+        return await self._entity_repo.list_by_entity_ids_ordered(entity_ids)
+
     async def merge_entities(self, body: EntityMergeRequest) -> Tuple[CRMEntity, str]:
         """
         Сливает source в survivor: переносит связи и права, объединяет поля по выбору,

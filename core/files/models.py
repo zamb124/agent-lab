@@ -179,6 +179,21 @@ class AudioAttachmentContent(BaseModel):
     )
 
 
+class FileReadPreviewResponse(BaseModel):
+    """Текстовое превью содержимого файла (извлечение без vision для изображений)."""
+
+    text: str = Field(description="Извлечённый текст (может быть усечён для UI)")
+    truncated: bool = Field(description="Усечён ли текст по лимиту превью")
+    page_count: int = Field(default=0, description="Число страниц после чтения")
+    detected_kind: str = Field(description="Тип файла по FileReader")
+    mime_type: Optional[str] = Field(default=None, description="MIME после распознавания")
+    warnings: List[str] = Field(default_factory=list, description="Предупреждения парсера")
+    preview_note: Optional[str] = Field(
+        default=None,
+        description="Пояснение для пользователя (например для изображений)",
+    )
+
+
 class VideoAttachmentContent(BaseModel):
     """Видеовложение в сообщении (запись звонка и т.п.)."""
 

@@ -9,6 +9,7 @@ from apps.crm.services.access_control_service import AccessControlService
 from apps.crm.services.access_grant_service import AccessGrantService
 from apps.crm.services.access_request_service import AccessRequestService
 from apps.crm.services.graph_service import GraphService
+from apps.crm.services.knowledge_import_service import KnowledgeImportService
 
 _initialized_companies: set = set()
 
@@ -55,3 +56,8 @@ def get_graph_service() -> GraphService:
     """Получить GraphService из контейнера"""
     container = get_crm_container()
     return container.graph_service
+
+
+def get_knowledge_import_service() -> KnowledgeImportService:
+    container = get_crm_container()
+    return container.knowledge_import_service

@@ -97,13 +97,8 @@ async def _participant_names_for_call(container, call: SyncCall) -> dict[str, st
     return out
 
 
-def _resolve_join_url(link_token: str, join_url_base: Optional[str], request: Request) -> str:
-    if join_url_base is not None and join_url_base.strip() != "":
-        base = join_url_base.strip().rstrip("/")
-        if not base.startswith("http://") and not base.startswith("https://"):
-            raise HTTPException(status_code=400, detail="join_url_base должен быть URL с http или https.")
-        return f"{base}/sync/join/{link_token}"
-    return f"{str(request.base_url).rstrip('/')}/sync/join/{link_token}"
+async def _mint_join_short_url(container, link_token: str, expires_at: datetime) -> str:
+    return await container.short_link_service.mint_sync_call_join(link_token, expires_at)
 
 
 def _ttl_hours_from_schedule(scheduled_end: datetime, now: datetime) -> int:
@@ -150,7 +145,7 @@ async def get_turn_credentials() -> TurnCredentials:
 
 
 @router.post("/links", status_code=201)
-async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRead:
+async def create_call_link(body: CallLinkCreate) -> CallLinkRead:
     """
     Создаёт постоянную ссылку на звонок.
 
@@ -257,7 +252,7 @@ async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRe
     )
     await container.call_repository.create_link(link)
 
-    join_url = _resolve_join_url(link_token, body.join_url_base, request)
+    join_url = await _mint_join_short_url(container, link_token, expires_at)
 
     return CallLinkRead(
         link_token=link_token,
@@ -274,11 +269,9 @@ async def create_call_link(body: CallLinkCreate, request: Request) -> CallLinkRe
 
 @router.get("/links/scheduled", response_model=list[CallScheduledLinkRead])
 async def list_scheduled_call_links(
-    request: Request,
     start_at: datetime,
     end_at: datetime,
     channel_id: str | None = None,
-    join_url_base: str | None = None,
 ) -> list[CallScheduledLinkRead]:
     context = get_context()
     container = get_sync_container()
@@ -297,7 +290,7 @@ async def list_scheduled_call_links(
             continue
         if row.calendar_event_id is None:
             continue
-        join_url = _resolve_join_url(row.link_token, join_url_base, request)
+        join_url = await _mint_join_short_url(container, row.link_token, row.expires_at)
         out.append(
             CallScheduledLinkRead(
                 link_token=row.link_token,
@@ -317,7 +310,6 @@ async def list_scheduled_call_links(
 async def patch_call_link(
     link_token: str,
     body: CallLinkPatch,
-    request: Request,
 ) -> CallLinkRead:
     context = get_context()
     container = get_sync_container()
@@ -368,7 +360,7 @@ async def patch_call_link(
             calendar_member_user_ids=body.calendar_member_user_ids,
         )
     updated = await container.call_repository.get_link_for_company(link_token, company_id)
-    join_url = _resolve_join_url(link_token, body.join_url_base, request)
+    join_url = await _mint_join_short_url(container, link_token, updated.expires_at)
     return CallLinkRead(
         link_token=updated.link_token,
         channel_id=updated.channel_id,
@@ -398,6 +390,7 @@ async def delete_call_link(link_token: str) -> None:
     deleted = await container.call_repository.delete_link(link_token, company_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Ссылка не найдена.")
+    await container.short_link_service.delete_sync_by_link_token(link_token)
     ch = await container.channel_repository.get(channel_id)
     if ch is not None and ch.company_id == company_id and ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
         await container.channel_repository.delete(channel_id)

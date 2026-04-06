@@ -14,6 +14,7 @@ import '../pages/tasks-page.js';
 import '../pages/settings-hub-page.js';
 import '../pages/templates-page.js';
 import '../pages/spaces-page.js';
+import '../pages/namespace-imports-page.js';
 import '../modals/entity-modal.js';
 import '../modals/note-view-modal.js';
 import '../modals/ai-analysis-modal.js';
@@ -394,6 +395,10 @@ export class CRMApp extends PlatformApp {
             return html`<spaces-page></spaces-page>`;
         }
 
+        if (this._currentView === 'namespace_imports') {
+            return html`<namespace-imports-page></namespace-imports-page>`;
+        }
+
         return this._renderPlaceholder(this._currentView);
     }
 
@@ -425,6 +430,7 @@ export class CRMApp extends PlatformApp {
             settings: { title: v('settings.title'), actionIcon: null },
             templates: { title: v('templates.title'), actionIcon: null },
             spaces: { title: v('spaces.title'), actionIcon: null },
+            namespace_imports: { title: v('namespace_imports.title'), actionIcon: null },
         };
     }
 
@@ -436,6 +442,7 @@ export class CRMApp extends PlatformApp {
             tasks: 'checklist',
             templates: 'settings',
             spaces: 'folder',
+            namespace_imports: 'database',
         };
 
         return html`

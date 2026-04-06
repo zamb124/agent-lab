@@ -7,6 +7,8 @@ description: "CRM NetWorkle система управления сущностя
 
 ## UI: i18n
 
+- **Primary `platform-button` в CRM:** в **`apps/crm/ui/index.html`** на **`body.platform-shell`** заданы **`--platform-btn-primary-*`** из **`--crm-button-primary-*`** (и тени как у **`crm-app`**), т.к. **`glass-modal`** и др. порталятся в **`document.body`** и иначе брали бы зелёный фолбэк из **`platform-button.js`**. См. аналог **`apps/office/ui/index.html`**.
+- **История импорта знаний** (`namespace-imports-page`): опрос списка при **`running` / `pending`** — **`_loadImports({ silent: true })`**, без строки «Загрузка…», чтобы не дёргать вёрстку; первая загрузка страницы — с индикатором. Статусы и режим в таблице — теги и i18n (`job_status_*`, `import_list_mode_*`), не сырые значения API.
 - Тексты **`apps/crm/ui`** — **`this.i18n.t('группа.ключ')`**, namespace по умолчанию **`crm`** (`/crm`), файлы **`core/i18n/translations/{ru,en}/crm.json`**, парность и **`make check-i18n`**.
 - **Мобильный хедер CRM** (`< 768px`): единая строка **`crm-mobile-app-header`** в **`crm-app.js`** — заголовок или поле поиска (иконка поиска + input) в той же линии для **notes / entities / tasks**. Синхрон строки поиска: **`CRMStore.ui.notesPageSearchQuery`**, **`tasksListSearchQuery`**, фильтр **`entities.filters.search`**. Глобальная кнопка «AI» в шелле не используется (анализ заметок — в контексте карточки / модалки).
 - **Daily notes — период по умолчанию:** `CRMStore.ui.dailyNotesRange` при первом заходе и при миграции persist — **текущая календарная неделя (пн–вс, локальная зона)**; `dailyNotesRangePersistVersion === 2` в persist, при отсутствии версии в сохранённом состоянии merge подставляет неделю. Сброс при невалидном выборе в date-picker — снова неделя (`defaultDailyNotesRange`).
@@ -62,6 +64,7 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
 - В контексте воркера восстанавливается `Context` через `_set_crm_context` (как у daily summary): `company_id`, `namespace` заметки при apply, `active_namespace` при analyze, `auth_token` / `user_id` из запроса.
 - `ValidationError` из воркера при передаче через TaskIQ часто превращается в `Exception` без `.errors()`; `analyze_text_with_ai_task` кодирует `exc.errors()` в `ValueError` с префиксом (`apps/crm/taskiq_analyze_errors.py`), HTTP разбирает и отдаёт `detail` как список ошибок.
 - При старте `crm_worker` вызывается `set_billing_service(get_crm_container().billing_service)` — иначе RAG/embeddings при dedup в задачах analyze падают с «BillingService не инициализирован» (в HTTP CRM это делает `create_service_app`).
+- При старте `crm_worker` вызывается `initialize_default_processors(container.file_repository)` — иначе `load_text_from_stored_file_id` / импорт знаний по `file_id` падают с «Процессоры не инициализированы» (аналогично `flows_worker`, `rag_worker`, `create_service_app`).
 - **`apply_analysis_draft`** в `EntityService`: строки сущностей обрабатывает `_apply_analysis_draft_entity_rows_with_retries` — на каждом **раунде** параллельный `gather` по текущему списку «ожидающих», неуспешные остаются на следующий раунд (до `ANALYSIS_DRAFT_APPLY_MAX_ROUNDS`, см. `entity_service.py`). Одна строка — `_persist_analysis_draft_entity_row` (create или merge + RAG). Для merge с одним `dedup_existing_id` — `asyncio.Lock` на целевой id. Если после всех раундов остались ошибки — `ApplyAnalysisDraftEntityFailuresError` (текст с перечислением `draft_entity_id` / name / type). Затем связи (`gather`), снятие `ai_analysis_draft` с заметки.
 
 ### Daily Summary (event-driven, SWR)
@@ -418,7 +421,7 @@ company_id="acme", namespace="default"   # По умолчанию
 
 - Источник правды по доступности типа в пространстве: `EntityType.namespace_ids`.
 - Создание/обновление сущности обязано проходить проверку: `entity_type` (и `entity_subtype`, если указан) должен содержать текущий `namespace` в `namespace_ids`.
-- `AI analyze` работает в контексте `namespace` и использует только разрешенные в нем типы.
+- `AI analyze` работает в контексте `namespace` и использует только разрешенные в нем типы. Промпт skill **`analyze`** в bundle **`crm`**: **`apps/flows/bundles/crm/prompts/analyze.md`** — жёсткий контракт: белые списки `type` из variables (`entity_types`, `relationship_types`), запрет на любые иные `entity_type` / `relationship_type` / `source_type` / `target_type`; без доменных примеров вводной («организации» и т.д.), чтобы модель не подставляла типы вне списка (JSON Schema по-прежнему `string`, не enum).
 - Дедупликация `EntityService._deduplicate_entities`: кандидаты в том же `namespace`; RAG — `dedup_rag_search_limit`, параллельность поиска — `dedup_rag_max_concurrent_searches`. LLM по «серой зоне» — раздел **Chunked async** (`run_chunked_map` + `deduplicate` / `deduplicate_batch`). Ответ analyze: у `note` (если не null) и у каждой entity непустое `description` не короче порога (`_ANALYZE_ENTITY_DESCRIPTION_MIN_LEN` / JSON Schema в bundle CRM).
 - Связи из analyze приходят с `source_name`/`target_name` (id часто null). При `CRMStore.confirmAllSuggestions` после создания/обновления сущностей строится карта `entity_type`+нормализованное имя → `entity_id` (включая merge через возвращённый `entity_id`, совпадение имён с учётом кавычек «»). По ней заполняются концы связи перед `createRelationship`. Точечное `confirmRelationship` использует ту же логику только для уже известных id (merge/`dedup_existing_id` и текущая заметка); новые сущности без подтверждения в карту не попадают — нужен полный подтверждающий проход или «Подтвердить всё».
 - При создании `namespace` через шаблон: типы из `NamespaceTemplateType` materialize в `EntityType` (если отсутствуют) и получают новый namespace в `namespace_ids`.
@@ -532,3 +535,35 @@ await grant_service.create_public_grant(
 ## Демо-данные (генератор JSON)
 
 Скрипт `scripts/generate_crm_sales_demo.py` формирует `schema_version=1` (в т.ч. `logical_entities`, `relationships` для архива демо). Скрипт `scripts/import_crm_sales_demo.py` не восстанавливает граф: для каждой записи-встречи в JSON выполняется сценарий пользователя — заметка (`note`/`meeting`), `POST /entities/analyze?note_id=…&check_duplicates=false`, `POST /entities/notes/{id}/analysis-draft/apply`. Пайплайны по встречам параллельны (`--concurrency`). Namespace по умолчанию `default`; иначе `--namespace` или `--use-json-namespace` с полями JSON. Нужны `CRM_API_TOKEN` и worker CRM. Если модель вернула две сущности с одной парой (тип, имя) в черновике, сервис analyze схлопывает ключ к первому `draft_entity_id` и пишет предупреждение в лог.
+
+## Импорт базы знаний (knowledge import)
+
+### Форматы источника и лимиты
+
+- **Текст из мастера (`source_text`):** до **100 000** символов; дольше — только через **файлы** в shared storage.
+- **Файлы:** один `source_file_id` (legacy) или список **`source_file_ids`** (до **80** за импорт); можно **вместе с `source_text`** — воркер склеивает: сначала текст из Redis, затем извлечённый текст из каждого файла по порядку.
+- **Полный текст после чтения файлов:** лимит **`MAX_IMPORT_TEXT_CHARS` = 10 000 000** (`core/utils/knowledge_text_split.py`); форматы — как у **`FileReader`** (txt, md, pdf, docx, xlsx, изображения и т.д.).
+- **Нарезка:** `chunk_max_chars` в диапазоне **[2000, 500 000]** (по умолчанию 50 000); опция **заголовки markdown** (`split_by_headings`).
+- **Структурированный bulk-импорт** без LLM: заготовка API `POST /crm/api/v1/knowledge-imports/structured/bulk` — **501** до отдельной реализации.
+
+### Персистентность и API
+
+- Таблица **`crm_knowledge_imports`**, репозиторий **`KnowledgeImportRepository`**, сервис **`KnowledgeImportService`**.
+- Inline-текст перед воркером кладётся в Redis: ключ `crm:knowledge_import:text:{import_id}`, TTL 7 суток (`apps/crm/services/knowledge_import_text_redis.py`).
+- **HTTP:** `POST /knowledge-imports` (старт), `GET /knowledge-imports?namespace=`, `GET /knowledge-imports/{id}`, `GET /knowledge-imports/{id}/created-entities` (список созданных сущностей для просмотра), `POST /knowledge-imports/{id}/review-complete` (подтверждение просмотра инициатором), `POST .../cancel`, `POST .../rollback`.
+- **Поле `review_completed_at`:** после завершения импорта (`completed` / `failed` / `cancelled` при ненулевом журнале) инициатор открывает импорт в UI, правит сущности при необходимости и подтверждает просмотр. Существующие строки при миграции получают `review_completed_at = COALESCE(completed_at, created_at)`, новые импорты — `NULL` до подтверждения.
+- **Воркер:** `run_knowledge_import_task` (`apps/crm_worker/tasks/knowledge_import_tasks.py`), очередь CRM. Уведомления пользователю: **`NotificationType.CRM_KNOWLEDGE_IMPORT_UPDATED`**.
+
+### UI (мастер и модалки импорта)
+
+- **`glass-modal`** при открытии переносится в **`document.body`**: слоты **`content` / `actions`** не находятся в shadow **`namespace-imports-page`**, поэтому стили страницы на сетку карточек типов и блоки мастера **не применяются**. Оформление — **`apps/crm/ui/styles/knowledge-import-portal-styles.js`**, однократное подключение в **`connectedCallback`** через **`ensureKnowledgeImportPortalStyles()`**. Разметка: на контейнере контента **`crm-import-glass-content`** (вместе с **`import-wizard`** у мастера), на панели кнопок **`crm-import-glass-actions`**.
+
+### Режимы
+
+- **`notes_only`:** нарезка → создание заметок с телом чанка → индексация как у обычной заметки.
+- **`graph`:** на каждый чанк: заметка → `analyze_text_with_ai` с `note_id` → `apply_analysis_draft`. Связи только **внутри чанка**; склейка черновиков между чанками **не делается** (отдельная политика при расширении).
+- **Откат:** удаление связей по `created_relationship_ids`, затем сущностей по `created_entity_ids`. Сущности, созданные только через **merge** дедупа, в список созданных импортом **не попадают** — откат их не трогает.
+
+### Семантический поиск и вложения
+
+- В **`EntityRepository.search_with_similarity`** hit по чанку вектора с **`metadata.entity_id`** резолвится в **CRM-сущность с этим `entity_id`**, если она есть в `crm_entities` (поиск «к родительской заметке» для вложений с таким метаданным).

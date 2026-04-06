@@ -56,10 +56,6 @@ class CallLinkCreate(BaseModel):
         default=None,
         description="Участники канала встречи (platform user_id), без создателя.",
     )
-    join_url_base: Optional[str] = Field(
-        default=None,
-        description="Публичный origin без завершающего слэша, например https://app.example.com",
-    )
 
     @model_validator(mode="before")
     @classmethod
@@ -105,7 +101,6 @@ class CallLinkPatch(BaseModel):
     scheduled_title: Optional[str] = None
     scheduled_start_at: Optional[datetime] = None
     scheduled_end_at: Optional[datetime] = None
-    join_url_base: Optional[str] = None
     calendar_member_user_ids: Optional[list[str]] = Field(
         default=None,
         description="Полная синхронизация участников канала встречи (кроме создателя ссылки).",

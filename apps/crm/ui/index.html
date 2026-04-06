@@ -35,6 +35,19 @@
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
 
+    <style id="crm-networkle-primary-buttons">
+        /* NetWorkle primary: токены CRM на body, чтобы portal-модалки (glass-modal) наследовали цвет кнопок. */
+        body.platform-shell {
+            --platform-btn-primary-text: var(--crm-button-primary-text);
+            --platform-btn-primary-bg: var(--crm-button-primary-bg);
+            --platform-btn-primary-border: var(--crm-button-primary-bg);
+            --platform-btn-primary-bg-hover: var(--crm-button-primary-hover);
+            --platform-btn-primary-border-hover: var(--crm-button-primary-hover);
+            --platform-btn-primary-shadow: 0 4px 12px rgba(153, 166, 249, 0.35);
+            --platform-btn-primary-shadow-hover: 0 6px 20px rgba(153, 166, 249, 0.45);
+        }
+    </style>
+
     <script type="module">
         import '/static/core/lib/components/app-loader.js';
     </script>

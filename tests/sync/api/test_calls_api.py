@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
 from apps.sync.db.models import SyncCall
 from apps.sync.db.repositories.call_repository import CallRepository
@@ -136,7 +138,8 @@ async def test_full_link_flow(
     assert "link_token" in link_data
     assert "join_url" in link_data
     assert link_data["channel_id"] == channel_id
-    assert "/sync/join/" in link_data["join_url"]
+    join_url = link_data["join_url"]
+    assert "/l/" in join_url
     assert link_data["call_type"] == "video"
 
     token = link_data["link_token"]
@@ -339,3 +342,44 @@ async def test_create_link_call_id_wrong_channel_returns_400(
         json={"channel_id": channel_b, "call_type": "video", "ttl_hours": 1, "call_id": call_id},
     )
     assert bad.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_short_join_url_redirects_to_sync_join(
+    sync_client,
+    frontend_app,
+    auth_headers_system,
+    sync_db_clean: None,
+) -> None:
+    """GET /l/{code} на frontend (shared БД) отдаёт 303 на /sync/join/{link_token}."""
+    space_r = await sync_client.post(
+        "/sync/api/v1/spaces/",
+        headers=auth_headers_system,
+        json={"name": "ShortLinkSpace", "description": None},
+    )
+    assert space_r.status_code == 201
+    ch_r = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=auth_headers_system,
+        json={"name": "ShortLinkCh", "type": "topic", "space_id": space_r.json()["id"]},
+    )
+    assert ch_r.status_code == 201
+    link_r = await sync_client.post(
+        "/sync/api/v1/calls/links",
+        headers=auth_headers_system,
+        json={"channel_id": ch_r.json()["id"], "call_type": "video", "ttl_hours": 1},
+    )
+    assert link_r.status_code == 201
+    link_data = link_r.json()
+    token = link_data["link_token"]
+    parsed = urlparse(link_data["join_url"])
+    short_path = parsed.path
+    assert short_path.startswith("/l/")
+
+    transport = ASGITransport(app=frontend_app)
+    async with AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=False) as fe:
+        res = await fe.get(short_path)
+    assert res.status_code == 303
+    loc = res.headers.get("location")
+    assert loc is not None
+    assert loc.endswith(f"/sync/join/{token}")

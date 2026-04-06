@@ -36,7 +36,7 @@ alwaysApply: false
 **Таблицы по БД (важно для baseline и JOIN):**
 
 - **platform_agents**: KV-таблицы flows/nodes/tools/… плюс **`storage`** (префиксы `llm_model:`, embed, файлы) и **`mcp_servers`** — не путать с `storage` в `platform_shared`.
-- **platform_crm**: реляционные CRM-таблицы плюс **`vector_documents`** (pgvector) для `JOIN crm_entities` при семантическом поиске; дубли по смыслу с RAG не смешиваются: RAG-документы живут в **platform_rag**, сущности CRM — в **platform_crm**.
+- **platform_crm**: реляционные CRM-таблицы плюс **`vector_documents`** (pgvector) для `JOIN crm_entities` при семантическом поиске; журнал **`crm_knowledge_imports`** (импорт базы знаний, метаданные и id для отката); дубли по смыслу с RAG не смешиваются: RAG-документы живут в **platform_rag**, сущности CRM — в **platform_crm**.
 - **platform_rag**: `document_processing_status`, `vector_documents` для пайплайна RAG.
 - **platform_office**: `office_document_bindings` — привязки файлов Office к `company_id` и namespace (BFF).
 - **platform_tracing**: только **`spans`** (OpenTelemetry + журнал по сущности); не shared. См. **`tracing.mdc`**.

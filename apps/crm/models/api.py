@@ -514,3 +514,84 @@ class DeduplicateResult(BaseModel):
     merged_attributes: Optional[Dict[str, Any]] = None
     merged_description: Optional[str] = None
 
+
+class KnowledgeImportStartRequest(BaseModel):
+    namespace: str = Field(..., description="Пространство назначения")
+    mode: Literal["notes_only", "graph"] = Field(
+        ...,
+        description="Только заметки или нарезка + analyze/apply по каждому чанку",
+    )
+    source_file_id: Optional[str] = Field(default=None, description="Один file_id в shared files (legacy)")
+    source_file_ids: Optional[List[str]] = Field(
+        default=None,
+        description="Несколько file_id; можно вместе с source_text",
+    )
+    source_text: Optional[str] = Field(
+        default=None,
+        description="Текст из мастера (лимит см. CRM knowledge import)",
+    )
+    extract_entity_types: Optional[List[str]] = Field(
+        default=None,
+        description="Для mode=graph: типы сущностей (None = все типы пространства)",
+    )
+    split_by_headings: bool = Field(default=False, description="Нарезка по заголовкам markdown")
+    chunk_max_chars: int = Field(default=50_000, ge=2000, le=500_000)
+
+
+class KnowledgeImportResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    import_id: str
+    company_id: str
+    namespace: str
+    user_id: str
+    mode: str
+    status: str
+    extract_entity_types: Optional[List[str]] = None
+    source_file_id: Optional[str] = None
+    source_file_ids: Optional[List[str]] = None
+    source_text_sha256: Optional[str] = None
+    split_by_headings: bool = False
+    chunk_max_chars: int = 50_000
+    taskiq_task_id: Optional[str] = None
+    notes_created_count: int = 0
+    entities_created_count: int = 0
+    relationships_created_count: int = 0
+    created_entity_ids: List[str] = Field(default_factory=list)
+    created_relationship_ids: List[str] = Field(default_factory=list)
+    attachment_document_ids: List[str] = Field(default_factory=list)
+    cancel_requested: bool = False
+    error_message: Optional[str] = None
+    chunk_errors: Optional[List[Dict[str, Any]]] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    review_completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeImportCreatedEntityItem(BaseModel):
+    entity_id: str
+    name: str
+    entity_type: str
+    entity_subtype: Optional[str] = None
+    status: str
+
+
+class KnowledgeImportCreatedEntitiesResponse(BaseModel):
+    import_id: str
+    namespace: str
+    status: str
+    review_completed_at: Optional[datetime] = None
+    relationships_created_count: int = 0
+    entities: List[KnowledgeImportCreatedEntityItem] = Field(default_factory=list)
+    missing_entity_ids: List[str] = Field(default_factory=list)
+
+
+class StructuredKnowledgeImportRequest(BaseModel):
+    """Запрос структурированного импорта (массовое создание без LLM)."""
+
+    namespace: str
+    entities: List[Dict[str, Any]] = Field(default_factory=list)
+    relationships: List[Dict[str, Any]] = Field(default_factory=list)
+

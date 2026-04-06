@@ -733,7 +733,6 @@ class CalendarService:
                 raise ValueError(
                     "Для встречи Sync в конфигурации задан server.platform_public_base_url."
                 )
-            base = public_base.strip().rstrip("/")
             invited = await self._resolve_invited_platform_user_ids(
                 company_id=company_id,
                 organizer_user_id=organizer_user_id,
@@ -746,7 +745,6 @@ class CalendarService:
                     "scheduled_start_at": _iso_datetime(start_at),
                     "scheduled_end_at": _iso_datetime(end_at),
                     "calendar_member_user_ids": invited,
-                    "join_url_base": base,
                 }
                 data = await self._service_client.post(
                     "sync",
@@ -757,12 +755,14 @@ class CalendarService:
                 metadata[SYNC_LINK_TOKEN_META] = token
                 metadata[SYNC_CHANNEL_ID_META] = data["channel_id"]
                 metadata[SYNC_MEETING_FLAG_META] = "1"
-                return True, f"{base}/sync/join/{token}"
+                join = data.get("join_url")
+                if not isinstance(join, str) or join == "":
+                    raise ValueError("Ответ sync calls/links без join_url")
+                return True, join
             patch_body = {
                 "scheduled_title": title,
                 "scheduled_start_at": _iso_datetime(start_at),
                 "scheduled_end_at": _iso_datetime(end_at),
-                "join_url_base": base,
                 "calendar_member_user_ids": invited,
             }
             data = await self._service_client.patch(
@@ -774,7 +774,10 @@ class CalendarService:
             metadata[SYNC_LINK_TOKEN_META] = token
             metadata[SYNC_CHANNEL_ID_META] = data["channel_id"]
             metadata[SYNC_MEETING_FLAG_META] = "1"
-            return True, f"{base}/sync/join/{token}"
+            join = data.get("join_url")
+            if not isinstance(join, str) or join == "":
+                raise ValueError("Ответ sync calls/links без join_url")
+            return True, join
 
         if prev_token:
             await self._service_client.delete(
@@ -1454,8 +1457,6 @@ class CalendarService:
             "start_at": _iso_datetime(_ensure_utc(start_at)),
             "end_at": _iso_datetime(_ensure_utc(end_at)),
         }
-        if public_base is not None and public_base.strip() != "":
-            params["join_url_base"] = public_base.strip().rstrip("/")
         rows = await self._service_client.get(
             "sync",
             "/sync/api/v1/calls/links/scheduled",
@@ -1484,11 +1485,9 @@ class CalendarService:
             title_raw = item.get("title")
             title = title_raw if isinstance(title_raw, str) and title_raw.strip() else "Sync"
             join = item.get("join_url")
-            deep = join if isinstance(join, str) and join != "" else None
-            if deep is None:
-                tok = item.get("link_token")
-                if isinstance(tok, str) and tok:
-                    deep = f"/sync/join/{tok}"
+            if not isinstance(join, str) or join == "":
+                continue
+            deep = join
             source_id = item.get("link_token")
             if not isinstance(source_id, str) or source_id == "":
                 continue
