@@ -245,6 +245,10 @@ class BaseContainer:
             usage_repository=self.usage_repository,
             resource_base_prices=settings.billing.resource_base_prices,
             shared_storage=self.shared_storage,
+            balance_enforcement_enabled=settings.billing.balance_enforcement_enabled,
+            balance_enforcement_exempt_company_ids=list(
+                settings.billing.balance_enforcement_exempt_company_ids
+            ),
         )
     
     @lazy

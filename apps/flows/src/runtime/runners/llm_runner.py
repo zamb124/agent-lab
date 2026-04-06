@@ -26,6 +26,7 @@ from apps.flows.src.runtime.llm_override_params import (
     stream_kwargs_from_override,
 )
 from core.config import get_settings
+from core.context import get_context
 from core.clients.llm import LLMClient, MockLLM, StreamEvent, get_llm_for_state
 from apps.flows.src.container import get_container
 from core.logging import get_logger
@@ -273,6 +274,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         trace_ctx = _get_trace_ctx_from_state()
         tracer = get_tracer()
         model = self.node_config.llm_override.model if self.node_config and self.node_config.llm_override else "unknown"
+
+        actx = get_context()
+        if actx is None or actx.active_company is None:
+            raise ValueError("Контекст с active_company обязателен для LLM-ноды")
+        container = get_container()
+        await container.billing_service.require_balance_for_billable_operation(
+            actx.active_company.company_id
+        )
 
         # Определяем режим: structured_output или tools
         structured_output = self.node_config.structured_output if self.node_config else False

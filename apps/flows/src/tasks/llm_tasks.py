@@ -6,6 +6,7 @@ TaskIQ tasks для LLM вызовов.
 
 from typing import Any, Dict, List, Optional
 
+from core.billing import get_billing_service
 from core.clients.llm import get_llm
 from core.context import get_context
 from core.logging import get_logger
@@ -40,11 +41,14 @@ async def invoke_llm(
 
     trace_extra: dict[str, str] = {}
     actx = get_context()
-    if actx is not None:
-        if actx.active_company is not None:
-            trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
-        if actx.user is not None and str(actx.user.user_id).strip() != "":
-            trace_extra[trace_attributes.ATTR_USER_ID] = str(actx.user.user_id).strip()
+    if actx is None or actx.active_company is None:
+        raise ValueError("Контекст с active_company обязателен для invoke_llm")
+    await get_billing_service().require_balance_for_billable_operation(
+        actx.active_company.company_id
+    )
+    if actx.user is not None and str(actx.user.user_id).strip() != "":
+        trace_extra[trace_attributes.ATTR_USER_ID] = str(actx.user.user_id).strip()
+    trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
 
     async with traced_operation(
         "flows.llm.invoke_task",

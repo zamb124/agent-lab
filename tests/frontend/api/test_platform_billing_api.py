@@ -263,6 +263,34 @@ async def test_platform_billing_get_company_prices_whitespace_id_422(frontend_cl
 
 
 @pytest.mark.asyncio
+async def test_platform_billing_companies_overview_system(frontend_client_system):
+    response = await frontend_client_system.get(
+        "/frontend/api/platform-billing/companies-billing-overview",
+        params={"limit": 10, "offset": 0},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert "has_more" in data
+    assert isinstance(data["items"], list)
+    assert isinstance(data["has_more"], bool)
+    ids = {row["company_id"] for row in data["items"]}
+    assert "system" in ids
+    first = next(r for r in data["items"] if r["company_id"] == "system")
+    assert "balance" in first
+    assert "tariff_plan" in first
+    assert "monthly_budget" in first
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_companies_overview_forbidden_non_system(frontend_client_with_auth):
+    response = await frontend_client_with_auth.get(
+        "/frontend/api/platform-billing/companies-billing-overview",
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_platform_billing_company_resolve_by_company_id(frontend_client_system):
     response = await frontend_client_system.get(
         "/frontend/api/platform-billing/company-resolve",

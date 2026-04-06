@@ -17,11 +17,13 @@ alwaysApply: false
 
 В базовом **`conf.json`** для локальной разработки **`billing.span_settlement.enabled: true`**, чтобы idle-джоба и запись в scheduler создавались без ручных шагов. Если **`enabled: false`**, при старте **scheduler-api** (`apps/scheduler/main.py`) расписание **`span_billing_settlement_tick` не создаётся** — в UI «Scheduler tasks» строки не будет. После смены флага перезапустить scheduler-api (или создать расписание через API/UI).
 
-### Жёсткие проверки баланса
+### Pre-flight: баланс > 0 перед тарифицируемыми операциями
 
-В settlement **нет** проверки `can_use_resource` — джоба записывает факт использования без блокировки. Баланс может уходить в минус. Контроль лимитов (блокировка доступа при исчерпании баланса) — **отдельная фича**, реализуется позже.
+Перед стартом операций, которые создают span с **`billing_pending_settlement`** (LLM в flows, RAG embed, vision reader, billable LiveKit), вызывается **`BillingService.require_balance_for_billable_operation(company_id)`**: при **`Company.balance <= 0`** — **`BillingBalanceBlockedError`** (HTTP **403** с `code: billing_balance_blocked` через `create_service_app`). Флаги **`billing.balance_enforcement_enabled`** и **`billing.balance_enforcement_exempt_company_ids`** в конфиге (`BillingConfig`); по умолчанию в exempt — **`system`**.
 
-`can_use_resource` существует в API `BillingService` для будущих pre-flight проверок, но в settlement не вызывается.
+Это **не** заменяет settlement: фоновая джоба по-прежнему пишет usage без pre-flight; при нуле баланса запись usage после уже выполненной операции по текущим правилам возможна. Оценка по токенам до вызова LLM отдельно не делается (фаза 1 — только **balance > 0**).
+
+`can_use_resource` остаётся для проверок с учётом стоимости ресурса и месячного лимита; в settlement не вызывается.
 
 ## OpenRouter и рубли
 

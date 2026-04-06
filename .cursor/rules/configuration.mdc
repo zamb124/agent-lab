@@ -62,6 +62,8 @@ LEGAL__DPO_EMAIL=...
     - **`livekit`**: **`room_create`**, **`egress_composite`**, **`egress_segmented`** — см. `core/calls/livekit_client.py` и **`billing.mdc`**.
   - **`usd_to_rub_rate`**: положительное число; множитель для перевода `platform.llm.provider_reported_cost` (USD) в целые рубли на span перед settlement (дефолтное правило **`llm_openrouter_usd_to_rub`**).
   - **`span_settlement`**: джоба idle worker (`span_billing_settlement_tick`) — **`enabled`**, **`cron`**, **`lookback_minutes`**, **`batch_limit`**, **`fallback_user_id`** (если пусто и у span нет user_id — span не списывается). Детали — **`billing.mdc`**.
+  - **`balance_enforcement_enabled`**: pre-flight перед операциями с `pending_settlement` (см. **`billing.mdc`**).
+  - **`balance_enforcement_exempt_company_ids`**: список `company_id` без проверки баланса (дефолт включает **`system`**).
   - В **`conf.json`** внутри `billing` допустим массив **`_docs_ru`**: только текст для разработчиков, **`json.load` и Pydantic поле не используют** (игнорируется как лишний ключ).
 - **`services.<имя>`**: только отличия от общего слоя (порт, `auth.permissions_enabled`, свой `llm` для flows, override `rag.providers` у rag-сервиса и т.д.).
 - **`legal`**: публичные реквизиты оператора для `/policy` и `/terms` (`company_name_*`, `legal_form_*`, `inn`, `ogrn`, `legal_address_*`, email-контакты, сроки хранения, инфраструктурные поля). Продовые значения задавать через ENV `LEGAL__*` или `conf.local.json`; в `conf.json` допустимы только шаблонные/базовые значения.

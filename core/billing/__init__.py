@@ -4,6 +4,7 @@
 
 from typing import Optional
 
+from .exceptions import BillingBalanceBlockedError
 from .service import BillingService
 
 _billing_service: Optional[BillingService] = None
@@ -36,5 +37,10 @@ def get_billing_service() -> BillingService:
     return _billing_service
 
 
-__all__ = ["BillingService", "get_billing_service", "set_billing_service"]
+__all__ = [
+    "BillingBalanceBlockedError",
+    "BillingService",
+    "get_billing_service",
+    "set_billing_service",
+]
 

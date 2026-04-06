@@ -43,7 +43,9 @@
       "Вызовы инструментов flows (категория tool в resource_name) в этом каталоге не задаются — для биллинга считаются бесплатно.",
       "billing:rub — 1 ₽ за единицу quantity; quantity = platform.billing.settlement_quantity_rub (OpenRouter: USD из ответа × usd_to_rub_rate, округление).",
       "usd_to_rub_rate — множитель для перевода platform.llm.provider_reported_cost в целые рубли на span (дефолтное правило settlement).",
-      "span_settlement — фоновая джоба idle worker: находит spans с platform.billing.pending_settlement и создаёт записи usage по правилам компании. enabled — вкл/выкл; cron — расписание; lookback_minutes — как глубоко искать spans назад; batch_limit — максимум spans за один тик; fallback_user_id — user_id для UsageRecord, если в span нет user_id (пустая строка — такие spans пропускаются с ошибкой в лог)."
+      "span_settlement — фоновая джоба idle worker: находит spans с platform.billing.pending_settlement и создаёт записи usage по правилам компании. enabled — вкл/выкл; cron — расписание; lookback_minutes — как глубоко искать spans назад; batch_limit — максимум spans за один тик; fallback_user_id — user_id для UsageRecord, если в span нет user_id (пустая строка — такие spans пропускаются с ошибкой в лог).",
+      "balance_enforcement_enabled — pre-flight перед LLM/embed/vision/billable LiveKit: при balance <= 0 операция не стартует (BillingBalanceBlockedError → HTTP 403). Не отменяет фоновый settlement.",
+      "balance_enforcement_exempt_company_ids — company_id без этой проверки (по умолчанию [\"system\"]; можно добавить демо-компанию для локальной разработки)."
     ],
     "usd_to_rub_rate": 85.0,
     "resource_base_prices": {

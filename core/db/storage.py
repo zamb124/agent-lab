@@ -519,7 +519,7 @@ class Storage:
             return result
 
     async def _get_all_by_prefix_and_table(
-        self, prefix: str, table_name: str, limit: int = 1000
+        self, prefix: str, table_name: str, limit: int = 1000, offset: int = 0
     ) -> dict[str, str]:
         """
         Низкоуровневый метод для получения всех значений по префиксу из конкретной таблицы.
@@ -529,10 +529,13 @@ class Storage:
             prefix: Финальный префикс (с префиксом компании если нужно)
             table_name: Имя таблицы
             limit: Максимальное количество результатов
-            
+            offset: Смещение (пагинация)
+
         Returns:
             Словарь {key: value_json}
         """
+        if offset < 0:
+            raise ValueError("offset должен быть >= 0")
         async with self._get_session() as session:
             model = self._get_table_model(table_name)
             
@@ -541,11 +544,17 @@ class Storage:
                     select(model.key, model.value)
                     .where(model.key.like(f"{prefix}%"))
                     .order_by(model.updated_at.desc())
+                    .offset(offset)
                     .limit(limit)
                 )
             else:
-                query = text(f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix ORDER BY updated_at DESC LIMIT :limit")
-                result = await session.execute(query, {"prefix": f"{prefix}%", "limit": limit})
+                query = text(
+                    f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix "
+                    "ORDER BY updated_at DESC LIMIT :limit OFFSET :offset"
+                )
+                result = await session.execute(
+                    query, {"prefix": f"{prefix}%", "limit": limit, "offset": offset}
+                )
 
             data = {}
             for row in result:

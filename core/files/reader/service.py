@@ -11,6 +11,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Union
 
+from core.billing import get_billing_service
+from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef, file_id_from_download_url, normalize_file_ref
 from core.files.models import FileRecord, FileResponse
@@ -326,6 +328,12 @@ async def _read_image_impl(
         ],
     )
     llm = get_vision_llm(model_name=opts.vision_model)
+    actx = get_context()
+    if actx is None or actx.active_company is None:
+        raise ValueError("Контекст с active_company обязателен для vision-чтения изображения")
+    await get_billing_service().require_balance_for_billable_operation(
+        actx.active_company.company_id
+    )
     async with traced_operation(
         "core.files.reader.image",
         event_type="llm.vision",

@@ -9,6 +9,7 @@ import logging
 import tiktoken
 from typing import Any, List, Optional
 
+from core.billing import get_billing_service
 from core.context import get_context
 from core.http import get_httpx_client
 from core.models.billing_models import UsageType
@@ -231,11 +232,15 @@ class EmbeddingService:
             trace_attributes.ATTR_LLM_INPUT_TOKENS: token_count,
         }
         actx = get_context()
-        if actx is not None:
-            if actx.active_company is not None:
-                trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
-            if actx.user is not None and str(actx.user.user_id).strip() != "":
-                trace_extra[trace_attributes.ATTR_USER_ID] = str(actx.user.user_id).strip()
+        if actx is None or actx.active_company is None:
+            raise ValueError("Контекст с active_company обязателен для generate_embeddings")
+
+        await get_billing_service().require_balance_for_billable_operation(
+            actx.active_company.company_id
+        )
+        trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
+        if actx.user is not None and str(actx.user.user_id).strip() != "":
+            trace_extra[trace_attributes.ATTR_USER_ID] = str(actx.user.user_id).strip()
 
         async with traced_operation(
             "rag.embed.batch",

@@ -6,11 +6,23 @@ LLMResource - wrapper для llm ресурса.
 
 from typing import Any, Dict, List, Optional
 
+from core.context import get_context
 from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
+
+
+async def _require_balance_for_llm_resource() -> None:
+    from apps.flows.src.container import get_container
+
+    actx = get_context()
+    if actx is None or actx.active_company is None:
+        raise ValueError("Контекст с active_company обязателен для LLMResource")
+    await get_container().billing_service.require_balance_for_billable_operation(
+        actx.active_company.company_id
+    )
 
 
 class LLMResource:
@@ -73,6 +85,7 @@ class LLMResource:
             Сгенерированный текст
         """
         client = self._get_client()
+        await _require_balance_for_llm_resource()
 
         async with traced_operation(
             "flows.llm_resource.complete",
@@ -104,6 +117,7 @@ class LLMResource:
             Ответ модели
         """
         client = self._get_client()
+        await _require_balance_for_llm_resource()
 
         async with traced_operation(
             "flows.llm_resource.chat",
@@ -143,6 +157,7 @@ class LLMResource:
             Ответ с tool_calls если есть
         """
         client = self._get_client()
+        await _require_balance_for_llm_resource()
 
         async with traced_operation(
             "flows.llm_resource.chat_with_tools",

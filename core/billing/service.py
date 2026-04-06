@@ -23,7 +23,9 @@ if TYPE_CHECKING:
     from core.db.repositories.user_repository import UserRepository
     from core.db.storage import Storage
 
+from core.billing.exceptions import BillingBalanceBlockedError
 from core.billing.default_settlement_rules import default_settlement_rules_document
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
 from core.billing.settlement_rules import (
     SettlementRule,
@@ -61,6 +63,8 @@ class BillingService:
         tariff_prices: Optional[Dict[TariffPlan, Dict[str, Dict[str, float]]]] = None,
         resource_base_prices: Optional[Dict[str, Dict[str, float]]] = None,
         shared_storage: Optional["Storage"] = None,
+        balance_enforcement_enabled: bool = True,
+        balance_enforcement_exempt_company_ids: Optional[list[str]] = None,
     ):
         if not company_repository:
             raise ValueError("company_repository обязателен для BillingService")
@@ -81,6 +85,34 @@ class BillingService:
             raise ValueError("resource_base_prices обязателен (передавайте из settings.billing.resource_base_prices)")
         self._resource_base_prices_static = copy.deepcopy(resource_base_prices)
         self._resource_base_prices_static.pop("tool", None)
+
+        self._balance_enforcement_enabled = balance_enforcement_enabled
+        exempt = (
+            balance_enforcement_exempt_company_ids
+            if balance_enforcement_exempt_company_ids is not None
+            else [SYSTEM_COMPANY_ID]
+        )
+        self._balance_enforcement_exempt_company_ids = frozenset(exempt)
+    
+    async def require_balance_for_billable_operation(self, company_id: str) -> None:
+        """
+        Pre-flight перед операцией, которая создаёт span с pending_settlement.
+        Не заменяет фоновое settlement и не оценивает стоимость по токенам.
+        """
+        if not self._balance_enforcement_enabled:
+            return
+        cid = (company_id or "").strip()
+        if not cid:
+            raise ValueError("company_id обязателен для проверки баланса")
+        if cid in self._balance_enforcement_exempt_company_ids:
+            return
+        company = await self._company_repository.get(cid)
+        if company is None:
+            raise ValueError(f"Компания {cid} не найдена")
+        if company.balance <= 0:
+            raise BillingBalanceBlockedError(
+                f"Недостаточно средств: баланс компании {cid} неположительный ({company.balance})."
+            )
     
     async def can_use_resource(
         self,

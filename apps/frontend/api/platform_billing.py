@@ -13,6 +13,8 @@ from pydantic import ValidationError
 
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import (
+    PlatformBillingCompaniesOverviewResponse,
+    PlatformBillingCompanyOverviewItem,
     PlatformBillingCompanyPricesResponse,
     PlatformBillingCompanyResolveResponse,
     PlatformBillingPricesResponse,
@@ -34,6 +36,7 @@ router = APIRouter(prefix="/api/platform-billing", tags=["platform-billing"])
 _STORAGE_PRICES_KEY = "billing:resource_base_prices_json"
 
 _BILLING_COMPANY_LIST_CAP = 2000
+_COMPANIES_OVERVIEW_MAX_LIMIT = 500
 
 
 def _billing_company_facet_label(co: Company) -> str:
@@ -119,6 +122,37 @@ def _validate_price_catalog(data: Any) -> Dict[str, Dict[str, float]]:
                 ) from e
         out[cat] = bucket
     return out
+
+
+@router.get(
+    "/companies-billing-overview",
+    response_model=PlatformBillingCompaniesOverviewResponse,
+)
+async def companies_billing_overview(
+    request: Request,
+    container: ContainerDep,
+    limit: int = Query(default=50, ge=1, le=_COMPANIES_OVERVIEW_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
+) -> PlatformBillingCompaniesOverviewResponse:
+    _require_system(request)
+    fetch_limit = limit + 1
+    companies = await container.company_repository.list_all(limit=fetch_limit, offset=offset)
+    has_more = len(companies) > limit
+    page = companies[:limit]
+    items = [
+        PlatformBillingCompanyOverviewItem(
+            company_id=c.company_id,
+            name=c.name,
+            subdomain=c.subdomain,
+            status=c.status,
+            tariff_plan=c.tariff_plan.value,
+            balance=c.balance,
+            monthly_budget=c.monthly_budget,
+            current_month_spent=c.current_month_spent,
+        )
+        for c in page
+    ]
+    return PlatformBillingCompaniesOverviewResponse(items=items, has_more=has_more)
 
 
 @router.get(

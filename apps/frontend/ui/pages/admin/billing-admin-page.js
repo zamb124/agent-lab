@@ -904,10 +904,62 @@ export class BillingAdminPage extends PlatformElement {
             .billing-page-intro-header page-header {
                 margin-bottom: 0;
             }
+            .billing-admin-tabs {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+                margin: var(--space-3) 0 var(--space-2);
+            }
+            .billing-admin-tab {
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-sm);
+                border: 1px solid var(--border-default);
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+            }
+            .billing-admin-tab:hover {
+                background: var(--glass-tint-medium);
+            }
+            .billing-admin-tab[aria-selected='true'] {
+                border-color: var(--accent-primary, var(--border-strong));
+                background: var(--glass-tint-strong, var(--glass-tint-medium));
+            }
+            .billing-companies-table-wrap {
+                overflow-x: auto;
+                margin-top: var(--space-2);
+            }
+            .billing-companies-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: var(--text-xs);
+            }
+            .billing-companies-table th,
+            .billing-companies-table td {
+                padding: var(--space-2);
+                text-align: left;
+                border-bottom: 1px solid var(--border-default);
+            }
+            .billing-companies-table th {
+                color: var(--text-secondary);
+                font-weight: 600;
+            }
+            .billing-companies-table .num {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
         `,
     ];
 
     static properties = {
+        _billingTab: { type: String, state: true },
+        _companiesOverviewItems: { type: Array, state: true },
+        _companiesOverviewLoading: { type: Boolean, state: true },
+        _companiesOverviewError: { type: String, state: true },
+        _companiesOverviewHasMore: { type: Boolean, state: true },
+        _companiesOverviewOffset: { type: Number, state: true },
+
         _effectivePrices: { type: Object, state: true },
         _overrideRows: { type: Array, state: true },
         _pricesError: { type: String, state: true },
@@ -950,6 +1002,13 @@ export class BillingAdminPage extends PlatformElement {
 
     constructor() {
         super();
+        this._billingTab = 'companies';
+        this._companiesOverviewItems = [];
+        this._companiesOverviewLoading = false;
+        this._companiesOverviewError = '';
+        this._companiesOverviewHasMore = false;
+        this._companiesOverviewOffset = 0;
+
         this._effectivePrices = {};
         this._overrideRows = [];
         this._pricesError = '';
@@ -1020,6 +1079,9 @@ export class BillingAdminPage extends PlatformElement {
         document.addEventListener('click', this._usageOnDocClick);
         void this._loadPrices();
         void this._fetchBillingCompanySuggestInitial();
+        if (this._billingTab === 'companies') {
+            void this._loadCompaniesOverview(true);
+        }
     }
 
     disconnectedCallback() {
@@ -1255,6 +1317,41 @@ export class BillingAdminPage extends PlatformElement {
             this._pricesError = e.message;
         } finally {
             this._pricesLoading = false;
+        }
+    }
+
+    async _loadCompaniesOverview(reset = false) {
+        const pageSize = 50;
+        if (reset) {
+            this._companiesOverviewOffset = 0;
+            this._companiesOverviewItems = [];
+            this._companiesOverviewHasMore = false;
+        }
+        this._companiesOverviewLoading = true;
+        this._companiesOverviewError = '';
+        try {
+            const data = await api.get('/api/platform-billing/companies-billing-overview', {
+                limit: pageSize,
+                offset: this._companiesOverviewOffset,
+            });
+            const chunk = Array.isArray(data.items) ? data.items : [];
+            this._companiesOverviewItems = reset ? chunk : [...this._companiesOverviewItems, ...chunk];
+            this._companiesOverviewHasMore = Boolean(data.has_more);
+            this._companiesOverviewOffset = this._companiesOverviewItems.length;
+        } catch (e) {
+            this._companiesOverviewError = e && typeof e.message === 'string' ? e.message : String(e);
+        } finally {
+            this._companiesOverviewLoading = false;
+        }
+    }
+
+    _onSelectBillingTab(tab) {
+        if (this._billingTab === tab) {
+            return;
+        }
+        this._billingTab = tab;
+        if (tab === 'companies' && this._companiesOverviewItems.length === 0 && !this._companiesOverviewLoading) {
+            void this._loadCompaniesOverview(true);
         }
     }
 
@@ -1641,12 +1738,127 @@ export class BillingAdminPage extends PlatformElement {
                         ></platform-help-hint>
                     </page-header>
                 </div>
-                ${this._renderBillingCompanyScopeCompact()}
             </div>
 
-            ${this._renderPricesSection()}
-            ${this._renderSettlementRulesSection()}
-            ${this._renderUsageSection()}
+            <div class="billing-admin-tabs" role="tablist" aria-label=${this._t('tabs_region_label')}>
+                <button
+                    type="button"
+                    class="billing-admin-tab"
+                    role="tab"
+                    aria-selected=${this._billingTab === 'companies'}
+                    @click=${() => this._onSelectBillingTab('companies')}
+                >
+                    ${this._t('tab_companies')}
+                </button>
+                <button
+                    type="button"
+                    class="billing-admin-tab"
+                    role="tab"
+                    aria-selected=${this._billingTab === 'prices'}
+                    @click=${() => this._onSelectBillingTab('prices')}
+                >
+                    ${this._t('tab_prices_rules')}
+                </button>
+                <button
+                    type="button"
+                    class="billing-admin-tab"
+                    role="tab"
+                    aria-selected=${this._billingTab === 'usage'}
+                    @click=${() => this._onSelectBillingTab('usage')}
+                >
+                    ${this._t('tab_usage')}
+                </button>
+            </div>
+
+            ${this._billingTab === 'companies' ? this._renderCompaniesOverviewSection() : ''}
+            ${this._billingTab === 'prices'
+                ? html`
+                      <div class="billing-page-intro" style="margin-top:0;">
+                          ${this._renderBillingCompanyScopeCompact()}
+                      </div>
+                      ${this._renderPricesSection()}
+                      ${this._renderSettlementRulesSection()}
+                  `
+                : ''}
+            ${this._billingTab === 'usage' ? this._renderUsageSection() : ''}
+        `;
+    }
+
+    _renderCompaniesOverviewSection() {
+        const rows = this._companiesOverviewItems;
+        return html`
+            <div class="section" aria-label=${this._t('tab_companies')}>
+                <div class="billing-section-head-row">
+                    <h2 class="section-title section-title--inline">
+                        <span class="section-title__text">${this._t('companies_overview_heading')}</span>
+                    </h2>
+                    <div class="toolbar toolbar-tight toolbar-compact">
+                        ${this._iconBtn('refresh', {
+                            title: this._t('reload'),
+                            disabled: this._companiesOverviewLoading,
+                            onClick: () => this._loadCompaniesOverview(true),
+                        })}
+                    </div>
+                </div>
+                ${this._companiesOverviewError
+                    ? html`<div class="err">${this._companiesOverviewError}</div>`
+                    : ''}
+                ${this._companiesOverviewLoading && rows.length === 0
+                    ? html`<div>${this._t('loading')}</div>`
+                    : ''}
+                ${rows.length === 0 && !this._companiesOverviewLoading && !this._companiesOverviewError
+                    ? html`<p class="muted">${this._t('empty')}</p>`
+                    : ''}
+                ${rows.length > 0
+                    ? html`
+                          <div class="billing-companies-table-wrap">
+                              <table class="billing-companies-table">
+                                  <thead>
+                                      <tr>
+                                          <th>${this._t('col_company_id')}</th>
+                                          <th>${this._t('col_name')}</th>
+                                          <th>${this._t('col_subdomain')}</th>
+                                          <th>${this._t('col_status')}</th>
+                                          <th>${this._t('col_tariff')}</th>
+                                          <th class="num">${this._t('col_balance')}</th>
+                                          <th class="num">${this._t('col_monthly_budget')}</th>
+                                          <th class="num">${this._t('col_spent_month')}</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody>
+                                      ${rows.map(
+                                          (r) => html`
+                                              <tr>
+                                                  <td><code>${r.company_id}</code></td>
+                                                  <td>${r.name ?? ''}</td>
+                                                  <td>${r.subdomain ?? '—'}</td>
+                                                  <td>${r.status ?? ''}</td>
+                                                  <td>${r.tariff_plan ?? ''}</td>
+                                                  <td class="num">${r.balance}</td>
+                                                  <td class="num">${r.monthly_budget}</td>
+                                                  <td class="num">${r.current_month_spent}</td>
+                                              </tr>
+                                          `,
+                                      )}
+                                  </tbody>
+                              </table>
+                          </div>
+                          ${this._companiesOverviewHasMore
+                              ? html`
+                                    <div style="margin-top:var(--space-3);">
+                                        <platform-button
+                                            variant="secondary"
+                                            ?disabled=${this._companiesOverviewLoading}
+                                            @click=${() => this._loadCompaniesOverview(false)}
+                                        >
+                                            ${this._t('companies_load_more')}
+                                        </platform-button>
+                                    </div>
+                                `
+                              : ''}
+                      `
+                    : ''}
+            </div>
         `;
     }
 

@@ -237,13 +237,14 @@ class BaseRepository(ABC, Generic[T]):
         table_name = self._get_table_name()
         return await self._storage._delete_with_table(final_key, table_name)
 
-    async def list_all(self, limit: int = 100) -> List[T]:
+    async def list_all(self, limit: int = 100, offset: int = 0) -> List[T]:
         """
         Возвращает список всех сущностей.
         
         Args:
             limit: Максимальное количество результатов
-            
+            offset: Смещение (пагинация)
+
         Returns:
             Список сущностей
         """
@@ -252,7 +253,7 @@ class BaseRepository(ABC, Generic[T]):
         table_name = self._get_table_name()
         
         all_data = await self._storage._get_all_by_prefix_and_table(
-            final_prefix, table_name, limit
+            final_prefix, table_name, limit, offset
         )
         
         entities = []

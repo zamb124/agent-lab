@@ -162,3 +162,23 @@ class PlatformBillingCompanyResolveResponse(BaseModel):
     name: str
     subdomain: Optional[str] = None
 
+
+class PlatformBillingCompanyOverviewItem(BaseModel):
+    """Строка сводки по компании для таблицы админки биллинга."""
+
+    company_id: str
+    name: str
+    subdomain: Optional[str] = None
+    status: str
+    tariff_plan: str
+    balance: float
+    monthly_budget: float
+    current_month_spent: float
+
+
+class PlatformBillingCompaniesOverviewResponse(BaseModel):
+    """Страница списка компаний с полями биллинга."""
+
+    items: List[PlatformBillingCompanyOverviewItem]
+    has_more: bool
+

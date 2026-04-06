@@ -27,9 +27,9 @@ from pathlib import Path
 from typing import Type, Callable, List, Optional, Any, Tuple
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from pydantic_settings import BaseSettings as PydanticBaseSettings
@@ -229,6 +229,17 @@ def create_service_app(
     
     app.state.container = container
     app.state.settings = settings
+
+    from core.billing.exceptions import BillingBalanceBlockedError
+
+    @app.exception_handler(BillingBalanceBlockedError)
+    async def _billing_balance_blocked_handler(
+        _request: Request, exc: BillingBalanceBlockedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": str(exc), "code": "billing_balance_blocked"},
+        )
     
     # Дополнительные атрибуты state
     if extra_state:

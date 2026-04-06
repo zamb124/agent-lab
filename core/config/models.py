@@ -665,6 +665,14 @@ class BillingSpanSettlementConfig(BaseModel):
 class BillingConfig(BaseModel):
     """Тарификация: базовые цены из конфига + override через API system; settlement по трейсам."""
 
+    balance_enforcement_enabled: bool = Field(
+        default=True,
+        description="Pre-flight: блокировать старт операций с pending_settlement при balance <= 0.",
+    )
+    balance_enforcement_exempt_company_ids: List[str] = Field(
+        default_factory=lambda: ["system"],
+        description="company_id без проверки баланса (например system и демо для локальной разработки).",
+    )
     resource_base_prices: Dict[str, Dict[str, float]] = Field(
         default_factory=default_billing_resource_base_prices,
         description="Дерево category → resource → цена в руб./единицу списания; merge с storage override.",
