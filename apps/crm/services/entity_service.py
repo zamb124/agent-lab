@@ -1381,6 +1381,22 @@ class EntityService:
             pending = next_pending
 
         if pending:
+            created_real_ids = [
+                id_fragment[did]
+                for did in id_fragment
+                if kind_by_draft.get(did) == "created"
+            ]
+            for eid in reversed(created_real_ids):
+                ok = await self.delete_entity(eid)
+                if not ok:
+                    raise RuntimeError(
+                        f"Компенсация частичного apply черновика: сущность {eid} не удалена"
+                    )
+            if created_real_ids:
+                logger.warning(
+                    "apply черновика: откат %s частично созданных сущностей из-за ошибок в других строках",
+                    len(created_real_ids),
+                )
             failures: List[Tuple[str, Optional[str], Optional[str], str]] = []
             for ent in pending:
                 did = ent.draft_entity_id or ""
