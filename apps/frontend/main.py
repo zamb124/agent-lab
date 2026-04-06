@@ -33,6 +33,8 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
         return
     await ensure_system_admin_membership(container)
     await ensure_demo_company_and_user(container)
+    n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
+    logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
 
 
 # Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)

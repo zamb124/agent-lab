@@ -185,7 +185,9 @@ class BillingService:
         key = company_settlement_rules_storage_key(company_id)
         raw = await self._shared_storage.get(key, force_global=True)
         if raw:
-            return parse_settlement_rules_json(raw)
+            existing = parse_settlement_rules_json(raw)
+            if existing.rules:
+                return existing
 
         global_raw = await self._shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
         if global_raw:
@@ -201,6 +203,18 @@ class BillingService:
             force_global=True,
         )
         return fresh
+
+    async def ensure_settlement_rules_materialized_for_all_companies(self, *, limit: int = 50_000) -> int:
+        """
+        Для каждой компании в хранилище вызывает load_settlement_rules_document_for_company:
+        отсутствующий или пустой rules в Redis заменяется глобальным или кодовым дефолтом.
+        """
+        if self._shared_storage is None:
+            return 0
+        companies = await self._company_repository.list_all(limit=limit)
+        for company in companies:
+            await self.load_settlement_rules_document_for_company(company.company_id)
+        return len(companies)
 
     async def save_settlement_rules_document_for_company(
         self,
