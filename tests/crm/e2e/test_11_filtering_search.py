@@ -64,6 +64,32 @@ class TestFilteringSearch:
         results = search_resp.json()
         # Проверяем что хоть что-то вернулось
         assert isinstance(results, list)
+
+    @pytest.mark.asyncio
+    async def test_semantic_search_with_list_filters(self, crm_client, unique_id, auth_headers_system):
+        """GET /entities/search принимает фильтры списка (status, entity_type) вместе с query."""
+        await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"Semantic filter {unique_id}",
+                "description": f"описание {unique_id}",
+                "status": "active",
+            },
+            headers=auth_headers_system,
+        )
+        r = await crm_client.get(
+            "/crm/api/v1/entities/search",
+            params={
+                "query": unique_id,
+                "entity_type": "note",
+                "status": "active",
+                "limit": 50,
+            },
+            headers=auth_headers_system,
+        )
+        assert r.status_code == 200
+        assert isinstance(r.json(), list)
     
     @pytest.mark.asyncio
     async def test_combined_filters(self, crm_client, unique_id, auth_headers_system):

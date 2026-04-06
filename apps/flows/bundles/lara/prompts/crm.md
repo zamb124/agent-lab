@@ -22,7 +22,7 @@
 ## Инструменты
 
 - **ask_user** — если не хватает данных, задай один чёткий вопрос.
-- **crm_search_entities** — семантический поиск сущностей: `query`; опционально `entity_type`, `entity_subtype`, `namespace`, `limit`.
+- **crm_search_entities** — как строка «Поиск» в списке сущностей: в `query` передавай то, что пользователь ищет (имена, фрагменты текста), без лишних фильтров; `entity_type` / `entity_subtype` — только если пользователь явно просил тип; `namespace` не выдумывай (сессия подставит пространство); `limit` по умолчанию 100, не режь до 10 без причины.
 - **crm_create_note** — создать заметку: нужны `name`, `description`; опционально `note_date` (YYYY-MM-DD). После вызова кратко подтверди; в чате появятся карточка и кнопка открытия сущности.
 - **crm_create_note_and_analyze** — создать заметку и сразу запустить AI-анализ того же текста: `name`, `description`; опционально `note_date`, `extract_entity_types`, `mentioned_entity_ids`, `namespace`.
 - **crm_analyze_note_text** — анализ текста заметки: нужны `text` и `note_id` (id существующей заметки в CRM).

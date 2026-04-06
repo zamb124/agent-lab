@@ -8,6 +8,8 @@ import json
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
 from apps.flows.src.tools import tool
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.context import get_context
@@ -35,6 +37,48 @@ def _analyze_mock(args: dict, state: Any = None) -> str:
     )
 
 
+class CrmSearchEntitiesArgs(BaseModel):
+    """Аргументы GET /crm/api/v1/entities/search — та же семантика, что поле «Поиск» в UI."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    query: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Текст семантического поиска (вектор по name/description), как в строке «Поиск» в списке сущностей: "
+            "имена, фрагменты названий, ключевые слова; не пересказ всего диалога."
+        ),
+    )
+    entity_type: Optional[str] = Field(
+        None,
+        description="Только если пользователь явно ограничил тип сущности; иначе не передавай (null).",
+    )
+    entity_subtype: Optional[str] = Field(
+        None,
+        description="Только при явном запросе подтипа; иначе null.",
+    )
+    namespace: Optional[str] = Field(
+        None,
+        description="Пространство имён; null — берётся active_namespace из сессии CRM, не подставляй default сам.",
+    )
+    limit: int = Field(
+        100,
+        ge=1,
+        le=1000,
+        description="Максимум результатов (в UI часто 100).",
+    )
+
+    @field_validator("entity_type", "entity_subtype", "namespace", mode="before")
+    @classmethod
+    def _optional_str(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
 def _compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
     desc = raw.get("description")
     if isinstance(desc, str) and len(desc) > 400:
@@ -52,11 +96,12 @@ def _compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
 @tool(
     name="crm_search_entities",
     description=(
-        "Семантический поиск сущностей в CRM по запросу пользователя. "
-        "Передай query (текст). Опционально: entity_type, entity_subtype, namespace, limit (1–100). "
-        "Возвращает JSON: success, hits (краткие поля), blocks."
+        "Семантический поиск по сущностям CRM (как строка «Поиск» в списке сущностей: по смыслу имени и описания). "
+        "Не добавляй фильтры по типу или пространству, если пользователь об этом не просил. "
+        "Ответ — JSON: успех, список совпадений и блоки для чата."
     ),
     tags=["crm", "lara", "search"],
+    args_schema=CrmSearchEntitiesArgs,
     mock_response=lambda args, state=None: json.dumps(
         {
             "success": True,
@@ -80,19 +125,19 @@ async def crm_search_entities(
     entity_type: Optional[str] = None,
     entity_subtype: Optional[str] = None,
     namespace: Optional[str] = None,
-    limit: int = 15,
+    limit: int = 100,
     state: Optional[dict] = None,
 ) -> str:
-    ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
+    ns = namespace if namespace else _require_context_namespace()
     params: Dict[str, Any] = {
         "query": query.strip(),
         "namespace": ns,
-        "limit": max(1, min(100, int(limit))),
+        "limit": max(1, min(1000, int(limit))),
     }
-    if entity_type and str(entity_type).strip():
-        params["entity_type"] = str(entity_type).strip()
-    if entity_subtype and str(entity_subtype).strip():
-        params["entity_subtype"] = str(entity_subtype).strip()
+    if entity_type:
+        params["entity_type"] = entity_type
+    if entity_subtype:
+        params["entity_subtype"] = entity_subtype
 
     client = ServiceClient()
     try:

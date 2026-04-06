@@ -44,6 +44,47 @@ from taskiq.exceptions import TaskiqResultTimeoutError
 router = APIRouter(prefix="/entities", tags=["Entities"])
 
 
+def build_crm_entity_filters_from_query(
+    *,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    tags: Optional[str] = None,
+    user_id: Optional[str] = None,
+    substring_search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    created_at_from: Optional[datetime] = None,
+    created_at_to: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Общие фильтры списка и семантического поиска (без дублирования логики)."""
+    filters: Dict[str, Any] = {}
+    if status:
+        filters["status"] = status
+    if priority:
+        filters["priority"] = priority
+    if tags:
+        filters["tags"] = {"$contains": tags}
+    if user_id:
+        filters["user_id"] = user_id
+    if substring_search:
+        filters["search"] = substring_search
+    if date_from:
+        filters["note_date"] = {"$gte": date_from}
+    if date_to:
+        if "note_date" in filters:
+            filters["note_date"]["$lte"] = date_to
+        else:
+            filters["note_date"] = {"$lte": date_to}
+    if created_at_from:
+        filters["created_at"] = {"$gte": created_at_from}
+    if created_at_to:
+        if "created_at" in filters:
+            filters["created_at"]["$lte"] = created_at_to
+        else:
+            filters["created_at"] = {"$lte": created_at_to}
+    return filters
+
+
 @router.get("/person-entity/self", response_model=EntityResponse)
 async def get_person_entity_for_current_user(
     container: CRMContainer = Depends(get_container_dep),
@@ -135,16 +176,36 @@ async def search_entities(
     entity_type: Optional[str] = Query(None),
     entity_subtype: Optional[str] = Query(None),
     namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
-    limit: int = Query(10, le=100),
+    status: Optional[str] = Query(None, description="Как у списка: статус"),
+    priority: Optional[str] = Query(None, description="Как у списка: приоритет"),
+    tags: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
+    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
+    limit: int = Query(100, le=1000),
     service: EntityService = Depends(get_entity_service)
 ):
-    """Семантический поиск entities"""
+    """Семантический поиск entities (RAG + вектор); те же доп. фильтры, что у GET /entities (кроме подстроки ILIKE)."""
+    filters = build_crm_entity_filters_from_query(
+        status=status,
+        priority=priority,
+        tags=tags,
+        user_id=user_id,
+        substring_search=None,
+        date_from=date_from,
+        date_to=date_to,
+        created_at_from=created_at_from,
+        created_at_to=created_at_to,
+    )
     entities = await service.search_entities(
         query=query,
         entity_type=entity_type,
         entity_subtype=entity_subtype,
         namespace=namespace,
-        limit=limit
+        filters=filters if filters else None,
+        limit=limit,
     )
     return [EntityResponse.model_validate(e) for e in entities]
 
@@ -334,32 +395,18 @@ async def list_entities(
     service: EntityService = Depends(get_entity_service)
 ):
     """Получить список entities с фильтрацией"""
-    filters = {}
-    if status:
-        filters["status"] = status
-    if priority:
-        filters["priority"] = priority
-    if tags:
-        filters["tags"] = {"$contains": tags}
-    if user_id:
-        filters["user_id"] = user_id
-    if search:
-        filters["search"] = search
-    if date_from:
-        filters["note_date"] = {"$gte": date_from}
-    if date_to:
-        if "note_date" in filters:
-            filters["note_date"]["$lte"] = date_to
-        else:
-            filters["note_date"] = {"$lte": date_to}
-    if created_at_from:
-        filters["created_at"] = {"$gte": created_at_from}
-    if created_at_to:
-        if "created_at" in filters:
-            filters["created_at"]["$lte"] = created_at_to
-        else:
-            filters["created_at"] = {"$lte": created_at_to}
-    
+    filters = build_crm_entity_filters_from_query(
+        status=status,
+        priority=priority,
+        tags=tags,
+        user_id=user_id,
+        substring_search=search,
+        date_from=date_from,
+        date_to=date_to,
+        created_at_from=created_at_from,
+        created_at_to=created_at_to,
+    )
+
     entities = await service.list_entities(
         entity_type=entity_type,
         entity_subtype=entity_subtype,

@@ -21,7 +21,7 @@ let mid = 0;
  * Автономный чат: A2A stream + блоки. Без apps/crm, apps/flows.
  *
  * Свойства:
- * - flowsBaseUrl, flowId, skillId
+ * - flowsBaseUrl, flowId, skillId (→ metadata.skill в A2A на каждый message/stream; у flow lara в CRM — skill crm)
  * - title
  * - labels: { send, placeholder, newChat, greeting, ... }
  * - useCredentials: boolean (fetch credentials: include — cookie при том же site / см. хост)
@@ -34,6 +34,8 @@ let mid = 0;
  * - hideHeader: скрыть внутренний header (например когда заголовок и действия в drawer)
  * - getExtraMetadataVariables: async () => Record<string, unknown> — доп. ключи в metadata.variables (мёрж после языка)
  * - assistantTitle (assistant-title): имя в шапке; иначе title; иначе labels.title из локали (?embed_assistant_name= на странице — см. drawer)
+ *
+ * Событие (после завершения стрима ответа на отправку пользователя): **`humanitec-embed-chat-assistant-reply-completed`**, bubbles + composed — для счётчика на FAB drawer.
  */
 export class PlatformEmbedChat extends LitElement {
     static properties = {
@@ -239,6 +241,8 @@ export class PlatformEmbedChat extends LitElement {
         this.greetingSent = false;
         /** Пользователь у низа — продолжаем автопрокрутку при новых кусках ответа */
         this._stickToBottom = true;
+        /** После отправки пользователя ждём завершения стрима — для счётчика на FAB drawer. */
+        this._pendingAssistantReplyNotify = false;
         registerBuiltinEmbedBlocks();
     }
 
@@ -409,6 +413,7 @@ export class PlatformEmbedChat extends LitElement {
         };
         this._messages = [...this._messages, assistantMsg];
         this._loading = true;
+        this._pendingAssistantReplyNotify = true;
         this._stickToBottom = true;
         this.requestUpdate();
 
@@ -448,10 +453,19 @@ export class PlatformEmbedChat extends LitElement {
         } catch (err) {
             const m = err instanceof Error ? err.message : String(err);
             this._patchMessage(assistantMsg.id, { content: m, streaming: false });
+        } finally {
+            this._loading = false;
+            if (this._pendingAssistantReplyNotify) {
+                this._pendingAssistantReplyNotify = false;
+                this.dispatchEvent(
+                    new CustomEvent('humanitec-embed-chat-assistant-reply-completed', {
+                        bubbles: true,
+                        composed: true,
+                    }),
+                );
+            }
+            this.requestUpdate();
         }
-
-        this._loading = false;
-        this.requestUpdate();
     }
 
     _findMessage(id) {
@@ -487,6 +501,7 @@ export class PlatformEmbedChat extends LitElement {
     }
 
     _newChat() {
+        this._pendingAssistantReplyNotify = false;
         this._contextId = `${Date.now()}`;
         const g = this._lb('greeting', '');
         this._messages = g

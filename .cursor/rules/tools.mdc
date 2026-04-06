@@ -53,7 +53,7 @@ Tools = inline конфиги внутри ноды / FlowConfig. Встроен
 
 ## args_schema
 
-JSON Schema для LLM - какие параметры tool принимает:
+JSON Schema для LLM — какие параметры tool принимает (в конфиге ноды / `ToolReference` — объект свойств):
 
     "args_schema": {
         "name": {"type": "string", "description": "Имя пользователя"},
@@ -62,6 +62,8 @@ JSON Schema для LLM - какие параметры tool принимает:
     }
 
 Типы: string, integer, number, boolean, array, object
+
+**Встроенные тулы в Python** (`apps/flows/tools/`, декоратор **`@tool`**): можно задать полную JSON Schema и валидацию через Pydantic — **`@tool(..., args_schema=MyArgsModel)`**, где **`MyArgsModel`** — **`BaseModel`** с **`Field(description=...)`**, ограничениями и валидаторами. Для LLM **`parameters`** берутся из **`model_json_schema()`**; перед вызовом функции аргументы проходят **`model_validate`**. Без **`args_schema`** схема собирается из аннотаций сигнатуры (как раньше).
 
 ## input_mapping
 
@@ -186,7 +188,7 @@ JSON Schema для LLM - какие параметры tool принимает:
 
 ## Inline Python: `llm.chat` и function calling из кода
 
-- В namespace есть **`tool`** (`apps/flows/src/tools/decorator.py`) и **`BaseTool`**: функцию оборачивают **`@tool(name=..., description=..., tags=[...])`**, после чего имя функции — экземпляр с **`to_openai_schema()`**.
+- В namespace есть **`tool`** (`apps/flows/src/tools/decorator.py`) и **`BaseTool`**: функцию оборачивают **`@tool(name=..., description=..., tags=[...])`**, после чего имя функции — экземпляр с **`to_openai_schema()`**; для нормальной JSON Schema параметров у класса-наследника **`BaseTool`** задай **`args_schema: Type[BaseModel]`** с **`Field(description=...)`** (см. **`CrmSearchEntitiesTool`** в **`lara_crm.py`**).
 - **`SafeLLMClient.chat`** (`apps/flows/src/eval/wrappers.py`) нормализует **`tools`**: OpenAI-**`dict`** или объекты с **`to_openai_schema`**; сырая **`def`** без обёртки — **`SafeEvalError`** с пояснением.
 - Выполнение tool по **`tool_calls`** из ответа LLM в одном вызове `llm.chat` автоматически не делается: агент сам исполняет цикл или вызывает **`tool_instance.run(args, state)`** в коде ноды.
 

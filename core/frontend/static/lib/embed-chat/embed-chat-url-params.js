@@ -8,6 +8,7 @@
  * - embed_max_height | embed-panel-max-height: число (px) или CSS
  * - embed_locale_control | embed-locale-control: 1 | 0 — показывать переключатель языка в композере
  * - embed_assistant_name | embed-assistant-name | embed_chat_title | embed-chat-title: подпись в шапке панели (имя ассистента), UTF-8 в query
+ * - embed_skill | embed-skill | embed_skill_id | embed-skill-id: id skill flows (например crm для Lara); уходит в metadata A2A как skill
  */
 
 /**
@@ -19,8 +20,23 @@
  *   panelMaxHeight?: string,
  *   showLocaleControl?: boolean,
  *   assistantTitle?: string,
+ *   skillId?: string,
  * }}
  */
+function normalizeEmbedSkillId(raw) {
+    if (raw == null) {
+        return null;
+    }
+    const s = String(raw).trim();
+    if (!s || s.length > 64) {
+        return null;
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(s)) {
+        return null;
+    }
+    return s;
+}
+
 export function readEmbedChatUrlParams(search) {
     const raw =
         typeof search === 'string'
@@ -86,6 +102,12 @@ export function readEmbedChatUrlParams(search) {
         if (trimmed) {
             out.assistantTitle = trimmed.slice(0, 120);
         }
+    }
+
+    const skillRaw = pick(['embed_skill', 'embed-skill', 'embed_skill_id', 'embed-skill-id']);
+    const skillNorm = normalizeEmbedSkillId(skillRaw);
+    if (skillNorm) {
+        out.skillId = skillNorm;
     }
 
     return out;

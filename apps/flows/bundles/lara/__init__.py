@@ -1,1 +1,1 @@
-"""Bundle Lara: ассистент CRM с тулами create_file, read_file, CRM REST, UI blocks."""
+"""Bundle Lara: мультисервисный ассистент; skill crm — CRM REST, файлы, UI blocks."""

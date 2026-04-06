@@ -1926,27 +1926,50 @@ export const CRMStore = {
         const filters = baseStore.state.entities.filters;
         const currentNamespace = baseStore.state.namespaces.current;
         const namespaceName = getNamespaceName(currentNamespace);
-        const queryParams = {
-            entity_type: params.entity_type || filters.entity_type,
-            entity_subtype: params.entity_subtype || filters.entity_subtype,
-            namespace: namespaceName,
-            status: filters.status,
-            priority: filters.priority,
-            search: filters.search || undefined,
-            date_from: filters.date_from,
-            date_to: filters.date_to,
-            tags: filters.tags.length > 0 ? filters.tags.join(',') : undefined,
-            user_id: filters.user_id,
-            limit: params.limit || 100,
-        };
+        const searchTrimmed = typeof filters.search === 'string' ? filters.search.trim() : '';
 
-        Object.keys(queryParams).forEach(key => {
-            if (queryParams[key] === null || queryParams[key] === undefined) {
-                delete queryParams[key];
-            }
-        });
+        let entities;
+        if (searchTrimmed) {
+            const searchParams = {
+                namespace: namespaceName,
+                entity_type: params.entity_type || filters.entity_type,
+                entity_subtype: params.entity_subtype || filters.entity_subtype,
+                status: filters.status,
+                priority: filters.priority,
+                date_from: filters.date_from,
+                date_to: filters.date_to,
+                tags: filters.tags.length > 0 ? filters.tags.join(',') : undefined,
+                user_id: filters.user_id,
+                limit: params.limit || 100,
+            };
+            Object.keys(searchParams).forEach((key) => {
+                if (searchParams[key] === null || searchParams[key] === undefined) {
+                    delete searchParams[key];
+                }
+            });
+            entities = await crmApi.searchEntities(searchTrimmed, searchParams);
+        } else {
+            const queryParams = {
+                entity_type: params.entity_type || filters.entity_type,
+                entity_subtype: params.entity_subtype || filters.entity_subtype,
+                namespace: namespaceName,
+                status: filters.status,
+                priority: filters.priority,
+                date_from: filters.date_from,
+                date_to: filters.date_to,
+                tags: filters.tags.length > 0 ? filters.tags.join(',') : undefined,
+                user_id: filters.user_id,
+                limit: params.limit || 100,
+            };
 
-        const entities = await crmApi.getEntities(queryParams);
+            Object.keys(queryParams).forEach(key => {
+                if (queryParams[key] === null || queryParams[key] === undefined) {
+                    delete queryParams[key];
+                }
+            });
+
+            entities = await crmApi.getEntities(queryParams);
+        }
         const list = Array.isArray(entities) ? entities : [];
 
         baseStore.setState((s) => ({

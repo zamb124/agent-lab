@@ -7,10 +7,11 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
     ru: {
         title: 'Ассистент',
         fab_aria_open: 'Открыть чат',
+        fab_aria_open_unread: 'Открыть чат, новых ответов: {count}',
         fab_aria_close: 'Закрыть панель',
         panel_close: 'Закрыть',
-        panel_fullscreen: 'На весь экран',
-        panel_exit_fullscreen: 'Выйти из полноэкранного режима',
+        panel_fullscreen: 'Расширить окно',
+        panel_exit_fullscreen: 'Обычный размер',
         greeting:
             'Привет. Могу отвечать по данным из подключённых инструментов. Задайте вопрос или приложите файл.',
         placeholder: 'Сообщение…',
@@ -27,10 +28,11 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
     en: {
         title: 'Assistant',
         fab_aria_open: 'Open chat',
+        fab_aria_open_unread: 'Open chat, new replies: {count}',
         fab_aria_close: 'Close panel',
         panel_close: 'Close',
-        panel_fullscreen: 'Full screen',
-        panel_exit_fullscreen: 'Exit full screen',
+        panel_fullscreen: 'Expand panel',
+        panel_exit_fullscreen: 'Normal size',
         greeting: 'Hi. Ask a question or attach a file — answers use your flow tools.',
         placeholder: 'Message…',
         attach: 'Attachments',

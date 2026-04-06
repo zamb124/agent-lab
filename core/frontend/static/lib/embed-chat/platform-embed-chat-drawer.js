@@ -1,4 +1,4 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { embedChatLabelsForLang } from './embed-chat-default-labels.js';
 import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './embed-chat-url-params.js';
 import { resolveEmbedChatTheme } from './embed-chat-theme.js';
@@ -11,6 +11,7 @@ import './platform-embed-chat.js';
  * Тема: атрибут theme="light"|"dark"|"auto" (по умолчанию auto — как data-theme на documentElement).
  * Параметры URL страницы: см. embed-chat-url-params.js (embed_theme, embed_lang, embed_width, embed_assistant_name, …).
  * Имя в шапке: атрибут assistant-title или ?embed_assistant_name= / embed_chat_title= (UTF-8).
+ * Закрытие панели скрывает её (panel--collapsed), экземпляр platform-embed-chat сохраняется.
  */
 export class PlatformEmbedChatDrawer extends LitElement {
     static properties = {
@@ -36,6 +37,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
         /** Развёрнутая панель на весь вьюпорт (кнопка в шапке). */
         panelMaximized: { type: Boolean, state: true },
+        /** Непрочитанные ответы ассистента (панель закрыта), бейдж на FAB. */
+        fabUnreadCount: { type: Number, state: true },
     };
 
     static styles = css`
@@ -61,6 +64,26 @@ export class PlatformEmbedChatDrawer extends LitElement {
             align-items: center;
             justify-content: center;
             padding: 0;
+            box-sizing: border-box;
+        }
+
+        .fab-badge {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            box-sizing: border-box;
+            border-radius: 9px;
+            background: #e53935;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 18px;
+            text-align: center;
+            pointer-events: none;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
         }
 
         .fab:hover {
@@ -120,6 +143,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
             --embed-drawer-panel-bg: rgba(255, 255, 255, 0.98);
             --embed-drawer-panel-border: rgba(28, 31, 46, 0.08);
             box-shadow: 0 24px 64px rgba(22, 26, 38, 0.12);
+        }
+
+        .panel.panel--collapsed {
+            visibility: hidden;
+            pointer-events: none;
+            opacity: 0;
         }
 
         .panel-head {
@@ -188,15 +217,30 @@ export class PlatformEmbedChatDrawer extends LitElement {
             min-height: 0;
         }
 
-        .panel.panel--maximized {
-            top: max(0px, env(safe-area-inset-top, 0px));
-            right: max(0px, env(safe-area-inset-right, 0px));
-            bottom: max(0px, env(safe-area-inset-bottom, 0px));
-            left: max(0px, env(safe-area-inset-left, 0px));
-            width: auto;
-            height: auto;
-            max-height: none;
-            border-radius: min(var(--embed-drawer-radius), 20px);
+        @media (min-width: 768px) {
+            .panel.panel--maximized {
+                top: max(24px, env(safe-area-inset-top, 0px));
+                right: max(24px, env(safe-area-inset-right, 0px));
+                bottom: max(24px, env(safe-area-inset-bottom, 0px));
+                left: max(24px, env(safe-area-inset-left, 0px));
+                width: auto;
+                height: auto;
+                max-height: none;
+                border-radius: min(var(--embed-drawer-radius), 20px);
+            }
+        }
+
+        @media (max-width: 767px) {
+            .panel.panel--maximized {
+                top: max(0px, env(safe-area-inset-top, 0px));
+                right: max(0px, env(safe-area-inset-right, 0px));
+                bottom: max(0px, env(safe-area-inset-bottom, 0px));
+                left: max(0px, env(safe-area-inset-left, 0px));
+                width: auto;
+                height: auto;
+                max-height: none;
+                border-radius: min(var(--embed-drawer-radius), 20px);
+            }
         }
 
         .panel:fullscreen {
@@ -241,7 +285,10 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._onFullscreenChange = null;
         /** Нативный fullscreen именно для .panel (чтобы не сбрасывать CSS-maximize при чужом FS). */
         this._panelNativeFullscreen = false;
+        /** После успешного requestFullscreen на панели — выход без сравнения узлов (Lit / shadow). */
+        this._drawerOwnsNativeFullscreen = false;
         this.panelMaximized = false;
+        this.fabUnreadCount = 0;
     }
 
     _applyEmbedUrlParams() {
@@ -257,6 +304,9 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
         if (p.assistantTitle) {
             this.assistantTitle = p.assistantTitle;
+        }
+        if (p.skillId) {
+            this.skillId = p.skillId;
         }
         applyEmbedChatDrawerSizeVars(this, p);
     }
@@ -281,8 +331,9 @@ export class PlatformEmbedChatDrawer extends LitElement {
                 this._panelNativeFullscreen = true;
                 return;
             }
-            if (this._panelNativeFullscreen) {
+            if (this._panelNativeFullscreen || this._drawerOwnsNativeFullscreen) {
                 this._panelNativeFullscreen = false;
+                this._drawerOwnsNativeFullscreen = false;
                 if (this.panelMaximized) {
                     this.panelMaximized = false;
                     this.requestUpdate();
@@ -336,7 +387,11 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._unbindToggleListener();
         const name = (this.toggleEventName && String(this.toggleEventName).trim()) || 'humanitec-embed-chat-toggle';
         this._boundToggle = () => {
-            this.open = !this.open;
+            const next = !this.open;
+            if (next) {
+                this.fabUnreadCount = 0;
+            }
+            this.open = next;
         };
         this._toggleListenerEventName = name;
         window.addEventListener(name, this._boundToggle);
@@ -371,14 +426,55 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     _toggle() {
-        this.open = !this.open;
+        const next = !this.open;
+        if (next) {
+            this.fabUnreadCount = 0;
+        }
+        this.open = next;
+    }
+
+    _isMobileViewportForNativeFullscreen() {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return false;
+        }
+        return window.matchMedia('(max-width: 767px)').matches;
+    }
+
+    _onEmbedAssistantReplyCompleted() {
+        if (this.open) {
+            return;
+        }
+        this.fabUnreadCount += 1;
+        this.requestUpdate();
+    }
+
+    _fabBadgeText() {
+        const n = this.fabUnreadCount;
+        if (n < 1) {
+            return '';
+        }
+        return n > 9 ? '9+' : String(n);
+    }
+
+    _fabOpenAriaLabel(L) {
+        const n = this.fabUnreadCount;
+        if (n < 1) {
+            return L.fab_aria_open;
+        }
+        const tpl = L.fab_aria_open_unread || L.fab_aria_open;
+        const c = n > 99 ? '99+' : String(n);
+        return tpl.includes('{count}') ? tpl.replace(/\{count\}/g, c) : `${L.fab_aria_open} (${c})`;
     }
 
     _close() {
         const panel = this.renderRoot?.querySelector('.panel');
-        if (panel && document.fullscreenElement === panel) {
+        const fs = typeof document !== 'undefined' ? document.fullscreenElement : null;
+        if (this._drawerOwnsNativeFullscreen || this._panelNativeFullscreen || (fs && panel && fs === panel)) {
             this._panelNativeFullscreen = false;
-            document.exitFullscreen().catch(() => {});
+            this._drawerOwnsNativeFullscreen = false;
+            if (typeof document !== 'undefined' && document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
         }
         this.panelMaximized = false;
         this.open = false;
@@ -396,6 +492,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
             await this.updateComplete;
             const el = this.renderRoot?.querySelector('.panel');
             if (
+                this._isMobileViewportForNativeFullscreen() &&
                 el &&
                 typeof document !== 'undefined' &&
                 document.fullscreenEnabled &&
@@ -403,17 +500,27 @@ export class PlatformEmbedChatDrawer extends LitElement {
             ) {
                 try {
                     await el.requestFullscreen();
+                    this._drawerOwnsNativeFullscreen = true;
+                    this._panelNativeFullscreen = true;
                 } catch {
                     /* только CSS panel--maximized */
                 }
             }
         } else {
-            if (document.fullscreenElement === panel) {
+            const fs = typeof document !== 'undefined' ? document.fullscreenElement : null;
+            const shouldExitNative =
+                this._drawerOwnsNativeFullscreen ||
+                this._panelNativeFullscreen ||
+                (fs && panel && fs === panel);
+            if (shouldExitNative) {
+                this._drawerOwnsNativeFullscreen = false;
                 this._panelNativeFullscreen = false;
-                try {
-                    await document.exitFullscreen();
-                } catch {
-                    /* ignore */
+                if (typeof document !== 'undefined' && document.fullscreenElement) {
+                    try {
+                        await document.exitFullscreen();
+                    } catch {
+                        /* ignore */
+                    }
                 }
             }
             this.panelMaximized = false;
@@ -430,14 +537,17 @@ export class PlatformEmbedChatDrawer extends LitElement {
     render() {
         const L = this._resolvedLabels();
         const headTitle = this._panelAssistantHeadTitle(L);
-        const fabLabel = this.open ? L.fab_aria_close : L.fab_aria_open;
+        const fabAria = this.open ? L.fab_aria_close : this._fabOpenAriaLabel(L);
         const embedTheme = resolveEmbedChatTheme(this.theme);
         const fsLabel = this.panelMaximized ? L.panel_exit_fullscreen : L.panel_fullscreen;
 
         return html`
             ${!this.open
                 ? html`
-                      <button type="button" class="fab" aria-label=${fabLabel} @click=${this._toggle}>
+                      <button type="button" class="fab" aria-label=${fabAria} @click=${this._toggle}>
+                ${this.fabUnreadCount > 0
+                    ? html`<span class="fab-badge" aria-hidden="true">${this._fabBadgeText()}</span>`
+                    : nothing}
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <defs>
                         <linearGradient id="pecd-ai-g1" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -475,104 +585,103 @@ export class PlatformEmbedChatDrawer extends LitElement {
                   `
                 : ''}
 
-            ${this.open
-                ? html`
-                      <div class="backdrop" @click=${this._close}></div>
-                      <div
-                          class="panel ${this.panelMaximized ? 'panel--maximized' : ''}"
-                          @click=${(e) => e.stopPropagation()}
-                      >
-                          <div class="panel-head">
-                              <span class="panel-head-title">${headTitle}</span>
-                              <div class="panel-head-actions">
-                                  <button
-                                      type="button"
-                                      class="close-btn"
-                                      title=${L.new_chat}
-                                      aria-label=${L.new_chat}
-                                      @click=${this._onNewChat}
-                                  >
-                                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                                          <path
-                                              fill="none"
-                                              stroke="currentColor"
-                                              stroke-width="2"
-                                              stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
-                                          />
-                                      </svg>
-                                  </button>
-                                  <button
-                                      type="button"
-                                      class="close-btn"
-                                      title=${fsLabel}
-                                      aria-label=${fsLabel}
-                                      @click=${this._togglePanelFullscreen}
-                                  >
-                                      ${this.panelMaximized
-                                          ? html`<svg viewBox="0 0 24 24" aria-hidden="true">
-                                                <path
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    stroke-width="2"
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
-                                                />
-                                            </svg>`
-                                          : html`<svg viewBox="0 0 24 24" aria-hidden="true">
-                                                <path
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    stroke-width="2"
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7M9 9H3V3M21 21h-6v-6"
-                                                />
-                                            </svg>`}
-                                  </button>
-                                  <button
-                                      type="button"
-                                      class="close-btn"
-                                      title=${L.panel_close}
-                                      aria-label=${L.panel_close}
-                                      @click=${this._close}
-                                  >
-                                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                                          <path
-                                              fill="none"
-                                              stroke="currentColor"
-                                              stroke-width="2"
-                                              stroke-linecap="round"
-                                              d="M6 6l12 12M18 6L6 18"
-                                          />
-                                      </svg>
-                                  </button>
-                              </div>
-                          </div>
-                          <platform-embed-chat
-                              ?hide-header=${true}
-                              embed-theme=${embedTheme}
-                              interface-locale=${this._interfaceLocaleForChat()}
-                              ?show-locale-control=${this.showLocaleControl}
-                              .flowsBaseUrl=${this.flowsBaseUrl}
-                              flow-id=${this.flowId || ''}
-                              skill-id=${this.skillId || ''}
-                              .assistantTitle=${headTitle}
-                              .title=${headTitle}
-                              .labels=${this.labels && typeof this.labels === 'object' ? this.labels : {}}
-                              ?use-credentials=${this.useCredentials}
-                              ?enable-voice=${this.enableVoice}
-                              .getAuthToken=${this.getAuthToken}
-                              .getExtraMetadataVariables=${this.getExtraMetadataVariables}
-                              .actionHandlers=${this.actionHandlers && typeof this.actionHandlers === 'object'
-                                  ? this.actionHandlers
-                                  : {}}
-                          ></platform-embed-chat>
-                      </div>
-                  `
-                : ''}
+            ${this.open ? html`<div class="backdrop" @click=${this._close}></div>` : ''}
+            <div
+                class="panel ${this.panelMaximized ? 'panel--maximized' : ''} ${!this.open ? 'panel--collapsed' : ''}"
+                aria-hidden=${this.open ? 'false' : 'true'}
+                ?inert=${!this.open}
+                @click=${(e) => e.stopPropagation()}
+            >
+                <div class="panel-head">
+                    <span class="panel-head-title">${headTitle}</span>
+                    <div class="panel-head-actions">
+                        <button
+                            type="button"
+                            class="close-btn"
+                            title=${L.new_chat}
+                            aria-label=${L.new_chat}
+                            @click=${this._onNewChat}
+                        >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+                                />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            class="close-btn"
+                            title=${fsLabel}
+                            aria-label=${fsLabel}
+                            @click=${this._togglePanelFullscreen}
+                        >
+                            ${this.panelMaximized
+                                ? html`<svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <path
+                                          fill="none"
+                                          stroke="currentColor"
+                                          stroke-width="2"
+                                          stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
+                                      />
+                                  </svg>`
+                                : html`<svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <path
+                                          fill="none"
+                                          stroke="currentColor"
+                                          stroke-width="2"
+                                          stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          d="M3 10V3h7M14 3h7v7M3 14v7h7M21 14v7h-7"
+                                      />
+                                  </svg>`}
+                        </button>
+                        <button
+                            type="button"
+                            class="close-btn"
+                            title=${L.panel_close}
+                            aria-label=${L.panel_close}
+                            @click=${this._close}
+                        >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    d="M6 6l12 12M18 6L6 18"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <platform-embed-chat
+                    @humanitec-embed-chat-assistant-reply-completed=${this._onEmbedAssistantReplyCompleted}
+                    ?hide-header=${true}
+                    embed-theme=${embedTheme}
+                    interface-locale=${this._interfaceLocaleForChat()}
+                    ?show-locale-control=${this.showLocaleControl}
+                    .flowsBaseUrl=${this.flowsBaseUrl}
+                    flow-id=${this.flowId || ''}
+                    skill-id=${this.skillId || ''}
+                    .assistantTitle=${headTitle}
+                    .title=${headTitle}
+                    .labels=${this.labels && typeof this.labels === 'object' ? this.labels : {}}
+                    ?use-credentials=${this.useCredentials}
+                    ?enable-voice=${this.enableVoice}
+                    .getAuthToken=${this.getAuthToken}
+                    .getExtraMetadataVariables=${this.getExtraMetadataVariables}
+                    .actionHandlers=${this.actionHandlers && typeof this.actionHandlers === 'object'
+                        ? this.actionHandlers
+                        : {}}
+                ></platform-embed-chat>
+            </div>
         `;
     }
 }

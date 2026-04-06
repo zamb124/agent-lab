@@ -1,30 +1,21 @@
 {
   "id": "lara",
   "name": "Lara",
-  "description": "Ассистент CRM: заметки, анализ, файлы, UI-блоки в чате",
+  "description": "Мультисервисный ассистент: навыки по сервисам (CRM — skill crm)",
   "version": "1.0.0",
-  "tags": ["crm", "lara", "assistant"],
+  "tags": ["lara", "assistant", "multiservice", "crm"],
   "permission": ["admin", "developers"],
   "entry": "main",
   "nodes": {
     "main": {
       "type": "llm_node",
       "name": "Lara",
-      "prompt": "prompts/main.md",
+      "prompt": "prompts/base.md",
       "llm": {
         "model": "gpt-4o",
         "temperature": 0.2
       },
-      "tools": [
-        "ask_user",
-        "crm_search_entities",
-        "crm_create_note",
-        "crm_create_note_and_analyze",
-        "crm_analyze_note_text",
-        "create_file",
-        "read_file",
-        "push_embed_blocks"
-      ],
+      "tools": ["ask_user"],
       "output_key": "response"
     }
   },
@@ -47,5 +38,34 @@
     "active_namespace": "default",
     "user_language": "ru"
   },
-  "skills": {}
+  "skills": {
+    "crm": {
+      "name": "CRM NetWorkle",
+      "description": "Lara для CRM: сущности, заметки, файлы, UI-блоки в чате",
+      "tags": ["crm", "lara"],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Lara CRM",
+          "prompt": "prompts/crm.md",
+          "llm": {
+            "model": "gpt-4o",
+            "temperature": 0.2
+          },
+          "tools": [
+            "ask_user",
+            "crm_search_entities",
+            "crm_create_note",
+            "crm_create_note_and_analyze",
+            "crm_analyze_note_text",
+            "create_file",
+            "read_file",
+            "push_embed_blocks"
+          ],
+          "output_key": "response"
+        }
+      }
+    }
+  }
 }
