@@ -6,3 +6,10 @@ export { registerBuiltinEmbedBlocks } from './embed-builtin-blocks.js';
 export { PlatformEmbedChat } from './platform-embed-chat.js';
 export { PlatformEmbedChatDrawer } from './platform-embed-chat-drawer.js';
 export { EMBED_CHAT_DEFAULT_LABELS, embedChatLabelsForLang } from './embed-chat-default-labels.js';
+export { embedAssistantMarkdownToHtml, escapeHtmlBeforeMarkdown } from './embed-chat-markdown.js';
+export {
+    extractFlowsDownloadFileId,
+    normalizeEmbedBlockForFlowsUrls,
+    resolveFlowsFileDownloadUrl,
+    rewriteFlowsFileUrlsInHtml,
+} from './embed-flows-url-rewrite.js';

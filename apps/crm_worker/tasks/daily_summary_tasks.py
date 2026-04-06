@@ -27,6 +27,9 @@ from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
 
+# user_id из _set_crm_context без реального пользователя — не искать в user_repository
+_WORKER_PLACEHOLDER_USER_IDS = frozenset({"crm-worker"})
+
 
 def _set_crm_context(
     company_id: str,
@@ -53,6 +56,8 @@ def _set_crm_context(
 async def _build_auth_token_for_company(company_id: str, user_id: Optional[str]) -> str:
     container = get_crm_container()
     resolved_user_id = user_id
+    if resolved_user_id in _WORKER_PLACEHOLDER_USER_IDS:
+        resolved_user_id = None
     if not resolved_user_id:
         company = await container.company_repository.get(company_id)
         if company is None:

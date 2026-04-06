@@ -382,7 +382,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                                               stroke-width="2"
                                               stroke-linecap="round"
                                               stroke-linejoin="round"
-                                              d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"
+                                              d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
                                           />
                                       </svg>
                                   </button>
@@ -406,7 +406,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                               </div>
                           </div>
                           <platform-embed-chat
-                              hide-header
+                              ?hide-header=${true}
                               embed-theme=${embedTheme}
                               interface-locale=${this._interfaceLocaleForChat()}
                               ?show-locale-control=${this.showLocaleControl}

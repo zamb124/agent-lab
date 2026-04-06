@@ -129,12 +129,26 @@ async def read_file(
     vision_prompt: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> dict:
+    def _pick_file(files_list: List[Dict[str, Any]], name: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not files_list:
+            return None
+        if not name:
+            return files_list[0]
+        for f in files_list:
+            if f.get("name") == name:
+                return f
+        name_lower = name.lower()
+        for f in files_list:
+            if name_lower in (f.get("name") or "").lower():
+                return f
+        return None
+
     state = state or {}
     files = state.get("files", [])
     if not files:
         return {"success": False, "error": "Нет файлов для чтения"}
 
-    finfo = _find_file(files, file_name)
+    finfo = _pick_file(files, file_name)
     if finfo is None:
         return {
             "success": False,

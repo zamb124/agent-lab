@@ -10,7 +10,7 @@ import datetime as stdlib_datetime
 import importlib
 import math
 import operator
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from a2a.types import (
     Artifact,
@@ -47,8 +47,9 @@ from apps.flows.src.eval.wrappers import (
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.scheduling import _extract_ids_from_state
-from core.files.reader import FileReader
-from core.files.writer import FileWriter
+from core.files.models import FileResponse
+from core.files.reader import FileReadError, FileReader
+from core.files.writer import FileWriteError, FileWriter
 from core.inline_python_eval_policy import ALLOWED_BUILTINS
 from core.logging import get_logger
 from core.scheduler.models import ContentType
@@ -106,6 +107,7 @@ class PythonNamespaceBuilder:
         namespace["Union"] = Union
         namespace["Tuple"] = Tuple
         namespace["Callable"] = Callable
+        namespace["Literal"] = Literal
 
         namespace["FlowInterrupt"] = FlowInterrupt
 
@@ -131,6 +133,8 @@ class PythonNamespaceBuilder:
         namespace["add_user_message"] = add_user_message
         namespace["add_agent_message"] = add_agent_message
 
+        namespace["FileReader"] = FileReader
+        namespace["FileReadError"] = FileReadError
         namespace["reader"] = FileReader()
 
         namespace["extract_json"] = extract_json
@@ -157,6 +161,9 @@ class PythonNamespaceBuilder:
         namespace["ContentType"] = ContentType
         namespace["_extract_ids_from_state"] = _extract_ids_from_state
 
+        namespace["FileWriter"] = FileWriter
+        namespace["FileWriteError"] = FileWriteError
+        namespace["FileResponse"] = FileResponse
         namespace["writer"] = FileWriter()
         namespace["BaseTool"] = self.base_tool_class
         namespace["tool"] = tool

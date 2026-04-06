@@ -1,5 +1,11 @@
 import { LitElement, html, css, nothing } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { streamEmbedA2A } from './embed-a2a-stream.js';
+import { embedAssistantMarkdownToHtml } from './embed-chat-markdown.js';
+import {
+    normalizeEmbedBlockForFlowsUrls,
+    rewriteFlowsFileUrlsInHtml,
+} from './embed-flows-url-rewrite.js';
 import {
     crmA2aInterfaceLanguageVariables,
     embedChatLabelsForLang,
@@ -141,6 +147,68 @@ export class PlatformEmbedChat extends LitElement {
             padding: 0;
             border-radius: var(--embed-radius);
         }
+        .embed-msg-md {
+            color: inherit;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            max-width: 100%;
+        }
+        .embed-msg-md > :first-child {
+            margin-top: 0;
+        }
+        .embed-msg-md > :last-child {
+            margin-bottom: 0;
+        }
+        .embed-msg-md p,
+        .embed-msg-md ul,
+        .embed-msg-md ol,
+        .embed-msg-md blockquote,
+        .embed-msg-md pre,
+        .embed-msg-md h1,
+        .embed-msg-md h2,
+        .embed-msg-md h3,
+        .embed-msg-md h4 {
+            margin: 0 0 10px 0;
+        }
+        .embed-msg-md ul,
+        .embed-msg-md ol {
+            padding-left: 1.25rem;
+        }
+        .embed-msg-md a {
+            color: var(--embed-chat-accent);
+        }
+        .embed-msg-md code {
+            background: var(--embed-chat-composer-bg);
+            border-radius: 6px;
+            padding: 1px 5px;
+            font-size: 0.92em;
+        }
+        .embed-msg-md pre {
+            background: var(--embed-chat-input-bg);
+            border: 1px solid var(--embed-chat-border);
+            border-radius: 10px;
+            padding: 10px;
+            overflow: auto;
+        }
+        .embed-msg-md pre code {
+            background: transparent;
+            border: 0;
+            padding: 0;
+        }
+        .embed-msg-md table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0 0 10px 0;
+            font-size: 13px;
+        }
+        .embed-msg-md th,
+        .embed-msg-md td {
+            border: 1px solid var(--embed-chat-border);
+            padding: 6px 8px;
+        }
+        .embed-stream-dots {
+            color: var(--embed-chat-muted);
+        }
     `;
 
     constructor() {
@@ -164,8 +232,21 @@ export class PlatformEmbedChat extends LitElement {
         this._contextId = `${Date.now()}`;
         this._currentTaskId = null;
         this.greetingSent = false;
+        /** Пользователь у низа — продолжаем автопрокрутку при новых кусках ответа */
+        this._stickToBottom = true;
         registerBuiltinEmbedBlocks();
     }
+
+    static _SCROLL_STICK_PX = 56;
+
+    _onScrollAreaScroll = (e) => {
+        const el = e.currentTarget;
+        if (!(el instanceof HTMLElement)) {
+            return;
+        }
+        const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+        this._stickToBottom = gap <= PlatformEmbedChat._SCROLL_STICK_PX;
+    };
 
     _langForUiLabels() {
         const il = String(this.interfaceLocale || '').trim().toLowerCase();
@@ -238,8 +319,25 @@ export class PlatformEmbedChat extends LitElement {
                 },
             ];
             this.greetingSent = true;
+            this._stickToBottom = true;
             this.requestUpdate();
         }
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        if (!this._stickToBottom) {
+            return;
+        }
+        const run = () => {
+            const el = this.renderRoot?.querySelector('.scroll');
+            if (el instanceof HTMLElement) {
+                el.scrollTop = el.scrollHeight;
+            }
+        };
+        requestAnimationFrame(() => {
+            requestAnimationFrame(run);
+        });
     }
 
     _fileToBase64Part(file) {
@@ -294,6 +392,7 @@ export class PlatformEmbedChat extends LitElement {
         };
         this._messages = [...this._messages, assistantMsg];
         this._loading = true;
+        this._stickToBottom = true;
         this.requestUpdate();
 
         const getHeaders = async () => {
@@ -378,6 +477,7 @@ export class PlatformEmbedChat extends LitElement {
               ]
             : [];
         this.greetingSent = Boolean(g);
+        this._stickToBottom = true;
         this.requestUpdate();
     }
 
@@ -399,7 +499,7 @@ export class PlatformEmbedChat extends LitElement {
               `;
         return html`
             ${head}
-            <div class="scroll">
+            <div class="scroll" @scroll=${this._onScrollAreaScroll}>
                 ${this._messages.map((m) => this._renderMessage(m))}
             </div>
             <embed-chat-input
@@ -432,19 +532,33 @@ export class PlatformEmbedChat extends LitElement {
             m.toolCalls && m.toolCalls.length
                 ? html`<div class="tools">${m.toolCalls.map((t) => t.name || t.function?.name || 'tool').join(', ')}</div>`
                 : nothing;
-        const blocks = (m.blocks || []).map(
-            (b) => html`<embed-block-renderer .block=${b}></embed-block-renderer>`,
+        const flowsRoot = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim()) || '';
+        const blocks = (m.blocks || []).map((b) => {
+            const nb = normalizeEmbedBlockForFlowsUrls(b, flowsRoot);
+            return html`<embed-block-renderer .block=${nb}></embed-block-renderer>`;
+        });
+        const bodyHtml = rewriteFlowsFileUrlsInHtml(
+            embedAssistantMarkdownToHtml(m.content || ''),
+            flowsRoot,
         );
         const interrupt = m.inputRequired
             ? html`
                   <div class="interrupt">
-                      <div>${m.inputRequired.question || ''}</div>
+                      <div class="embed-msg-md">
+                          ${unsafeHTML(
+                              rewriteFlowsFileUrlsInHtml(
+                                  embedAssistantMarkdownToHtml(m.inputRequired.question || ''),
+                                  flowsRoot,
+                              ),
+                          )}
+                      </div>
                   </div>
               `
             : nothing;
         return html`
             <div class="msg assistant">
-                <div style="white-space: pre-wrap;">${m.content || ''}${m.streaming ? ' ...' : ''}</div>
+                <div class="embed-msg-md">${unsafeHTML(bodyHtml)}</div>
+                ${m.streaming ? html`<span class="embed-stream-dots"> ...</span>` : nothing}
                 ${interrupt}
                 ${blocks}
                 ${tools}

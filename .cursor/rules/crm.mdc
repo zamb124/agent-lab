@@ -101,6 +101,7 @@ CRM = **PostgreSQL (crm_entities + vector_documents) + PostgreSQL (types, relati
   - задача `crm_rebuild_daily_summary` пересчитывает и сохраняет state (+ S3);
   - задача `crm_rebuild_period_summary` — период;
   - задача `crm_reconcile_daily_summary` периодически доставляет пропущенные пересчеты daily.
+  - В `enqueue_daily_summary_rebuild` в TaskIQ уходит `user_id` из текущего `Context`; при reconcile контекст — `_set_crm_context` с плейсхолдером **`crm-worker`**. Для выпуска JWT без переданного `auth_token` **`_build_auth_token_for_company`** игнорирует этот плейсхолдер и берёт **`owner_user_id`** / первого из **`members`** реальной компании.
 ┌─────────────────────────────────────────────────────────────┐
 │  crm_entities (атрибуты)       │   PostgreSQL (relations)   │
 ├────────────────────────────────┼────────────────────────────┤
