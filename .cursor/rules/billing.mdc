@@ -39,7 +39,7 @@ alwaysApply: false
 ## Правила списания по spans
 
 - **Per company:** shared storage **`billing:company:{company_id}:settlement_rules_json`** (`force_global=True`), модель **`SettlementRulesDocument`** в [`core/billing/settlement_rules.py`](core/billing/settlement_rules.py): `application_mode` (`all_matching` | `first_win`), список **`SettlementRule`** (`rule_id`, `match`, `resource_name`, `usage_type`, `quantity_from`, `exclusive_group`, `priority`).
-- **Инициализация:** при первом чтении для компании, если ключа нет — однократно копируется непустой глобальный legacy-ключ **`billing:settlement_rules_json`**, иначе в storage пишется кодовый дефолт из [`core/billing/default_settlement_rules.py`](core/billing/default_settlement_rules.py).
+- **Инициализация:** `BillingService.load_settlement_rules_document_for_company`: если ключа нет **или** в JSON пустой **`rules`** — в per-company ключ пишется **кодовый дефолт** из [`core/billing/default_settlement_rules.py`](core/billing/default_settlement_rules.py). Устаревший глобальный **`billing:settlement_rules_json`** в эту цепочку **не входит** (только `load_settlement_rules_document()` для чтения без записи в компанию). При старте **frontend** — **`ensure_settlement_rules_materialized_for_all_companies`**. Джоба **`span_billing_settlement_tick`** вызывает тот же `load_*` по `company_id`.
 - **`quantity_from`:** `const:N` или `attr:<полный_ключ_в_attributes>` (например `platform.billing.quantity`).
 - Джоба: **`BillingService.settle_pending_span_in_job`** — если **`rules` пустой**, поведение как раньше (**`settle_span_charge`**, legacy). Если правила заданы — только совпавшие правила; при отсутствии матча списания нет (в лог — warning).
 

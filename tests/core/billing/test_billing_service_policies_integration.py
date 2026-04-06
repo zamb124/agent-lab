@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.service import (
     BillingService,
     STORAGE_SETTLEMENT_RULES_JSON,
@@ -267,14 +268,47 @@ async def test_reset_monthly_billing_unknown_company_raises(frontend_container) 
 
 
 @pytest.mark.asyncio
-async def test_load_settlement_rules_for_company_migrates_from_global_json(
+async def test_load_settlement_rules_empty_company_json_materializes_code_default(
     frontend_container, unique_id, system_user_id
 ) -> None:
     billing = frontend_container.billing_service
-    cid = f"migrate_sr_{unique_id}"
+    cid = f"empty_rules_{unique_id}"
     company = Company(
         company_id=cid,
-        name="Migrate SR",
+        name="Empty rules co",
+        owner_user_id=system_user_id,
+        members={system_user_id: ["owner"]},
+        balance=100.0,
+        monthly_budget=0.0,
+        current_month_spent=0.0,
+    )
+    await frontend_container.company_repository.set(company)
+    ckey = company_settlement_rules_storage_key(cid)
+    prev = await frontend_container.shared_storage.get(ckey, force_global=True)
+    try:
+        await frontend_container.shared_storage.set(ckey, "{}", force_global=True)
+        doc = await billing.load_settlement_rules_document_for_company(cid)
+        assert len(doc.rules) >= 1
+        raw_after = await frontend_container.shared_storage.get(ckey, force_global=True)
+        assert raw_after is not None
+        assert len(json.loads(raw_after).get("rules", [])) >= 1
+    finally:
+        if prev is not None:
+            await frontend_container.shared_storage.set(ckey, prev, force_global=True)
+        else:
+            await frontend_container.shared_storage.delete(ckey, force_global=True)
+
+
+@pytest.mark.asyncio
+async def test_load_settlement_rules_for_company_ignores_legacy_global_json(
+    frontend_container, unique_id, system_user_id
+) -> None:
+    """Per-company пустой каталог не копирует billing:settlement_rules_json — только кодовый дефолт."""
+    billing = frontend_container.billing_service
+    cid = f"no_migrate_sr_{unique_id}"
+    company = Company(
+        company_id=cid,
+        name="No global migrate",
         owner_user_id=system_user_id,
         members={system_user_id: ["owner"]},
         balance=100.0,
@@ -297,6 +331,7 @@ async def test_load_settlement_rules_for_company_migrates_from_global_json(
             }
         ],
     }
+    expected_n = len(default_settlement_rules_document().rules)
     prev_global = await frontend_container.shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
     try:
         await frontend_container.shared_storage.set(
@@ -305,11 +340,12 @@ async def test_load_settlement_rules_for_company_migrates_from_global_json(
             force_global=True,
         )
         doc = await billing.load_settlement_rules_document_for_company(cid)
-        assert len(doc.rules) == 1
-        assert doc.rules[0].rule_id == f"g_{unique_id}"
+        assert len(doc.rules) == expected_n
+        assert doc.rules[0].rule_id != f"g_{unique_id}"
         raw_co = await frontend_container.shared_storage.get(ckey, force_global=True)
         assert raw_co is not None
-        assert json.loads(raw_co)["rules"][0]["rule_id"] == f"g_{unique_id}"
+        stored_ids = {r["rule_id"] for r in json.loads(raw_co)["rules"]}
+        assert f"g_{unique_id}" not in stored_ids
     finally:
         await frontend_container.shared_storage.delete(ckey, force_global=True)
         if prev_global is not None:

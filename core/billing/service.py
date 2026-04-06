@@ -174,8 +174,11 @@ class BillingService:
 
     async def load_settlement_rules_document_for_company(self, company_id: str) -> SettlementRulesDocument:
         """
-        Правила settlement компании: ключ в storage, иначе однократная миграция из глобального
-        billing:settlement_rules_json, иначе кодовый дефолт (все варианты материализуются в storage).
+        Правила settlement компании: ключ per-company в storage.
+
+        Ключ отсутствует или rules пустой — в ключ пишется кодовый дефолт (default_settlement_rules_document).
+        Глобальный billing:settlement_rules_json не подмешивается: он только для load_settlement_rules_document()
+        (чтение без записи в компанию).
         """
         if not company_id or not isinstance(company_id, str):
             raise ValueError("company_id обязателен для правил settlement")
@@ -189,13 +192,6 @@ class BillingService:
             if existing.rules:
                 return existing
 
-        global_raw = await self._shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
-        if global_raw:
-            global_doc = parse_settlement_rules_json(global_raw)
-            if global_doc.rules:
-                await self._shared_storage.set(key, global_raw, force_global=True)
-                return global_doc
-
         fresh = default_settlement_rules_document()
         await self._shared_storage.set(
             key,
@@ -207,7 +203,7 @@ class BillingService:
     async def ensure_settlement_rules_materialized_for_all_companies(self, *, limit: int = 50_000) -> int:
         """
         Для каждой компании в хранилище вызывает load_settlement_rules_document_for_company:
-        отсутствующий или пустой rules в Redis заменяется глобальным или кодовым дефолтом.
+        отсутствующий или пустой rules в Redis заменяется кодовым дефолтом.
         """
         if self._shared_storage is None:
             return 0
