@@ -172,7 +172,57 @@ export class CRMApp extends PlatformApp {
         this._mobileSearchInputValue = '';
         this._resizeObserver = null;
         this._searchDebounce = null;
+        /** @type {{ key: string, at: number, data: object } | null} */
+        this._laraSummaryCache = null;
     }
+
+    _laraEmbedGetAuthToken = async () => {
+        const headers = await resolveFlowsEmbedAuthHeaders();
+        const ns = CRMStore._getCurrentNamespaceName();
+        if (ns && ns !== 'default') {
+            headers['X-Platform-Namespace'] = ns;
+        }
+        return headers;
+    };
+
+    _laraSummaryFlattenForVariables(data) {
+        if (!data || typeof data !== 'object') {
+            return {};
+        }
+        const json = JSON.stringify(data);
+        return {
+            crm_lara_summary: data,
+            crm_lara_summary_json: json,
+            crm_knowledge_imports_awaiting_review: data.knowledge_imports_awaiting_review,
+            crm_knowledge_imports_in_progress: data.knowledge_imports_in_progress,
+            crm_notes_analysis_draft_not_applied: data.notes_with_analysis_draft_not_applied,
+        };
+    }
+
+    _laraEmbedExtraMetadataVariables = async () => {
+        const crmApi = this.services?.get('crmApi');
+        if (!crmApi || typeof crmApi.getLaraWorkspaceSummary !== 'function') {
+            return {};
+        }
+        const ns = CRMStore._getCurrentNamespaceName();
+        const now = Date.now();
+        const ttlMs = 45000;
+        if (
+            this._laraSummaryCache &&
+            this._laraSummaryCache.key === ns &&
+            now - this._laraSummaryCache.at < ttlMs
+        ) {
+            return this._laraSummaryFlattenForVariables(this._laraSummaryCache.data);
+        }
+        try {
+            const data = await crmApi.getLaraWorkspaceSummary(ns);
+            this._laraSummaryCache = { key: ns, at: now, data };
+            return this._laraSummaryFlattenForVariables(data);
+        } catch (err) {
+            console.warn('getLaraWorkspaceSummary failed', err);
+            return {};
+        }
+    };
 
     setupStore() {
         return CRMStore;
@@ -588,11 +638,13 @@ export class CRMApp extends PlatformApp {
 
             <platform-embed-chat-drawer
                 theme="auto"
+                .assistantTitle=${this.i18n.t('app_shell.embed_assistant_name')}
                 .flowsBaseUrl=${resolveCrmLaraFlowsBaseUrl()}
                 flow-id="lara"
                 toggle-event-name="humanitec-embed-chat-toggle"
                 ?use-credentials=${flowsEmbedShouldSendCredentials(resolveCrmLaraFlowsBaseUrl())}
-                .getAuthToken=${resolveFlowsEmbedAuthHeaders}
+                .getAuthToken=${this._laraEmbedGetAuthToken}
+                .getExtraMetadataVariables=${this._laraEmbedExtraMetadataVariables}
                 .locale=${this.services.get('i18n').getCurrentLocale()}
             ></platform-embed-chat-drawer>
         `;

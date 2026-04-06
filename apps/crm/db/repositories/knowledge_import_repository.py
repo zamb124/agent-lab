@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMKnowledgeImport
@@ -141,3 +141,42 @@ class KnowledgeImportRepository(BaseCRMRepository[CRMKnowledgeImport]):
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def count_imports_in_progress_for_namespace(
+        self,
+        namespace: str,
+        *,
+        company_id: Optional[str] = None,
+    ) -> int:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(func.count()).select_from(CRMKnowledgeImport).where(
+                CRMKnowledgeImport.company_id == cid,
+                CRMKnowledgeImport.namespace == namespace,
+                CRMKnowledgeImport.status.in_(("pending", "running")),
+            )
+            result = await session.execute(stmt)
+            value = result.scalar()
+            if value is None:
+                raise ValueError("Knowledge import in_progress count returned empty")
+            return int(value)
+
+    async def count_imports_awaiting_review_for_namespace(
+        self,
+        namespace: str,
+        *,
+        company_id: Optional[str] = None,
+    ) -> int:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(func.count()).select_from(CRMKnowledgeImport).where(
+                CRMKnowledgeImport.company_id == cid,
+                CRMKnowledgeImport.namespace == namespace,
+                CRMKnowledgeImport.status.in_(("completed", "failed", "cancelled")),
+                CRMKnowledgeImport.review_completed_at.is_(None),
+            )
+            result = await session.execute(stmt)
+            value = result.scalar()
+            if value is None:
+                raise ValueError("Knowledge import awaiting_review count returned empty")
+            return int(value)

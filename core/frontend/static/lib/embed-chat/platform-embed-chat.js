@@ -32,6 +32,8 @@ let mid = 0;
  * - interfaceLocale: ru | en | auto — metadata.variables для A2A (язык ответа Lara/CRM)
  * - showLocaleControl: переключатель ru/en/auto в композере
  * - hideHeader: скрыть внутренний header (например когда заголовок и действия в drawer)
+ * - getExtraMetadataVariables: async () => Record<string, unknown> — доп. ключи в metadata.variables (мёрж после языка)
+ * - assistantTitle (assistant-title): имя в шапке; иначе title; иначе labels.title из локали (?embed_assistant_name= на странице — см. drawer)
  */
 export class PlatformEmbedChat extends LitElement {
     static properties = {
@@ -39,6 +41,7 @@ export class PlatformEmbedChat extends LitElement {
         flowId: { type: String, attribute: 'flow-id' },
         skillId: { type: String, attribute: 'skill-id' },
         title: { type: String },
+        assistantTitle: { type: String, attribute: 'assistant-title' },
         labels: { type: Object },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
@@ -46,6 +49,7 @@ export class PlatformEmbedChat extends LitElement {
         interfaceLocale: { type: String, attribute: 'interface-locale' },
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
         hideHeader: { type: Boolean, attribute: 'hide-header' },
+        getExtraMetadataVariables: { type: Object },
         greetingSent: { type: Boolean, state: true },
     };
 
@@ -216,7 +220,8 @@ export class PlatformEmbedChat extends LitElement {
         this.flowsBaseUrl = '';
         this.flowId = '';
         this.skillId = '';
-        this.title = 'Assistant';
+        this.title = '';
+        this.assistantTitle = '';
         this.labels = {};
         this.useCredentials = false;
         this.enableVoice = true;
@@ -270,6 +275,18 @@ export class PlatformEmbedChat extends LitElement {
     _lb(key, fb) {
         const L = this._mergedLabels();
         return L[key] != null && L[key] !== '' ? L[key] : fb;
+    }
+
+    _headDisplayTitle() {
+        const a = this.assistantTitle != null ? String(this.assistantTitle).trim() : '';
+        if (a) {
+            return a;
+        }
+        const t = this.title != null ? String(this.title).trim() : '';
+        if (t) {
+            return t;
+        }
+        return this._lb('title', 'Assistant');
     }
 
     _onEmbedLocaleChange(e) {
@@ -404,6 +421,14 @@ export class PlatformEmbedChat extends LitElement {
         };
 
         const langVars = crmA2aInterfaceLanguageVariables(this.interfaceLocale);
+        let extraVars = {};
+        if (typeof this.getExtraMetadataVariables === 'function') {
+            const raw = await this.getExtraMetadataVariables();
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                extraVars = raw;
+            }
+        }
+        const variables = { ...langVars, ...extraVars };
 
         try {
             await streamEmbedA2A(
@@ -414,7 +439,7 @@ export class PlatformEmbedChat extends LitElement {
                     contextId: this._contextId,
                     skillId: this.skillId || null,
                     files: fileParts,
-                    metadata: { variables: { ...langVars } },
+                    metadata: { variables },
                     getHeaders,
                     credentials: this.useCredentials ? 'include' : 'omit',
                 },
@@ -491,7 +516,7 @@ export class PlatformEmbedChat extends LitElement {
             ? nothing
             : html`
                   <header>
-                      <span>${this.title}</span>
+                      <span>${this._headDisplayTitle()}</span>
                       <button type="button" class="link" @click=${this._newChat}>
                           ${this._lb('new_chat', 'New chat')}
                       </button>

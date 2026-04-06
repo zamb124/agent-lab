@@ -7,6 +7,7 @@
  * - embed_width | embed-panel-width: число (px) или CSS, например 420 или min(100vw-32px,520px)
  * - embed_max_height | embed-panel-max-height: число (px) или CSS
  * - embed_locale_control | embed-locale-control: 1 | 0 — показывать переключатель языка в композере
+ * - embed_assistant_name | embed-assistant-name | embed_chat_title | embed-chat-title: подпись в шапке панели (имя ассистента), UTF-8 в query
  */
 
 /**
@@ -17,6 +18,7 @@
  *   panelWidth?: string,
  *   panelMaxHeight?: string,
  *   showLocaleControl?: boolean,
+ *   assistantTitle?: string,
  * }}
  */
 export function readEmbedChatUrlParams(search) {
@@ -71,6 +73,19 @@ export function readEmbedChatUrlParams(search) {
     if (locCtl != null) {
         const v = locCtl.toLowerCase();
         out.showLocaleControl = v !== '0' && v !== 'false' && v !== 'no';
+    }
+
+    const assistantRaw = pick([
+        'embed_assistant_name',
+        'embed-assistant-name',
+        'embed_chat_title',
+        'embed-chat-title',
+    ]);
+    if (assistantRaw) {
+        const trimmed = assistantRaw.replace(/\s+/g, ' ').trim();
+        if (trimmed) {
+            out.assistantTitle = trimmed.slice(0, 120);
+        }
     }
 
     return out;

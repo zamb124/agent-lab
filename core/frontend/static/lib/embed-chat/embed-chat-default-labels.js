@@ -9,6 +9,8 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         fab_aria_open: 'Открыть чат',
         fab_aria_close: 'Закрыть панель',
         panel_close: 'Закрыть',
+        panel_fullscreen: 'На весь экран',
+        panel_exit_fullscreen: 'Выйти из полноэкранного режима',
         greeting:
             'Привет. Могу отвечать по данным из подключённых инструментов. Задайте вопрос или приложите файл.',
         placeholder: 'Сообщение…',
@@ -27,6 +29,8 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         fab_aria_open: 'Open chat',
         fab_aria_close: 'Close panel',
         panel_close: 'Close',
+        panel_fullscreen: 'Full screen',
+        panel_exit_fullscreen: 'Exit full screen',
         greeting: 'Hi. Ask a question or attach a file — answers use your flow tools.',
         placeholder: 'Message…',
         attach: 'Attachments',

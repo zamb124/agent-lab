@@ -7,6 +7,8 @@
  * - Если объект с полем `blocks` (массив) — используется `blocks`.
  * - Если объект с полем `files` (массив) — каждый элемент мапится в блок `file_card`
  *   (`file_id`, `name`, `mime_type`, `url`, `preview_url`).
+ * Типы `card` / `table` / `actions` / `text`: см. `embed-builtin-blocks.js` и `embed-block-renderer.js`
+ * (у `table` поле JSON `title` → свойство `caption` у Lit-компонента).
  * Невалидный JSON не даёт блоков; рендерер показывает fallback для неизвестного `type`.
  */
 

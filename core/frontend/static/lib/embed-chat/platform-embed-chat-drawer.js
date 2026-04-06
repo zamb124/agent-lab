@@ -9,7 +9,8 @@ import './platform-embed-chat.js';
  * иконка FAB — та же разметка, что в core/assets/icons/ai.svg (встроена, без отдельного fetch).
  * Переключение: клик по FAB или CustomEvent `humanitec-embed-chat-toggle` на window.
  * Тема: атрибут theme="light"|"dark"|"auto" (по умолчанию auto — как data-theme на documentElement).
- * Параметры URL страницы: см. embed-chat-url-params.js (embed_theme, embed_lang, embed_width, …).
+ * Параметры URL страницы: см. embed-chat-url-params.js (embed_theme, embed_lang, embed_width, embed_assistant_name, …).
+ * Имя в шапке: атрибут assistant-title или ?embed_assistant_name= / embed_chat_title= (UTF-8).
  */
 export class PlatformEmbedChatDrawer extends LitElement {
     static properties = {
@@ -26,10 +27,15 @@ export class PlatformEmbedChatDrawer extends LitElement {
         /** Поверх дефолтных строк (embed-chat-default-labels) */
         labels: { type: Object },
         getAuthToken: { type: Object },
+        getExtraMetadataVariables: { type: Object },
         actionHandlers: { type: Object },
+        /** Имя в шапке панели и для внутреннего чата; внешние сайты: атрибут assistant-title или ?embed_assistant_name= */
+        assistantTitle: { type: String, attribute: 'assistant-title' },
         toggleEventName: { type: String, attribute: 'toggle-event-name' },
         /** Переключатель языка в композере; также embed_locale_control=1 в URL */
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
+        /** Развёрнутая панель на весь вьюпорт (кнопка в шапке). */
+        panelMaximized: { type: Boolean, state: true },
     };
 
     static styles = css`
@@ -181,6 +187,30 @@ export class PlatformEmbedChatDrawer extends LitElement {
             flex: 1;
             min-height: 0;
         }
+
+        .panel.panel--maximized {
+            top: max(0px, env(safe-area-inset-top, 0px));
+            right: max(0px, env(safe-area-inset-right, 0px));
+            bottom: max(0px, env(safe-area-inset-bottom, 0px));
+            left: max(0px, env(safe-area-inset-left, 0px));
+            width: auto;
+            height: auto;
+            max-height: none;
+            border-radius: min(var(--embed-drawer-radius), 20px);
+        }
+
+        .panel:fullscreen {
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            max-height: none;
+            border-radius: 0;
+            padding: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px))
+                max(16px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
+        }
     `;
 
     constructor() {
@@ -195,6 +225,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.theme = 'auto';
         this.labels = {};
         this.getAuthToken = undefined;
+        this.getExtraMetadataVariables = undefined;
         this.actionHandlers = {};
         this.toggleEventName = 'humanitec-embed-chat-toggle';
         this.showLocaleControl = false;
@@ -206,6 +237,11 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._onPlatformThemeChange = null;
         /** @type {(() => void) | null} */
         this._onPopStateEmbedParams = null;
+        /** @type {(() => void) | null} */
+        this._onFullscreenChange = null;
+        /** Нативный fullscreen именно для .panel (чтобы не сбрасывать CSS-maximize при чужом FS). */
+        this._panelNativeFullscreen = false;
+        this.panelMaximized = false;
     }
 
     _applyEmbedUrlParams() {
@@ -218,6 +254,9 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
         if (p.showLocaleControl !== undefined) {
             this.showLocaleControl = p.showLocaleControl;
+        }
+        if (p.assistantTitle) {
+            this.assistantTitle = p.assistantTitle;
         }
         applyEmbedChatDrawerSizeVars(this, p);
     }
@@ -233,6 +272,24 @@ export class PlatformEmbedChatDrawer extends LitElement {
             }
         };
         window.addEventListener('theme-change', this._onPlatformThemeChange);
+        this._onFullscreenChange = () => {
+            const panel = this.renderRoot?.querySelector('.panel');
+            if (!panel) {
+                return;
+            }
+            if (document.fullscreenElement === panel) {
+                this._panelNativeFullscreen = true;
+                return;
+            }
+            if (this._panelNativeFullscreen) {
+                this._panelNativeFullscreen = false;
+                if (this.panelMaximized) {
+                    this.panelMaximized = false;
+                    this.requestUpdate();
+                }
+            }
+        };
+        document.addEventListener('fullscreenchange', this._onFullscreenChange);
     }
 
     disconnectedCallback() {
@@ -243,6 +300,10 @@ export class PlatformEmbedChatDrawer extends LitElement {
         if (this._onPlatformThemeChange) {
             window.removeEventListener('theme-change', this._onPlatformThemeChange);
             this._onPlatformThemeChange = null;
+        }
+        if (this._onFullscreenChange) {
+            document.removeEventListener('fullscreenchange', this._onFullscreenChange);
+            this._onFullscreenChange = null;
         }
         this._unbindToggleListener();
         super.disconnectedCallback();
@@ -300,12 +361,63 @@ export class PlatformEmbedChatDrawer extends LitElement {
         return 'auto';
     }
 
+    /** Заголовок шапки: явное имя ассистента или строка title из labels/локали. */
+    _panelAssistantHeadTitle(L) {
+        const custom = this.assistantTitle != null ? String(this.assistantTitle).trim() : '';
+        if (custom) {
+            return custom;
+        }
+        return L.title;
+    }
+
     _toggle() {
         this.open = !this.open;
     }
 
     _close() {
+        const panel = this.renderRoot?.querySelector('.panel');
+        if (panel && document.fullscreenElement === panel) {
+            this._panelNativeFullscreen = false;
+            document.exitFullscreen().catch(() => {});
+        }
+        this.panelMaximized = false;
         this.open = false;
+    }
+
+    async _togglePanelFullscreen() {
+        const panel = this.renderRoot?.querySelector('.panel');
+        if (!panel) {
+            return;
+        }
+        const next = !this.panelMaximized;
+        if (next) {
+            this.panelMaximized = true;
+            this.requestUpdate();
+            await this.updateComplete;
+            const el = this.renderRoot?.querySelector('.panel');
+            if (
+                el &&
+                typeof document !== 'undefined' &&
+                document.fullscreenEnabled &&
+                typeof el.requestFullscreen === 'function'
+            ) {
+                try {
+                    await el.requestFullscreen();
+                } catch {
+                    /* только CSS panel--maximized */
+                }
+            }
+        } else {
+            if (document.fullscreenElement === panel) {
+                this._panelNativeFullscreen = false;
+                try {
+                    await document.exitFullscreen();
+                } catch {
+                    /* ignore */
+                }
+            }
+            this.panelMaximized = false;
+        }
     }
 
     _onNewChat() {
@@ -317,8 +429,10 @@ export class PlatformEmbedChatDrawer extends LitElement {
 
     render() {
         const L = this._resolvedLabels();
+        const headTitle = this._panelAssistantHeadTitle(L);
         const fabLabel = this.open ? L.fab_aria_close : L.fab_aria_open;
         const embedTheme = resolveEmbedChatTheme(this.theme);
+        const fsLabel = this.panelMaximized ? L.panel_exit_fullscreen : L.panel_fullscreen;
 
         return html`
             ${!this.open
@@ -364,9 +478,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
             ${this.open
                 ? html`
                       <div class="backdrop" @click=${this._close}></div>
-                      <div class="panel" @click=${(e) => e.stopPropagation()}>
+                      <div
+                          class="panel ${this.panelMaximized ? 'panel--maximized' : ''}"
+                          @click=${(e) => e.stopPropagation()}
+                      >
                           <div class="panel-head">
-                              <span class="panel-head-title">${L.title}</span>
+                              <span class="panel-head-title">${headTitle}</span>
                               <div class="panel-head-actions">
                                   <button
                                       type="button"
@@ -385,6 +502,35 @@ export class PlatformEmbedChatDrawer extends LitElement {
                                               d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
                                           />
                                       </svg>
+                                  </button>
+                                  <button
+                                      type="button"
+                                      class="close-btn"
+                                      title=${fsLabel}
+                                      aria-label=${fsLabel}
+                                      @click=${this._togglePanelFullscreen}
+                                  >
+                                      ${this.panelMaximized
+                                          ? html`<svg viewBox="0 0 24 24" aria-hidden="true">
+                                                <path
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
+                                                />
+                                            </svg>`
+                                          : html`<svg viewBox="0 0 24 24" aria-hidden="true">
+                                                <path
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7M9 9H3V3M21 21h-6v-6"
+                                                />
+                                            </svg>`}
                                   </button>
                                   <button
                                       type="button"
@@ -413,11 +559,13 @@ export class PlatformEmbedChatDrawer extends LitElement {
                               .flowsBaseUrl=${this.flowsBaseUrl}
                               flow-id=${this.flowId || ''}
                               skill-id=${this.skillId || ''}
-                              .title=${L.title}
+                              .assistantTitle=${headTitle}
+                              .title=${headTitle}
                               .labels=${this.labels && typeof this.labels === 'object' ? this.labels : {}}
                               ?use-credentials=${this.useCredentials}
                               ?enable-voice=${this.enableVoice}
                               .getAuthToken=${this.getAuthToken}
+                              .getExtraMetadataVariables=${this.getExtraMetadataVariables}
                               .actionHandlers=${this.actionHandlers && typeof this.actionHandlers === 'object'
                                   ? this.actionHandlers
                                   : {}}

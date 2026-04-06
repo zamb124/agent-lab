@@ -11,6 +11,10 @@ import importlib
 import math
 import operator
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+from urllib.parse import quote
+
+from core.clients.service_client import ServiceClient, ServiceClientError
+from core.context import get_context
 
 from a2a.types import (
     Artifact,
@@ -67,6 +71,29 @@ def _create_safe_builtins() -> Dict[str, Any]:
 
 def _get_inline_logger(name: str = "inline_code"):
     return get_logger(name)
+
+
+def _inline_require_context_namespace() -> str:
+    """Совпадает с lara_crm._require_context_namespace; код тулов в БД без импортов core.*."""
+    ctx = get_context()
+    if ctx is None:
+        raise RuntimeError("Context is not set")
+    return ctx.active_namespace or "default"
+
+
+def _inline_compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Совпадает с lara_crm._compact_entity_hit."""
+    desc = raw.get("description")
+    if isinstance(desc, str) and len(desc) > 400:
+        desc = desc[:400] + "…"
+    return {
+        "entity_id": raw.get("entity_id"),
+        "name": raw.get("name"),
+        "entity_type": raw.get("entity_type"),
+        "entity_subtype": raw.get("entity_subtype"),
+        "description": desc,
+        "namespace": raw.get("namespace"),
+    }
 
 
 class PythonNamespaceBuilder:
@@ -156,6 +183,13 @@ class PythonNamespaceBuilder:
         namespace["Artifact"] = Artifact
 
         namespace["httpx"] = HttpxModule()
+
+        namespace["ServiceClient"] = ServiceClient
+        namespace["ServiceClientError"] = ServiceClientError
+        namespace["get_context"] = get_context
+        namespace["quote"] = quote
+        namespace["_require_context_namespace"] = _inline_require_context_namespace
+        namespace["_compact_entity_hit"] = _inline_compact_entity_hit
 
         namespace["datetime"] = stdlib_datetime.datetime
         namespace["ContentType"] = ContentType

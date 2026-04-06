@@ -17,7 +17,9 @@
       },
       "tools": [
         "ask_user",
+        "crm_search_entities",
         "crm_create_note",
+        "crm_create_note_and_analyze",
         "crm_analyze_note_text",
         "create_file",
         "read_file",

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from apps.flows.src.tools import tool
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -30,6 +31,106 @@ def _analyze_mock(args: dict, state: Any = None) -> str:
                 }
             ],
         },
+        ensure_ascii=False,
+    )
+
+
+def _compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
+    desc = raw.get("description")
+    if isinstance(desc, str) and len(desc) > 400:
+        desc = desc[:400] + "…"
+    return {
+        "entity_id": raw.get("entity_id"),
+        "name": raw.get("name"),
+        "entity_type": raw.get("entity_type"),
+        "entity_subtype": raw.get("entity_subtype"),
+        "description": desc,
+        "namespace": raw.get("namespace"),
+    }
+
+
+@tool(
+    name="crm_search_entities",
+    description=(
+        "Семантический поиск сущностей в CRM по запросу пользователя. "
+        "Передай query (текст). Опционально: entity_type, entity_subtype, namespace, limit (1–100). "
+        "Возвращает JSON: success, hits (краткие поля), blocks."
+    ),
+    tags=["crm", "lara", "search"],
+    mock_response=lambda args, state=None: json.dumps(
+        {
+            "success": True,
+            "hits": [
+                {
+                    "entity_id": "ent_mock_1",
+                    "name": "Mock hit",
+                    "entity_type": "contact",
+                    "entity_subtype": None,
+                    "description": None,
+                    "namespace": "default",
+                }
+            ],
+            "blocks": [{"type": "text", "text": "Mock: найдено 1 сущность."}],
+        },
+        ensure_ascii=False,
+    ),
+)
+async def crm_search_entities(
+    query: str,
+    entity_type: Optional[str] = None,
+    entity_subtype: Optional[str] = None,
+    namespace: Optional[str] = None,
+    limit: int = 15,
+    state: Optional[dict] = None,
+) -> str:
+    ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
+    params: Dict[str, Any] = {
+        "query": query.strip(),
+        "namespace": ns,
+        "limit": max(1, min(100, int(limit))),
+    }
+    if entity_type and str(entity_type).strip():
+        params["entity_type"] = str(entity_type).strip()
+    if entity_subtype and str(entity_subtype).strip():
+        params["entity_subtype"] = str(entity_subtype).strip()
+
+    client = ServiceClient()
+    try:
+        raw_list = await client.get("crm", "/crm/api/v1/entities/search", params=params)
+    except ServiceClientError as exc:
+        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
+
+    if not isinstance(raw_list, list):
+        return json.dumps({"success": False, "error": "CRM search: invalid response"}, ensure_ascii=False)
+
+    hits = [_compact_entity_hit(x) for x in raw_list if isinstance(x, dict)]
+    summary = f"Найдено сущностей: {len(hits)}."
+    blocks: List[Dict[str, Any]] = [{"type": "text", "text": summary}]
+    if hits:
+        rows = [
+            {
+                "entity_id": h.get("entity_id"),
+                "name": h.get("name"),
+                "type": h.get("entity_type"),
+                "subtype": h.get("entity_subtype"),
+            }
+            for h in hits[:20]
+        ]
+        blocks.append(
+            {
+                "type": "table",
+                "title": "Результаты поиска",
+                "columns": [
+                    {"key": "name", "label": "Имя"},
+                    {"key": "type", "label": "Тип"},
+                    {"key": "entity_id", "label": "ID"},
+                ],
+                "rows": rows,
+            }
+        )
+
+    return json.dumps(
+        {"success": True, "hits": hits, "blocks": blocks},
         ensure_ascii=False,
     )
 
@@ -71,7 +172,7 @@ async def crm_create_note(
 
     client = ServiceClient()
     try:
-        entity = await client.post("crm", "/api/v1/entities", json=payload)
+        entity = await client.post("crm", "/crm/api/v1/entities", json=payload)
     except ServiceClientError as exc:
         return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
 
@@ -103,6 +204,87 @@ async def crm_create_note(
 
 
 @tool(
+    name="crm_create_note_and_analyze",
+    description=(
+        "Создаёт заметку в CRM и сразу запускает AI-анализ того же текста (извлечение сущностей). "
+        "Передай name, description. Опционально note_date (YYYY-MM-DD), extract_entity_types, mentioned_entity_ids, namespace."
+    ),
+    tags=["crm", "lara", "notes", "ai"],
+    mock_response=lambda args, state=None: json.dumps(
+        {
+            "success": True,
+            "entity_id": "note_mock_combo",
+            "analyze": {"entities": []},
+            "blocks": [{"type": "text", "text": "Mock: заметка создана и анализ выполнен."}],
+        },
+        ensure_ascii=False,
+    ),
+)
+async def crm_create_note_and_analyze(
+    name: str,
+    description: str,
+    note_date: Optional[str] = None,
+    extract_entity_types: Optional[List[str]] = None,
+    mentioned_entity_ids: Optional[List[str]] = None,
+    namespace: Optional[str] = None,
+    state: Optional[dict] = None,
+) -> str:
+    create_args: Dict[str, Any] = {"name": name, "description": description}
+    if note_date and str(note_date).strip():
+        create_args["note_date"] = str(note_date).strip()
+    if namespace and str(namespace).strip():
+        create_args["namespace"] = str(namespace).strip()
+
+    created_raw = await crm_create_note._run_impl(create_args, state)
+    created = json.loads(created_raw)
+    if not created.get("success"):
+        return created_raw
+
+    eid = created.get("entity_id")
+    if not eid or not isinstance(eid, str):
+        return json.dumps({"success": False, "error": "create_note: missing entity_id"}, ensure_ascii=False)
+
+    analyze_args: Dict[str, Any] = {"text": description, "note_id": eid}
+    if extract_entity_types:
+        analyze_args["extract_entity_types"] = extract_entity_types
+    if mentioned_entity_ids:
+        analyze_args["mentioned_entity_ids"] = mentioned_entity_ids
+
+    analyzed_raw = await crm_analyze_note_text._run_impl(analyze_args, state)
+    analyzed = json.loads(analyzed_raw)
+    if not analyzed.get("success"):
+        return json.dumps(
+            {
+                "success": False,
+                "error": analyzed.get("error", "analyze failed"),
+                "entity_id": eid,
+                "create": created,
+                "analyze": analyzed,
+            },
+            ensure_ascii=False,
+        )
+
+    blocks_out: List[Dict[str, Any]] = []
+    for b in created.get("blocks") or []:
+        if isinstance(b, dict):
+            blocks_out.append(b)
+    for b in analyzed.get("blocks") or []:
+        if isinstance(b, dict):
+            blocks_out.append(b)
+
+    return json.dumps(
+        {
+            "success": True,
+            "entity_id": eid,
+            "entity": created.get("entity"),
+            "analyze": analyzed.get("analyze"),
+            "blocks": blocks_out,
+        },
+        ensure_ascii=False,
+    )
+
+
+@tool(
     name="crm_analyze_note_text",
     description=(
         "Запускает AI-анализ текста заметки в CRM (извлечение сущностей). "
@@ -129,7 +311,7 @@ async def crm_analyze_note_text(
         body["mentioned_entity_ids"] = mentioned_entity_ids
 
     client = ServiceClient()
-    path = f"/api/v1/entities/analyze?note_id={note_id}"
+    path = f"/crm/api/v1/entities/analyze?note_id={quote(str(note_id), safe='')}"
     try:
         result = await client.post("crm", path, json=body)
     except ServiceClientError as exc:

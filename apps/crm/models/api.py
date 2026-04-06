@@ -515,6 +515,27 @@ class DeduplicateResult(BaseModel):
     merged_description: Optional[str] = None
 
 
+class LaraWorkspaceSummaryResponse(BaseModel):
+    """Сводка для Lara: импорты и черновики AI-анализа заметок в namespace."""
+
+    namespace: str
+    knowledge_imports_awaiting_review: int = Field(
+        ...,
+        ge=0,
+        description="Импорты completed/failed/cancelled без review_completed_at",
+    )
+    knowledge_imports_in_progress: int = Field(
+        ...,
+        ge=0,
+        description="Импорты в статусах pending или running",
+    )
+    notes_with_analysis_draft_not_applied: int = Field(
+        ...,
+        ge=0,
+        description="Заметки с ai_analysis_draft и без ai_analysis_applied_at",
+    )
+
+
 class KnowledgeImportStartRequest(BaseModel):
     namespace: str = Field(..., description="Пространство назначения")
     mode: Literal["notes_only", "graph"] = Field(

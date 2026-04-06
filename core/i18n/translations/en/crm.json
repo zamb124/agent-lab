@@ -461,6 +461,7 @@
         "mobile_search": "Search",
         "mobile_close_search": "Close search",
         "embed_chat_toggle": "Assistant chat",
+        "embed_assistant_name": "Lara",
         "sidebar": {
             "namespace": "Space",
             "create_space": "Create space",

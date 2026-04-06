@@ -216,6 +216,15 @@ class CRMContainer(BaseContainer):
             relationship_repo=self.relationship_repository,
         )
 
+    @lazy
+    def lara_workspace_service(self):
+        from apps.crm.services.lara_workspace_service import LaraWorkspaceService
+
+        return LaraWorkspaceService(
+            import_repo=self.knowledge_import_repository,
+            entity_repo=self.entity_repository,
+        )
+
 
 # === Глобальный контейнер ===
 

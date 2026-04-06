@@ -256,6 +256,27 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 raise ValueError("Entity count query returned empty value")
             return int(value)
 
+    async def count_notes_with_analysis_draft_not_applied(
+        self,
+        namespace: str,
+        *,
+        company_id: Optional[str] = None,
+    ) -> int:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(func.count(CRMEntity.entity_id)).where(
+                CRMEntity.company_id == cid,
+                CRMEntity.namespace == namespace,
+                CRMEntity.entity_type == "note",
+                CRMEntity.attributes["ai_analysis_draft"].is_not(None),
+                CRMEntity.attributes["ai_analysis_applied_at"].is_(None),
+            )
+            result = await session.execute(stmt)
+            value = result.scalar()
+            if value is None:
+                raise ValueError("Notes draft analysis count returned empty value")
+            return int(value)
+
     async def get_created_at_bounds(
         self,
         entity_type: Optional[str] = None,

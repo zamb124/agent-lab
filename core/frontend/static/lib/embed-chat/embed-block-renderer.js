@@ -3,6 +3,16 @@ import { getEmbedBlockEntry } from './block-registry.js';
 import './blocks/embed-ui-fallback.js';
 
 /**
+ * Имена полей JSON → свойства Lit-компонента (избегаем конфликта с HTMLElement, например title у table).
+ */
+function mapBlockPropertyToElementKey(blockType, key) {
+    if (blockType === 'table' && key === 'title') {
+        return 'caption';
+    }
+    return key;
+}
+
+/**
  * Рендерит один блок: createElement по tagName из реестра, прокидывает поля JSON (кроме type).
  */
 export class EmbedBlockRenderer extends LitElement {
@@ -52,8 +62,9 @@ export class EmbedBlockRenderer extends LitElement {
             if (k === 'type') {
                 continue;
             }
+            const propKey = mapBlockPropertyToElementKey(b.type, k);
             try {
-                el[k] = v;
+                el[propKey] = v;
             } catch {
                 /* ignore invalid prop */
             }

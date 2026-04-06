@@ -64,6 +64,13 @@ export class CRMAPIService extends BaseService {
         }
         return this.get('/entities/search', { query, ...params });
     }
+
+    async getLaraWorkspaceSummary(namespace) {
+        if (!namespace || typeof namespace !== 'string' || namespace.trim().length === 0) {
+            throw new Error('namespace is required');
+        }
+        return this.get('/workspace/lara-summary', { namespace: namespace.trim() });
+    }
     
     async findEntitiesByText(text) {
         if (!text) {
