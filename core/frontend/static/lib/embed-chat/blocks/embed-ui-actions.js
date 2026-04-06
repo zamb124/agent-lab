@@ -12,7 +12,7 @@ export class EmbedUiActions extends LitElement {
             gap: 8px;
         }
         button {
-            border-radius: 10px;
+            border-radius: var(--embed-radius, 25px);
             padding: 8px 14px;
             font-size: 13px;
             font-weight: 500;

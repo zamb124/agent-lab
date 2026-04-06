@@ -148,11 +148,15 @@ class KnowledgeImportService:
 
         from apps.crm_worker.tasks.knowledge_import_tasks import run_knowledge_import_task
 
+        ctx = get_context()
+        if ctx is None:
+            raise ValueError("Для старта импорта нужен контекст запроса")
         try:
             task = await run_knowledge_import_task.kiq(
                 import_id=import_id,
                 company_id=row.company_id,
                 auth_token=self._auth_token_from_context(),
+                interface_language=ctx.language.value,
             )
             task_id_str = str(task.task_id)
         except Exception as exc:

@@ -59,6 +59,7 @@ async def run_knowledge_import_task(
     import_id: str,
     company_id: str,
     auth_token: Optional[str],
+    interface_language: str,
 ) -> dict[str, Any]:
     container = get_crm_container()
     repo = container.knowledge_import_repository
@@ -67,7 +68,13 @@ async def run_knowledge_import_task(
         raise ValueError(f"Импорт не найден: {import_id}")
 
     used_redis = row.source_text_sha256 is not None
-    _set_crm_context(company_id, row.namespace, auth_token, row.user_id)
+    _set_crm_context(
+        company_id,
+        row.namespace,
+        auth_token,
+        row.user_id,
+        interface_language=interface_language,
+    )
     entity_service = container.entity_service
 
     created_entity_ids: list[str] = []

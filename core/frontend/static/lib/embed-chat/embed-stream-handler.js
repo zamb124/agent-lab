@@ -176,6 +176,7 @@ function reduceStatusUpdate(msg, result, out) {
     const state = status.state;
     const taskId = result.taskId || result.task_id || status.taskId || status.task_id;
     const ctx = result.contextId || result.context_id;
+    const terminalOk = state === 'completed' || state === 'finished';
     if (ctx) {
         out.contextId = ctx;
     }
@@ -187,7 +188,14 @@ function reduceStatusUpdate(msg, result, out) {
     if (message?.parts) {
         const text = message.parts.filter((p) => p.kind === 'text' && p.text).map((p) => p.text).join('');
         if (text) {
-            out.patch.content = (msg.content || '') + text;
+            if (terminalOk) {
+                const cur = (msg.content || '').trim();
+                if (!cur) {
+                    out.patch.content = text;
+                }
+            } else {
+                out.patch.content = (msg.content || '') + text;
+            }
         }
     }
 

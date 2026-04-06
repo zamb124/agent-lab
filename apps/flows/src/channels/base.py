@@ -47,6 +47,7 @@ from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
 from apps.flows.src.utils import extract_json_from_response
 from apps.flows.src.variables import VariableResolver
+from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
 
 logger = get_logger(__name__)
 
@@ -422,7 +423,11 @@ class BaseChannel(ABC):
                 override_vars = final_override_vars
                 
                 runtime_flow.variables = {**runtime_flow.variables, **override_vars}
-            
+
+            identity_vars = flow_variables_from_request_context(self.context)
+            if identity_vars:
+                runtime_flow.variables = {**runtime_flow.variables, **identity_vars}
+
             user_id = self.context.user.user_id if self.context.user else params.user_id
             user_groups = self.context.metadata.get("grps", []) or []
             

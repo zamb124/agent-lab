@@ -1,5 +1,9 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { streamEmbedA2A } from './embed-a2a-stream.js';
+import {
+    crmA2aInterfaceLanguageVariables,
+    embedChatLabelsForLang,
+} from './embed-chat-default-labels.js';
 import { reduceEmbedStreamEvent } from './embed-stream-handler.js';
 import { registerBuiltinEmbedBlocks } from './embed-builtin-blocks.js';
 import './embed-block-renderer.js';
@@ -18,6 +22,10 @@ let mid = 0;
  * - getAuthToken: async () => ({ Authorization?: 'Bearer ...' })
  * - actionHandlers: Record<string, (detail: object) => void>
  * - enableVoice: boolean
+ * - embedTheme: 'light' | 'dark' (атрибут embed-theme)
+ * - interfaceLocale: ru | en | auto — metadata.variables для A2A (язык ответа Lara/CRM)
+ * - showLocaleControl: переключатель ru/en/auto в композере
+ * - hideHeader: скрыть внутренний header (например когда заголовок и действия в drawer)
  */
 export class PlatformEmbedChat extends LitElement {
     static properties = {
@@ -28,6 +36,10 @@ export class PlatformEmbedChat extends LitElement {
         labels: { type: Object },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
+        embedTheme: { type: String, attribute: 'embed-theme' },
+        interfaceLocale: { type: String, attribute: 'interface-locale' },
+        showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
+        hideHeader: { type: Boolean, attribute: 'hide-header' },
         greetingSent: { type: Boolean, state: true },
     };
 
@@ -38,47 +50,65 @@ export class PlatformEmbedChat extends LitElement {
             height: 100%;
             min-height: 200px;
             font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-            --embed-chat-text: rgba(255, 255, 255, 0.9);
-            --embed-chat-muted: rgba(255, 255, 255, 0.55);
-            --embed-chat-border: rgba(255, 255, 255, 0.12);
-            --embed-chat-surface: rgba(255, 255, 255, 0.06);
+            --embed-radius: 25px;
+            --embed-chat-text: rgba(255, 255, 255, 0.92);
+            --embed-chat-muted: rgba(255, 255, 255, 0.52);
+            --embed-chat-border: rgba(255, 255, 255, 0.11);
+            --embed-chat-surface: rgba(255, 255, 255, 0.07);
             --embed-chat-accent: #99a6f9;
             --embed-chat-on-accent: #0f0f12;
-            --embed-chat-input-bg: rgba(0, 0, 0, 0.25);
+            --embed-chat-accent-muted: rgba(153, 166, 249, 0.28);
+            --embed-chat-input-bg: rgba(0, 0, 0, 0.22);
+            --embed-chat-composer-bg: rgba(255, 255, 255, 0.06);
+            --embed-chat-panel-bg: transparent;
+            --embed-chat-interrupt-bg: rgba(153, 166, 249, 0.1);
             color: var(--embed-chat-text);
-            background: var(--embed-chat-panel-bg, rgba(20, 22, 30, 0.95));
-            border-radius: 16px;
-            border: 1px solid var(--embed-chat-border);
+            background: var(--embed-chat-panel-bg);
+            border-radius: 0;
+            border: none;
             overflow: hidden;
+        }
+        :host([embed-theme='light']) {
+            --embed-chat-text: #1c1f2e;
+            --embed-chat-muted: rgba(28, 31, 46, 0.52);
+            --embed-chat-border: rgba(28, 31, 46, 0.1);
+            --embed-chat-surface: rgba(28, 31, 46, 0.05);
+            --embed-chat-accent: #6d62e8;
+            --embed-chat-on-accent: #ffffff;
+            --embed-chat-accent-muted: rgba(109, 98, 232, 0.2);
+            --embed-chat-input-bg: rgba(255, 255, 255, 0.92);
+            --embed-chat-composer-bg: #f2f3f8;
+            --embed-chat-interrupt-bg: rgba(109, 98, 232, 0.1);
         }
         header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 14px;
+            padding: 4px 4px 12px 8px;
             border-bottom: 1px solid var(--embed-chat-border);
             font-weight: 600;
             font-size: 15px;
+            border-radius: 0;
         }
         .scroll {
             flex: 1;
             min-height: 0;
             overflow-y: auto;
-            padding: 12px;
+            padding: 12px 4px;
             display: flex;
             flex-direction: column;
             gap: 12px;
         }
         .msg {
             max-width: 92%;
-            padding: 10px 12px;
-            border-radius: 14px;
+            padding: 12px 14px;
+            border-radius: var(--embed-radius);
             font-size: 14px;
             line-height: 1.45;
         }
         .msg.user {
             align-self: flex-end;
-            background: var(--embed-chat-accent-muted, rgba(153, 166, 249, 0.25));
+            background: var(--embed-chat-accent-muted);
         }
         .msg.assistant {
             align-self: flex-start;
@@ -97,10 +127,10 @@ export class PlatformEmbedChat extends LitElement {
         }
         .interrupt {
             margin-top: 10px;
-            padding: 10px;
-            border-radius: 10px;
+            padding: 12px 14px;
+            border-radius: var(--embed-radius);
             border: 1px solid var(--embed-chat-accent);
-            background: rgba(153, 166, 249, 0.08);
+            background: var(--embed-chat-interrupt-bg);
         }
         button.link {
             background: transparent;
@@ -109,6 +139,7 @@ export class PlatformEmbedChat extends LitElement {
             cursor: pointer;
             font-size: 13px;
             padding: 0;
+            border-radius: var(--embed-radius);
         }
     `;
 
@@ -121,6 +152,10 @@ export class PlatformEmbedChat extends LitElement {
         this.labels = {};
         this.useCredentials = false;
         this.enableVoice = true;
+        this.embedTheme = 'dark';
+        this.interfaceLocale = 'auto';
+        this.showLocaleControl = false;
+        this.hideHeader = false;
         this.getAuthToken = undefined;
         this.actionHandlers = {};
         /** @type {Array<object>} */
@@ -132,9 +167,37 @@ export class PlatformEmbedChat extends LitElement {
         registerBuiltinEmbedBlocks();
     }
 
+    _langForUiLabels() {
+        const il = String(this.interfaceLocale || '').trim().toLowerCase();
+        const primary = il.split(/[-_]/)[0];
+        if (primary === 'en') {
+            return 'en';
+        }
+        if (primary === 'ru') {
+            return 'ru';
+        }
+        const doc = String(document.documentElement.lang || '').trim().toLowerCase();
+        return doc.startsWith('en') ? 'en' : 'ru';
+    }
+
+    _mergedLabels() {
+        const base = embedChatLabelsForLang(this._langForUiLabels());
+        const extra = this.labels && typeof this.labels === 'object' ? this.labels : {};
+        return { ...base, ...extra };
+    }
+
     _lb(key, fb) {
-        const L = this.labels && typeof this.labels === 'object' ? this.labels : {};
+        const L = this._mergedLabels();
         return L[key] != null && L[key] !== '' ? L[key] : fb;
+    }
+
+    _onEmbedLocaleChange(e) {
+        const loc = e.detail?.locale;
+        if (loc !== 'auto' && loc !== 'ru' && loc !== 'en') {
+            return;
+        }
+        this.interfaceLocale = loc;
+        this.requestUpdate();
     }
 
     connectedCallback() {
@@ -241,6 +304,8 @@ export class PlatformEmbedChat extends LitElement {
             return h && typeof h === 'object' ? h : {};
         };
 
+        const langVars = crmA2aInterfaceLanguageVariables(this.interfaceLocale);
+
         try {
             await streamEmbedA2A(
                 {
@@ -250,6 +315,7 @@ export class PlatformEmbedChat extends LitElement {
                     contextId: this._contextId,
                     skillId: this.skillId || null,
                     files: fileParts,
+                    metadata: { variables: { ...langVars } },
                     getHeaders,
                     credentials: this.useCredentials ? 'include' : 'omit',
                 },
@@ -315,20 +381,35 @@ export class PlatformEmbedChat extends LitElement {
         this.requestUpdate();
     }
 
+    /** Сброс диалога; вызывается с хоста (drawer) при скрытом внутреннем header. */
+    startNewChat() {
+        this._newChat();
+    }
+
     render() {
+        const head = this.hideHeader
+            ? nothing
+            : html`
+                  <header>
+                      <span>${this.title}</span>
+                      <button type="button" class="link" @click=${this._newChat}>
+                          ${this._lb('new_chat', 'New chat')}
+                      </button>
+                  </header>
+              `;
         return html`
-            <header>
-                <span>${this.title}</span>
-                <button type="button" class="link" @click=${this._newChat}>${this._lb('newChat', 'New chat')}</button>
-            </header>
+            ${head}
             <div class="scroll">
                 ${this._messages.map((m) => this._renderMessage(m))}
             </div>
             <embed-chat-input
                 ?loading=${this._loading}
                 placeholder=${this._lb('placeholder', 'Message...')}
-                .labels=${this.labels}
+                .labels=${this._mergedLabels()}
                 ?enable-voice=${this.enableVoice}
+                ?show-locale-control=${this.showLocaleControl}
+                interface-locale=${this.interfaceLocale || 'auto'}
+                @embed-locale-change=${this._onEmbedLocaleChange}
                 @embed-send=${this._onSend}
             ></embed-chat-input>
         `;

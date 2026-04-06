@@ -13,7 +13,7 @@ export class EmbedUiFallback extends LitElement {
             color: var(--embed-chat-muted, rgba(255, 255, 255, 0.55));
             padding: 8px;
             border: 1px dashed var(--embed-chat-border, rgba(255, 255, 255, 0.2));
-            border-radius: 8px;
+            border-radius: var(--embed-radius, 25px);
         }
     `;
 

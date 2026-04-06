@@ -17,7 +17,7 @@ export class EmbedUiCard extends LitElement {
             --embed-card-muted: var(--embed-chat-muted, rgba(255, 255, 255, 0.55));
         }
         .card {
-            border-radius: 12px;
+            border-radius: var(--embed-radius, 25px);
             border: 1px solid var(--embed-card-border);
             background: var(--embed-card-bg);
             padding: 12px 14px;

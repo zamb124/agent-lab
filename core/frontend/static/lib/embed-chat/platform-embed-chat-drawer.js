@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { embedChatLabelsForLang } from './embed-chat-default-labels.js';
+import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './embed-chat-url-params.js';
 import { resolveEmbedChatTheme } from './embed-chat-theme.js';
 import './platform-embed-chat.js';
 
@@ -8,6 +9,7 @@ import './platform-embed-chat.js';
  * иконка FAB — та же разметка, что в core/assets/icons/ai.svg (встроена, без отдельного fetch).
  * Переключение: клик по FAB или CustomEvent `humanitec-embed-chat-toggle` на window.
  * Тема: атрибут theme="light"|"dark"|"auto" (по умолчанию auto — как data-theme на documentElement).
+ * Параметры URL страницы: см. embed-chat-url-params.js (embed_theme, embed_lang, embed_width, …).
  */
 export class PlatformEmbedChatDrawer extends LitElement {
     static properties = {
@@ -26,6 +28,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
         getAuthToken: { type: Object },
         actionHandlers: { type: Object },
         toggleEventName: { type: String, attribute: 'toggle-event-name' },
+        /** Переключатель языка в композере; также embed_locale_control=1 в URL */
+        showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
     };
 
     static styles = css`
@@ -90,8 +94,11 @@ export class PlatformEmbedChatDrawer extends LitElement {
             bottom: max(12px, env(safe-area-inset-bottom, 0px));
             left: auto;
             height: auto;
-            max-height: calc(100dvh - 24px);
-            width: min(calc(100vw - 24px), max(320px, min(52vw, 440px)));
+            width: var(
+                --embed-panel-width,
+                min(calc(100vw - 24px), max(320px, min(52vw, 440px)))
+            );
+            max-height: var(--embed-panel-max-height, calc(100dvh - 24px));
             box-sizing: border-box;
             padding: 14px 14px 16px;
             display: flex;
@@ -112,7 +119,28 @@ export class PlatformEmbedChatDrawer extends LitElement {
         .panel-head {
             display: flex;
             align-items: center;
-            justify-content: flex-end;
+            gap: 10px;
+            flex-shrink: 0;
+            padding: 4px 4px 12px 8px;
+            border-bottom: 1px solid var(--embed-drawer-panel-border, rgba(255, 255, 255, 0.1));
+        }
+
+        .panel-head-title {
+            flex: 1;
+            min-width: 0;
+            font-weight: 600;
+            font-size: 15px;
+            color: rgba(255, 255, 255, 0.92);
+        }
+
+        :host([data-embed-theme='light']) .panel-head-title {
+            color: #1c1f2e;
+        }
+
+        .panel-head-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             flex-shrink: 0;
         }
 
@@ -169,16 +197,36 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.getAuthToken = undefined;
         this.actionHandlers = {};
         this.toggleEventName = 'humanitec-embed-chat-toggle';
+        this.showLocaleControl = false;
         /** @type {(() => void) | null} */
         this._boundToggle = null;
         /** @type {string | null} */
         this._toggleListenerEventName = null;
         /** @type {(() => void) | null} */
         this._onPlatformThemeChange = null;
+        /** @type {(() => void) | null} */
+        this._onPopStateEmbedParams = null;
+    }
+
+    _applyEmbedUrlParams() {
+        const p = readEmbedChatUrlParams();
+        if (p.theme) {
+            this.theme = p.theme;
+        }
+        if (p.locale) {
+            this.locale = p.locale;
+        }
+        if (p.showLocaleControl !== undefined) {
+            this.showLocaleControl = p.showLocaleControl;
+        }
+        applyEmbedChatDrawerSizeVars(this, p);
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._applyEmbedUrlParams();
+        this._onPopStateEmbedParams = () => this._applyEmbedUrlParams();
+        window.addEventListener('popstate', this._onPopStateEmbedParams);
         this._onPlatformThemeChange = () => {
             if ((this.theme || 'auto').toLowerCase() === 'auto') {
                 this.requestUpdate();
@@ -188,6 +236,10 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     disconnectedCallback() {
+        if (this._onPopStateEmbedParams) {
+            window.removeEventListener('popstate', this._onPopStateEmbedParams);
+            this._onPopStateEmbedParams = null;
+        }
         if (this._onPlatformThemeChange) {
             window.removeEventListener('theme-change', this._onPlatformThemeChange);
             this._onPlatformThemeChange = null;
@@ -236,12 +288,31 @@ export class PlatformEmbedChatDrawer extends LitElement {
         return { ...base, ...extra };
     }
 
+    _interfaceLocaleForChat() {
+        const r = String(this.locale || '').trim().toLowerCase();
+        if (!r || r === 'auto') {
+            return 'auto';
+        }
+        const p = r.split(/[-_]/)[0];
+        if (p === 'en' || p === 'ru') {
+            return p;
+        }
+        return 'auto';
+    }
+
     _toggle() {
         this.open = !this.open;
     }
 
     _close() {
         this.open = false;
+    }
+
+    _onNewChat() {
+        const el = this.renderRoot?.querySelector('platform-embed-chat');
+        if (el && typeof el.startNewChat === 'function') {
+            el.startNewChat();
+        }
     }
 
     render() {
@@ -295,38 +366,55 @@ export class PlatformEmbedChatDrawer extends LitElement {
                       <div class="backdrop" @click=${this._close}></div>
                       <div class="panel" @click=${(e) => e.stopPropagation()}>
                           <div class="panel-head">
-                              <button
-                                  type="button"
-                                  class="close-btn"
-                                  title=${L.panel_close}
-                                  aria-label=${L.panel_close}
-                                  @click=${this._close}
-                              >
-                                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                                      <path
-                                          fill="none"
-                                          stroke="currentColor"
-                                          stroke-width="2"
-                                          stroke-linecap="round"
-                                          d="M6 6l12 12M18 6L6 18"
-                                      />
-                                  </svg>
-                              </button>
+                              <span class="panel-head-title">${L.title}</span>
+                              <div class="panel-head-actions">
+                                  <button
+                                      type="button"
+                                      class="close-btn"
+                                      title=${L.new_chat}
+                                      aria-label=${L.new_chat}
+                                      @click=${this._onNewChat}
+                                  >
+                                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                                          <path
+                                              fill="none"
+                                              stroke="currentColor"
+                                              stroke-width="2"
+                                              stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"
+                                          />
+                                      </svg>
+                                  </button>
+                                  <button
+                                      type="button"
+                                      class="close-btn"
+                                      title=${L.panel_close}
+                                      aria-label=${L.panel_close}
+                                      @click=${this._close}
+                                  >
+                                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                                          <path
+                                              fill="none"
+                                              stroke="currentColor"
+                                              stroke-width="2"
+                                              stroke-linecap="round"
+                                              d="M6 6l12 12M18 6L6 18"
+                                          />
+                                      </svg>
+                                  </button>
+                              </div>
                           </div>
                           <platform-embed-chat
+                              hide-header
                               embed-theme=${embedTheme}
+                              interface-locale=${this._interfaceLocaleForChat()}
+                              ?show-locale-control=${this.showLocaleControl}
                               .flowsBaseUrl=${this.flowsBaseUrl}
                               flow-id=${this.flowId || ''}
                               skill-id=${this.skillId || ''}
                               .title=${L.title}
-                              .labels=${{
-                                  greeting: L.greeting,
-                                  placeholder: L.placeholder,
-                                  send: L.send,
-                                  newChat: L.new_chat,
-                                  voiceTitle: L.voice_title,
-                                  voiceNotSupported: L.voice_not_supported,
-                              }}
+                              .labels=${this.labels && typeof this.labels === 'object' ? this.labels : {}}
                               ?use-credentials=${this.useCredentials}
                               ?enable-voice=${this.enableVoice}
                               .getAuthToken=${this.getAuthToken}

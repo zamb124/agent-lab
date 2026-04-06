@@ -52,6 +52,7 @@ from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
 from core.models.identity_models import Namespace, NamespaceCRMSettings
+from core.models.i18n_models import Language
 import json
 
 logger = get_logger(__name__)
@@ -61,6 +62,24 @@ from core.utils.chunked_async import map_reduce_tree, run_chunked_map
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
 _DAILY_SUMMARY_CARD_SNIPPET_MAX = 500
+
+_INTERFACE_LANGUAGE_NAMES_RU: dict[str, str] = {
+    Language.RU.value: "русском",
+    Language.EN.value: "английском",
+}
+
+
+def _crm_llm_interface_language_vars() -> dict[str, str]:
+    ctx = get_context()
+    if ctx is None:
+        raise ValueError("Контекст не задан: для CRM LLM нужен Context с языком интерфейса")
+    code = ctx.language.value
+    if code not in _INTERFACE_LANGUAGE_NAMES_RU:
+        raise ValueError(f"Неподдерживаемый язык интерфейса для CRM LLM: {code!r}")
+    return {
+        "interface_language_code": code,
+        "interface_language_name": _INTERFACE_LANGUAGE_NAMES_RU[code],
+    }
 
 
 def _iter_iso_dates_inclusive(date_from: str, date_to: str) -> list[str]:
@@ -2181,6 +2200,7 @@ class EntityService:
         settings = get_settings()
         flows_base = settings.server.get_flows_service_url().rstrip("/")
         variables = {
+            **_crm_llm_interface_language_vars(),
             "notes_json": json.dumps(cards, ensure_ascii=False),
             "date": date_str,
             "namespace": self._normalize_namespace(namespace),
@@ -2203,6 +2223,7 @@ class EntityService:
         settings = get_settings()
         flows_base = settings.server.get_flows_service_url().rstrip("/")
         variables = {
+            **_crm_llm_interface_language_vars(),
             "partials_json": json.dumps(partial_payloads, ensure_ascii=False),
             "date": date_str,
             "namespace": self._normalize_namespace(namespace),
@@ -2226,6 +2247,7 @@ class EntityService:
         settings = get_settings()
         flows_base = settings.server.get_flows_service_url().rstrip("/")
         variables = {
+            **_crm_llm_interface_language_vars(),
             "partials_json": json.dumps(partial_payloads, ensure_ascii=False),
             "date_from": date_from,
             "date_to": date_to,
@@ -3269,6 +3291,7 @@ class EntityService:
         flows_base_url = settings.server.get_flows_service_url().rstrip("/")
 
         variables = {
+            **_crm_llm_interface_language_vars(),
             "extracted_entity": {
                 "type": extracted.entity_type,
                 "entity_subtype": extracted.entity_subtype,
@@ -3337,7 +3360,10 @@ class EntityService:
                 }
             )
 
-        variables = {"pairs_json": json.dumps(pairs_for_prompt, ensure_ascii=False)}
+        variables = {
+            **_crm_llm_interface_language_vars(),
+            "pairs_json": json.dumps(pairs_for_prompt, ensure_ascii=False),
+        }
 
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base_url}/flows/api/v1/crm",

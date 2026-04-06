@@ -4,6 +4,10 @@
   "description": "Единый flow для CRM: skills (анализ, резюмирование и др.)",
   "version": "1.0.0",
   "entry": "main",
+  "variables": {
+    "interface_language_code": "ru",
+    "interface_language_name": "русском"
+  },
   "nodes": {
     "main": {
       "type": "llm_node",

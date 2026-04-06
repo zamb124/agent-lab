@@ -587,6 +587,7 @@ export class CRMApp extends PlatformApp {
             ` : ''}
 
             <platform-embed-chat-drawer
+                theme="auto"
                 .flowsBaseUrl=${resolveCrmLaraFlowsBaseUrl()}
                 flow-id="lara"
                 toggle-event-name="humanitec-embed-chat-toggle"

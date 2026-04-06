@@ -394,6 +394,7 @@ async def analyze_text(
             namespace=active_ns or "default",
             auth_token=auth_token,
             user_id=user_id_ctx,
+            interface_language=context.language.value,
         )
         res = await task.wait_result(timeout=settings.taskiq_sync_timeout_seconds)
     except TaskiqResultTimeoutError as exc:
