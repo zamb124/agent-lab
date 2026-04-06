@@ -47,6 +47,34 @@ logger = get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+
+def _merge_openai_compatible_usage_into_usage_data(
+    usage: Dict[str, Any], usage_data: Dict[str, Any]
+) -> None:
+    """
+    Заполняет usage_data из объекта usage финального чанка/ответа chat completions.
+
+    Токены — стандартные поля OpenAI. Поля cost / cost_details — расширения
+    (OpenRouter и др. совместимые шлюзы); пишем только если ключ есть и значение число.
+    """
+    usage_data["input_tokens"] = int(usage.get("prompt_tokens") or 0)
+    usage_data["output_tokens"] = int(usage.get("completion_tokens") or 0)
+    total = usage.get("total_tokens")
+    if total is not None:
+        usage_data["total_tokens"] = int(total)
+    else:
+        usage_data["total_tokens"] = usage_data["input_tokens"] + usage_data["output_tokens"]
+
+    cost = usage.get("cost")
+    if isinstance(cost, (int, float)):
+        usage_data["provider_reported_cost"] = float(cost)
+
+    details = usage.get("cost_details")
+    if isinstance(details, dict):
+        upstream = details.get("upstream_inference_cost")
+        if isinstance(upstream, (int, float)):
+            usage_data["provider_upstream_inference_cost"] = float(upstream)
+
 # Типы для messages
 MessageInput = Union[
     str,
@@ -301,6 +329,7 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         default_headers: Optional[Dict[str, str]] = None,
         timeout: float = 120.0,
+        llm_provider: Optional[str] = None,
     ):
         self.model = model
         self.api_key = api_key
@@ -309,6 +338,7 @@ class LLMClient:
         self.max_tokens = max_tokens
         self.default_headers = default_headers or {}
         self.timeout = timeout
+        self.llm_provider = llm_provider if llm_provider is not None else _detect_provider(self.base_url)
 
     async def stream(
         self,
@@ -415,7 +445,7 @@ class LLMClient:
         full_content = ""
         full_reasoning = ""
         tool_calls_buffer: Dict[int, Dict[str, Any]] = {}
-        usage_data: Dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        usage_data: Dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
         async with get_httpx_client(timeout=self.timeout, proxy=True) as client:
             try:
@@ -470,10 +500,7 @@ class LLMClient:
                         
                         # Парсим usage из последнего chunk (stream_options: include_usage)
                         if chunk.get("usage"):
-                            usage = chunk["usage"]
-                            usage_data["input_tokens"] = usage.get("prompt_tokens", 0)
-                            usage_data["output_tokens"] = usage.get("completion_tokens", 0)
-                            usage_data["total_tokens"] = usage.get("total_tokens", 0)
+                            _merge_openai_compatible_usage_into_usage_data(chunk["usage"], usage_data)
                         
                         if not chunk.get("choices"):
                             continue
@@ -940,6 +967,7 @@ def get_llm(
             max_tokens=resolved_max_tokens,
             timeout=timeout,
             default_headers=default_headers,
+            llm_provider=actual_provider,
         )
     
     # Иначе используем системный конфиг
@@ -961,6 +989,7 @@ def get_llm(
                 "HTTP-Referer": cfg.site_url,
                 "X-Title": cfg.site_name,
             },
+            llm_provider=actual_provider,
         )
 
     if actual_provider == "bothub":
@@ -975,6 +1004,7 @@ def get_llm(
             temperature=temp,
             max_tokens=resolved_max_tokens,
             timeout=timeout,
+            llm_provider=actual_provider,
         )
 
     if actual_provider == "openai":
@@ -989,6 +1019,7 @@ def get_llm(
             temperature=temp,
             max_tokens=resolved_max_tokens,
             timeout=timeout,
+            llm_provider=actual_provider,
         )
 
     raise ValueError(f"Неизвестный LLM провайдер: {actual_provider}")

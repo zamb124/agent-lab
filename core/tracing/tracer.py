@@ -484,6 +484,7 @@ class PlatformTracer:
         messages_count: int,
         tools_count: int,
         trace_ctx: Optional[TraceContext] = None,
+        llm_provider: Optional[str] = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для вызова LLM."""
         if not is_tracing_enabled():
@@ -496,6 +497,8 @@ class PlatformTracer:
         attributes["llm.messages_count"] = messages_count
         attributes["llm.tools_count"] = tools_count
         attributes[attr.ATTR_LLM_STREAM] = True
+        if llm_provider:
+            attributes[attr.ATTR_LLM_PROVIDER] = llm_provider
 
         with self._otel_tracer.start_as_current_span(
             name=f"llm.{model}",
@@ -541,6 +544,10 @@ class PlatformTracer:
         duration_ms: float,
         response_content: Optional[str] = None,
         tool_calls: Optional[List[Dict[str, Any]]] = None,
+        llm_provider: Optional[str] = None,
+        provider_reported_cost: Optional[float] = None,
+        provider_upstream_inference_cost: Optional[float] = None,
+        settlement_quantity_rub: Optional[int] = None,
     ) -> None:
         """Записывает результат LLM вызова в span и помечает для billing settlement."""
         total_tokens = input_tokens + output_tokens
@@ -553,6 +560,19 @@ class PlatformTracer:
                 attr.ATTR_LLM_DURATION_MS: duration_ms,
             }
         )
+        if llm_provider:
+            span.set_attribute(attr.ATTR_LLM_PROVIDER, llm_provider)
+        if provider_reported_cost is not None:
+            span.set_attribute(attr.ATTR_LLM_PROVIDER_REPORTED_COST, provider_reported_cost)
+        if provider_upstream_inference_cost is not None:
+            span.set_attribute(
+                attr.ATTR_LLM_PROVIDER_UPSTREAM_INFERENCE_COST,
+                provider_upstream_inference_cost,
+            )
+        if settlement_quantity_rub is not None:
+            if settlement_quantity_rub < 1:
+                raise ValueError("settlement_quantity_rub должна быть >= 1")
+            span.set_attribute(attr.ATTR_BILLING_SETTLEMENT_QUANTITY_RUB, settlement_quantity_rub)
 
         span_attrs = getattr(span, "attributes", None) or {}
         model = span_attrs.get(attr.ATTR_LLM_MODEL, "unknown")

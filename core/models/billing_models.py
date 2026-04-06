@@ -61,28 +61,28 @@ class UsageRecord(BaseModel):
 DEFAULT_TARIFF_PRICES = {
     TariffPlan.FREE: {
         "llm": {"*": 1.5},
-        "tools": {"*": 1.5},
         "embedding": {"*": 1.5},
         "livekit": {"*": 1.5},
+        "billing": {"*": 1.0},
     },
     TariffPlan.BASIC: {
         "llm": {"*": 1.25},
-        "tools": {"*": 1.25},
         "embedding": {"*": 1.25},
         "livekit": {"*": 1.25},
+        "billing": {"*": 1.0},
     },
     TariffPlan.PREMIUM: {
         "llm": {"*": 1.1},
-        "tools": {"*": 1.1},
         "embedding": {"*": 1.1},
         "livekit": {"*": 1.1},
+        "billing": {"*": 1.0},
     },
     TariffPlan.ENTERPRISE: {
         "llm": {"*": 1.1},
-        "tools": {"*": 1.1},
         "embedding": {"*": 1.1},
         "livekit": {"*": 1.1},
-    }
+        "billing": {"*": 1.0},
+    },
 }
 
 # Для обратной совместимости

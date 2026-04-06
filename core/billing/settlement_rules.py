@@ -28,6 +28,10 @@ class SettlementRuleMatch(BaseModel):
     service_name_equals: Optional[str] = None
     event_type_equals: Optional[str] = None
     attribute_equals: Dict[str, Any] = Field(default_factory=dict)
+    attribute_keys_present: List[str] = Field(
+        default_factory=list,
+        description="Все перечисленные ключи должны быть в attributes и не None",
+    )
 
 
 class SettlementRule(BaseModel):
@@ -96,6 +100,9 @@ def rule_matches_span(rule: SettlementRule, span_dict: Dict[str, Any]) -> bool:
         return False
     for attr_key, expected in m.attribute_equals.items():
         if _attr_value(attrs, attr_key) != expected:
+            return False
+    for key in m.attribute_keys_present:
+        if key not in attrs or attrs.get(key) is None:
             return False
     return True
 

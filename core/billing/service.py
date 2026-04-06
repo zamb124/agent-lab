@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from core.db.repositories.user_repository import UserRepository
     from core.db.storage import Storage
 
+from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
 from core.billing.settlement_rules import (
     SettlementRule,
@@ -39,6 +40,14 @@ STORAGE_SETTLEMENT_RULES_JSON = "billing:settlement_rules_json"
 
 def company_resource_prices_storage_key(company_id: str) -> str:
     return f"billing:company:{company_id}:resource_base_prices_json"
+
+
+def company_settlement_rules_storage_key(company_id: str) -> str:
+    return f"billing:company:{company_id}:settlement_rules_json"
+
+
+def _settlement_rules_document_to_storage_json(doc: SettlementRulesDocument) -> str:
+    return json.dumps(doc.model_dump(mode="json"), ensure_ascii=False)
 
 
 class BillingService:
@@ -71,6 +80,7 @@ class BillingService:
         if resource_base_prices is None:
             raise ValueError("resource_base_prices обязателен (передавайте из settings.billing.resource_base_prices)")
         self._resource_base_prices_static = copy.deepcopy(resource_base_prices)
+        self._resource_base_prices_static.pop("tool", None)
     
     async def can_use_resource(
         self,
@@ -127,6 +137,7 @@ class BillingService:
             bucket = merged.setdefault(cat, {})
             for res_name, price in resources.items():
                 bucket[str(res_name)] = float(price)
+        merged.pop("tool", None)
         return merged
 
     async def get_effective_resource_base_prices_for_company(self, company_id: str) -> Dict[str, Dict[str, float]]:
@@ -149,15 +160,63 @@ class BillingService:
             bucket = merged.setdefault(cat, {})
             for res_name, price in resources.items():
                 bucket[str(res_name)] = float(price)
+        merged.pop("tool", None)
         return merged
 
     async def load_settlement_rules_document(self) -> SettlementRulesDocument:
+        """Устаревший глобальный каталог (только чтение для миграции). Джоба и API используют per-company."""
         if self._shared_storage is None:
             return SettlementRulesDocument()
         raw = await self._shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
         if not raw:
             return SettlementRulesDocument()
         return parse_settlement_rules_json(raw)
+
+    async def load_settlement_rules_document_for_company(self, company_id: str) -> SettlementRulesDocument:
+        """
+        Правила settlement компании: ключ в storage, иначе однократная миграция из глобального
+        billing:settlement_rules_json, иначе кодовый дефолт (все варианты материализуются в storage).
+        """
+        if not company_id or not isinstance(company_id, str):
+            raise ValueError("company_id обязателен для правил settlement")
+        if self._shared_storage is None:
+            return default_settlement_rules_document()
+
+        key = company_settlement_rules_storage_key(company_id)
+        raw = await self._shared_storage.get(key, force_global=True)
+        if raw:
+            return parse_settlement_rules_json(raw)
+
+        global_raw = await self._shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
+        if global_raw:
+            global_doc = parse_settlement_rules_json(global_raw)
+            if global_doc.rules:
+                await self._shared_storage.set(key, global_raw, force_global=True)
+                return global_doc
+
+        fresh = default_settlement_rules_document()
+        await self._shared_storage.set(
+            key,
+            _settlement_rules_document_to_storage_json(fresh),
+            force_global=True,
+        )
+        return fresh
+
+    async def save_settlement_rules_document_for_company(
+        self,
+        company_id: str,
+        document: SettlementRulesDocument,
+    ) -> None:
+        if not company_id or not isinstance(company_id, str):
+            raise ValueError("company_id обязателен")
+        if self._shared_storage is None:
+            raise RuntimeError("shared_storage не настроен: сохранение правил settlement невозможно")
+        key = company_settlement_rules_storage_key(company_id)
+        await self._shared_storage.set(
+            key,
+            _settlement_rules_document_to_storage_json(document),
+            force_global=True,
+        )
 
     async def record_usage(
         self, 
@@ -407,6 +466,9 @@ class BillingService:
             raise ValueError(f"Неверный формат resource_name: {resource_name}. Ожидается 'category:resource'")
 
         category, resource = resource_name.split(":", 1)
+        if category == "tool":
+            return 0.0
+
         base_prices = await self.get_effective_resource_base_prices_for_company(company.company_id)
         category_prices = base_prices.get(category, {})
         base_cost = category_prices.get(resource, category_prices.get("*", 0.0))
@@ -415,8 +477,7 @@ class BillingService:
             return 0.0
 
         tariff_prices = self._tariff_prices.get(company.tariff_plan, {})
-        tariff_category = "tools" if category == "tool" else category
-        category_multipliers = tariff_prices.get(tariff_category, {})
+        category_multipliers = tariff_prices.get(category, {})
 
         if resource in category_multipliers:
             multiplier = category_multipliers[resource]

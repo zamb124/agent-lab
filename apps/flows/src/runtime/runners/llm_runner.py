@@ -25,7 +25,8 @@ from apps.flows.src.runtime.llm_override_params import (
     split_llm_override_for_client,
     stream_kwargs_from_override,
 )
-from core.clients.llm import StreamEvent, get_llm_for_state
+from core.config import get_settings
+from core.clients.llm import LLMClient, MockLLM, StreamEvent, get_llm_for_state
 from apps.flows.src.container import get_container
 from core.logging import get_logger
 from apps.flows.src.models import ReactLoopMode
@@ -322,15 +323,32 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         llm_start = time.time()
                         input_tokens = 0
                         output_tokens = 0
+                        provider_reported_cost: Optional[float] = None
+                        provider_upstream_inference_cost: Optional[float] = None
+                        settlement_quantity_rub: Optional[int] = None
+
+                        llm, stream_kw, max_tok = self._resolve_llm_client(state)
+                        llm_provider = getattr(llm, "llm_provider", None)
 
                         async with tracer.llm_call_span(
-                            model, len(llm_messages), len(tools_schema) if tools_schema else 0, trace_ctx=trace_ctx
+                            model,
+                            len(llm_messages),
+                            len(tools_schema) if tools_schema else 0,
+                            trace_ctx=trace_ctx,
+                            llm_provider=llm_provider,
                         ) as llm_span:
                             llm_messages_for_trace = self._messages_to_dict(llm_messages)
                             tracer.record_llm_request(llm_span, llm_messages_for_trace, tools_schema, response_format)
                             
                             async for event in self._call_llm(
-                                llm_messages, tools_schema, context_id, task_id, state, response_format
+                                llm,
+                                stream_kw,
+                                max_tok,
+                                llm_messages,
+                                tools_schema,
+                                context_id,
+                                task_id,
+                                response_format,
                             ):
                                 should_yield = True
                                 
@@ -354,6 +372,22 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         if usage:
                                             input_tokens = usage.get("input_tokens", 0)
                                             output_tokens = usage.get("output_tokens", 0)
+                                            prc = usage.get("provider_reported_cost")
+                                            if isinstance(prc, (int, float)):
+                                                provider_reported_cost = float(prc)
+                                            puc = usage.get("provider_upstream_inference_cost")
+                                            if isinstance(puc, (int, float)):
+                                                provider_upstream_inference_cost = float(puc)
+
+                            if (
+                                llm_provider == "openrouter"
+                                and provider_reported_cost is not None
+                                and provider_reported_cost > 0
+                            ):
+                                rate = get_settings().billing.usd_to_rub_rate
+                                rub = int(round(provider_reported_cost * rate))
+                                if rub >= 1:
+                                    settlement_quantity_rub = rub
 
                             llm_duration = (time.time() - llm_start) * 1000
                             tracer.record_llm_response(
@@ -364,6 +398,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 duration_ms=llm_duration,
                                 response_content=content,
                                 tool_calls=tool_calls,
+                                llm_provider=llm_provider,
+                                provider_reported_cost=provider_reported_cost,
+                                provider_upstream_inference_cost=provider_upstream_inference_cost,
+                                settlement_quantity_rub=settlement_quantity_rub,
                             )
 
                         if tool_calls:
@@ -580,16 +618,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     state.response = final_response
                     tracer.record_state_snapshot(llm_node_span, state)
 
-    async def _call_llm(
-        self,
-        messages: List[Message],
-        tools: Optional[List[Dict[str, Any]]],
-        context_id: str,
-        task_id: str,
-        state: ExecutionState,
-        response_format: Optional[Dict[str, Any]] = None,
-    ) -> AsyncGenerator[StreamEvent, None]:
-        """Вызывает LLM - ТОЛЬКО STREAM."""
+    def _resolve_llm_client(
+        self, state: ExecutionState
+    ) -> tuple[LLMClient | MockLLM, Dict[str, Any], Optional[int]]:
         override = self.node_config.llm_override if self.node_config else None
         model, temp, provider, api_key, base_url, max_tok = split_llm_override_for_client(override)
         llm = get_llm_for_state(
@@ -602,6 +633,20 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             max_tokens=max_tok,
         )
         stream_kw = stream_kwargs_from_override(override)
+        return llm, stream_kw, max_tok
+
+    async def _call_llm(
+        self,
+        llm: LLMClient | MockLLM,
+        stream_kw: Dict[str, Any],
+        max_tok: Optional[int],
+        messages: List[Message],
+        tools: Optional[List[Dict[str, Any]]],
+        context_id: str,
+        task_id: str,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Вызывает LLM - ТОЛЬКО STREAM."""
         async for event in llm.stream(
             messages,
             tools,

@@ -211,6 +211,9 @@ export class PlatformHelpHint extends PlatformElement {
         document.body.appendChild(bubble);
         this._portalBubble = bubble;
         this._syncPortalPosition();
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => this._syncPortalPosition());
+        });
     }
 
     _teardownPortal() {

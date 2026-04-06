@@ -52,6 +52,10 @@ ATTR_LLM_NODE_LABEL = "platform.llm_node.label"
 # LLM
 ATTR_LLM_MODEL = "platform.llm.model"
 ATTR_LLM_PROVIDER = "platform.llm.provider"
+# Стоимость из ответа провайдера (OpenRouter: usage.cost в USD; расширения OpenAI-совместимых API)
+ATTR_LLM_PROVIDER_REPORTED_COST = "platform.llm.provider_reported_cost"
+# OpenRouter BYOK: usage.cost_details.upstream_inference_cost
+ATTR_LLM_PROVIDER_UPSTREAM_INFERENCE_COST = "platform.llm.provider_upstream_inference_cost"
 ATTR_LLM_INPUT_TOKENS = "platform.llm.input_tokens"
 ATTR_LLM_OUTPUT_TOKENS = "platform.llm.output_tokens"
 ATTR_LLM_TOTAL_TOKENS = "platform.llm.total_tokens"
@@ -90,6 +94,8 @@ ATTR_STATE_SNAPSHOT = "platform.state.snapshot"
 ATTR_BILLING_USAGE_TYPE = "platform.billing.usage_type"
 ATTR_BILLING_RESOURCE_NAME = "platform.billing.resource_name"
 ATTR_BILLING_QUANTITY = "platform.billing.quantity"
+# Целые рубли для settlement, если провайдер отдал USD (OpenRouter): round(usd * billing.usd_to_rub_rate)
+ATTR_BILLING_SETTLEMENT_QUANTITY_RUB = "platform.billing.settlement_quantity_rub"
 ATTR_BILLING_PENDING_SETTLEMENT = "platform.billing.pending_settlement"
 ATTR_OPERATION_CATEGORY = "platform.operation.category"
 

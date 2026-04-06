@@ -32,21 +32,28 @@
     "retention_days": 30
   },
   "billing": {
+    "_docs_ru": [
+      "Этот ключ (_docs_ru) только для людей: приложение его игнорирует (валидный JSON не допускает // комментарии).",
+      "resource_base_prices — базовый прайс до merge: глобальный override в shared storage billing:resource_base_prices_json и пер-компания billing:company:{company_id}:resource_base_prices_json (см. billing.mdc, BillingService).",
+      "Числа — условные рубли за ОДНУ единицу списания по правилу settlement: для LLM чаще за 1 токен (или за platform.billing.quantity), для livekit за 1 операцию (const:1 в правиле). Итог = базовая_цена × множитель тарифа компании (TariffPlan в core/models/billing_models.py).",
+      "Структура: категория → имя_ресурса → цена. В списании span поле resource_name вида «категория:ресурс», например llm:gpt-4o или livekit:room_create. Ключ «*» внутри категории — цена по умолчанию, если нет точного совпадения имени.",
+      "llm — запросы к моделям (трейсы llm.*, flows.llm_resource.*, flows.llm.*). «*»: типично цена за 1 токен; можно добавить отдельные ключи под конкретные модели.",
+      "embedding — пакетные эмбеддинги RAG (rag.embed.*); единица обычно из атрибута span (токены/батч) по правилу settlement.",
+      "livekit — аудио/видео: room_create — создание комнаты; egress_composite — composite egress в S3; egress_segmented — сегментированная запись; «*» — прочие livekit:* без отдельной строки.",
+      "Вызовы инструментов flows (категория tool в resource_name) в этом каталоге не задаются — для биллинга считаются бесплатно.",
+      "billing:rub — 1 ₽ за единицу quantity; quantity = platform.billing.settlement_quantity_rub (OpenRouter: USD из ответа × usd_to_rub_rate, округление).",
+      "usd_to_rub_rate — множитель для перевода platform.llm.provider_reported_cost в целые рубли на span (дефолтное правило settlement).",
+      "span_settlement — фоновая джоба idle worker: находит spans с platform.billing.pending_settlement и создаёт записи usage по правилам компании. enabled — вкл/выкл; cron — расписание; lookback_minutes — как глубоко искать spans назад; batch_limit — максимум spans за один тик; fallback_user_id — user_id для UsageRecord, если в span нет user_id (пустая строка — такие spans пропускаются с ошибкой в лог)."
+    ],
+    "usd_to_rub_rate": 85.0,
     "resource_base_prices": {
-      "llm": { "*": 0.001 },
-      "tool": {
-        "weather_api": 0.1,
-        "travel_suggest": 0.2,
-        "calculator": 0.0,
-        "nano_banana_generation": 0.5,
-        "fashn_buyer_agent": 0.0,
-        "*": 0.05
-      },
-      "embedding": { "*": 0.0005 },
+      "llm": { "*": 0.0001 },
+      "embedding": { "*": 0.00005 },
+      "billing": { "rub": 1.0 },
       "livekit": {
-        "room_create": 0.1,
-        "egress_composite": 1.0,
-        "egress_segmented": 0.5,
+        "room_create": 0.01,
+        "egress_composite": 0.05,
+        "egress_segmented": 0.02,
         "*": 0.0
       }
     },

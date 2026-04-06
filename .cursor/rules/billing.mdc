@@ -23,6 +23,10 @@ alwaysApply: false
 
 `can_use_resource` существует в API `BillingService` для будущих pre-flight проверок, но в settlement не вызывается.
 
+## OpenRouter и рубли
+
+Дефолтный каталог settlement (`default_settlement_rules_document`): правило **`llm_openrouter_usd_to_rub`** (first_win, приоритет выше, чем токены) матчит `operation_name` `llm.*`, `platform.llm.provider == openrouter` и наличие **`platform.billing.settlement_quantity_rub`**. Количество списания = этот атрибут; ресурс **`billing:rub`** с базовой ценой **1.0** (1 ₽ за единицу quantity). На span **`settlement_quantity_rub`** выставляется в flows при `provider_reported_cost > 0` как `round(USD × settings.billing.usd_to_rub_rate)` (минимум 1 при попадании в запись). Без USD в ответе API остаётся правило по **токенам** (`llm_tracer_tokens`). Курс — **`billing.usd_to_rub_rate`** в `conf.json` / `BillingConfig`.
+
 ## Источники цен
 
 1. **Базовые цены** — `settings.billing.resource_base_prices` (JSON / `conf.json`, секция `billing.resource_base_prices`).
@@ -34,7 +38,8 @@ alwaysApply: false
 
 ## Правила списания по spans
 
-- Каталог JSON в storage: **`billing:settlement_rules_json`** — модель **`SettlementRulesDocument`** в [`core/billing/settlement_rules.py`](core/billing/settlement_rules.py): `application_mode` (`all_matching` | `first_win`), список **`SettlementRule`** (`rule_id`, `match`, `resource_name`, `usage_type`, `quantity_from`, `exclusive_group`, `priority`).
+- **Per company:** shared storage **`billing:company:{company_id}:settlement_rules_json`** (`force_global=True`), модель **`SettlementRulesDocument`** в [`core/billing/settlement_rules.py`](core/billing/settlement_rules.py): `application_mode` (`all_matching` | `first_win`), список **`SettlementRule`** (`rule_id`, `match`, `resource_name`, `usage_type`, `quantity_from`, `exclusive_group`, `priority`).
+- **Инициализация:** при первом чтении для компании, если ключа нет — однократно копируется непустой глобальный legacy-ключ **`billing:settlement_rules_json`**, иначе в storage пишется кодовый дефолт из [`core/billing/default_settlement_rules.py`](core/billing/default_settlement_rules.py).
 - **`quantity_from`:** `const:N` или `attr:<полный_ключ_в_attributes>` (например `platform.billing.quantity`).
 - Джоба: **`BillingService.settle_pending_span_in_job`** — если **`rules` пустой**, поведение как раньше (**`settle_span_charge`**, legacy). Если правила заданы — только совпавшие правила; при отсутствии матча списания нет (в лог — warning).
 
@@ -46,27 +51,30 @@ alwaysApply: false
 
 ## Фоновая джоба
 
-- **`span_billing_settlement_tick`** загружает документ правил один раз на пачку, для каждого span вызывает **`settle_pending_span_in_job`** (суммарно считает новые списания).
+- **`span_billing_settlement_tick`** для каждого span берёт **`company_id`** из колонки span; документ правил **`load_settlement_rules_document_for_company(company_id)`** кэшируется в памяти на один тик по `company_id` (не на каждый span отдельный Redis GET). Span без `company_id` — ошибка в лог, спан пропускается.
+- Для каждого span вызывается **`settle_pending_span_in_job`**.
 - Выборка spans: **`list_spans_pending_billing_settlement`**.
 
 ## Покрытые операции
 
-| Операция | Файл | `billing_resource_name` | `billing_quantity` |
-|---|---|---|---|
-| LLM (ReAct цикл) | `core/tracing/tracer.py` (`record_llm_response`) | `llm:{model}` | input_tokens + output_tokens |
-| LLM (invoke_llm task) | `apps/flows/src/tasks/llm_tasks.py` | `llm:default` (обновляется из usage) | total_tokens |
-| LLM (LLMResource) | `apps/flows/src/resources/wrappers/llm_resource.py` | `llm:{model}` | 1 |
-| LLM (vision, FileReader / изображения) | `core/files/reader/service.py` (`core.files.reader.image`) | `llm:{model}` | 1 |
-| Embeddings | `core/rag/services/embedding_service.py` | `embedding:{model}` | token_count |
-| STT audio | `apps/sync/realtime/tasks.py` | `tool:stt_sync_message` | 1 |
-| STT video | `apps/sync/realtime/tasks.py` | `tool:stt_sync_video` | 1 |
-| Finalize recording | `apps/sync/realtime/tasks.py` | `tool:finalize_recording` | 1 |
-| LiveKit create_room | `core/calls/livekit_client.py` | `livekit:room_create` | 1 |
-| LiveKit composite egress | `core/calls/livekit_client.py` | `livekit:egress_composite` | 1 |
-| LiveKit segmented egress | `core/calls/livekit_client.py` | `livekit:egress_segmented` | 1 |
-| External API | `apps/flows/src/clients/external_api_client.py` | `tool:external_api` | 1 |
-| MCP tool | `apps/flows/src/clients/mcp_client.py` | `tool:mcp_{server_id}` | 1 |
-| Channel (Telegram/Webhook) | `apps/flows/src/runtime/nodes.py` (`ChannelNode`) | `tool:channel_{type}` | 1 |
+Полный перечень `operation_name` для spans с `pending_settlement` — в docstring [`core/billing/default_settlement_rules.py`](core/billing/default_settlement_rules.py). Дефолтные правила матчат по префиксу (`first_win`).
+
+| `operation_name` (пример) | Файл | `usage_type` | `billing_resource_name` | `quantity` |
+|---|---|---|---|---|
+| `llm.{model}` | `core/tracing/tracer.py` (`record_llm_response`) | `llm_request` | `llm:{model}` | total_tokens |
+
+На том же CLIENT span при потоковом вызове из flows дополнительно могут быть **`platform.llm.provider`** и (если API отдал) **`platform.llm.provider_reported_cost`** / **`platform.llm.provider_upstream_inference_cost`** (OpenRouter и др.). Это **наблюдаемость**; базовое списание по джобе по-прежнему от внутреннего прайса и **`platform.billing.quantity`**, если правила settlement не переведены на `quantity_from` по атрибуту стоимости провайдера.
+| `flows.llm.invoke_task` | `apps/flows/src/tasks/llm_tasks.py` | `llm_request` | `llm:default` (уточняется) | токены |
+| `flows.llm_resource.*` | `apps/flows/src/resources/wrappers/llm_resource.py` | `llm_request` | `llm:{model}` | из attr |
+| `core.files.reader.image` | `core/files/reader/service.py` | `llm_request` | `llm:{model}` | 1 |
+| `rag.embed.batch` | `core/rag/services/embedding_service.py` | `embedding_request` | `embedding:{model}` | token_count |
+| `livekit.room.create` | `core/calls/livekit_client.py` | `tool_call` | `livekit:room_create` | 1 |
+| `livekit.egress.room_composite_s3` | `core/calls/livekit_client.py` | `tool_call` | `livekit:egress_composite` | 1 |
+| `livekit.egress.track_composite_segmented` | `core/calls/livekit_client.py` | `tool_call` | `livekit:egress_segmented` | 1 |
+
+Только трейсинг (без `pending_settlement`, в дефолтном settlement не матчатся): `sync.stt.*`, `sync.calls.finalize_recording`, `flows.external_api.call`, `flows.mcp.call_tool`, `flows.channel.execute_action`. Категория прайса **`tool`** не используется: `resource_name` вида `tool:*` в расчёте unit cost даёт **0**; в `GET` эффективного каталога и при сохранении прайса категория **`tool`** отбрасывается / запрещена (`422` на `PUT`).
+
+Не в settlement: вызовы инструментов LLM (`flows.tools.*` и т.п.) без `pending_settlement`. Перечень `UsageType` — `core/models/billing_models.py`; в правилах используются строковые значения enum.
 
 ## Как добавить биллинг к новой операции
 
@@ -81,17 +89,23 @@ alwaysApply: false
 
 ## Админка (компания `system`)
 
-- **`/frontend/api/platform-billing`**: `GET/PUT /prices`, `GET/PUT /settlement-rules`, `GET/PUT /prices/company/{company_id}`, `GET /usage-report`.
-- UI: **`/platform-billing`**, **`billing-admin-page`** ([`apps/frontend/ui/pages/admin/billing-admin-page.js`](apps/frontend/ui/pages/admin/billing-admin-page.js)). В **`core/middleware/auth/route_config.py`** нужны и **`/platform-billing`**, и **`/frontend/platform-billing`**: префикс `/frontend/` исключён из анонимного SPA-fallback, без второго правила refresh по URL с префиксом даёт 404.
+- Доступ к API только при активной компании **`system`** (роль оператора платформы), не путать с областью данных.
+- **`/frontend/api/platform-billing`**: `GET/PUT /prices` (глобальный override каталога), **`GET/PUT /settlement-rules/{company_id}`**, `GET/PUT /prices/company/{company_id}`, `GET /usage-report`, **`GET /company-resolve?q=`** (разрешение `company_id` или subdomain/slug → `company_id`), **`GET /facets/billing-companies`** (подсказки по имени, slug, id), **`GET /default-settlement-rules`** (кодовый шаблон `SettlementRulesDocument` без записи в storage).
+- UI: **`/platform-billing`**, **`billing-admin-page`**. Сверху страницы выбирается **компания**, для которой загружаются и редактируются **правила settlement** и **override прайса**; глобальный каталог цен — отдельная секция (база для всех компаний).
+- В **`core/middleware/auth/route_config.py`** нужны и **`/platform-billing`**, и **`/frontend/platform-billing`**: префикс `/frontend/` исключён из анонимного SPA-fallback, без второго правила refresh по URL с префиксом даёт 404.
 - HTTP: `BaseService('/frontend')` — все запросы через единый `api` (не raw `fetch`).
 
-### Прайс-каталог
+### Прайс-каталог (глобальный)
 
-Таблица category / resource / price (и то же для per-company override). Категории и ресурсы из эффективного прайса с бэкенда; для категории **`tool`** в выпадающий список ресурсов дополнительно подмешиваются **`tool_id`** из **`GET /flows/api/v1/tools/`** (репозиторий тулов flows), чтобы новые тулы не требовали ручного перечисления во фронте.
+Таблица category / resource / price — **`billing:resource_base_prices_json`**. Категории из эффективного прайса с бэкенда. **`PUT /prices`** с ключом категории **`tool`** → **422**.
 
-### Settlement Rules
+### Settlement Rules (per company)
 
-Карточки правил: `rule_id`, `enabled`, `priority`, `exclusive_group`, `resource_name`, `usage_type`, `quantity_from`, форма `match` с `attribute_equals`. Для поля **`resource_name`** в селект подмешиваются значения **`tool:{tool_id}`** из того же **`GET /flows/api/v1/tools/`** плюс фиксированный набор шаблонов (`llm:*`, `tool:external_api`, каналы, livekit и т.д.).
+`GET/PUT .../settlement-rules/{company_id}`; компания должна существовать в БД (404 иначе). Карточки правил: `rule_id`, `enabled`, `priority`, `exclusive_group`, `resource_name`, `usage_type`, `quantity_from`, форма `match` с `attribute_equals`. **`resource_name` с префиксом `tool:`** при **`PUT`** → **422**. В UI селект шаблонов: `llm:*`, `embedding:*`, `livekit:*` и конкретные ключи livekit.
+
+### Прайс компании
+
+Тот же **`company_id`**, что выбран для правил: override в **`billing:company:{company_id}:resource_base_prices_json`**.
 
 ### Usage Report
 
@@ -115,7 +129,7 @@ alwaysApply: false
 
 ## Категории базовых цен
 
-`llm`, `tool`, `embedding`, `livekit`. Wildcard `*` в категории покрывает все ресурсы без явной цены.
+`llm`, `embedding`, `livekit`. Wildcard `*` в категории покрывает все ресурсы без явной цены. Инструменты flows в прайс не входят.
 
 ## Контракт атрибутов на span
 

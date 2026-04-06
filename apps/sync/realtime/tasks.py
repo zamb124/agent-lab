@@ -40,7 +40,6 @@ from core.config import get_settings
 from core.files.models import VideoAttachmentContent
 from core.http import get_httpx_client
 from core.logging import get_logger
-from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 from core.utils.tokens import get_token_service
@@ -689,10 +688,6 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
         "sync.calls.finalize_recording",
         event_type="sync.calls",
         operation_category="livekit_egress",
-        billing_usage_type=UsageType.TOOL_CALL.value,
-        billing_resource_name="tool:livekit_recording_finalize",
-        billing_quantity=1,
-        billing_pending_settlement=True,
         resource_type="sync_call_recording",
         resource_id=recording_id,
         extra_attributes={
@@ -899,10 +894,6 @@ async def transcribe_audio_message_core(
                 "sync.stt.transcribe_audio_message",
                 event_type="sync.stt",
                 operation_category="stt",
-                billing_usage_type=UsageType.TOOL_CALL.value,
-                billing_resource_name="tool:stt_sync_message",
-                billing_quantity=1,
-                billing_pending_settlement=True,
                 resource_type="sync_message",
                 resource_id=message_id,
                 extra_attributes={
@@ -1062,10 +1053,6 @@ async def transcribe_video_message_core(
             "sync.stt.transcribe_video_message",
             event_type="sync.stt",
             operation_category="stt",
-            billing_usage_type=UsageType.TOOL_CALL.value,
-            billing_resource_name="tool:stt_sync_message",
-            billing_quantity=1,
-            billing_pending_settlement=True,
             resource_type="sync_message",
             resource_id=message_id,
             extra_attributes={

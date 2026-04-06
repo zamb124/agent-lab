@@ -6,7 +6,6 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { BaseService } from '@platform/lib/services/BaseService.js';
-import { FlowsCatalogService } from '../../services/flows-catalog.service.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';
@@ -15,9 +14,8 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 
 const api = new BaseService('/frontend');
-const flowsCatalog = new FlowsCatalogService();
-
 const USAGE_FACET_DEBOUNCE_MS = 300;
+const BILLING_COMPANY_SUGGEST_DEBOUNCE_MS = 280;
 
 function _usageFacetItemIsObject(item) {
     return item !== null && typeof item === 'object' && typeof item.value === 'string';
@@ -36,8 +34,7 @@ const USAGE_TYPES = [
 ];
 
 const SETTLEMENT_RESOURCE_NAMES_BASE = [
-    'llm:*', 'tool:external_api', 'tool:mcp_*',
-    'tool:channel_telegram', 'tool:channel_webhook',
+    'llm:*',
     'embedding:*',
     'livekit:room_create', 'livekit:egress_composite', 'livekit:egress_segmented',
 ];
@@ -49,9 +46,20 @@ const QUANTITY_SOURCES = [
 ];
 
 const OPERATION_PREFIXES = [
-    'flows.llm', 'flows.llm_resource', 'flows.external_api',
-    'flows.mcp', 'flows.channel', 'flows.tools',
-    'livekit.room', 'livekit.egress',
+    'llm.',
+    'flows.llm_resource.',
+    'flows.llm.',
+    'rag.embed',
+    'core.files.reader',
+    'livekit.',
+    'sync.',
+    'flows.external_api',
+    'flows.mcp',
+    'flows.channel',
+    'flows.llm',
+    'flows.tools',
+    'livekit.room',
+    'livekit.egress',
 ];
 
 const OPERATION_NAMES = [
@@ -61,7 +69,14 @@ const OPERATION_NAMES = [
     'flows.external_api.call',
     'flows.mcp.call_tool',
     'flows.channel.execute_action',
-    'livekit.room.create', 'livekit.egress.composite', 'livekit.egress.segmented',
+    'rag.embed.batch',
+    'sync.stt.transcribe_audio_message',
+    'sync.stt.transcribe_video_message',
+    'sync.calls.finalize_recording',
+    'core.files.reader.image',
+    'livekit.room.create',
+    'livekit.egress.room_composite_s3',
+    'livekit.egress.track_composite_segmented',
 ];
 
 const SERVICE_NAMES = ['flows', 'sync', 'rag', 'crm', 'frontend', 'scheduler'];
@@ -155,7 +170,43 @@ export class BillingAdminPage extends PlatformElement {
         formStyles,
         buttonStyles,
         css`
-            :host { display: block; }
+            :host {
+                display: block;
+                color: var(--text-primary);
+            }
+
+            .muted {
+                color: var(--text-secondary);
+            }
+
+            :host-context([data-theme="light"]) .muted,
+            :host-context([data-theme="light"]) .billing-scope-compact .scope-active-line {
+                color: rgba(30, 41, 59, 0.88);
+            }
+
+            :host-context([data-theme="light"]) .billing-scope-compact .scope-active-id {
+                color: rgba(30, 41, 59, 0.62);
+            }
+
+            :host-context([data-theme="light"]) .billing-co-root .scope-banner-title {
+                color: rgba(30, 41, 59, 0.72);
+            }
+
+            :host-context([data-theme="light"]) .billing-co-empty {
+                color: rgba(30, 41, 59, 0.72);
+            }
+
+            :host-context([data-theme="light"]) .billing-section-meta.muted {
+                color: rgba(30, 41, 59, 0.82);
+            }
+
+            :host-context([data-theme="light"]) .usage-table .muted {
+                color: rgba(30, 41, 59, 0.72);
+            }
+
+            :host-context([data-theme="light"]) .billing-readonly-catalog-toggle .muted {
+                color: rgba(30, 41, 59, 0.72);
+            }
 
             .section {
                 margin-bottom: var(--space-8);
@@ -178,6 +229,158 @@ export class BillingAdminPage extends PlatformElement {
                 gap: var(--space-2);
                 align-items: center;
                 margin-top: var(--space-3);
+            }
+
+            .toolbar.toolbar-tight {
+                margin-top: 0;
+                margin-bottom: var(--space-2);
+                flex-direction: row;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+
+            .toolbar.toolbar-compact {
+                gap: var(--space-1);
+            }
+
+            .toolbar.toolbar-compact .icon-btn {
+                width: 32px;
+                height: 32px;
+            }
+
+            .price-override-block {
+                margin-top: 0;
+                margin-bottom: var(--space-3);
+                padding-top: 0;
+                border-top: none;
+            }
+
+            .billing-section-head-row {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                margin-bottom: var(--space-2);
+            }
+
+            .billing-section-head-row > .section-title,
+            .billing-section-head-row > h2.section-title {
+                margin: 0;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+
+            .billing-section-head-row .toolbar {
+                margin: 0;
+                flex-shrink: 0;
+            }
+
+            .section-title--inline {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-2);
+            }
+
+            .section-title--inline .section-title__text {
+                margin: 0;
+            }
+
+            .override-subtitle {
+                margin: 0 0 var(--space-2);
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-1);
+            }
+
+            .billing-company-prices-sub-head .billing-company-prices-sub-title {
+                margin-bottom: 0;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+
+            .billing-section-meta {
+                font-size: var(--text-xs);
+                font-weight: var(--font-normal);
+            }
+
+            .price-table thead th {
+                vertical-align: middle;
+            }
+
+            .price-table thead th .field-label-row {
+                min-height: 24px;
+            }
+
+            .billing-prices-company-subsection {
+                margin-top: var(--space-3);
+                padding-top: var(--space-3);
+                border-top: 1px solid var(--border-subtle);
+            }
+
+            .billing-fold-chevron {
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                margin: 0;
+                padding: 0;
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-medium);
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+
+            .billing-fold-chevron:hover {
+                background: var(--glass-tint-medium);
+                color: var(--text-primary);
+            }
+
+            .billing-section-head-fold {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                margin-bottom: var(--space-2);
+            }
+
+            .billing-section-head-fold .section-title {
+                margin: 0;
+                flex: 1;
+                min-width: 0;
+                font-size: var(--text-base);
+            }
+
+            .billing-readonly-catalog-toggle {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                width: 100%;
+                margin: 0 0 var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                text-align: left;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                cursor: pointer;
+            }
+
+            .billing-readonly-catalog-toggle:hover {
+                background: var(--glass-tint-medium);
+            }
+
+            .billing-readonly-catalog-toggle .muted {
+                font-weight: var(--font-normal);
+                font-size: var(--text-xs);
             }
 
             .icon-btn {
@@ -240,97 +443,137 @@ export class BillingAdminPage extends PlatformElement {
                 color: white;
             }
 
-            /* Price table */
-            .price-table {
+            /* Price tables */
+            .price-catalog-wrap {
+                max-height: min(24rem, 55vh);
+                overflow: auto;
+                margin-bottom: 0;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                position: relative;
+                isolation: isolate;
+                background: var(--glass-solid-subtle);
+            }
+            table.price-catalog-table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: var(--space-3);
+                font-size: var(--text-xs);
             }
-            .price-table th,
-            .price-table td {
+            .price-catalog-table th,
+            .price-catalog-table td {
                 padding: var(--space-2) var(--space-3);
                 border-bottom: 1px solid var(--border-subtle);
                 text-align: left;
-                font-size: var(--text-sm);
                 color: var(--text-primary);
-                overflow: visible;
+            }
+            .price-catalog-table th {
+                position: sticky;
+                top: 0;
+                z-index: 3;
+                background: var(--glass-solid-strong);
+                color: var(--text-secondary);
+                font-weight: var(--font-semibold);
+                font-size: var(--text-xs);
+                box-shadow: 0 1px 0 var(--border-subtle);
+            }
+            .price-catalog-table tbody tr:nth-child(even) {
+                background: var(--glass-solid-subtle);
+            }
+            .price-catalog-table td.num {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+                font-family: var(--font-mono, ui-monospace, monospace);
+            }
+            .price-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: var(--space-1);
+                table-layout: fixed;
+            }
+            .price-table th,
+            .price-table td {
+                padding: var(--space-1) var(--space-2);
+                border-bottom: 1px solid var(--border-subtle);
+                text-align: left;
+                font-size: var(--text-xs);
+                color: var(--text-primary);
+                overflow: hidden;
                 vertical-align: middle;
             }
             .price-table th {
-                font-size: var(--text-xs);
                 color: var(--text-secondary);
                 font-weight: var(--font-semibold);
             }
+            .price-table td:nth-child(1),
+            .price-table th:nth-child(1) {
+                width: 28%;
+            }
+            .price-table td:nth-child(2),
+            .price-table th:nth-child(2) {
+                width: 44%;
+            }
+            .price-table td:nth-child(3),
+            .price-table th:nth-child(3) {
+                width: 22%;
+            }
             .price-table td:last-child {
-                width: 40px;
+                width: 36px;
                 text-align: center;
             }
             .price-table input,
             .price-table select {
                 width: 100%;
+                max-width: 100%;
                 box-sizing: border-box;
                 padding: var(--space-1) var(--space-2);
+                min-height: 32px;
                 border-radius: var(--radius-sm);
                 border: 1px solid var(--border-default);
                 background: var(--glass-solid-medium);
                 color: var(--text-primary);
-                font-size: var(--text-sm);
+                font-size: var(--text-xs);
             }
 
             /* Rules */
             .rule-card {
                 border: 1px solid var(--border-default);
                 border-radius: var(--radius-md);
-                margin-bottom: var(--space-3);
+                margin-bottom: var(--space-2);
                 background: var(--glass-solid-subtle);
             }
-            .rule-header {
+            .rule-header-static {
                 display: flex;
                 align-items: center;
-                gap: var(--space-3);
-                padding: var(--space-3);
-                cursor: pointer;
-                user-select: none;
+                gap: var(--space-2);
+                padding: var(--space-1) var(--space-2);
+                border-bottom: 1px solid var(--border-subtle);
             }
-            .rule-header .rule-summary {
+            .rule-header-static .rule-summary {
                 flex: 1;
                 display: flex;
+                flex-wrap: wrap;
                 align-items: center;
-                gap: var(--space-3);
-                font-size: var(--text-sm);
+                gap: var(--space-2);
+                font-size: var(--text-xs);
                 color: var(--text-primary);
                 min-width: 0;
             }
-            .rule-header .rule-id-label {
+            .rule-header-static .rule-id-label {
                 font-weight: var(--font-semibold);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                font-size: var(--text-sm);
             }
-            .rule-header .rule-resource-label {
-                font-size: var(--text-xs);
+            .rule-header-static .rule-resource-label {
                 color: var(--text-secondary);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .rule-header .chevron {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                transition: transform var(--duration-fast);
-            }
-            .rule-header .chevron.open {
-                transform: rotate(90deg);
             }
             .rule-body {
-                padding: 0 var(--space-3) var(--space-3);
+                padding: var(--space-2);
                 display: grid;
-                gap: var(--space-3);
+                gap: var(--space-2);
             }
             .rule-body .form-row {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-                gap: var(--space-3);
+                grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+                gap: var(--space-2);
             }
 
             .match-section {
@@ -354,14 +597,14 @@ export class BillingAdminPage extends PlatformElement {
             .kv-row input,
             .kv-row select {
                 flex: 1;
-                padding: var(--space-2) var(--space-3);
-                min-height: 42px;
+                padding: var(--space-1) var(--space-2);
+                min-height: 32px;
                 box-sizing: border-box;
-                border-radius: var(--radius-lg);
+                border-radius: var(--radius-sm);
                 border: 1px solid var(--border-default);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary);
-                font-size: var(--text-sm);
+                font-size: var(--text-xs);
             }
 
             /* Usage table */
@@ -498,15 +741,6 @@ export class BillingAdminPage extends PlatformElement {
                 font-size: var(--text-sm);
             }
 
-            .usage-filters-hint {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                line-height: 1.35;
-                max-width: min(22rem, 40vw);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
             label.field {
                 display: flex;
                 flex-direction: column;
@@ -547,6 +781,129 @@ export class BillingAdminPage extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-secondary);
             }
+
+            .billing-page-intro {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                gap: var(--space-4);
+                margin-bottom: var(--space-6);
+            }
+            .billing-co-root.billing-scope-compact {
+                flex: 0 0 auto;
+                width: 100%;
+                max-width: 22rem;
+                position: relative;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md, 8px);
+                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+                border-left-width: 4px;
+                border-left-color: var(--accent-primary, var(--primary, #22c55e));
+                background: var(--surface-elevated, var(--surface-secondary, rgba(255, 255, 255, 0.04)));
+            }
+            .billing-co-root .scope-banner-title {
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                color: var(--text-secondary);
+                margin: 0 0 var(--space-1);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .billing-co-trigger {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-1);
+                width: 100%;
+                padding: var(--space-1) var(--space-2);
+                min-height: 34px;
+                border-radius: var(--radius-sm);
+                border: 1px solid var(--border-default);
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                cursor: pointer;
+                text-align: left;
+            }
+            .billing-co-trigger-text {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .billing-co-panel {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: calc(100% + var(--space-1));
+                z-index: 20;
+                padding: var(--space-2);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-default);
+                background: var(--glass-solid-strong);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            }
+            .billing-co-search {
+                width: 100%;
+                box-sizing: border-box;
+                padding: var(--space-1) var(--space-2);
+                margin-bottom: var(--space-2);
+                min-height: 32px;
+                font-size: var(--text-xs);
+                border-radius: var(--radius-sm);
+                border: 1px solid var(--border-default);
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+            }
+            .billing-co-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                max-height: 12rem;
+                overflow-y: auto;
+            }
+            .billing-co-item {
+                display: block;
+                width: 100%;
+                padding: var(--space-2);
+                border: none;
+                border-radius: var(--radius-sm);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                text-align: left;
+                cursor: pointer;
+            }
+            .billing-co-item:hover {
+                background: var(--glass-tint-medium);
+            }
+            .billing-co-empty {
+                padding: var(--space-2);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .billing-scope-compact .scope-active-line {
+                margin-top: var(--space-2);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                line-height: 1.35;
+            }
+            .billing-scope-compact .scope-active-id {
+                font-family: var(--font-mono, ui-monospace, monospace);
+                font-size: 10px;
+                color: var(--text-tertiary);
+                word-break: break-all;
+                display: block;
+                margin-top: 2px;
+            }
+            .billing-page-intro-header {
+                width: 100%;
+                min-width: 0;
+            }
+            .billing-page-intro-header page-header {
+                margin-bottom: 0;
+            }
         `,
     ];
 
@@ -557,11 +914,17 @@ export class BillingAdminPage extends PlatformElement {
         _pricesLoading: { type: Boolean, state: true },
 
         _rulesDoc: { type: Object, state: true },
-        _rulesExpandedIdx: { type: Number, state: true },
         _rulesError: { type: String, state: true },
         _rulesLoading: { type: Boolean, state: true },
 
-        _cPriceCompanyId: { type: String, state: true },
+        _billingTargetCompanyId: { type: String, state: true },
+        _billingCompanyInput: { type: String, state: true },
+        _billingCompanyOptions: { type: Array, state: true },
+        _billingCompanyResolveError: { type: String, state: true },
+        _billingPickerOpen: { type: Boolean, state: true },
+        _billingPickerQuery: { type: String, state: true },
+        _billingCompanyDisplayName: { type: String, state: true },
+        _billingCompanyDisplaySlug: { type: String, state: true },
         _cPriceOverrideRows: { type: Array, state: true },
         _cPriceError: { type: String, state: true },
         _cPriceLoading: { type: Boolean, state: true },
@@ -577,11 +940,12 @@ export class BillingAdminPage extends PlatformElement {
         _uLimit: { type: Number, state: true },
         _uOffset: { type: Number, state: true },
 
-        _registryToolIds: { type: Array, state: true },
-        _registryToolsError: { type: String, state: true },
 
         _usageFacetOpen: { type: String, state: true },
         _usageFacetItems: { type: Object, state: true },
+
+        _billingReadonlyCatalogExpanded: { type: Boolean, state: true },
+        _settlementRulesExpanded: { type: Boolean, state: true },
     };
 
     constructor() {
@@ -591,12 +955,18 @@ export class BillingAdminPage extends PlatformElement {
         this._pricesError = '';
         this._pricesLoading = false;
 
-        this._rulesDoc = { version: 1, application_mode: 'all_matching', rules: [] };
-        this._rulesExpandedIdx = -1;
+        this._rulesDoc = { version: 1, application_mode: 'first_win', rules: [] };
         this._rulesError = '';
         this._rulesLoading = false;
 
-        this._cPriceCompanyId = '';
+        this._billingTargetCompanyId = '';
+        this._billingCompanyInput = '';
+        this._billingCompanyOptions = [];
+        this._billingCompanyResolveError = '';
+        this._billingPickerOpen = false;
+        this._billingPickerQuery = '';
+        this._billingCompanyDisplayName = '';
+        this._billingCompanyDisplaySlug = '';
         this._cPriceOverrideRows = [];
         this._cPriceError = '';
         this._cPriceLoading = false;
@@ -612,16 +982,26 @@ export class BillingAdminPage extends PlatformElement {
         this._uLimit = 200;
         this._uOffset = 0;
 
-        this._registryToolIds = [];
-        this._registryToolsError = '';
-
         this._pickCompany = '';
         this._pickUsageType = '';
         this._pickResource = '';
         this._usageFacetOpen = '';
         this._usageFacetItems = { company: [], usage_type: [], resource_name: [] };
         this._usageFacetDebounce = {};
+        this._billingPickerSuggestTimer = 0;
+
+        this._billingReadonlyCatalogExpanded = false;
+        this._settlementRulesExpanded = false;
         this._usageOnDocClick = (e) => {
+            if (this._billingPickerOpen) {
+                const pathPicker = e.composedPath();
+                const hitPicker = pathPicker.some(
+                    (n) => n instanceof HTMLElement && n.classList?.contains('billing-co-root'),
+                );
+                if (!hitPicker) {
+                    this._billingPickerOpen = false;
+                }
+            }
             if (!this._usageFacetOpen) {
                 return;
             }
@@ -639,18 +1019,151 @@ export class BillingAdminPage extends PlatformElement {
         super.connectedCallback();
         document.addEventListener('click', this._usageOnDocClick);
         void this._loadPrices();
-        void this._loadSettlementRules();
-        void this._loadRegistryTools();
+        void this._fetchBillingCompanySuggestInitial();
     }
 
     disconnectedCallback() {
         document.removeEventListener('click', this._usageOnDocClick);
         Object.values(this._usageFacetDebounce).forEach((id) => clearTimeout(id));
+        if (this._billingPickerSuggestTimer) {
+            clearTimeout(this._billingPickerSuggestTimer);
+            this._billingPickerSuggestTimer = 0;
+        }
         super.disconnectedCallback();
     }
 
     _t(key, params = {}) {
         return this.i18n.t(`platform_billing_page.${key}`, params);
+    }
+
+    _billingSectionTitleSuffix() {
+        const cid = (this._billingTargetCompanyId || '').trim();
+        if (!cid) {
+            return '';
+        }
+        const name = (this._billingCompanyDisplayName || '').trim();
+        const slug = (this._billingCompanyDisplaySlug || '').trim();
+        if (slug && name) {
+            return ` — ${name} (${slug})`;
+        }
+        if (slug) {
+            return ` — ${slug}`;
+        }
+        if (name) {
+            return ` — ${name}`;
+        }
+        return ` — ${cid}`;
+    }
+
+    _effectiveCatalogRows() {
+        const ep = this._effectivePrices;
+        if (!ep || typeof ep !== 'object') {
+            return [];
+        }
+        const rows = [];
+        for (const [cat, resources] of Object.entries(ep)) {
+            if (!resources || typeof resources !== 'object') {
+                continue;
+            }
+            for (const [res, price] of Object.entries(resources)) {
+                rows.push({ category: cat, resource: res, price: Number(price) });
+            }
+        }
+        rows.sort((a, b) => {
+            const c = a.category.localeCompare(b.category);
+            if (c !== 0) {
+                return c;
+            }
+            return a.resource.localeCompare(b.resource);
+        });
+        return rows;
+    }
+
+    _filteredBillingPickerOptions() {
+        const q = (this._billingPickerQuery || '').trim().toLowerCase();
+        const items = Array.isArray(this._billingCompanyOptions) ? this._billingCompanyOptions : [];
+        if (!q) {
+            return items;
+        }
+        return items.filter((item) => {
+            if (!_usageFacetItemIsObject(item)) {
+                return String(item).toLowerCase().includes(q);
+            }
+            const v = String(item.value || '').toLowerCase();
+            const l = String(item.label || '').toLowerCase();
+            return v.includes(q) || l.includes(q);
+        });
+    }
+
+    _scheduleBillingCompanySuggestFromPicker() {
+        if (this._billingPickerSuggestTimer) {
+            clearTimeout(this._billingPickerSuggestTimer);
+        }
+        this._billingPickerSuggestTimer = window.setTimeout(() => {
+            this._billingPickerSuggestTimer = 0;
+            void this._fetchBillingCompanySuggestForQuery(this._billingPickerQuery);
+        }, BILLING_COMPANY_SUGGEST_DEBOUNCE_MS);
+    }
+
+    async _selectBillingCompanyFromList(item) {
+        if (!item || typeof item !== 'object' || !item.value) {
+            return;
+        }
+        const cid = String(item.value).trim();
+        const lbl = String(item.label || cid);
+        this._billingTargetCompanyId = cid;
+        this._billingPickerOpen = false;
+        this._billingPickerQuery = '';
+        this._billingCompanyResolveError = '';
+        const m = /^(.+?)\s+\(([^)]+)\)\s*$/.exec(lbl);
+        if (m) {
+            this._billingCompanyDisplayName = m[1].trim();
+            this._billingCompanyDisplaySlug = m[2].trim();
+            this._billingCompanyInput = this._billingCompanyDisplaySlug;
+        } else {
+            this._billingCompanyDisplayName = lbl;
+            this._billingCompanyDisplaySlug = '';
+            this._billingCompanyInput = cid.length <= 36 ? cid : lbl;
+        }
+        this._uCompany = cid;
+        await Promise.all([this._loadSettlementRules(), this._loadCompanyPrices()]);
+    }
+
+    async _applyBillingPickerManual() {
+        const raw = (this._billingPickerQuery || '').trim();
+        if (!raw) {
+            return;
+        }
+        this._billingCompanyInput = raw;
+        await this._applyBillingCompanyFromInput();
+        if ((this._billingTargetCompanyId || '').trim()) {
+            this._billingPickerOpen = false;
+            this._billingPickerQuery = '';
+        }
+    }
+
+    async _loadDefaultSettlementRulesTemplate() {
+        const cid = (this._billingTargetCompanyId || '').trim();
+        if (!cid) {
+            this._rulesError = this._t('billing_company_required');
+            return;
+        }
+        if (!window.confirm(this._t('confirm_replace_rules_default'))) {
+            return;
+        }
+        this._rulesError = '';
+        try {
+            const data = await api.get('/api/platform-billing/default-settlement-rules');
+            const doc = data.document;
+            if (!doc || typeof doc !== 'object') {
+                throw new Error(this._t('rules_template_invalid'));
+            }
+            this._rulesDoc = doc;
+            this.success(this._t('rules_template_loaded'));
+        } catch (e) {
+            const msg = e && typeof e.message === 'string' ? e.message : String(e);
+            this._rulesError = msg;
+        }
     }
 
     get _priceCategories() {
@@ -664,34 +1177,67 @@ export class BillingAdminPage extends PlatformElement {
     }
 
     _mergedPriceResources(category) {
-        const fromCatalog = this._priceResources(category);
-        if (category !== 'tool') {
-            return fromCatalog;
-        }
-        return [...new Set([...fromCatalog, ...this._registryToolIds])].sort();
+        return this._priceResources(category);
     }
 
     get _settlementResourceNameOptions() {
-        const fromRegistry = this._registryToolIds.map((id) => `tool:${id}`);
-        return [...new Set([...SETTLEMENT_RESOURCE_NAMES_BASE, ...fromRegistry])].sort((a, b) =>
+        return [...SETTLEMENT_RESOURCE_NAMES_BASE].sort((a, b) =>
             a.localeCompare(b, undefined, { sensitivity: 'base' }),
         );
     }
 
-    async _loadRegistryTools() {
-        this._registryToolsError = '';
+    async _fetchBillingCompanySuggestInitial() {
+        await this._fetchBillingCompanySuggestForQuery('');
+    }
+
+    async _fetchBillingCompanySuggestForQuery(qRaw) {
         try {
-            const items = await flowsCatalog.listTools();
-            const ids = items
-                .filter((row) => row && (row.item_type === undefined || row.item_type === 'tool'))
-                .map((row) => row.tool_id)
-                .filter((id) => typeof id === 'string' && id.length > 0);
-            this._registryToolIds = [...new Set(ids)].sort((a, b) =>
-                a.localeCompare(b, undefined, { sensitivity: 'base' }),
-            );
+            const params = { limit: 20 };
+            const trimmed = (qRaw || '').trim();
+            if (trimmed) {
+                params.q = trimmed;
+            }
+            const data = await api.get('/api/platform-billing/facets/billing-companies', params);
+            const items = Array.isArray(data.items) ? data.items : [];
+            this._billingCompanyOptions = items;
+        } catch {
+            this._billingCompanyOptions = [];
+        }
+    }
+
+    async _applyBillingCompanyFromInput() {
+        const raw = (this._billingCompanyInput || '').trim();
+        this._billingCompanyResolveError = '';
+        if (!raw) {
+            this._billingTargetCompanyId = '';
+            this._billingCompanyDisplayName = '';
+            this._billingCompanyDisplaySlug = '';
+            this._uCompany = '';
+            this._rulesDoc = { version: 1, application_mode: 'first_win', rules: [] };
+            this._cPriceOverrideRows = [];
+            return;
+        }
+        try {
+            const resolved = await api.get('/api/platform-billing/company-resolve', { q: raw });
+            const cid = resolved.company_id;
+            if (!cid) {
+                throw new Error(this._t('billing_company_resolve_failed'));
+            }
+            this._billingTargetCompanyId = cid;
+            this._billingCompanyDisplayName = resolved.name ? String(resolved.name) : '';
+            this._billingCompanyDisplaySlug = resolved.subdomain ? String(resolved.subdomain).trim() : '';
+            const slug = this._billingCompanyDisplaySlug;
+            this._billingCompanyInput = slug || cid;
+            this._uCompany = cid;
+            await Promise.all([this._loadSettlementRules(), this._loadCompanyPrices()]);
         } catch (e) {
-            this._registryToolIds = [];
-            this._registryToolsError = e.message;
+            const msg = e && typeof e.message === 'string' ? e.message : String(e);
+            this._billingCompanyResolveError = msg;
+            this._billingTargetCompanyId = '';
+            this._billingCompanyDisplayName = '';
+            this._billingCompanyDisplaySlug = '';
+            this._rulesDoc = { version: 1, application_mode: 'first_win', rules: [] };
+            this._cPriceOverrideRows = [];
         }
     }
 
@@ -741,11 +1287,19 @@ export class BillingAdminPage extends PlatformElement {
     // ── Settlement Rules ──
 
     async _loadSettlementRules() {
+        const cid = (this._billingTargetCompanyId || '').trim();
+        if (!cid) {
+            this._rulesError = '';
+            this._rulesDoc = { version: 1, application_mode: 'first_win', rules: [] };
+            return;
+        }
         this._rulesLoading = true;
         this._rulesError = '';
         try {
-            const data = await api.get('/api/platform-billing/settlement-rules');
-            const doc = data.document ?? { version: 1, application_mode: 'all_matching', rules: [] };
+            const data = await api.get(
+                `/api/platform-billing/settlement-rules/${encodeURIComponent(cid)}`,
+            );
+            const doc = data.document ?? { version: 1, application_mode: 'first_win', rules: [] };
             this._rulesDoc = doc;
         } catch (e) {
             this._rulesError = e.message;
@@ -755,14 +1309,19 @@ export class BillingAdminPage extends PlatformElement {
     }
 
     async _saveSettlementRules() {
+        const cid = (this._billingTargetCompanyId || '').trim();
+        if (!cid) {
+            this._rulesError = this._t('billing_company_required');
+            return;
+        }
         this._rulesError = '';
         const payload = {
             version: this._rulesDoc.version || 1,
-            application_mode: this._rulesDoc.application_mode || 'all_matching',
+            application_mode: this._rulesDoc.application_mode || 'first_win',
             rules: (this._rulesDoc.rules || []).map(_cleanRule),
         };
         try {
-            await api.put('/api/platform-billing/settlement-rules', payload);
+            await api.put(`/api/platform-billing/settlement-rules/${encodeURIComponent(cid)}`, payload);
             await this._loadSettlementRules();
             this.success(this._t('saved_ok'));
         } catch (e) {
@@ -773,14 +1332,11 @@ export class BillingAdminPage extends PlatformElement {
     _addRule() {
         const rules = [...(this._rulesDoc.rules || []), _emptyRule()];
         this._rulesDoc = { ...this._rulesDoc, rules };
-        this._rulesExpandedIdx = rules.length - 1;
     }
 
     _removeRule(idx) {
         const rules = (this._rulesDoc.rules || []).filter((_, i) => i !== idx);
         this._rulesDoc = { ...this._rulesDoc, rules };
-        if (this._rulesExpandedIdx === idx) this._rulesExpandedIdx = -1;
-        else if (this._rulesExpandedIdx > idx) this._rulesExpandedIdx--;
     }
 
     _updateRule(idx, field, value) {
@@ -829,7 +1385,7 @@ export class BillingAdminPage extends PlatformElement {
     // ── Company Prices ──
 
     async _loadCompanyPrices() {
-        const cid = this._cPriceCompanyId.trim();
+        const cid = (this._billingTargetCompanyId || '').trim();
         if (!cid) {
             this._cPriceError = this._t('company_id_required');
             return;
@@ -848,7 +1404,7 @@ export class BillingAdminPage extends PlatformElement {
     }
 
     async _saveCompanyPrices() {
-        const cid = this._cPriceCompanyId.trim();
+        const cid = (this._billingTargetCompanyId || '').trim();
         if (!cid) {
             this._cPriceError = this._t('company_id_required');
             return;
@@ -1056,7 +1612,7 @@ export class BillingAdminPage extends PlatformElement {
     }
 
     _hint(key) {
-        return html`<platform-help-hint text=${this._t(key)}></platform-help-hint>`;
+        return html`<platform-help-hint .text=${this._t(key)}></platform-help-hint>`;
     }
 
     _iconBtn(icon, opts = {}) {
@@ -1075,32 +1631,152 @@ export class BillingAdminPage extends PlatformElement {
 
     render() {
         return html`
-            <page-header
-                title=${this._t('title')}
-                subtitle=${this._t('subtitle')}
-            ></page-header>
-
-            ${this._registryToolsError
-                ? html`<div class="err">${this._t('registry_tools_error', { message: this._registryToolsError })}</div>`
-                : ''}
+            <div class="billing-page-intro">
+                <div class="billing-page-intro-header">
+                    <page-header title=${this._t('title')} subtitle="">
+                        <platform-help-hint
+                            slot="actions"
+                            .text=${this._t('hint_billing_page_about')}
+                            label=${this._t('title')}
+                        ></platform-help-hint>
+                    </page-header>
+                </div>
+                ${this._renderBillingCompanyScopeCompact()}
+            </div>
 
             ${this._renderPricesSection()}
             ${this._renderSettlementRulesSection()}
-            ${this._renderCompanyPricesSection()}
             ${this._renderUsageSection()}
+        `;
+    }
+
+    _renderBillingCompanyScopeCompact() {
+        const activeId = (this._billingTargetCompanyId || '').trim();
+        const triggerText = activeId
+            ? (this._billingSectionTitleSuffix().replace(/^ — /, '') || activeId)
+            : this._t('billing_company_pick_placeholder');
+        const options = this._filteredBillingPickerOptions();
+        return html`
+            <div class="billing-co-root billing-scope-compact" role="region" aria-label=${this._t('billing_scope_region_label')}>
+                <h2 class="scope-banner-title" style="display:flex;align-items:center;gap:var(--space-1);flex-wrap:wrap;">
+                    ${this._t('billing_scope_banner_title')}
+                    ${this._hint('hint_billing_company_pick')}
+                </h2>
+                <button
+                    type="button"
+                    class="billing-co-trigger"
+                    @click=${(e) => {
+                        e.stopPropagation();
+                        const next = !this._billingPickerOpen;
+                        this._billingPickerOpen = next;
+                        if (next) {
+                            this._billingPickerQuery = '';
+                            void this._fetchBillingCompanySuggestForQuery('');
+                        }
+                    }}
+                >
+                    <span class="billing-co-trigger-text">${triggerText}</span>
+                    <platform-icon name="chevron-down" size="14"></platform-icon>
+                </button>
+                ${this._billingPickerOpen
+                    ? html`
+                        <div class="billing-co-panel" @click=${(e) => e.stopPropagation()}>
+                            <input
+                                type="search"
+                                class="billing-co-search"
+                                placeholder=${this._t('billing_company_search_placeholder')}
+                                .value=${this._billingPickerQuery}
+                                @input=${(e) => {
+                                    this._billingPickerQuery = e.target.value;
+                                    this._scheduleBillingCompanySuggestFromPicker();
+                                }}
+                                @keydown=${(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        void this._applyBillingPickerManual();
+                                    }
+                                }}
+                            />
+                            <ul class="billing-co-list">
+                                ${options.length === 0
+                                    ? html`<li class="billing-co-empty">${this._t('billing_company_list_empty')}</li>`
+                                    : options.map(
+                                          (item) => html`
+                                              <li>
+                                                  <button
+                                                      type="button"
+                                                      class="billing-co-item"
+                                                      @click=${() => this._selectBillingCompanyFromList(item)}
+                                                  >
+                                                      ${_usageFacetItemIsObject(item) ? item.label : item}
+                                                  </button>
+                                              </li>
+                                          `,
+                                      )}
+                            </ul>
+                        </div>
+                    `
+                    : ''}
+                ${this._billingCompanyResolveError
+                    ? html`<div class="err" style="margin-top: var(--space-2);">${this._billingCompanyResolveError}</div>`
+                    : ''}
+                ${activeId
+                    ? html`<div class="scope-active-line">
+                        <span>${this._t('billing_scope_active_label')}</span>
+                        <span class="scope-active-id" title=${activeId}>id: ${activeId}</span>
+                    </div>`
+                    : html`<p class="muted scope-active-line">${this._t('billing_scope_none_hint')}</p>`}
+            </div>
         `;
     }
 
     // ── Price catalog ──
 
-    _renderPriceTable(rows, onUpdate, onRemove, onAdd) {
+    _renderEffectiveCatalogScrollable() {
+        const rows = this._effectiveCatalogRows();
+        if (rows.length === 0) {
+            return html`<p class="muted" style="margin:0;">${this._t('price_catalog_empty')}</p>`;
+        }
+        return html`
+            <div class="price-catalog-wrap">
+                <table class="price-catalog-table">
+                    <thead>
+                        <tr>
+                            <th>${this._t('price_col_category')}</th>
+                            <th>${this._t('price_col_resource')}</th>
+                            <th style="text-align:right">${this._t('price_col_price')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(
+                            (row) => html`
+                                <tr>
+                                    <td>${row.category}</td>
+                                    <td><code>${row.resource}</code></td>
+                                    <td class="num">${row.price}</td>
+                                </tr>
+                            `,
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    _renderPriceTable(rows, onUpdate, onRemove) {
         return html`
             <table class="price-table">
                 <thead>
                     <tr>
-                        <th>${this._t('price_col_category')} ${this._hint('hint_price_category')}</th>
-                        <th>${this._t('price_col_resource')} ${this._hint('hint_price_resource')}</th>
-                        <th>${this._t('price_col_price')} ${this._hint('hint_price_price')}</th>
+                        <th>
+                            <span class="field-label-row">${this._t('price_col_category')} ${this._hint('hint_price_category')}</span>
+                        </th>
+                        <th>
+                            <span class="field-label-row">${this._t('price_col_resource')} ${this._hint('hint_price_resource')}</span>
+                        </th>
+                        <th>
+                            <span class="field-label-row">${this._t('price_col_price')} ${this._hint('hint_price_price')}</span>
+                        </th>
                         <th></th>
                     </tr>
                 </thead>
@@ -1133,39 +1809,72 @@ export class BillingAdminPage extends PlatformElement {
                     `)}
                 </tbody>
             </table>
-            ${this._iconBtn('plus', {
-                title: this._t('price_add_row'),
-                onClick: onAdd,
-            })}
         `;
     }
 
     _renderPricesSection() {
+        const catalogRows = this._effectiveCatalogRows();
+        const catalogCount = catalogRows.length;
         return html`
             <div class="section">
-                <h2 class="section-title">${this._t('section_prices')} ${this._hint('hint_prices_section')}</h2>
+                <div class="billing-section-head-row" aria-label=${this._t('section_prices')}>
+                    <h2 class="section-title section-title--inline">
+                        <span class="section-title__text">${this._t('section_prices')}</span>
+                        ${this._hint('hint_prices_section')}
+                    </h2>
+                    <div class="toolbar toolbar-tight toolbar-compact">
+                        ${this._iconBtn('plus', {
+                            title: this._t('price_add_row'),
+                            onClick: () => this._addOverrideRow(),
+                        })}
+                        ${this._iconBtn('refresh', {
+                            title: this._t('reload'),
+                            onClick: () => this._loadPrices(),
+                        })}
+                        ${this._iconBtn('save', {
+                            variant: 'primary',
+                            title: this._t('save_override'),
+                            onClick: () => this._saveOverride(),
+                        })}
+                    </div>
+                </div>
                 ${this._pricesError ? html`<div class="err">${this._pricesError}</div>` : ''}
                 ${this._pricesLoading
                     ? html`<div>${this._t('loading')}</div>`
                     : html`
-                        ${this._renderPriceTable(
-                            this._overrideRows,
-                            (i, f, v) => this._updateOverrideRow(i, f, v),
-                            (i) => this._removeOverrideRow(i),
-                            () => this._addOverrideRow(),
-                        )}
-
-                        <div class="toolbar">
-                            ${this._iconBtn('refresh', {
-                                title: this._t('reload'),
-                                onClick: () => this._loadPrices(),
-                            })}
-                            ${this._iconBtn('save', {
-                                variant: 'primary',
-                                title: this._t('save_override'),
-                                onClick: () => this._saveOverride(),
-                            })}
+                        <div class="price-override-block">
+                            <h3 class="override-subtitle">
+                                ${this._t('section_prices_override_only')}
+                                ${this._hint('hint_prices_override_only')}
+                            </h3>
+                            ${this._renderPriceTable(
+                                this._overrideRows,
+                                (i, f, v) => this._updateOverrideRow(i, f, v),
+                                (i) => this._removeOverrideRow(i),
+                            )}
                         </div>
+
+                        <button
+                            type="button"
+                            class="billing-readonly-catalog-toggle"
+                            aria-expanded=${this._billingReadonlyCatalogExpanded}
+                            title=${this._billingReadonlyCatalogExpanded
+                                ? this._t('billing_collapse')
+                                : this._t('billing_expand')}
+                            @click=${() => {
+                                this._billingReadonlyCatalogExpanded = !this._billingReadonlyCatalogExpanded;
+                            }}
+                        >
+                            <platform-icon
+                                name=${this._billingReadonlyCatalogExpanded ? 'chevron-down' : 'chevron-right'}
+                                size="16"
+                            ></platform-icon>
+                            <span>${this._t('billing_readonly_catalog_title')}</span>
+                            <span class="muted">${this._t('billing_readonly_catalog_rows', { count: catalogCount })}</span>
+                        </button>
+                        ${this._billingReadonlyCatalogExpanded ? this._renderEffectiveCatalogScrollable() : ''}
+
+                        ${this._renderCompanyPricesSubsection()}
                     `}
             </div>
         `;
@@ -1174,27 +1883,80 @@ export class BillingAdminPage extends PlatformElement {
     // ── Settlement rules ──
 
     _renderSettlementRulesSection() {
+        const cid = (this._billingTargetCompanyId || '').trim();
+        const disabled = !cid;
+        const rulesCount = (this._rulesDoc.rules || []).length;
         return html`
             <div class="section">
-                <h2 class="section-title">${this._t('section_settlement_rules')} ${this._hint('hint_settlement_section')}</h2>
+                <div class="billing-section-head-fold">
+                    <button
+                        type="button"
+                        class="billing-fold-chevron"
+                        aria-expanded=${this._settlementRulesExpanded}
+                        title=${this._settlementRulesExpanded
+                            ? this._t('billing_collapse')
+                            : this._t('billing_expand')}
+                        @click=${() => {
+                            this._settlementRulesExpanded = !this._settlementRulesExpanded;
+                        }}
+                    >
+                        <platform-icon
+                            name=${this._settlementRulesExpanded ? 'chevron-down' : 'chevron-right'}
+                            size="18"
+                        ></platform-icon>
+                    </button>
+                    <div style="flex:1;min-width:0;">
+                        <h2 class="section-title section-title--inline">
+                            <span class="section-title__text">
+                                ${this._t('section_settlement_rules')}${this._billingSectionTitleSuffix()}
+                            </span>
+                            ${this._hint('hint_settlement_section')}
+                            ${cid
+                                ? html`<span class="billing-section-meta muted">${this._t('rules_count_badge', { count: rulesCount })}</span>`
+                                : ''}
+                        </h2>
+                    </div>
+                </div>
                 ${this._rulesError ? html`<div class="err">${this._rulesError}</div>` : ''}
+                ${disabled ? html`<div class="err">${this._t('billing_company_required')}</div>` : ''}
                 ${this._rulesLoading
                     ? html`<div>${this._t('loading')}</div>`
-                    : html`
-                        ${this._renderRulesForm()}
-
-                        <div class="toolbar">
-                            ${this._iconBtn('refresh', {
-                                title: this._t('reload'),
-                                onClick: () => this._loadSettlementRules(),
-                            })}
-                            ${this._iconBtn('save', {
-                                variant: 'primary',
-                                title: this._t('save_rules'),
-                                onClick: () => this._saveSettlementRules(),
-                            })}
-                        </div>
-                    `}
+                    : this._settlementRulesExpanded
+                      ? html`
+                            <div
+                                class="toolbar toolbar-tight toolbar-compact"
+                                style="margin-bottom:var(--space-2);"
+                                aria-label=${this._t('section_settlement_rules')}
+                            >
+                                ${this._iconBtn('plus', {
+                                    title: this._t('rules_add_rule'),
+                                    disabled,
+                                    onClick: () => this._addRule(),
+                                })}
+                                ${this._iconBtn('refresh', {
+                                    title: this._t('reload'),
+                                    disabled,
+                                    onClick: () => this._loadSettlementRules(),
+                                })}
+                                <button
+                                    type="button"
+                                    class="icon-btn"
+                                    ?disabled=${disabled}
+                                    title=${this._t('rules_load_platform_default')}
+                                    @click=${() => void this._loadDefaultSettlementRulesTemplate()}
+                                >
+                                    <platform-icon name="book-open" size="16"></platform-icon>
+                                </button>
+                                ${this._iconBtn('save', {
+                                    variant: 'primary',
+                                    title: this._t('save_rules'),
+                                    disabled,
+                                    onClick: () => this._saveSettlementRules(),
+                                })}
+                            </div>
+                            ${this._renderRulesForm()}
+                        `
+                      : ''}
             </div>
         `;
     }
@@ -1203,8 +1965,8 @@ export class BillingAdminPage extends PlatformElement {
         const doc = this._rulesDoc;
         const rules = doc.rules || [];
         return html`
-            <div style="display: flex; gap: var(--space-4); align-items: center; margin-bottom: var(--space-4);">
-                <label class="field">
+            <div style="display:flex;gap:var(--space-3);align-items:center;margin-bottom:var(--space-2);">
+                <label class="field" style="margin:0;">
                     <span class="field-label-row">${this._t('rules_application_mode')} ${this._hint('hint_application_mode')}</span>
                     <select .value=${doc.application_mode || 'all_matching'}
                         @change=${(e) => { this._rulesDoc = { ...doc, application_mode: e.target.value }; }}>
@@ -1215,20 +1977,13 @@ export class BillingAdminPage extends PlatformElement {
             </div>
 
             ${rules.map((rule, idx) => this._renderRuleCard(rule, idx))}
-
-            ${this._iconBtn('plus', {
-                title: this._t('rules_add_rule'),
-                onClick: () => this._addRule(),
-            })}
         `;
     }
 
     _renderRuleCard(rule, idx) {
-        const expanded = this._rulesExpandedIdx === idx;
         return html`
             <div class="rule-card">
-                <div class="rule-header" @click=${() => { this._rulesExpandedIdx = expanded ? -1 : idx; }}>
-                    <span class="chevron ${expanded ? 'open' : ''}">&#9654;</span>
+                <div class="rule-header-static">
                     <div class="rule-summary">
                         <span class="rule-id-label">${rule.rule_id || this._t('rules_new')}</span>
                         <span class="rule-resource-label">${rule.resource_name || ''}</span>
@@ -1236,53 +1991,49 @@ export class BillingAdminPage extends PlatformElement {
                     <platform-switch
                         ?checked=${rule.enabled !== false}
                         size="sm"
-                        @change=${(e) => { e.stopPropagation(); this._updateRule(idx, 'enabled', e.detail.value); }}
+                        @change=${(e) => { this._updateRule(idx, 'enabled', e.detail.value); }}
                     ></platform-switch>
-                    <span @click=${(e) => { e.stopPropagation(); this._removeRule(idx); }}>
+                    <span @click=${() => this._removeRule(idx)}>
                         ${this._iconBtn('trash', { variant: 'danger', size: 'sm' })}
                     </span>
                 </div>
-
-                ${expanded ? html`
-                    <div class="rule-body">
-                        <div class="form-row">
-                            <label class="field">
-                                <span class="field-label-row">rule_id ${this._hint('hint_rule_id')}</span>
-                                <input .value=${rule.rule_id || ''}
-                                    @input=${(e) => this._updateRule(idx, 'rule_id', e.target.value)} />
-                            </label>
-                            <label class="field">
-                                <span class="field-label-row">resource_name ${this._hint('hint_resource_name')}</span>
-                                ${this._selectWithEmpty(this._settlementResourceNameOptions, rule.resource_name || '',
-                                    (v) => this._updateRule(idx, 'resource_name', v))}
-                            </label>
-                            <label class="field">
-                                <span class="field-label-row">usage_type ${this._hint('hint_usage_type')}</span>
-                                ${this._selectWithEmpty(USAGE_TYPES, rule.usage_type || 'tool_call',
-                                    (v) => this._updateRule(idx, 'usage_type', v))}
-                            </label>
-                        </div>
-                        <div class="form-row">
-                            <label class="field">
-                                <span class="field-label-row">priority ${this._hint('hint_priority')}</span>
-                                <input type="number" .value=${String(rule.priority ?? 100)}
-                                    @input=${(e) => this._updateRule(idx, 'priority', Number(e.target.value) || 100)} />
-                            </label>
-                            <label class="field">
-                                <span class="field-label-row">exclusive_group ${this._hint('hint_exclusive_group')}</span>
-                                <input .value=${rule.exclusive_group || ''}
-                                    @input=${(e) => this._updateRule(idx, 'exclusive_group', e.target.value)} />
-                            </label>
-                            <label class="field">
-                                <span class="field-label-row">quantity_from ${this._hint('hint_quantity_from')}</span>
-                                ${this._selectWithEmpty(QUANTITY_SOURCES, rule.quantity_from || 'const:1',
-                                    (v) => this._updateRule(idx, 'quantity_from', v))}
-                            </label>
-                        </div>
-
-                        ${this._renderMatchSection(rule, idx)}
+                <div class="rule-body">
+                    <div class="form-row">
+                        <label class="field">
+                            <span class="field-label-row">rule_id ${this._hint('hint_rule_id')}</span>
+                            <input .value=${rule.rule_id || ''}
+                                @input=${(e) => this._updateRule(idx, 'rule_id', e.target.value)} />
+                        </label>
+                        <label class="field">
+                            <span class="field-label-row">resource_name ${this._hint('hint_resource_name')}</span>
+                            ${this._selectWithEmpty(this._settlementResourceNameOptions, rule.resource_name || '',
+                                (v) => this._updateRule(idx, 'resource_name', v))}
+                        </label>
+                        <label class="field">
+                            <span class="field-label-row">usage_type ${this._hint('hint_usage_type')}</span>
+                            ${this._selectWithEmpty(USAGE_TYPES, rule.usage_type || 'tool_call',
+                                (v) => this._updateRule(idx, 'usage_type', v))}
+                        </label>
                     </div>
-                ` : ''}
+                    <div class="form-row">
+                        <label class="field">
+                            <span class="field-label-row">priority ${this._hint('hint_priority')}</span>
+                            <input type="number" .value=${String(rule.priority ?? 100)}
+                                @input=${(e) => this._updateRule(idx, 'priority', Number(e.target.value) || 100)} />
+                        </label>
+                        <label class="field">
+                            <span class="field-label-row">exclusive_group ${this._hint('hint_exclusive_group')}</span>
+                            <input .value=${rule.exclusive_group || ''}
+                                @input=${(e) => this._updateRule(idx, 'exclusive_group', e.target.value)} />
+                        </label>
+                        <label class="field">
+                            <span class="field-label-row">quantity_from ${this._hint('hint_quantity_from')}</span>
+                            ${this._selectWithEmpty(QUANTITY_SOURCES, rule.quantity_from || 'const:1',
+                                (v) => this._updateRule(idx, 'quantity_from', v))}
+                        </label>
+                    </div>
+                    ${this._renderMatchSection(rule, idx)}
+                </div>
             </div>
         `;
     }
@@ -1344,47 +2095,65 @@ export class BillingAdminPage extends PlatformElement {
         `;
     }
 
-    // ── Company prices ──
+    // ── Company prices (вложено в секцию «Каталог цен») ──
 
-    _renderCompanyPricesSection() {
+    _renderCompanyPricesSubsection() {
+        const cid = (this._billingTargetCompanyId || '').trim();
+        const disabled = !cid;
         return html`
-            <div class="section">
-                <h2 class="section-title">${this._t('section_company_prices')} ${this._hint('hint_company_prices')}</h2>
-                ${this._cPriceError ? html`<div class="err">${this._cPriceError}</div>` : ''}
-                <div style="display: flex; gap: var(--space-2); align-items: end; max-width: 32rem; margin-bottom: var(--space-3);">
-                    <label class="field" style="flex: 1;">
-                        ${this._t('company_price_id_label')}
-                        <input .value=${this._cPriceCompanyId}
-                            @input=${(e) => { this._cPriceCompanyId = e.target.value; }} />
-                    </label>
-                    ${this._iconBtn('search', {
-                        variant: 'primary',
-                        title: this._t('load_company_prices'),
-                        disabled: this._cPriceLoading,
-                        onClick: () => this._loadCompanyPrices(),
-                    })}
+            <div class="billing-prices-company-subsection">
+                <div class="billing-section-head-row billing-company-prices-sub-head">
+                    <h3 class="override-subtitle billing-company-prices-sub-title">
+                        ${this._t('subsection_company_prices_title')}
+                        ${this._billingSectionTitleSuffix()}
+                        ${this._hint('hint_company_prices')}
+                    </h3>
+                    ${cid
+                        ? html`
+                              <div
+                                  class="toolbar toolbar-tight toolbar-compact"
+                                  aria-label=${this._t('subsection_company_prices_title')}
+                              >
+                                  ${this._iconBtn('plus', {
+                                      title: this._t('price_add_row'),
+                                      disabled: this._cPriceLoading,
+                                      onClick: () => {
+                                          this._cPriceOverrideRows = [
+                                              ...this._cPriceOverrideRows,
+                                              { category: '', resource: '', price: 0 },
+                                          ];
+                                      },
+                                  })}
+                                  ${this._iconBtn('refresh', {
+                                      title: this._t('load_company_prices'),
+                                      disabled: this._cPriceLoading,
+                                      onClick: () => this._loadCompanyPrices(),
+                                  })}
+                                  ${this._iconBtn('save', {
+                                      variant: 'primary',
+                                      title: this._t('save_company_override'),
+                                      disabled,
+                                      onClick: () => this._saveCompanyPrices(),
+                                  })}
+                              </div>
+                          `
+                        : ''}
                 </div>
-
-                ${this._cPriceOverrideRows.length > 0 || this._cPriceCompanyId ? html`
-                    ${this._renderPriceTable(
-                        this._cPriceOverrideRows,
-                        (i, f, v) => {
-                            const rows = [...this._cPriceOverrideRows];
-                            rows[i] = { ...rows[i], [f]: f === 'price' ? Number(v) || 0 : v };
-                            this._cPriceOverrideRows = rows;
-                        },
-                        (i) => { this._cPriceOverrideRows = this._cPriceOverrideRows.filter((_, j) => j !== i); },
-                        () => { this._cPriceOverrideRows = [...this._cPriceOverrideRows, { category: '', resource: '', price: 0 }]; },
-                    )}
-
-                    <div class="toolbar">
-                        ${this._iconBtn('save', {
-                            variant: 'primary',
-                            title: this._t('save_company_override'),
-                            onClick: () => this._saveCompanyPrices(),
-                        })}
-                    </div>
-                ` : ''}
+                ${this._cPriceError ? html`<div class="err">${this._cPriceError}</div>` : ''}
+                ${disabled ? html`<div class="err">${this._t('billing_company_required')}</div>` : ''}
+                ${cid
+                    ? this._renderPriceTable(
+                          this._cPriceOverrideRows,
+                          (i, f, v) => {
+                              const rows = [...this._cPriceOverrideRows];
+                              rows[i] = { ...rows[i], [f]: f === 'price' ? Number(v) || 0 : v };
+                              this._cPriceOverrideRows = rows;
+                          },
+                          (i) => {
+                              this._cPriceOverrideRows = this._cPriceOverrideRows.filter((_, j) => j !== i);
+                          },
+                      )
+                    : ''}
             </div>
         `;
     }
@@ -1414,7 +2183,10 @@ export class BillingAdminPage extends PlatformElement {
 
         return html`
             <div class="section">
-                <h2 class="section-title">${this._t('section_usage')} ${this._hint('hint_usage_section')}</h2>
+                <h2 class="section-title section-title--inline">
+                    <span class="section-title__text">${this._t('section_usage')}</span>
+                    ${this._hint('hint_usage_section')}
+                </h2>
                 ${this._usageError ? html`<div class="err">${this._usageError}</div>` : ''}
 
                 <div class="usage-filters-bar">
@@ -1459,14 +2231,10 @@ export class BillingAdminPage extends PlatformElement {
                         <div class="usage-filters-submit">
                             ${this._iconBtn('search', {
                                 variant: 'primary',
-                                title: `${this._t('apply')}. ${this._t('usage_facet_hint')}`,
+                                title: this._t('apply'),
                                 disabled: this._usageLoading,
                                 onClick: () => { this._uOffset = 0; void this._loadUsage(); },
                             })}
-                            <span
-                                class="usage-filters-hint"
-                                title=${this._t('usage_facet_hint')}
-                            >${this._t('usage_facet_hint')}</span>
                         </div>
                     </div>
                 </div>

@@ -80,6 +80,8 @@ alwaysApply: false
 
 Вспомогательно: **`record_llm_request` / `record_llm_response`**, **`record_tool_result`**, **`record_prompt_result`**, **`record_state_snapshot`**, **`set_error`**.
 
+**LLM span (flows ReAct):** при наличии конфигурации провайдера на клиенте в атрибутах span выставляется **`platform.llm.provider`** (`openrouter`, `bothub`, `openai`, `mock`, …). Если провайдер вернул расширенный **`usage`** (как у OpenRouter: `cost`, опционально `cost_details.upstream_inference_cost`), в span попадают **`platform.llm.provider_reported_cost`** и **`platform.llm.provider_upstream_inference_cost`** (только когда значения численные в ответе API). Парсинг — `core/clients/llm/factory.py` (`_merge_openai_compatible_usage_into_usage_data`); **settlement по умолчанию** по-прежнему от **`platform.billing.quantity`** (токены × прайс), см. **`billing.mdc`**.
+
 Кастомные поля: атрибуты на span OTEL; доменные ключи — через константы в `core/tracing/attributes.py`, чтобы совпадали с фильтрами репозитория.
 
 ## API чтения

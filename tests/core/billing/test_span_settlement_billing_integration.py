@@ -116,8 +116,8 @@ async def test_settle_pending_two_rules_two_usages(frontend_container, unique_id
             SettlementRule(
                 rule_id=f"r2_{unique_id}",
                 priority=2,
-                resource_name="tool:*",
-                usage_type="tool_call",
+                resource_name="embedding:*",
+                usage_type="embedding_request",
                 quantity_from="const:1",
                 match=SettlementRuleMatch(operation_name_prefix=f"multi.{unique_id}."),
             ),

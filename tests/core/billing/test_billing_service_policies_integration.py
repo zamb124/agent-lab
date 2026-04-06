@@ -10,13 +10,18 @@ from datetime import datetime, timezone
 
 import pytest
 
-from core.billing.service import BillingService, company_resource_prices_storage_key
+from core.billing.service import (
+    BillingService,
+    STORAGE_SETTLEMENT_RULES_JSON,
+    company_resource_prices_storage_key,
+    company_settlement_rules_storage_key,
+)
 from core.models.billing_models import UsageType
 from core.models.identity_models import Company
 
 
 def _minimal_base_prices() -> dict:
-    return {"llm": {"*": 1.0}, "tool": {"*": 2.0}}
+    return {"llm": {"*": 1.0}, "livekit": {"*": 2.0}}
 
 
 @pytest.mark.asyncio
@@ -127,16 +132,14 @@ async def test_get_resource_cost_invalid_resource_name_format(frontend_container
 
 
 @pytest.mark.asyncio
-async def test_unit_cost_tool_category_uses_tools_multiplier(
+async def test_tool_billing_category_always_zero_even_with_storage_override(
     frontend_container, unique_id, system_user_id
 ) -> None:
-    from core.models.billing_models import DEFAULT_TARIFF_PRICES
-
     billing = frontend_container.billing_service
     cid = f"toolm_{unique_id}"
     company = Company(
         company_id=cid,
-        name="Tool mult",
+        name="Tool free",
         owner_user_id=system_user_id,
         members={system_user_id: ["owner"]},
         balance=0.0,
@@ -144,9 +147,8 @@ async def test_unit_cost_tool_category_uses_tools_multiplier(
     await frontend_container.company_repository.set(company)
     key = company_resource_prices_storage_key(cid)
     await frontend_container.shared_storage.set(key, json.dumps({"tool": {"*": 10.0}}), force_global=True)
-    mult = float(DEFAULT_TARIFF_PRICES[company.tariff_plan]["tools"]["*"])
     unit = await billing.get_resource_cost_for_company(company, "tool:calc")
-    assert unit == pytest.approx(10.0 * mult)
+    assert unit == 0.0
     await frontend_container.shared_storage.delete(key, force_global=True)
 
 
@@ -186,8 +188,6 @@ async def test_get_effective_resource_base_prices_for_company_invalid_override_r
 async def test_load_settlement_rules_document_invalid_storage_json_raises(
     frontend_container,
 ) -> None:
-    from core.billing.service import STORAGE_SETTLEMENT_RULES_JSON
-
     billing = frontend_container.billing_service
     await frontend_container.shared_storage.set(STORAGE_SETTLEMENT_RULES_JSON, "[]", force_global=True)
     try:
@@ -264,3 +264,57 @@ async def test_reset_monthly_billing_unknown_company_raises(frontend_container) 
     billing = frontend_container.billing_service
     with pytest.raises(ValueError, match="не найдена"):
         await billing.reset_monthly_billing("company_does_not_exist_xyz")
+
+
+@pytest.mark.asyncio
+async def test_load_settlement_rules_for_company_migrates_from_global_json(
+    frontend_container, unique_id, system_user_id
+) -> None:
+    billing = frontend_container.billing_service
+    cid = f"migrate_sr_{unique_id}"
+    company = Company(
+        company_id=cid,
+        name="Migrate SR",
+        owner_user_id=system_user_id,
+        members={system_user_id: ["owner"]},
+        balance=100.0,
+        monthly_budget=0.0,
+        current_month_spent=0.0,
+    )
+    await frontend_container.company_repository.set(company)
+    ckey = company_settlement_rules_storage_key(cid)
+    await frontend_container.shared_storage.delete(ckey, force_global=True)
+    global_doc = {
+        "version": 1,
+        "application_mode": "first_win",
+        "rules": [
+            {
+                "rule_id": f"g_{unique_id}",
+                "resource_name": "llm:*",
+                "usage_type": "llm_request",
+                "quantity_from": "const:1",
+                "match": {"operation_name_prefix": "z."},
+            }
+        ],
+    }
+    prev_global = await frontend_container.shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
+    try:
+        await frontend_container.shared_storage.set(
+            STORAGE_SETTLEMENT_RULES_JSON,
+            json.dumps(global_doc),
+            force_global=True,
+        )
+        doc = await billing.load_settlement_rules_document_for_company(cid)
+        assert len(doc.rules) == 1
+        assert doc.rules[0].rule_id == f"g_{unique_id}"
+        raw_co = await frontend_container.shared_storage.get(ckey, force_global=True)
+        assert raw_co is not None
+        assert json.loads(raw_co)["rules"][0]["rule_id"] == f"g_{unique_id}"
+    finally:
+        await frontend_container.shared_storage.delete(ckey, force_global=True)
+        if prev_global is not None:
+            await frontend_container.shared_storage.set(
+                STORAGE_SETTLEMENT_RULES_JSON, prev_global, force_global=True
+            )
+        else:
+            await frontend_container.shared_storage.delete(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)

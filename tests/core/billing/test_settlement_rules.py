@@ -100,7 +100,7 @@ def test_settlement_rule_invalid_usage_type_raises() -> None:
 def test_rule_matches_operation_name_prefix() -> None:
     rule = SettlementRule(
         rule_id="r1",
-        resource_name="tool:*",
+        resource_name="livekit:*",
         usage_type="tool_call",
         match=SettlementRuleMatch(operation_name_prefix="flows."),
     )
@@ -111,7 +111,7 @@ def test_rule_matches_operation_name_prefix() -> None:
 def test_rule_matches_operation_name_equals() -> None:
     rule = SettlementRule(
         rule_id="r1",
-        resource_name="tool:*",
+        resource_name="livekit:*",
         usage_type="tool_call",
         match=SettlementRuleMatch(operation_name_equals="exact.op"),
     )
@@ -179,6 +179,22 @@ def test_rule_matches_attribute_equals() -> None:
     assert rule_matches_span(rule, _span(attributes={})) is False
 
 
+def test_rule_matches_attribute_keys_present() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="llm:*",
+        usage_type="llm_request",
+        match=SettlementRuleMatch(attribute_keys_present=["platform.billing.settlement_quantity_rub"]),
+    )
+    assert rule_matches_span(rule, _span(attributes={})) is False
+    assert rule_matches_span(
+        rule, _span(attributes={"platform.billing.settlement_quantity_rub": None})
+    ) is False
+    assert rule_matches_span(
+        rule, _span(attributes={"platform.billing.settlement_quantity_rub": 43})
+    ) is True
+
+
 def test_rule_matches_span_attributes_not_dict_returns_false() -> None:
     rule = SettlementRule(
         rule_id="r1",
@@ -230,7 +246,7 @@ def test_resolve_disabled_rule_excluded() -> None:
             ),
             SettlementRule(
                 rule_id="on",
-                resource_name="tool:*",
+                resource_name="livekit:*",
                 usage_type="tool_call",
                 match=SettlementRuleMatch(operation_name_prefix="z."),
             ),
@@ -255,7 +271,7 @@ def test_resolve_first_win() -> None:
             SettlementRule(
                 rule_id="a",
                 priority=10,
-                resource_name="tool:*",
+                resource_name="livekit:*",
                 usage_type="tool_call",
                 match=SettlementRuleMatch(operation_name_prefix="x."),
             ),
@@ -283,7 +299,7 @@ def test_resolve_first_win_across_two_exclusive_groups_picks_best_priority() -> 
                 rule_id="gb",
                 priority=5,
                 exclusive_group="g2",
-                resource_name="tool:*",
+                resource_name="livekit:*",
                 usage_type="tool_call",
                 match=SettlementRuleMatch(operation_name_prefix="m."),
             ),
@@ -310,7 +326,7 @@ def test_resolve_exclusive_group_one_winner() -> None:
                 rule_id="high",
                 priority=5,
                 exclusive_group="g",
-                resource_name="tool:*",
+                resource_name="livekit:*",
                 usage_type="tool_call",
                 match=SettlementRuleMatch(operation_name_prefix="z."),
             ),
@@ -345,7 +361,7 @@ def test_resolve_two_exclusive_groups_both_winners_plus_standalone() -> None:
                 rule_id="a2",
                 priority=9,
                 exclusive_group="A",
-                resource_name="tool:*",
+                resource_name="livekit:*",
                 usage_type="tool_call",
                 match=SettlementRuleMatch(operation_name_prefix="q."),
             ),

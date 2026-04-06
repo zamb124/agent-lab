@@ -57,6 +57,7 @@ class MockLLM:
 
     def __init__(self, model_name: str = "mock-gpt-4"):
         self.model_name = model_name
+        self.llm_provider = "mock"
         self._response_queue: List[Any] = []
         self._responses: Dict[str, str] = {}
         self._tool_responses: Dict[str, Dict[str, Any]] = {}

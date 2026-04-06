@@ -604,22 +604,32 @@ class LegalConfig(BaseModel):
 
 
 def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
-    """Базовые цены до merge с override в shared storage (ключ billing:resource_base_prices_json)."""
+    """
+    Базовый каталог цен до merge с shared storage и пер-компанией.
+
+    Каждое значение — цена в условных рублях за одну единицу списания (что именно считается
+    единицей, задаёт правило settlement: токены LLM, один вызов livekit и т.д.).
+    Итоговая цена = значение × множитель тарифа компании (см. DEFAULT_TARIFF_PRICES).
+
+    Ключи верхнего уровня — категория первого сегмента resource_name (формат category:resource).
+    Внутри категории: имя ресурса или "*" для цены по умолчанию.
+
+    - llm: модели (трейсы llm.*, flows.llm_resource.*, flows.llm.*). "*" — типично руб/токен.
+    - embedding: RAG эмбеддинги (rag.embed.*).
+    - billing:rub — единица = 1 ₽; quantity из platform.billing.settlement_quantity_rub (OpenRouter USD×usd_to_rub_rate).
+    - livekit: room_create, egress_composite, egress_segmented — см. core/calls/livekit_client.py; "*" — прочие livekit:*.
+
+    Категория tool в биллинге не используется (тулы flows бесплатны в учёте).
+    Подробнее: conf.json → billing._docs_ru, configuration.mdc, billing.mdc.
+    """
     return {
-        "llm": {"*": 0.001},
-        "tool": {
-            "weather_api": 0.1,
-            "travel_suggest": 0.2,
-            "calculator": 0.0,
-            "nano_banana_generation": 0.5,
-            "fashn_buyer_agent": 0.0,
-            "*": 0.05,
-        },
-        "embedding": {"*": 0.0005},
+        "llm": {"*": 0.0001},
+        "embedding": {"*": 0.00005},
+        "billing": {"rub": 1.0},
         "livekit": {
-            "room_create": 0.1,
-            "egress_composite": 1.0,
-            "egress_segmented": 0.5,
+            "room_create": 0.01,
+            "egress_composite": 0.05,
+            "egress_segmented": 0.02,
             "*": 0.0,
         },
     }
@@ -628,13 +638,27 @@ def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
 class BillingSpanSettlementConfig(BaseModel):
     """Фоновое списание по spans с platform.billing.pending_settlement (idle worker)."""
 
-    enabled: bool = False
-    cron: str = "*/15 * * * *"
-    lookback_minutes: int = 360
-    batch_limit: int = 500
+    enabled: bool = Field(
+        default=False,
+        description="Включить тик settlement на idle worker (создание usage из spans).",
+    )
+    cron: str = Field(
+        default="*/15 * * * *",
+        description="Cron выражение расписания тика span settlement.",
+    )
+    lookback_minutes: int = Field(
+        default=360,
+        ge=1,
+        description="За сколько минут назад искать необработанные spans (окно после простоя воркера).",
+    )
+    batch_limit: int = Field(
+        default=500,
+        ge=1,
+        description="Максимум spans, обрабатываемых за один тик.",
+    )
     fallback_user_id: str = Field(
         default="",
-        description="user_id для UsageRecord, если в span нет user_id (иначе span пропускается с ошибкой в логе)",
+        description="user_id для UsageRecord, если в span нет user_id (пусто — span пропускается, ошибка в логе).",
     )
 
 
@@ -642,6 +666,15 @@ class BillingConfig(BaseModel):
     """Тарификация: базовые цены из конфига + override через API system; settlement по трейсам."""
 
     resource_base_prices: Dict[str, Dict[str, float]] = Field(
-        default_factory=default_billing_resource_base_prices
+        default_factory=default_billing_resource_base_prices,
+        description="Дерево category → resource → цена в руб./единицу списания; merge с storage override.",
     )
-    span_settlement: BillingSpanSettlementConfig = Field(default_factory=BillingSpanSettlementConfig)
+    usd_to_rub_rate: float = Field(
+        default=85.0,
+        gt=0.0,
+        description="Курс: USD из platform.llm.provider_reported_cost × rate → platform.billing.settlement_quantity_rub (целые рубли).",
+    )
+    span_settlement: BillingSpanSettlementConfig = Field(
+        default_factory=BillingSpanSettlementConfig,
+        description="Параметры фоновой джобы преобразования spans в usage.",
+    )

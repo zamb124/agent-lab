@@ -154,3 +154,11 @@ class PlatformBillingCompanyPricesResponse(BaseModel):
     effective: Dict[str, Dict[str, float]]
     storage_override: Optional[Dict[str, Dict[str, float]]] = None
 
+
+class PlatformBillingCompanyResolveResponse(BaseModel):
+    """Разрешение ввода (company_id или subdomain/slug) в company_id для админки биллинга."""
+
+    company_id: str
+    name: str
+    subdomain: Optional[str] = None
+

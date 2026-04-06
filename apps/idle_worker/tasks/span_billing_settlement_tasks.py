@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
+from core.billing.settlement_rules import SettlementRulesDocument
 from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.logging import get_logger
 
@@ -44,11 +45,23 @@ async def span_billing_settlement_tick(
         limit=cfg.batch_limit,
     )
 
-    rules_doc = await billing.load_settlement_rules_document()
+    rules_by_company: dict[str, SettlementRulesDocument] = {}
 
     settled = 0
     errors = 0
     for span_dict in spans:
+        company_id = span_dict.get("company_id")
+        if not company_id or not isinstance(company_id, str):
+            errors += 1
+            logger.error(
+                "span_billing_settlement_tick: span без company_id span_id=%s",
+                span_dict.get("span_id"),
+            )
+            continue
+        rules_doc = rules_by_company.get(company_id)
+        if rules_doc is None:
+            rules_doc = await billing.load_settlement_rules_document_for_company(company_id)
+            rules_by_company[company_id] = rules_doc
         try:
             n = await billing.settle_pending_span_in_job(
                 span_dict=span_dict,

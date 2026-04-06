@@ -14,13 +14,16 @@ from pydantic import ValidationError
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import (
     PlatformBillingCompanyPricesResponse,
+    PlatformBillingCompanyResolveResponse,
     PlatformBillingPricesResponse,
     PlatformBillingSettlementRulesResponse,
     PlatformBillingUsageReportResponse,
     PlatformTracingFacetItem,
     PlatformTracingFacetItemsResponse,
 )
-from core.billing.service import STORAGE_SETTLEMENT_RULES_JSON, company_resource_prices_storage_key
+from core.models.identity_models import Company
+from core.billing.service import company_resource_prices_storage_key
+from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.settlement_rules import parse_settlement_rules_json
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.models.billing_models import UsageType
@@ -29,6 +32,55 @@ from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _facet_query_fragmen
 router = APIRouter(prefix="/api/platform-billing", tags=["platform-billing"])
 
 _STORAGE_PRICES_KEY = "billing:resource_base_prices_json"
+
+_BILLING_COMPANY_LIST_CAP = 2000
+
+
+def _billing_company_facet_label(co: Company) -> str:
+    if co.subdomain:
+        return f"{co.name} ({co.subdomain})"
+    return f"{co.name} ({co.company_id})"
+
+
+async def _resolve_company_for_billing_admin(container: ContainerDep, raw: str) -> Company:
+    q = raw.strip()
+    if not q:
+        raise HTTPException(status_code=422, detail="Пустой запрос")
+    direct = await container.company_repository.get(q)
+    if direct is not None:
+        return direct
+    q_lower = q.lower()
+    mapped_id = await container.subdomain_repository.get_company_id(q_lower)
+    if mapped_id:
+        co = await container.company_repository.get(mapped_id)
+        if co is not None:
+            return co
+    companies = await container.company_repository.list_all(limit=_BILLING_COMPANY_LIST_CAP)
+    for co in companies:
+        if co.subdomain and co.subdomain.lower() == q_lower:
+            return co
+    raise HTTPException(
+        status_code=404,
+        detail=f"Компания не найдена по id или slug: {q!r}",
+    )
+
+
+def _company_matches_billing_facet_query(co: Company, frag_lower: str) -> bool:
+    if not frag_lower:
+        return True
+    cid = co.company_id.lower()
+    if frag_lower == cid:
+        return True
+    sub = (co.subdomain or "").lower()
+    if sub and frag_lower == sub:
+        return True
+    if frag_lower in cid:
+        return True
+    if sub and frag_lower in sub:
+        return True
+    if frag_lower in co.name.lower():
+        return True
+    return False
 
 
 def _require_system(request: Request) -> None:
@@ -47,6 +99,11 @@ def _validate_price_catalog(data: Any) -> Dict[str, Dict[str, float]]:
     for cat, resources in data.items():
         if not isinstance(cat, str):
             raise HTTPException(status_code=422, detail=f"Ключ категории должен быть строкой: {cat!r}")
+        if cat == "tool":
+            raise HTTPException(
+                status_code=422,
+                detail="Категория tool в прайсе не поддерживается: инструменты не тарифицируются",
+            )
         if not isinstance(resources, dict):
             raise HTTPException(status_code=422, detail=f"Категория {cat!r} должна быть объектом resource->price")
         bucket: Dict[str, float] = {}
@@ -62,6 +119,62 @@ def _validate_price_catalog(data: Any) -> Dict[str, Dict[str, float]]:
                 ) from e
         out[cat] = bucket
     return out
+
+
+@router.get(
+    "/company-resolve",
+    response_model=PlatformBillingCompanyResolveResponse,
+)
+async def resolve_billing_company(
+    request: Request,
+    container: ContainerDep,
+    q: str = Query(..., min_length=1),
+) -> PlatformBillingCompanyResolveResponse:
+    _require_system(request)
+    co = await _resolve_company_for_billing_admin(container, q)
+    return PlatformBillingCompanyResolveResponse(
+        company_id=co.company_id,
+        name=co.name,
+        subdomain=co.subdomain,
+    )
+
+
+@router.get(
+    "/facets/billing-companies",
+    response_model=PlatformTracingFacetItemsResponse,
+)
+async def facet_billing_companies(
+    request: Request,
+    container: ContainerDep,
+    q: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+) -> PlatformTracingFacetItemsResponse:
+    _require_system(request)
+    frag = (q or "").strip().lower()
+    companies = await container.company_repository.list_all(limit=_BILLING_COMPANY_LIST_CAP)
+    matched = [c for c in companies if _company_matches_billing_facet_query(c, frag)]
+
+    def sort_key(c: Company) -> tuple[int, str]:
+        if not frag:
+            return (0, (c.name or "").lower())
+        fl = frag
+        cid = c.company_id.lower()
+        sub = (c.subdomain or "").lower()
+        if fl == cid or (sub and fl == sub):
+            return (0, (c.name or "").lower())
+        return (1, (c.name or "").lower())
+
+    matched.sort(key=sort_key)
+    sliced = matched[:limit]
+    return PlatformTracingFacetItemsResponse(
+        items=[
+            PlatformTracingFacetItem(
+                value=c.company_id,
+                label=_billing_company_facet_label(c),
+            )
+            for c in sliced
+        ],
+    )
 
 
 @router.get("/prices", response_model=PlatformBillingPricesResponse)
@@ -95,31 +208,64 @@ async def put_billing_prices(
 
 
 @router.get(
-    "/settlement-rules",
+    "/default-settlement-rules",
     response_model=PlatformBillingSettlementRulesResponse,
 )
-async def get_settlement_rules(request: Request, container: ContainerDep) -> PlatformBillingSettlementRulesResponse:
+async def get_default_settlement_rules_template(
+    request: Request,
+) -> PlatformBillingSettlementRulesResponse:
+    """Кодовый дефолт правил (без сохранения) — для подстановки в админке."""
     _require_system(request)
-    doc = await container.billing_service.load_settlement_rules_document()
+    doc = default_settlement_rules_document()
     return PlatformBillingSettlementRulesResponse(document=doc.model_dump(mode="json"))
 
 
-@router.put("/settlement-rules")
+@router.get(
+    "/settlement-rules/{company_id}",
+    response_model=PlatformBillingSettlementRulesResponse,
+)
+async def get_settlement_rules(
+    request: Request,
+    container: ContainerDep,
+    company_id: str,
+) -> PlatformBillingSettlementRulesResponse:
+    _require_system(request)
+    cid = company_id.strip()
+    if not cid:
+        raise HTTPException(status_code=422, detail="company_id не может быть пустым")
+    company = await container.company_repository.get(cid)
+    if company is None:
+        raise HTTPException(status_code=404, detail=f"Компания {cid} не найдена")
+    doc = await container.billing_service.load_settlement_rules_document_for_company(cid)
+    return PlatformBillingSettlementRulesResponse(document=doc.model_dump(mode="json"))
+
+
+@router.put("/settlement-rules/{company_id}")
 async def put_settlement_rules(
     request: Request,
     container: ContainerDep,
+    company_id: str,
     body: Dict[str, Any] = Body(...),
 ) -> dict[str, str]:
     _require_system(request)
+    cid = company_id.strip()
+    if not cid:
+        raise HTTPException(status_code=422, detail="company_id не может быть пустым")
+    company = await container.company_repository.get(cid)
+    if company is None:
+        raise HTTPException(status_code=404, detail=f"Компания {cid} не найдена")
     try:
-        parse_settlement_rules_json(json.dumps(body))
+        document = parse_settlement_rules_json(json.dumps(body))
     except (ValueError, ValidationError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    await container.shared_storage.set(
-        STORAGE_SETTLEMENT_RULES_JSON,
-        json.dumps(body),
-        force_global=True,
-    )
+    for rule in document.rules:
+        rn = rule.resource_name
+        if isinstance(rn, str) and rn.startswith("tool:"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Правило {rule.rule_id}: resource_name с префиксом tool: запрещён (инструменты вне биллинга)",
+            )
+    await container.billing_service.save_settlement_rules_document_for_company(cid, document)
     return {"status": "ok"}
 
 

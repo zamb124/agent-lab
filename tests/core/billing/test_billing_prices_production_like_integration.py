@@ -22,20 +22,13 @@ from core.models.identity_models import Company
 
 # Канон платформы (дублирует core.config.models.default_billing_resource_base_prices).
 PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
-    "llm": {"*": 0.001},
-    "tool": {
-        "weather_api": 0.1,
-        "travel_suggest": 0.2,
-        "calculator": 0.0,
-        "nano_banana_generation": 0.5,
-        "fashn_buyer_agent": 0.0,
-        "*": 0.05,
-    },
-    "embedding": {"*": 0.0005},
+    "llm": {"*": 0.0001},
+    "embedding": {"*": 0.00005},
+    "billing": {"rub": 1.0},
     "livekit": {
-        "room_create": 0.1,
-        "egress_composite": 1.0,
-        "egress_segmented": 0.5,
+        "room_create": 0.01,
+        "egress_composite": 0.05,
+        "egress_segmented": 0.02,
         "*": 0.0,
     },
 }
@@ -45,8 +38,8 @@ def _free_llm_mult() -> float:
     return float(DEFAULT_TARIFF_PRICES[TariffPlan.FREE]["llm"]["*"])
 
 
-def _free_tools_mult() -> float:
-    return float(DEFAULT_TARIFF_PRICES[TariffPlan.FREE]["tools"]["*"])
+def _free_livekit_mult() -> float:
+    return float(DEFAULT_TARIFF_PRICES[TariffPlan.FREE]["livekit"]["*"])
 
 
 def _free_embedding_mult() -> float:
@@ -64,38 +57,15 @@ async def test_production_like_llm_star_unit_cost(frontend_container, system_use
     company = await frontend_container.company_repository.get("system")
     assert company is not None
     unit = await billing.get_resource_cost_for_company(company, "llm:gpt-4o")
-    assert unit == pytest.approx(0.001 * _free_llm_mult())
+    assert unit == pytest.approx(0.0001 * _free_llm_mult())
 
 
 @pytest.mark.asyncio
-async def test_production_like_tool_named_resources_unit_cost(frontend_container, system_user_id) -> None:
+async def test_tool_category_not_billed(frontend_container, system_user_id) -> None:
     billing = frontend_container.billing_service
     company = await frontend_container.company_repository.get("system")
     assert company is not None
-    m = _free_tools_mult()
-    assert await billing.get_resource_cost_for_company(company, "tool:weather_api") == pytest.approx(0.1 * m)
-    assert await billing.get_resource_cost_for_company(company, "tool:travel_suggest") == pytest.approx(0.2 * m)
-    assert await billing.get_resource_cost_for_company(company, "tool:nano_banana_generation") == pytest.approx(
-        0.5 * m
-    )
-
-
-@pytest.mark.asyncio
-async def test_production_like_tool_zero_price_is_free(frontend_container, system_user_id) -> None:
-    billing = frontend_container.billing_service
-    company = await frontend_container.company_repository.get("system")
-    assert company is not None
-    assert await billing.get_resource_cost_for_company(company, "tool:calculator") == 0.0
-    assert await billing.get_resource_cost_for_company(company, "tool:fashn_buyer_agent") == 0.0
-
-
-@pytest.mark.asyncio
-async def test_production_like_tool_fallback_star(frontend_container, system_user_id) -> None:
-    billing = frontend_container.billing_service
-    company = await frontend_container.company_repository.get("system")
-    assert company is not None
-    unit = await billing.get_resource_cost_for_company(company, "tool:custom_integration_xyz")
-    assert unit == pytest.approx(0.05 * _free_tools_mult())
+    assert await billing.get_resource_cost_for_company(company, "tool:any_id") == 0.0
 
 
 @pytest.mark.asyncio
@@ -138,7 +108,7 @@ async def test_resource_name_split_only_first_colon_for_category(frontend_contai
     company = await frontend_container.company_repository.get("system")
     assert company is not None
     unit = await billing.get_resource_cost_for_company(company, "llm:vendor:model:v2")
-    assert unit == pytest.approx(0.001 * _free_llm_mult())
+    assert unit == pytest.approx(0.0001 * _free_llm_mult())
 
 
 @pytest.mark.asyncio
@@ -156,8 +126,8 @@ async def test_tariff_plan_basic_multiplier(frontend_container, unique_id, syste
     await frontend_container.company_repository.set(company)
     fresh = await frontend_container.company_repository.get(cid)
     assert fresh is not None
-    m = float(DEFAULT_TARIFF_PRICES[TariffPlan.BASIC]["tools"]["*"])
-    assert await billing.get_resource_cost_for_company(fresh, "tool:weather_api") == pytest.approx(0.1 * m)
+    m = float(DEFAULT_TARIFF_PRICES[TariffPlan.BASIC]["livekit"]["*"])
+    assert await billing.get_resource_cost_for_company(fresh, "livekit:room_create") == pytest.approx(0.01 * m)
 
 
 @pytest.mark.asyncio
@@ -177,7 +147,7 @@ async def test_tariff_plan_premium_lowers_multiplier(frontend_container, unique_
     assert fresh is not None
     mult = float(DEFAULT_TARIFF_PRICES[TariffPlan.PREMIUM]["llm"]["*"])
     unit = await billing.get_resource_cost_for_company(fresh, "llm:any")
-    assert unit == pytest.approx(0.001 * mult)
+    assert unit == pytest.approx(0.0001 * mult)
 
 
 @pytest.mark.asyncio
@@ -196,8 +166,8 @@ async def test_global_storage_override_merges_llm_only(frontend_container, syste
         assert await billing.get_resource_cost_for_company(company, "llm:x") == pytest.approx(
             0.01 * _free_llm_mult()
         )
-        assert await billing.get_resource_cost_for_company(company, "tool:weather_api") == pytest.approx(
-            0.1 * _free_tools_mult()
+        assert await billing.get_resource_cost_for_company(company, "livekit:room_create") == pytest.approx(
+            0.01 * _free_livekit_mult()
         )
     finally:
         if prev is not None:
@@ -228,20 +198,20 @@ async def test_company_override_merges_over_global_and_static(
     try:
         await frontend_container.shared_storage.set(
             global_key,
-            json.dumps({"llm": {"*": 0.02}, "tool": {"*": 0.07}}),
+            json.dumps({"llm": {"*": 0.02}, "livekit": {"*": 0.07}}),
             force_global=True,
         )
         await frontend_container.shared_storage.set(
             ckey,
-            json.dumps({"tool": {"weather_api": 0.33}}),
+            json.dumps({"livekit": {"room_create": 0.33}}),
             force_global=True,
         )
         assert await billing.get_resource_cost_for_company(fresh, "llm:x") == pytest.approx(0.02 * _free_llm_mult())
-        assert await billing.get_resource_cost_for_company(fresh, "tool:weather_api") == pytest.approx(
-            0.33 * _free_tools_mult()
+        assert await billing.get_resource_cost_for_company(fresh, "livekit:room_create") == pytest.approx(
+            0.33 * _free_livekit_mult()
         )
-        assert await billing.get_resource_cost_for_company(fresh, "tool:unknown_tool") == pytest.approx(
-            0.07 * _free_tools_mult()
+        assert await billing.get_resource_cost_for_company(fresh, "livekit:unknown_op") == pytest.approx(
+            0.07 * _free_livekit_mult()
         )
     finally:
         await frontend_container.shared_storage.delete(ckey, force_global=True)
@@ -310,12 +280,12 @@ async def test_tariff_per_resource_multiplier_overrides_star(
     await frontend_container.company_repository.set(company)
     fresh = await frontend_container.company_repository.get(cid)
     assert fresh is not None
-    assert await billing.get_resource_cost_for_company(fresh, "llm:gpt-4o-prod") == pytest.approx(0.001 * 2.5)
-    assert await billing.get_resource_cost_for_company(fresh, "llm:other") == pytest.approx(0.001 * 1.5)
+    assert await billing.get_resource_cost_for_company(fresh, "llm:gpt-4o-prod") == pytest.approx(0.0001 * 2.5)
+    assert await billing.get_resource_cost_for_company(fresh, "llm:other") == pytest.approx(0.0001 * 1.5)
 
 
 @pytest.mark.asyncio
-async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_production_tool(
+async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_livekit(
     frontend_container, unique_id, system_user_id
 ) -> None:
     from core.billing.settlement_rules import SettlementRule, SettlementRuleMatch
@@ -336,13 +306,13 @@ async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_producti
     assert fresh is not None
 
     billing = frontend_container.billing_service
-    unit = await billing.get_resource_cost_for_company(fresh, "tool:weather_api")
+    unit = await billing.get_resource_cost_for_company(fresh, "livekit:room_create")
     qty = 4
     expected = unit * qty
 
     rule = SettlementRule(
         rule_id=f"rule_cost_{unique_id}",
-        resource_name="tool:weather_api",
+        resource_name="livekit:room_create",
         usage_type="tool_call",
         quantity_from=f"const:{qty}",
         match=SettlementRuleMatch(operation_name_prefix=f"prod.{unique_id}."),
@@ -367,7 +337,7 @@ async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_producti
     row = next(r for r in recs if r.usage_id == usage_id)
     assert row.quantity == qty
     assert row.cost == pytest.approx(expected)
-    assert row.resource_name == "tool:weather_api"
+    assert row.resource_name == "livekit:room_create"
 
 
 @pytest.mark.asyncio
@@ -456,7 +426,7 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
             SettlementRule(
                 rule_id=f"r_lo_{unique_id}",
                 priority=50,
-                resource_name="tool:*",
+                resource_name="livekit:*",
                 usage_type="tool_call",
                 quantity_from="const:1",
                 match=SettlementRuleMatch(operation_name_prefix=f"fw.{unique_id}."),
@@ -464,7 +434,7 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
             SettlementRule(
                 rule_id=f"r_hi_{unique_id}",
                 priority=5,
-                resource_name="tool:weather_api",
+                resource_name="livekit:room_create",
                 usage_type="tool_call",
                 quantity_from="const:1",
                 match=SettlementRuleMatch(operation_name_prefix=f"fw.{unique_id}."),
@@ -488,13 +458,13 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
         rules_doc=doc,
     )
     assert n == 1
-    unit_weather = await billing.get_resource_cost_for_company(fresh, "tool:weather_api")
-    unit_star = await billing.get_resource_cost_for_company(fresh, "tool:custom")
-    assert unit_weather != unit_star
+    unit_room = await billing.get_resource_cost_for_company(fresh, "livekit:room_create")
+    unit_star = await billing.get_resource_cost_for_company(fresh, "livekit:custom")
+    assert unit_room != unit_star
 
     recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=20)
     span_recs = [r for r in recs if r.metadata.get("span_id") == span_dict["span_id"]]
     assert len(span_recs) == 1
     assert span_recs[0].metadata.get("rule_id") == f"r_hi_{unique_id}"
-    assert span_recs[0].resource_name == "tool:weather_api"
-    assert span_recs[0].cost == pytest.approx(unit_weather)
+    assert span_recs[0].resource_name == "livekit:room_create"
+    assert span_recs[0].cost == pytest.approx(unit_room)

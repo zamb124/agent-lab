@@ -114,14 +114,14 @@ def test_first_win_prefers_lower_priority_number_among_standalone() -> None:
             SettlementRule(
                 rule_id="wide",
                 priority=100,
-                resource_name="tool:*",
+                resource_name="livekit:*",
                 usage_type="tool_call",
                 match=SettlementRuleMatch(operation_name_prefix="sync."),
             ),
             SettlementRule(
                 rule_id="narrow",
                 priority=5,
-                resource_name="tool:*",
+                resource_name="livekit:*",
                 usage_type="tool_call",
                 match=SettlementRuleMatch(
                     operation_name_prefix="sync.command.",
@@ -139,21 +139,21 @@ def test_first_win_prefers_lower_priority_number_among_standalone() -> None:
 def test_attribute_route_prod_billing_resource_name_condition() -> None:
     rule = SettlementRule(
         rule_id="bill_attr",
-        resource_name="tool:*",
+        resource_name="livekit:*",
         usage_type="tool_call",
         match=SettlementRuleMatch(
             attribute_equals={
-                "platform.billing.resource_name": "tool:weather_api",
+                "platform.billing.resource_name": "livekit:room_create",
             },
         ),
     )
     span_ok = _span(
         operation_name="anything",
-        attributes={"platform.billing.resource_name": "tool:weather_api"},
+        attributes={"platform.billing.resource_name": "livekit:room_create"},
     )
     span_bad = _span(
         operation_name="anything",
-        attributes={"platform.billing.resource_name": "tool:other"},
+        attributes={"platform.billing.resource_name": "livekit:other"},
     )
     assert rule_matches_span(rule, span_ok) is True
     assert rule_matches_span(rule, span_bad) is False

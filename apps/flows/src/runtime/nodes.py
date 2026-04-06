@@ -38,7 +38,6 @@ from apps.flows.src.models.external_api import ExternalAPIConfig, ParameterSchem
 from core.state import ExecutionState, InterruptData
 from core.logging import get_logger
 from core.errors import ResourceNotFoundError
-from core.models.billing_models import UsageType
 from core.tracing.operation_span import traced_operation
 
 if TYPE_CHECKING:
@@ -1069,10 +1068,6 @@ class ChannelNode(BaseNode):
             "flows.channel.execute_action",
             event_type="channel.action",
             operation_category="channel",
-            billing_usage_type=UsageType.TOOL_CALL.value,
-            billing_resource_name=f"tool:channel_{self.channel.value}",
-            billing_quantity=1,
-            billing_pending_settlement=True,
             extra_attributes={
                 "platform.channel.type": self.channel.value,
                 "platform.channel.action": self.action,
