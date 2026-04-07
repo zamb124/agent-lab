@@ -11,6 +11,7 @@ import os
 
 from taskiq import TaskiqState
 
+from core.billing import set_billing_service
 from core.logging import get_logger, setup_logging
 from core.tasks.broker import (
     create_broker,
@@ -41,6 +42,9 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
 
     container = get_container()
     state.container = container
+
+    set_billing_service(container.billing_service)
+    logger.info("Worker: BillingService инициализирован")
 
     from core.files.processors import initialize_default_processors
     from core.files.writer import FileWriter

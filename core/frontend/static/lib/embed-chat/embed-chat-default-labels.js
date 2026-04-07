@@ -24,6 +24,13 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         locale_ru: 'Русский',
         locale_en: 'English',
         ai_disclaimer: 'Содержимое, созданное ИИ, может быть неточным.',
+        interrupt_operator_banner: 'Ожидается действие оператора. Диалог на паузе.',
+        interrupt_oauth_banner: 'Требуется авторизация во внешнем сервисе',
+        interrupt_oauth_button: 'Авторизоваться',
+        integration_badge_title: 'Подключено: {provider} / {service}',
+        integration_disconnect: 'Отключить',
+        operator_reply_heading: 'Оператор',
+        download_file: 'Скачать',
     },
     en: {
         title: 'Assistant',
@@ -44,6 +51,13 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         locale_ru: 'Russian',
         locale_en: 'English',
         ai_disclaimer: 'AI-generated content may be inaccurate.',
+        interrupt_operator_banner: 'Waiting for an operator. The chat is on hold.',
+        interrupt_oauth_banner: 'External service authorization required',
+        interrupt_oauth_button: 'Authorize',
+        integration_badge_title: 'Connected: {provider} / {service}',
+        integration_disconnect: 'Disconnect',
+        operator_reply_heading: 'Operator',
+        download_file: 'Download',
     },
 };
 

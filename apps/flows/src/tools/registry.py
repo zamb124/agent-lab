@@ -66,6 +66,13 @@ class ToolRegistry:
         from apps.flows.tools import (
             calculator,
             create_file,
+            gdocs_append_text,
+            gdocs_create_document,
+            gdocs_delete_range,
+            gdocs_find_replace,
+            gdocs_insert_text,
+            gdocs_read_document,
+            gdocs_share_document,
             rag_add_text,
             rag_create_namespace,
             rag_search,
@@ -81,6 +88,7 @@ class ToolRegistry:
             reason,
             self_check,
             ask_user,
+            hitl_operator_task,
             schedule_cron_task,
             schedule_interval_task,
             schedule_one_time_task,
@@ -91,6 +99,13 @@ class ToolRegistry:
         builtin_tools = [
             calculator,
             create_file,
+            gdocs_append_text,
+            gdocs_create_document,
+            gdocs_delete_range,
+            gdocs_find_replace,
+            gdocs_insert_text,
+            gdocs_read_document,
+            gdocs_share_document,
             rag_add_text,
             rag_create_namespace,
             rag_search,
@@ -106,6 +121,7 @@ class ToolRegistry:
             reason,
             self_check,
             ask_user,
+            hitl_operator_task,
             schedule_cron_task,
             schedule_interval_task,
             schedule_one_time_task,
@@ -133,11 +149,12 @@ class ToolRegistry:
 
         Порядок веток:
         1. ``code_mode=mcp_tool`` → MCPTool
-        2. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → merge из ``tool_repository``
-        3. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
-        4. Непустой ``code`` → CodeTool
-        5. ``type=code`` без кода → NodeAsToolWrapper
-        6. иначе ValueError
+        2. ``tool_id`` без инлайн ``code`` → если есть процессный builtin (``register_builtin_tools``), он имеет приоритет над шаблоном в ``tool_repository`` (Python-реализация, не sandbox).
+        3. иначе ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → merge из ``tool_repository``
+        4. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
+        5. Непустой ``code`` → CodeTool
+        6. ``type=code`` без кода → NodeAsToolWrapper
+        7. иначе ValueError
         """
         if isinstance(tool_ref, ToolReference):
             ref: Dict[str, Any] = tool_ref.model_dump(exclude_none=True)
@@ -166,6 +183,7 @@ class ToolRegistry:
             NodeType.EXTERNAL_API.value,
             NodeType.MCP.value,
             NodeType.CHANNEL.value,
+            NodeType.HITL_NODE.value,
             "channel",
         )
 
@@ -177,6 +195,12 @@ class ToolRegistry:
             and not tid.startswith("mcp:")
             and not _node_as_tool_kind
         ):
+            if not self._initialized:
+                self.register_builtin_tools()
+            builtin_tool = self.get(tid)
+            if builtin_tool is not None:
+                return builtin_tool
+
             from apps.flows.src.container import get_container
 
             container = get_container()
@@ -199,6 +223,7 @@ class ToolRegistry:
             NodeType.EXTERNAL_API.value,
             NodeType.MCP.value,
             NodeType.CHANNEL.value,
+            NodeType.HITL_NODE.value,
             "channel",
         ) or ref.get("prompt"):
             return self._create_node_as_tool(ref)

@@ -97,6 +97,10 @@ async def init_company_resources(
             company_id=company_id,
             filter_public=(company_id != "system")
         )
+
+        from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
+
+        await ensure_example_hitl_queue(container.operator_repository, company_id)
         
         # Обновляем статистику tools
         stats["tools"] = len(loaded_tools)

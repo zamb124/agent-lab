@@ -18,6 +18,7 @@ from .code import router as code_router
 from .company import router as company_router
 from .mcp import router as mcp_router
 from .resources import router as resources_router
+from .operator import router as operator_router
 
 api_v1_router = APIRouter()
 
@@ -37,3 +38,4 @@ api_v1_router.include_router(code_router, prefix="/code")
 api_v1_router.include_router(company_router)
 api_v1_router.include_router(mcp_router, prefix="/mcp")
 api_v1_router.include_router(resources_router, prefix="/resources")
+api_v1_router.include_router(operator_router, prefix="/operator")

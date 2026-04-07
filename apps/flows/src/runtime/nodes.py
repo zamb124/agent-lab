@@ -34,8 +34,12 @@ from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock import get_mock_for_node
 from apps.flows.src.models import NodeLLMOverride, NodeConfig, ReactConfig
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.models.external_api import ExternalAPIConfig, ParameterSchema
-from core.state import ExecutionState, InterruptData
+from core.context import get_context as get_request_context
+from core.state import ExecutionState, parse_interrupt_body_from_external_dict
+from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
+from apps.flows.src.state.interrupt_manager import InterruptManager
 from core.logging import get_logger
 from core.errors import ResourceNotFoundError
 from core.tracing.operation_span import traced_operation
@@ -931,11 +935,8 @@ class ExternalAPINode(BaseNode):
                 raise ValueError(
                     f"ExternalAPINode: interrupt должен быть dict, получено {type(interrupt_data)}"
                 )
-            if "question" not in interrupt_data:
-                raise ValueError(
-                    "ExternalAPINode: interrupt без обязательного поля 'question'"
-                )
-            state.interrupt = InterruptData(question=interrupt_data["question"])
+            body = parse_interrupt_body_from_external_dict(interrupt_data)
+            InterruptManager.apply_interrupt(state, body, tool_call=None)
             return None
 
         if result.get("status") == "error":
@@ -1089,6 +1090,108 @@ class ChannelNode(BaseNode):
         )
 
         return result
+
+
+class HitlNode(BaseNode):
+    """
+    Нода передачи диалога оператору очереди (персистентная задача + interrupt).
+    После complete в очереди: resume с тем же correlation — задача в БД completed,
+    нода выставляет response и отдаёт управление следующим нодам по рёбрам.
+    """
+
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        ctx = get_request_context()
+        if ctx is None or ctx.active_company is None:
+            raise ValueError(
+                f"hitl_node {self.node_id}: нужен Context с active_company"
+            )
+        company_id = ctx.active_company.company_id
+        cid_resume = state.hitl_handoff_correlation_id
+        if isinstance(cid_resume, str) and cid_resume.strip() and state.content:
+            repo = get_container().operator_repository
+            existing_resume = await repo.get_task_by_correlation(
+                company_id, cid_resume.strip()
+            )
+            if existing_resume is None:
+                raise ValueError(
+                    f"hitl_node {self.node_id}: resume с correlation_id={cid_resume!r}, "
+                    "задача оператора не найдена"
+                )
+            if existing_resume.status != OperatorTaskStatus.COMPLETED.value:
+                raise ValueError(
+                    f"hitl_node {self.node_id}: задача оператора ещё не завершена "
+                    f"(status={existing_resume.status!r})"
+                )
+            state.hitl_handoff_correlation_id = None
+            answer = str(state.content).strip()
+            state.response = answer
+            return None
+
+        slug_in = inputs.get("assignee_queue")
+        slug_cfg = self.config.get("operator_queue_slug")
+        qid_cfg = self.config.get("operator_queue_id")
+
+        slug_effective: Optional[str] = None
+        if isinstance(slug_in, str) and slug_in.strip():
+            slug_effective = slug_in.strip()
+        elif isinstance(slug_cfg, str) and slug_cfg.strip():
+            slug_effective = slug_cfg.strip()
+        elif isinstance(qid_cfg, str) and qid_cfg.strip():
+            row = await get_container().operator_repository.get_queue_by_id(
+                company_id, qid_cfg.strip()
+            )
+            if row is None:
+                raise ValueError(
+                    f"hitl_node {self.node_id}: очередь {qid_cfg!r} не найдена"
+                )
+            slug_effective = row.slug
+        else:
+            raise ValueError(
+                f"hitl_node {self.node_id}: укажите operator_queue_slug, operator_queue_id "
+                "или input_mapping.assignee_queue"
+            )
+
+        title = inputs.get("task_title") or self.config.get("operator_task_title")
+        if not title or not str(title).strip():
+            raise ValueError(
+                f"hitl_node {self.node_id}: нужен task_title (input_mapping или operator_task_title)"
+            )
+        message = (
+            inputs.get("user_facing_message")
+            or inputs.get("question")
+            or self.config.get("operator_user_message")
+        )
+        if not message or not str(message).strip():
+            raise ValueError(
+                f"hitl_node {self.node_id}: нужен текст для пользователя "
+                "(user_facing_message / question / operator_user_message)"
+            )
+
+        raw_mode = (
+            inputs.get("handoff_mode")
+            or self.config.get("operator_handoff_mode")
+            or "single_reply"
+        )
+        mode = HandoffMode(str(raw_mode).strip())
+
+        svc = get_container().operator_handoff_service
+        cid, op_task_id = await svc.register_handoff(
+            state,
+            question=str(message).strip(),
+            task_title=str(title).strip(),
+            assignee_queue_slug=slug_effective,
+            handoff_mode=mode,
+        )
+        raise FlowInterrupt(
+            body=OperatorTaskInterrupt(
+                question=str(message).strip(),
+                task_title=str(title).strip(),
+                assignee_queue=slug_effective,
+                handoff_mode=mode,
+                operator_task_id=op_task_id,
+            ),
+            correlation_id=cid,
+        )
 
 
 async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:

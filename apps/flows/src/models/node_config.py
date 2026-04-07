@@ -100,6 +100,7 @@ class NodeConfig(StrictBaseModel):
     - NodeType.REMOTE_FLOW: внешний flow по A2A
     - NodeType.EXTERNAL_API: вызов HTTP API
     - NodeType.MCP: MCP tool
+    - NodeType.HITL_NODE: пауза до оператора очереди
     """
 
     model_config = ConfigDict(json_schema_extra={"storage_prefix": "node"}, populate_by_name=True)
@@ -222,6 +223,27 @@ class NodeConfig(StrictBaseModel):
             "Закреплённые файлы ноды (как элементы state.files: name, path; опционально "
             "mime_type, size, file_id). При старте новой сессии агрегируются в state.files."
         ),
+    )
+
+    operator_queue_slug: Optional[str] = Field(
+        default=None,
+        description="Slug очереди оператора (взаимоисключающе с operator_queue_id)",
+    )
+    operator_queue_id: Optional[str] = Field(
+        default=None,
+        description="UUID очереди оператора (взаимоисключающе с operator_queue_slug)",
+    )
+    operator_handoff_mode: Optional[Literal["single_reply", "takeover"]] = Field(
+        default=None,
+        description="Режим оператора: single_reply — один ответ; takeover — перехват диалога",
+    )
+    operator_task_title: Optional[str] = Field(
+        default=None,
+        description="Заголовок задачи; можно переопределить input_mapping.task_title",
+    )
+    operator_user_message: Optional[str] = Field(
+        default=None,
+        description="Текст для пользователя; можно переопределить input_mapping.user_facing_message",
     )
     
     # Общее

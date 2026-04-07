@@ -28,6 +28,10 @@ from a2a.types import (
 
 import apps.flows.tools as flows_tools
 from apps.flows.src.eval.import_policy import safe_inline_import
+from apps.flows.src.eval.platform_services import (
+    get_operator_handoff_service,
+    get_schedule_service,
+)
 from apps.flows.src.eval.state_utils import (
     add_agent_message,
     add_user_message,
@@ -49,6 +53,12 @@ from apps.flows.src.eval.wrappers import (
     SafeLLMClient,
 )
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from core.state.interrupt import (
+    HandoffMode,
+    InterruptKind,
+    OperatorTaskInterrupt,
+    UserMessageInterrupt,
+)
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.scheduling import _extract_ids_from_state
 from core.files.models import FileResponse
@@ -137,6 +147,10 @@ class PythonNamespaceBuilder:
         namespace["Literal"] = Literal
 
         namespace["FlowInterrupt"] = FlowInterrupt
+        namespace["InterruptKind"] = InterruptKind
+        namespace["HandoffMode"] = HandoffMode
+        namespace["UserMessageInterrupt"] = UserMessageInterrupt
+        namespace["OperatorTaskInterrupt"] = OperatorTaskInterrupt
 
         if "math" not in self.resources:
             namespace["math"] = math
@@ -187,6 +201,8 @@ class PythonNamespaceBuilder:
         namespace["ServiceClient"] = ServiceClient
         namespace["ServiceClientError"] = ServiceClientError
         namespace["get_context"] = get_context
+        namespace["get_operator_handoff_service"] = get_operator_handoff_service
+        namespace["get_schedule_service"] = get_schedule_service
         namespace["quote"] = quote
         namespace["_require_context_namespace"] = _inline_require_context_namespace
         namespace["_compact_entity_hit"] = _inline_compact_entity_hit

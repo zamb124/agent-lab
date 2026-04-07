@@ -43,3 +43,6 @@ mobile/screens/generated/
 
 # FileWriter: выход тестов (перезапись при прогоне)
 tests/core/files/file_writer_output/
+
+# Google Service Account key (integration tests)
+/google_service_account.json

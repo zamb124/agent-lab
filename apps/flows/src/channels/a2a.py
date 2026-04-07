@@ -9,6 +9,7 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path as _P
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 from a2a.types import (
@@ -33,6 +34,7 @@ from a2a.types import (
 from a2a.utils.message import get_message_text, new_agent_text_message
 
 from apps.flows.src.channels.base import BaseChannel
+from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
 from core.context import set_current_channel
 from apps.flows.src.evaluation.service import EvaluationService
@@ -228,6 +230,58 @@ class A2AChannel(BaseChannel):
         emitter = Emitter(container.redis_client, exec_state)
         await emitter.emit_text_chunk(content, append=False, last_chunk=True)
 
+    async def _handle_takeover_user_reply(
+        self,
+        prepared: PreparedTaskParams,
+    ) -> AsyncGenerator[Union[TaskStatusUpdateEvent], None]:
+        """A2A Section 3.4.3: follow-up при input-required с operator takeover.
+
+        Маршрутизирует текст пользователя в dialog_log без запуска flow.
+        Возвращает status-update input-required (задача остаётся в ожидании оператора).
+        """
+        container = get_container()
+        svc = container.operator_handoff_service
+
+        file_ids: list[str] = []
+        if prepared.files_data:
+            for fd in prepared.files_data:
+                path = fd.get("path")
+                if not path:
+                    continue
+                p = _P(path)
+                if not p.exists():
+                    continue
+                data = p.read_bytes()
+                record = await container.file_processor.process_file_from_bytes(
+                    data=data,
+                    original_name=fd.get("name", p.name),
+                    content_type=fd.get("mime_type"),
+                )
+                file_ids.append(record.file_id)
+
+        await svc.receive_user_reply(
+            company_id=self.context.active_company.company_id,
+            task_id=prepared.takeover_operator_task_id,
+            text=prepared.content,
+            user_id=prepared.user_id,
+            file_ids=file_ids if file_ids else None,
+        )
+        logger.info(
+            "[on_message_stream] takeover user-reply routed to dialog_log, "
+            "task_id=%s, operator_task=%s",
+            prepared.task_id,
+            prepared.takeover_operator_task_id,
+        )
+        yield TaskStatusUpdateEvent(
+            taskId=prepared.task_id,
+            contextId=prepared.context_id,
+            status=TaskStatus(
+                state=TaskState.input_required,
+                message=new_agent_text_message(prepared.content),
+            ),
+            final=True,
+        )
+
     async def _prepare_a2a_params(self, params: MessageSendParams):
         """Подготовка параметров специфичных для A2A."""
         message = params.message
@@ -291,6 +345,18 @@ class A2AChannel(BaseChannel):
         await self.check_permissions(user_groups, skill_id)
 
         prepared = await self._prepare_a2a_params(params)
+
+        # A2A Section 3.4.3: follow-up при активном operator takeover
+        if prepared.is_takeover_user_reply:
+            events = [event async for event in self._handle_takeover_user_reply(prepared)]
+            return await _build_task_from_events(
+                events=events,
+                task_id=prepared.task_id,
+                context_id=prepared.context_id,
+                input_message=params.message,
+                flow_id=self.flow_id,
+            )
+
         container = get_container()
 
         # Таймаут короче для тестов
@@ -464,6 +530,10 @@ class A2AChannel(BaseChannel):
 
         ВАЖНО: подписка на канал ПЕРЕД киком задачи, иначе race condition.
 
+        A2A input-required follow-up (Section 3.4.3):
+        при активном operator takeover реплика пользователя маршрутизируется в dialog_log
+        без запуска flow; SSE отдаёт единственный status-update input-required.
+
         Args:
             params: параметры сообщения
             context: контекст с user_groups для проверки permissions
@@ -487,6 +557,13 @@ class A2AChannel(BaseChannel):
 
         logger.info(f"[on_message_stream] Starting for flow_id={self.flow_id}")
         prepared = await self._prepare_a2a_params(params)
+
+        # A2A Section 3.4.3: follow-up при активном operator takeover
+        if prepared.is_takeover_user_reply:
+            async for event in self._handle_takeover_user_reply(prepared):
+                yield event
+            return
+
         logger.info(f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis...")
         container = get_container()
 

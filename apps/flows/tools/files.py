@@ -6,6 +6,8 @@ read_file — чтение вложений; create_file — FileWriter() + crea
 
 from typing import Any, Dict, List, Literal, Optional
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from apps.flows.src.tools import tool
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
@@ -112,6 +114,41 @@ def _read_file_mock(args: dict, state: Any = None) -> dict:
     return {"success": True, **res.model_dump(mode="json")}
 
 
+class ReadFileArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    file_name: Optional[str] = Field(
+        None,
+        description="Имя вложения как в state.files[].name; не передавай — будет взят первый файл из списка.",
+    )
+    include_asset_bytes: bool = Field(
+        False,
+        description="Включать ли картинки/вложения из PDF в ответ как base64 (увеличивает размер ответа).",
+    )
+    vision_prompt: Optional[str] = Field(
+        None,
+        description="Для изображений: инструкция для vision-анализа содержимого.",
+    )
+
+
+class CreateFileArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    content: str = Field(
+        ...,
+        description="Содержимое файла в зависимости от content_mode; подробности — в описании тула create_file.",
+    )
+    original_name: str = Field(
+        ...,
+        min_length=1,
+        description="Имя файла с расширением (например report.docx); расширение обязательно.",
+    )
+    content_mode: Literal["auto", "markdown", "base64", "raw"] = Field(
+        "auto",
+        description="auto — автоопределение; markdown — GFM; base64 — бинарные байты строкой; raw — UTF-8 текст.",
+    )
+
+
 @tool(
     name="read_file",
     description=(
@@ -122,6 +159,7 @@ def _read_file_mock(args: dict, state: Any = None) -> dict:
     ),
     tags=["files", "ocr", "document"],
     mock_response=_read_file_mock,
+    args_schema=ReadFileArgs,
 )
 async def read_file(
     file_name: Optional[str] = None,
@@ -186,6 +224,7 @@ def _create_file_mock(args: dict, state: Any = None) -> dict:
     description=_CREATE_FILE_TOOL_DESCRIPTION,
     tags=["files", "storage"],
     mock_response=_create_file_mock,
+    args_schema=CreateFileArgs,
 )
 async def create_file(
     content: str,

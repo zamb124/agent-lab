@@ -5,11 +5,14 @@ import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { FlowsStore } from '../../store/flows.store.js';
+import { canManageOperatorWorkbench } from '../../utils/operator-workbench-access.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/sidebar-section.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
+import '@platform/lib/components/platform-notification-manager.js';
 import './flow-card.js';
 
 export class FlowsSidebar extends PlatformElement {
@@ -120,7 +123,7 @@ export class FlowsSidebar extends PlatformElement {
         super();
         this.collapsed = false;
         this.mobileOpen = false;
-        
+        this._onFlowsAuthChange = () => this.requestUpdate();
         this.state = this.use(s => ({
             flows: s.flows.list,
             currentFlowId: s.flows.currentId,
@@ -131,6 +134,12 @@ export class FlowsSidebar extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         FlowsStore.loadFlows(this.a2a);
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._onFlowsAuthChange);
+    }
+
+    disconnectedCallback() {
+        window.removeEventListener(AppEvents.AUTH_CHANGE, this._onFlowsAuthChange);
+        super.disconnectedCallback();
     }
 
     _shell() {
@@ -303,6 +312,29 @@ export class FlowsSidebar extends PlatformElement {
 
     render() {
         const { flows, currentFlowId, expandedFlows } = this.state.value;
+        const operatorEntry = canManageOperatorWorkbench(this.auth)
+            ? html`
+                  <a class="footer-link" href="/flows/operator">
+                      <platform-icon name="users" size="16"></platform-icon>
+                      <span>${this.i18n.t('flows_sidebar.footer_operator_tasks')}</span>
+                  </a>
+              `
+            : null;
+        const footerLinks = html`
+            ${operatorEntry}
+            <button type="button" class="footer-link" @click=${this._openSessions}>
+                <platform-icon name="chat" size="16"></platform-icon>
+                <span>${this.i18n.t('flows_sidebar.footer_sessions')}</span>
+            </button>
+            <button type="button" class="footer-link" @click=${this._openMCPServers}>
+                <platform-icon name="cloud" size="16"></platform-icon>
+                <span>${this.i18n.t('flows_sidebar.footer_mcp')}</span>
+            </button>
+            <button type="button" class="footer-link" @click=${this._openVariables}>
+                <platform-icon name="key" size="16"></platform-icon>
+                <span>${this.i18n.t('flows_sidebar.footer_vars')}</span>
+            </button>
+        `;
 
         return html`
             <platform-service-sidebar
@@ -344,25 +376,10 @@ export class FlowsSidebar extends PlatformElement {
                 </sidebar-section>
 
                 <div slot="footer">
-                    <div class="footer-links">
-                        <a class="footer-link" href="/documentation" target="_blank">
-                            <platform-icon file-icon name="text" size="16"></platform-icon>
-                            <span>Docs</span>
-                        </a>
-                        <button class="footer-link" @click=${this._openSessions}>
-                            <platform-icon name="chat" size="16"></platform-icon>
-                            <span>${this.i18n.t('flows_sidebar.footer_sessions')}</span>
-                        </button>
-                        <button class="footer-link" @click=${this._openMCPServers}>
-                            <platform-icon name="cloud" size="16"></platform-icon>
-                            <span>MCP</span>
-                        </button>
-                        <button class="footer-link" @click=${this._openVariables}>
-                            <platform-icon name="key" size="16"></platform-icon>
-                            <span>Vars</span>
-                        </button>
-                    </div>
-                    <platform-user block></platform-user>
+                    <div class="footer-links">${footerLinks}</div>
+                    <platform-user block>
+                        <platform-notification-manager slot="user-toolbar"></platform-notification-manager>
+                    </platform-user>
                     <platform-deployment-version base-url="/flows" footer></platform-deployment-version>
                 </div>
             </platform-service-sidebar>

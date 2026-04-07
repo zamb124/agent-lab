@@ -32,6 +32,7 @@ const NODE_TYPE_ICON_NAMES = {
     'flow': 'workflow',
     'mcp': 'mcp',
     'channel': 'send',
+    'hitl_node': 'users',
 };
 
 const RESOURCE_TYPE_ICON_NAMES = {
@@ -302,11 +303,7 @@ export class FlowCanvas extends PlatformElement {
                 }
                 const posX = nodeData.pos_x + 50;
                 const posY = nodeData.pos_y + 50;
-                const drawflowId = await this._addNode(nodeType, posX, posY);
-                const created = this.nodeConfigs.get(String(drawflowId));
-                if (created) {
-                    created.allowNodeIdRenameOnce = true;
-                }
+                await this._addNode(nodeType, posX, posY);
             }
             this.contextMenu = null;
         }
@@ -838,6 +835,7 @@ export class FlowCanvas extends PlatformElement {
             config: {},
             color: nodeType.color,
             name: nodeType.name,
+            allowNodeIdRenameOnce: true,
         });
 
         if (isEntry) {
@@ -1213,6 +1211,7 @@ export class FlowCanvas extends PlatformElement {
             'flow': '#ec4899',
             'mcp': '#14b8a6',
             'channel': '#10b981',
+            'hitl_node': '#0ea5e9',
         };
         
         const color = colors[type];

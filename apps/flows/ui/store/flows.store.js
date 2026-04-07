@@ -49,6 +49,7 @@ const baseStore = new BaseStore('flows', {
     chat: {
         messages: [],
         loading: false,
+        streamPending: false,
         contextId: null,
         currentTaskId: null,
     },
@@ -94,7 +95,7 @@ export const FlowsStore = {
     initChat() {
         const contextId = `${Date.now()}`;
         baseStore.setState((s) => ({
-            chat: { ...s.chat, contextId, messages: [] }
+            chat: { ...s.chat, contextId, messages: [], streamPending: false }
         }));
     },
     
@@ -255,11 +256,17 @@ export const FlowsStore = {
             chat: { ...s.chat, loading }
         }));
     },
+
+    setStreamPending(streamPending) {
+        baseStore.setState((s) => ({
+            chat: { ...s.chat, streamPending }
+        }));
+    },
     
     clearChat() {
         const contextId = `${Date.now()}`;
         baseStore.setState((s) => ({
-            chat: { ...s.chat, messages: [], contextId }
+            chat: { ...s.chat, messages: [], contextId, streamPending: false }
         }));
     },
     
@@ -292,7 +299,14 @@ export const FlowsStore = {
         
         baseStore.setState((s) => ({
             flows: { ...s.flows, currentId: flowId },
-            chat: { ...s.chat, messages, contextId, loading: false, currentTaskId: sessionTaskId }
+            chat: {
+                ...s.chat,
+                messages,
+                contextId,
+                loading: false,
+                streamPending: false,
+                currentTaskId: sessionTaskId,
+            }
         }));
     },
     

@@ -14,6 +14,7 @@ from core.db.models.platform import (
     PushSubscription,
     CalendarEventRecord,
     CalendarIntegrationRecord,
+    IntegrationCredentialRecord,
     SchedulerTaskRecord,
     PlatformShortLink,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "PushSubscription",
     "CalendarEventRecord",
     "CalendarIntegrationRecord",
+    "IntegrationCredentialRecord",
     "SchedulerTaskRecord",
     "PlatformShortLink",
     "DocumentProcessingStatus",

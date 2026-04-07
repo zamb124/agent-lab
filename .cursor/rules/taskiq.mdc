@@ -63,6 +63,8 @@ apps/frontend/tasks/
 
 Задачи flows регистрируются на `broker` из `apps/flows_worker/broker.py` (очередь `flows_worker`), фабрика брокера — `core/tasks/broker.py`.
 
+При старте `flows_worker` в `_initialize_worker_state` вызывается `set_billing_service(container.billing_service)` (как у `crm_worker`): без этого `invoke_llm` и другие задачи с `get_billing_service()` падают в процессе воркера.
+
 ## Брокер и Scheduler
 
 Брокер и scheduler живут в `core/tasks/broker.py`:
@@ -298,9 +300,10 @@ flow = await flow_factory.get_flow(flow_id)
 
 try:
     result_state = await flow.run(state)
-    await emitter.emit_complete(result_state.response)
-except FlowInterrupt as e:
-    await emitter.emit_interrupt(e.question)
+    if result_state.interrupt:
+        await emitter.emit_interrupt(result_state.interrupt)
+    else:
+        await emitter.emit_complete(result_state.response)
 except Exception as e:
     await emitter.emit_error(str(e))
 ```

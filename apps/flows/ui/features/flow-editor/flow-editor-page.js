@@ -700,7 +700,6 @@ export class FlowEditorPage extends PlatformElement {
         if (nodeConfig) {
             this._onNodeUpdated({ detail: { nodeId: addedNodeId, nodeConfig } });
         }
-        canvas.setAllowNodeIdRenameOnce(addedNodeId);
         FlowsStore.selectNode(addedNodeId);
     }
 

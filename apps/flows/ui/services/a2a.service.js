@@ -215,5 +215,72 @@ export class A2AService extends BaseService {
         
         return this.postStream(url, body, onEvent);
     }
+
+    async listOperatorQueues() {
+        return this.get('/api/v1/operator/queues');
+    }
+
+    async createOperatorQueue(body) {
+        return this.post('/api/v1/operator/queues', body);
+    }
+
+    async addOperatorQueueMember(queueId, body) {
+        return this.post(
+            `/api/v1/operator/queues/${encodeURIComponent(queueId)}/members`,
+            body,
+        );
+    }
+
+    async removeOperatorQueueMember(queueId, memberUserId) {
+        return this.delete(
+            `/api/v1/operator/queues/${encodeURIComponent(queueId)}/members/${encodeURIComponent(memberUserId)}`,
+        );
+    }
+
+    async listOperatorTasks(params = {}) {
+        const q = new URLSearchParams();
+        if (params.queue_id) q.append('queue_id', params.queue_id);
+        if (params.status) q.append('status', params.status);
+        if (params.limit != null) q.append('limit', String(params.limit));
+        if (params.offset != null) q.append('offset', String(params.offset));
+        const suffix = q.toString() ? `?${q.toString()}` : '';
+        return this.get(`/api/v1/operator/tasks${suffix}`);
+    }
+
+    async getOperatorTask(taskId) {
+        return this.get(`/api/v1/operator/tasks/${encodeURIComponent(taskId)}`);
+    }
+
+    async claimOperatorTask(taskId) {
+        return this.post(`/api/v1/operator/tasks/${encodeURIComponent(taskId)}/claim`, {});
+    }
+
+    async postOperatorTaskMessage(taskId, text, fileIds = []) {
+        const body = { text };
+        if (fileIds.length > 0) body.file_ids = fileIds;
+        return this.post(`/api/v1/operator/tasks/${encodeURIComponent(taskId)}/messages`, body);
+    }
+
+    async completeOperatorTask(taskId, resolution, fileIds = []) {
+        const body = { resolution };
+        if (fileIds.length > 0) body.file_ids = fileIds;
+        return this.post(`/api/v1/operator/tasks/${encodeURIComponent(taskId)}/complete`, body);
+    }
+
+    async uploadFile(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        return this.post('/api/v1/files/', formData);
+    }
+
+    async listIntegrationCredentials() {
+        return this.get('/api/v1/integrations/credentials');
+    }
+
+    async deleteIntegrationCredential(provider, service) {
+        return this.delete(
+            `/api/v1/integrations/credentials/${encodeURIComponent(provider)}/${encodeURIComponent(service)}`,
+        );
+    }
 }
 

@@ -5,9 +5,25 @@
 все перечисленные объекты попадают в eval по имени. Добавляя tool, включи имя в __all__.
 """
 
-from .agent_session_tools import ask_user, final_answer, finish, reason, self_check
+from .agent_session_tools import (
+    ask_user,
+    final_answer,
+    finish,
+    hitl_operator_task,
+    reason,
+    self_check,
+)
 from .docx_template import fill_docx_template
 from .files import create_file, read_file
+from .google_docs import (
+    gdocs_append_text,
+    gdocs_create_document,
+    gdocs_delete_range,
+    gdocs_find_replace,
+    gdocs_insert_text,
+    gdocs_read_document,
+    gdocs_share_document,
+)
 from .lara_crm import (
     crm_analyze_note_text,
     crm_create_note,
@@ -27,6 +43,7 @@ from .scheduling import (
 
 __all__ = [
     "ask_user",
+    "hitl_operator_task",
     "calculator",
     "crm_analyze_note_text",
     "crm_create_note",
@@ -36,6 +53,13 @@ __all__ = [
     "create_file",
     "fill_docx_template",
     "final_answer",
+    "gdocs_append_text",
+    "gdocs_create_document",
+    "gdocs_delete_range",
+    "gdocs_find_replace",
+    "gdocs_insert_text",
+    "gdocs_read_document",
+    "gdocs_share_document",
     "finish",
     "list_scheduled_tasks",
     "push_embed_blocks",

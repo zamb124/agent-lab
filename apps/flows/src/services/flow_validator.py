@@ -119,6 +119,8 @@ class FlowValidator:
         
         # 4c. поле files у нод (как state.files)
         self._validate_node_files(nodes, result)
+
+        self._validate_hitl_nodes(nodes, result)
         
         # 5. Попытка сборки (если нет критических ошибок)
         if result.valid:
@@ -554,6 +556,48 @@ class FlowValidator:
                     code="invalid_node_files",
                     message=str(exc),
                     node_id=node_id,
+                )
+
+    def _validate_hitl_nodes(
+        self,
+        nodes: Dict[str, Dict[str, Any]],
+        result: FlowValidationResult,
+    ) -> None:
+        """hitl_node: ровно один источник очереди (slug или id)."""
+        for nid, cfg in nodes.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("type") != "hitl_node":
+                continue
+            slug = cfg.get("operator_queue_slug")
+            qid = cfg.get("operator_queue_id")
+            has_slug = isinstance(slug, str) and bool(slug.strip())
+            has_qid = isinstance(qid, str) and bool(qid.strip())
+            im = cfg.get("input_mapping")
+            has_im_queue = (
+                isinstance(im, dict)
+                and "assignee_queue" in im
+                and isinstance(im.get("assignee_queue"), str)
+                and bool(str(im["assignee_queue"]).strip())
+            )
+            if has_slug and has_qid:
+                result.add_error(
+                    code="hitl_queue_source",
+                    message=(
+                        f"Нода '{nid}' (hitl_node): нельзя задавать одновременно "
+                        "operator_queue_slug и operator_queue_id"
+                    ),
+                    node_id=nid,
+                )
+                continue
+            if not has_slug and not has_qid and not has_im_queue:
+                result.add_error(
+                    code="hitl_queue_source",
+                    message=(
+                        f"Нода '{nid}' (hitl_node): укажите operator_queue_slug, operator_queue_id "
+                        "или input_mapping.assignee_queue"
+                    ),
+                    node_id=nid,
                 )
     
     def _parse_inline_code(

@@ -135,10 +135,17 @@ async def companies_billing_overview(
     offset: int = Query(default=0, ge=0),
 ) -> PlatformBillingCompaniesOverviewResponse:
     _require_system(request)
-    fetch_limit = limit + 1
-    companies = await container.company_repository.list_all(limit=fetch_limit, offset=offset)
-    has_more = len(companies) > limit
-    page = companies[:limit]
+    all_companies = await container.company_repository.list_all(
+        limit=_BILLING_COMPANY_LIST_CAP, offset=0
+    )
+    sorted_companies = sorted(
+        all_companies,
+        key=lambda c: (0 if c.company_id == SYSTEM_COMPANY_ID else 1, (c.name or "").lower()),
+    )
+    slice_end = offset + limit + 1
+    window = sorted_companies[offset:slice_end]
+    has_more = len(window) > limit
+    page = window[:limit]
     items = [
         PlatformBillingCompanyOverviewItem(
             company_id=c.company_id,

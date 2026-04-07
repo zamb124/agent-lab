@@ -11,6 +11,7 @@ import json
 import uuid
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from uuid import UUID
 
 from a2a.types import (
     AgentCapabilities,
@@ -40,8 +41,10 @@ from apps.flows.src.models.flow_config import Edge, SkillConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
+from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
+from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
 from apps.idle_worker.tasks.push_notification_tasks import send_task_update
 from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
@@ -210,7 +213,31 @@ class BaseChannel(ABC):
         """Сохраняет state в StateManager."""
         container = get_container()
         await container.state_manager.save_state(session_id, state)
-    
+
+    async def _resolve_active_takeover_task(self, correlation_id: "UUID") -> Optional[str]:
+        """Проверяет, есть ли активная (CLAIMED/USER_DIALOG) задача оператора по correlation_id.
+
+        Возвращает operator_task_id или None (задача уже завершена / не найдена).
+        """
+        from apps.flows.src.models.operator_schemas import OperatorTaskStatus
+
+        container = get_container()
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None:
+            return None
+        company_id = ctx.active_company.company_id
+        task = await container.operator_repository.get_task_by_correlation(
+            company_id, str(correlation_id)
+        )
+        if task is None:
+            return None
+        if task.status not in (
+            OperatorTaskStatus.CLAIMED.value,
+            OperatorTaskStatus.USER_DIALOG.value,
+        ):
+            return None
+        return task.id
+
     async def _prepare_task_params(
         self,
         content: str,
@@ -242,6 +269,9 @@ class BaseChannel(ABC):
         
         state = await self._get_state(session_id)
         
+        is_takeover_user_reply = False
+        takeover_operator_task_id: str | None = None
+
         if state is None:
             skill_id = "default"
             if metadata and "skill" in metadata:
@@ -253,9 +283,24 @@ class BaseChannel(ABC):
             is_resume = bool(state.interrupt) or bool(state.breakpoint_hit)
             
             if state.interrupt:
-                saved_task_id = state.interrupt.context.get("task_id") if state.interrupt.context else None
+                saved_task_id = state.interrupt.system.task_id
                 if saved_task_id:
                     task_id = saved_task_id
+
+                # A2A input-required follow-up: при активном takeover
+                # реплика пользователя маршрутизируется в dialog_log,
+                # flow НЕ возобновляется до complete_handoff оператором.
+                if (
+                    isinstance(state.interrupt.body, OperatorTaskInterrupt)
+                    and state.interrupt.body.handoff_mode == HandoffMode.TAKEOVER
+                    and state.interrupt.correlation_id is not None
+                ):
+                    op_task = await self._resolve_active_takeover_task(
+                        state.interrupt.correlation_id
+                    )
+                    if op_task is not None:
+                        is_takeover_user_reply = True
+                        takeover_operator_task_id = op_task
         
         # Объединяем metadata из Context канала с переданным metadata
         final_metadata = metadata or {}
@@ -273,6 +318,8 @@ class BaseChannel(ABC):
             message=message,
             metadata=final_metadata,
             user_id=user_id or context_id,
+            is_takeover_user_reply=is_takeover_user_reply,
+            takeover_operator_task_id=takeover_operator_task_id,
         )
     
     async def create_task(self, params: PreparedTaskParams) -> None:
@@ -361,9 +408,7 @@ class BaseChannel(ABC):
         saved_task_id = None
         if saved_state and saved_state.interrupt is not None:
             ir = saved_state.interrupt
-            ctx = ir.context if ir.context is not None else None
-            if isinstance(ctx, dict):
-                saved_task_id = ctx.get("task_id")
+            saved_task_id = ir.system.task_id
         effective_task_id = saved_task_id or params.task_id
         
         logger.debug(f"[process_task] Starting task_id={effective_task_id} (from params: {params.task_id})")
@@ -540,16 +585,17 @@ class BaseChannel(ABC):
                     "status": "input-required",
                 }
             if state.interrupt:
-                interrupt_context = state.interrupt.context or {}
-                state.interrupt.context = {
-                    **interrupt_context,
-                    "task_id": effective_task_id,
-                    "context_id": params.context_id,
-                }
-                question = state.interrupt.question
-                await emitter.emit_interrupt(question)
+                InterruptManager.enrich_system_from_channel(
+                    state,
+                    context_id=params.context_id,
+                    task_id=effective_task_id,
+                )
+                await emitter.emit_interrupt(state.interrupt)
                 await self._send_push_notification(
-                    params.task_id, params.context_id, "input-required", question
+                    params.task_id,
+                    params.context_id,
+                    "input-required",
+                    state.interrupt.question,
                 )
             else:
                 json_data = extract_json_from_response(final_response)
@@ -572,7 +618,7 @@ class BaseChannel(ABC):
             
             # Сериализация interrupt
             if state.interrupt:
-                interrupt_dict = state.interrupt.model_dump()
+                interrupt_dict = interrupt_to_response_dict(state.interrupt)
             else:
                 interrupt_dict = None
             
@@ -1131,6 +1177,8 @@ class BaseChannel(ABC):
                     description = "Code нода"
                 elif node_type == NodeType.LLM_NODE.value:
                     description = "ReAct агент"
+                elif node_type == NodeType.HITL_NODE.value:
+                    description = "Оператор очереди"
                 
                 tools_info.append({
                     "name": node_id,

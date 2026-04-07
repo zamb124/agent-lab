@@ -149,6 +149,8 @@ def test_with_queue(mock_llm_with_queue, unique_id):
     ])
 ```
 
+**Стрим с tool_calls:** `MockLLM.stream` повторяет контракт `LLMClient.stream`: после статуса с `metadata.tool_calls` идёт второй `TaskStatusUpdateEvent` (часто сообщение только с `usage`, без `tool_calls`). Иначе тесты не воспроизводят поведение провайдера и не ловят регрессии в агрегации событий в `LlmNodeRunner`.
+
 ### MockLLM: очередь ответов в реальном Redis (интеграционные тесты с worker)
 
 ```python
@@ -347,6 +349,10 @@ uv run pytest tests/flows/api/test_reload_flow_from_bundle.py -v
 - [ ] Новые worker фикстуры используют `SessionWorkerManager` и размещены в `tests/fixtures/workers.py`
 
 ---
+
+## Автоматическое применение миграций
+
+Фикстура `setup_database_before_tests` (session-scoped, `tests/conftest.py`) **автоматически сравнивает Alembic head (файлы) с current (БД)** для каждого сервиса из `migrations/services.json`. Если ревизии расходятся — `upgrade head` для отстающих сервисов. Если `alembic_version` вообще нет — полный дроп + upgrade всех. Никаких ручных проверок конкретных таблиц/колонок: добавление новой миграции автоматически подхватывается при следующем прогоне тестов.
 
 ## Внешние зависимости тестового окружения
 

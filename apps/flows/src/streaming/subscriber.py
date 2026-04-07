@@ -49,7 +49,12 @@ def is_final_event(event: StreamEvent) -> bool:
             return False
         state = event.status.state if event.status else None
         state_str = state.value if hasattr(state, 'value') else str(state) if state else None
-        return state_str in TERMINAL_STATES
+        if state_str in TERMINAL_STATES:
+            md = event.metadata or {}
+            if state_str == "input-required" and md.get("platform_handoff_continue") is True:
+                return False
+            return True
+        return False
     return False
 
 

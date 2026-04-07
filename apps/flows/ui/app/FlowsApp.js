@@ -3,9 +3,12 @@
  */
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { A2AService } from '../services/a2a.service.js';
 import { FlowsStore } from '../store/flows.store.js';
+import { canManageOperatorWorkbench } from '../utils/operator-workbench-access.js';
 import '../components/sidebar/flows-sidebar.js';
+import '../features/operator/operator-workbench-page.js';
 
 export class FlowsApp extends PlatformApp {
     static styles = [
@@ -32,8 +35,55 @@ export class FlowsApp extends PlatformApp {
                 margin-left: 0.5rem;
             }
 
+            operator-workbench-page {
+                flex: 1;
+                min-width: 0;
+                height: calc(var(--app-vh, 100vh) - 2rem);
+                margin: 1rem;
+            }
+
+            .operator-access-denied {
+                text-align: center;
+                max-width: 28rem;
+                margin: 0 auto;
+            }
+
+            .operator-access-denied .denied-title {
+                font-size: var(--text-lg);
+                color: var(--text-primary);
+                margin-bottom: var(--space-3);
+            }
+
+            .operator-access-denied .denied-text {
+                font-size: var(--text-sm);
+                color: var(--text-muted);
+                margin-bottom: var(--space-4);
+            }
+
+            .operator-access-denied .denied-link {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--space-2) var(--space-4);
+                border-radius: var(--radius-lg);
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-medium);
+                text-decoration: none;
+            }
+
+            .operator-access-denied .denied-link:hover {
+                background: var(--glass-solid-medium);
+            }
+
             @media (max-width: 768px) {
                 platform-chat {
+                    margin: 0;
+                    height: var(--app-vh, 100vh);
+                }
+
+                operator-workbench-page {
                     margin: 0;
                     height: var(--app-vh, 100vh);
                 }
@@ -44,6 +94,21 @@ export class FlowsApp extends PlatformApp {
     static properties = {
         ...PlatformApp.properties,
     };
+
+    constructor() {
+        super();
+        this._onOperatorAuthChange = () => this.requestUpdate();
+    }
+
+    async connectedCallback() {
+        await super.connectedCallback();
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._onOperatorAuthChange);
+    }
+
+    disconnectedCallback() {
+        window.removeEventListener(AppEvents.AUTH_CHANGE, this._onOperatorAuthChange);
+        super.disconnectedCallback();
+    }
 
     _toggleMobileMenu() {
         const sidebar = this.shadowRoot.querySelector('flows-sidebar');
@@ -79,10 +144,12 @@ export class FlowsApp extends PlatformApp {
             };
         });
         
+        const path = window.location.pathname.replace(/\/$/, '') || '';
+        this._operatorWorkbench = path.endsWith('/operator');
         const urlParts = window.location.pathname.split('/');
         const flowIdFromUrl = urlParts[urlParts.length - 1];
         
-        if (flowIdFromUrl && flowIdFromUrl !== 'flows') {
+        if (!this._operatorWorkbench && flowIdFromUrl && flowIdFromUrl !== 'flows') {
             FlowsStore.setCurrentFlow(flowIdFromUrl);
         }
     }
@@ -118,6 +185,19 @@ export class FlowsApp extends PlatformApp {
                     <div class="loading-text">${this.i18n.t('flows_app.redirect_auth')}</div>
                 </div>
             `;
+        }
+
+        if (this._operatorWorkbench) {
+            if (!canManageOperatorWorkbench(this.auth)) {
+                return html`
+                    <div class="loading-container operator-access-denied">
+                        <p class="denied-title">${this.i18n.t('flows_app.operator_denied_title')}</p>
+                        <p class="denied-text">${this.i18n.t('flows_app.operator_denied_body')}</p>
+                        <a class="denied-link" href="/flows/example_react">${this.i18n.t('flows_app.operator_denied_back')}</a>
+                    </div>
+                `;
+            }
+            return html`<operator-workbench-page></operator-workbench-page>`;
         }
 
         const { currentFlowId, currentFlowName, currentSkillId, currentSkillName } = this.state.value;

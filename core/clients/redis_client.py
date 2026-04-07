@@ -176,14 +176,19 @@ class RedisClient:
         self, 
         channel: str, 
         timeout: float = 300.0,
+        max_timeout: float = 3600.0,
         ready_event: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[str]:
         """
         Подписывается на канал и yield'ит сообщения с auto-reconnect.
 
+        Idle-timeout: сбрасывается при каждом полученном сообщении.
+        Max-timeout: абсолютный предел жизни подписки (защита от утечек).
+
         Args:
             channel: Имя канала
-            timeout: Таймаут ожидания сообщений в секундах
+            timeout: Idle-таймаут в секундах (сбрасывается при каждом сообщении)
+            max_timeout: Абсолютный потолок жизни подписки
             ready_event: Event для сигнализации о готовности подписки
 
         Yields:
@@ -203,20 +208,28 @@ class RedisClient:
             
             import time
             start_time = time.monotonic()
+            last_activity = start_time
             
             while True:
-                elapsed = time.monotonic() - start_time
-                if elapsed >= timeout:
-                    logger.warning(f"Subscription timeout on {channel} after {elapsed:.1f}s")
+                now = time.monotonic()
+                if now - start_time >= max_timeout:
+                    logger.warning(
+                        "Subscription max-timeout on %s after %.1fs", channel, now - start_time
+                    )
+                    break
+                if now - last_activity >= timeout:
+                    logger.warning(
+                        "Subscription idle-timeout on %s after %.1fs idle", channel, now - last_activity
+                    )
                     break
                 
                 try:
                     message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                     if message and message["type"] == "message":
+                        last_activity = time.monotonic()
                         yield message["data"]
                 except Exception as e:
                     logger.warning(f"Error receiving message from {channel}: {e}")
-                    # Пытаемся переподключиться и переподписаться
                     if await self._ensure_connected():
                         try:
                             await pubsub.unsubscribe(channel)

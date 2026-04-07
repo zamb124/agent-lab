@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from apps.flows.src.tools import tool
 from apps.flows.tools.files import _find_file
 from core.files import DocxTemplateError, DocxTemplater
@@ -52,11 +54,34 @@ def _fill_docx_mock(args: dict, state: Any = None) -> dict:
     }
 
 
+class FillDocxTemplateArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    variables: Dict[str, Any] = Field(
+        ...,
+        description="Данные для Jinja2 в шаблоне: строки, числа, bool, вложенные объекты и массивы; даты — ISO-строки.",
+    )
+    output_original_name: str = Field(
+        ...,
+        min_length=1,
+        description="Имя итогового файла с расширением .docx.",
+    )
+    file_name: Optional[str] = Field(
+        None,
+        description="Имя шаблона в state.files; не указано — первый .docx из вложений.",
+    )
+    strict: bool = Field(
+        False,
+        description="Если true — в variables ровно набор переменных шаблона верхнего уровня, без лишних ключей.",
+    )
+
+
 @tool(
     name="fill_docx_template",
     description=_FILL_DOCX_DESCRIPTION,
     tags=["files", "docx", "template"],
     mock_response=_fill_docx_mock,
+    args_schema=FillDocxTemplateArgs,
 )
 async def fill_docx_template(
     variables: Dict[str, Any],

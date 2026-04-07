@@ -120,8 +120,10 @@ export class ChatMessages extends PlatformElement {
                             .toolCalls=${message.toolCalls || []}
                             .toolResults=${message.toolResults || []}
                             .inputRequired=${message.inputRequired}
+                            .operatorReply=${message.operatorReply || ''}
                             .breakpoint=${message.breakpoint}
                             .files=${message.files || []}
+                            .fileIds=${message.fileIds || []}
                             .taskId=${message.taskId || ''}
                             @show-tracing=${this._onShowTracing}
                         ></chat-message>

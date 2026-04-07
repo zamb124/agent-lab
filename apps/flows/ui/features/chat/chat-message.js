@@ -1,7 +1,7 @@
 /**
  * Компонент одного сообщения в чате
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -48,6 +48,11 @@ export class ChatMessage extends PlatformElement {
             .message.assistant .avatar {
                 background: var(--glass-solid-medium);
                 color: var(--accent);
+            }
+            
+            .message.operator .avatar {
+                background: var(--glass-solid-medium);
+                color: var(--warning, #f59e0b);
             }
             
             .message.system .avatar {
@@ -297,11 +302,52 @@ export class ChatMessage extends PlatformElement {
                 border: 1px solid var(--info-border);
                 border-radius: var(--radius-lg);
             }
+
+            .input-required-banner {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                margin-bottom: var(--space-2);
+            }
             
             .input-required-text {
                 font-size: var(--text-base);
                 color: var(--text-primary);
                 margin-bottom: var(--space-3);
+            }
+
+            .oauth-auth-link {
+                display: inline-block;
+                padding: var(--space-2) var(--space-4);
+                background: var(--primary);
+                color: var(--on-primary);
+                border-radius: var(--radius-md);
+                text-decoration: none;
+                font-size: var(--text-sm);
+                font-weight: 500;
+                transition: opacity 0.15s;
+            }
+            .oauth-auth-link:hover {
+                opacity: 0.85;
+            }
+
+            .operator-reply {
+                margin-top: var(--space-4);
+                padding: var(--space-4);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+            }
+
+            .operator-reply-label {
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                color: var(--text-tertiary);
+                margin-bottom: var(--space-2);
+            }
+
+            .operator-reply-text {
+                font-size: var(--text-base);
+                color: var(--text-primary);
             }
             
             .breakpoint {
@@ -391,8 +437,10 @@ export class ChatMessage extends PlatformElement {
         toolCalls: { type: Array },
         toolResults: { type: Array },
         inputRequired: { type: Object },
+        operatorReply: { type: String },
         breakpoint: { type: Object },
         files: { type: Array },
+        fileIds: { type: Array },
         expandedStates: { type: Object },
         taskId: { type: String },
     };
@@ -407,8 +455,10 @@ export class ChatMessage extends PlatformElement {
         this.toolCalls = [];
         this.toolResults = [];
         this.inputRequired = null;
+        this.operatorReply = '';
         this.breakpoint = null;
         this.files = [];
+        this.fileIds = [];
         this.expandedStates = new Map();
         this.expandedStates.set('reasoning', false);
         this.taskId = '';
@@ -422,6 +472,7 @@ export class ChatMessage extends PlatformElement {
         switch (this.role) {
             case 'user': return this.i18n.t('chat_message.role_user');
             case 'assistant': return this.i18n.t('chat_message.role_assistant');
+            case 'operator': return this.i18n.t('chat_message.role_operator');
             case 'system': return this.i18n.t('chat_message.role_system');
             default: return this.role;
         }
@@ -431,6 +482,7 @@ export class ChatMessage extends PlatformElement {
         switch (this.role) {
             case 'user': return 'user';
             case 'assistant': return 'bot';
+            case 'operator': return 'agent';
             case 'system': return 'info';
             default: return 'chat';
         }
@@ -548,11 +600,51 @@ export class ChatMessage extends PlatformElement {
 
     _renderInputRequired() {
         if (!this.inputRequired) return '';
-        
+
+        const kind = this.inputRequired.interruptKind;
+
+        if (kind === 'oauth_required' && this.inputRequired.authUrl) {
+            return html`
+                <div class="input-required">
+                    <div class="input-required-banner">${this.i18n.t('chat_message.interrupt_oauth_banner')}</div>
+                    <div class="input-required-text">
+                        ${window.marked ? unsafeHTML(window.marked.parse(this.inputRequired.question)) : this.inputRequired.question}
+                    </div>
+                    <a
+                        class="oauth-auth-link"
+                        href="${this.inputRequired.authUrl}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >${this.i18n.t('chat_message.interrupt_oauth_button')}</a>
+                </div>
+            `;
+        }
+
+        const banner =
+            kind === 'operator_task'
+                ? html`<div class="input-required-banner">${this.i18n.t('chat_message.interrupt_operator_banner')}</div>`
+                : nothing;
+
         return html`
             <div class="input-required">
+                ${banner}
                 <div class="input-required-text">
                     ${window.marked ? unsafeHTML(window.marked.parse(this.inputRequired.question)) : this.inputRequired.question}
+                </div>
+            </div>
+        `;
+    }
+
+    _renderOperatorReply() {
+        const t = (this.operatorReply && String(this.operatorReply).trim()) || '';
+        if (!t) {
+            return '';
+        }
+        return html`
+            <div class="operator-reply">
+                <div class="operator-reply-label">${this.i18n.t('chat_message.operator_reply_heading')}</div>
+                <div class="operator-reply-text">
+                    ${window.marked ? unsafeHTML(window.marked.parse(t)) : t}
                 </div>
             </div>
         `;
@@ -590,6 +682,30 @@ export class ChatMessage extends PlatformElement {
         if (this.taskId) {
             this.emit('show-tracing', { taskId: this.taskId });
         }
+    }
+
+    _renderOperatorFiles() {
+        if (!this.fileIds || this.fileIds.length === 0) return '';
+        return html`
+            <div class="files-container">
+                ${this.fileIds.map(
+                    (fid) => html`
+                        <a
+                            class="file-item"
+                            href="/flows/api/v1/files/download/${fid}"
+                            target="_blank"
+                            rel="noopener"
+                            style="text-decoration:none;color:inherit;cursor:pointer;"
+                        >
+                            <platform-icon name="file" size="20"></platform-icon>
+                            <div>
+                                <div class="file-name">${this.i18n.t('chat_message.operator_files')}</div>
+                            </div>
+                        </a>
+                    `,
+                )}
+            </div>
+        `;
     }
 
     _renderFiles() {
@@ -652,6 +768,7 @@ export class ChatMessage extends PlatformElement {
                         </div>
                         
                         ${this._renderFiles()}
+                        ${this._renderOperatorFiles()}
                         ${this._renderReasoning()}
                         ${this._renderToolCalls()}
                         ${this._renderToolResults()}
@@ -659,6 +776,7 @@ export class ChatMessage extends PlatformElement {
                         ${this.content ? html`<div class="text">${this._renderContent()}</div>` : ''}
                         
                         ${this._renderInputRequired()}
+                        ${this._renderOperatorReply()}
                         ${this._renderBreakpoint()}
                     </div>
                 </div>

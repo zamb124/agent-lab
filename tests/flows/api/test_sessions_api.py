@@ -88,7 +88,10 @@ class TestSessionsAPI:
 
         await repo.set(session_id, state)
 
-        response = await client.get("/flows/api/v1/sessions/")
+        response = await client.get(
+            "/flows/api/v1/sessions/",
+            params={"limit": 500},
+        )
 
         assert response.status_code == 200
         data = response.json()

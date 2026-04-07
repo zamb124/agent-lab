@@ -17,6 +17,43 @@ function partText(part) {
     return '';
 }
 
+/**
+ * @param {object | null} message
+ * @param {object | undefined} resultMetadata - metadata события status-update / artifact-update
+ */
+function buildInputRequiredPatch(message, resultMetadata) {
+    const meta = resultMetadata || {};
+    const msgMeta = message?.metadata || {};
+    const pi = meta.platform_interrupt || msgMeta.platform_interrupt;
+    if (pi && typeof pi === 'object' && pi.body && pi.body.kind) {
+        const kind = pi.body.kind;
+        if (kind === 'user_message') {
+            return { question: pi.body.question, interruptKind: kind };
+        }
+        if (kind === 'operator_task') {
+            return {
+                question: pi.body.question,
+                interruptKind: kind,
+                operatorTaskTitle: pi.body.task_title,
+                operatorAssigneeQueue: pi.body.assignee_queue,
+                handoffMode: pi.body.handoff_mode || 'single_reply',
+                operatorTaskId: pi.body.operator_task_id || null,
+            };
+        }
+        if (kind === 'oauth_required') {
+            return {
+                question: pi.body.question,
+                interruptKind: kind,
+                authUrl: pi.body.auth_url,
+                provider: pi.body.provider,
+                service: pi.body.service,
+            };
+        }
+        throw new Error(`buildInputRequiredPatch: неизвестный interrupt kind ${kind}`);
+    }
+    return { question: extractQuestionFromMessage(message) };
+}
+
 function extractQuestionFromMessage(message) {
     if (!message) {
         return '';
@@ -89,9 +126,23 @@ function reduceArtifactUpdate(msg, result, out) {
         if (text) {
             if (artifact.name === 'reasoning') {
                 out.patch.reasoning = (msg.reasoning || '') + text;
+            } else if (artifact.name === 'operator_reply') {
+                out.operatorMessage = text;
+            } else if (artifact.name === 'operator_files') {
+                // handled below via DataPart
+            } else if (msg.inputRequired) {
+                out.splitMessage = true;
+                out.patch.content = text;
             } else {
                 out.patch.content = (msg.content || '') + text;
             }
+        }
+    }
+
+    if (artifact?.name === 'operator_files' && artifact?.parts) {
+        const dataPart = artifact.parts.find((p) => p.data?.file_ids);
+        if (dataPart) {
+            out.operatorFiles = dataPart.data.file_ids;
         }
     }
 
@@ -160,7 +211,7 @@ function reduceArtifactUpdate(msg, result, out) {
                 data: metadata.breakpoint.data,
             };
         } else {
-            out.patch.inputRequired = { question: extractQuestionFromMessage(message) };
+            out.patch.inputRequired = buildInputRequiredPatch(message, metadata);
         }
     }
 
@@ -185,16 +236,13 @@ function reduceStatusUpdate(msg, result, out) {
         out.currentTaskId = taskId;
     }
 
-    if (message?.parts) {
+    const isTerminalState = terminalOk || state === 'failed' || state === 'error';
+    if (isTerminalState && message?.parts) {
         const text = message.parts.filter((p) => p.kind === 'text' && p.text).map((p) => p.text).join('');
         if (text) {
-            if (terminalOk) {
-                const cur = (msg.content || '').trim();
-                if (!cur) {
-                    out.patch.content = text;
-                }
-            } else {
-                out.patch.content = (msg.content || '') + text;
+            const cur = (msg.content || '').trim();
+            if (!cur) {
+                out.patch.content = text;
             }
         }
     }
@@ -220,6 +268,7 @@ function reduceStatusUpdate(msg, result, out) {
 
     if (state === 'completed' || state === 'finished') {
         out.patch.streaming = false;
+        out.patch.inputRequired = null;
         out.taskId = taskId;
     }
 
@@ -233,13 +282,24 @@ function reduceStatusUpdate(msg, result, out) {
         }
         out.patch.content = err;
         out.patch.streaming = false;
+        out.patch.inputRequired = null;
         out.taskId = taskId;
     }
 
     if (state === 'input-required' || state === 'input_required') {
+        const metadata = result.metadata || {};
+        const handoffContinue = metadata.platform_handoff_continue === true;
+        const oauthContinue = metadata.platform_oauth_continue === true;
+        if (!result.final && (handoffContinue || oauthContinue)) {
+            out.patch.inputRequired = buildInputRequiredPatch(message, metadata);
+            out.patch.streaming = false;
+            if (taskId) {
+                out.currentTaskId = taskId;
+            }
+            return out;
+        }
         out.patch.streaming = false;
         out.taskId = taskId;
-        const metadata = result.metadata || {};
         if (metadata.breakpoint) {
             out.patch.breakpoint = {
                 node_id: metadata.breakpoint.node_id,
@@ -248,7 +308,7 @@ function reduceStatusUpdate(msg, result, out) {
                 data: metadata.breakpoint.data,
             };
         } else {
-            out.patch.inputRequired = { question: extractQuestionFromMessage(message) };
+            out.patch.inputRequired = buildInputRequiredPatch(message, metadata);
         }
     }
 

@@ -40,6 +40,7 @@ class NodeType(str, Enum):
     EXTERNAL_API = "external_api"   # Вызов внешнего HTTP API
     MCP = "mcp"                     # MCP Tool как нода
     CHANNEL = "channel"             # Отправка сообщений в каналы (Telegram, Email)
+    HITL_NODE = "hitl_node"         # Передача диалога оператору очереди (operator_task)
 
 
 class ReactToolRole(str, Enum):

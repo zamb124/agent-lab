@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformIsland } from '@platform/lib/components/layout/platform-island.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { FlowsStore } from '../../store/flows.store.js';
+import '../../components/integration-badges.js';
 
 let messageIdCounter = 0;
 
@@ -188,6 +189,13 @@ export class PlatformChat extends PlatformIsland {
                 color: var(--accent);
                 transform: scale(1.05);
             }
+
+            .chat-badges {
+                position: absolute;
+                top: var(--space-3);
+                right: var(--space-3);
+                z-index: 10;
+            }
             
             .mobile-actions-container {
                 display: none;
@@ -346,6 +354,7 @@ export class PlatformChat extends PlatformIsland {
         this.state = this.use(s => ({
             messages: s.chat.messages,
             loading: s.chat.loading,
+            streamPending: s.chat.streamPending,
             contextId: s.chat.contextId,
             currentTaskId: s.chat.currentTaskId,
         }));
@@ -371,9 +380,28 @@ export class PlatformChat extends PlatformIsland {
         FlowsStore.initChat();
     }
 
+    _isActiveTakeover() {
+        const msgs = FlowsStore.state.chat.messages;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            const m = msgs[i];
+            if (m.role !== 'assistant') continue;
+            return (
+                m.inputRequired?.interruptKind === 'operator_task' &&
+                m.inputRequired.handoffMode === 'takeover'
+            );
+        }
+        return false;
+    }
+
     async _onSendMessage(e) {
         const { message, files = [] } = e.detail;
-        if ((!message && files.length === 0) || this.state.value.loading) return;
+        if (!message && files.length === 0) return;
+
+        const takeover = this._isActiveTakeover();
+
+        if (!takeover && (this.state.value.loading || this.state.value.streamPending)) {
+            return;
+        }
 
         const fileParts = await Promise.all(
             files.map(file => this._fileToBase64Part(file))
@@ -388,7 +416,23 @@ export class PlatformChat extends PlatformIsland {
         };
         FlowsStore.addMessage(userMessage);
 
+        // A2A Section 3.4.3: при активном operator takeover реплика пользователя
+        // отправляется через тот же message/stream; бэкенд маршрутизирует в dialog_log.
+        // Новый assistant-бабл не нужен — SSE вернёт единственный input-required ack.
+        if (takeover) {
+            await this.a2a.streamMessage(
+                this.flowId,
+                message,
+                { contextId: this.state.value.contextId, files: fileParts },
+                () => {},
+            ).catch(err => {
+                this.error(this.i18n.t('platform_chat.err_with_message', { message: err.message }));
+            });
+            return;
+        }
+
         FlowsStore.setLoading(true);
+        FlowsStore.setStreamPending(true);
 
         const assistantMessage = {
             id: `msg_${++messageIdCounter}`,
@@ -396,31 +440,36 @@ export class PlatformChat extends PlatformIsland {
             content: '',
             streaming: true,
             reasoning: '',
+            operatorReply: '',
             toolCalls: [],
             toolResults: [],
             inputRequired: null,
             breakpoint: null,
         };
         FlowsStore.addMessage(assistantMessage);
+        this._activeStreamMessageId = assistantMessage.id;
 
-        await this.a2a.streamMessage(
-            this.flowId,
-            message,
-            {
-                files: fileParts,
-                contextId: this.state.value.contextId,
-                skillId: this.skillId || null
-            },
-            (event) => this._handleStreamEvent(event, assistantMessage.id)
-        ).catch(err => {
-            this.error(this.i18n.t('platform_chat.err_with_message', { message: err.message }));
-            FlowsStore.updateMessage(assistantMessage.id, {
-                content: this.i18n.t('platform_chat.stream_fallback_content'),
-                streaming: false,
+        try {
+            await this.a2a.streamMessage(
+                this.flowId,
+                message,
+                {
+                    files: fileParts,
+                    contextId: this.state.value.contextId,
+                    skillId: this.skillId || null
+                },
+                (event) => this._handleStreamEvent(event, this._activeStreamMessageId)
+            ).catch(err => {
+                this.error(this.i18n.t('platform_chat.err_with_message', { message: err.message }));
+                FlowsStore.updateMessage(assistantMessage.id, {
+                    content: this.i18n.t('platform_chat.stream_fallback_content'),
+                    streaming: false,
+                });
             });
-        });
-
-        FlowsStore.setLoading(false);
+        } finally {
+            FlowsStore.setLoading(false);
+            FlowsStore.setStreamPending(false);
+        }
     }
 
     async _fileToBase64Part(file) {
@@ -469,7 +518,9 @@ export class PlatformChat extends PlatformIsland {
             if (task_id) {
                 const currentTaskId = this.state.value.currentTaskId;
                 if (task_id !== currentTaskId) {
-                    set((s) => ({ chat: { ...s.chat, currentTaskId: task_id } }));
+                    FlowsStore.setState((s) => ({
+                        chat: { ...s.chat, currentTaskId: task_id },
+                    }));
                     this.emit(AppEvents.TASK_UPDATE, { taskId: task_id, artifact });
                 }
             }
@@ -487,10 +538,60 @@ export class PlatformChat extends PlatformIsland {
                     console.log('[PlatformChat] appending text from artifact.parts:', text, 'name:', artifact.name);
                     
                     if (artifact.name === 'reasoning') {
-                        console.log('[PlatformChat] Appending to reasoning field');
                         FlowsStore.appendToMessageField(messageId, 'reasoning', text);
+                    } else if (artifact.name === 'operator_reply') {
+                        FlowsStore.addMessage({
+                            id: `msg_${++messageIdCounter}`,
+                            role: 'operator',
+                            content: text,
+                            timestamp: new Date().toLocaleTimeString(),
+                        });
+                    } else if (artifact.name === 'operator_files') {
+                        // handled below via DataPart
                     } else {
+                        const currentMsg = FlowsStore.state.chat.messages.find(m => m.id === messageId);
+                        if (currentMsg?.inputRequired) {
+                            FlowsStore.updateMessage(messageId, { inputRequired: null, streaming: false });
+                            const resumeMsg = {
+                                id: `msg_${++messageIdCounter}`,
+                                role: 'assistant',
+                                content: '',
+                                streaming: true,
+                                reasoning: '',
+                                operatorReply: '',
+                                toolCalls: [],
+                                toolResults: [],
+                                inputRequired: null,
+                                breakpoint: null,
+                            };
+                            FlowsStore.addMessage(resumeMsg);
+                            this._activeStreamMessageId = resumeMsg.id;
+                            messageId = resumeMsg.id;
+                        }
                         FlowsStore.appendToMessage(messageId, text);
+                    }
+                }
+            }
+
+            if (artifact?.name === 'operator_files' && artifact?.parts) {
+                const dataPart = artifact.parts.find(p => p.data?.file_ids);
+                if (dataPart) {
+                    const fileIds = dataPart.data.file_ids;
+                    const messages = FlowsStore.state.chat.messages;
+                    const lastOperatorMsg = [...messages].reverse().find(m => m.role === 'operator');
+                    if (lastOperatorMsg) {
+                        const existing = lastOperatorMsg.fileIds || [];
+                        FlowsStore.updateMessage(lastOperatorMsg.id, {
+                            fileIds: [...existing, ...fileIds],
+                        });
+                    } else {
+                        FlowsStore.addMessage({
+                            id: `msg_${++messageIdCounter}`,
+                            role: 'operator',
+                            content: '',
+                            fileIds,
+                            timestamp: new Date().toLocaleTimeString(),
+                        });
                     }
                 }
             }
@@ -600,11 +701,10 @@ export class PlatformChat extends PlatformIsland {
                         taskId
                     });
                 } else {
-                    const question = this._extractQuestionFromMessage(message);
-                    FlowsStore.updateMessage(messageId, { 
-                        inputRequired: { question },
+                    FlowsStore.updateMessage(messageId, {
+                        inputRequired: this._buildInputRequiredPayload(message, metadata),
                         streaming: false,
-                        taskId
+                        taskId,
                     });
                 }
             }
@@ -615,14 +715,20 @@ export class PlatformChat extends PlatformIsland {
             const message = status.message;
             const state = status.state;
 
-            if (message && message.parts) {
+            const isTerminal = state === 'completed' || state === 'finished' ||
+                               state === 'failed' || state === 'error';
+            if (isTerminal && message && message.parts) {
                 const text = message.parts
                     .filter(p => p.kind === 'text' && p.text)
                     .map(p => p.text)
                     .join('');
                 
                 if (text) {
-                    FlowsStore.appendToMessage(messageId, text);
+                    const messages = FlowsStore.state.chat.messages;
+                    const msg = messages.find(m => m.id === messageId);
+                    if (msg && !(msg.content || '').trim()) {
+                        FlowsStore.updateMessage(messageId, { content: text });
+                    }
                 }
             }
 
@@ -660,7 +766,7 @@ export class PlatformChat extends PlatformIsland {
 
             if (state === 'completed' || state === 'finished') {
                 const taskId = result.taskId || result.task_id || this.state.value.currentTaskId;
-                FlowsStore.updateMessage(messageId, { streaming: false, taskId });
+                FlowsStore.updateMessage(messageId, { streaming: false, taskId, inputRequired: null });
             }
 
             if (state === 'failed' || state === 'error') {
@@ -680,15 +786,25 @@ export class PlatformChat extends PlatformIsland {
                 FlowsStore.updateMessage(messageId, { 
                     content: errorText,
                     streaming: false,
-                    taskId
+                    taskId,
+                    inputRequired: null,
                 });
             }
 
             if (state === 'input-required' || state === 'input_required') {
                 const metadata = result.metadata || {};
                 const taskId = result.taskId || result.task_id || status.taskId || status.task_id || this.state.value.currentTaskId;
-                
-                if (metadata.breakpoint) {
+                const handoffContinue = metadata.platform_handoff_continue === true;
+                const oauthContinue = metadata.platform_oauth_continue === true;
+
+                if (!result.final && (handoffContinue || oauthContinue)) {
+                    FlowsStore.setLoading(false);
+                    FlowsStore.updateMessage(messageId, {
+                        inputRequired: this._buildInputRequiredPayload(message, metadata),
+                        streaming: false,
+                        taskId,
+                    });
+                } else if (metadata.breakpoint) {
                     const breakpointData = {
                         node_id: metadata.breakpoint.node_id,
                         state: metadata.breakpoint.state,
@@ -701,140 +817,48 @@ export class PlatformChat extends PlatformIsland {
                         taskId
                     });
                 } else {
-                    const question = this._extractQuestionFromMessage(message);
-                    FlowsStore.updateMessage(messageId, { 
-                        inputRequired: { question },
+                    FlowsStore.updateMessage(messageId, {
+                        inputRequired: this._buildInputRequiredPayload(message, metadata),
                         streaming: false,
-                        taskId
+                        taskId,
                     });
                 }
             }
         }
     }
 
-    _handleArtifactUpdate(result, messageId) {
-        if (!result.artifact) return;
-        if (!result.artifact.parts) return;
 
-        const artifactName = result.artifact.name || 'response';
-        
-        for (const part of result.artifact.parts) {
-            let text = null;
-            
-            if (part.kind === 'text' && part.text !== undefined) {
-                text = part.text;
-            } else if (part.root && part.root.text !== undefined) {
-                text = part.root.text;
+    _buildInputRequiredPayload(message, resultMetadata) {
+        const meta = resultMetadata || {};
+        const msgMeta = message?.metadata || {};
+        const pi = meta.platform_interrupt || msgMeta.platform_interrupt;
+        if (pi && typeof pi === 'object' && pi.body && pi.body.kind) {
+            const kind = pi.body.kind;
+            if (kind === 'user_message') {
+                return { question: pi.body.question, interruptKind: kind };
             }
-            
-            if (text !== null && text !== undefined) {
-                if (artifactName === 'reasoning') {
-                    FlowsStore.appendToMessageField(messageId, 'reasoning', text);
-                } else {
-                    FlowsStore.appendToMessage(messageId, text);
-                }
-            }
-        }
-    }
-
-    _handleStatusUpdate(result, messageId) {
-        if (!result.status) return;
-
-        const state = result.status.state;
-        const message = result.status.message;
-
-        if (message && message.metadata) {
-            if (message.metadata.tool_calls && Array.isArray(message.metadata.tool_calls)) {
-                const messages = FlowsStore.state.chat.messages;
-                const currentMsg = messages.find(m => m.id === messageId);
-                if (currentMsg) {
-                    const newToolCalls = message.metadata.tool_calls.filter(tc => 
-                        !currentMsg.toolCalls.find(existing => existing.id === tc.id)
-                    );
-                    if (newToolCalls.length > 0) {
-                        FlowsStore.updateMessage(messageId, { 
-                            toolCalls: [...currentMsg.toolCalls, ...newToolCalls] 
-                        });
-                    }
-                }
-            }
-
-            if (message.metadata.tool_result) {
-                const messages = FlowsStore.state.chat.messages;
-                const currentMsg = messages.find(m => m.id === messageId);
-                if (currentMsg) {
-                    const resultExists = currentMsg.toolResults.find(
-                        tr => tr.id === message.metadata.tool_result.id
-                    );
-                    if (!resultExists) {
-                        FlowsStore.updateMessage(messageId, { 
-                            toolResults: [...currentMsg.toolResults, message.metadata.tool_result] 
-                        });
-                    }
-                }
-            }
-        }
-
-        if (state === 'completed' && result.final) {
-            FlowsStore.updateMessage(messageId, { streaming: false });
-            
-            if (message && message.parts) {
-                const text = message.parts
-                    .filter(p => p.kind === 'text' && p.text)
-                    .map(p => p.text)
-                    .join('');
-                    
-                if (text) {
-                    const messages = FlowsStore.state.chat.messages;
-                    const msg = messages.find(m => m.id === messageId);
-                    if (msg && !msg.content.trim()) {
-                        FlowsStore.updateMessage(messageId, { content: text });
-                    }
-                }
-            }
-        }
-
-        if (state === 'failed' && result.final) {
-            let errorText = this.i18n.t('platform_chat.err_occurred');
-            
-            if (message && message.parts) {
-                const extracted = message.parts
-                    .filter(p => p.kind === 'text')
-                    .map(p => p.text)
-                    .join('');
-                if (extracted) {
-                    errorText = extracted;
-                }
-            }
-            
-            FlowsStore.updateMessage(messageId, { 
-                content: errorText,
-                streaming: false 
-            });
-        }
-
-        if ((state === 'input-required' || state === 'input_required') && result.final) {
-            const metadata = result.metadata || {};
-            
-            if (metadata.breakpoint) {
-                const breakpointData = {
-                    nodeId: metadata.node_id || 'unknown',
-                    message: this._extractQuestionFromMessage(message),
-                    contextId: result.contextId || result.context_id || this.state.value.contextId,
-                    taskId: result.taskId || result.task_id || this.state.value.currentTaskId,
+            if (kind === 'operator_task') {
+                return {
+                    question: pi.body.question,
+                    interruptKind: kind,
+                    operatorTaskTitle: pi.body.task_title,
+                    operatorAssigneeQueue: pi.body.assignee_queue,
+                    handoffMode: pi.body.handoff_mode || 'single_reply',
+                    operatorTaskId: pi.body.operator_task_id || null,
                 };
-                FlowsStore.updateMessage(messageId, { 
-                    breakpoint: breakpointData,
-                    streaming: false 
-                });
-            } else {
-                const question = this._extractQuestionFromMessage(message);
-                FlowsStore.updateMessage(messageId, { 
-                    inputRequired: { question },
-                    streaming: false 
-                });
             }
+            if (kind === 'oauth_required') {
+                return {
+                    question: pi.body.question,
+                    interruptKind: kind,
+                    authUrl: pi.body.auth_url,
+                    provider: pi.body.provider,
+                    service: pi.body.service,
+                };
+            }
+            throw new Error(`Unknown interrupt kind: ${kind}`);
         }
+        return { question: this._extractQuestionFromMessage(message) };
     }
 
     _extractQuestionFromMessage(message) {
@@ -971,6 +995,8 @@ export class PlatformChat extends PlatformIsland {
                             <platform-icon name="database" size="18"></platform-icon>
                         </button>
                     ` : ''}
+
+                    <integration-badges class="chat-badges"></integration-badges>
                     
                     <chat-messages
                         .messages=${messages}

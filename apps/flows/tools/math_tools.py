@@ -5,13 +5,30 @@ import math
 import operator
 from typing import Optional
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from apps.flows.src.tools import tool
+
+
+class CalculatorArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    expression: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Одно математическое выражение: +, -, *, /, //, %, **, скобки; "
+            "функции sin, cos, tan, asin, acos, atan, sqrt, pow, exp, log, log10, log2, ceil, floor, abs, round, min, max; "
+            "константы pi, e, tau. Без произвольных имён переменных кроме перечисленных констант."
+        ),
+    )
 
 
 @tool(
     name="calculator",
     description="Вычисляет математические выражения. Поддерживает: +, -, *, /, **, %, sqrt, sin, cos, tan, log, exp, pi, e",
     tags=["math"],
+    args_schema=CalculatorArgs,
 )
 async def calculator(expression: str, state: Optional[dict] = None) -> str:
     ops = {

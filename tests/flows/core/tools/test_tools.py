@@ -165,15 +165,34 @@ class TestAskUserTool:
         assert exc_info.value.question == "Как вас зовут?"
 
     @pytest.mark.asyncio
-    async def test_registry_create_tool_minimal_dict_from_repository(self, app):
-        """create_tool({tool_id}) поднимает шаблон из tool_repository и даёт CodeTool."""
+    async def test_registry_builtin_precedence_over_repository_template(self, app):
+        """Для tool_id с процессным builtin materialize возвращает FunctionTool, не CodeTool из БД."""
         from apps.flows.src.container import get_container
-        from apps.flows.src.tools.base import CodeTool
+        from apps.flows.src.tools.decorator import FunctionTool
 
         container = get_container()
         tool = await container.tool_registry.create_tool({"tool_id": "ask_user"})
-        assert isinstance(tool, CodeTool)
+        assert isinstance(tool, FunctionTool)
         assert tool.name == "ask_user"
+
+    @pytest.mark.asyncio
+    async def test_registry_create_tool_from_repository_without_builtin(self, app, unique_id):
+        """Если tool_id не зарегистрирован как builtin, подтягивается шаблон из tool_repository → CodeTool."""
+        from apps.flows.src.container import get_container
+        from apps.flows.src.models import ToolReference
+        from apps.flows.src.tools.base import CodeTool
+
+        container = get_container()
+        tid = f"repo_only_{unique_id}"
+        await container.tool_repository.set(
+            ToolReference(
+                tool_id=tid,
+                code="async def execute(args, state):\n    return 'from_repo'",
+            )
+        )
+        tool = await container.tool_registry.create_tool({"tool_id": tid})
+        assert isinstance(tool, CodeTool)
+        assert tool.name == tid
 
 
 class TestToolRegistryPolicy:

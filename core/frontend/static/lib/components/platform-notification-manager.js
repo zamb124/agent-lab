@@ -253,6 +253,12 @@ export class PlatformNotificationManager extends PlatformElement {
     }
 
     _handleNotification(notification) {
+        if (notification?.type === 'flows_operator_tasks_updated') {
+            this._showToast(notification);
+            this._emitNotificationEvents(notification);
+            return;
+        }
+
         this.notifications = [notification, ...this.notifications].slice(0, 50);
         this.unreadCount++;
 

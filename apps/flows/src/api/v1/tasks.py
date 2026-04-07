@@ -118,10 +118,10 @@ async def submit_task(request: TaskSubmitRequest) -> Dict[str, Any]:
         response_text = f"Breakpoint at node '{breakpoint_hit}'"
         task_state = TaskState.input_required
     elif interrupt_data:
-        if isinstance(interrupt_data, dict):
-            response_text = interrupt_data.get("question", "")
-        else:
-            response_text = str(interrupt_data)
+        from core.state import InterruptData
+
+        ir = InterruptData.model_validate(interrupt_data)
+        response_text = ir.question
         task_state = TaskState.input_required
     else:
         response_text = task_result.get("response", "")

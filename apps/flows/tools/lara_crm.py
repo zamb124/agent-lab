@@ -80,6 +80,97 @@ class CrmSearchEntitiesArgs(BaseModel):
         return v
 
 
+class CrmCreateNoteArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, description="Заголовок заметки.")
+    description: str = Field(..., min_length=1, description="Текст заметки (тело).")
+    note_date: Optional[str] = Field(
+        None,
+        description="Дата заметки YYYY-MM-DD; только если уместно по смыслу.",
+    )
+    namespace: Optional[str] = Field(
+        None,
+        description="Пространство имён CRM; null — из контекста сессии.",
+    )
+
+    @field_validator("note_date", "namespace", mode="before")
+    @classmethod
+    def _optional_str_note(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
+class CrmAnalyzeNoteTextArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(..., min_length=1, description="Текст для AI-анализа (обычно тот же, что в заметке).")
+    note_id: str = Field(..., min_length=1, description="entity_id созданной или существующей заметки.")
+    extract_entity_types: Optional[List[str]] = Field(
+        None,
+        description="Ограничить извлечение указанными типами сущностей; иначе не передавай.",
+    )
+    mentioned_entity_ids: Optional[List[str]] = Field(
+        None,
+        description="Уже известные id сущностей для контекста анализа; опционально.",
+    )
+    namespace: Optional[str] = Field(
+        None,
+        description="Обычно не передавать — берётся из сессии; непустая строка переопределяет.",
+    )
+
+    @field_validator("namespace", mode="before")
+    @classmethod
+    def _optional_str_ns(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
+class CrmCreateNoteAndAnalyzeArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, description="Заголовок новой заметки.")
+    description: str = Field(..., min_length=1, description="Текст заметки; по нему же выполняется анализ.")
+    note_date: Optional[str] = Field(None, description="Дата YYYY-MM-DD; опционально.")
+    extract_entity_types: Optional[List[str]] = Field(
+        None,
+        description="Типы сущностей для извлечения при анализе; опционально.",
+    )
+    mentioned_entity_ids: Optional[List[str]] = Field(
+        None,
+        description="Упомянутые id для контекста анализа; опционально.",
+    )
+    namespace: Optional[str] = Field(None, description="Пространство имён; null — из контекста.")
+
+    @field_validator("note_date", "namespace", mode="before")
+    @classmethod
+    def _optional_str_combo(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
+class PushEmbedBlocksArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    blocks_json: str = Field(
+        ...,
+        min_length=2,
+        description=(
+            "Одна JSON-строка: массив объектов блоков UI. У каждого объекта поле type: "
+            "card | table | actions | file_card | text и поля по схеме блока."
+        ),
+    )
+
+
 def _compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
     desc = raw.get("description")
     if isinstance(desc, str) and len(desc) > 400:
@@ -197,6 +288,7 @@ async def crm_search_entities(
         "Возвращает JSON: entity, blocks (карточка для чата)."
     ),
     tags=["crm", "lara", "notes"],
+    args_schema=CrmCreateNoteArgs,
     mock_response=lambda args, state=None: json.dumps(
         {
             "success": True,
@@ -264,6 +356,7 @@ async def crm_create_note(
         "Передай name, description. Опционально note_date (YYYY-MM-DD), extract_entity_types, mentioned_entity_ids, namespace."
     ),
     tags=["crm", "lara", "notes", "ai"],
+    args_schema=CrmCreateNoteAndAnalyzeArgs,
     mock_response=lambda args, state=None: json.dumps(
         {
             "success": True,
@@ -346,6 +439,7 @@ async def crm_create_note_and_analyze(
         "если всё же передан непустой, используется он. Возвращает JSON с кратким summary и blocks для чата."
     ),
     tags=["crm", "lara", "ai"],
+    args_schema=CrmAnalyzeNoteTextArgs,
     mock_response=_analyze_mock,
 )
 async def crm_analyze_note_text(
@@ -405,6 +499,7 @@ async def crm_analyze_note_text(
         "с полем type: card | table | actions | file_card | text и полями схемы."
     ),
     tags=["lara", "ui"],
+    args_schema=PushEmbedBlocksArgs,
     mock_response=lambda args, state=None: args.get("blocks_json", "[]"),
 )
 async def push_embed_blocks(blocks_json: str, state: Optional[dict] = None) -> str:

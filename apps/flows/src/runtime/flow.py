@@ -24,7 +24,9 @@ from opentelemetry import trace
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt, BreakpointInterrupt, NodeCallLimitError
 from apps.flows.src.container import get_container
-from core.state import ExecutionState, InterruptData
+from apps.flows.src.state.interrupt_manager import InterruptManager
+from core.state import ExecutionState
+from core.state.interrupt import OperatorTaskInterrupt
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.mapping import MappingResolver
 from core.logging import get_logger
@@ -185,6 +187,11 @@ class Flow:
         if state.interrupt and state.content:
             # Resume: есть interrupt и новый контент (ответ пользователя)
             logger.info(f"Flow {self.flow_id}: resume with answer='{state.content[:50]}...'")
+            ir = state.interrupt
+            if ir.correlation_id is not None and isinstance(
+                ir.body, OperatorTaskInterrupt
+            ):
+                state.hitl_handoff_correlation_id = str(ir.correlation_id)
             state.interrupt = None
         elif not state.current_nodes:
             # Start: новый запуск
@@ -275,7 +282,12 @@ class Flow:
                 except FlowInterrupt as e:
                     node_id = current_nodes[0]  # interrupt от первой ноды
                     logger.info(f"Flow {self.flow_id}: interrupt at '{node_id}': {e.question}")
-                    state.interrupt = InterruptData(question=e.question)
+                    InterruptManager.apply_interrupt(
+                        state,
+                        e.body,
+                        e.tool_call,
+                        getattr(e, "correlation_id", None),
+                    )
                     state.current_nodes = current_nodes
                     return state
 

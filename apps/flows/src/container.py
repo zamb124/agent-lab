@@ -78,6 +78,16 @@ class FlowContainer(BaseContainer):
         return ResourceRepository(storage=self.storage)
 
     @lazy
+    def operator_repository(self):
+        from apps.flows.src.db.operator_repository import OperatorRepository
+        return OperatorRepository(storage=self.storage)
+
+    @lazy
+    def operator_handoff_service(self):
+        from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
+        return OperatorHandoffService(repository=self.operator_repository)
+
+    @lazy
     def resource_resolver(self):
         from apps.flows.src.resources import ResourceResolver
         return ResourceResolver(

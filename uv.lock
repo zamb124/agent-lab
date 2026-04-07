@@ -36,6 +36,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "cairosvg" },
+    { name = "google-auth" },
     { name = "greenlet" },
     { name = "pywebpush" },
     { name = "reportlab" },
@@ -137,6 +138,7 @@ worker-base = [
 [package.metadata]
 requires-dist = [
     { name = "cairosvg", specifier = ">=2.8.2" },
+    { name = "google-auth", specifier = ">=2.43.0" },
     { name = "greenlet" },
     { name = "pywebpush", specifier = ">=2.1.2" },
     { name = "reportlab", specifier = ">=4.4.7" },

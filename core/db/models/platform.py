@@ -278,6 +278,42 @@ class CalendarIntegrationRecord(Base):
     )
 
 
+class IntegrationCredentialRecord(Base):
+    """Per-user OAuth токены внешних интеграций (shared БД)."""
+
+    __tablename__ = "integration_credentials"
+
+    credential_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    service: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    scope: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    token_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id", "user_id", "provider", "service",
+            name="uq_integration_credentials_user_provider_service",
+        ),
+    )
+
+
 class SchedulerTaskRecord(Base):
     """Служебная таблица задач платформенного scheduler (shared БД)."""
 

@@ -88,8 +88,16 @@ class RagAddTextArgs(BaseModel):
 class RagSearchArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    namespace_id: str = Field(..., min_length=1)
-    query: str = Field(..., min_length=1)
+    namespace_id: str = Field(
+        ...,
+        min_length=1,
+        description="Имя namespace, в который уже загружали документы (как при rag_create_namespace / rag_add_text).",
+    )
+    query: str = Field(
+        ...,
+        min_length=1,
+        description="Запрос естественным языком по смыслу фрагментов в этом namespace.",
+    )
     limit: int = Field(5, ge=1, le=100)
     filters: Optional[Dict[str, Any]] = Field(None, description="Фильтры по metadata; опционально.")
 

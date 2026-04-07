@@ -80,5 +80,14 @@
     "prompt_file": "prompts/evaluation_judge.md",
     "tools": [],
     "llm": {"model": "grok-code-fast-1", "temperature": 0.1}
+  },
+  {
+    "id": "example_hitl_tool_agent",
+    "type": "llm_node",
+    "name": "HITL: тул hitl_operator_task",
+    "description": "ReAct-агент с эскалацией в очередь операторов через hitl_operator_task (демо-очередь example_hitl).",
+    "prompt_file": "prompts/hitl_tool.md",
+    "tools": ["calculator", "ask_user", "hitl_operator_task"],
+    "llm": {"model": "gpt-4o", "temperature": 0.2}
   }
 ]

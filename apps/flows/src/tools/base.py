@@ -488,7 +488,15 @@ class ExternalAPITool(BaseTool):
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
             from apps.flows.src.runtime.exceptions import FlowInterrupt
-            raise FlowInterrupt(question=result["interrupt"].get("question", ""))
+            from core.state import parse_interrupt_body_from_external_dict
+
+            raw = result["interrupt"]
+            if not isinstance(raw, dict):
+                raise ValueError(
+                    f"External API tool: interrupt должен быть dict, получено {type(raw)}"
+                )
+            body = parse_interrupt_body_from_external_dict(raw)
+            raise FlowInterrupt(body=body)
 
         if result.get("status") == "error":
             raise ValueError(f"External API error: {result.get('error')}")

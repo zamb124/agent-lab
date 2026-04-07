@@ -1,0 +1,107 @@
+"""
+Pydantic-схемы для API операторских очередей и задач.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import StrEnum
+from typing import Any, Dict, List, Optional
+
+from pydantic import Field
+
+from core.models import StrictBaseModel
+
+
+class OperatorTaskStatus(StrEnum):
+    OPEN = "open"
+    CLAIMED = "claimed"
+    USER_DIALOG = "user_dialog"
+    AWAITING_AGENT = "awaiting_agent"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class OperatorQueueCreate(StrictBaseModel):
+    name: str = Field(..., min_length=1)
+    slug: str = Field(..., min_length=1)
+    description: Optional[str] = None
+
+
+class OperatorQueuePatch(StrictBaseModel):
+    name: Optional[str] = Field(None, min_length=1)
+    description: Optional[str] = None
+
+
+class OperatorQueueOut(StrictBaseModel):
+    id: str
+    company_id: str
+    name: str
+    slug: str
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    i_am_member: bool = False
+
+
+class OperatorMemberAdd(StrictBaseModel):
+    user_id: str = Field(..., min_length=1)
+    role: str = Field(default="agent", min_length=1)
+
+
+class OperatorTaskOut(StrictBaseModel):
+    id: str
+    company_id: str
+    queue_id: str
+    status: str
+    session_id: str
+    end_user_id: str
+    flow_id: str
+    skill_id: str
+    flow_display_name: str = Field(
+        ...,
+        description="Название flow из конфига; при отсутствии конфига — flow_id",
+    )
+    skill_display_name: str = Field(
+        ...,
+        description="Название skill из конфига; при отсутствии — skill_id",
+    )
+    handoff_title: Optional[str] = Field(
+        default=None,
+        description="Заголовок из interrupt_snapshot (handoff)",
+    )
+    handoff_message_preview: Optional[str] = Field(
+        default=None,
+        description="Краткий текст вопроса пользователю из interrupt_snapshot",
+    )
+    handoff_mode: str = Field(
+        default="single_reply",
+        description="Режим оператора: single_reply или takeover",
+    )
+    a2a_task_id: Optional[str] = None
+    context_id: Optional[str] = None
+    correlation_id: Optional[str] = None
+    claimed_by_user_id: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class OperatorTaskListResponse(StrictBaseModel):
+    tasks: List[OperatorTaskOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class OperatorTaskPatch(StrictBaseModel):
+    status: str = Field(..., min_length=1)
+
+
+class OperatorTaskMessageBody(StrictBaseModel):
+    text: str = Field(..., min_length=1)
+    file_ids: List[str] = Field(default_factory=list)
+
+
+class OperatorTaskCompleteBody(StrictBaseModel):
+    resolution: str = Field(..., min_length=1)
+    file_ids: List[str] = Field(default_factory=list)

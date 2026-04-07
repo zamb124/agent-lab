@@ -121,6 +121,9 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                 container.tool_repository
             )
             logger.info(f"Загружено flows: {loaded_flow_ids}")
+            from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
+
+            await ensure_example_hitl_queue(container.operator_repository, "system")
         else:
             # Фоновая загрузка bundles в company system через TaskIQ (не блокирует старт)
             from apps.flows.src.tasks.company_init_tasks import init_company_resources
@@ -286,6 +289,23 @@ async def old_ui_redirect(flow_id: str = "example_react"):
 async def old_flows_ui_redirect(flow_id: str = "example_react"):
     """Редирект со старых путей /flows/ui на /flows/{flow_id}"""
     return RedirectResponse(url=f"/flows/{flow_id}", status_code=301)
+
+
+@app.get("/flows/operator", response_class=HTMLResponse)
+@app.get("/flows/operator/", response_class=HTMLResponse)
+async def ui_operator_workbench(request: Request):
+    """Рабочее место оператора (очереди и задачи)."""
+    ui_templates = Jinja2Templates(directory=ui_path)
+    base_url = f"{request.base_url.scheme}://{request.base_url.netloc}"
+    return ui_templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "flow_id": "operator",
+            "flow_name": "operator",
+            "base_url": base_url,
+        },
+    )
 
 
 @app.get("/flows", response_class=HTMLResponse)

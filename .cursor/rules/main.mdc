@@ -268,7 +268,7 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | Тестирование, фикстуры | `testing.mdc` |
 | TaskIQ: воркеры, задачи | `taskiq.mdc` |
 | Streaming, events, Redis Pub/Sub | `streaming.mdc` |
-| Интеграции: A2A, HTTP | `integrations.mdc` |
+| Интеграции: A2A, HTTP, OAuth | `integrations.mdc` |
 | S3 и MinIO | `s3_minio.mdc` |
 | Инфраструктура: сервер, ingress, деплой | `infrastructure.mdc` |
 | Сессии | `session.mdc` |

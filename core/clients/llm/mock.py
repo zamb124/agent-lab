@@ -18,7 +18,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
 )
-from a2a.utils.message import get_message_text
+from a2a.utils.message import get_message_text, new_agent_text_message
 from pydantic import BaseModel
 
 from core.logging import get_logger
@@ -333,18 +333,32 @@ class MockLLM:
                 )
                 await asyncio.sleep(0.005)
 
-        # Tool calls стримятся по частям как в OpenAI
+        # Tool calls: как в LLMClient.stream — сначала статус с tool_calls+usage, затем
+        # второй статус (часто только usage), иначе LlmNodeRunner затирал бы tool_calls.
         if tool_calls:
+            usage_data = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
             message = Message(
                 message_id=str(uuid.uuid4()),
                 role=Role.agent,
                 parts=[Part(root=TextPart(text=content))],
-                metadata={"tool_calls": tool_calls},
+                metadata={"tool_calls": tool_calls, "usage": usage_data},
             )
             yield TaskStatusUpdateEvent(
                 contextId=context_id,
                 taskId=task_id,
                 status=TaskStatus(state=TaskState.working, message=message),
+                final=False,
+            )
+            final_message = new_agent_text_message(content) if content else None
+            if final_message:
+                final_message.metadata = {"usage": usage_data}
+            yield TaskStatusUpdateEvent(
+                contextId=context_id,
+                taskId=task_id,
+                status=TaskStatus(
+                    state=TaskState.working,
+                    message=final_message,
+                ),
                 final=False,
             )
         else:

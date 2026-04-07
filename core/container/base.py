@@ -286,17 +286,31 @@ class BaseContainer:
         return SchedulerClient(service_client=self.service_client)
 
     @lazy
+    def integration_credential_repository(self):
+        """IntegrationCredentialRepository для per-user OAuth токенов"""
+        from core.integrations.repository import IntegrationCredentialRepository
+        return IntegrationCredentialRepository(db_url=self.shared_db_url)
+
+    @lazy
+    def oauth_service(self):
+        """OAuthService — универсальный OAuth2 flow для внешних интеграций"""
+        from core.integrations.oauth_service import OAuthService
+        return OAuthService(
+            repository=self.integration_credential_repository,
+            storage=self.shared_storage,
+        )
+
+    @lazy
     def calendar_service(self):
         """CalendarService для платформенного календаря"""
-        from core.calendar.repositories import CalendarEventSqlRepository, CalendarIntegrationSqlRepository
+        from core.calendar.repositories import CalendarEventSqlRepository
         from core.calendar.service import CalendarService
         return CalendarService(
             event_repository=CalendarEventSqlRepository(db_url=self.shared_db_url),
-            integration_repository=CalendarIntegrationSqlRepository(db_url=self.shared_db_url),
+            oauth_service=self.oauth_service,
             user_repository=self.user_repository,
             company_repository=self.company_repository,
             service_client=self.service_client,
-            storage=self.shared_storage,
         )
     
     @lazy

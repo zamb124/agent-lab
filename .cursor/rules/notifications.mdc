@@ -8,6 +8,8 @@ description: "Система уведомлений уведомления notif
 
 `Service/Worker/Task -> notify_user(...) -> Redis (platform:notifications) -> WS /{service}/ws/notifications -> platform-notification-manager -> toast + badge`
 
+Исключение **операторские задачи flows**: **`publish_operator_tasks_refresh`** ([`apps/flows/src/services/operator_tasks_broadcast.py`](../../apps/flows/src/services/operator_tasks_broadcast.py)) публикует в тот же Redis-канал через **`RedisClient.publish`** контейнера (работает и в **TaskIQ worker**, где singleton **`notification_manager._redis_client`** не инициализирован). Тип **`flows_operator_tasks_updated`**: в **`platform-notification-manager`** без toast и без записи в колокольчик — только событие **`platform-notification-received`** на `window` и отдельное WS-подключение на **`operator-workbench-page`** для перезагрузки канбана.
+
 ## Backend: как отправлять
 
 Только через `core.websocket.publisher.notify_user`.

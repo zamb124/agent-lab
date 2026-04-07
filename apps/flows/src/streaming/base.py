@@ -4,7 +4,7 @@
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Union
 
 from a2a.types import (
     Artifact,
@@ -20,6 +20,10 @@ from a2a.types import (
 )
 
 from core.state import ExecutionState
+from core.state.interrupt import InterruptKind
+
+if TYPE_CHECKING:
+    from core.state import InterruptData
 
 StreamEvent = Union[TaskStatusUpdateEvent, TaskArtifactUpdateEvent]
 
@@ -37,12 +41,15 @@ class BaseEmitter(ABC):
         self.state = state
         self._span_context = None
     
-    def _create_message(self, text: str) -> Message:
+    def _create_message(
+        self, text: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> Message:
         """Создаёт A2A Message объект."""
         return Message(
             messageId=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=text))],
+            metadata=metadata,
         )
     
     async def emit_text(
@@ -50,11 +57,13 @@ class BaseEmitter(ABC):
         text: str,
         append: bool = True,
         last_chunk: bool = False,
+        *,
+        artifact_name: str = "response",
     ) -> None:
-        """Публикует текстовый чанк."""
+        """Публикует текстовый чанк (LLM: response; оператор: operator_reply)."""
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
-            name="response",
+            name=artifact_name,
             parts=[TextPart(text=text)],
         )
         
@@ -140,20 +149,30 @@ class BaseEmitter(ABC):
     
     async def emit_interrupt(
         self,
-        question: str,
+        interrupt: "InterruptData",
         message_id: Optional[str] = None,
     ) -> None:
-        """Публикует событие запроса ввода (ask_user)."""
+        """Публикует input_required с полным объектом interrupt в metadata."""
+        dump = interrupt.model_dump(mode="json")
+        meta: Dict[str, Any] = {"platform_interrupt": dump}
+        is_operator = interrupt.body.kind == InterruptKind.OPERATOR_TASK
+        is_oauth = interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
+        keep_stream_open = is_operator or is_oauth
+        if is_operator:
+            meta["platform_handoff_continue"] = True
+        if is_oauth:
+            meta["platform_oauth_continue"] = True
         event = TaskStatusUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             status=TaskStatus(
                 state=TaskState.input_required,
-                message=self._create_message(question),
+                message=self._create_message(interrupt.question, metadata=meta),
             ),
-            final=True,
+            final=not keep_stream_open,
+            metadata=meta,
         )
-        
+
         await self._publish(event)
     
     async def emit_error(
@@ -248,6 +267,27 @@ class BaseEmitter(ABC):
             artifact=artifact,
         )
         
+        await self._publish(event)
+
+    async def emit_file_artifact(
+        self,
+        file_ids: List[str],
+        *,
+        artifact_name: str = "operator_files",
+    ) -> None:
+        """Публикует артефакт со списком ID прикреплённых файлов."""
+        artifact = Artifact(
+            artifact_id=str(uuid.uuid4()),
+            name=artifact_name,
+            parts=[DataPart(data={"file_ids": file_ids})],
+        )
+        event = TaskArtifactUpdateEvent(
+            task_id=self.state.task_id,
+            context_id=self.state.context_id,
+            artifact=artifact,
+            append=False,
+            last_chunk=True,
+        )
         await self._publish(event)
 
     async def emit_artifact(

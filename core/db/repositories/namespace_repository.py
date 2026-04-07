@@ -37,7 +37,7 @@ class NamespaceRepository(BaseRepository[Namespace]):
         """ID = name"""
         return entity.name
     
-    async def list_all(self, limit: int = 100) -> List[Namespace]:
+    async def list_all(self, limit: int = 10000) -> List[Namespace]:
         """
         Возвращает все namespace компании.
         Если пусто - создает default.

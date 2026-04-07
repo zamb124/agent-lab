@@ -49,7 +49,10 @@ INLINE_ASK_USER = {
     "args_schema": {"question": {"type": "string"}},
     "code": """async def execute(args: dict, state: dict = None):
     from apps.flows.src.runtime.exceptions import FlowInterrupt
-    raise FlowInterrupt(question=args.get('question', ''))
+    q = args.get("question")
+    if not q or not str(q).strip():
+        raise ValueError("ask_user: question обязателен")
+    raise FlowInterrupt(question=str(q).strip())
 """
 }
 

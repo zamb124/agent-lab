@@ -100,26 +100,21 @@ export class ExecutionRunner extends PlatformElement {
         this.emit('clear-node-errors');
 
         try {
-            // Формируем текст сообщения
-            let messageText = message;
-            
+            let fileParts = [];
             if (files && files.length > 0) {
-                const fileParts = await this._prepareFileParts(files);
-                // Добавляем информацию о файлах к сообщению
-                const fileInfo = fileParts.map(f => f.text || f.name || 'file').join(', ');
-                messageText = `${message}${this.i18n.t('execution_runner.files_attached', { files: fileInfo })}`;
+                fileParts = await this._prepareFileParts(files);
             }
 
             console.log('[ExecutionRunner] Sending breakpoints:', breakpoints);
             console.log('[ExecutionRunner] Sending metadata.mock:', mockPayload);
 
-            // Используем a2a.service вместо прямого fetch
             await this.a2a.streamMessage(
                 this.flowId,
-                messageText,
+                message,
                 {
                     contextId: this._contextId,
                     skillId: this.skillId !== 'base' ? this.skillId : null,
+                    files: fileParts,
                     breakpoints,
                     mock: mockPayload
                 },

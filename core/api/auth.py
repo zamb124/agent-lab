@@ -281,13 +281,12 @@ async def _complete_oauth_callback(
                 return_path = await calendar_service.complete_google_oauth(state=state, code=code)
             except ValueError as err:
                 raise HTTPException(status_code=400, detail=str(err)) from err
-            except Exception as err:
-                raise HTTPException(status_code=500, detail=str(err)) from err
             redirect_url = _append_query(
                 return_path,
                 {
-                    "calendar_provider": "google",
-                    "calendar_status": "connected",
+                    "integration_provider": "google",
+                    "integration_service": "calendar",
+                    "integration_status": "connected",
                 },
             )
             return RedirectResponse(url=redirect_url)

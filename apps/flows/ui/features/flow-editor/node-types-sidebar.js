@@ -46,6 +46,7 @@ const NODE_CATEGORIES = [
         id: 'channels',
         items: [
             { type: 'channel', paletteKey: 'channel', icon: 'send', color: '#10b981' },
+            { type: 'hitl_node', paletteKey: 'hitl_node', icon: 'users', color: '#0ea5e9' },
         ]
     },
     {

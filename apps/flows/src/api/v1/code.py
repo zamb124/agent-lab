@@ -569,7 +569,7 @@ def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> L
         "interrupt_path", "tool_results", "triggers", "files",
         "breakpoints", "scheduled_tasks", "reasoning_history",
         "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt",
-        "join_arrived_preds",
+        "join_arrived_preds", "hitl_handoff_correlation_id",
     }
     all_keys = set(old.keys()) | set(new.keys())
 

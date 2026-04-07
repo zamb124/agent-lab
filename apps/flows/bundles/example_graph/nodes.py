@@ -16,6 +16,7 @@ def format_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "greeting": ["greeting_message", "response"],
         "order": ["order_total", "response"],
         "cat": ["cat_fact", "response"],
+        "operator": ["response"],
     }
     
     # Берем первое найденное поле или response по умолчанию

@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from core.db.models.platform import (  # noqa: F401 — регистрируют таблицы в Base.metadata
     Base, Storage, Users, Variables, Usage, Namespaces, PushSubscription,
-    CalendarEventRecord, CalendarIntegrationRecord, SchedulerTaskRecord,
-    PlatformShortLink,
+    CalendarEventRecord, CalendarIntegrationRecord, IntegrationCredentialRecord,
+    SchedulerTaskRecord, PlatformShortLink,
 )
 
 config = context.config
@@ -33,8 +33,8 @@ target_metadata = Base.metadata
 MANAGED_TABLES = {
     "storage", "users", "variables", "usage",
     "namespaces", "push_subscriptions",
-    "calendar_events", "calendar_integrations", "scheduler_tasks",
-    "platform_short_links",
+    "calendar_events", "calendar_integrations", "integration_credentials",
+    "scheduler_tasks", "platform_short_links",
 }
 
 

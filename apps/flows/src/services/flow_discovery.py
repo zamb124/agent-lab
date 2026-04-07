@@ -127,7 +127,7 @@ class FlowDiscoveryService:
 
     async def health_check_all(self) -> Dict[str, bool]:
         """Health-check по всем записям в репозитории."""
-        rows = await self._repository.list_all()
+        rows = await self._repository.list_all(limit=10000)
         results: Dict[str, bool] = {}
 
         for row in rows:

@@ -15,6 +15,7 @@ from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.eval_task import execute_inline_code
 from apps.flows.src.tasks.tool_tasks import execute_tool
 import apps.idle_worker.tasks.calendar_sync_tasks as calendar_sync_tasks
+from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models import (
     CalendarEventSource,
     CalendarIntegration,
@@ -46,12 +47,16 @@ async def test_calendar_sync_tick_returns_zero_when_disabled(monkeypatch):
         calendar_sync = _FakeCalendarSync()
         database = _FakeDatabase()
 
-    async def _list_sync_enabled(self, *, limit: int):
-        _ = (self, limit)
-        raise AssertionError("list_sync_enabled must not be called when task is disabled")
+    async def _list_by_provider_service(self, provider, service, *, limit):
+        _ = (self, provider, service, limit)
+        raise AssertionError("list_by_provider_service must not be called when task is disabled")
 
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(calendar_sync_tasks.CalendarIntegrationSqlRepository, "list_sync_enabled", _list_sync_enabled)
+    monkeypatch.setattr(
+        calendar_sync_tasks.IntegrationCredentialRepository,
+        "list_by_provider_service",
+        _list_by_provider_service,
+    )
 
     result = await calendar_sync_tasks.calendar_sync_tick()
     assert result["integrations_total"] == 0
@@ -76,26 +81,31 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
         calendar_sync = _FakeCalendarSync()
         database = _FakeDatabase()
 
-    integration = CalendarIntegration(
-        integration_id="integration-1",
+    now = datetime.now(timezone.utc)
+    credential = IntegrationCredential(
+        credential_id="integration-1",
         company_id="company-1",
         user_id="user-1",
-        provider=CalendarProvider.GOOGLE,
-        credentials=CalendarIntegrationCredentials(access_token="token", refresh_token="refresh"),
-        settings=CalendarIntegrationSettings(
-            default_calendar_id="primary",
-            sync_enabled=True,
-            sync_inbound_enabled=True,
-            sync_outbound_enabled=False,
-            notifications_enabled=True,
-        ),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        provider=IntegrationProvider.GOOGLE,
+        service="calendar",
+        access_token="token",
+        refresh_token="refresh",
+        metadata={
+            "calendar_settings": {
+                "default_calendar_id": "primary",
+                "sync_enabled": True,
+                "sync_inbound_enabled": True,
+                "sync_outbound_enabled": False,
+                "notifications_enabled": True,
+            },
+        },
+        created_at=now,
+        updated_at=now,
     )
 
-    async def _list_sync_enabled(self, *, limit: int):
-        _ = (self, limit)
-        return [integration]
+    async def _list_by_provider_service(self, provider, service, *, limit):
+        _ = (self, provider, service, limit)
+        return [credential]
 
     class _FakeEvent:
         def __init__(self, event_id: str):
@@ -145,7 +155,11 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
     )()
 
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(calendar_sync_tasks.CalendarIntegrationSqlRepository, "list_sync_enabled", _list_sync_enabled)
+    monkeypatch.setattr(
+        calendar_sync_tasks.IntegrationCredentialRepository,
+        "list_by_provider_service",
+        _list_by_provider_service,
+    )
     monkeypatch.setattr(calendar_sync_tasks, "get_container", lambda: fake_container)
     monkeypatch.setattr(calendar_sync_tasks, "notify_user", _notify_user)
 

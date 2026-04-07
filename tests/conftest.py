@@ -137,6 +137,72 @@ async def _alembic_version_ready(db_url: str) -> bool:
         await engine.dispose()
 
 
+async def _alembic_current_revision(db_url: str) -> str | None:
+    """Читает текущую ревизию alembic_version из БД. None если таблицы нет."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            row = await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+            r = row.first()
+            return r[0] if r else None
+    except Exception:
+        return None
+    finally:
+        await engine.dispose()
+
+
+def _alembic_head_revision(script_location: str) -> str | None:
+    """Читает head ревизию из файлов Alembic (без подключения к БД)."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from pathlib import Path
+
+    root = Path(__file__).parent.parent
+    ini_path = root / script_location / "alembic.ini"
+    if not ini_path.exists():
+        return None
+    cfg = Config(str(ini_path))
+    cfg.set_main_option("script_location", str(root / script_location))
+    directory = ScriptDirectory.from_config(cfg)
+    heads = directory.get_heads()
+    return heads[0] if heads else None
+
+
+async def _all_migrations_up_to_date() -> tuple[bool, list[str]]:
+    """
+    Сравнивает head в коде с current в БД для каждого сервиса из migration_manifest.
+    Возвращает (all_ok, list_of_stale_service_names).
+    """
+    from core.db.migration_manifest import load_migration_manifest, migration_entry_is_active
+
+    manifest = load_migration_manifest()
+    stale: list[str] = []
+
+    for entry in manifest["services"]:
+        if not migration_entry_is_active(entry):
+            continue
+        name = entry["name"]
+        script_loc = f"migrations/{name}"
+        head = _alembic_head_revision(script_loc)
+        if head is None:
+            continue
+
+        from core.config import get_settings
+        url_key = entry["database_url_key"]
+        db_url = getattr(get_settings().database, url_key)
+        if not db_url or not str(db_url).strip():
+            continue
+
+        current = await _alembic_current_revision(str(db_url))
+        if current != head:
+            stale.append(name)
+
+    return (len(stale) == 0, stale)
+
+
 async def _crm_base_schema_ready(db_url: str) -> bool:
     """Базовая CRM-схема (без журнала knowledge import)."""
     from sqlalchemy.ext.asyncio import create_async_engine
@@ -227,32 +293,23 @@ async def _crm_schema_ready(db_url: str) -> bool:
 
 
 async def _shared_calendar_schema_ready(db_url: str) -> bool:
-    """Проверяет наличие таблиц календаря в shared схеме."""
+    """Проверяет наличие таблиц календаря и integration_credentials в shared схеме."""
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
 
     engine = create_async_engine(db_url, echo=False)
     try:
         async with engine.begin() as conn:
-            events_table_row = await conn.execute(
+            result = await conn.execute(
                 text(
                     """
                     SELECT COUNT(*)
                     FROM information_schema.tables
-                    WHERE table_name = 'calendar_events'
+                    WHERE table_name IN ('calendar_events', 'calendar_integrations', 'integration_credentials')
                     """
                 )
             )
-            integrations_table_row = await conn.execute(
-                text(
-                    """
-                    SELECT COUNT(*)
-                    FROM information_schema.tables
-                    WHERE table_name = 'calendar_integrations'
-                    """
-                )
-            )
-            return (events_table_row.scalar() or 0) == 1 and (integrations_table_row.scalar() or 0) == 1
+            return (result.scalar() or 0) == 3
     except Exception:
         return False
     finally:
@@ -395,10 +452,10 @@ async def _ensure_postgres_database(admin_url: str, database_name: str) -> None:
 async def setup_database_before_tests():
     """
     Глобальная фикстура для подготовки БД перед запуском тестов.
-    Если shared/crm и прочие проверки ОК и в platform_office актуальная схема (bindings + catalog_id + каталоги) —
-    пропуск. Если только office отстаёт — upgrade для сервиса office без дропа shared.
-    Если только platform_tracing отстаёт — upgrade для сервиса tracing.
-    Иначе под блокировкой: дроп таблиц shared и полный upgrade.
+
+    Логика: сравнивает Alembic head (файлы) с current (БД) для каждого сервиса.
+    Если все актуальны — пропуск. Если отстают — инкрементальный upgrade по каждому.
+    Если БД пуста (нет alembic_version) — полный дроп + upgrade.
     """
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
@@ -422,8 +479,6 @@ async def setup_database_before_tests():
     print("Все тестовые порты свободны!\n")
 
     shared_db_url = os.environ.get("DATABASE__SHARED_URL", TEST_DATABASE_ENV["DATABASE__SHARED_URL"])
-    crm_db_url = os.environ.get("DATABASE__CRM_URL", TEST_DATABASE_ENV["DATABASE__CRM_URL"])
-    office_db_url = os.environ.get("DATABASE__OFFICE_URL", TEST_DATABASE_ENV["DATABASE__OFFICE_URL"])
     tracing_db_url = os.environ.get(
         "DATABASE__TRACING_URL",
         TEST_DATABASE_ENV.get("DATABASE__TRACING_URL", ""),
@@ -433,90 +488,54 @@ async def setup_database_before_tests():
         admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
         await _ensure_postgres_database(admin_url, "platform_tracing")
 
-    async def _core_ready() -> bool:
-        return (
-            await _alembic_version_ready(shared_db_url)
-            and await _crm_schema_ready(crm_db_url)
-            and await _shared_calendar_schema_ready(shared_db_url)
-            and await _shared_scheduler_schema_ready(shared_db_url)
-        )
+    from core.db.migration_manifest import bootstrap_migration_registry
+    from core.db.migrations import run_migrations_async
 
-    core_ok = await _core_ready()
-    office_ok = await _office_schema_ready(office_db_url)
-    tracing_ok = await _tracing_schema_ready(tracing_db_url) if tracing_db_url else True
+    bootstrap_migration_registry()
 
-    if core_ok and office_ok and tracing_ok:
-        print("БД уже подготовлена (alembic_version есть, одна ревизия), пропуск дропа и миграций.\n")
+    all_ok, stale_services = await _all_migrations_up_to_date()
+
+    if all_ok:
+        print("Все миграции актуальны, пропуск.\n")
         yield
     else:
         lock = FileLock(_DB_SETUP_LOCK, timeout=_DB_SETUP_LOCK_TIMEOUT_SEC)
         with lock:
-            core_ok = await _core_ready()
-            office_ok = await _office_schema_ready(office_db_url)
-            tracing_ok = await _tracing_schema_ready(tracing_db_url) if tracing_db_url else True
-            if core_ok and office_ok and tracing_ok:
-                print("БД подготовлена другим процессом, пропуск.\n")
-                yield
-            elif (
-                await _alembic_version_ready(shared_db_url)
-                and await _crm_base_schema_ready(crm_db_url)
-                and not await _crm_knowledge_imports_table_ready(crm_db_url)
-                and await _shared_calendar_schema_ready(shared_db_url)
-                and await _shared_scheduler_schema_ready(shared_db_url)
-                and office_ok
-                and tracing_ok
-            ):
-                print("Догрузка миграций CRM (crm_knowledge_imports)...")
-                from core.db.migration_manifest import bootstrap_migration_registry
-                from core.db.migrations import run_migrations_async
-
-                bootstrap_migration_registry()
-                await run_migrations_async(service="crm")
-                print("Миграции CRM догружены!\n")
-                yield
-            elif core_ok and office_ok and not tracing_ok:
-                print("Догрузка миграций сервиса tracing (platform_tracing)...")
-                from core.db.migration_manifest import bootstrap_migration_registry
-                from core.db.migrations import run_migrations_async
-
-                bootstrap_migration_registry()
-                await run_migrations_async(service="tracing")
-                print("Миграции tracing применены!\n")
-                yield
-            elif core_ok and not office_ok:
-                print("Догрузка миграций сервиса office (platform_office)...")
-                from core.db.migration_manifest import bootstrap_migration_registry
-                from core.db.migrations import run_migrations_async
-
-                bootstrap_migration_registry()
-                await run_migrations_async(service="office")
-                print("Миграции office применены!\n")
+            all_ok, stale_services = await _all_migrations_up_to_date()
+            if all_ok:
+                print("Миграции применены другим процессом, пропуск.\n")
                 yield
             else:
-                print("Подготовка БД для тестов...")
-                engine = create_async_engine(shared_db_url, echo=False)
-                async with engine.begin() as conn:
-                    result = await conn.execute(text("""
-                        SELECT tablename FROM pg_tables
-                        WHERE schemaname = 'public'
-                    """))
-                    tables = [row[0] for row in result.fetchall()]
-                    if tables:
-                        await conn.execute(text("SET session_replication_role = 'replica'"))
-                        for table in tables:
-                            await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
-                        await conn.execute(text("SET session_replication_role = 'origin'"))
-                        print(f"   Удалено {len(tables)} таблиц")
-                await engine.dispose()
+                has_any_schema = await _alembic_version_ready(shared_db_url)
 
-                print("Применение миграций...")
-                from core.db.migration_manifest import bootstrap_migration_registry
-                from core.db.migrations import run_migrations_async
+                if has_any_schema:
+                    for svc_name in stale_services:
+                        print(f"Догрузка миграций сервиса {svc_name}...")
+                        await run_migrations_async(service=svc_name)
+                        print(f"Миграции {svc_name} применены!")
+                    print()
+                    yield
+                else:
+                    print("Подготовка БД для тестов (первичная инициализация)...")
+                    engine = create_async_engine(shared_db_url, echo=False)
+                    async with engine.begin() as conn:
+                        result = await conn.execute(text("""
+                            SELECT tablename FROM pg_tables
+                            WHERE schemaname = 'public'
+                        """))
+                        tables = [row[0] for row in result.fetchall()]
+                        if tables:
+                            await conn.execute(text("SET session_replication_role = 'replica'"))
+                            for table in tables:
+                                await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
+                            await conn.execute(text("SET session_replication_role = 'origin'"))
+                            print(f"   Удалено {len(tables)} таблиц")
+                    await engine.dispose()
 
-                bootstrap_migration_registry()
-                await run_migrations_async()
-                print("Миграции применены!\n")
-                yield
+                    print("Применение всех миграций...")
+                    await run_migrations_async()
+                    print("Миграции применены!\n")
+                    yield
 
     print(f"\nФинальная очистка портов...")
     for port in test_ports:
@@ -1091,7 +1110,10 @@ def inline_tools():
             "args_schema": {"question": {"type": "string", "description": "Вопрос для пользователя"}},
             "code": """async def execute(args: dict, state: dict = None):
     from apps.flows.src.runtime.exceptions import FlowInterrupt
-    raise FlowInterrupt(question=args.get('question', ''))
+    q = args.get("question")
+    if not q or not str(q).strip():
+        raise ValueError("ask_user: question обязателен")
+    raise FlowInterrupt(question=str(q).strip())
 """
         },
         "reason": {

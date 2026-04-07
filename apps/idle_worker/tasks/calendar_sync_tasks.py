@@ -15,11 +15,9 @@ import httpx
 from apps.idle_worker.broker import broker as idle_broker
 from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
-from core.calendar.service import CalendarReauthRequiredError
-from core.calendar.repositories import (
-    CalendarEventSqlRepository,
-    CalendarIntegrationSqlRepository,
-)
+from core.calendar.service import CalendarReauthRequiredError, _credential_to_calendar_integration
+from core.integrations.models import IntegrationProvider
+from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
 from core.models import CalendarEventSource, CalendarProvider
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -206,8 +204,23 @@ async def calendar_sync_tick(
     start_at = start_tick - timedelta(days=config.lookback_days)
     end_at = _add_months(start_tick, config.lookahead_months)
 
-    integration_repository = CalendarIntegrationSqlRepository(db_url=settings.database.shared_url)
-    integrations = await integration_repository.list_sync_enabled(limit=config.max_integrations_per_tick)
+    credential_repository = IntegrationCredentialRepository(db_url=settings.database.shared_url)
+    google_creds = await credential_repository.list_by_provider_service(
+        provider=IntegrationProvider.GOOGLE,
+        service="calendar",
+        limit=config.max_integrations_per_tick,
+    )
+    yandex_creds = await credential_repository.list_by_provider_service(
+        provider=IntegrationProvider.YANDEX,
+        service="calendar",
+        limit=config.max_integrations_per_tick,
+    )
+    all_creds = google_creds + yandex_creds
+    integrations = [
+        _credential_to_calendar_integration(c)
+        for c in all_creds
+        if c.metadata.get("calendar_settings", {}).get("sync_enabled", True)
+    ]
     if len(integrations) > config.batch_size:
         integrations = integrations[: config.batch_size]
 

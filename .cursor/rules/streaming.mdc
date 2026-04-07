@@ -14,6 +14,8 @@ Worker (TaskIQ) → LlmNodeRunner → Emitter → Redis Pub/Sub → EventSubscri
                      ↑ llm.stream()          channel: stream:{task_id}
 ```
 
+**`LLMClient.stream`** (`core/clients/llm/factory.py`): после чанков при наличии `tool_calls` уходит **`TaskStatusUpdateEvent`** с `metadata.tool_calls`, затем второй **`TaskStatusUpdateEvent`** с финальным текстом и **`metadata.usage`** без `tool_calls`. В **`LlmNodeRunner`** при разборе стрима поле `tool_calls` обновляется **только если** в `metadata` есть непустой `tool_calls` — иначе последнее событие затирало бы список вызовов и тулы не выполнялись бы при живом провайдере.
+
 ## Emitter — публикация событий
 
 Файл: `apps/flows/src/streaming/emitter.py`
@@ -28,7 +30,7 @@ await emitter.emit_text("Hello")                                      # текс
 await emitter.emit_tool_call("calculator", {"expr": "2+2"}, call_id) # вызов tool
 await emitter.emit_tool_result("calculator", 4, call_id)              # результат tool
 await emitter.emit_complete("Done!")                                   # завершение
-await emitter.emit_interrupt("Какой склад?")                          # interrupt (input-required)
+await emitter.emit_interrupt(state.interrupt)                          # interrupt (input-required); metadata.platform_interrupt
 await emitter.emit_error("Connection failed")                          # ошибка
 ```
 
@@ -53,7 +55,15 @@ assert emitter.events[1]["kind"] == "task-status-update"
 
 Файл: `apps/flows/src/streaming/subscriber.py`
 
-Подписка завершается на `is_final_event`: `TaskStatusUpdateEvent` с `final=True` и терминальным `state` (`completed`, `failed`, `input-required`, `canceled`). **Завершение одного вызова LLM** в `core/clients/llm` (`stream`) не должно использовать `final=True` при `state=completed` — иначе SSE обрывается до `node_complete` следующих нод и до `Emitter.emit_complete`. Конец A2A-задачи — только события канала: `emit_complete`, `emit_interrupt`, `emit_error`.
+Подписка завершается на `is_final_event`: `TaskStatusUpdateEvent` с `final=True` и терминальным `state` (`completed`, `failed`, `input-required`, `canceled`). **Исключение:** `input-required` с `metadata.platform_handoff_continue === true` не считается финалом для подписчика (многофазный operator handoff). Первое событие operator interrupt: `BaseEmitter.emit_interrupt` для `OperatorTaskInterrupt` ставит **`final=False`** и **`platform_handoff_continue`** в metadata; финал раунда — после `emit_complete` при resume.
+
+**UI при открытом SSE после handoff:** поток не закрывается до resume, поэтому клиент не должен держать индикатор «ждём ответа» (`loading` композера) и точки стриминга у сообщения ассистента (`streaming: false` в патче для этого статуса). Повторную отправку нового сообщения блокируют `chat.streamPending` (flows) / `_sseOpen` (embed), пока `message/stream` не завершится. Текст оператора в тот же SSE публикуется через `Emitter.emit_text(..., artifact_name="operator_reply")` — клиенты копят поле `operatorReply` и показывают блок под карточкой interrupt (не смешивать с `content` от LLM).
+
+**Redis subscribe idle-timeout:** `RedisClient.subscribe` использует **idle-таймаут** (сбрасывается при каждом полученном сообщении, по умолчанию 300 с) вместо абсолютного; плюс **max-timeout** (абсолютный потолок, 3600 с) для защиты от утечек. Operator handoff при `takeover` может длиться минуты — активные сообщения (operator_reply, user_reply) сбрасывают idle-таймер.
+
+**Дедупликация текста status-update:** в `platform-chat.js` и `embed-stream-handler.js` текст из `message.parts` в `status-update` записывается в `content` **только** для терминальных состояний (`completed`, `finished`, `failed`, `error`). Для `working` текст приходит через `artifact-update` — дублирование исключено.
+
+**Завершение одного вызова LLM** в `core/clients/llm` (`stream`) не должно использовать `final=True` при `state=completed` — иначе SSE обрывается до `node_complete` следующих нод и до `Emitter.emit_complete`. Конец A2A-задачи — только события канала: `emit_complete`, `emit_interrupt`, `emit_error`.
 
 ```python
 from apps.flows.src.streaming import EventSubscriber
@@ -110,9 +120,10 @@ emitter = Emitter(redis_client, state)
 flow = await flow_factory.get_flow(flow_id)
 try:
     state = await flow.run(state)
-    await emitter.emit_complete(state.response)
-except FlowInterrupt as e:
-    await emitter.emit_interrupt(e.question)
+    if state.interrupt:
+        await emitter.emit_interrupt(state.interrupt)
+    else:
+        await emitter.emit_complete(state.response)
 except Exception as e:
     await emitter.emit_error(str(e))
     raise

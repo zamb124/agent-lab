@@ -20,6 +20,7 @@ from core.clients.service_client import (
     ServiceClientError,
 )
 from core.clients.scheduler_client import SchedulerClient
+from core.clients.google_docs_client import GoogleDocsClient, GoogleDocsClientError
 from core.clients.rag_client import RagClient
 
 __all__ = [
@@ -41,5 +42,7 @@ __all__ = [
     "ServiceClient",
     "ServiceClientError",
     "SchedulerClient",
+    "GoogleDocsClient",
+    "GoogleDocsClientError",
     "RagClient",
 ]

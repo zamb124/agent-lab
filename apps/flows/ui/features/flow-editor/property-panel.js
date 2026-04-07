@@ -75,6 +75,13 @@ export class PropertyPanel extends PlatformElement {
                 'remote_flow': { name: this.i18n.t('node_defaults.name_remote_flow'), url: '' },
                 'mcp': { name: this.i18n.t('node_defaults.name_mcp'), server_id: '', tool_name: '' },
                 'channel': { name: this.i18n.t('node_defaults.name_channel'), channel: 'telegram', action: 'send_message', channel_config: {} },
+                'hitl_node': {
+                    name: this.i18n.t('node_defaults.name_hitl_node'),
+                    operator_queue_slug: '',
+                    operator_task_title: '',
+                    operator_user_message: '',
+                    operator_handoff_mode: 'tool_result',
+                },
             };
             
             const typeDefaults = defaults[config.type] || {};
@@ -252,6 +259,20 @@ export class PropertyPanel extends PlatformElement {
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
                 ></channel-node-editor>`;
+            case 'hitl_node':
+                return html`<hitl-node-editor
+                    .nodeConfig=${this.config}
+                    .nodeId=${this.node.id || this.node.nodeId}
+                    .flowId=${this.flowId}
+                    .skillId=${this.skillId}
+                    .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
+                    ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
+                    @config-change=${this._onConfigChanged}
+                    @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
+                ></hitl-node-editor>`;
             default:
                 return this._renderDefaultPanel();
         }

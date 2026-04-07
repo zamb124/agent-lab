@@ -243,7 +243,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     )
                 InterruptManager.clear_interrupt_path(state)
             except FlowInterrupt as e:
-                InterruptManager.set_interrupt(state, e.question, tool_call)
+                InterruptManager.apply_interrupt(
+                    state, e.body, tool_call, getattr(e, "correlation_id", None)
+                )
                 raise
         else:
             self._ensure_assistant_tool_calls(
@@ -382,8 +384,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                                 if isinstance(event, TaskStatusUpdateEvent):
                                     if event.status.message and event.status.message.metadata:
-                                        tool_calls = event.status.message.metadata.get("tool_calls")
-                                        usage = event.status.message.metadata.get("usage")
+                                        md = event.status.message.metadata
+                                        tc = md.get("tool_calls")
+                                        if tc:
+                                            tool_calls = tc
+                                        usage = md.get("usage")
                                         if usage:
                                             input_tokens = usage.get("input_tokens", 0)
                                             output_tokens = usage.get("output_tokens", 0)
@@ -543,8 +548,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             ),
                                         )
                                     
-                                    InterruptManager.set_interrupt(
-                                        state, e.question, interrupted_tc
+                                    InterruptManager.apply_interrupt(
+                                        state,
+                                        e.body,
+                                        interrupted_tc,
+                                        getattr(e, "correlation_id", None),
                                     )
                                 raise
                         else:

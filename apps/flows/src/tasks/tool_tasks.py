@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.state.interrupt_manager import InterruptManager
+from core.state.interrupt import interrupt_to_response_dict
 from apps.flows.src.container import get_container
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
@@ -66,10 +68,19 @@ async def execute_tool(
             logger.info(
                 f"Tool {tool_id} interrupt: {e.question[:50]}..., nested_keys={list(nested.keys())}, path_len={len(path)}"
             )
+            InterruptManager.apply_interrupt(
+                tool_state,
+                e.body,
+                e.tool_call,
+                getattr(e, "correlation_id", None),
+            )
+            packed = tool_state.interrupt
+            if packed is None:
+                raise RuntimeError("execute_tool: apply_interrupt не выставил interrupt")
             return {
                 "tool_id": tool_id,
                 "result": None,
-                "interrupt": {"question": e.question},
+                "interrupt": interrupt_to_response_dict(packed),
                 "nested_states": nested,
                 "interrupt_path": path,
             }
