@@ -515,8 +515,8 @@ GLOBALS: List[Dict[str, Any]] = [
         "doc": (
             "Ошибка шаблона DOCX (и подклассы DocxTemplateInvalidError, DocxTemplateSyntaxError и т.д.).\n"
             "У экземпляра: message, code, payload.\n"
-            "В inline-коде надёжнее не писать except DocxTemplateError — строки import из core вырезаются; "
-            "используйте проверку type(exc).__name__ или вызывайте fill_docx_template."
+            "В inline-коде нельзя писать .__name__ / .__class__ (валидатор eval); имя типа: "
+            "getattr(type(exc), \"__name__\", \"\"). Или вызывайте fill_docx_template."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["files", "docx", "exception"],

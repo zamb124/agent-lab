@@ -139,10 +139,10 @@ async def fill_docx_template(
             strict=strict,
         )
     except Exception as exc:
-        if type(exc).__name__ == "FileWriteError":
+        exc_type_name = getattr(type(exc), "__name__", "")
+        if exc_type_name == "FileWriteError":
             return {"success": False, "error": str(exc)}
-        exc_name = type(exc).__name__
-        if exc_name.startswith("DocxTemplate") and exc_name.endswith("Error"):
+        if exc_type_name.startswith("DocxTemplate") and exc_type_name.endswith("Error"):
             return {
                 "success": False,
                 "error": getattr(exc, "message", str(exc)),

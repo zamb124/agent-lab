@@ -114,6 +114,9 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 ### НЕТ в namespace
 `get_container`, `get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, `importlib` (кроме whitelist).
 
+### Валидация AST (`compiler._validate_code`)
+Доступ к атрибутам вида `__*__` (например `obj.__name__`, `obj.__class__`) в коде тулов **запрещён**. Имя типа исключения: `getattr(type(exc), "__name__", "")` (имя атрибута — строковый литерал, не `ast.Attribute`).
+
 ## ОБЯЗАТЕЛЬНО: актуализация документации внешнего разработчика
 
 При **любом** изменении namespace, eval-окружения или добавлении тула — **сразу** актуализировать документацию в `core/docs/data/python/`:
