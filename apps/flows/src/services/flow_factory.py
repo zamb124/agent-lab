@@ -276,10 +276,7 @@ class FlowFactory:
         """
         Резолвит @var:key ссылки в переменных и извлекает значения из FlowVariableConfig.
 
-        Для flow-переменных допускается отложенный резолв:
-        - если company variable существует, ссылка резолвится сразу;
-        - если company variable отсутствует, ссылка сохраняется как @var:...
-          и будет разрешена позже через runtime metadata/context.
+        Если company variable не существует — значение становится None.
 
         Args:
             variables: Словарь FlowVariableConfig объектов
@@ -288,12 +285,11 @@ class FlowFactory:
             Словарь с резолвнутыми значениями (только values, без метаданных)
         """
         company_variables = await self.variables_service._get_company_variables_map()
-        resolved = self._resolve_flow_variables_with_deferred_refs(
+        resolved = self._resolve_flow_variables(
             value=variables,
             company_variables=company_variables,
         )
         
-        # Извлекаем только значения из FlowVariableConfig объектов
         result = {}
         for key, value in resolved.items():
             if isinstance(value, dict) and "value" in value:
@@ -303,19 +299,19 @@ class FlowFactory:
         
         return result
 
-    def _resolve_flow_variables_with_deferred_refs(
+    def _resolve_flow_variables(
         self,
         value: Any,
         company_variables: Dict[str, Any],
     ) -> Any:
         if isinstance(value, dict):
             return {
-                key: self._resolve_flow_variables_with_deferred_refs(item, company_variables)
+                key: self._resolve_flow_variables(item, company_variables)
                 for key, item in value.items()
             }
         if isinstance(value, list):
             return [
-                self._resolve_flow_variables_with_deferred_refs(item, company_variables)
+                self._resolve_flow_variables(item, company_variables)
                 for item in value
             ]
         if not isinstance(value, str):
@@ -326,7 +322,7 @@ class FlowFactory:
             path = full_match.group(1)
             root_key = path.split(".", 1)[0]
             if root_key not in company_variables:
-                return value
+                return None
             return VarResolver.resolve_ref(value, company_variables)
 
         if "@var:" not in value:
@@ -336,7 +332,7 @@ class FlowFactory:
             path = match.group(1)
             root_key = path.split(".", 1)[0]
             if root_key not in company_variables:
-                return f"@var:{path}"
+                return ""
             resolved_value = VarResolver.resolve_ref(f"@var:{path}", company_variables)
             return str(resolved_value)
 
