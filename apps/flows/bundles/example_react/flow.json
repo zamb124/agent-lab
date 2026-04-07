@@ -1,7 +1,7 @@
 {
   "id": "example_react",
   "name": "Пример ReAct flow",
-  "description": "Демонстрация ReAct: tools, subflow, interrupt, variables, skills, mock; HITL — skills hitl_operator_react (тул hitl_operator_task) и hitl_operator_node (нода hitl_node), очередь example_hitl",
+  "description": "Демонстрация ReAct: tools, subflow, interrupt, variables, skills, mock; HITL — skills hitl_operator_react (тул hitl_operator_task) и hitl_operator_node (нода hitl_node), очередь example_hitl; Google Docs — skill google_docs",
   "tags": ["example", "react", "demo", "mock"],
   "permission": ["admin", "developers"],
   "entry": "main",
@@ -226,6 +226,43 @@
         {"from": "hitl_pause", "to": null}
       ],
       "edges_mode": "merge"
+    },
+    "google_docs": {
+      "name": "Google Docs",
+      "description": "Агент для работы с Google Docs: создание, чтение, редактирование, шаринг. Авторизация: переменные google_service_account (JSON SA) / google_access_token (Bearer-токен), или per-user OAuth.",
+      "entry": "gdocs_main",
+      "nodes": {
+        "gdocs_main": {
+          "type": "llm_node",
+          "node_id": "example_gdocs_agent"
+        }
+      },
+      "nodes_mode": "merge",
+      "edges": [
+        {"from": "gdocs_main", "to": null}
+      ],
+      "edges_mode": "merge",
+      "variables": {
+        "google_service_account": {
+          "value": "@var:google_service_account",
+          "public": false,
+          "title": "Google Service Account JSON",
+          "description": "JSON ключ Service Account для Google API. Альтернатива: google_access_token."
+        },
+        "google_access_token": {
+          "value": "@var:google_access_token",
+          "public": false,
+          "title": "Google OAuth2 Bearer-токен",
+          "description": "Статичный access_token для Google API. Альтернатива: google_service_account."
+        },
+        "google_impersonate_email": {
+          "value": "@var:google_impersonate_email",
+          "public": false,
+          "title": "Google Impersonate Email",
+          "description": "Email для domain-wide delegation (только с Service Account)."
+        }
+      },
+      "variables_mode": "merge"
     }
   },
 

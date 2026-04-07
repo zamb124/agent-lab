@@ -89,5 +89,25 @@
     "prompt_file": "prompts/hitl_tool.md",
     "tools": ["calculator", "ask_user", "hitl_operator_task"],
     "llm": {"model": "gpt-4o", "temperature": 0.2}
+  },
+  {
+    "id": "example_gdocs_agent",
+    "type": "llm_node",
+    "name": "Google Docs ассистент",
+    "description": "ReAct-агент с тулами Google Docs: создание, чтение, редактирование, шаринг документов. Авторизация через переменные google_service_account / google_access_token или per-user OAuth.",
+    "prompt_file": "prompts/google_docs.md",
+    "tools": [
+      "ask_user",
+      "create_file",
+      "fill_docx_template",
+      "gdocs_create_document",
+      "gdocs_read_document",
+      "gdocs_append_text",
+      "gdocs_insert_text",
+      "gdocs_find_replace",
+      "gdocs_delete_range",
+      "gdocs_share_document"
+    ],
+    "llm": {"model": "gpt-4o", "temperature": 0.2}
   }
 ]
