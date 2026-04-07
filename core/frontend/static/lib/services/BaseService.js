@@ -59,12 +59,13 @@ export class BaseService {
         return this._fetch('DELETE', path, null, options);
     }
 
-    async postStream(url, data, onEvent) {
+    async postStream(url, data, onEvent, { signal } = {}) {
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(data),
+            signal,
         });
 
         if (!response.ok) {

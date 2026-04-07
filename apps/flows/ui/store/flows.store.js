@@ -112,19 +112,20 @@ export const FlowsStore = {
     },
     
     setCurrentFlow(id) {
-        console.log('[Store] setCurrentFlow called with:', id);
+        const contextId = `${Date.now()}`;
         baseStore.setState((s) => ({
             flows: { ...s.flows, currentId: id },
-            app: { ...s.app, currentSkillId: null }
+            app: { ...s.app, currentSkillId: null },
+            chat: { ...s.chat, messages: [], contextId, loading: false, streamPending: false, currentTaskId: null },
         }));
-        console.log('[Store] currentId set to:', baseStore.state.flows.currentId);
     },
     
     setCurrentFlowAndSkill(flowId, skillId) {
-        console.log('[Store] setCurrentFlowAndSkill called with:', flowId, skillId);
+        const contextId = `${Date.now()}`;
         baseStore.setState((s) => ({
             flows: { ...s.flows, currentId: flowId },
-            app: { ...s.app, currentSkillId: skillId }
+            app: { ...s.app, currentSkillId: skillId },
+            chat: { ...s.chat, messages: [], contextId, loading: false, streamPending: false, currentTaskId: null },
         }));
     },
     

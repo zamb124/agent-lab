@@ -160,7 +160,8 @@ export class A2AService extends BaseService {
             skillId = null,
             variables = null,
             breakpoints = null, 
-            mock = null 
+            mock = null,
+            signal = null,
         } = options;
         
         const url = `${this.baseUrl}/api/v1/${flowId}`;
@@ -213,7 +214,7 @@ export class A2AService extends BaseService {
             body.params.metadata = metadata;
         }
         
-        return this.postStream(url, body, onEvent);
+        return this.postStream(url, body, onEvent, { signal });
     }
 
     async listOperatorQueues() {

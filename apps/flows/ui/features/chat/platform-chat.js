@@ -350,6 +350,7 @@ export class PlatformChat extends PlatformIsland {
         this.headerGlow = false;
         this.hideMenu = true;
         this._actionsMenuOpen = false;
+        this._streamAbortController = null;
         
         this.state = this.use(s => ({
             messages: s.chat.messages,
@@ -393,6 +394,13 @@ export class PlatformChat extends PlatformIsland {
         return false;
     }
 
+    _onStopStream() {
+        if (this._streamAbortController) {
+            this._streamAbortController.abort();
+            this._streamAbortController = null;
+        }
+    }
+
     async _onSendMessage(e) {
         const { message, files = [] } = e.detail;
         if (!message && files.length === 0) return;
@@ -418,7 +426,6 @@ export class PlatformChat extends PlatformIsland {
 
         // A2A Section 3.4.3: при активном operator takeover реплика пользователя
         // отправляется через тот же message/stream; бэкенд маршрутизирует в dialog_log.
-        // Новый assistant-бабл не нужен — SSE вернёт единственный input-required ack.
         if (takeover) {
             await this.a2a.streamMessage(
                 this.flowId,
@@ -433,6 +440,8 @@ export class PlatformChat extends PlatformIsland {
 
         FlowsStore.setLoading(true);
         FlowsStore.setStreamPending(true);
+
+        this._streamAbortController = new AbortController();
 
         const assistantMessage = {
             id: `msg_${++messageIdCounter}`,
@@ -456,17 +465,23 @@ export class PlatformChat extends PlatformIsland {
                 {
                     files: fileParts,
                     contextId: this.state.value.contextId,
-                    skillId: this.skillId || null
+                    skillId: this.skillId || null,
+                    signal: this._streamAbortController.signal,
                 },
                 (event) => this._handleStreamEvent(event, this._activeStreamMessageId)
-            ).catch(err => {
+            );
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                FlowsStore.updateMessage(assistantMessage.id, { streaming: false });
+            } else {
                 this.error(this.i18n.t('platform_chat.err_with_message', { message: err.message }));
                 FlowsStore.updateMessage(assistantMessage.id, {
                     content: this.i18n.t('platform_chat.stream_fallback_content'),
                     streaming: false,
                 });
-            });
+            }
         } finally {
+            this._streamAbortController = null;
             FlowsStore.setLoading(false);
             FlowsStore.setStreamPending(false);
         }
@@ -1008,6 +1023,7 @@ export class PlatformChat extends PlatformIsland {
                         ?loading=${loading}
                         placeholder=${this.i18n.t('chat_widget.placeholder_message')}
                         @send=${this._onSendMessage}
+                        @stop=${this._onStopStream}
                     ></chat-input>
                 </div>
             </div>

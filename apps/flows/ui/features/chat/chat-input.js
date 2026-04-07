@@ -146,6 +146,15 @@ export class ChatInput extends PlatformElement {
                 box-shadow: none;
             }
             
+            .send-button.stop {
+                background: var(--error, #ef4444);
+                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+            }
+            
+            .send-button.stop:hover {
+                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+            }
+            
             .file-input {
                 display: none;
             }
@@ -221,6 +230,8 @@ export class ChatInput extends PlatformElement {
         placeholder: { type: String },
         maxLength: { type: Number },
         maxFileSize: { type: Number },
+        _value: { state: true },
+        _selectedFiles: { state: true },
     };
 
     constructor() {
@@ -353,6 +364,10 @@ export class ChatInput extends PlatformElement {
         }
     }
 
+    _stop() {
+        this.emit('stop');
+    }
+
     render() {
         const canSend = (this._value.trim().length > 0 || this._selectedFiles.length > 0) && !this.disabled && !this.loading;
 
@@ -393,16 +408,22 @@ export class ChatInput extends PlatformElement {
                     ></textarea>
                 </div>
                 
-                <button 
-                    class="send-button" 
-                    ?disabled=${!canSend}
-                    @click=${this._send}
-                >
-                    ${this.loading 
-                        ? html`<platform-spinner size="20"></platform-spinner>`
-                        : html`<platform-icon name="send" size="20"></platform-icon>`
-                    }
-                </button>
+                ${this.loading ? html`
+                    <button 
+                        class="send-button stop"
+                        @click=${this._stop}
+                    >
+                        <platform-icon name="stop" size="20"></platform-icon>
+                    </button>
+                ` : html`
+                    <button 
+                        class="send-button" 
+                        ?disabled=${!canSend}
+                        @click=${this._send}
+                    >
+                        <platform-icon name="send" size="20"></platform-icon>
+                    </button>
+                `}
             </div>
         `;
     }
