@@ -9,7 +9,6 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path as _P
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 from a2a.types import (
@@ -38,8 +37,9 @@ from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
 from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from core.context import set_current_channel
+from apps.flows.config import settings
 from apps.flows.src.evaluation.service import EvaluationService
-from apps.flows.src.files import FileHandler
+from apps.flows.src.files import extract_incoming_a2a_files, format_a2a_files_content
 from core.logging import get_logger
 from apps.flows.src.services.push_notifications import dict_to_config
 from apps.flows.src.streaming import Emitter
@@ -246,19 +246,18 @@ class A2AChannel(BaseChannel):
         file_ids: list[str] = []
         if prepared.files_data:
             for fd in prepared.files_data:
+                fid = fd.get("file_id")
+                if fid:
+                    file_ids.append(str(fid))
+                    continue
                 path = fd.get("path")
-                if not path:
+                if path and str(path).startswith(("http://", "https://")):
                     continue
-                p = _P(path)
-                if not p.exists():
-                    continue
-                data = p.read_bytes()
-                record = await container.file_processor.process_file_from_bytes(
-                    data=data,
-                    original_name=fd.get("name", p.name),
-                    content_type=fd.get("mime_type"),
-                )
-                file_ids.append(record.file_id)
+                if path:
+                    raise ValueError(
+                        "Вложение A2A без file_id: ожидается персист через API (S3), "
+                        "локальные path в state.files не поддерживаются."
+                    )
 
         await svc.receive_user_reply(
             company_id=self.context.active_company.company_id,
@@ -283,17 +282,57 @@ class A2AChannel(BaseChannel):
             final=True,
         )
 
+    async def _persist_incoming_a2a_files(self, message: Message) -> tuple[List[Dict[str, Any]], str]:
+        """Байты FileWithBytes -> S3 + FileRecord; FileWithUri -> только path в state."""
+        incoming = extract_incoming_a2a_files(message)
+        if not incoming:
+            return [], ""
+
+        if not self.context or not self.context.active_company:
+            raise ValueError(
+                "Загрузка вложений A2A требует active_company в контексте запроса"
+            )
+
+        company_id = self.context.active_company.company_id
+        user_id = self.context.user.user_id if self.context.user else None
+        prefix = f"/{settings.server.name}/api/v1/files/download"
+        container = get_container()
+        files_data: List[Dict[str, Any]] = []
+
+        for inc in incoming:
+            if inc.data is not None:
+                item = await container.file_processor.persist_uploaded_file_as_state_files_item(
+                    data=inc.data,
+                    original_name=inc.name,
+                    content_type=inc.mime_type,
+                    uploaded_by=user_id,
+                    company_id=company_id,
+                    public=False,
+                    download_url_prefix=prefix,
+                )
+                files_data.append(item)
+            else:
+                if not inc.uri:
+                    raise ValueError("FileWithUri без uri")
+                files_data.append(
+                    {
+                        "name": inc.name,
+                        "path": inc.uri,
+                        "mime_type": inc.mime_type,
+                        "size": inc.size,
+                    }
+                )
+
+        return files_data, format_a2a_files_content(files_data)
+
     async def _prepare_a2a_params(self, params: MessageSendParams):
         """Подготовка параметров специфичных для A2A."""
         message = params.message
         content = get_message_text(message)
 
-        file_handler = FileHandler()
-        files = file_handler.extract_and_save(message)
-        files_data = file_handler.files_to_state(files)
-
-        if files:
-            content += file_handler.format_files_for_content(files)
+        files_data, files_content_suffix = await self._persist_incoming_a2a_files(message)
+        if files_content_suffix:
+            content += files_content_suffix
 
         prepared = await self._prepare_task_params(
             content=content,

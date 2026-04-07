@@ -105,7 +105,18 @@ async def fill_docx_template(
     state = state or {}
     files = state.get("files", [])
     if not files:
-        return {"success": False, "error": "Нет файлов для чтения"}
+        if file_name:
+            return {
+                "success": False,
+                "error": (
+                    f"state.files пуст: вложение {file_name!r} недоступно. "
+                    "Сначала пользователь должен прикрепить .docx к сообщению в канале."
+                ),
+            }
+        return {
+            "success": False,
+            "error": "state.files пуст: прикрепите шаблон .docx к сообщению, затем вызовите fill_docx_template.",
+        }
 
     docx_entries = [
         f

@@ -38,7 +38,7 @@ async def test_fill_docx_template_no_files(monkeypatch) -> None:
         state,
     )
     assert out["success"] is False
-    assert "Нет файлов" in out["error"]
+    assert "state.files пуст" in out["error"]
 
 
 @pytest.mark.asyncio

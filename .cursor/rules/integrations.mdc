@@ -63,6 +63,8 @@ async for event in subscriber.subscribe(task_id):
 - `TaskStatusUpdateEvent` - статус задачи (working, input-required, completed, failed)
 - `TaskArtifactUpdateEvent` - текстовые чанки от LLM
 
+**A2A вложения (`FilePart`):** `FileWithBytes` на HTTP API flows не пишется на локальный диск: `FileProcessor.persist_uploaded_file` (S3 + `FileRecord`), в `state.files` — `file_id` и same-origin `path` вида `/{server.name}/api/v1/files/download/{file_id}`. `FileWithUri` — без персиста, в `path` остаётся URI. Нужен `active_company` в контексте. При takeover ответ пользователя с файлами: в `dialog_log` уходят только `file_id` из этих записей (чтение локального path с диска не используется).
+
 **Автоматически добавляется:**
 - `task_id`, `context_id`
 - `trace_id`, `span_id` (OpenTelemetry)

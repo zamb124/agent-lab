@@ -62,6 +62,18 @@ class FileProcessor:
             await self._s3_client.close()
             self._s3_client = None
 
+    @staticmethod
+    def _original_name_with_extension_from_content_type(
+        original_name: str, content_type: str
+    ) -> str:
+        """Если в имени нет суффикса, добавляет его по MIME (S3-ключ и метаданные согласованы)."""
+        if Path(original_name).suffix:
+            return original_name
+        ext = mimetypes.guess_extension(content_type.strip(), strict=False)
+        if ext and not original_name.endswith(ext):
+            return f"{original_name}{ext}"
+        return original_name
+
     async def process_file_from_bytes(
         self,
         data: bytes,
@@ -93,6 +105,10 @@ class FileProcessor:
             content_type, _ = mimetypes.guess_type(original_name)
             if not content_type:
                 content_type = "application/octet-stream"
+
+        original_name = FileProcessor._original_name_with_extension_from_content_type(
+            original_name, content_type
+        )
 
         needs_ios, src_suffix = resolve_ios_transcode_source(
             content_type,
@@ -179,6 +195,46 @@ class FileProcessor:
         file_record = file_record.model_copy(update=updates)
         await self.file_repository.set(file_record)
         return file_record
+
+    async def persist_uploaded_file_as_state_files_item(
+        self,
+        *,
+        data: bytes,
+        original_name: str,
+        content_type: Optional[str],
+        uploaded_by: Optional[str],
+        company_id: str,
+        public: bool,
+        download_url_prefix: str,
+        content_sha256_hex: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Байты с клиента → S3 + FileRecord + download_url; один элемент формата state.files.
+        """
+        effective_type = content_type if content_type else "application/octet-stream"
+        record = await self.persist_uploaded_file(
+            data=data,
+            original_name=original_name,
+            content_type=effective_type,
+            uploaded_by=uploaded_by,
+            company_id=company_id,
+            public=public,
+            download_url_prefix=download_url_prefix,
+            content_sha256_hex=content_sha256_hex,
+            metadata=metadata,
+            tags=tags,
+        )
+        prefix = download_url_prefix.rstrip("/")
+        path = record.download_url if record.download_url else f"{prefix}/{record.file_id}"
+        return {
+            "name": record.original_name,
+            "path": path,
+            "mime_type": record.content_type,
+            "size": record.file_size,
+            "file_id": record.file_id,
+        }
 
     async def get_file_record(self, file_id: str) -> Optional[FileMetadata]:
         """

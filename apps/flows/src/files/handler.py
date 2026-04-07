@@ -1,6 +1,8 @@
 """
-Обработчик файлов из A2A сообщений.
-Извлекает FilePart, сохраняет в tmp, формирует информацию для state.files.
+Извлечение вложений FilePart из A2A Message в память (без записи на диск).
+
+Имя без расширения и S3/метаданные нормализует FileProcessor.process_file_from_bytes;
+канал A2A вызывает persist_uploaded_file_as_state_files_item.
 """
 
 import base64
@@ -11,15 +13,9 @@ from typing import Any, Dict, List, Optional
 
 from a2a.types import FilePart, FileWithBytes, FileWithUri, Message
 
-from apps.flows.config import settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-def get_temp_dir() -> Path:
-    """Возвращает путь к директории для временных файлов из конфига."""
-    return Path(settings.files.temp_dir)
 
 
 def get_file_parts(message: Message) -> List[FilePart]:
@@ -34,139 +30,72 @@ def get_file_parts(message: Message) -> List[FilePart]:
 
 
 @dataclass
-class FileInfo:
-    """Информация о сохраненном файле."""
+class IncomingA2aFile:
+    """Вложение из A2A: либо байты (FileWithBytes), либо URI (FileWithUri)."""
 
     name: str
-    path: str
     mime_type: Optional[str]
     size: int
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "path": self.path,
-            "mime_type": self.mime_type,
-            "size": self.size,
-        }
+    data: Optional[bytes] = None
+    uri: Optional[str] = None
 
 
-class FileHandler:
-    """Обработчик файлов из A2A сообщений."""
+def _payload_from_bytes(file_data: FileWithBytes) -> IncomingA2aFile:
+    file_bytes = base64.b64decode(file_data.bytes)
+    name = file_data.name or f"file_{uuid.uuid4().hex[:8]}"
+    return IncomingA2aFile(
+        name=name,
+        mime_type=file_data.mime_type,
+        size=len(file_bytes),
+        data=file_bytes,
+    )
 
-    def __init__(self, temp_dir: Optional[Path] = None):
-        self.temp_dir = temp_dir or get_temp_dir()
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
 
-    def extract_and_save(self, message: Message) -> List[FileInfo]:
-        """
-        Извлекает файлы из Message и сохраняет в tmp.
+def _payload_from_uri(file_data: FileWithUri) -> IncomingA2aFile:
+    name = file_data.name or Path(file_data.uri).name or f"file_{uuid.uuid4().hex[:8]}"
+    return IncomingA2aFile(
+        name=name,
+        mime_type=file_data.mime_type,
+        size=0,
+        uri=file_data.uri,
+    )
 
-        Args:
-            message: A2A Message с возможными FilePart
 
-        Returns:
-            Список FileInfo сохраненных файлов
-        """
-        file_parts = get_file_parts(message)
-        if not file_parts:
-            return []
+def extract_incoming_a2a_files(message: Message) -> List[IncomingA2aFile]:
+    """
+    Извлекает вложения из Message. Байты остаются в памяти, URI не скачиваются.
+    """
+    file_parts = get_file_parts(message)
+    if not file_parts:
+        return []
 
-        saved_files: List[FileInfo] = []
-        for file_part in file_parts:
-            file_info = self._save_file_part(file_part)
-            if file_info:
-                saved_files.append(file_info)
-
-        return saved_files
-
-    def _save_file_part(self, file_part: FilePart) -> Optional[FileInfo]:
-        """Сохраняет один FilePart и возвращает FileInfo."""
+    result: List[IncomingA2aFile] = []
+    for file_part in file_parts:
         file_data = file_part.file
-
         if isinstance(file_data, FileWithBytes):
-            return self._save_bytes_file(file_data)
+            result.append(_payload_from_bytes(file_data))
         elif isinstance(file_data, FileWithUri):
-            return self._save_uri_file(file_data)
+            result.append(_payload_from_uri(file_data))
+        else:
+            raise ValueError(f"Неподдерживаемый тип вложения A2A: {type(file_data)}")
 
-        logger.warning(f"Unknown file type: {type(file_data)}")
-        return None
+    return result
 
-    def _save_bytes_file(self, file_data: FileWithBytes) -> FileInfo:
-        """Сохраняет файл из base64 bytes."""
-        file_bytes = base64.b64decode(file_data.bytes)
 
-        name = file_data.name or f"file_{uuid.uuid4().hex[:8]}"
-        ext = self._get_extension(file_data.mime_type, name)
-        if not name.endswith(ext):
-            name = f"{name}{ext}"
+def format_a2a_files_content(files_data: List[Dict[str, Any]]) -> str:
+    """
+    Добавляет в текст сообщения блоки [FILE]...[/FILE] по записям для state.files.
 
-        unique_name = f"{uuid.uuid4().hex}_{name}"
-        file_path = self.temp_dir / unique_name
-
-        with open(file_path, "wb") as f:
-            f.write(file_bytes)
-
-        logger.info(f"Saved file: {file_path}")
-
-        return FileInfo(
-            name=name,
-            path=str(file_path.absolute()),
-            mime_type=file_data.mime_type,
-            size=len(file_bytes),
-        )
-
-    def _save_uri_file(self, file_data: FileWithUri) -> FileInfo:
-        """Создает FileInfo для файла по URI (без скачивания)."""
-        name = file_data.name or Path(file_data.uri).name or f"file_{uuid.uuid4().hex[:8]}"
-
-        return FileInfo(
-            name=name,
-            path=file_data.uri,
-            mime_type=file_data.mime_type,
-            size=0,
-        )
-
-    def _get_extension(self, mime_type: Optional[str], name: str) -> str:
-        """Определяет расширение файла."""
-        if "." in name:
-            return ""
-
-        mime_to_ext = {
-            "image/jpeg": ".jpg",
-            "image/png": ".png",
-            "image/gif": ".gif",
-            "image/webp": ".webp",
-            "application/pdf": ".pdf",
-            "text/plain": ".txt",
-            "application/json": ".json",
-        }
-
-        if mime_type:
-            return mime_to_ext.get(mime_type, "")
+    Ожидаются ключи name, path, mime_type (как после персиста или для URI).
+    """
+    if not files_data:
         return ""
 
-    @staticmethod
-    def format_files_for_content(files: List[FileInfo]) -> str:
-        """
-        Форматирует информацию о файлах для добавления в content сообщения.
+    parts: List[str] = []
+    for fd in files_data:
+        name = fd.get("name", "")
+        path = fd.get("path", "")
+        mime = fd.get("mime_type") or "unknown"
+        parts.append(f"\n[FILE]\nname: {name}\npath: {path}\nmime_type: {mime}\n[/FILE]")
 
-        Returns:
-            Строка с [FILE]...[/FILE] тегами
-        """
-        if not files:
-            return ""
-
-        parts = []
-        for f in files:
-            parts.append(
-                f"\n[FILE]\nname: {f.name}\npath: {f.path}\nmime_type: {f.mime_type or 'unknown'}\n[/FILE]"
-            )
-
-        return "".join(parts)
-
-    @staticmethod
-    def files_to_state(files: List[FileInfo]) -> List[Dict[str, Any]]:
-        """Конвертирует список FileInfo в формат для state.files."""
-        return [f.to_dict() for f in files]
-
+    return "".join(parts)

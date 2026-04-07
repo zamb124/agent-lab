@@ -34,12 +34,6 @@ class ExternalFlowsConfig(BaseModel):
     )
 
 
-class FilesConfig(BaseModel):
-    """Конфигурация для хранения файлов"""
-
-    temp_dir: str = Field(default="tmp", description="Директория для временных файлов")
-
-
 class PushConfig(CorePushConfig):
     """Push: VAPID и APNs; дефолты VAPID для локальной разработки flows."""
 
@@ -94,7 +88,6 @@ class FlowSettings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     s3: S3Config = Field(default_factory=S3Config)
     external_flows: ExternalFlowsConfig = Field(default_factory=ExternalFlowsConfig)
-    files: FilesConfig = Field(default_factory=FilesConfig)
     mock: MockConfig = Field(default_factory=MockConfig)
     push: PushConfig = Field(default_factory=PushConfig)
 
