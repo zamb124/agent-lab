@@ -17,10 +17,7 @@ export class EmbedUiFileCard extends LitElement {
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 10px 12px;
-            border-radius: var(--embed-radius, 25px);
-            border: 1px solid var(--embed-chat-border, rgba(255, 255, 255, 0.12));
-            background: var(--embed-chat-surface, rgba(255, 255, 255, 0.05));
+            padding: 4px 0;
         }
         .meta {
             flex: 1;

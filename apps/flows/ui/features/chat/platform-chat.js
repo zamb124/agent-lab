@@ -376,11 +376,6 @@ export class PlatformChat extends PlatformIsland {
         }));
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        FlowsStore.initChat();
-    }
-
     _isActiveTakeover() {
         const msgs = FlowsStore.state.chat.messages;
         for (let i = msgs.length - 1; i >= 0; i--) {

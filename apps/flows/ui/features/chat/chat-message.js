@@ -402,11 +402,10 @@ export class ChatMessage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
+                padding: var(--space-1) 0;
                 font-size: var(--text-sm);
+                text-decoration: none;
+                color: inherit;
             }
             
             .file-image {

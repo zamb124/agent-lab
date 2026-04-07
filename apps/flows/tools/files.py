@@ -58,23 +58,22 @@ file_size, checksum (если есть), is_public.
 """.strip()
 
 
-def _find_file(files: List[Dict[str, Any]], name: Optional[str]) -> Optional[Dict[str, Any]]:
-    if not files:
-        return None
-    if not name:
-        return files[0]
-    for f in files:
-        if f.get("name") == name:
-            return f
-    name_lower = name.lower()
-    for f in files:
-        if name_lower in (f.get("name") or "").lower():
-            return f
-    return None
-
-
 def _read_file_mock(args: dict, state: Any = None) -> dict:
     from pathlib import Path
+
+    def _pick(entries, name):
+        if not entries:
+            return None
+        if not name:
+            return entries[0]
+        for f in entries:
+            if f.get("name") == name:
+                return f
+        nl = name.lower()
+        for f in entries:
+            if nl in (f.get("name") or "").lower():
+                return f
+        return None
 
     file_name_arg = args.get("file_name")
     if state is not None:
@@ -84,7 +83,7 @@ def _read_file_mock(args: dict, state: Any = None) -> dict:
         files = files or []
         if not files:
             return {"success": False, "error": "Нет файлов для чтения"}
-        finfo = _find_file(files, file_name_arg)
+        finfo = _pick(files, file_name_arg)
         if finfo is None:
             return {
                 "success": False,

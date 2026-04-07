@@ -1108,18 +1108,14 @@ export class MessageBubble extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
+                padding: var(--space-1) 0;
                 text-decoration: none;
                 color: var(--text-primary);
                 max-width: 280px;
-                transition: background var(--duration-fast);
             }
 
-            .file-card:hover {
-                background: var(--glass-solid-medium);
+            .file-card:hover .file-card-name {
+                text-decoration: underline;
             }
 
             .file-card-icon {

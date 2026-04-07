@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.tools import tool
-from apps.flows.tools.files import _find_file
 from core.files import DocxTemplateError, DocxTemplater
 from core.files.models import FileResponse
 from core.files.writer import FileWriteError
@@ -90,6 +89,20 @@ async def fill_docx_template(
     strict: bool = False,
     state: Optional[dict] = None,
 ) -> dict:
+    def _pick_file(entries, name):
+        if not entries:
+            return None
+        if not name:
+            return entries[0]
+        for f in entries:
+            if f.get("name") == name:
+                return f
+        name_lower = name.lower()
+        for f in entries:
+            if name_lower in (f.get("name") or "").lower():
+                return f
+        return None
+
     state = state or {}
     files = state.get("files", [])
     if not files:
@@ -102,7 +115,7 @@ async def fill_docx_template(
         and (f.get("name") or "").lower().endswith(".docx")
     ]
     if file_name:
-        finfo = _find_file(files, file_name)
+        finfo = _pick_file(files, file_name)
     else:
         finfo = docx_entries[0] if docx_entries else None
 

@@ -1,0 +1,140 @@
+---
+description: "Eval sandbox: безопасное исполнение тулов, namespace whitelist, паттерн создания тулов"
+alwaysApply: false
+---
+# Eval Sandbox — безопасность и паттерны
+
+## Модель безопасности
+
+Код тула = **публичный код**. Его может редактировать внешний разработчик через UI редактора flows. Поэтому:
+
+- Тул исполняется в **sandbox** (`PythonNamespaceBuilder` → `exec` в ограниченном namespace).
+- Sandbox видит **только whitelist** имён. Всё остальное недоступно.
+- Платформенные сервисы (`core/`, `apps/`) = **защищённый внутренний код**, недоступный напрямую.
+
+Доступ из тула к платформе — **только через узкие фасады** (`platform_services.py`), зарегистрированные в namespace.
+
+## АБСОЛЮТНЫЕ ЗАПРЕТЫ в коде тулов
+
+1. **`get_container()`** — дыра: даёт доступ ко всем репозиториям и данным всех компаний.
+2. **Импорты `apps.*` / `core.*`** — строки `from apps.` / `from core.` / `import apps` / `import core` вырезаются `strip_forbidden_platform_import_lines` при сохранении в БД. Код с такими импортами **молча сломается** в sandbox.
+3. **Импорты между модулями тулов** (`from apps.flows.tools.files import _find_file`) — вырезаются вместе с остальными `apps.*`. Хелпер не попадёт в namespace → `NameError` в рантайме.
+4. **Прямой `httpx.AsyncClient` к сервисам платформы** — только `ServiceClient` (уже в namespace).
+
+## Жизненный цикл кода тула
+
+```
+@tool(name="my_tool", ...)     ← Python-модуль в apps/flows/tools/
+        │
+        ▼
+load_tools_to_db               ← inspect.getsource → strip imports → tool_repository (БД)
+        │
+        ▼
+FlowsLoader._inline_single_tool ← код из БД инлайнится в flow config (поле code)
+        │
+        ▼
+ToolRegistry.materialize        ← видит code → CodeTool (sandbox exec)
+        │
+        ▼
+PythonNamespaceBuilder.build()  ← whitelist namespace
+        │
+        ▼
+exec(code, namespace)           ← код тула исполняется С ЭТИМ namespace
+```
+
+**Следствие:** любая зависимость, которой нет в namespace, даст `NameError`. Импорты `apps.*`/`core.*` вырезаны. Тул должен быть **самодостаточен** в рамках namespace.
+
+## Паттерн: как писать тул
+
+### Хелпер нужен ТОЛЬКО этому тулу
+
+Определить **внутри тела функции** (как `_pick_file` в `read_file`):
+
+```python
+@tool(name="my_tool", ...)
+async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
+    def _helper(x):
+        return x.strip().lower()
+
+    return {"result": _helper(arg)}
+```
+
+### Хелпер нужен НЕСКОЛЬКИМ тулам
+
+1. Добавить в `apps/flows/src/eval/state_utils.py`
+2. Зарегистрировать в `apps/flows/src/eval/namespace.py` (`namespace["helper_name"] = helper_name`)
+3. Использовать в тулах как глобальное имя (оно уже в namespace при sandbox exec)
+4. Для FunctionTool-пути (прямой вызов builtin) — дополнительно определить inline-копию внутри функции
+
+Пример: `find_file` (поиск файла в `state.files`), `_extract_ids_from_state`, `_require_context_namespace`.
+
+### Доступ к платформенному сервису
+
+1. Добавить **фасад** в `apps/flows/src/eval/platform_services.py`
+2. Зарегистрировать в `namespace.py`
+3. Вызывать из тула по имени фасада
+
+Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`.
+
+## Whitelist namespace (что доступно в sandbox)
+
+### Модули
+`math`, `ast`, `operator`, `json`, `mimetypes`, `base64`, `datetime` (только `datetime.datetime`)
+
+### Типы
+`Optional`, `List`, `Dict`, `Any`, `Union`, `Tuple`, `Callable`, `Literal`
+
+### Утилиты состояния (`state_utils`)
+`deep_copy_state`, `merge_state`, `get_nested`, `set_nested`, `get_files`, `find_file`, `get_user`, `get_tool_result`, `get_messages`, `add_user_message`, `add_agent_message`, `extract_json`, `ask_user`
+
+### Файлы
+`FileReader`, `FileReadError`, `reader` (экземпляр), `FileWriter`, `FileWriteError`, `FileResponse`, `writer` (экземпляр)
+
+### Interrupt / State
+`FlowInterrupt`, `InterruptKind`, `HandoffMode`, `UserMessageInterrupt`, `OperatorTaskInterrupt`
+
+### A2A-типы
+`Message`, `Part`, `TextPart`, `FilePart`, `DataPart`, `Role`, `Artifact`
+
+### Интеграции
+`ServiceClient`, `ServiceClientError`, `get_context`, `GoogleDocsClient`, `quote`, `httpx` (обёртка `HttpxModule`), `ContentType`
+
+### Фасады (`platform_services`)
+`get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`
+
+### Все публичные тулы
+Все имена из `apps.flows.tools.__all__` доступны по имени.
+
+### Декоратор и базовый класс
+`tool`, `BaseTool` — для создания тулов из inline-кода.
+
+### Builtins
+Урезанный набор из `core/inline_python_eval_policy.py`: `ALLOWED_BUILTINS` + `__import__` (через `safe_inline_import`) + `__build_class__`.
+
+### НЕТ в namespace
+`get_container`, `get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, `importlib` (кроме whitelist).
+
+## Чеклист: добавление нового тула
+
+1. Модуль в `apps/flows/tools/` с декоратором `@tool`
+2. Pydantic `args_schema` с `Field(description=...)` — обязательно
+3. **Никаких импортов `apps.*` / `core.*` в теле функции** — они будут вырезаны
+4. Хелперы — **внутри тела функции** или через namespace (`state_utils.py`)
+5. Платформенные сервисы — **только через фасады** (`platform_services.py`)
+6. Имя в `apps/flows/tools/__init__.py` → `__all__`
+7. Регистрация в `ToolRegistry.register_builtin_tools`
+8. `mock_response` для тестового режима
+
+## Ключевые файлы
+
+| Файл | Назначение |
+|------|-----------|
+| `apps/flows/src/eval/namespace.py` | `PythonNamespaceBuilder` — whitelist namespace |
+| `apps/flows/src/eval/state_utils.py` | Утилиты для inline-кода (find_file, get_files, ask_user, ...) |
+| `apps/flows/src/eval/platform_services.py` | Узкие фасады к платформенным сервисам |
+| `apps/flows/src/eval/compiler.py` | Компиляция и валидация кода |
+| `apps/flows/src/eval/import_policy.py` | Whitelist импортов (`safe_inline_import`) |
+| `apps/flows/src/eval/inline_tool_sanitize.py` | `strip_forbidden_platform_import_lines` |
+| `core/inline_python_eval_policy.py` | `ALLOWED_BUILTINS` |
+| `apps/flows/tools/` | Реализации тулов (публичный код) |
+| `apps/flows/tools/__init__.py` | `__all__` — экспорт имён в namespace |

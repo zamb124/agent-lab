@@ -172,6 +172,42 @@ export class FlowsApp extends PlatformApp {
         }
 
         this._setupUrlSync();
+        this._setupChatSessionUrlSync();
+    }
+
+    /**
+     * После первого сообщения в чате добавляет в URL session={flow_id}:{context_id},
+     * чтобы ссылку можно было передать. Пустой чат — параметр session убирается.
+     */
+    _setupChatSessionUrlSync() {
+        let lastSig = '';
+
+        FlowsStore.subscribe(() => {
+            const s = FlowsStore.state;
+            const flowId = s.flows.currentId;
+            const skillId = s.app.currentSkillId;
+            const contextId = s.chat.contextId;
+            const msgLen = s.chat.messages.length;
+
+            if (!flowId) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const edit = params.get('edit') === '1';
+
+            const sessionId =
+                msgLen > 0 && contextId ? `${flowId}:${contextId}` : null;
+
+            const sig = `${flowId}|${skillId ?? ''}|${sessionId ?? ''}|${edit}|${msgLen}`;
+            if (sig === lastSig) return;
+            lastSig = sig;
+
+            updateUrl({
+                flowId,
+                skillId,
+                sessionId,
+                edit,
+            });
+        });
     }
 
     /**

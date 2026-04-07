@@ -42,6 +42,7 @@ from apps.flows.src.eval.state_utils import (
     ask_user,
     deep_copy_state,
     extract_json,
+    find_file,
     get_files,
     get_messages,
     get_nested,
@@ -172,6 +173,7 @@ class PythonNamespaceBuilder:
         namespace["set_nested"] = set_nested
 
         namespace["get_files"] = get_files
+        namespace["find_file"] = find_file
         namespace["get_user"] = get_user
         namespace["get_tool_result"] = get_tool_result
         namespace["get_messages"] = get_messages

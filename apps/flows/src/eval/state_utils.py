@@ -171,6 +171,34 @@ def get_files(state: 'ExecutionState | dict') -> List[Dict[str, Any]]:
         return []
 
 
+def find_file(files: List[Dict[str, Any]], name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Ищет файл в списке state.files по имени.
+
+    Точное совпадение по полю name, затем case-insensitive подстрока.
+    Без name — первый элемент списка.
+
+    Args:
+        files: Список записей файлов (state.files)
+        name: Имя файла для поиска
+
+    Returns:
+        Запись файла или None
+    """
+    if not files:
+        return None
+    if not name:
+        return files[0]
+    for f in files:
+        if f.get("name") == name:
+            return f
+    name_lower = name.lower()
+    for f in files:
+        if name_lower in (f.get("name") or "").lower():
+            return f
+    return None
+
+
 def read_path_bytes(file_path: str, mode: str = "rb") -> bytes:
     """
     Читает сырые байты или текст с диска по пути (без семантики документа).

@@ -255,17 +255,14 @@ export class PlatformEmbedChat extends LitElement {
             align-items: center;
             gap: 6px;
             margin-top: 6px;
-            padding: 4px 10px;
-            border-radius: 8px;
-            background: var(--embed-chat-input-bg, #f0f0f0);
-            border: 1px solid var(--embed-chat-border);
+            padding: 2px 0;
             font-size: 12px;
             color: var(--embed-chat-accent, #3b82f6);
             text-decoration: none;
             cursor: pointer;
         }
         .embed-file-card:hover {
-            background: var(--embed-chat-border);
+            text-decoration: underline;
         }
         .embed-cred-badges {
             position: absolute;
