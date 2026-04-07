@@ -11,7 +11,7 @@ import json
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, urlunparse
 from uuid import uuid4
 
 from core.config import get_settings
@@ -32,6 +32,14 @@ logger = get_logger(__name__)
 OAUTH_STATE_TTL = 600
 OAUTH_STATE_PREFIX = "integration_oauth_state"
 TOKEN_EXPIRY_BUFFER = timedelta(minutes=2)
+
+
+def _public_service_origin(service_base_url: str) -> str:
+    """Схема + host + port без path/query: в конфиге URL сервиса иногда с суффиксом пути."""
+    parts = urlparse(service_base_url)
+    if parts.scheme and parts.netloc:
+        return urlunparse((parts.scheme, parts.netloc, "", "", "", "")).rstrip("/")
+    return service_base_url.rstrip("/")
 
 
 class OAuthTokenRefreshError(Exception):
@@ -108,8 +116,9 @@ class OAuthService:
 
         if redirect_uri is None:
             settings = get_settings()
-            base_url = settings.server.get_service_url()
-            redirect_uri = f"{base_url}/api/v1/integrations/oauth/callback"
+            origin = _public_service_origin(settings.server.get_service_url())
+            public_segment = settings.server.name
+            redirect_uri = f"{origin}/{public_segment}/api/v1/integrations/oauth/callback"
 
         state_token = secrets.token_urlsafe(32)
         state_key = f"{OAUTH_STATE_PREFIX}:{state_token}"

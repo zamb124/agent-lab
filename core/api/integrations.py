@@ -1,10 +1,10 @@
 """
 Generic OAuth callback и CRUD credentials для всех интеграций (Google, Yandex, ...).
 
-Endpoints:
-  GET  /api/v1/integrations/oauth/callback — OAuth redirect после авторизации
-  GET  /api/v1/integrations/credentials     — список подключённых интеграций пользователя
-  DELETE /api/v1/integrations/credentials/{provider}/{service} — отключить интеграцию
+Endpoints (в приложении под префиксом /{server.name}, напр. flows: /flows/api/v1/...):
+  GET  .../api/v1/integrations/oauth/callback — OAuth redirect после авторизации
+  GET  .../api/v1/integrations/credentials     — список подключённых интеграций пользователя
+  DELETE .../api/v1/integrations/credentials/{provider}/{service} — отключить интеграцию
 """
 
 from __future__ import annotations

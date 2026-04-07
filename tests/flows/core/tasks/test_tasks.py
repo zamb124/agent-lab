@@ -104,8 +104,10 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
     )
 
     async def _list_by_provider_service(self, provider, service, *, limit):
-        _ = (self, provider, service, limit)
-        return [credential]
+        _ = (self, service, limit)
+        if provider == IntegrationProvider.GOOGLE:
+            return [credential]
+        return []
 
     class _FakeEvent:
         def __init__(self, event_id: str):

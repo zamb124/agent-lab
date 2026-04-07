@@ -273,8 +273,9 @@ async def test_auth_google_callback_can_finalize_calendar_integration_state(
     location = response.headers.get("location")
     assert location is not None
     assert location.startswith("/crm/calendar")
-    assert "calendar_provider=google" in location
-    assert "calendar_status=connected" in location
+    assert "integration_provider=google" in location
+    assert "integration_service=calendar" in location
+    assert "integration_status=connected" in location
 
 
 @pytest.mark.asyncio

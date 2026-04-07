@@ -3,7 +3,6 @@ FlowFactory - создание flow из БД.
 """
 
 import copy
-import re
 from typing import Any, Dict, List, Optional
 
 from apps.flows.src.runtime import Flow
@@ -22,9 +21,6 @@ logger = get_logger(__name__)
 
 
 class FlowFactory:
-    _VAR_REF_PATTERN = re.compile(r"^@var:([a-zA-Z_][a-zA-Z0-9_.]*)$")
-    _VAR_TOKEN_PATTERN = re.compile(r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)")
-
     """Фабрика для создания Flow из БД."""
 
     def __init__(
@@ -317,26 +313,7 @@ class FlowFactory:
         if not isinstance(value, str):
             return value
 
-        full_match = self._VAR_REF_PATTERN.match(value)
-        if full_match is not None:
-            path = full_match.group(1)
-            root_key = path.split(".", 1)[0]
-            if root_key not in company_variables:
-                return None
-            return VarResolver.resolve_ref(value, company_variables)
-
-        if "@var:" not in value:
-            return value
-
-        def replace_var(match: re.Match[str]) -> str:
-            path = match.group(1)
-            root_key = path.split(".", 1)[0]
-            if root_key not in company_variables:
-                return ""
-            resolved_value = VarResolver.resolve_ref(f"@var:{path}", company_variables)
-            return str(resolved_value)
-
-        return self._VAR_TOKEN_PATTERN.sub(replace_var, value)
+        return VarResolver.resolve_for_flow_variable(value, company_variables)
 
     async def create_flow(self, config: FlowConfig, skill_id: str = "default") -> Flow:
         """

@@ -108,6 +108,10 @@ settings.server.get_service_url("flows")
 
 В проде за корпоративным прокси задать в конфиге/ENV секцию **`proxy`**: `enabled` и список **`proxies`** (см. `ProxyConfig` в [`core/config/models.py`](../../core/config/models.py)).
 
+## Переменные flow и ссылки `@var:`
+
+При создании runtime flow **`FlowFactory._resolve_variables`** мержит значения секции **`variables`** с переменными компании из БД через **`VarResolver.resolve_for_flow_variable`** ([`core/variables/resolver.py`](../../core/variables/resolver.py)): если корневого ключа компании нет, путь не существует или цепочка `@var:` не сходится — в **`state.variables`** попадает **`None`**, а не строка вида `@var:...` и не «полустрока» с вырезанным токеном. Строки без `@var:` не меняются. Строгий резолв в рантайме маппингов (**`MappingResolver`**, **`ExternalAPIClient`**) по-прежнему через **`VarResolver.resolve_ref` / `resolve_text`** с **`VariableResolutionError`** при отсутствии ключа в переданном словаре.
+
 ## Типичные ошибки
 
 - Неверное имя ENV (одинарное `_`, нижний регистр секций).

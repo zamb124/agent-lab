@@ -181,7 +181,7 @@ external_flow = await container.flow_discovery.register_agent(
 | `core/integrations/models.py` | `IntegrationProvider`, `IntegrationCredential`, `OAuthProviderConfig` |
 | `core/integrations/repository.py` | `IntegrationCredentialRepository` — CRUD для `integration_credentials` (shared БД) |
 | `core/integrations/oauth_service.py` | `OAuthService` — `build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
-| `core/api/integrations.py` | Generic OAuth callback `GET /api/v1/integrations/oauth/callback` |
+| `core/api/integrations.py` | OAuth callback: `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`); дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём |
 
 ### Приоритет credentials в тулах
 

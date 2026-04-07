@@ -330,6 +330,33 @@ class TestOAuthService:
         assert state_data["user_id"] == f"user-{unique_id}"
 
     @pytest.mark.asyncio
+    async def test_build_auth_url_default_redirect_uri_includes_service_path(
+        self,
+        oauth_service: OAuthService,
+        fake_storage: FakeStorage,
+        unique_id: str,
+        monkeypatch,
+    ) -> None:
+        """Callback смонтирован как /{server.name}/api/v1/integrations/... (см. core.app.factory)."""
+        from urllib.parse import parse_qs, urlparse
+
+        from core.config import get_settings
+
+        _patch_auth_config(monkeypatch)
+
+        url = await oauth_service.build_auth_url(
+            provider=IntegrationProvider.GOOGLE,
+            service="docs",
+            scopes=["https://www.googleapis.com/auth/documents"],
+            user_id=f"user-{unique_id}",
+            company_id=f"company-{unique_id}",
+        )
+
+        redirect_uri = parse_qs(urlparse(url).query)["redirect_uri"][0]
+        segment = get_settings().server.name
+        assert f"/{segment}/api/v1/integrations/oauth/callback" in redirect_uri
+
+    @pytest.mark.asyncio
     async def test_is_expired(self) -> None:
         now = datetime.now(timezone.utc)
         expired = IntegrationCredential(
