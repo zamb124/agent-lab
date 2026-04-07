@@ -65,6 +65,21 @@ A2A_METHODS = {
     "agent/getAuthenticatedExtendedCard",
 }
 
+_STREAM_METHODS = {"message/stream", "tasks/resubscribe"}
+
+
+def _sse_error_response(rpc_id: str | None, code: int, message: str) -> StreamingResponse:
+    """JSON-RPC ошибка в виде SSE, чтобы клиент мог её распарсить."""
+    error_payload = json.dumps(
+        {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": code, "message": message}},
+        ensure_ascii=False,
+    )
+
+    async def _gen():
+        yield f"data: {error_payload}\n\n"
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
+
 
 async def _get_flow_config(flow_id: str, version: Optional[str] = None) -> Optional[FlowConfig]:
     """
@@ -395,9 +410,14 @@ async def json_rpc_handler(
 
     except PermissionDenied as e:
         logger.warning(f"Permission denied for {method}: {e}")
-        return {"jsonrpc": "2.0", "id": rpc_id, "error": e.error.to_json_rpc_error()}
+        err = e.error.to_json_rpc_error()
+        if method in _STREAM_METHODS:
+            return _sse_error_response(rpc_id, err.get("code", -32000), err.get("message", str(e)))
+        return {"jsonrpc": "2.0", "id": rpc_id, "error": err}
     except Exception as e:
         logger.exception(f"Error handling {method}: {e}")
+        if method in _STREAM_METHODS:
+            return _sse_error_response(rpc_id, -32000, str(e))
         return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32000, "message": str(e)}}
 
 

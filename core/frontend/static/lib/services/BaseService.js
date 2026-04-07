@@ -73,6 +73,15 @@ export class BaseService {
             throw new Error(this._formatError(errorData, response.status));
         }
 
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('text/event-stream')) {
+            const body = await response.json().catch(() => null);
+            if (body?.error) {
+                throw new Error(body.error.message || JSON.stringify(body.error));
+            }
+            throw new Error(`Unexpected response content-type: ${contentType}`);
+        }
+
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';

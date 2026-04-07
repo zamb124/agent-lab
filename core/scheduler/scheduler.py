@@ -2,9 +2,14 @@
 TaskiqScheduler factory.
 """
 
+from typing import Any
+
 from taskiq import TaskiqScheduler
 from taskiq.abc.schedule_source import ScheduleSource
+from taskiq.exceptions import ScheduledTaskCancelledError
+from taskiq.kicker import AsyncKicker
 from taskiq.scheduler.scheduled_task import ScheduledTask
+from taskiq.utils import maybe_awaitable
 
 from core.logging import get_logger
 from core.scheduler.source import get_schedule_source
@@ -23,6 +28,14 @@ _SCHEDULER_DISPATCH_BROKERS = (
     rag_broker,
     sync_broker,
 )
+
+_QUEUE_NAME_TO_BROKER: dict[str, Any] = {
+    "flows_worker": flows_broker,
+    "idle": idle_broker,
+    "crm": crm_broker,
+    "rag": rag_broker,
+    "sync": sync_broker,
+}
 
 
 def require_tasks_registered_for_scheduler(
@@ -55,9 +68,37 @@ def require_tasks_registered_for_scheduler(
 
 class QueueAwareTaskiqScheduler(TaskiqScheduler):
     async def on_ready(self, source: ScheduleSource, task: ScheduledTask) -> None:
-        if "queue_name" not in task.labels:
+        """
+        TaskIQ по умолчанию шлёт kick через self.broker (flows). У RedisStreamBroker
+        очередь = labels['queue_name'] or broker.queue_name; пустая строка даёт fallback
+        на flows_worker, из-за чего idle-задачи оказываются в flows и воркер их не находит.
+        Здесь нормализуем queue_name и кикаем через брокер целевой очереди.
+        """
+        raw_qn = task.labels.get("queue_name")
+        if raw_qn is None or (isinstance(raw_qn, str) and not raw_qn.strip()):
             task.labels["queue_name"] = _resolve_queue_name(task.task_name)
-        await super().on_ready(source, task)
+        queue_name = str(task.labels["queue_name"]).strip()
+        task.labels["queue_name"] = queue_name
+        target_broker = _QUEUE_NAME_TO_BROKER.get(queue_name)
+        if target_broker is None:
+            raise ValueError(f"Неизвестная очередь для dispatch планировщика: {queue_name}")
+        try:
+            await maybe_awaitable(source.pre_send(task))
+        except ScheduledTaskCancelledError:
+            logger.info("Scheduled task %s has been cancelled.", task.task_name)
+        else:
+            await (
+                AsyncKicker(task.task_name, target_broker, task.labels)
+                .with_labels(
+                    schedule_id=task.schedule_id,
+                )
+                .with_task_id(task_id=task.task_id)
+                .kiq(
+                    *task.args,
+                    **task.kwargs,
+                )
+            )
+            await maybe_awaitable(source.post_send(task))
 
 
 def _resolve_queue_name(task_name: str) -> str:

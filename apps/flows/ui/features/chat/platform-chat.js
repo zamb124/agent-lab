@@ -500,9 +500,11 @@ export class PlatformChat extends PlatformIsland {
                 const base64 = reader.result.split(',')[1];
                 resolve({
                     kind: 'file',
-                    name: file.name,
-                    mimeType: file.type,
-                    data: base64,
+                    file: {
+                        name: file.name,
+                        mimeType: file.type || 'application/octet-stream',
+                        bytes: base64,
+                    },
                 });
             };
             reader.onerror = reject;
