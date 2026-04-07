@@ -29,6 +29,8 @@ from a2a.types import (
 import apps.flows.tools as flows_tools
 from apps.flows.src.eval.import_policy import safe_inline_import
 from apps.flows.src.eval.platform_services import (
+    get_file_bytes,
+    get_oauth_service,
     get_operator_handoff_service,
     get_schedule_service,
 )
@@ -203,6 +205,8 @@ class PythonNamespaceBuilder:
         namespace["get_context"] = get_context
         namespace["get_operator_handoff_service"] = get_operator_handoff_service
         namespace["get_schedule_service"] = get_schedule_service
+        namespace["get_oauth_service"] = get_oauth_service
+        namespace["get_file_bytes"] = get_file_bytes
         namespace["quote"] = quote
         namespace["_require_context_namespace"] = _inline_require_context_namespace
         namespace["_compact_entity_hit"] = _inline_compact_entity_hit

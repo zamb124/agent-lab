@@ -57,9 +57,9 @@ class OAuthService:
         self._repository = repository
         self._storage = storage
 
-    def get_provider_config(self, provider: IntegrationProvider) -> OAuthProviderConfig:
+    def get_provider_config(self, provider: IntegrationProvider | str) -> OAuthProviderConfig:
         settings = get_settings()
-        provider_key = provider.value
+        provider_key = provider.value if hasattr(provider, "value") else str(provider)
         auth_provider = settings.auth.providers.get(provider_key)
         if auth_provider is None or not auth_provider.enabled:
             raise ValueError(f"OAuth provider '{provider_key}' is disabled or not configured")
@@ -143,6 +143,10 @@ class OAuthService:
                 "include_granted_scopes": "true",
             }
         )
+        logger.info(
+            "OAuth auth URL built: provider=%s service=%s user=%s company=%s",
+            provider.value, service, user_id, company_id,
+        )
         return f"{oauth_config.auth_url}?{query}"
 
     async def complete_oauth(
@@ -205,6 +209,12 @@ class OAuthService:
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
+            if token_response.status_code >= 400:
+                logger.error(
+                    "OAuth token exchange failed: provider=%s service=%s status=%d body=%s",
+                    provider_str, service, token_response.status_code,
+                    token_response.text[:500],
+                )
             token_response.raise_for_status()
             token_payload = token_response.json()
 
@@ -272,6 +282,11 @@ class OAuthService:
         При invalid_grant удаляет credential и бросает OAuthTokenRefreshError.
         """
         if not credential.refresh_token:
+            logger.warning(
+                "OAuth refresh impossible (no refresh_token), deleting credential: "
+                "provider=%s service=%s user=%s",
+                credential.provider, credential.service, credential.user_id,
+            )
             await self._repository.delete_by_user_provider_service(
                 company_id=credential.company_id,
                 user_id=credential.user_id,
@@ -305,6 +320,12 @@ class OAuthService:
             oauth_error_desc = payload.get("error_description") if isinstance(payload, dict) else None
 
             if oauth_error == "invalid_grant":
+                logger.warning(
+                    "OAuth refresh invalid_grant, deleting credential: "
+                    "provider=%s service=%s user=%s desc=%s",
+                    credential.provider, credential.service, credential.user_id,
+                    oauth_error_desc,
+                )
                 await self._repository.delete_by_user_provider_service(
                     company_id=credential.company_id,
                     user_id=credential.user_id,
@@ -380,6 +401,10 @@ class OAuthService:
 
         if credential.is_expired() or self._is_about_to_expire(credential):
             credential = await self.refresh_token(credential)
+            logger.info(
+                "OAuth token auto-refreshed: provider=%s service=%s user=%s",
+                provider, service, user_id,
+            )
 
         return credential
 

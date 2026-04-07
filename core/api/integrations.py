@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from starlette.responses import HTMLResponse, RedirectResponse
 
@@ -56,11 +57,16 @@ async def delete_credential(
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
 
+    try:
+        provider_enum = IntegrationProvider(provider)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Unknown provider: {provider}")
+
     repository = request.app.state.container.integration_credential_repository
     deleted = await repository.delete_by_user_provider_service(
         company_id=ctx.active_company.company_id,
         user_id=ctx.user.user_id,
-        provider=IntegrationProvider(provider),
+        provider=provider_enum,
         service=service,
     )
     if not deleted:
@@ -90,10 +96,17 @@ async def oauth_callback(
         raise HTTPException(status_code=400, detail="Missing required parameters: code and state")
 
     oauth_service = request.app.state.container.oauth_service
-    credential, return_path, flow_context = await oauth_service.complete_oauth(
-        state_token=state,
-        code=code,
-    )
+    try:
+        credential, return_path, flow_context = await oauth_service.complete_oauth(
+            state_token=state,
+            code=code,
+        )
+    except ValueError as exc:
+        logger.warning("OAuth complete_oauth ValueError: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc))
+    except httpx.HTTPStatusError as exc:
+        logger.error("OAuth provider token exchange error: status=%d", exc.response.status_code)
+        raise HTTPException(status_code=502, detail="OAuth provider error")
 
     if flow_context is not None:
         await _resume_flow(flow_context, credential.provider, credential.service)
@@ -129,6 +142,8 @@ async def _resume_flow(
     channel = flow_context.get("channel", "a2a")
     user_id = flow_context.get("user_id", "")
 
+    trace_context = flow_context.get("trace_context")
+
     await process_flow_task.kiq(
         flow_id=flow_id,
         session_id=session_id,
@@ -142,7 +157,7 @@ async def _resume_flow(
         is_resume=True,
         files=[],
         context_data=context_data,
-        trace_context=None,
+        trace_context=trace_context,
     )
     logger.info(
         "OAuth auto-resume kicked: flow_id=%s session_id=%s provider=%s service=%s",

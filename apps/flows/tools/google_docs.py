@@ -1,14 +1,17 @@
 """
 Платформенные тулы Google Docs: создание, чтение, редактирование, шаринг.
 
-Авторизация (порядок приоритета):
-  1. Company-level: state.variables
-     - "google_service_account"    — JSON ключа Service Account;
-     - "google_impersonate_email"  — email для domain-wide delegation;
-     - "google_access_token"       — статичный OAuth2 Bearer-токен.
-  2. Per-user OAuth: integration_credentials в БД
-     (get_context → company_id + user_id → OAuthService.get_valid_token)
-  3. Нет credentials → FlowInterrupt с OAuthInterrupt (auto-resume после OAuth callback).
+Переменные агента (state.variables) для авторизации:
+  google_service_account   — JSON ключ Service Account
+  google_access_token      — статичный OAuth2 Bearer-токен
+  google_impersonate_email — email для domain-wide delegation (только с SA)
+
+Если ни одна переменная не задана — per-user OAuth:
+  платформа предлагает пользователю авторизоваться, flow ставится на паузу,
+  после OAuth callback автоматически продолжается.
+
+Безопасность: тулы НЕ используют get_container().
+Доступ к сервисам только через фасады platform_services.py.
 """
 
 from __future__ import annotations
@@ -17,11 +20,15 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.eval.platform_services import get_file_bytes, get_oauth_service
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools import tool
 from core.clients.google_docs_client import GoogleDocsClient
+from core.context import get_context
+from core.integrations.models import IntegrationProvider
 from core.logging import get_logger
 from core.state.interrupt import OAuthInterrupt
+from core.tracing.context import get_current_trace_context
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -34,68 +41,58 @@ GOOGLE_DOCS_SCOPES = [
 ]
 
 
-async def _resolve_gdocs_client(state: "ExecutionState") -> GoogleDocsClient:
+async def _get_user_google_token(state: "ExecutionState", service: str) -> str:
     """
-    Трёхступенчатый резолв credentials для Google Docs.
+    Per-user OAuth: ищет сохранённый токен в БД, если нет — бросает FlowInterrupt
+    с ссылкой на авторизацию Google. Flow ставится на паузу и автоматически
+    продолжается после OAuth callback.
 
-    Возвращает GoogleDocsClient при успехе.
-    При отсутствии credentials бросает FlowInterrupt(body=OAuthInterrupt(...))
-    с auth URL и flow_context для auto-resume после OAuth callback.
+    Возвращает access_token (строка).
     """
-    credentials_json = state.variables.get("google_service_account")
-    access_token = state.variables.get("google_access_token")
-    subject = state.variables.get("google_impersonate_email")
+    ctx = get_context()
+    if ctx is None or ctx.active_company is None or ctx.user is None:
+        raise ValueError("Контекст с активной компанией обязателен для Google Docs")
 
-    if not credentials_json and not access_token:
-        from apps.flows.src.container import get_container
-        from core.context import get_context
-        from core.integrations.models import IntegrationProvider
+    oauth = get_oauth_service()
+    credential = await oauth.get_valid_token(
+        company_id=ctx.active_company.company_id,
+        user_id=ctx.user.user_id,
+        provider=IntegrationProvider.GOOGLE,
+        service=service,
+    )
+    if credential:
+        logger.debug("Google Docs: per-user OAuth credential found, user=%s", ctx.user.user_id)
+        return credential.access_token
 
-        ctx = get_context()
-        if ctx is None or ctx.active_company is None or ctx.user is None:
-            raise ValueError("Контекст с активной компанией обязателен для Google Docs")
-
-        container = get_container()
-        credential = await container.oauth_service.get_valid_token(
-            company_id=ctx.active_company.company_id,
-            user_id=ctx.user.user_id,
-            provider=IntegrationProvider.GOOGLE,
-            service="docs",
-        )
-        if credential:
-            access_token = credential.access_token
-        else:
-            flow_context: dict[str, Any] = {
-                "flow_id": state.session_flow_id,
-                "session_id": state.session_id,
-                "task_id": state.task_id,
-                "context_id": state.context_id,
-                "skill_id": state.skill_id,
-                "channel": "a2a",
-                "user_id": ctx.user.user_id,
-                "context_data": ctx.model_dump(mode="json"),
-            }
-            auth_url = await container.oauth_service.build_auth_url(
-                provider=IntegrationProvider.GOOGLE,
-                service="docs",
-                scopes=GOOGLE_DOCS_SCOPES,
-                user_id=ctx.user.user_id,
-                company_id=ctx.active_company.company_id,
-                flow_context=flow_context,
-            )
-            raise FlowInterrupt(
-                body=OAuthInterrupt(
-                    question="Для работы с Google Docs нужна авторизация Google",
-                    auth_url=auth_url,
-                    provider="google",
-                    service="docs",
-                ),
-            )
-
-    return GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
+    flow_context: dict[str, Any] = {
+        "flow_id": state.session_flow_id,
+        "session_id": state.session_id,
+        "task_id": state.task_id,
+        "context_id": state.context_id,
+        "skill_id": state.skill_id,
+        "channel": "a2a",
+        "user_id": ctx.user.user_id,
+        "context_data": ctx.model_dump(mode="json"),
+    }
+    saved_trace_context = get_current_trace_context()
+    if saved_trace_context is not None:
+        flow_context["trace_context"] = saved_trace_context
+    auth_url = await oauth.build_auth_url(
+        provider=IntegrationProvider.GOOGLE,
+        service=service,
+        scopes=GOOGLE_DOCS_SCOPES,
+        user_id=ctx.user.user_id,
+        company_id=ctx.active_company.company_id,
+        flow_context=flow_context,
+    )
+    logger.info("Google Docs: no credential, raising OAuthInterrupt for user=%s", ctx.user.user_id)
+    raise FlowInterrupt(
+        body=OAuthInterrupt(
+            question="Для работы с Google Docs нужна авторизация Google",
+            auth_url=auth_url,
+            provider="google",
+            service=service,
+        ),
     )
 
 
@@ -290,19 +287,21 @@ async def gdocs_create_document(
     file_id: Optional[str] = None,
     state: Optional["ExecutionState"] = None,
 ) -> dict:
-    client = await _resolve_gdocs_client(state)
+    credentials_json = state.variables.get("google_service_account")
+    access_token = state.variables.get("google_access_token")
+    subject = state.variables.get("google_impersonate_email")
+
+    if not credentials_json and not access_token:
+        access_token = await _get_user_google_token(state, service="docs")
+
+    client = GoogleDocsClient(
+        credentials_json=credentials_json,
+        access_token=access_token,
+        subject=subject,
+    )
 
     if file_id:
-        from apps.flows.src.container import get_container
-        from core.files import S3ClientFactory
-
-        container = get_container()
-        record = await container.file_repository.get(file_id)
-        if record is None:
-            raise ValueError(f"Файл {file_id} не найден в хранилище")
-        s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-        docx_bytes = await s3.download_bytes(record.s3_key)
-
+        docx_bytes = await get_file_bytes(file_id)
         result = await client.upload_docx(title, docx_bytes)
         return {
             "success": True,
@@ -332,7 +331,19 @@ async def gdocs_read_document(
     document_id: str,
     state: Optional["ExecutionState"] = None,
 ) -> dict:
-    client = await _resolve_gdocs_client(state)
+    credentials_json = state.variables.get("google_service_account")
+    access_token = state.variables.get("google_access_token")
+    subject = state.variables.get("google_impersonate_email")
+
+    if not credentials_json and not access_token:
+        access_token = await _get_user_google_token(state, service="docs")
+
+    client = GoogleDocsClient(
+        credentials_json=credentials_json,
+        access_token=access_token,
+        subject=subject,
+    )
+
     text = await client.read_as_text(document_id)
     return {"success": True, "document_id": document_id, "text": text}
 
@@ -349,7 +360,19 @@ async def gdocs_append_text(
     text: str,
     state: Optional["ExecutionState"] = None,
 ) -> dict:
-    client = await _resolve_gdocs_client(state)
+    credentials_json = state.variables.get("google_service_account")
+    access_token = state.variables.get("google_access_token")
+    subject = state.variables.get("google_impersonate_email")
+
+    if not credentials_json and not access_token:
+        access_token = await _get_user_google_token(state, service="docs")
+
+    client = GoogleDocsClient(
+        credentials_json=credentials_json,
+        access_token=access_token,
+        subject=subject,
+    )
+
     await client.append_text(document_id, text)
     return {"success": True, "document_id": document_id}
 
@@ -367,7 +390,19 @@ async def gdocs_insert_text(
     index: int,
     state: Optional["ExecutionState"] = None,
 ) -> dict:
-    client = await _resolve_gdocs_client(state)
+    credentials_json = state.variables.get("google_service_account")
+    access_token = state.variables.get("google_access_token")
+    subject = state.variables.get("google_impersonate_email")
+
+    if not credentials_json and not access_token:
+        access_token = await _get_user_google_token(state, service="docs")
+
+    client = GoogleDocsClient(
+        credentials_json=credentials_json,
+        access_token=access_token,
+        subject=subject,
+    )
+
     await client.insert_text(document_id, text, index)
     return {"success": True, "document_id": document_id}
 
@@ -386,7 +421,19 @@ async def gdocs_find_replace(
     match_case: bool = True,
     state: Optional["ExecutionState"] = None,
 ) -> dict:
-    client = await _resolve_gdocs_client(state)
+    credentials_json = state.variables.get("google_service_account")
+    access_token = state.variables.get("google_access_token")
+    subject = state.variables.get("google_impersonate_email")
+
+    if not credentials_json and not access_token:
+        access_token = await _get_user_google_token(state, service="docs")
+
+    client = GoogleDocsClient(
+        credentials_json=credentials_json,
+        access_token=access_token,
+        subject=subject,
+    )
+
     result = await client.find_and_replace(
         document_id, find, replace, match_case=match_case
     )
@@ -414,7 +461,19 @@ async def gdocs_delete_range(
     end_index: int,
     state: Optional["ExecutionState"] = None,
 ) -> dict:
-    client = await _resolve_gdocs_client(state)
+    credentials_json = state.variables.get("google_service_account")
+    access_token = state.variables.get("google_access_token")
+    subject = state.variables.get("google_impersonate_email")
+
+    if not credentials_json and not access_token:
+        access_token = await _get_user_google_token(state, service="docs")
+
+    client = GoogleDocsClient(
+        credentials_json=credentials_json,
+        access_token=access_token,
+        subject=subject,
+    )
+
     await client.delete_range(document_id, start_index, end_index)
     return {"success": True, "document_id": document_id}
 
@@ -433,7 +492,18 @@ async def gdocs_share_document(
     anyone: bool = False,
     state: Optional["ExecutionState"] = None,
 ) -> dict:
-    client = await _resolve_gdocs_client(state)
+    credentials_json = state.variables.get("google_service_account")
+    access_token = state.variables.get("google_access_token")
+    subject = state.variables.get("google_impersonate_email")
+
+    if not credentials_json and not access_token:
+        access_token = await _get_user_google_token(state, service="docs")
+
+    client = GoogleDocsClient(
+        credentials_json=credentials_json,
+        access_token=access_token,
+        subject=subject,
+    )
 
     if anyone:
         await client.share_document_anyone(document_id, role=role)
