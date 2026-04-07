@@ -399,6 +399,12 @@ export class PlatformChat extends PlatformIsland {
             this._streamAbortController.abort();
             this._streamAbortController = null;
         }
+        const taskId = this.state.value.currentTaskId;
+        if (taskId && this.flowId) {
+            this.a2a.cancelTask(this.flowId, taskId).catch(err => {
+                console.warn('[PlatformChat] Failed to cancel task:', err);
+            });
+        }
     }
 
     async _onSendMessage(e) {

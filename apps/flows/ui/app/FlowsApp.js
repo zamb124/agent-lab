@@ -6,6 +6,7 @@ import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/Platform
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { A2AService } from '../services/a2a.service.js';
 import { FlowsStore } from '../store/flows.store.js';
+import { readUrlState, updateUrl, removeUrlParams } from '../utils/url-sync.js';
 import { canManageOperatorWorkbench } from '../utils/operator-workbench-access.js';
 import '../components/sidebar/flows-sidebar.js';
 import '../features/operator/operator-workbench-page.js';
@@ -131,7 +132,8 @@ export class FlowsApp extends PlatformApp {
     async initServices() {
         await super.initServices();
         
-        this.services.register('a2a', new A2AService('/flows'));
+        const a2a = new A2AService('/flows');
+        this.services.register('a2a', a2a);
         
         this.state = this.use(s => {
             const currentFlow = s.flows.list.find(a => a.flow_id === s.flows.currentId);
@@ -146,12 +148,87 @@ export class FlowsApp extends PlatformApp {
         
         const path = window.location.pathname.replace(/\/$/, '') || '';
         this._operatorWorkbench = path.endsWith('/operator');
-        const urlParts = window.location.pathname.split('/');
-        const flowIdFromUrl = urlParts[urlParts.length - 1];
-        
-        if (!this._operatorWorkbench && flowIdFromUrl && flowIdFromUrl !== 'flows') {
-            FlowsStore.setCurrentFlow(flowIdFromUrl);
+
+        if (this._operatorWorkbench) return;
+
+        const urlState = readUrlState();
+        const flowId = urlState.flowId;
+
+        if (flowId) {
+            if (urlState.skillId) {
+                FlowsStore.setCurrentFlowAndSkill(flowId, urlState.skillId);
+            } else {
+                FlowsStore.setCurrentFlow(flowId);
+            }
         }
+
+        if (flowId && urlState.sessionId) {
+            this._restoreSessionFromUrl(a2a, urlState.sessionId, flowId);
+        }
+
+        if (flowId && urlState.edit) {
+            this._pendingEditFlowId = flowId;
+            this._pendingEditSkillId = urlState.skillId;
+        }
+
+        this._setupUrlSync();
+    }
+
+    /**
+     * Восстановить сессию из URL-параметра session=...
+     */
+    async _restoreSessionFromUrl(a2a, sessionId, flowId) {
+        try {
+            const state = await a2a.getSessionState(sessionId);
+            const messages = state?.messages || [];
+            const taskId = state?.task_id || null;
+            FlowsStore.loadSession(sessionId, messages, flowId, taskId);
+        } catch (err) {
+            console.error('[FlowsApp] Failed to restore session from URL:', err);
+        }
+    }
+
+    _openEditorFromUrl(flowId, skillId) {
+        const modal = document.createElement('flow-edit-modal');
+        modal.flowId = flowId;
+        if (skillId) modal.skillId = skillId;
+        document.body.appendChild(modal);
+        requestAnimationFrame(() => modal.setAttribute('open', ''));
+        modal.addEventListener('close', () => {
+            modal.remove();
+            removeUrlParams('edit');
+        });
+    }
+
+    _setupUrlSync() {
+        let prevFlowId = FlowsStore.state.flows.currentId;
+        let prevSkillId = FlowsStore.state.app.currentSkillId;
+
+        FlowsStore.subscribe(() => {
+            const s = FlowsStore.state;
+            const flowId = s.flows.currentId;
+            const skillId = s.app.currentSkillId;
+
+            if (flowId === prevFlowId && skillId === prevSkillId) return;
+
+            const flowChanged = flowId !== prevFlowId;
+            prevFlowId = flowId;
+            prevSkillId = skillId;
+
+            if (!flowId) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const keepEdit = params.get('edit') === '1';
+            // При смене flow сессия становится невалидной
+            const keepSession = flowChanged ? null : params.get('session');
+
+            updateUrl({
+                flowId,
+                skillId,
+                sessionId: keepSession,
+                edit: keepEdit,
+            });
+        });
     }
 
     async checkAuth() {
@@ -198,6 +275,12 @@ export class FlowsApp extends PlatformApp {
                 `;
             }
             return html`<operator-workbench-page></operator-workbench-page>`;
+        }
+
+        if (this._pendingEditFlowId) {
+            this._openEditorFromUrl(this._pendingEditFlowId, this._pendingEditSkillId);
+            this._pendingEditFlowId = null;
+            this._pendingEditSkillId = null;
         }
 
         const { currentFlowId, currentFlowName, currentSkillId, currentSkillName } = this.state.value;

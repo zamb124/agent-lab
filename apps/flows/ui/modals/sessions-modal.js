@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { FlowsStore } from '../store/flows.store.js';
+import { setUrlParam, removeUrlParams } from '../utils/url-sync.js';
 import { confirm } from './confirm-modal.js';
 
 export class SessionsModal extends PlatformModal {
@@ -259,6 +260,8 @@ export class SessionsModal extends PlatformModal {
         const sessionTaskId = state?.task_id || null;
         
         FlowsStore.loadSession(session.session_id, messages, session.flow_id, sessionTaskId);
+        setUrlParam('session', session.session_id);
+        removeUrlParams('edit');
         
         this.loading = false;
         this.close();

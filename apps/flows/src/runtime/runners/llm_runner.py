@@ -21,6 +21,7 @@ from apps.flows.src.runtime.a2a_messages import (
     build_user_message as new_user_message,
 )
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.state.cancellation import check_cancellation
 from apps.flows.src.runtime.llm_override_params import (
     split_llm_override_for_client,
     stream_kwargs_from_override,
@@ -327,6 +328,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             try:
                 while iteration < max_iterations:
                     iteration += 1
+
+                    await check_cancellation()
+
                     logger.debug(f"[llm_node:{llm_node_label}] ReAct iteration {iteration} (streaming)")
 
                     messages = self._messages_for_llm_context(state)
@@ -679,6 +683,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             max_tokens=max_tok,
             **stream_kw,
         ):
+            await check_cancellation()
             yield event
 
     async def _execute_tools_parallel(

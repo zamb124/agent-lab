@@ -217,6 +217,22 @@ export class A2AService extends BaseService {
         return this.postStream(url, body, onEvent, { signal });
     }
 
+    /**
+     * Отмена задачи на бекенде (A2A JSON-RPC tasks/cancel).
+     * @param {string} flowId
+     * @param {string} taskId
+     */
+    async cancelTask(flowId, taskId) {
+        const url = `${this.baseUrl}/api/v1/${flowId}`;
+        const body = {
+            jsonrpc: '2.0',
+            id: Date.now().toString(),
+            method: 'tasks/cancel',
+            params: { id: taskId },
+        };
+        return this.post(url, body);
+    }
+
     async listOperatorQueues() {
         return this.get('/api/v1/operator/queues');
     }

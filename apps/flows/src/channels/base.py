@@ -41,6 +41,7 @@ from apps.flows.src.models.flow_config import Edge, SkillConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
+from apps.flows.src.state.cancellation import CancellationToken, FlowCancelled, set_cancellation_token
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
@@ -562,7 +563,18 @@ class BaseChannel(ABC):
             if params.is_resume and state.interrupt:
                 state.content = params.content
 
-            state = await runtime_flow.run(state)
+            cancellation_token = CancellationToken(effective_task_id, container.redis_client)
+            set_cancellation_token(cancellation_token)
+
+            try:
+                state = await runtime_flow.run(state)
+            except FlowCancelled:
+                logger.info(f"Flow cancelled: task_id={effective_task_id}")
+                await emitter.emit_cancelled()
+                return {"response": "", "status": "canceled"}
+            finally:
+                await cancellation_token.cleanup()
+                set_cancellation_token(None)
 
             final_response = state.response or ""
 

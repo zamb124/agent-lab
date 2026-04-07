@@ -24,6 +24,7 @@ from opentelemetry import trace
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt, BreakpointInterrupt, NodeCallLimitError
 from apps.flows.src.container import get_container
+from apps.flows.src.state.cancellation import check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from core.state import ExecutionState
 from core.state.interrupt import OperatorTaskInterrupt
@@ -224,6 +225,8 @@ class Flow:
                         flow_id=self.flow_id,
                         max_iterations=MAX_ITERATIONS
                     )
+
+                await check_cancellation()
 
                 # Валидация и подготовка нод
                 for node_id in current_nodes:

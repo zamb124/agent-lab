@@ -7,6 +7,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { FlowsStore } from '../../store/flows.store.js';
+import { setUrlParam, removeUrlParams } from '../../utils/url-sync.js';
 import { canManageOperatorWorkbench } from '../../utils/operator-workbench-access.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/sidebar-section.js';
@@ -188,15 +189,7 @@ export class FlowsSidebar extends PlatformElement {
     }
 
     _editFlow(flowId) {
-        const modal = document.createElement('flow-edit-modal');
-        modal.flowId = flowId;
-        document.body.appendChild(modal);
-        
-        requestAnimationFrame(() => {
-            modal.setAttribute('open', '');
-        });
-        
-        modal.addEventListener('close', () => modal.remove());
+        this._openEditor(flowId, null);
     }
 
     _openSessions() {
@@ -230,19 +223,11 @@ export class FlowsSidebar extends PlatformElement {
                 } else {
                     FlowsStore.setCurrentFlow(flowId);
                 }
+                removeUrlParams('session', 'edit');
                 this.closeMobile();
                 break;
             case 'edit':
-                if (skillId) {
-                    const modal = document.createElement('flow-edit-modal');
-                    modal.flowId = flowId;
-                    modal.skillId = skillId;
-                    document.body.appendChild(modal);
-                    requestAnimationFrame(() => modal.setAttribute('open', ''));
-                    modal.addEventListener('close', () => modal.remove());
-                } else {
-                    this._editFlow(flowId);
-                }
+                this._openEditor(flowId, skillId);
                 break;
             case 'delete':
                 this._deleteFlow(flowId);
@@ -257,6 +242,22 @@ export class FlowsSidebar extends PlatformElement {
                 FlowsStore.toggleExpandedFlow(flowId);
                 break;
         }
+    }
+
+    _openEditor(flowId, skillId) {
+        const modal = document.createElement('flow-edit-modal');
+        modal.flowId = flowId;
+        if (skillId) modal.skillId = skillId;
+        document.body.appendChild(modal);
+        requestAnimationFrame(() => modal.setAttribute('open', ''));
+
+        setUrlParam('edit', '1');
+        if (skillId) setUrlParam('skill', skillId);
+
+        modal.addEventListener('close', () => {
+            modal.remove();
+            removeUrlParams('edit');
+        });
     }
 
     async _deleteFlow(flowId) {

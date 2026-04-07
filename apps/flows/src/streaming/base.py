@@ -175,6 +175,19 @@ class BaseEmitter(ABC):
 
         await self._publish(event)
     
+    async def emit_cancelled(self) -> None:
+        """Публикует событие отмены выполнения."""
+        event = TaskStatusUpdateEvent(
+            task_id=self.state.task_id,
+            context_id=self.state.context_id,
+            status=TaskStatus(
+                state=TaskState.canceled,
+                message=self._create_message("Task cancelled"),
+            ),
+            final=True,
+        )
+        await self._publish(event)
+
     async def emit_error(
         self,
         error: str,

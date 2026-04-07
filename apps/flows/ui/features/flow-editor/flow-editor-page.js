@@ -7,6 +7,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { FlowsStore } from '../../store/flows.store.js';
+import { setUrlParam } from '../../utils/url-sync.js';
 import { injectEditorStyles } from './flow-editor-styles.js';
 import { confirm } from '../../modals/confirm-modal.js';
 import '../../modals/code-modal.js';
@@ -264,6 +265,9 @@ export class FlowEditorPage extends PlatformElement {
         });
         
         this._updateCanvasDirectly(data, inherited);
+
+        const urlSkillId = (skillId && skillId !== 'base') ? skillId : null;
+        setUrlParam('skill', urlSkillId);
 
         if (this.flowId) {
             await FlowsStore.refreshPreviewExecutionState(this.flowId, this.a2a, skillId);

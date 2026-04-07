@@ -36,6 +36,7 @@ from a2a.utils.message import get_message_text, new_agent_text_message
 from apps.flows.src.channels.base import BaseChannel
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
+from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from core.context import set_current_channel
 from apps.flows.src.evaluation.service import EvaluationService
 from apps.flows.src.files import FileHandler
@@ -602,8 +603,11 @@ class A2AChannel(BaseChannel):
         return task
 
     async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Optional[Task]:
-        """Отмена задачи."""
+        """Отмена задачи. Ставит Redis-ключ для остановки воркера на следующем такте."""
         logger.info(f"Cancel task: {params.id}")
+
+        container = get_container()
+        await container.redis_client.set(f"cancel:{params.id}", "1", ttl=CANCEL_KEY_TTL)
 
         task = await self._cancel_task_in_state(params.id)
 

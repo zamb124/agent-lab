@@ -2,6 +2,7 @@
  * FlowsStore - Состояние редактора flows приложения
  */
 import { BaseStore } from '@platform/lib/store/BaseStore.js';
+import { removeUrlParams } from '../utils/url-sync.js';
 
 const baseStore = new BaseStore('flows', {
     app: {
@@ -97,6 +98,7 @@ export const FlowsStore = {
         baseStore.setState((s) => ({
             chat: { ...s.chat, contextId, messages: [], streamPending: false }
         }));
+        removeUrlParams('session');
     },
     
     setAuth(isAuth, user = null) {
@@ -269,6 +271,7 @@ export const FlowsStore = {
         baseStore.setState((s) => ({
             chat: { ...s.chat, messages: [], contextId, streamPending: false }
         }));
+        removeUrlParams('session');
     },
     
     loadSession(sessionId, stateMessages, flowId, sessionTaskId = null) {

@@ -326,10 +326,56 @@ export class ChatInput extends PlatformElement {
         
         const allowedTypes = [
             'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
-            'application/pdf', 'text/plain', 'application/json'
+            'image/svg+xml', 'image/bmp', 'image/tiff', 'image/heic', 'image/heif',
+
+            'application/pdf',
+            'text/plain', 'text/csv', 'text/markdown', 'text/x-markdown',
+            'text/html', 'text/css', 'text/xml',
+            'application/json', 'application/xml',
+
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.oasis.opendocument.text',
+            'application/rtf', 'text/rtf',
+
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.oasis.opendocument.spreadsheet',
+
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.oasis.opendocument.presentation',
+
+            'application/zip', 'application/x-zip-compressed',
+            'application/x-rar-compressed', 'application/x-7z-compressed',
+            'application/gzip', 'application/x-tar',
+
+            'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/webm', 'audio/wav',
+            'audio/flac', 'audio/aac', 'audio/x-m4a',
+
+            'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+            'video/x-matroska',
         ];
-        
-        if (!allowedTypes.includes(file.type)) {
+
+        const allowedExtensions = [
+            'doc', 'docx', 'odt', 'rtf',
+            'xls', 'xlsx', 'ods', 'csv',
+            'ppt', 'pptx', 'odp',
+            'pdf', 'txt', 'md', 'json', 'xml', 'html', 'htm',
+            'zip', '7z', 'rar', 'tar', 'gz',
+            'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic',
+            'mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac',
+            'mp4', 'webm', 'mov', 'avi', 'mkv',
+        ];
+
+        const ext = file.name.includes('.')
+            ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase()
+            : '';
+        const typeOk = allowedTypes.includes(file.type)
+            || allowedExtensions.includes(ext)
+            || file.type === 'application/octet-stream';
+
+        if (!typeOk) {
             this.error(this.i18n.t('chat_input.err_file_type', { name: file.name }));
             return false;
         }
@@ -383,7 +429,7 @@ export class ChatInput extends PlatformElement {
                     type="file" 
                     class="file-input"
                     multiple
-                    accept="image/*,.pdf,.txt,.json"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp,.txt,.md,.json,.xml,.html,.htm,.zip,.7z,.rar,.tar,.gz,.mp3,.wav,.ogg,.flac,.m4a,.mp4,.webm,.mov,.avi,.mkv,.svg"
                     @change=${this._onFilesSelected}
                 >
                 
@@ -413,7 +459,7 @@ export class ChatInput extends PlatformElement {
                         class="send-button stop"
                         @click=${this._stop}
                     >
-                        <platform-icon name="stop" size="20"></platform-icon>
+                        <platform-icon name="stop" size="20" filled></platform-icon>
                     </button>
                 ` : html`
                     <button 
