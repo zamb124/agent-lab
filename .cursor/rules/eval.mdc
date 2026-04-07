@@ -88,7 +88,7 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 `deep_copy_state`, `merge_state`, `get_nested`, `set_nested`, `get_files`, `find_file`, `get_user`, `get_tool_result`, `get_messages`, `add_user_message`, `add_agent_message`, `extract_json`, `ask_user`
 
 ### Файлы
-`FileReader`, `FileReadError`, `reader` (экземпляр), `FileWriter`, `FileWriteError`, `FileResponse`, `writer` (экземпляр)
+`FileReader`, `FileReadError`, `reader` (экземпляр), `FileWriter`, `FileWriteError`, `FileResponse`, `writer` (экземпляр), `DocxTemplater`, `DocxTemplateError` (базовый класс ошибок DOCX-шаблонов; подклассы — `DocxTemplateInvalidError` и т.д.)
 
 ### Interrupt / State
 `FlowInterrupt`, `InterruptKind`, `HandoffMode`, `UserMessageInterrupt`, `OperatorTaskInterrupt`
@@ -114,6 +114,21 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 ### НЕТ в namespace
 `get_container`, `get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, `importlib` (кроме whitelist).
 
+## ОБЯЗАТЕЛЬНО: актуализация документации внешнего разработчика
+
+При **любом** изменении namespace, eval-окружения или добавлении тула — **сразу** актуализировать документацию в `core/docs/data/python/`:
+
+| Изменение | Что актуализировать |
+|-----------|-------------------|
+| Новая функция/объект в namespace | `globals.py` — добавить запись с `name`, `type`, `doc` |
+| Новый фасад в `platform_services.py` | `globals.py` — добавить запись |
+| Изменение сигнатуры существующего | `globals.py` — обновить `doc` |
+| Новый модуль в `ALLOWED_IMPORT_ROOTS` | `modules.py` (подхватится автоматически) + `MODULE_METHODS` если нужны подсказки |
+| Новый builtin | `core/inline_python_eval_policy.py` (подхватится автоматически) |
+| Новый паттерн использования | `templates.py` — добавить шаблон с примером кода |
+
+**Без актуализации `core/docs` изменение НЕ считается завершённым.** Внешний разработчик видит только то, что описано в `core/docs` — если функция есть в namespace, но нет в документации, для него она не существует.
+
 ## Чеклист: добавление нового тула
 
 1. Модуль в `apps/flows/tools/` с декоратором `@tool`
@@ -124,6 +139,7 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 6. Имя в `apps/flows/tools/__init__.py` → `__all__`
 7. Регистрация в `ToolRegistry.register_builtin_tools`
 8. `mock_response` для тестового режима
+9. **Актуализировать `core/docs/data/python/globals.py`** — если тул добавляет глобалы в namespace
 
 ## Ключевые файлы
 

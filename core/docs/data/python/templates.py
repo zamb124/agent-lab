@@ -195,6 +195,103 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     return {"key": key, "value": current, "action": "get"}
 ''',
     },
+    {
+        "id": "find_file_and_read",
+        "name": "Поиск и чтение файла",
+        "description": "**Категория:** файлы. Ищет файл по имени через `find_file`, затем читает через `reader`.",
+        "category": "files",
+        "node_type": "tool",
+        "tags": ["files", "find_file", "reader"],
+        "code": '''async def execute(file_name: str = None, state: dict = None):
+    """
+    Поиск файла по имени и извлечение текста.
+    
+    Args:
+        file_name: Имя файла (подстрока); без имени — первый файл
+        state: Текущее состояние
+    
+    Returns:
+        Текст файла или ошибка
+    """
+    files = get_files(state)
+    finfo = find_file(files, file_name)
+    
+    if not finfo:
+        return {"error": f"Файл не найден: {file_name}"}
+    
+    res = await reader.read(finfo)
+    text = "\\n".join(p.text for p in res.pages if p.text)
+    
+    return {
+        "name": finfo["name"],
+        "page_count": res.page_count,
+        "text": text[:5000],
+    }
+''',
+    },
+    {
+        "id": "llm_with_tools",
+        "name": "LLM с tools (ReAct)",
+        "description": "**Категория:** LLM. Вызов LLM с набором tools и ручной ReAct-цикл.",
+        "category": "llm",
+        "node_type": "tool",
+        "tags": ["llm", "tools", "react"],
+        "code": '''async def execute(prompt: str, state: dict = None):
+    """
+    LLM с tools: определяет tool_calls, выполняет и возвращает.
+    
+    Args:
+        prompt: Промпт для LLM
+        state: Текущее состояние
+    """
+    from a2a.utils.message import get_message_text
+
+    @tool(name="calc", description="Вычислить выражение")
+    def calc(expression: str):
+        import ast
+        return {"result": ast.literal_eval(expression)}
+
+    msg = await llm.chat(prompt, tools=[calc])
+    text = get_message_text(msg)
+    
+    if text:
+        return {"response": text}
+
+    tool_calls = (msg.metadata or {}).get("tool_calls", [])
+    results = []
+    for tc in tool_calls:
+        if tc["function"]["name"] == "calc":
+            args = json.loads(tc["function"]["arguments"])
+            res = await calc.run(args, state)
+            results.append(res)
+    
+    return {"tool_results": results}
+''',
+    },
+    {
+        "id": "service_client_call",
+        "name": "Вызов сервиса платформы",
+        "description": "**Категория:** HTTP. Запрос к другому сервису через `ServiceClient`.",
+        "category": "http",
+        "node_type": "tool",
+        "tags": ["http", "api", "platform"],
+        "code": '''async def execute(query: str, state: dict = None):
+    """
+    Поиск сущностей через CRM API.
+    
+    Args:
+        query: Поисковый запрос
+        state: Текущее состояние
+    """
+    client = ServiceClient()
+    data = await client.post(
+        "crm",
+        "/crm/api/v1/entities/search",
+        json={"query": query, "limit": 10},
+    )
+    return {"entities": data.get("items", [])}
+''',
+    },
 ]
 
 # Шаблоны для function нод (run function)
@@ -395,6 +492,72 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     
     state["response"] = f"Вы написали: {content}"
     
+    return state
+''',
+    },
+    {
+        "id": "fn_find_and_process_file",
+        "name": "Поиск и обработка файла",
+        "description": "Поиск файла через find_file и чтение содержимого",
+        "category": "files",
+        "node_type": "function",
+        "tags": ["files", "find_file", "reader"],
+        "code": '''async def run(state):
+    """Найти файл по имени и прочитать."""
+    file_name = state.get("target_file")
+    files = get_files(state)
+    finfo = find_file(files, file_name)
+    
+    if not finfo:
+        state["response"] = f"Файл {file_name!r} не найден"
+        return state
+    
+    res = await reader.read(finfo)
+    state["file_text"] = "\\n".join(p.text for p in res.pages if p.text)
+    state["file_name"] = finfo["name"]
+    
+    return state
+''',
+    },
+    {
+        "id": "fn_llm_with_tools",
+        "name": "LLM с tools",
+        "description": "Вызов LLM с определёнными tools в ноде",
+        "category": "llm",
+        "node_type": "function",
+        "tags": ["llm", "tools", "react"],
+        "code": '''async def run(state):
+    """LLM с tools внутри code_node."""
+    from a2a.utils.message import get_message_text
+
+    @tool(name="lookup", description="Поиск по базе знаний")
+    def lookup(query: str):
+        client = ServiceClient()
+        return {"answer": "Результат поиска"}
+
+    content = state.get("content", "")
+    msg = await llm.chat(content, tools=[lookup, ask_user_tool])
+    state["response"] = get_message_text(msg) or ""
+    
+    return state
+''',
+    },
+    {
+        "id": "fn_interrupt_flow",
+        "name": "Прерывание flow (FlowInterrupt)",
+        "description": "Запрос данных у пользователя с FlowInterrupt",
+        "category": "interaction",
+        "node_type": "function",
+        "tags": ["interrupt", "flow"],
+        "code": '''async def run(state):
+    """Запрос недостающих данных через FlowInterrupt."""
+    if not state.get("city"):
+        ask_user("В каком городе вы находитесь?")
+    
+    if not state.get("phone"):
+        raise FlowInterrupt(question="Укажите ваш номер телефона")
+    
+    state["profile_complete"] = True
     return state
 ''',
     },

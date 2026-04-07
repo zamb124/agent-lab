@@ -140,6 +140,20 @@ GLOBALS: List[Dict[str, Any]] = [
         "tags": ["files", "utility"],
     },
     {
+        "name": "find_file",
+        "type": "function",
+        "doc": (
+            "Найти файл по имени в списке state.files:\n"
+            "finfo = find_file(get_files(state), 'report.docx')\n\n"
+            "Без имени — первый файл из списка:\n"
+            "finfo = find_file(get_files(state))\n\n"
+            "Поиск: точное совпадение по полю name, затем case-insensitive подстрока.\n"
+            "Возвращает dict записи файла или None."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "utility"],
+    },
+    {
         "name": "reader",
         "type": "FileReader",
         "doc": (
@@ -247,6 +261,265 @@ GLOBALS: List[Dict[str, Any]] = [
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["tools", "platform"],
+    },
+    # Interrupt-типы
+    {
+        "name": "FlowInterrupt",
+        "type": "exception",
+        "doc": (
+            "Прерывание выполнения flow:\n"
+            "raise FlowInterrupt(question='Как вас зовут?')\n\n"
+            "Для operator handoff:\n"
+            "raise FlowInterrupt(body=OperatorTaskInterrupt(question=..., task_title=..., assignee_queue=..., handoff_mode=HandoffMode.single_reply))\n\n"
+            "После ответа пользователя / оператора flow продолжается с того же места."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "exception"],
+    },
+    {
+        "name": "HandoffMode",
+        "type": "enum",
+        "doc": (
+            "Режим передачи оператору:\n"
+            "- HandoffMode.single_reply — один ответ оператора\n"
+            "- HandoffMode.takeover — полный перехват диалога оператором"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "operator"],
+    },
+    {
+        "name": "InterruptKind",
+        "type": "enum",
+        "doc": (
+            "Вид прерывания:\n"
+            "- InterruptKind.user_input — запрос ввода от пользователя\n"
+            "- InterruptKind.operator_task — передача оператору\n"
+            "- InterruptKind.oauth_required — ожидание OAuth-авторизации"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "types"],
+    },
+    {
+        "name": "UserMessageInterrupt",
+        "type": "class",
+        "doc": (
+            "Тело interrupt для запроса у пользователя:\n"
+            "raise FlowInterrupt(body=UserMessageInterrupt(question='Ваш email?'))"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "types"],
+    },
+    {
+        "name": "OperatorTaskInterrupt",
+        "type": "class",
+        "doc": (
+            "Тело interrupt для передачи оператору:\n"
+            "raise FlowInterrupt(body=OperatorTaskInterrupt(\n"
+            "    question='Клиент запрашивает возврат',\n"
+            "    task_title='Возврат заказа #123',\n"
+            "    assignee_queue='support',\n"
+            "    handoff_mode=HandoffMode.takeover,\n"
+            "))"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "operator"],
+    },
+    # Интеграции
+    {
+        "name": "ServiceClient",
+        "type": "class",
+        "doc": (
+            "HTTP-клиент для вызовов между сервисами платформы:\n"
+            "client = ServiceClient()\n"
+            "data = await client.get('crm', '/crm/api/v1/entities/search', params={'query': 'test'})\n"
+            "result = await client.post('rag', '/rag/api/v1/search', json={'query': 'text'})\n\n"
+            "Методы: get, post, put, patch, delete. Первый аргумент — имя сервиса (crm, rag, flows, sync, frontend)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["http", "api", "platform"],
+    },
+    {
+        "name": "ServiceClientError",
+        "type": "exception",
+        "doc": (
+            "Ошибка вызова сервиса через ServiceClient:\n"
+            "try:\n"
+            "    data = await client.get('crm', '/crm/api/v1/entities/123')\n"
+            "except ServiceClientError as e:\n"
+            "    logger.error(f'Ошибка CRM: {e}')"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["http", "api", "platform"],
+    },
+    {
+        "name": "get_context",
+        "type": "function",
+        "doc": (
+            "Контекст выполнения (company_id, user_id, namespace):\n"
+            "ctx = get_context()\n"
+            "company_id = ctx.active_company.company_id\n"
+            "user_id = ctx.user.user_id\n"
+            "namespace = ctx.active_namespace"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["context", "platform"],
+    },
+    {
+        "name": "GoogleDocsClient",
+        "type": "class",
+        "doc": (
+            "Клиент Google Docs API:\n"
+            "client = GoogleDocsClient(credentials_json=..., access_token=..., subject=...)\n"
+            "doc = await client.create_document('Title')\n"
+            "text = await client.read_as_text(document_id)\n"
+            "await client.append_text(document_id, 'text')\n"
+            "await client.share_document(document_id, email, role='writer')\n\n"
+            "Авторизация: SA JSON из variables, или access_token, или per-user OAuth через get_google_oauth_token."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["google", "docs", "api"],
+    },
+    {
+        "name": "datetime",
+        "type": "class",
+        "doc": (
+            "Класс datetime.datetime (не модуль целиком):\n"
+            "now = datetime.now()\n"
+            "dt = datetime.fromisoformat('2025-01-15T10:00:00')\n"
+            "ts = datetime(2025, 6, 1, 12, 0)\n\n"
+            "Для timedelta, date и т.д. используйте import datetime."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["datetime", "utility"],
+    },
+    # Фасады платформы
+    {
+        "name": "get_file_bytes",
+        "type": "function",
+        "doc": (
+            "Скачать файл из хранилища по ID:\n"
+            "raw = await get_file_bytes(file_id)\n"
+            "# raw: bytes содержимого файла"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "platform"],
+    },
+    {
+        "name": "get_google_oauth_token",
+        "type": "function",
+        "doc": (
+            "Получить OAuth-токен Google для текущего пользователя:\n"
+            "token = await get_google_oauth_token(state, service='docs')\n\n"
+            "Если токена нет — бросает FlowInterrupt с OAuthInterrupt (flow встаёт на паузу, UI показывает кнопку авторизации)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["google", "oauth", "platform"],
+    },
+    {
+        "name": "get_schedule_service",
+        "type": "function",
+        "doc": (
+            "Фасад планировщика задач:\n"
+            "svc = get_schedule_service()\n"
+            "task = await svc.schedule_cron_task(flow_id=..., session_id=..., ...)\n"
+            "tasks = await svc.list_tasks(session_id=...)\n"
+            "await svc.cancel_task(task_id)"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["scheduling", "platform"],
+    },
+    {
+        "name": "get_oauth_service",
+        "type": "function",
+        "doc": (
+            "Фасад OAuth-сервиса:\n"
+            "svc = get_oauth_service()\n"
+            "token = await svc.get_valid_token(company_id, user_id, 'google', 'docs')"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["oauth", "platform"],
+    },
+    {
+        "name": "get_operator_handoff_service",
+        "type": "function",
+        "doc": (
+            "Фасад операторских очередей:\n"
+            "svc = get_operator_handoff_service()\n"
+            "cid, task_id = await svc.register_handoff(state, question=..., task_title=..., assignee_queue_slug=..., handoff_mode=HandoffMode.single_reply)"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["operator", "hitl", "platform"],
+    },
+    {
+        "name": "BaseTool",
+        "type": "class",
+        "doc": (
+            "Базовый класс для создания tool-классов (альтернатива @tool):\n"
+            "class MyTool(BaseTool):\n"
+            "    name = 'my_tool'\n"
+            "    description = 'Описание'\n"
+            "    args_schema = MyArgs  # Pydantic BaseModel\n\n"
+            "    async def _run_impl(self, args, state):\n"
+            "        return {'result': args['input']}\n\n"
+            "Экземпляр передаётся в llm.chat(..., tools=[MyTool()])."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["tools", "llm"],
+    },
+    {
+        "name": "quote",
+        "type": "function",
+        "doc": "URL-кодирование строки (urllib.parse.quote):\npath = f'/api/v1/items/{quote(item_id, safe=\"\")}'",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["url", "utility"],
+    },
+    {
+        "name": "ContentType",
+        "type": "enum",
+        "doc": "Тип содержимого для планировщика:\nContentType('message') или ContentType('tool_call')",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["scheduling", "utility"],
+    },
+    # Файлы - классы
+    {
+        "name": "FileResponse",
+        "type": "class",
+        "doc": (
+            "Модель ответа о файле:\n"
+            "response = FileResponse.from_record(record)\n"
+            "data = response.model_dump(mode='json')\n"
+            "# -> {file_id, url, original_name, content_type, file_size, checksum, is_public}"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "models"],
+    },
+    {
+        "name": "DocxTemplater",
+        "type": "class",
+        "doc": (
+            "Заполнение DOCX по Jinja2 (docxtpl):\n"
+            "record = await DocxTemplater().fill_and_create(\n"
+            "    file_ref=finfo,  # dict из state.files\n"
+            "    context={'name': 'Иван'},\n"
+            "    output_original_name='out.docx',\n"
+            "    strict=False,\n"
+            ")\n"
+            "Без кода: tool fill_docx_template."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "docx"],
+    },
+    {
+        "name": "DocxTemplateError",
+        "type": "exception",
+        "doc": (
+            "Ошибка шаблона DOCX (и подклассы DocxTemplateInvalidError, DocxTemplateSyntaxError и т.д.).\n"
+            "У экземпляра: message, code, payload.\n"
+            "В inline-коде надёжнее не писать except DocxTemplateError — строки import из core вырезаются; "
+            "используйте проверку type(exc).__name__ или вызывайте fill_docx_template."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "docx", "exception"],
     },
     # JSON
     {

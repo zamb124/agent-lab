@@ -227,3 +227,7 @@ Tools = inline конфиги внутри ноды / FlowConfig. Встроен
 - Системный tool **`read_file`** (`apps/flows/tools/files.py`) вызывает `FileReader` для пути из **`state.files`**; в том же модуле планируются прочие file-тулы.
 - В **eval**: только **`await reader.read(source=..., file_name=...)`** и **`get_files(state)`**; путь — строка из записи вложения, не произвольный **`Path`** с диска.
 - Подсказки редактора: **`core/docs/data/python/globals.py`** (**`reader`**, **`writer`**); шаблоны — **`core/docs/data/python/templates.py`**.
+
+## ОБЯЗАТЕЛЬНО: документация внешнего разработчика
+
+При добавлении/изменении тула или namespace — **сразу** актуализировать `core/docs/data/python/` (`globals.py`, `templates.py`, `modules.py`). Подробности → **`eval.mdc`** (раздел «актуализация документации»). Без обновления документации изменение **не считается завершённым**.

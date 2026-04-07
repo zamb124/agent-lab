@@ -66,6 +66,7 @@ from core.state.interrupt import (
 )
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.scheduling import _extract_ids_from_state
+from core.files import DocxTemplateError, DocxTemplater
 from core.files.models import FileResponse
 from core.files.reader import FileReadError, FileReader
 from core.files.writer import FileWriteError, FileWriter
@@ -183,6 +184,9 @@ class PythonNamespaceBuilder:
         namespace["FileReader"] = FileReader
         namespace["FileReadError"] = FileReadError
         namespace["reader"] = FileReader()
+
+        namespace["DocxTemplater"] = DocxTemplater
+        namespace["DocxTemplateError"] = DocxTemplateError
 
         namespace["extract_json"] = extract_json
 

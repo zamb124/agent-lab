@@ -1,7 +1,7 @@
 """
 Нормализация JSON flow / node / tool под контракт без легаси type нод tool|function и tool_type.
 
-Используется скриптом миграции БД и при необходимости офлайн-проверок. Не подменяет валидацию в рантайме.
+Скрипт миграции БД и чтение FlowRepository: перед FlowConfig.model_validate применяется normalize_flow_config_dict.
 """
 
 from __future__ import annotations
@@ -64,11 +64,32 @@ def normalize_node_config(node: Mapping[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _evaluation_function_type_to_modern(part: MutableMapping[str, Any], role: str) -> None:
+    """
+    Легаси evaluation: type=function. Сейчас: inline_code (исходник) или string (путь к checker в модуле).
+    """
+    value = part.get("value", "")
+    if isinstance(value, str):
+        stripped = value.strip()
+        looks_like_source = (
+            "\n" in stripped
+            or stripped.startswith(("def ", "async def"))
+            or " def " in stripped
+            or "async def " in stripped
+        )
+        if not looks_like_source and role == "check":
+            path_parts = stripped.split(".")
+            if len(path_parts) >= 2 and all(p.isidentifier() for p in path_parts):
+                part["type"] = "string"
+                return
+    part["type"] = "inline_code"
+
+
 def _normalize_evaluation_turn(turn: MutableMapping[str, Any]) -> None:
     for key in ("input", "check"):
         part = turn.get(key)
         if isinstance(part, dict) and part.get("type") == "function":
-            part["type"] = "inline_code"
+            _evaluation_function_type_to_modern(part, key)
 
 
 def _normalize_evaluation(evaluation: Any) -> None:

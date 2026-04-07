@@ -9,9 +9,8 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.tools import tool
-from core.files import DocxTemplateError, DocxTemplater
+from core.files import DocxTemplater
 from core.files.models import FileResponse
-from core.files.writer import FileWriteError
 
 _FILL_DOCX_DESCRIPTION = """
 Заполняет шаблон Word (.docx) с плейсхолдерами Jinja2 (docxtpl: {{ var }}, вложенные {{ a.b }}, {% if %}…{% else %}…{% endif %}, {% for x in items %}…{% endfor %}, фильтры {{ name|upper }} и т.д.).
@@ -139,15 +138,18 @@ async def fill_docx_template(
             output_original_name=output_original_name,
             strict=strict,
         )
-    except DocxTemplateError as exc:
-        return {
-            "success": False,
-            "error": exc.message,
-            "code": exc.code,
-            "payload": exc.payload,
-        }
-    except FileWriteError as exc:
-        return {"success": False, "error": str(exc)}
+    except Exception as exc:
+        if type(exc).__name__ == "FileWriteError":
+            return {"success": False, "error": str(exc)}
+        exc_name = type(exc).__name__
+        if exc_name.startswith("DocxTemplate") and exc_name.endswith("Error"):
+            return {
+                "success": False,
+                "error": getattr(exc, "message", str(exc)),
+                "code": getattr(exc, "code", "DOCX_TEMPLATE_ERROR"),
+                "payload": getattr(exc, "payload", None) or {},
+            }
+        raise
 
     response = FileResponse.from_record(record)
     return {"success": True, **response.model_dump(mode="json")}

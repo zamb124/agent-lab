@@ -33,6 +33,10 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 
 **При появлении нового паттерна, сервиса, конвенции или изменении архитектуры — сразу добавляй/прави правило в `.cursor/rules/`.** Без обновления рулов новое не считается завершённым. Один источник правды — рулы.
 
+## ОБЯЗАТЕЛЬНО: документация внешнего разработчика при изменении eval/tools
+
+Изменение namespace (`namespace.py`), добавление функции в `state_utils.py`, новый фасад в `platform_services.py`, новый тул — **сразу** актуализировать `core/docs/data/python/` (`globals.py`, `templates.py`, `modules.py`). Внешний разработчик видит **только** документацию из `core/docs`; то, чего нет в документации — для него не существует. Детали → **`eval.mdc`**.
+
 ## ОБЯЗАТЕЛЬНО: i18n при новом функционале
 
 Новый функционал с пользовательским текстом (UI, подписи, сообщения в интерфейсе) пишется **сразу с переводом**: для каждого нового ключа добавляются строки **парно** в `core/i18n/translations/ru/<namespace>.json` и `core/i18n/translations/en/<namespace>.json` в том же изменении, что и код. Фича без полной пары `ru` + `en` для всех новых ключей **не считается готовой**. Захардкоженный пользовательский текст вместо ключей i18n — запрещён (исключения только там, где это явно допустимо в **`frontend.mdc`**). Детали: раздел Internationalization в **`frontend.mdc`**; проверка парности ключей: **`make check-i18n`**.
@@ -277,6 +281,7 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | Инфраструктура: сервер, ingress, деплой | `infrastructure.mdc` |
 | Сессии | `session.mdc` |
 | Tools для flows | `tools.mdc` |
+| Eval sandbox, namespace, безопасность тулов | `eval.mdc` |
 | MCP серверы | `mcp.mdc` |
 | Уведомления | `notifications.mdc` |
 | Миграции БД | `migrations.mdc` |
