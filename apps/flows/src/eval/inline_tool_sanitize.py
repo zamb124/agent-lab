@@ -8,7 +8,8 @@ def strip_forbidden_platform_import_lines(code: str) -> str:
     Удаляет строки import из apps.* и core.* — в инлайн-окружении они запрещены,
     нужные имена уже в namespace (см. PythonNamespaceBuilder.build: FlowInterrupt,
     ServiceClient, ServiceClientError, get_context, get_operator_handoff_service,
-    get_schedule_service, quote,
+    get_schedule_service, get_oauth_service, get_google_oauth_token,
+    get_file_bytes, GoogleDocsClient, quote,
     _require_context_namespace, …).
     """
     lines = code.split("\n")

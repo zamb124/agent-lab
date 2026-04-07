@@ -30,10 +30,12 @@ import apps.flows.tools as flows_tools
 from apps.flows.src.eval.import_policy import safe_inline_import
 from apps.flows.src.eval.platform_services import (
     get_file_bytes,
+    get_google_oauth_token,
     get_oauth_service,
     get_operator_handoff_service,
     get_schedule_service,
 )
+from core.clients.google_docs_client import GoogleDocsClient
 from apps.flows.src.eval.state_utils import (
     add_agent_message,
     add_user_message,
@@ -207,6 +209,8 @@ class PythonNamespaceBuilder:
         namespace["get_schedule_service"] = get_schedule_service
         namespace["get_oauth_service"] = get_oauth_service
         namespace["get_file_bytes"] = get_file_bytes
+        namespace["get_google_oauth_token"] = get_google_oauth_token
+        namespace["GoogleDocsClient"] = GoogleDocsClient
         namespace["quote"] = quote
         namespace["_require_context_namespace"] = _inline_require_context_namespace
         namespace["_compact_entity_hit"] = _inline_compact_entity_hit

@@ -20,80 +20,15 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.eval.platform_services import get_file_bytes, get_oauth_service
-from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.eval.platform_services import get_file_bytes, get_google_oauth_token
 from apps.flows.src.tools import tool
 from core.clients.google_docs_client import GoogleDocsClient
-from core.context import get_context
-from core.integrations.models import IntegrationProvider
 from core.logging import get_logger
-from core.state.interrupt import OAuthInterrupt
-from core.tracing.context import get_current_trace_context
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
 logger = get_logger(__name__)
-
-GOOGLE_DOCS_SCOPES = [
-    "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/drive",
-]
-
-
-async def _get_user_google_token(state: "ExecutionState", service: str) -> str:
-    """
-    Per-user OAuth: ищет сохранённый токен в БД, если нет — бросает FlowInterrupt
-    с ссылкой на авторизацию Google. Flow ставится на паузу и автоматически
-    продолжается после OAuth callback.
-
-    Возвращает access_token (строка).
-    """
-    ctx = get_context()
-    if ctx is None or ctx.active_company is None or ctx.user is None:
-        raise ValueError("Контекст с активной компанией обязателен для Google Docs")
-
-    oauth = get_oauth_service()
-    credential = await oauth.get_valid_token(
-        company_id=ctx.active_company.company_id,
-        user_id=ctx.user.user_id,
-        provider=IntegrationProvider.GOOGLE,
-        service=service,
-    )
-    if credential:
-        logger.debug("Google Docs: per-user OAuth credential found, user=%s", ctx.user.user_id)
-        return credential.access_token
-
-    flow_context: dict[str, Any] = {
-        "flow_id": state.session_flow_id,
-        "session_id": state.session_id,
-        "task_id": state.task_id,
-        "context_id": state.context_id,
-        "skill_id": state.skill_id,
-        "channel": "a2a",
-        "user_id": ctx.user.user_id,
-        "context_data": ctx.model_dump(mode="json"),
-    }
-    saved_trace_context = get_current_trace_context()
-    if saved_trace_context is not None:
-        flow_context["trace_context"] = saved_trace_context
-    auth_url = await oauth.build_auth_url(
-        provider=IntegrationProvider.GOOGLE,
-        service=service,
-        scopes=GOOGLE_DOCS_SCOPES,
-        user_id=ctx.user.user_id,
-        company_id=ctx.active_company.company_id,
-        flow_context=flow_context,
-    )
-    logger.info("Google Docs: no credential, raising OAuthInterrupt for user=%s", ctx.user.user_id)
-    raise FlowInterrupt(
-        body=OAuthInterrupt(
-            question="Для работы с Google Docs нужна авторизация Google",
-            auth_url=auth_url,
-            provider="google",
-            service=service,
-        ),
-    )
 
 
 # ── описания ─────────────────────────────────────────────────────
@@ -292,7 +227,7 @@ async def gdocs_create_document(
     subject = state.variables.get("google_impersonate_email")
 
     if not credentials_json and not access_token:
-        access_token = await _get_user_google_token(state, service="docs")
+        access_token = await get_google_oauth_token(state, service="docs")
 
     client = GoogleDocsClient(
         credentials_json=credentials_json,
@@ -336,7 +271,7 @@ async def gdocs_read_document(
     subject = state.variables.get("google_impersonate_email")
 
     if not credentials_json and not access_token:
-        access_token = await _get_user_google_token(state, service="docs")
+        access_token = await get_google_oauth_token(state, service="docs")
 
     client = GoogleDocsClient(
         credentials_json=credentials_json,
@@ -365,7 +300,7 @@ async def gdocs_append_text(
     subject = state.variables.get("google_impersonate_email")
 
     if not credentials_json and not access_token:
-        access_token = await _get_user_google_token(state, service="docs")
+        access_token = await get_google_oauth_token(state, service="docs")
 
     client = GoogleDocsClient(
         credentials_json=credentials_json,
@@ -395,7 +330,7 @@ async def gdocs_insert_text(
     subject = state.variables.get("google_impersonate_email")
 
     if not credentials_json and not access_token:
-        access_token = await _get_user_google_token(state, service="docs")
+        access_token = await get_google_oauth_token(state, service="docs")
 
     client = GoogleDocsClient(
         credentials_json=credentials_json,
@@ -426,7 +361,7 @@ async def gdocs_find_replace(
     subject = state.variables.get("google_impersonate_email")
 
     if not credentials_json and not access_token:
-        access_token = await _get_user_google_token(state, service="docs")
+        access_token = await get_google_oauth_token(state, service="docs")
 
     client = GoogleDocsClient(
         credentials_json=credentials_json,
@@ -466,7 +401,7 @@ async def gdocs_delete_range(
     subject = state.variables.get("google_impersonate_email")
 
     if not credentials_json and not access_token:
-        access_token = await _get_user_google_token(state, service="docs")
+        access_token = await get_google_oauth_token(state, service="docs")
 
     client = GoogleDocsClient(
         credentials_json=credentials_json,
@@ -497,7 +432,7 @@ async def gdocs_share_document(
     subject = state.variables.get("google_impersonate_email")
 
     if not credentials_json and not access_token:
-        access_token = await _get_user_google_token(state, service="docs")
+        access_token = await get_google_oauth_token(state, service="docs")
 
     client = GoogleDocsClient(
         credentials_json=credentials_json,
