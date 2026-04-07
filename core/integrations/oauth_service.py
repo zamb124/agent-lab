@@ -116,7 +116,11 @@ class OAuthService:
 
         if redirect_uri is None:
             settings = get_settings()
-            origin = _public_service_origin(settings.server.get_service_url())
+            public_base = settings.server.platform_public_base_url
+            if public_base and public_base.strip():
+                origin = public_base.strip().rstrip("/")
+            else:
+                origin = _public_service_origin(settings.server.get_service_url())
             public_segment = settings.server.name
             redirect_uri = f"{origin}/{public_segment}/api/v1/integrations/oauth/callback"
 
