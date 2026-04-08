@@ -185,8 +185,25 @@ export class SyncSidebar extends PlatformElement {
                 min-width: 0;
             }
 
+            .sync-sidebar-inner {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                min-height: 0;
+                overflow: hidden;
+            }
+
+            .channels-section:last-child {
+                flex: 1 1 0;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
             .section-scroll--channels {
-                max-height: min(52vh, 480px);
+                flex: 1 1 0;
+                min-height: 0;
             }
 
             .nav-row-wrap {
@@ -237,7 +254,7 @@ export class SyncSidebar extends PlatformElement {
             }
 
             .section-scroll {
-                max-height: 45vh;
+                max-height: 30vh;
                 overflow-y: auto;
                 padding-right: var(--space-1);
             }

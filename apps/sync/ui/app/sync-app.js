@@ -121,6 +121,8 @@ export class SyncApp extends PlatformApp {
         this._activeCallChannels = {};
         /** id WS-команд call.hangup — ack тоже содержит CallRead с call_id, без фильтра открыл бы оверлей снова */
         this._callHangupRequestIds = new Set();
+        /** id WS-команд call.recording.start/stop — ack содержит CallRecordingRead с call_id, без фильтра затирает _activeCall */
+        this._callRecordingRequestIds = new Set();
         this._callUiMinimized = false;
         this._boundSyncCallOverlayExpand = () => {
             if (this._activeCall == null) return;
@@ -315,6 +317,22 @@ export class SyncApp extends PlatformApp {
         }
         if (typeof msg.ok === 'boolean' && typeof msg.id === 'string') {
             if (this._callHangupRequestIds.delete(msg.id)) {
+                return;
+            }
+            if (this._callRecordingRequestIds.delete(msg.id)) {
+                if (!msg.ok) {
+                    const overlay = this.renderRoot?.querySelector('call-overlay');
+                    if (overlay) {
+                        const prev = overlay._recordingStatus;
+                        const resetTo = prev === 'starting' ? 'idle'
+                            : prev === 'stopping' ? 'recording'
+                            : prev;
+                        overlay.setRecordingStatus(
+                            resetTo,
+                            msg.error_detail || null,
+                        );
+                    }
+                }
                 return;
             }
             if (msg.ok) {
@@ -786,6 +804,7 @@ export class SyncApp extends PlatformApp {
         if (!ws) return;
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        this._callRecordingRequestIds.add(id);
         ws.sendJson({
             id,
             type: action === 'start' ? 'call.recording.start' : 'call.recording.stop',

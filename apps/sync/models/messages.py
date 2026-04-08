@@ -39,6 +39,7 @@ class MessageContentType(str, Enum):
     FILE_AUDIO = "file/audio"
     FILE_VIDEO = "file/video"
     CALL_BOUNDARY = "call/boundary"
+    CALL_TRANSCRIPT = "call/transcript"
     GIT_REFERENCE = "git/reference"
     CUSTOM_TOOL_RESPONSE = "custom_tool_response"
 
@@ -109,6 +110,24 @@ class CallBoundaryContent(BaseModel):
     phase: Literal["started", "ended"] = Field(description="Фаза сессии.")
 
 
+class CallTranscriptEntry(BaseModel):
+    """Одна реплика в транскрипте звонка."""
+
+    user_id: str = Field(description="Идентификатор участника (user_id или guest:...).")
+    display_name: str = Field(description="Отображаемое имя участника.")
+    avatar_url: str | None = Field(default=None, description="URL аватара участника.")
+    is_guest: bool = Field(default=False, description="Гостевой участник (без профиля).")
+    timestamp: datetime = Field(description="Время реплики.")
+    text: str = Field(description="Текст реплики.")
+
+
+class CallTranscriptContent(BaseModel):
+    """Структурированный транскрипт звонка с данными об участниках и таймингами."""
+
+    call_id: str = Field(description="Идентификатор звонка.")
+    entries: list[CallTranscriptEntry] = Field(description="Реплики в хронологическом порядке.")
+
+
 ContentData = Union[
     TextPlainContent,
     CodeBlockContent,
@@ -116,6 +135,7 @@ ContentData = Union[
     AudioAttachmentContent,
     VideoAttachmentContent,
     CallBoundaryContent,
+    CallTranscriptContent,
     MockImageContent,
     GitReferenceContent,
     CustomToolResponseContent,

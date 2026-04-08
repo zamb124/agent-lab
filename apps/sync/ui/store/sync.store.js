@@ -53,6 +53,17 @@ function isHiddenSyncChannelName(name) {
     return typeof name === 'string' && name.startsWith('_');
 }
 
+/** Свежие каналы наверху: по last_message_at desc, без сообщений — по created_at desc. */
+function _sortChannelsByRecent(channels) {
+    return [...channels].sort((a, b) => {
+        const ta = a.last_message_at || a.created_at || '';
+        const tb = b.last_message_at || b.created_at || '';
+        if (tb > ta) return 1;
+        if (tb < ta) return -1;
+        return 0;
+    });
+}
+
 const baseStore = new BaseStore('sync', {
     spaces: {
         list: [],
@@ -872,6 +883,7 @@ export const SyncStore = {
 
     /**
      * Topic-каналы для сайдбара: по умолчанию все; при непустом sidebarSpaceFilterIds — только выбранные пространства (ИЛИ).
+     * Сортировка: свежие (по last_message_at) наверху, без сообщений — по created_at.
      * @returns {object[]}
      */
     getChannelsForSidebarList() {
@@ -881,11 +893,14 @@ export const SyncStore = {
             c => c.type !== 'direct' && c.space_id && visible(c),
         );
         const filters = baseStore.state.ui.sidebarSpaceFilterIds ?? [];
+        let filtered;
         if (!Array.isArray(filters) || filters.length === 0) {
-            return topicInSpaces;
+            filtered = topicInSpaces;
+        } else {
+            const set = new Set(filters);
+            filtered = topicInSpaces.filter(c => c.space_id && set.has(c.space_id));
         }
-        const set = new Set(filters);
-        return topicInSpaces.filter(c => c.space_id && set.has(c.space_id));
+        return _sortChannelsByRecent(filtered);
     },
 
     /**
@@ -895,7 +910,7 @@ export const SyncStore = {
     getChannelsForPickerList() {
         const all = baseStore.state.channels.list;
         const visible = (c) => !isHiddenSyncChannelName(c.name);
-        const direct = all.filter(c => c.type === 'direct' && visible(c));
+        const direct = _sortChannelsByRecent(all.filter(c => c.type === 'direct' && visible(c)));
         const topic = this.getChannelsForSidebarList();
         return [...direct, ...topic];
     },

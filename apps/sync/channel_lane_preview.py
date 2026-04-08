@@ -46,6 +46,8 @@ def lane_preview_from_content_row(content_type: str, data: dict) -> str:
         return "[Аудио]"
     if content_type == MessageContentType.FILE_VIDEO.value:
         return "[Видео]"
+    if content_type == MessageContentType.CALL_TRANSCRIPT.value:
+        return "[Транскрипт звонка]"
     if content_type == MessageContentType.CALL_BOUNDARY.value:
         phase = data.get("phase")
         if phase == "started":

@@ -163,7 +163,7 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 - WS-команды: `call.recording.start`, `call.recording.stop` (без `call.meeting.*`).
 - `call.recording.start` запускает `RoomCompositeEgress` с `EncodedFileOutput.s3`.
 - `call.recording.stop` останавливает egress по `provider_job_id`.
-- `sync_finalize_recording_task`: ожидание готового egress — **`calls.finalize_recording_egress_wait_timeout_seconds`** и **`finalize_recording_egress_poll_interval_seconds`**; затем `file/video` в канал с `call_id`. Отдельных таблиц встреч/summary для sync нет.
+- `sync_finalize_recording_task`: ожидание готового egress — **`calls.finalize_recording_egress_wait_timeout_seconds`** и **`finalize_recording_egress_poll_interval_seconds`**; затем `file/video` в канал с `call_id`. Отдельных таблиц встреч/summary для sync нет. Если egress завершился с «Stop called before pipeline could start» (слишком короткая запись), пользователю показывается «Запись слишком короткая — файл не был создан».
 - WS-события звонка: `call.recording.started|stopped|failed` и прочие события участников; событий `call.transcript.*`, `call.summary.*`, `call.export.crm.*` нет.
 - REST: `GET /sync/api/v1/calls/{call_id}/recordings`; транскрипция через `POST .../messages/.../transcribe`, `.../transcribe-video`, `POST .../channels/{channel_id}/calls/{call_id}/transcribe` (см. `sync.mdc`).
 - `sync_spaces`: `namespace` для CRM/RAG; колонок автоэкспорта транскрипта/summary нет.

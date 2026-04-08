@@ -164,7 +164,14 @@
     "err_tool_response": "Некорректный custom_tool_response контент.",
     "err_content_type": "Неподдерживаемый тип контента: {{type}}",
     "err_mark_file_id": "markFileUnavailable: fileId обязателен.",
-    "err_check_file_id": "isFileUnavailable: fileId обязателен."
+    "err_check_file_id": "isFileUnavailable: fileId обязателен.",
+    "transcript_guest": "Гость",
+    "transcript_preview": "Транскрипт звонка",
+    "export_crm": "Отправить в NetWorkle",
+    "export_crm_no_transcript": "Сначала создайте транскрипт",
+    "export_crm_success": "Заметка создана в NetWorkle",
+    "export_crm_no_namespace": "У пространства не задан CRM namespace",
+    "export_crm_error": "Не удалось создать заметку: {{detail}}"
   },
   "user_info_modal": {
     "err_no_user_id": "Нет user_id для профиля.",
@@ -308,6 +315,7 @@
     "file": "[Файл]",
     "audio": "[Аудио]",
     "video": "[Видео]",
+    "call_transcript": "[Транскрипт звонка]",
     "call_boundary": "[Звонок]",
     "git": "[Git]",
     "tool": "[Инструмент]",

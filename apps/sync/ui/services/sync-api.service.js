@@ -297,4 +297,57 @@ export class SyncAPIService extends BaseService {
             {}
         );
     }
+
+    /**
+     * @param {string} typeId
+     * @returns {Promise<object|null>}
+     */
+    async getCrmEntityType(typeId) {
+        if (typeof typeId !== 'string' || typeId === '') {
+            throw new Error('typeId is required');
+        }
+        const response = await fetch(
+            `/crm/api/v1/entity-types/${encodeURIComponent(typeId)}`,
+            { credentials: 'include' },
+        );
+        if (response.status === 404) return null;
+        if (!response.ok) {
+            throw new Error(`CRM entity-types GET failed: ${response.status}`);
+        }
+        return response.json();
+    }
+
+    /**
+     * @param {object} data
+     */
+    async createCrmEntityType(data) {
+        const response = await fetch('/crm/api/v1/entity-types', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const detail = await response.text().catch(() => '');
+            throw new Error(`CRM entity-types POST failed: ${response.status} ${detail}`);
+        }
+        return response.json();
+    }
+
+    /**
+     * @param {object} data
+     */
+    async createCrmEntity(data) {
+        const response = await fetch('/crm/api/v1/entities', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const detail = await response.text().catch(() => '');
+            throw new Error(`CRM entities POST failed: ${response.status} ${detail}`);
+        }
+        return response.json();
+    }
 }

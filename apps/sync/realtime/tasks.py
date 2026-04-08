@@ -23,6 +23,8 @@ from apps.sync.models.messages import (
     SYNC_MESSAGE_TEXT_MAX_CHARS,
     AudioAttachmentContent,
     AudioTranscriptionStatus,
+    CallTranscriptContent,
+    CallTranscriptEntry,
     MessageContentModel,
     MessageContentType,
     MessageCreate,
@@ -33,7 +35,7 @@ from apps.sync.realtime.command_dispatch import dispatch_sync_command
 from apps.sync.realtime.commands import CommandEnvelope, MessagesSendPayload
 from apps.sync.realtime.events import event_call_recording_failed, event_message_updated
 from apps.sync.realtime.publish_events import publish_realtime_events
-from apps.sync.sender_display import sender_brief_for_message
+from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
 from core.clients.stt_client import STTClientFactory
 from core.config import get_settings
@@ -429,6 +431,11 @@ async def _resolve_livekit_egress_result(
                     )
                     return egress_id, location
                 if ended_at > 0:
+                    error_str = str(error) if error else ""
+                    if "stop called before pipeline could start" in error_str.lower():
+                        raise RuntimeError(
+                            "Запись слишком короткая — файл не был создан. Попробуйте записать дольше."
+                        )
                     raise RuntimeError(
                         "LiveKit egress завершился без location. "
                         f"room_name={room_name}, egress_id={egress_id}, status={status}, error={error}."
@@ -1308,7 +1315,7 @@ async def sync_aggregate_call_transcript_task(
                         actor_user_id=actor_user_id,
                     )
 
-        out_lines: list[str] = []
+        transcript_entries: list[CallTranscriptEntry] = []
         fresh_rows = await container.message_repository.list_root_lane_by_call(
             channel_id=channel_id,
             call_id=call_id,
@@ -1328,8 +1335,6 @@ async def sync_aggregate_call_transcript_task(
                 continue
 
             sender = await sender_brief_for_message(container.user_repository, m.sender_user_id)
-            label = sender.display_name
-            ts = _utc_iso_z(m.sent_at)
             parts: list[str] = []
             for c in sorted(contents, key=lambda x: x.order):
                 if c.type == MessageContentType.TEXT_PLAIN:
@@ -1346,21 +1351,36 @@ async def sync_aggregate_call_transcript_task(
             if len(parts) == 0:
                 continue
             body = " ".join(parts)
-            out_lines.append(f"[{label}][{ts}] — {body}")
-
-        full_text = "\n".join(out_lines)
-        if full_text.strip() == "":
-            full_text = _sync_call_aggregate_empty_body()
-
-        chunks = _split_text_plain_chunks(full_text)
-        content_blocks = [
-            MessageContentModel(
-                type=MessageContentType.TEXT_PLAIN,
-                data=TextPlainContent(body=chunk, mentions=None),
-                order=idx,
+            is_guest = guest_display_name_from_sender_id(m.sender_user_id) is not None
+            transcript_entries.append(
+                CallTranscriptEntry(
+                    user_id=m.sender_user_id,
+                    display_name=sender.display_name,
+                    avatar_url=sender.avatar_url,
+                    is_guest=is_guest,
+                    timestamp=m.sent_at,
+                    text=body,
+                )
             )
-            for idx, chunk in enumerate(chunks)
-        ]
+
+        if len(transcript_entries) == 0:
+            empty_text = _sync_call_aggregate_empty_body()
+            content_blocks: list[MessageContentModel] = [
+                MessageContentModel(
+                    type=MessageContentType.TEXT_PLAIN,
+                    data=TextPlainContent(body=empty_text, mentions=None),
+                    order=0,
+                ),
+            ]
+        else:
+            content_blocks = [
+                MessageContentModel(
+                    type=MessageContentType.CALL_TRANSCRIPT,
+                    data=CallTranscriptContent(call_id=call_id, entries=transcript_entries),
+                    order=0,
+                ),
+            ]
+
         agg_body = MessageCreate(
             thread_id=None,
             parent_message_id=None,

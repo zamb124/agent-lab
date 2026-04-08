@@ -1749,7 +1749,9 @@ class CallOverlay extends PlatformElement {
 
     async _copyLink() {
         if (!this.callId) return;
-        const res = await fetch('/sync/api/v1/calls/links', {
+
+        let resolvedUrl = null;
+        const urlPromise = fetch('/sync/api/v1/calls/links', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1758,22 +1760,55 @@ class CallOverlay extends PlatformElement {
                 call_type: 'video',
                 call_id: this.callId,
             }),
+        }).then(res => {
+            if (!res.ok) throw new Error('fetch');
+            return res.json();
+        }).then(body => {
+            const url = body.join_url;
+            if (typeof url !== 'string' || url.trim() === '') throw new Error('fetch');
+            resolvedUrl = url;
+            return url;
         });
-        if (!res.ok) return;
-        const body = await res.json();
-        const join_url = body.join_url;
-        if (typeof join_url !== 'string' || join_url.trim() === '') {
-            this._mediaSettingsError = this._tp('call_overlay.copy_link_bad_response');
-            this.requestUpdate();
-            return;
+
+        // ClipboardItem с deferred blob: clipboard.write() вызывается синхронно
+        // в рамках user gesture, данные резолвятся async — работает на mobile Safari/Chrome
+        if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+            try {
+                const item = new ClipboardItem({
+                    'text/plain': urlPromise.then(u => new Blob([u], { type: 'text/plain' })),
+                });
+                await navigator.clipboard.write([item]);
+                this._onCopyLinkDone();
+                return;
+            } catch {
+                if (resolvedUrl === null) {
+                    this._mediaSettingsError = this._tp('call_overlay.copy_link_bad_response');
+                    this.requestUpdate();
+                    return;
+                }
+            }
+        }
+
+        if (resolvedUrl === null) {
+            try {
+                await urlPromise;
+            } catch {
+                this._mediaSettingsError = this._tp('call_overlay.copy_link_bad_response');
+                this.requestUpdate();
+                return;
+            }
         }
         try {
-            await copyTextToClipboard(join_url);
+            await copyTextToClipboard(resolvedUrl);
         } catch {
             this._mediaSettingsError = this._tp('call_overlay.copy_link_clipboard_failed');
             this.requestUpdate();
             return;
         }
+        this._onCopyLinkDone();
+    }
+
+    _onCopyLinkDone() {
         this._clearCopyLinkFeedbackTimer();
         this._copyLinkFeedback = true;
         this.requestUpdate();

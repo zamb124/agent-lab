@@ -69,6 +69,11 @@ function extractPlainText(msg) {
         if (c.type === 'text/plain' && typeof c.data?.body === 'string') {
             parts.push(c.data.body);
         }
+        if (c.type === 'call/transcript' && Array.isArray(c.data?.entries)) {
+            for (const entry of c.data.entries) {
+                parts.push(`${entry.display_name}: ${entry.text}`);
+            }
+        }
     }
     return parts.join('\n').trim();
 }
@@ -179,6 +184,18 @@ function _callBoundaryShowJoinButton(host, boundaryCallId) {
     if (typeof activeId !== 'string' || activeId === '') return true;
     if (activeId !== boundaryCallId) return true;
     return o.minimized === true;
+}
+
+const _svgNetworkleLogo = html`
+<svg width="18" height="18" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M59.99 29.37C59.72 23.4 50.9 18.6 40.07 18.6l-1.03.01c-5.93.17-11.18 1.77-14.63 4.2-.15-1.89-.6-3.96-1.38-6.07-2.59-7.02-7.83-11.87-11.7-10.83-3.86 1.04-4.9 7.57-2.3 14.59 1.36 3.69 3.46 6.78 5.7 8.73-4.2 1.32-8.63 5.11-11.62 10.42l-.42.77C-1.4 48.3-.77 56.49 4.2 59.15l.25.13c5.19 2.52 12.95-1.69 17.64-9.44l.44-.76c2.29-4.07 3.3-8.27 3.09-11.8 3.41 1.99 8.15 3.28 13.43 3.43l1.02.01c11.01 0 19.94-4.95 19.94-11.05l-.01-.29zM21.52 37.53c.18 2.71-.59 6.23-2.59 9.79s-4.67 5.57-7.17 6.98c-2.55 1.44-4.35 1.38-5.36.89-1.01-.49-2.09-1.82-2.28-4.59-.18-2.71.59-6.23 2.59-9.79s4.67-5.56 7.17-6.97c2.49-1.44 4.29-1.38 5.3-.89 1.01.49 2.09 1.83 2.28 4.59zm-2.36-19.75c1.11 3.02 1.37 5.75 1.07 7.65-.26 1.64-.78 2.06-.9 2.14-.15-.01-.87-.1-2.18-1.32-1.52-1.41-3.15-3.77-4.26-6.79-1.12-3.02-1.37-5.74-1.07-7.64.26-1.64.78-2.06.9-2.14.15.01.87.09 2.18 1.32 1.52 1.41 3.15 3.77 4.26 6.79zM56 29.66c0 .94-.73 2.63-3.78 4.32-2.91 1.61-7.2 2.74-12.16 2.74s-9.25-1.12-12.16-2.73c-3.04-1.69-3.77-3.38-3.78-4.32.01-.94.73-2.63 3.78-4.32 2.91-1.61 7.2-2.73 12.16-2.73s9.25 1.12 12.16 2.73c3.04 1.69 3.77 3.38 3.78 4.32z" fill="currentColor"/>
+</svg>`;
+
+function _transcriptInitials(displayName) {
+    const parts = (displayName || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return '?';
 }
 
 function renderContent(content, host, tp) {
@@ -352,27 +369,43 @@ function renderContent(content, host, tp) {
         const canRequest = safeStatus === 'idle' || safeStatus === 'failed';
         return html`
             <div class="video-attachment">
-                <video class="video-attachment-player" controls preload="metadata" src=${src}></video>
-                <div class="video-attachment-toolbar">
-                    <a
-                        class="transcribe-btn"
-                        href=${src}
-                        download=${label}
-                        target="_blank"
-                        @click=${(e) => e.stopPropagation()}
-                    >${tp('bubble.download_title')}</a>
-                    ${canRequest
-                        ? html`
-                            <button
-                                type="button"
-                                class="transcribe-btn"
-                                @click=${(e) => {
-                                    e.stopPropagation();
-                                    host._requestVideoTranscription();
-                                }}
-                            >${tp('bubble.transcribe_video')}</button>
-                        `
-                        : ''}
+                <div class="video-attachment-frame">
+                    <video class="video-attachment-player" controls preload="metadata" src=${src}></video>
+                    <div class="video-overlay-actions">
+                        <a
+                            class="video-overlay-btn"
+                            href=${src}
+                            download=${label}
+                            target="_blank"
+                            title=${tp('bubble.download_title')}
+                            @click=${(e) => e.stopPropagation()}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 3v13M5 15l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M3 21h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </a>
+                        ${canRequest
+                            ? html`
+                                <button
+                                    type="button"
+                                    class="video-overlay-btn"
+                                    title=${tp('bubble.transcribe_video')}
+                                    @click=${(e) => {
+                                        e.stopPropagation();
+                                        host._requestVideoTranscription();
+                                    }}
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                </button>
+                            `
+                            : ''}
+                    </div>
                 </div>
                 ${safeStatus === 'processing'
                     ? html`<div class="transcribe-hint">${tp('bubble.transcribe_processing')}</div>`
@@ -435,6 +468,66 @@ function renderContent(content, host, tp) {
                 >
                     <platform-icon name="doc-detail" size="18" aria-hidden="true"></platform-icon>
                 </button>
+                <button
+                    type="button"
+                    class="call-boundary-crm-export"
+                    title=${tp('bubble.export_crm')}
+                    aria-label=${tp('bubble.export_crm')}
+                    @click=${(e) => {
+                        e.stopPropagation();
+                        host._exportCallToCrm(callId);
+                    }}
+                >
+                    ${_svgNetworkleLogo}
+                </button>
+            </div>
+        `;
+    }
+    if (content.type === 'call/transcript') {
+        const entries = content.data?.entries;
+        if (!Array.isArray(entries)) throw new Error(tp('bubble.err_content_type', { type: 'call/transcript' }));
+        return html`
+            <div class="call-transcript">
+                ${entries.map((entry) => {
+                    const ts = new Date(entry.timestamp);
+                    const time = Number.isNaN(ts.getTime()) ? '' : ts.toLocaleTimeString(
+                        host.i18n?.locale === 'ru' ? 'ru-RU' : 'en-US',
+                        { hour: '2-digit', minute: '2-digit' },
+                    );
+                    const initials = _transcriptInitials(entry.display_name);
+                    const avatarUrl = entry.avatar_url
+                        ? `/sync/api/v1/files/download/${entry.avatar_url}`
+                        : null;
+                    const nameClickable = !entry.is_guest;
+                    return html`
+                        <div class="transcript-entry">
+                            <div
+                                class="transcript-avatar"
+                                style="--hue: ${hueFromUserId(entry.user_id)}"
+                                @click=${nameClickable ? () => host._openMentionProfile(entry.user_id) : null}
+                                role=${nameClickable ? 'button' : 'presentation'}
+                                tabindex=${nameClickable ? '0' : '-1'}
+                            >
+                                ${avatarUrl
+                                    ? html`<img src=${avatarUrl} alt="" class="transcript-avatar-img">`
+                                    : html`<span class="transcript-avatar-initials">${initials}</span>`}
+                            </div>
+                            <div class="transcript-body">
+                                <div class="transcript-header">
+                                    ${nameClickable
+                                        ? html`<button
+                                            type="button"
+                                            class="transcript-name transcript-name--link"
+                                            @click=${() => host._openMentionProfile(entry.user_id)}
+                                          >${entry.display_name}</button>`
+                                        : html`<span class="transcript-name">${entry.display_name}</span>`}
+                                    <span class="transcript-time">${time}</span>
+                                </div>
+                                <div class="transcript-text">${entry.text}</div>
+                            </div>
+                        </div>
+                    `;
+                })}
             </div>
         `;
     }
@@ -721,6 +814,12 @@ export class MessageBubble extends PlatformElement {
                 max-width: min(720px, 100%);
             }
 
+            .video-attachment-frame {
+                position: relative;
+                display: block;
+                line-height: 0;
+            }
+
             .video-attachment-player {
                 width: 100%;
                 max-height: 360px;
@@ -728,27 +827,38 @@ export class MessageBubble extends PlatformElement {
                 background: #000;
             }
 
-            .video-attachment-toolbar {
+            .video-overlay-actions {
+                position: absolute;
+                top: 8px;
+                left: 8px;
+                z-index: 2;
                 display: flex;
-                flex-wrap: wrap;
+                gap: 6px;
+                pointer-events: auto;
+            }
+
+            .video-overlay-btn {
+                display: flex;
                 align-items: center;
-                gap: var(--space-2);
-                font-size: var(--text-xs);
-            }
-
-            .transcribe-btn {
-                padding: var(--space-1) var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                font-size: var(--text-xs);
+                justify-content: center;
+                width: 34px;
+                height: 34px;
+                border-radius: 50%;
+                border: none;
+                background: rgba(0, 0, 0, 0.48);
+                color: #fff;
+                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+                text-decoration: none;
                 cursor: pointer;
+                transition: background var(--duration-fast), transform var(--duration-fast);
             }
 
-            .transcribe-btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
+            .video-overlay-btn:hover {
+                background: rgba(0, 0, 0, 0.65);
+            }
+
+            .video-overlay-btn:active {
+                transform: scale(0.92);
             }
 
             .transcribe-hint,
@@ -869,6 +979,127 @@ export class MessageBubble extends PlatformElement {
             .call-boundary-transcribe:focus-visible {
                 outline: 2px solid var(--accent);
                 outline-offset: 2px;
+            }
+
+            .call-boundary-crm-export {
+                display: inline-flex;
+                width: 36px;
+                height: 36px;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-full);
+                border: 1px solid rgba(255, 255, 255, 0.45);
+                background: rgba(255, 255, 255, 0.22);
+                cursor: pointer;
+                padding: 0;
+                flex-shrink: 0;
+                box-sizing: border-box;
+                transition: background var(--duration-fast), border-color var(--duration-fast);
+            }
+
+            .bubble.own .call-boundary-crm-export {
+                color: rgb(6, 95, 70);
+            }
+
+            .bubble.other .call-boundary-crm-export {
+                color: rgb(3, 105, 161);
+            }
+
+            .call-boundary-crm-export:hover {
+                background: rgba(255, 255, 255, 0.38);
+                border-color: rgba(255, 255, 255, 0.58);
+            }
+
+            .call-boundary-crm-export:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
+            }
+
+            .call-transcript {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                padding: var(--space-2) 0;
+            }
+
+            .transcript-entry {
+                display: flex;
+                gap: var(--space-2);
+                align-items: flex-start;
+            }
+
+            .transcript-avatar {
+                width: 28px;
+                height: 28px;
+                min-width: 28px;
+                border-radius: var(--radius-full);
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: hsl(var(--hue, 200), 50%, 78%);
+                font-size: 11px;
+                font-weight: 600;
+                color: hsl(var(--hue, 200), 40%, 30%);
+                cursor: default;
+                flex-shrink: 0;
+                margin-top: 2px;
+            }
+
+            .transcript-avatar[role="button"] {
+                cursor: pointer;
+            }
+
+            .transcript-avatar-img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .transcript-body {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .transcript-header {
+                display: flex;
+                align-items: baseline;
+                gap: var(--space-2);
+                margin-bottom: 1px;
+            }
+
+            .transcript-name {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
+            .transcript-name--link {
+                background: none;
+                border: none;
+                padding: 0;
+                cursor: pointer;
+                text-decoration: none;
+                font-family: inherit;
+            }
+
+            .transcript-name--link:hover {
+                text-decoration: underline;
+            }
+
+            .transcript-time {
+                font-size: 11px;
+                color: var(--text-tertiary);
+                white-space: nowrap;
+            }
+
+            .transcript-text {
+                font-size: var(--text-base, 14px);
+                color: var(--text-primary);
+                line-height: 1.45;
+                white-space: pre-line;
+                overflow-wrap: anywhere;
+                word-break: normal;
             }
 
             .bubble.bubble--call-boundary {
@@ -1646,6 +1877,89 @@ export class MessageBubble extends PlatformElement {
         }
         const syncApi = this.services.get('syncApi');
         await syncApi.transcribeCallSession(this.channelId, callId);
+    }
+
+    async _exportCallToCrm(callId) {
+        if (typeof callId !== 'string' || callId === '') {
+            throw new Error(this._tp('bubble.err_call_id_transcribe'));
+        }
+        const allMessages = SyncStore.getDisplayMessages();
+        const transcriptMsg = allMessages.find(
+            (m) => m.call_id === callId && Array.isArray(m.contents) &&
+                m.contents.some((c) => c.type === 'call/transcript' || c.type === 'text/plain'),
+        );
+        if (!transcriptMsg) {
+            this._showToast(this._tp('bubble.export_crm_no_transcript'), 'warning');
+            return;
+        }
+
+        let noteText = '';
+        for (const c of transcriptMsg.contents) {
+            if (c.type === 'call/transcript' && Array.isArray(c.data?.entries)) {
+                noteText = c.data.entries.map((e) => {
+                    const ts = new Date(e.timestamp);
+                    const time = Number.isNaN(ts.getTime()) ? '' : ts.toLocaleTimeString(
+                        this.i18n?.locale === 'ru' ? 'ru-RU' : 'en-US',
+                        { hour: '2-digit', minute: '2-digit' },
+                    );
+                    return `[${e.display_name}][${time}] ${e.text}`;
+                }).join('\n');
+                break;
+            }
+            if (c.type === 'text/plain' && typeof c.data?.body === 'string') {
+                noteText += c.data.body + '\n';
+            }
+        }
+        noteText = noteText.trim();
+        if (noteText === '') {
+            this._showToast(this._tp('bubble.export_crm_no_transcript'), 'warning');
+            return;
+        }
+
+        const state = SyncStore.state;
+        const channel = (state.channels?.list ?? []).find((ch) => ch.id === this.channelId);
+        const space = channel?.space_id
+            ? (state.spaces?.list ?? []).find((s) => s.id === channel.space_id)
+            : null;
+        const namespace = space?.namespace || 'default';
+
+        const syncApi = this.services.get('syncApi');
+        const existingType = await syncApi.getCrmEntityType('sync');
+        if (existingType === null) {
+            await syncApi.createCrmEntityType({
+                type_id: 'sync',
+                parent_type_id: 'note',
+                name: 'Sync',
+                description: 'Транскрипт звонка из Sync',
+                namespace_ids: [namespace],
+                required_fields: {},
+                optional_fields: {},
+            });
+        }
+
+        const sentDate = transcriptMsg.sent_at
+            ? new Date(transcriptMsg.sent_at).toLocaleDateString(
+                this.i18n?.locale === 'ru' ? 'ru-RU' : 'en-US',
+            )
+            : '';
+        const noteName = sentDate
+            ? `${this._tp('bubble.transcript_preview')} — ${sentDate}`
+            : this._tp('bubble.transcript_preview');
+
+        await syncApi.createCrmEntity({
+            entity_type: 'note',
+            entity_subtype: 'sync',
+            namespace,
+            name: noteName,
+            description: noteText,
+        });
+
+        this._showToast(this._tp('bubble.export_crm_success'), 'success');
+    }
+
+    _showToast(message, type = 'info') {
+        const notify = this.services.get('notify');
+        notify.show(type, message);
     }
 
     _joinCallFromBoundary(callId) {

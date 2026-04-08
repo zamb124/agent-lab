@@ -164,7 +164,14 @@
     "err_tool_response": "Invalid custom_tool_response content.",
     "err_content_type": "Unsupported content type: {{type}}",
     "err_mark_file_id": "markFileUnavailable: fileId is required.",
-    "err_check_file_id": "isFileUnavailable: fileId is required."
+    "err_check_file_id": "isFileUnavailable: fileId is required.",
+    "transcript_guest": "Guest",
+    "transcript_preview": "Call transcript",
+    "export_crm": "Export to NetWorkle",
+    "export_crm_no_transcript": "Transcribe the meeting first",
+    "export_crm_success": "Note created in NetWorkle",
+    "export_crm_no_namespace": "Space has no CRM namespace",
+    "export_crm_error": "Could not create note: {{detail}}"
   },
   "user_info_modal": {
     "err_no_user_id": "No user_id for profile.",
@@ -308,6 +315,7 @@
     "file": "[File]",
     "audio": "[Audio]",
     "video": "[Video]",
+    "call_transcript": "[Call transcript]",
     "call_boundary": "[Call]",
     "git": "[Git]",
     "tool": "[Tool]",
