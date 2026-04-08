@@ -686,3 +686,41 @@ class BillingConfig(BaseModel):
         default_factory=BillingSpanSettlementConfig,
         description="Параметры фоновой джобы преобразования spans в usage.",
     )
+
+
+class YouTubeConfig(BaseModel):
+    """Конфигурация скачивания аудио с YouTube через yt-dlp."""
+
+    max_duration_seconds: int = Field(
+        default=7200,
+        ge=60,
+        description="Максимальная длительность видео для скачивания (сек).",
+    )
+    preferred_codec: str = Field(
+        default="mp3",
+        description="Кодек для извлечения аудио (mp3, aac, wav).",
+    )
+    preferred_quality: str = Field(
+        default="64",
+        description="Качество аудио (kbps).",
+    )
+    socket_timeout: int = Field(
+        default=30,
+        ge=5,
+        description="Таймаут сетевых операций yt-dlp (сек).",
+    )
+
+
+class MediaTranscriberConfig(BaseModel):
+    """Конфигурация единого медиа-пайплайна транскрипции."""
+
+    max_file_size_bytes: int = Field(
+        default=500 * 1024 * 1024,
+        ge=1024,
+        description="Максимальный размер файла для транскрипции (байт).",
+    )
+    default_language: Optional[str] = Field(
+        default=None,
+        description="Язык по умолчанию для STT (None — из STT конфигурации).",
+    )
+    youtube: YouTubeConfig = Field(default_factory=YouTubeConfig)

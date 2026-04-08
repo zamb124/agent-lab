@@ -104,6 +104,7 @@ core = [
     "docxtpl>=0.20.2",
     "reportlab>=4.4.7",
     "unstructured[xlsx]>=0.16.0",
+    "yt-dlp>=2024.0.0",
 ]
 
 agents = [

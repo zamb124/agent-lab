@@ -117,6 +117,8 @@ _OFFICE_EXTENSIONS = {
     ".eml",
 }
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
+_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".wma", ".opus", ".amr"}
+_VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".wmv", ".flv", ".m4v", ".3gp"}
 
 _DEFAULT_IMAGE_VISION_PROMPT = (
     "Извлеки весь видимый текст с изображения. "
@@ -148,6 +150,10 @@ def _kind_from_extension(ext: str) -> FileReadKind:
         return FileReadKind.OFFICE
     if ext in _IMAGE_EXTENSIONS:
         return FileReadKind.IMAGE
+    if ext in _AUDIO_EXTENSIONS:
+        return FileReadKind.AUDIO
+    if ext in _VIDEO_EXTENSIONS:
+        return FileReadKind.VIDEO
     return FileReadKind.UNKNOWN
 
 
@@ -165,6 +171,10 @@ class FileReader:
         if kind == FileReadKind.UNKNOWN and mime:
             if mime.startswith("image/"):
                 kind = FileReadKind.IMAGE
+            elif mime.startswith("audio/"):
+                kind = FileReadKind.AUDIO
+            elif mime.startswith("video/"):
+                kind = FileReadKind.VIDEO
             elif mime == "application/pdf":
                 kind = FileReadKind.PDF
             elif mime in ("text/plain", "text/markdown", "text/html", "text/csv"):
@@ -222,6 +232,10 @@ class FileReader:
             result = await asyncio.to_thread(_read_pdf_sync, raw, name, mime, opts)
         elif info.detected_kind == FileReadKind.IMAGE:
             result = await _read_image_impl(raw, name, mime or "application/octet-stream", opts)
+        elif info.detected_kind == FileReadKind.AUDIO:
+            result = await _read_audio_impl(raw, name, mime or "audio/mpeg")
+        elif info.detected_kind == FileReadKind.VIDEO:
+            result = await _read_video_impl(raw, name, mime or "video/mp4")
         elif info.detected_kind == FileReadKind.TEXT:
             result = await asyncio.to_thread(_read_plain_text_sync, raw, name, mime, opts)
         elif info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
@@ -487,4 +501,51 @@ def _read_unstructured_sync(
         page_count=len(pages),
         pages=pages,
         warnings=warnings,
+    )
+
+
+async def _read_audio_impl(
+    raw: bytes,
+    file_name: str,
+    mime: str,
+) -> FileReadResult:
+    from core.files.media.transcriber import MediaTranscriber
+
+    transcriber = MediaTranscriber()
+    transcription = await transcriber.transcribe_audio(
+        audio_bytes=raw,
+        file_name=file_name,
+        mime_type=mime,
+    )
+    page = ReadPage(index=0, text=transcription.text, assets=[], label=None)
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime,
+        detected_kind=FileReadKind.AUDIO,
+        page_count=1,
+        pages=[page],
+        warnings=[],
+    )
+
+
+async def _read_video_impl(
+    raw: bytes,
+    file_name: str,
+    mime: str,
+) -> FileReadResult:
+    from core.files.media.transcriber import MediaTranscriber
+
+    transcriber = MediaTranscriber()
+    transcription = await transcriber.transcribe_video(
+        video_bytes=raw,
+        file_name=file_name,
+    )
+    page = ReadPage(index=0, text=transcription.text, assets=[], label=None)
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime,
+        detected_kind=FileReadKind.VIDEO,
+        page_count=1,
+        pages=[page],
+        warnings=[],
     )

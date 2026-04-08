@@ -34,6 +34,7 @@ from core.config.models import (
     LLMConfig,
     PushConfig,
     STTConfig,
+    MediaTranscriberConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ class BaseSettings(PydanticBaseSettings):
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     push: PushConfig = Field(default_factory=PushConfig)
     calls: CallsConfig = Field(default_factory=CallsConfig)
+    media_transcriber: MediaTranscriberConfig = Field(default_factory=MediaTranscriberConfig)
     recording_max_duration_seconds: float = Field(default=3600.0)
     transcribe_audio_redis_lock_ttl_seconds: int = Field(
         default=600,

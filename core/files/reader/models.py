@@ -14,6 +14,8 @@ class FileReadKind(StrEnum):
     OFFICE = "office"
     SPREADSHEET = "spreadsheet"
     IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
     UNKNOWN = "unknown"
 
 

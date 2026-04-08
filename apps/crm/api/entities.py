@@ -35,7 +35,7 @@ from apps.crm_worker.tasks.analysis_tasks import (
     analyze_text_with_ai_task,
     apply_analysis_draft_task,
 )
-from core.clients.stt_client import STTClientFactory
+from core.files.media.transcriber import MediaTranscriber
 from core.context import get_context
 from core.i18n.service import t
 from core.websocket.publisher import notify_user, Notification, NotificationType
@@ -592,24 +592,16 @@ async def voice_input(
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Пустой аудиофайл.")
 
-    stt_client = STTClientFactory.create_client()
-    stt_result = await stt_client.transcribe_audio(
+    transcriber = MediaTranscriber()
+    transcription = await transcriber.transcribe_audio(
         audio_bytes=audio_bytes,
         file_name=file_name,
         mime_type=mime_type,
         language=language,
     )
-    if stt_result.status.value != "done":
-        raise HTTPException(
-            status_code=422,
-            detail=f"Неуспешный статус STT: {stt_result.status.value}",
-        )
-    if stt_result.text.strip() == "":
-        raise HTTPException(status_code=422, detail="STT вернул пустую транскрипцию.")
-
     return {
-        "text": stt_result.text,
-        "stt": stt_result.model_dump(),
+        "text": transcription.text,
+        "stt": transcription.model_dump(),
     }
 
 

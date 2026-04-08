@@ -11,7 +11,6 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from core.clients.stt_client import BaseSTTClient, STTClientFactory
 from core.files.audio_transcode import (
     resolve_ios_transcode_source,
     transcode_audio_bytes_to_m4a_aac,
@@ -353,48 +352,19 @@ class AudioProcessor:
         file_repository: "FileRepository",
         bucket_name: Optional[str] = None,
     ):
-        """
-        Args:
-            file_repository: FileRepository для работы с записями о файлах
-            bucket_name: Имя S3 бакета
-        """
         self.file_repository = file_repository
         self.bucket_name = bucket_name
         self._s3_client: Optional[S3Client] = None
-        self._stt_client: Optional[BaseSTTClient] = None
 
     async def _get_s3_client(self) -> S3Client:
-        """Получает S3 клиент"""
         if self._s3_client is None:
             if self.bucket_name:
                 self._s3_client = S3ClientFactory.create_client_for_bucket(self.bucket_name)
             else:
                 self._s3_client = S3ClientFactory.create_default_client()
-
         return self._s3_client
 
-    async def _get_stt_client(self) -> BaseSTTClient:
-        """Получает STT клиент."""
-        if self._stt_client is None:
-            self._stt_client = STTClientFactory.create_client()
-        return self._stt_client
-
-    @staticmethod
-    def extract_audio_info_from_message(message: str) -> List[Dict[str, Any]]:
-        """
-        Legacy AUDIO-теги удалены из платформы.
-
-        Args:
-            message: Текст сообщения
-
-        Returns:
-            Всегда пустой список, т.к. [AUDIO] формат больше не поддерживается.
-        """
-        _ = message
-        return []
-
     async def close(self):
-        """Закрывает клиенты"""
         if self._s3_client:
             await self._s3_client.close()
             self._s3_client = None
@@ -406,27 +376,13 @@ class AudioProcessor:
         content_type: str = "audio/wave",
         uploaded_by: Optional[str] = None,
         auto_recognize: bool = True,
+        language: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         public: bool = True,
     ) -> AudioMetadata:
-        """
-        Обрабатывает аудиофайл из данных в памяти.
-
-        Args:
-            data: Данные аудиофайла
-            original_name: Оригинальное имя файла
-            content_type: MIME тип аудио
-            uploaded_by: ID пользователя
-            auto_recognize: Автоматически распознавать речь
-            metadata: Дополнительные метаданные
-            tags: Теги аудиофайла
-            public: Сделать файл публичным
-
-        Returns:
-            Метаданные аудиофайла
-        """
-        logger.info(f"Начинаем обработку аудио: {original_name}, размер={len(data)} байт")
+        """Загружает аудио в S3 и при auto_recognize транскрибирует через MediaTranscriber."""
+        logger.info("Обработка аудио: %s, размер=%s байт", original_name, len(data))
 
         file_id = f"file_{uuid.uuid4().hex[:12]}"
         file_hash = hashlib.sha256(data).hexdigest()[:16]
@@ -444,21 +400,23 @@ class AudioProcessor:
         )
 
         transcription_text = None
-        stt_result = None
         transcription_status = AudioTranscriptionStatus.IDLE
+        transcription_error: Optional[str] = None
+        transcription_provider: Optional[str] = None
 
         if auto_recognize:
-            logger.info("Запускаем распознавание речи...")
-            stt_client = await self._get_stt_client()
-            stt_result = await stt_client.transcribe_audio(
+            from core.files.media.transcriber import MediaTranscriber
+
+            transcriber = MediaTranscriber()
+            transcription_result = await transcriber.transcribe_audio(
                 audio_bytes=data,
                 file_name=original_name,
                 mime_type=content_type,
-                language="ru",
+                language=language,
             )
-            transcription_text = stt_result.text
-            transcription_status = stt_result.status
-            logger.info(f"Распознан текст: {transcription_text[:100]}...")
+            transcription_text = transcription_result.text
+            transcription_status = AudioTranscriptionStatus.DONE
+            transcription_provider = transcription_result.provider
 
         audio_record = AudioMetadata(
             file_id=file_id,
@@ -475,25 +433,15 @@ class AudioProcessor:
             tags=tags or [],
             transcription_status=transcription_status,
             transcription_text=transcription_text,
-            transcription_error=stt_result.error if stt_result is not None else None,
-            transcription_provider=stt_result.provider if stt_result is not None else None,
+            transcription_error=transcription_error,
+            transcription_provider=transcription_provider,
         )
 
         await self.file_repository.set(audio_record)
-
-        logger.info(f"Аудио обработано: {file_id}")
+        logger.info("Аудио обработано: %s", file_id)
         return audio_record
 
     async def get_audio_record(self, audio_id: str) -> Optional[AudioMetadata]:
-        """
-        Получает запись об аудиофайле.
-
-        Args:
-            audio_id: ID аудиофайла
-
-        Returns:
-            Запись об аудиофайле или None
-        """
         return await self.file_repository.get(audio_id)
 
 

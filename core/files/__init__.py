@@ -19,6 +19,12 @@ from core.files.file_ref import (
     file_id_from_download_url,
     normalize_file_ref,
 )
+from core.files.media import (
+    MediaTranscriber,
+    TranscriptionResult,
+    extract_audio_from_video,
+    transcribe_audio_with_chunking,
+)
 from core.files.models import (
     AudioAttachmentContent,
     AudioMetadata,
@@ -114,4 +120,8 @@ __all__ = [
     "normalize_file_ref",
     "read_template_bytes_from_file_ref",
     "render_docx_template_bytes",
+    "MediaTranscriber",
+    "TranscriptionResult",
+    "extract_audio_from_video",
+    "transcribe_audio_with_chunking",
 ]
