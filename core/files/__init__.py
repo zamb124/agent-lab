@@ -61,6 +61,18 @@ from core.files.s3_client import (
     get_default_s3_client,
 )
 from core.files.streaming import stream_s3_file
+from core.files.types import (
+    ALL_CATEGORIES,
+    FILE_TYPE_REGISTRY,
+    FileCategory,
+    FileTypeEntry,
+    accept_string_for,
+    ext_to_category,
+    ext_to_mime,
+    extensions_for,
+    mime_to_category,
+    mimes_for,
+)
 from core.files.writer import (
     ContentKind,
     FileWriteError,
@@ -124,4 +136,14 @@ __all__ = [
     "TranscriptionResult",
     "extract_audio_from_video",
     "transcribe_audio_with_chunking",
+    "FileCategory",
+    "FileTypeEntry",
+    "FILE_TYPE_REGISTRY",
+    "ALL_CATEGORIES",
+    "extensions_for",
+    "mimes_for",
+    "ext_to_mime",
+    "ext_to_category",
+    "mime_to_category",
+    "accept_string_for",
 ]

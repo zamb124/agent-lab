@@ -363,7 +363,7 @@ export class NamespaceDetail extends PlatformElement {
             <input 
                 type="file" 
                 @change=${this._handleFileSelect} 
-                accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.html,.htm,.txt,.md,.rst,.rtf,.odt,.csv,.tsv,.eml,.msg,.epub,.jpg,.jpeg,.png,.tiff,.bmp"
+                accept=${this.services.fileTypes.acceptStringFor(...this.services.fileTypes.categories)}
             />
             
             ${loading ? html`

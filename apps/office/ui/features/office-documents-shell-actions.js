@@ -349,7 +349,7 @@ export class OfficeDocumentsShellActions extends PlatformElement {
                 id="office-shell-file-input"
                 class="file-input"
                 type="file"
-                accept=".doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp,.pdf"
+                accept=${this.services.fileTypes.acceptStringFor('office_doc', 'spreadsheet', 'presentation', 'pdf', 'text')}
                 @change=${this._onFileSelected}
             />
             <glass-modal

@@ -12,5 +12,6 @@ export { IconService, FILE_ICON_BASE_NAMES, resolveFileIconKey } from './icon.se
 export { CompaniesService } from './companies.service.js';
 export { CalendarService } from './calendar.service.js';
 export { FilesService } from './files.service.js';
+export { FileTypesService } from './file-types.service.js';
 export { TeamService } from './team.service.js';
 

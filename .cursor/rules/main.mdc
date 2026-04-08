@@ -288,3 +288,4 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | Доменные имена (flow, user_id) | `domain_naming.mdc` |
 | Трейсинг, spans, platform_tracing | `tracing.mdc` |
 | Тарификация, usage, прайс (system) | `billing.mdc` |
+| Типы файлов: реестр, MIME, accept | `file_types.mdc` |

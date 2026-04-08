@@ -1533,7 +1533,7 @@ export class MessageComposer extends PlatformElement {
                     ${this._attachMenuOpen ? html`
                         <div class="attach-popup">
                             <label class="attach-item">
-                                <input type="file" accept="image/*,video/*" multiple @change=${e => this._pickAttachments('file/image', e)}>
+                                <input type="file" accept=${this.services.fileTypes.acceptStringFor('image', 'video')} multiple @change=${e => this._pickAttachments('file/image', e)}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                                     <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8"/>
                                     <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
@@ -1542,7 +1542,7 @@ export class MessageComposer extends PlatformElement {
                                 ${ts('composer.attach_photo_video')}
                             </label>
                             <label class="attach-item">
-                                <input type="file" accept="*/*" multiple @change=${e => this._pickAttachments('file/document', e)}>
+                                <input type="file" accept=${this.services.fileTypes.acceptStringFor(...this.services.fileTypes.categories)} multiple @change=${e => this._pickAttachments('file/document', e)}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                                     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                     <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>

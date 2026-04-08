@@ -390,6 +390,11 @@ def create_service_app(
     register_platform_i18n_routes(app, project_root)
     logger.info("I18n: GET /api/i18n/{locale}")
 
+    from core.app.file_types_route import register_platform_file_types_route
+
+    register_platform_file_types_route(app)
+    logger.info("FileTypes: GET /api/platform/file-types")
+
     # Health endpoints
     @app.get("/health")
     @app.get(f"/{service_name}/health")

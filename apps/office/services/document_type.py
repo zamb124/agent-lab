@@ -1,8 +1,36 @@
 """
 Соответствие расширения файла типу редактора OnlyOffice (documentType / fileType).
+
+Расширения здесь — подмножество единого реестра core.files.types.
 """
 
 from pathlib import Path
+
+from core.files.types import (
+    FileCategory,
+    accept_string_for,
+    extensions_for,
+)
+
+ONLYOFFICE_CATEGORIES = (
+    FileCategory.OFFICE_DOC,
+    FileCategory.SPREADSHEET,
+    FileCategory.PRESENTATION,
+    FileCategory.PDF,
+    FileCategory.TEXT,
+)
+
+ONLYOFFICE_ACCEPT_STRING = accept_string_for(*ONLYOFFICE_CATEGORIES)
+
+_ONLYOFFICE_WORD_EXTS = {
+    e.lstrip(".") for e in extensions_for(FileCategory.OFFICE_DOC, FileCategory.PDF)
+} | {"txt"}
+_ONLYOFFICE_CELL_EXTS = {
+    e.lstrip(".") for e in extensions_for(FileCategory.SPREADSHEET)
+} | {"csv"}
+_ONLYOFFICE_SLIDE_EXTS = {
+    e.lstrip(".") for e in extensions_for(FileCategory.PRESENTATION)
+}
 
 _MIME_TO_DTYPE_AND_EXT: dict[str, tuple[str, str]] = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ("cell", "xlsx"),
@@ -29,11 +57,11 @@ def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
     ext = Path(filename).suffix.lower().lstrip(".")
     if not ext:
         raise ValueError("У файла нет расширения")
-    if ext in ("doc", "docx", "odt", "rtf", "txt", "pdf"):
+    if ext in _ONLYOFFICE_WORD_EXTS:
         return "word", ext
-    if ext in ("xls", "xlsx", "ods", "csv"):
+    if ext in _ONLYOFFICE_CELL_EXTS:
         return "cell", ext
-    if ext in ("ppt", "pptx", "odp"):
+    if ext in _ONLYOFFICE_SLIDE_EXTS:
         return "slide", ext
     raise ValueError(
         f"Неподдерживаемое расширение для OnlyOffice: .{ext} "

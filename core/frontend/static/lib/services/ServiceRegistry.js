@@ -7,6 +7,7 @@ import { NotifyService } from '../../services/notify.service.js';
 import { IconService } from '../../services/icon.service.js';
 import { CalendarService } from '../../services/calendar.service.js';
 import { FilesService } from '../../services/files.service.js';
+import { FileTypesService } from '../../services/file-types.service.js';
 import { TeamService } from '../../services/team.service.js';
 import { getPWAService } from '../../services/pwa.service.js';
 import { i18n } from '../../services/i18n/i18n.service.js';
@@ -44,6 +45,7 @@ class ServiceRegistryClass {
         this.register('icon', new IconService('/static/core/assets/icons'));
         this.register('calendarApi', new CalendarService(baseUrl));
         this.register('filesApi', new FilesService(baseUrl));
+        this.register('fileTypes', new FileTypesService(baseUrl));
         this.register('team', new TeamService(baseUrl));
         this.register('pwa', getPWAService(baseUrl));
         this.register('i18n', i18n);
@@ -99,6 +101,7 @@ class ServiceRegistryClass {
     get i18n() { return this.get('i18n'); }
     get calendarApi() { return this.has('calendarApi') ? this.get('calendarApi') : null; }
     get filesApi() { return this.has('filesApi') ? this.get('filesApi') : null; }
+    get fileTypes() { return this.get('fileTypes'); }
 }
 
 export const ServiceRegistry = new ServiceRegistryClass();

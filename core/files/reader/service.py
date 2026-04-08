@@ -28,6 +28,7 @@ from core.files.reader.models import (
     ReadPage,
     merge_file_ref_read_options,
 )
+from core.files.types import FileCategory, extensions_for
 
 SourceInput = Union[Path, str, bytes]
 
@@ -89,36 +90,14 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
     raise FileReadError(f"Источник файла не настроен: {file_id}")
 
 
-_TEXT_EXTENSIONS = {
-    ".txt",
-    ".md",
-    ".rst",
-    ".csv",
-    ".tsv",
-    ".json",
-    ".xml",
-    ".html",
-    ".htm",
-    ".log",
-    ".ini",
-    ".yaml",
-    ".yml",
-}
-_SPREADSHEET_EXTENSIONS = {".xlsx", ".xls"}
-_OFFICE_EXTENSIONS = {
-    ".doc",
-    ".docx",
-    ".ppt",
-    ".pptx",
-    ".odt",
-    ".rtf",
-    ".epub",
-    ".msg",
-    ".eml",
-}
-_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
-_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".wma", ".opus", ".amr"}
-_VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".wmv", ".flv", ".m4v", ".3gp"}
+_TEXT_EXTENSIONS = extensions_for(FileCategory.TEXT)
+_SPREADSHEET_EXTENSIONS = extensions_for(FileCategory.SPREADSHEET)
+_OFFICE_EXTENSIONS = extensions_for(
+    FileCategory.OFFICE_DOC, FileCategory.PRESENTATION, FileCategory.EMAIL, FileCategory.EBOOK,
+)
+_IMAGE_EXTENSIONS = extensions_for(FileCategory.IMAGE)
+_AUDIO_EXTENSIONS = extensions_for(FileCategory.AUDIO)
+_VIDEO_EXTENSIONS = extensions_for(FileCategory.VIDEO)
 
 _DEFAULT_IMAGE_VISION_PROMPT = (
     "Извлеки весь видимый текст с изображения. "
