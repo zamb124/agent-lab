@@ -3,18 +3,13 @@
 import re
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.dependencies import ContainerDep
 from core.variables import VariableResolver
 
 router = APIRouter(tags=["prompts"])
-
-
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера"""
-    return get_container()
 
 
 class RenderPromptRequest(BaseModel):
@@ -34,7 +29,7 @@ class RenderPromptResponse(BaseModel):
 @router.post("/render", response_model=RenderPromptResponse)
 async def render_prompt(
     request: RenderPromptRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> RenderPromptResponse:
     """
     Рендерит промпт с подстановкой переменных.

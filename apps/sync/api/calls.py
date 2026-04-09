@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
-from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.db.models import SyncCall, SyncCallLink, SyncChannel
 from apps.sync.models.calls import (
     CallLinkCreate,
@@ -145,7 +145,7 @@ async def get_turn_credentials() -> TurnCredentials:
 
 
 @router.post("/links", status_code=201)
-async def create_call_link(body: CallLinkCreate) -> CallLinkRead:
+async def create_call_link(body: CallLinkCreate, container: ContainerDep) -> CallLinkRead:
     """
     Создаёт постоянную ссылку на звонок.
 
@@ -155,7 +155,6 @@ async def create_call_link(body: CallLinkCreate) -> CallLinkRead:
     Если передан calendar_event_id, создаётся канал типа calendar_meeting и ссылка на него.
     """
     context = get_context()
-    container = get_sync_container()
     company_id = context.active_company.company_id
     actor_id = context.user.user_id
 
@@ -271,10 +270,10 @@ async def create_call_link(body: CallLinkCreate) -> CallLinkRead:
 async def list_scheduled_call_links(
     start_at: datetime,
     end_at: datetime,
+    container: ContainerDep,
     channel_id: str | None = None,
 ) -> list[CallScheduledLinkRead]:
     context = get_context()
-    container = get_sync_container()
     company_id = context.active_company.company_id
     user_id = context.user.user_id
     rows = await container.call_repository.list_scheduled_calendar_links_for_user(
@@ -310,9 +309,9 @@ async def list_scheduled_call_links(
 async def patch_call_link(
     link_token: str,
     body: CallLinkPatch,
+    container: ContainerDep,
 ) -> CallLinkRead:
     context = get_context()
-    container = get_sync_container()
     company_id = context.active_company.company_id
     user_id = context.user.user_id
     link = await container.call_repository.get_link_for_company(link_token, company_id)
@@ -375,9 +374,8 @@ async def patch_call_link(
 
 
 @router.delete("/links/{link_token}", status_code=204)
-async def delete_call_link(link_token: str) -> None:
+async def delete_call_link(link_token: str, container: ContainerDep) -> None:
     context = get_context()
-    container = get_sync_container()
     company_id = context.active_company.company_id
     user_id = context.user.user_id
     link = await container.call_repository.get_link_for_company(link_token, company_id)
@@ -397,10 +395,9 @@ async def delete_call_link(link_token: str) -> None:
 
 
 @router.get("/{call_id}")
-async def get_call(call_id: str) -> CallRead:
+async def get_call(call_id: str, container: ContainerDep) -> CallRead:
     """Статус звонка и список участников."""
     context = get_context()
-    container = get_sync_container()
     try:
         call = await container.call_repository.get_call(call_id, context.active_company.company_id)
     except ValueError as exc:
@@ -410,10 +407,9 @@ async def get_call(call_id: str) -> CallRead:
 
 
 @router.get("/{call_id}/recordings")
-async def list_call_recordings(call_id: str) -> list[CallRecordingRead]:
+async def list_call_recordings(call_id: str, container: ContainerDep) -> list[CallRecordingRead]:
     """Список записей звонка."""
     context = get_context()
-    container = get_sync_container()
     company_id = context.active_company.company_id
     call = await container.call_repository.get_call(call_id, company_id)
     if not await container.channel_repository.is_member(call.channel_id, context.user.user_id, company_id=company_id):
@@ -439,7 +435,7 @@ async def list_call_recordings(call_id: str) -> list[CallRecordingRead]:
 
 
 @router.get("/{call_id}/token")
-async def get_livekit_token(call_id: str) -> dict:
+async def get_livekit_token(call_id: str, container: ContainerDep) -> dict:
     """
     Выдаёт LiveKit access token для подключения к SFU-комнате.
 
@@ -449,8 +445,6 @@ async def get_livekit_token(call_id: str) -> dict:
     context = get_context()
     user_id = context.user.user_id
     company_id = context.active_company.company_id
-
-    container = get_sync_container()
     try:
         call = await container.call_repository.get_call(call_id, company_id)
     except ValueError as exc:
@@ -473,7 +467,7 @@ async def get_livekit_token(call_id: str) -> dict:
 # ─── Публичные эндпоинты (без обязательного auth) ────────────────────────────
 
 @router.get("/join/{link_token}")
-async def get_link_info(link_token: str) -> CallLinkInfo:
+async def get_link_info(link_token: str, container: ContainerDep) -> CallLinkInfo:
     """
     Публичная информация о ссылке.
 
@@ -481,7 +475,6 @@ async def get_link_info(link_token: str) -> CallLinkInfo:
     для отображения канала, создателя и типа звонка.
     """
     settings = get_settings()
-    container = get_sync_container()
     try:
         link = await container.call_repository.get_link(link_token)
     except ValueError as exc:
@@ -514,6 +507,7 @@ async def get_link_info(link_token: str) -> CallLinkInfo:
 async def join_via_link(
     link_token: str,
     request: Request,
+    container: ContainerDep,
     body: Optional[GuestJoinRequest] = None,
 ) -> JoinResponse:
     """
@@ -525,7 +519,6 @@ async def join_via_link(
     Первый вход создаёт SFU-звонок; последующие — переиспользуют.
     """
     settings = get_settings()
-    container = get_sync_container()
     try:
         link = await container.call_repository.get_link(link_token)
     except ValueError as exc:

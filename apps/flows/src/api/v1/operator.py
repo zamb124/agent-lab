@@ -7,9 +7,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any, List, Optional, Set
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.db.models import OperatorQueues, OperatorTasks
 from apps.flows.src.db.operator_repository import OperatorRepository
 from apps.flows.src.models.flow_config import FlowConfig
@@ -35,10 +35,6 @@ logger = get_logger(__name__)
 HANDOFF_PREVIEW_MAX_LEN = 200
 
 router = APIRouter(tags=["operator"])
-
-
-def get_container_dep() -> FlowContainer:
-    return get_container()
 
 
 def _company_and_user() -> tuple[str, str]:
@@ -188,7 +184,7 @@ async def _flow_config_map_for_tasks(
 @router.post("/queues", response_model=OperatorQueueOut)
 async def create_queue(
     body: OperatorQueueCreate,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> OperatorQueueOut:
     _require_operator_queue_manage_role()
     company_id, user_id = _company_and_user()
@@ -208,7 +204,7 @@ async def create_queue(
 
 @router.get("/queues", response_model=List[OperatorQueueOut])
 async def list_queues(
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> List[OperatorQueueOut]:
     _require_operator_queue_manage_role()
     company_id, user_id = _company_and_user()
@@ -225,7 +221,7 @@ async def list_queues(
 async def patch_queue(
     queue_id: str,
     body: OperatorQueuePatch,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> OperatorQueueOut:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
@@ -251,7 +247,7 @@ async def patch_queue(
 async def add_queue_member(
     queue_id: str,
     body: OperatorMemberAdd,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> dict[str, str]:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
@@ -269,7 +265,7 @@ async def add_queue_member(
 async def remove_queue_member(
     queue_id: str,
     member_user_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> None:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
@@ -284,11 +280,12 @@ async def remove_queue_member(
 
 @router.get("/tasks", response_model=OperatorTaskListResponse)
 async def list_operator_tasks(
+    container: ContainerDep,
     queue_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    container: FlowContainer = Depends(get_container_dep),
+    
 ) -> OperatorTaskListResponse:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
@@ -328,7 +325,7 @@ async def list_operator_tasks(
 @router.get("/tasks/{task_id}")
 async def get_operator_task(
     task_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> dict[str, Any]:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
@@ -359,7 +356,7 @@ async def get_operator_task(
 async def patch_operator_task(
     task_id: str,
     body: OperatorTaskPatch,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> OperatorTaskOut:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
@@ -384,7 +381,7 @@ async def patch_operator_task(
 @router.post("/tasks/{task_id}/claim", response_model=OperatorTaskOut)
 async def claim_operator_task(
     task_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> OperatorTaskOut:
     company_id, user_id = _company_and_user()
     svc = container.operator_handoff_service
@@ -405,7 +402,7 @@ async def claim_operator_task(
 async def post_operator_task_message(
     task_id: str,
     body: OperatorTaskMessageBody,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> dict[str, str]:
     company_id, user_id = _company_and_user()
     svc = container.operator_handoff_service
@@ -428,7 +425,7 @@ async def post_operator_task_message(
 async def complete_operator_task(
     task_id: str,
     body: OperatorTaskCompleteBody,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> dict[str, str]:
     company_id, user_id = _company_and_user()
     svc = container.operator_handoff_service

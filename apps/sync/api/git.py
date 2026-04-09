@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.models.git import GitResourceRefRead, GitResourceRefCreate
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
@@ -33,9 +33,8 @@ async def upsert_git_resource(body: GitResourceRefCreate) -> GitResourceRefRead:
 
 
 @router.get("/resources/{git_ref_id}")
-async def get_git_resource(git_ref_id: str) -> GitResourceRefRead:
+async def get_git_resource(git_ref_id: str, container: ContainerDep) -> GitResourceRefRead:
     """Получение Git-ресурса по ID."""
-    container = get_sync_container()
     ref = await container.git_resource_ref_repository.get(git_ref_id)
     if ref is None:
         raise HTTPException(status_code=404, detail="Git resource not found")

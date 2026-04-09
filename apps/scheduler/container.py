@@ -76,6 +76,11 @@ def get_scheduler_container() -> SchedulerContainer:
     return _scheduler_container
 
 
+def set_scheduler_container(container: SchedulerContainer) -> None:
+    global _scheduler_container
+    _scheduler_container = container
+
+
 def reset_scheduler_container() -> None:
     global _scheduler_container
     _scheduler_container = None

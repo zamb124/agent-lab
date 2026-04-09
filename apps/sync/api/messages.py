@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.db.models import SyncMessage
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.common import PaginationRequest, PaginationResponse, UserBrief
@@ -94,11 +94,11 @@ async def _message_read_from_entity(
 async def list_messages(
     channel_id: str,
     request: Request,
+    container: ContainerDep,
     pagination: PaginationRequest = Depends(),
 ) -> PaginationResponse[MessageRead]:
     """Сообщения канала: полная модель с отправителем и контентом (как в MessageRead / WS)."""
     context = get_context()
-    container = get_sync_container()
 
     if pagination.before is not None and pagination.after is not None:
         raise HTTPException(status_code=400, detail="Нельзя одновременно передавать before и after.")

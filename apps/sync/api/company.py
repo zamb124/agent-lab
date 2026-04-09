@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.config import get_settings
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
-from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.models.channels import ChannelRead
 from apps.sync.models.common import PaginationRequest
 from apps.sync.models.company_members import CompanyMemberRead
@@ -16,13 +16,11 @@ router = APIRouter()
 
 
 @router.get("/members", response_model=list[CompanyMemberRead])
-async def list_company_members() -> list[CompanyMemberRead]:
+async def list_company_members(container: ContainerDep) -> list[CompanyMemberRead]:
     """Участники активной компании (без текущего пользователя)."""
     context = get_context()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
-
-    container = get_sync_container()
     company = await container.company_repository.get(company_id)
     if company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена.")
@@ -63,14 +61,13 @@ async def list_company_members() -> list[CompanyMemberRead]:
 @router.get("/members/{peer_user_id}/shared-channels", response_model=list[ChannelRead])
 async def list_shared_channels_with_member(
     peer_user_id: str,
+    container: ContainerDep,
     pagination: PaginationRequest = Depends(),
 ) -> list[ChannelRead]:
     """Каналы, где есть и текущий пользователь, и указанный участник компании (как в сайдбаре)."""
     context = get_context()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
-
-    container = get_sync_container()
     company = await container.company_repository.get(company_id)
     if company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена.")

@@ -27,7 +27,8 @@ from core.auth.utils import get_token_info
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.websocket import WebSocketChannel
 from apps.flows.config import get_settings
-from apps.flows.src.container import get_container
+from apps.flows.src.container import FlowContainer
+from apps.flows.src.dependencies import ContainerDep
 from core.context import Context, User, set_context
 from core.logging import get_logger
 from apps.flows.src.models import FlowConfig
@@ -52,8 +53,7 @@ WS_A2A_METHODS = {
 }
 
 
-async def _get_flow_config(flow_id: str) -> Optional[FlowConfig]:
-    container = get_container()
+async def _get_flow_config(flow_id: str, container: FlowContainer) -> Optional[FlowConfig]:
     return await container.flow_repository.get(flow_id)
 
 
@@ -89,8 +89,8 @@ async def _send_json(websocket: WebSocket, payload: Dict[str, Any]) -> None:
 
 
 @router.websocket("/ws/{flow_id}")
-async def websocket_a2a(flow_id: str, websocket: WebSocket) -> None:
-    config = await _get_flow_config(flow_id)
+async def websocket_a2a(flow_id: str, websocket: WebSocket, container: ContainerDep) -> None:
+    config = await _get_flow_config(flow_id, container)
     if not config:
         await websocket.accept()
         await _send_json(

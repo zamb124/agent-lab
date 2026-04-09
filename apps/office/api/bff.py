@@ -13,11 +13,12 @@ from urllib.parse import quote, urlparse
 import httpx
 import jwt
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 
 from apps.office.config import OfficeSettings, get_office_settings
-from apps.office.container import OfficeContainer, get_office_container
+from apps.office.container import OfficeContainer
+from apps.office.dependencies import ContainerDep
 from apps.office.models.api import (
     OfficeCatalogCreateRequest,
     OfficeCatalogDetailResponse,
@@ -89,10 +90,6 @@ def _http_exception_from_service_client(service: str, exc: ServiceClientError) -
         status_code=502,
         detail=f"Сервис {service} недоступен или вернул ошибку: {msg}",
     )
-
-
-def _container() -> OfficeContainer:
-    return get_office_container()
 
 
 async def _resolve_catalog_for_create(
@@ -234,7 +231,7 @@ async def integration_status() -> OfficeIntegrationStatusResponse:
 
 
 @router.get("/namespaces", response_model=OfficeNamespacesResponse)
-async def list_namespaces(c: OfficeContainer = Depends(_container)) -> OfficeNamespacesResponse:
+async def list_namespaces(c: ContainerDep) -> OfficeNamespacesResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
@@ -251,7 +248,7 @@ async def list_namespaces(c: OfficeContainer = Depends(_container)) -> OfficeNam
 
 @router.get("/namespaces/templates", response_model=list[OfficeNamespaceTemplateItem])
 async def list_namespace_templates_proxy(
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> list[OfficeNamespaceTemplateItem]:
     ctx = get_context()
     if not ctx.active_company:
@@ -298,7 +295,7 @@ async def list_namespace_templates_proxy(
 @router.post("/namespaces", response_model=OfficeNamespaceCreateResponse, status_code=201)
 async def create_namespace_proxy(
     body: OfficeNamespaceCreateRequest,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeNamespaceCreateResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -334,7 +331,7 @@ async def create_namespace_proxy(
 
 @router.get("/company-members")
 async def list_company_members_for_catalogs(
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> list[dict[str, object]]:
     ctx = get_context()
     if not ctx.active_company:
@@ -366,7 +363,7 @@ async def list_company_members_for_catalogs(
 
 
 @router.get("/catalogs", response_model=OfficeCatalogListResponse)
-async def list_catalogs(c: OfficeContainer = Depends(_container)) -> OfficeCatalogListResponse:
+async def list_catalogs(c: ContainerDep) -> OfficeCatalogListResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
@@ -398,7 +395,7 @@ async def list_catalogs(c: OfficeContainer = Depends(_container)) -> OfficeCatal
 @router.post("/catalogs", response_model=OfficeCatalogDetailResponse)
 async def create_catalog(
     body: OfficeCatalogCreateRequest,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -427,7 +424,7 @@ async def create_catalog(
 @router.get("/catalogs/{catalog_id}", response_model=OfficeCatalogDetailResponse)
 async def get_catalog(
     catalog_id: str,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -465,7 +462,7 @@ async def get_catalog(
 async def patch_catalog(
     catalog_id: str,
     body: OfficeCatalogPatchRequest,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -507,7 +504,7 @@ async def patch_catalog(
 @router.delete("/catalogs/{catalog_id}", status_code=204)
 async def delete_catalog_endpoint(
     catalog_id: str,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> Response:
     ctx = get_context()
     if not ctx.active_company:
@@ -538,7 +535,7 @@ async def delete_catalog_endpoint(
 @router.get("/catalogs/{catalog_id}/members", response_model=OfficeCatalogMembersResponse)
 async def list_catalog_members(
     catalog_id: str,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeCatalogMembersResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -580,7 +577,7 @@ async def list_catalog_members(
 async def add_catalog_member(
     catalog_id: str,
     body: OfficeCatalogMemberAddRequest,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeCatalogMembersResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -611,7 +608,7 @@ async def add_catalog_member(
 async def remove_catalog_member(
     catalog_id: str,
     member_user_id: str,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> Response:
     ctx = get_context()
     if not ctx.active_company:
@@ -643,9 +640,9 @@ async def remove_catalog_member(
 
 @router.get("/documents", response_model=OfficeDocumentListResponse)
 async def list_documents(
+    c: ContainerDep,
     catalog_id: str | None = Query(None, min_length=1),
     catalog_ids: list[str] | None = Query(None),
-    c: OfficeContainer = Depends(_container),
 ) -> OfficeDocumentListResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -718,10 +715,10 @@ async def list_documents(
 
 @router.post("/documents", response_model=OfficeDocumentCreateResponse)
 async def upload_document(
+    c: ContainerDep,
     file: UploadFile = File(...),
     title: str | None = Form(None),
     catalog_id: str | None = Form(None),
-    c: OfficeContainer = Depends(_container),
 ) -> OfficeDocumentCreateResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -784,7 +781,7 @@ async def upload_document(
 @router.post("/documents/empty", response_model=OfficeDocumentCreateResponse)
 async def create_empty_document(
     body: OfficeEmptyCreateRequest,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeDocumentCreateResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -868,7 +865,7 @@ async def create_empty_document(
 async def rename_document(
     binding_id: str,
     body: OfficeDocumentRenameRequest,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeDocumentRenameResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -898,7 +895,7 @@ async def rename_document(
 
 
 @router.delete("/documents/{binding_id}", status_code=204)
-async def delete_document(binding_id: str, c: OfficeContainer = Depends(_container)) -> Response:
+async def delete_document(binding_id: str, c: ContainerDep) -> Response:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
@@ -928,7 +925,7 @@ async def delete_document(binding_id: str, c: OfficeContainer = Depends(_contain
 )
 async def editor_config(
     binding_id: str,
-    c: OfficeContainer = Depends(_container),
+    c: ContainerDep,
 ) -> OfficeEditorConfigResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -1019,8 +1016,8 @@ async def editor_config(
 
 @router.get("/office-download")
 async def office_download(
+    c: ContainerDep,
     token: str = Query(..., description="JWT office_dl"),
-    c: OfficeContainer = Depends(_container),
 ) -> Response:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
@@ -1076,8 +1073,8 @@ async def office_download(
 )
 async def onlyoffice_callback(
     request: Request,
+    c: ContainerDep,
     token: str = Query(..., description="JWT office_cb"),
-    c: OfficeContainer = Depends(_container),
 ) -> OnlyOfficeCallbackResponse:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():

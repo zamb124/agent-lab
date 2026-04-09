@@ -4,16 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.config import get_settings
 from apps.sync.container import get_sync_container
-from apps.sync.db.base import SyncDatabase
-from apps.sync.db.repositories.call_repository import CallRepository
-from apps.sync.db.repositories.channel_repository import ChannelRepository
-from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
-from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
-from apps.sync.db.repositories.space_repository import SpaceRepository
-from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.handlers import execute_command
 from apps.sync.realtime.publish_events import publish_realtime_events
@@ -31,33 +22,18 @@ async def dispatch_sync_command(command: CommandEnvelope) -> dict[str, Any]:
         command.company_id,
     )
 
-    settings = get_settings()
-    if not settings.database.sync_url:
-        raise ValueError("database.sync_url не задан")
-    sync_db_url = settings.database.sync_url
-    db = SyncDatabase(sync_db_url)
-
-    spaces = SpaceRepository(db)
-    channels = ChannelRepository(db)
-    threads = ThreadRepository(db)
-    messages = MessageRepository(db)
-    git_refs = GitResourceRefRepository(db)
-    calls = CallRepository(db)
-    call_recordings = CallRecordingRepository(db)
-
     container = get_sync_container()
-    user_repository = container.user_repository
 
     exec_res = await execute_command(
         command,
-        spaces=spaces,
-        channels=channels,
-        threads=threads,
-        messages=messages,
-        git_refs=git_refs,
-        calls=calls,
-        call_recordings=call_recordings,
-        user_repository=user_repository,
+        spaces=container.space_repository,
+        channels=container.channel_repository,
+        threads=container.thread_repository,
+        messages=container.message_repository,
+        git_refs=container.git_resource_ref_repository,
+        calls=container.call_repository,
+        call_recordings=container.call_recording_repository,
+        user_repository=container.user_repository,
     )
 
     await publish_realtime_events(exec_res.events)

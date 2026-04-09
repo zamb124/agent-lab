@@ -11,7 +11,7 @@ from core.models.identity_models import AuthProvider, AuthRequest
 from core.config import get_settings
 from core.utils.tokens import TokenService
 from core.utils.domain import get_cookie_domain, build_url
-from apps.frontend.dependencies import get_container
+from apps.frontend.dependencies import ContainerDep
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.get("/callback")
 async def auth_callback(
     request: Request,
+    container: ContainerDep,
     code: str = Query(...),
     state: str = Query(...),
     provider: str = Query(None),
@@ -28,7 +29,6 @@ async def auth_callback(
     """Callback после OAuth авторизации"""
     from core.utils.domain import is_local, get_host_with_port
     
-    container = get_container()
     auth_service: AuthService = container.auth_service
     
     auth_state = await auth_service._get_auth_state(state)

@@ -4,21 +4,16 @@ API endpoints для resources.
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import ResourceType, ResourceDefinition
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["resources"])
-
-
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера"""
-    return get_container()
 
 
 class ResourceCreateRequest(BaseModel):
@@ -57,8 +52,8 @@ class ResourceResponse(BaseModel):
 
 @router.get("/", response_model=List[ResourceResponse])
 async def list_resources(
+    container: ContainerDep,
     type: Optional[ResourceType] = None,
-    container: FlowContainer = Depends(get_container_dep),
 ) -> List[ResourceResponse]:
     """Список всех shared ресурсов"""
     resources = await container.resource_repository.list_all()
@@ -83,7 +78,7 @@ async def list_resources(
 @router.get("/{resource_id}", response_model=ResourceResponse)
 async def get_resource(
     resource_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> ResourceResponse:
     """Получить ресурс по ID"""
     resource = await container.resource_repository.get(resource_id)
@@ -104,7 +99,7 @@ async def get_resource(
 @router.post("/", response_model=ResourceResponse)
 async def create_resource(
     request: ResourceCreateRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> ResourceResponse:
     """Создать shared ресурс"""
     existing = await container.resource_repository.get(request.resource_id)
@@ -142,7 +137,7 @@ async def create_resource(
 async def update_resource(
     resource_id: str,
     request: ResourceUpdateRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> ResourceResponse:
     """Обновить ресурс"""
     resource = await container.resource_repository.get(resource_id)
@@ -172,7 +167,7 @@ async def update_resource(
 @router.delete("/{resource_id}")
 async def delete_resource(
     resource_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> dict:
     """Удалить ресурс"""
     deleted = await container.resource_repository.delete(resource_id)

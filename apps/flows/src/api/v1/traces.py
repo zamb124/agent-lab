@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
 
-from apps.flows.src.container import get_container
+from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from core.tracing.span_tree import build_span_tree
 
@@ -21,6 +21,7 @@ router = APIRouter(tags=["Traces"])
 @router.get("/session/{session_id}")
 async def get_traces_by_session(
     session_id: str,
+    container: ContainerDep,
     limit: int = Query(default=100, le=1000),
 ) -> Dict[str, Any]:
     """
@@ -33,7 +34,6 @@ async def get_traces_by_session(
     Returns:
         Список spans с иерархией
     """
-    container = get_container()
     spans = await container.span_repository.get_spans_by_session(session_id, limit)
     
     return {
@@ -44,7 +44,7 @@ async def get_traces_by_session(
 
 
 @router.get("/task/{task_id}")
-async def get_traces_by_task(task_id: str) -> Dict[str, Any]:
+async def get_traces_by_task(task_id: str, container: ContainerDep) -> Dict[str, Any]:
     """
     Получает все трейсы для конкретного task.
     
@@ -54,7 +54,6 @@ async def get_traces_by_task(task_id: str) -> Dict[str, Any]:
     Returns:
         Список spans с иерархией
     """
-    container = get_container()
     spans = await container.span_repository.get_spans_by_task(task_id)
     
     return {
@@ -65,7 +64,7 @@ async def get_traces_by_task(task_id: str) -> Dict[str, Any]:
 
 
 @router.get("/trace/{trace_id}")
-async def get_trace(trace_id: str) -> Dict[str, Any]:
+async def get_trace(trace_id: str, container: ContainerDep) -> Dict[str, Any]:
     """
     Получает все spans для trace_id.
     
@@ -75,7 +74,6 @@ async def get_trace(trace_id: str) -> Dict[str, Any]:
     Returns:
         Полное дерево spans
     """
-    container = get_container()
     spans = await container.span_repository.get_trace(trace_id)
     
     return {
@@ -88,6 +86,7 @@ async def get_trace(trace_id: str) -> Dict[str, Any]:
 @router.get("/user/{user_id}")
 async def get_traces_by_user(
     user_id: str,
+    container: ContainerDep,
     from_time: Optional[datetime] = None,
     to_time: Optional[datetime] = None,
     limit: int = Query(default=100, le=1000),
@@ -104,7 +103,6 @@ async def get_traces_by_user(
     Returns:
         Список spans
     """
-    container = get_container()
     spans = await container.span_repository.get_spans_by_user(
         user_id, from_time, to_time, limit
     )
@@ -119,6 +117,7 @@ async def get_traces_by_user(
 @router.get("/flow/{flow_id}")
 async def get_traces_by_flow(
     flow_id: str,
+    container: ContainerDep,
     from_time: Optional[datetime] = None,
     to_time: Optional[datetime] = None,
     limit: int = Query(default=100, le=1000),
@@ -135,7 +134,6 @@ async def get_traces_by_flow(
     Returns:
         Список spans
     """
-    container = get_container()
     spans = await container.span_repository.get_spans_by_flow(
         flow_id, from_time, to_time, limit
     )
@@ -149,6 +147,7 @@ async def get_traces_by_flow(
 
 @router.get("/search")
 async def search_traces(
+    container: ContainerDep,
     user_id: Optional[str] = None,
     session_id: Optional[str] = None,
     flow_id: Optional[str] = None,
@@ -172,7 +171,6 @@ async def search_traces(
     Returns:
         Список trace с деревом spans для каждого trace и общее количество
     """
-    container = get_container()
     traces, total_count = await container.span_repository.search_traces(
         user_id=user_id,
         session_id=session_id,

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from apps.flows.src.container import get_container
+from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from apps.flows.src.models import FlowConfig, SkillConfig
 from apps.flows.src.services.flows_loader import get_all_flows
@@ -152,12 +152,11 @@ def build_flow_card(
 
 
 @router.get("/flows")
-async def list_registry_flows(request: Request) -> List[Dict[str, Any]]:
+async def list_registry_flows(request: Request, container: ContainerDep) -> List[Dict[str, Any]]:
     """
     Список flows как AgentCard[] (A2A формат).
     """
     base_url = get_base_url(request)
-    container = get_container()
     configs = await get_all_flows(container.flow_repository)
 
     cards: List[Dict[str, Any]] = []
@@ -169,18 +168,17 @@ async def list_registry_flows(request: Request) -> List[Dict[str, Any]]:
 
 
 @router.get("/tools")
-async def get_tools() -> List[Dict[str, Any]]:
+async def get_tools(container: ContainerDep) -> List[Dict[str, Any]]:
     """
     Список tools в формате совместимом с platformweb.
     Совместимость с platformweb OrchestratorService.getTools()
     """
-    container = get_container()
     tools = await container.tool_repository.list_all()
     return [tool.to_registry_format() for tool in tools]
 
 
 @router.get("/models/values")
-async def get_models_values(provider: Optional[str] = None) -> List[str]:
+async def get_models_values(container: ContainerDep, provider: Optional[str] = None) -> List[str]:
     """
     Список доступных моделей.
     
@@ -188,7 +186,6 @@ async def get_models_values(provider: Optional[str] = None) -> List[str]:
         provider: Провайдер (bothub, openrouter, openai). 
                   Если не указан - используется текущий из конфига.
     """
-    container = get_container()
     
     if provider:
         models = await container.llm_models_service.get_models_by_provider(provider)
@@ -208,7 +205,7 @@ async def get_models_values(provider: Optional[str] = None) -> List[str]:
 
 
 @router.post("/models/sync")
-async def sync_models(provider: Optional[str] = None) -> Dict[str, Any]:
+async def sync_models(container: ContainerDep, provider: Optional[str] = None) -> Dict[str, Any]:
     """
     Синхронизация моделей от провайдеров.
     
@@ -216,7 +213,6 @@ async def sync_models(provider: Optional[str] = None) -> Dict[str, Any]:
         provider: Провайдер для синхронизации. 
                   Если не указан - синхронизируются ВСЕ настроенные провайдеры.
     """
-    container = get_container()
     
     if provider:
         count = await container.llm_models_service.sync_models_by_provider(provider)
@@ -647,12 +643,11 @@ def _generate_html(schema: Dict[str, Any]) -> str:
 
 
 @router.get("/flows/{flow_id}/schema", response_class=HTMLResponse)
-async def get_flow_schema(flow_id: str) -> HTMLResponse:
+async def get_flow_schema(flow_id: str, container: ContainerDep) -> HTMLResponse:
     """
     HTML страница с визуализацией схемы агента для всех skills.
     Использует Mermaid.js для отрисовки графов.
     """
-    container = get_container()
     schema = await container.flow_factory.get_flow_schema(flow_id)
 
     if schema is None:

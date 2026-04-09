@@ -1,8 +1,8 @@
 """API роутер для тредов (Threads)."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.models.common import PaginationRequest
 from apps.sync.models.threads import ThreadRead, ThreadCreate, ThreadRow
 from apps.sync.realtime.commands import CommandEnvelope
@@ -16,11 +16,11 @@ router = APIRouter()
 @router.get("/")
 async def list_threads(
     channel_id: str,
+    container: ContainerDep,
     pagination: PaginationRequest = Depends(),
 ) -> list[ThreadRow]:
     """Список тредов в канале."""
     context = get_context()
-    container = get_sync_container()
     threads = await container.thread_repository.list_by_channel(
         channel_id, limit=pagination.limit,
         company_id=context.active_company.company_id,
@@ -59,12 +59,10 @@ async def create_thread(channel_id: str, body: ThreadCreate) -> ThreadRead:
 
 
 @router.get("/{thread_id}")
-async def get_thread(thread_id: str) -> ThreadRow:
+async def get_thread(thread_id: str, container: ContainerDep) -> ThreadRow:
     """Получение треда по ID."""
-    container = get_sync_container()
     thread = await container.thread_repository.get(thread_id)
     if thread is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Thread not found")
     return ThreadRow(
         id=thread.thread_id,

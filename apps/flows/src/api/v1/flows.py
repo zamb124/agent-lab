@@ -5,10 +5,10 @@ API endpoints для flows.
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.flows_loader import FlowsLoader
 from core.logging import get_logger
 from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig
@@ -257,11 +257,6 @@ def _skill_request_to_config(skill_id: str, skill: SkillRequest) -> SkillConfig:
     )
 
 
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера"""
-    return get_container()
-
-
 class FlowCreateRequest(BaseModel):
     """Запрос на создание агента"""
 
@@ -358,7 +353,7 @@ class FlowValidateResponse(BaseModel):
 @router.post("/validate", response_model=FlowValidateResponse)
 async def validate_flow(
     request: FlowValidateRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> FlowValidateResponse:
     """
     Валидирует конфигурацию агента без сохранения.
@@ -403,9 +398,9 @@ async def validate_flow(
 
 @router.get("/", response_model=List[FlowResponse])
 async def list_flows(
+    container: ContainerDep,
     type: Optional[FlowType] = None,
     limit: int = Query(1000, ge=1, le=10000, description="Максимум flows"),
-    container: FlowContainer = Depends(get_container_dep),
 ) -> List[FlowResponse]:
     """Список всех flows с опциональным фильтром по типу (local/external)"""
     flows = await container.flow_repository.list_all(limit=limit)
@@ -489,7 +484,7 @@ async def _validate_tool_nodes(
 
 @router.post("/", response_model=FlowResponse)
 async def create_flow(
-    request: FlowCreateRequest, container: FlowContainer = Depends(get_container_dep)
+    request: FlowCreateRequest, container: ContainerDep
 ) -> FlowResponse:
     """Создаёт flow."""
     # Валидируем tool_id в tool нодах
@@ -578,7 +573,7 @@ async def create_flow(
 
 @router.get("/{flow_id}", response_model=FlowResponse)
 async def get_flow(
-    flow_id: str, container: FlowContainer = Depends(get_container_dep)
+    flow_id: str, container: ContainerDep
 ) -> FlowResponse:
     """Получает flow по ID."""
     try:
@@ -650,7 +645,7 @@ async def get_flow(
 @router.post("/{flow_id}/reload-from-bundle", response_model=ReloadFlowFromBundleResponse)
 async def reload_flow_from_bundle(
     flow_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> ReloadFlowFromBundleResponse:
     """
     Перезаписывает flow в БД из каталога ``apps/flows/bundles/<flow_id>/`` (как при company init).
@@ -688,7 +683,7 @@ async def reload_flow_from_bundle(
 async def update_flow(
     flow_id: str,
     request: FlowCreateRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> FlowResponse:
     """Обновляет flow (новая версия)."""
     existing = await container.flow_repository.get(flow_id)
@@ -773,7 +768,7 @@ async def update_flow(
 
 @router.delete("/{flow_id}")
 async def delete_flow(
-    flow_id: str, container: FlowContainer = Depends(get_container_dep)
+    flow_id: str, container: ContainerDep
 ) -> dict:
     """Удаляет flow."""
     deleted = await container.flow_repository.delete(flow_id)
@@ -784,7 +779,7 @@ async def delete_flow(
 
 @router.get("/{flow_id}/versions", response_model=List[str])
 async def list_versions(
-    flow_id: str, container: FlowContainer = Depends(get_container_dep)
+    flow_id: str, container: ContainerDep
 ) -> List[str]:
     """Список версий flow."""
     versions = await container.flow_repository.list_versions(flow_id)
@@ -795,7 +790,7 @@ async def list_versions(
 async def get_version(
     flow_id: str,
     version: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> FlowResponse:
     """Конкретная версия flow."""
     version_cfg = await container.flow_repository.get_version(flow_id, version)
@@ -834,7 +829,7 @@ async def get_version(
 async def rollback_version(
     flow_id: str,
     version: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> Dict[str, Any]:
     """
     Откатывает flow к указанной версии.

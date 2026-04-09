@@ -105,20 +105,19 @@ async def create_embed_config(
     if not company_id:
         raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
     
-    # Проверяем существование агента
-    from apps.flows.src.container import get_container
-
-    flows_container = get_container()
-    agent = await flows_container.flow_repository.get(request_data.flow_id)
-    
-    if not agent:
+    response = await container.service_client.get(
+        "flows", f"/flows/api/v1/flows/{request_data.flow_id}"
+    )
+    if response.status_code == 404:
         raise HTTPException(status_code=404, detail=f"Агент {request_data.flow_id} не найден")
+    response.raise_for_status()
+    agent = response.json()
 
     skill_id = request_data.skill_id
-    if agent.type == FlowType.EXTERNAL:
+    if agent.get("type") == FlowType.EXTERNAL.value:
         skill_id = "default"
     else:
-        skills = agent.skills or {}
+        skills = agent.get("skills") or {}
         if skills:
             if skill_id not in skills:
                 raise HTTPException(

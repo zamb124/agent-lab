@@ -450,7 +450,7 @@ class A2AChannel(BaseChannel):
         task_id = str(uuid.uuid4())
         context_id = params.message.context_id or str(uuid.uuid4())
 
-        service = EvaluationService(container.evaluation_repository)
+        service = container.evaluation_service
 
         try:
             async for event in service.run_test_stream(

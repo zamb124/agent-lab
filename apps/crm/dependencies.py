@@ -2,6 +2,10 @@
 Dependency injection для FastAPI endpoints.
 """
 
+from typing import Annotated
+
+from fastapi import Depends
+
 from core.context import get_context
 from apps.crm.container import CRMContainer, get_crm_container
 from apps.crm.services.entity_service import EntityService
@@ -27,6 +31,9 @@ async def get_container_dep() -> CRMContainer:
             _initialized_companies.add(company_id)
     
     return container
+
+
+ContainerDep = Annotated[CRMContainer, Depends(get_container_dep)]
 
 
 def get_entity_service() -> EntityService:

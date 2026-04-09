@@ -30,7 +30,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.a2a import A2AChannel
 from core.context import get_context
-from apps.flows.src.container import get_container
+from apps.flows.src.container import FlowContainer
+from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from apps.flows.src.models import FlowConfig
 
@@ -81,15 +82,17 @@ def _sse_error_response(rpc_id: str | None, code: int, message: str) -> Streamin
     return StreamingResponse(_gen(), media_type="text/event-stream")
 
 
-async def _get_flow_config(flow_id: str, version: Optional[str] = None) -> Optional[FlowConfig]:
+async def _get_flow_config(
+    flow_id: str, container: FlowContainer, version: Optional[str] = None,
+) -> Optional[FlowConfig]:
     """
     Получает конфигурацию агента.
     
     Args:
         flow_id: ID агента
+        container: DI-контейнер
         version: Версия агента (опционально). Если не указана - возвращает latest.
     """
-    container = get_container()
     if version:
         return await container.flow_repository.get_version(flow_id, version)
     return await container.flow_repository.get(flow_id)
@@ -126,7 +129,8 @@ def _get_base_url(request: Request) -> str:
 async def get_agent_card_well_known(
     flow_id: str, 
     request: Request,
-    v: Optional[str] = None
+    container: ContainerDep,
+    v: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Agent Card по well-known URL.
@@ -134,7 +138,7 @@ async def get_agent_card_well_known(
     Query params:
         v: версия агента (опционально)
     """
-    config = await _get_flow_config(flow_id, version=v)
+    config = await _get_flow_config(flow_id, container, version=v)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     
@@ -151,7 +155,8 @@ async def get_agent_card_well_known(
 async def get_agent_card(
     flow_id: str, 
     request: Request,
-    v: Optional[str] = None
+    container: ContainerDep,
+    v: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Agent Card по A2A спецификации - GET на URL агента.
@@ -159,7 +164,7 @@ async def get_agent_card(
     Query params:
         v: версия агента (опционально)
     """
-    config = await _get_flow_config(flow_id, version=v)
+    config = await _get_flow_config(flow_id, container, version=v)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     
@@ -205,7 +210,8 @@ async def _handle_resubscribe_streaming(
 async def json_rpc_handler(
     flow_id: str, 
     request: Request,
-    v: Optional[str] = None
+    container: ContainerDep,
+    v: Optional[str] = None,
 ):
     """
     JSON-RPC handler для A2A протокола.
@@ -242,7 +248,7 @@ async def json_rpc_handler(
     metadata = params_dict.get("metadata") or {}
     version = v or metadata.get("version")
     
-    config = await _get_flow_config(flow_id, version=version)
+    config = await _get_flow_config(flow_id, container, version=version)
     if not config:
         version_info = f" version '{version}'" if version else ""
         return JSONResponse(
@@ -422,20 +428,20 @@ async def json_rpc_handler(
 
 
 @router.get("/{flow_id}/skills")
-async def list_skills(flow_id: str) -> List[Dict[str, Any]]:
+async def list_skills(flow_id: str, container: ContainerDep) -> List[Dict[str, Any]]:
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
-    config = await _get_flow_config(flow_id)
+    config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     return await channel.list_skills()
 
 
 @router.get("/{flow_id}/skills/{skill_id}")
-async def get_skill(flow_id: str, skill_id: str) -> Dict[str, Any]:
+async def get_skill(flow_id: str, skill_id: str, container: ContainerDep) -> Dict[str, Any]:
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
-    config = await _get_flow_config(flow_id)
+    config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     
@@ -446,11 +452,11 @@ async def get_skill(flow_id: str, skill_id: str) -> Dict[str, Any]:
 
 
 @router.get("/{flow_id}/skills/{skill_id}/tools")
-async def get_skill_tools(flow_id: str, skill_id: str) -> List[Dict[str, Any]]:
+async def get_skill_tools(flow_id: str, skill_id: str, container: ContainerDep) -> List[Dict[str, Any]]:
     """Получить список tools для skill с полной информацией."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
-    config = await _get_flow_config(flow_id)
+    config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     
@@ -475,11 +481,11 @@ async def get_skill_schema(flow_id: str) -> Dict[str, Any]:
 
 
 @router.post("/{flow_id}/skills")
-async def create_skill(flow_id: str, request: Request) -> Dict[str, Any]:
+async def create_skill(flow_id: str, request: Request, container: ContainerDep) -> Dict[str, Any]:
     """Создать новый skill."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
-    config = await _get_flow_config(flow_id)
+    config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
@@ -502,11 +508,11 @@ async def create_skill(flow_id: str, request: Request) -> Dict[str, Any]:
 
 
 @router.put("/{flow_id}/skills/{skill_id}")
-async def update_skill(flow_id: str, skill_id: str, request: Request) -> Dict[str, Any]:
+async def update_skill(flow_id: str, skill_id: str, request: Request, container: ContainerDep) -> Dict[str, Any]:
     """Обновить существующий skill."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
-    config = await _get_flow_config(flow_id)
+    config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
@@ -524,11 +530,11 @@ async def update_skill(flow_id: str, skill_id: str, request: Request) -> Dict[st
 
 
 @router.delete("/{flow_id}/skills/{skill_id}")
-async def delete_skill(flow_id: str, skill_id: str) -> Dict[str, Any]:
+async def delete_skill(flow_id: str, skill_id: str, container: ContainerDep) -> Dict[str, Any]:
     """Удалить skill."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
-    config = await _get_flow_config(flow_id)
+    config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 

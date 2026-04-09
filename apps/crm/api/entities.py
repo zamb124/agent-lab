@@ -634,12 +634,10 @@ async def search_mentions(
 async def get_entity_relationships(
     entity_id: str,
     service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service)
+    access_control: AccessControlService = Depends(get_access_control_service),
+    container: CRMContainer = Depends(get_container_dep),
 ):
     """Получить все relationships для entity"""
-    from apps.crm.container import get_crm_container
-
-    container = get_crm_container()
     repo = container.relationship_repository
 
     entity = await service.get_entity(entity_id)

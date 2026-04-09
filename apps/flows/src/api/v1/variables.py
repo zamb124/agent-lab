@@ -5,10 +5,10 @@ API endpoints для переменных.
 from datetime import datetime
 from typing import Any, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.dependencies import ContainerDep
 from core.context import get_context
 from core.db.repositories.variable_repository import Variable
 from core.logging import get_logger
@@ -17,11 +17,6 @@ from core.variables import VariableResolver
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["variables"])
-
-
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера"""
-    return get_container()
 
 
 class VariableCreateRequest(BaseModel):
@@ -43,7 +38,7 @@ class VariableResponse(BaseModel):
 
 @router.get("/", response_model=List[VariableResponse])
 async def list_variables(
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> List[VariableResponse]:
     """Список всех переменных (включая системные)"""
     # Получаем пользовательские переменные из БД
@@ -88,9 +83,9 @@ async def list_variables(
 
 @router.get("/{key}", response_model=VariableResponse)
 async def get_variable(
-    key: str, 
+    key: str,
+    container: ContainerDep,
     unmask: bool = False,
-    container: FlowContainer = Depends(get_container_dep)
 ) -> VariableResponse:
     """Получает переменную по ключу (включая системные)
     
@@ -140,7 +135,7 @@ async def get_variable(
 
 @router.post("/", response_model=VariableResponse)
 async def create_variable(
-    request: VariableCreateRequest, container: FlowContainer = Depends(get_container_dep)
+    request: VariableCreateRequest, container: ContainerDep
 ) -> VariableResponse:
     """Создает переменную
     
@@ -168,7 +163,7 @@ async def create_variable(
 
 @router.delete("/{key}")
 async def delete_variable(
-    key: str, container: FlowContainer = Depends(get_container_dep)
+    key: str, container: ContainerDep
 ) -> dict:
     """Удаляет переменную
     

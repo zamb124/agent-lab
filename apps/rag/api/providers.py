@@ -10,7 +10,7 @@ from core.logging import get_logger
 from core.config import get_settings
 from core.rag.factory import get_rag_provider
 from ..container import RAGContainer
-from ..dependencies import get_container_dep
+from ..dependencies import get_container
 
 logger = get_logger(__name__)
 
@@ -38,7 +38,7 @@ class ProviderSwitchRequest(BaseModel):
 
 @router.get("/providers", response_model=ProviderListResponse)
 async def list_providers(
-    container: RAGContainer = Depends(get_container_dep)
+    container: RAGContainer = Depends(get_container)
 ) -> ProviderListResponse:
     """
     Возвращает список доступных RAG провайдеров.
@@ -72,7 +72,7 @@ async def list_providers(
 @router.post("/providers/switch")
 async def switch_provider(
     request: ProviderSwitchRequest,
-    container: RAGContainer = Depends(get_container_dep)
+    container: RAGContainer = Depends(get_container)
 ):
     """
     Переключает активный RAG провайдер.

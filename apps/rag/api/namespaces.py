@@ -14,7 +14,7 @@ from core.models.identity_models import Namespace
 from core.rag.factory import get_rag_provider
 from core.config import get_settings
 from ..container import RAGContainer
-from ..dependencies import get_container_dep
+from ..dependencies import get_container
 
 logger = get_logger(__name__)
 
@@ -36,7 +36,7 @@ class NamespaceListResponse(BaseModel):
 @router.get("/namespaces", response_model=NamespaceListResponse)
 async def list_namespaces(
     provider: Optional[str] = Query(None, description="RAG provider (pgvector, agentset)"),
-    container: RAGContainer = Depends(get_container_dep)
+    container: RAGContainer = Depends(get_container)
 ) -> NamespaceListResponse:
     """
     Получает список namespaces текущей компании.
@@ -73,7 +73,7 @@ async def list_namespaces(
 async def create_namespace(
     request: NamespaceCreateRequest,
     provider: Optional[str] = Query(None, description="RAG provider"),
-    container: RAGContainer = Depends(get_container_dep)
+    container: RAGContainer = Depends(get_container)
 ) -> Namespace:
     """
     Создает новый namespace для текущей компании.
@@ -119,7 +119,7 @@ async def create_namespace(
 async def delete_namespace(
     namespace_id: str,
     provider: Optional[str] = Query(None, description="RAG provider"),
-    container: RAGContainer = Depends(get_container_dep)
+    container: RAGContainer = Depends(get_container)
 ):
     """
     Удаляет namespace и все его документы.

@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from apps.flows.src.container import get_container
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
 from apps.flows.src.triggers import TriggerRegistry, TriggerValidationError
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
@@ -62,9 +62,8 @@ class TriggerListResponse(BaseModel):
 # CRUD endpoints
 
 @router.get("/flows/{flow_id}/triggers")
-async def list_triggers(flow_id: str) -> TriggerListResponse:
+async def list_triggers(flow_id: str, container: ContainerDep) -> TriggerListResponse:
     """Получить список триггеров агента."""
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -89,9 +88,8 @@ async def list_triggers(flow_id: str) -> TriggerListResponse:
 
 
 @router.get("/flows/{flow_id}/triggers/{trigger_id}")
-async def get_trigger(flow_id: str, trigger_id: str) -> TriggerResponse:
+async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> TriggerResponse:
     """Получить триггер по ID."""
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -116,9 +114,8 @@ async def get_trigger(flow_id: str, trigger_id: str) -> TriggerResponse:
 
 
 @router.post("/flows/{flow_id}/triggers")
-async def create_trigger(flow_id: str, request: TriggerCreateRequest) -> TriggerResponse:
+async def create_trigger(flow_id: str, request: TriggerCreateRequest, container: ContainerDep) -> TriggerResponse:
     """Создать новый триггер."""
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -177,9 +174,9 @@ async def update_trigger(
     flow_id: str,
     trigger_id: str,
     request: TriggerUpdateRequest,
+    container: ContainerDep,
 ) -> TriggerResponse:
     """Обновить триггер."""
-    container = get_container()
     old_config = await container.flow_repository.get(flow_id)
     
     if not old_config:
@@ -234,9 +231,8 @@ async def update_trigger(
 
 
 @router.delete("/flows/{flow_id}/triggers/{trigger_id}")
-async def delete_trigger(flow_id: str, trigger_id: str) -> Dict[str, str]:
+async def delete_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> Dict[str, str]:
     """Удалить триггер."""
-    container = get_container()
     old_config = await container.flow_repository.get(flow_id)
     
     if not old_config:
@@ -273,6 +269,7 @@ async def telegram_webhook(
     flow_id: str,
     trigger_id: str,
     request: Request,
+    container: ContainerDep,
     x_telegram_bot_api_secret_token: Optional[str] = Header(None),
 ) -> Dict[str, str]:
     """
@@ -280,7 +277,6 @@ async def telegram_webhook(
     
     Telegram посылает Update сюда после setWebhook.
     """
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -333,11 +329,11 @@ async def generic_webhook(
     flow_id: str,
     trigger_id: str,
     request: Request,
+    container: ContainerDep,
 ) -> Dict[str, Any]:
     """
     Generic webhook endpoint для внешних сервисов.
     """
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -377,13 +373,13 @@ async def test_trigger(
     flow_id: str,
     trigger_id: str,
     payload: Dict[str, Any],
+    container: ContainerDep,
 ) -> Dict[str, Any]:
     """
     Тестирует триггер с заданным payload.
     
     Полезно для отладки input_mapping.
     """
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:

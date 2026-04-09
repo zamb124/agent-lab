@@ -12,7 +12,7 @@ from core.context import get_context
 from core.rag.factory import get_rag_provider
 from core.config import get_settings
 from ..container import RAGContainer
-from ..dependencies import get_container_dep
+from ..dependencies import get_container
 from .namespace_access import require_registered_rag_namespace
 
 logger = get_logger(__name__)
@@ -40,7 +40,7 @@ async def search_in_namespace(
     namespace_id: str,
     request: SearchRequest,
     provider: Optional[str] = Query(None, description="RAG provider"),
-    container: RAGContainer = Depends(get_container_dep)
+    container: RAGContainer = Depends(get_container)
 ) -> SearchResponse:
     """
     Выполняет семантический поиск в namespace.
@@ -101,7 +101,7 @@ class GlobalSearchResponse(BaseModel):
 async def global_search(
     request: GlobalSearchRequest,
     provider: Optional[str] = Query(None, description="RAG provider"),
-    container: RAGContainer = Depends(get_container_dep)
+    container: RAGContainer = Depends(get_container)
 ) -> GlobalSearchResponse:
     """
     Выполняет поиск по нескольким namespace текущей компании.

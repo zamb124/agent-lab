@@ -4,10 +4,10 @@ API endpoints для nodes.
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, ToolReference, NodeLLMOverride
 from apps.flows.src.models.enums import ReactToolRole
@@ -16,11 +16,6 @@ from apps.flows.src.models.tool_reference import CallParameter
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["nodes"])
-
-
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера"""
-    return get_container()
 
 
 class NodeLLMOverrideRequest(BaseModel):
@@ -125,7 +120,7 @@ def _node_to_response(node: NodeConfig) -> NodeResponse:
 
 @router.get("/", response_model=List[NodeResponse])
 async def list_nodes(
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> List[NodeResponse]:
     """Список всех нод"""
     nodes = await container.node_repository.list_all()
@@ -134,7 +129,7 @@ async def list_nodes(
 
 @router.post("/", response_model=NodeResponse)
 async def create_node(
-    request: NodeCreateRequest, container: FlowContainer = Depends(get_container_dep)
+    request: NodeCreateRequest, container: ContainerDep
 ) -> NodeResponse:
     """Создает новую ноду"""
     tools = []
@@ -173,7 +168,7 @@ async def create_node(
 
 @router.get("/{node_id}", response_model=NodeResponse)
 async def get_node(
-    node_id: str, container: FlowContainer = Depends(get_container_dep)
+    node_id: str, container: ContainerDep
 ) -> NodeResponse:
     """Получает ноду по ID"""
     node = await container.node_repository.get(node_id)
@@ -186,7 +181,7 @@ async def get_node(
 async def update_node(
     node_id: str,
     request: NodeCreateRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NodeResponse:
     """Обновляет или создаёт ноду (upsert)"""
     existing = await container.node_repository.get(node_id)
@@ -229,7 +224,7 @@ async def update_node(
 
 @router.delete("/{node_id}")
 async def delete_node(
-    node_id: str, container: FlowContainer = Depends(get_container_dep)
+    node_id: str, container: ContainerDep
 ) -> dict:
     """Удаляет ноду"""
     deleted = await container.node_repository.delete(node_id)

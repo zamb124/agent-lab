@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
-from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.models.channels import (
     ChannelCreate,
     ChannelMemberAdd,
@@ -28,12 +28,12 @@ router = APIRouter()
 
 @router.get("/")
 async def list_channels(
+    container: ContainerDep,
     space_id: str | None = None,
     pagination: PaginationRequest = Depends(),
 ) -> list[ChannelRead]:
     """Список каналов текущего пользователя (членство). Опционально фильтр по space_id."""
     context = get_context()
-    container = get_sync_container()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
     channels = await container.channel_repository.list_for_user(
@@ -85,12 +85,12 @@ async def update_channel(channel_id: str, body: ChannelUpdate) -> ChannelRead:
 async def patch_channel_notification_settings(
     channel_id: str,
     body: ChannelNotificationSettingsUpdate,
+    container: ContainerDep,
 ) -> ChannelRead:
     """Мьют платформенных уведомлений о сообщениях для текущего пользователя в канале."""
     context = get_context()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
-    container = get_sync_container()
     ch = await container.channel_repository.get(channel_id)
     if ch is None or ch.company_id != company_id:
         raise HTTPException(status_code=404, detail="Канал не найден.")
@@ -154,12 +154,11 @@ async def create_channel(body: ChannelCreate) -> ChannelRead:
 
 
 @router.get("/{channel_id}/members", response_model=list[ChannelMemberRead])
-async def list_channel_members(channel_id: str) -> list[ChannelMemberRead]:
+async def list_channel_members(channel_id: str, container: ContainerDep) -> list[ChannelMemberRead]:
     """Участники канала (только для состоящих в канале)."""
     context = get_context()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
-    container = get_sync_container()
     ch = await container.channel_repository.get(channel_id)
     if ch is None or ch.company_id != company_id:
         raise HTTPException(status_code=404, detail="Канал не найден.")
@@ -170,12 +169,11 @@ async def list_channel_members(channel_id: str) -> list[ChannelMemberRead]:
 
 
 @router.post("/{channel_id}/members", status_code=201)
-async def add_member(channel_id: str, body: ChannelMemberAdd) -> ChannelMemberRead:
+async def add_member(channel_id: str, body: ChannelMemberAdd, container: ContainerDep) -> ChannelMemberRead:
     """Добавление участника в канал (только участники канала)."""
     context = get_context()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
-    container = get_sync_container()
     ch = await container.channel_repository.get(channel_id)
     if ch is None or ch.company_id != company_id:
         raise HTTPException(status_code=404, detail="Канал не найден.")

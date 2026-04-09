@@ -13,8 +13,8 @@ from core.state import ExecutionState
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.scheduler import get_schedule_source
-from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.models import ScheduledTaskStatus
+from apps.scheduler.container import get_scheduler_container
 from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
@@ -70,10 +70,7 @@ async def execute_scheduled_task(
     effective_scheduler_task_id = scheduler_task_id or scheduled_task_id
     effective_company_id = company_id or "system"
 
-    settings = get_settings()
-    if not settings.database.shared_url:
-        raise ValueError("database.shared_url is required for scheduler metadata updates")
-    scheduler_repo = SchedulerTaskRepository(db_url=settings.database.shared_url)
+    scheduler_repo = get_scheduler_container().scheduler_task_repository
 
     from core.models.identity_models import User, Company
     

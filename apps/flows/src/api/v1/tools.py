@@ -4,10 +4,10 @@ API endpoints для tools.
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from apps.flows.src.models import ToolReference, CallParameter
 from apps.flows.src.models.enums import ReactToolRole
@@ -16,11 +16,6 @@ from apps.flows.src.tools.json_schema_parameters import call_parameters_to_param
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["tools"])
-
-
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера"""
-    return get_container()
 
 
 class ToolCreateRequest(BaseModel):
@@ -55,7 +50,7 @@ class ToolResponse(BaseModel):
 
 @router.get("/", response_model=List[ToolResponse])
 async def list_tools(
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> List[ToolResponse]:
     """Список всех tools"""
     tools = await container.tool_repository.list_all()
@@ -78,7 +73,7 @@ async def list_tools(
 
 @router.get("/all", response_model=List[ToolResponse])
 async def list_all_tools_and_flows(
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> List[ToolResponse]:
     """Список всех tools и flows для picker."""
     result = []
@@ -157,7 +152,7 @@ async def draft_parameters_schema(
 
 @router.get("/{tool_id}", response_model=ToolResponse)
 async def get_tool(
-    tool_id: str, container: FlowContainer = Depends(get_container_dep)
+    tool_id: str, container: ContainerDep
 ) -> ToolResponse:
     """Получает tool по ID"""
     tool = await container.tool_repository.get(tool_id)
@@ -179,7 +174,7 @@ async def get_tool(
 
 @router.post("/", response_model=ToolResponse)
 async def create_tool(
-    request: ToolCreateRequest, container: FlowContainer = Depends(get_container_dep)
+    request: ToolCreateRequest, container: ContainerDep
 ) -> ToolResponse:
     """Создает новый tool"""
     args_schema: dict[str, CallParameter] = {}
@@ -234,7 +229,7 @@ async def create_tool(
 
 @router.delete("/{tool_id}")
 async def delete_tool(
-    tool_id: str, container: FlowContainer = Depends(get_container_dep)
+    tool_id: str, container: ContainerDep
 ) -> dict:
     """Удаляет tool"""
     deleted = await container.tool_repository.delete(tool_id)

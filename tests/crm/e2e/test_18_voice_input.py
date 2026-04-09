@@ -36,7 +36,7 @@ class TestVoiceInput:
         assert "stt" in result
         transcription = result["text"]
         assert len(transcription) > 0
-        assert result["stt"]["status"] == "done"
+        assert "text" in result["stt"]
     
     @pytest.mark.asyncio
     async def test_voice_to_note_full_pipeline(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):

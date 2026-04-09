@@ -28,7 +28,8 @@ from core.context import get_context
 from core.errors import SafeEvalError
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.api.v1.flows import _inline_tools_list
-from apps.flows.src.container import get_container
+from apps.flows.src.container import FlowContainer
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.platform_tool_docs import collect_platform_tool_docs
 from apps.flows.src.runners import PythonCodeRunner
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
@@ -162,6 +163,7 @@ async def get_code_templates(
 
 @router.get("/editor-state")
 async def get_editor_state(
+    container: ContainerDep,
     flow_id: str,
     skill_id: str = "default",
 ) -> Dict[str, Any]:
@@ -176,8 +178,6 @@ async def get_editor_state(
             detail="Требуется контекст пользователя",
         )
     user_id = context.user.user_id
-
-    container = get_container()
     runtime_flow = await container.flow_factory.get_flow(flow_id, skill_id)
     if runtime_flow is None:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -613,12 +613,12 @@ async def _merge_execute_state_with_flow(
     *,
     flow_id: str,
     skill_id: str,
+    container: "FlowContainer",
 ) -> None:
     """
     Приближает state к реальному старту flow: файлы из всех нод графа + резолвнутые variables flow.
     Записи state.files из запроса, которых нет среди файлов графа, дописываются в конец.
     """
-    container = get_container()
     runtime_flow = await container.flow_factory.get_flow(flow_id, skill_id)
     if runtime_flow is None:
         raise ValueError(f"Flow не найден: {flow_id}")
@@ -664,7 +664,7 @@ async def validate_code(request: ValidateRequest) -> ValidateResponse:
 
 
 @router.post("/execute", response_model=ExecuteResponse)
-async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
+async def execute_code(request: ExecuteRequest, container: ContainerDep) -> ExecuteResponse:
     """
     Выполняет ноду с переданным state.
     """
@@ -717,11 +717,12 @@ async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
                 input_state_normalized,
                 flow_id=resolved_flow_id,
                 skill_id=resolved_skill_id,
+                container=container,
             )
 
         node_config = await _build_node_config(request)
         output_state = await _execute_node(
-            node_config, input_state_normalized, flow_id=resolved_flow_id
+            node_config, input_state_normalized, container, flow_id=resolved_flow_id
         )
 
         duration_ms = int((time.time() - start_time) * 1000)
@@ -804,7 +805,12 @@ async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
     return config
 
 
-async def _execute_node(node_config: Dict[str, Any], input_state: Dict[str, Any], flow_id: str = "test-flow") -> Dict[str, Any]:
+async def _execute_node(
+    node_config: Dict[str, Any],
+    input_state: Dict[str, Any],
+    container: FlowContainer,
+    flow_id: str = "test-flow",
+) -> Dict[str, Any]:
     """Выполняет ноду используя унифицированную фабрику."""
     state_data = copy.deepcopy(input_state)
     state_data.setdefault("task_id", str(uuid.uuid4()))
@@ -814,11 +820,9 @@ async def _execute_node(node_config: Dict[str, Any], input_state: Dict[str, Any]
         context_id = state_data.get("context_id", str(uuid.uuid4()))
         state_data["session_id"] = f"{flow_id}:{context_id}"
     
-    # Инлайним tools для llm_node если они переданы как строки
     if node_config.get("type") == "llm_node" and "tools" in node_config:
         tools = node_config["tools"]
         if tools:
-            container = get_container()
             node_config = {**node_config, "tools": await _inline_tools_list(tools, container)}
     
     node = await create_node("test_node", node_config)

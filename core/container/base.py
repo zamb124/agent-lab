@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from core.db.base_repository import BaseRepository
 
 
+_UNSET = object()
+
+
 def lazy(func: Callable) -> property:
     """
     Декоратор для ленивой инициализации сервисов с кэшированием.
@@ -47,8 +50,8 @@ def lazy(func: Callable) -> property:
     @property
     @functools.wraps(func)
     def wrapper(self):
-        cached = getattr(self, attr_name, None)
-        if cached is None:
+        cached = getattr(self, attr_name, _UNSET)
+        if cached is _UNSET:
             cached = func(self)
             setattr(self, attr_name, cached)
             logger.debug(f"{func.__name__} инициализирован")

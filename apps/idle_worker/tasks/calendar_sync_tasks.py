@@ -17,7 +17,6 @@ from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
 from core.calendar.service import CalendarReauthRequiredError, _credential_to_calendar_integration
 from core.integrations.models import IntegrationProvider
-from core.integrations.repository import IntegrationCredentialRepository
 from core.calendar.repositories import CalendarEventSqlRepository
 from core.logging import get_logger
 from core.models import CalendarEventSource, CalendarProvider
@@ -201,11 +200,13 @@ async def calendar_sync_tick(
     if not settings.database.shared_url:
         raise ValueError("database.shared_url is required for calendar sync task")
 
+    container = get_container()
+
     start_tick = datetime.now(timezone.utc)
     start_at = start_tick - timedelta(days=config.lookback_days)
     end_at = _add_months(start_tick, config.lookahead_months)
 
-    credential_repository = IntegrationCredentialRepository(db_url=settings.database.shared_url)
+    credential_repository = container.integration_credential_repository
     google_creds = await credential_repository.list_by_provider_service(
         provider=IntegrationProvider.GOOGLE,
         service="calendar",
@@ -240,7 +241,6 @@ async def calendar_sync_tick(
             "notifications_sent": 0,
         }
 
-    container = get_container()
     semaphore = asyncio.Semaphore(config.max_parallel_integrations)
     tasks = [
         _sync_single_integration(
