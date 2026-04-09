@@ -47,16 +47,7 @@ async def test_calendar_sync_tick_returns_zero_when_disabled(monkeypatch):
         calendar_sync = _FakeCalendarSync()
         database = _FakeDatabase()
 
-    async def _list_by_provider_service(self, provider, service, *, limit):
-        _ = (self, provider, service, limit)
-        raise AssertionError("list_by_provider_service must not be called when task is disabled")
-
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(
-        calendar_sync_tasks.IntegrationCredentialRepository,
-        "list_by_provider_service",
-        _list_by_provider_service,
-    )
 
     result = await calendar_sync_tasks.calendar_sync_tick()
     assert result["integrations_total"] == 0
@@ -147,21 +138,21 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
         _ = (user_id, notification)
         sent_notifications["count"] += 1
 
+    class _FakeCredentialRepo:
+        async def list_by_provider_service(self, provider, service, *, limit):
+            return await _list_by_provider_service(self, provider, service, limit=limit)
+
     fake_container = type(
         "Container",
         (),
         {
             "calendar_service": _FakeCalendarService(),
             "shared_storage": _FakeStorage(),
+            "integration_credential_repository": _FakeCredentialRepo(),
         },
     )()
 
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(
-        calendar_sync_tasks.IntegrationCredentialRepository,
-        "list_by_provider_service",
-        _list_by_provider_service,
-    )
     monkeypatch.setattr(calendar_sync_tasks, "get_container", lambda: fake_container)
     monkeypatch.setattr(calendar_sync_tasks, "notify_user", _notify_user)
 
